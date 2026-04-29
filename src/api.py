@@ -152,9 +152,17 @@ if HAS_FASTAPI:
             raise HTTPException(status_code=401, detail="Invalid or missing API key")
         return True
 
+    # CORS: allow comma-separated origins via CORS_ORIGINS env var
+    _cors_env = os.getenv("CORS_ORIGINS", "")
+    _default_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost"]
+    if _cors_env:
+        allow_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    else:
+        allow_origins = _default_origins
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost"],
+        allow_origins=allow_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-API-Key", "Authorization"],
     )

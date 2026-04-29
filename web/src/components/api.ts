@@ -1,6 +1,17 @@
 // AI Video Pipeline backend API helpers
 
-export const API_BASE = "http://localhost:8001";
+// Deployment: set NEXT_PUBLIC_API_BASE_URL on Vercel/Netlify/etc.
+// Local dev: falls back to localhost:8001
+// Same-domain deploy: set to "" (empty) to use relative paths
+const _envBase =
+  typeof process !== "undefined"
+    ? (process as any).env?.NEXT_PUBLIC_API_BASE_URL
+    : undefined;
+
+export const API_BASE =
+  _envBase === undefined || _envBase === ""
+    ? "http://localhost:8001"
+    : String(_envBase);
 
 // Backend API Key for authentication (must match backend API_KEY env var)
 let _apiKey = process.env.NEXT_PUBLIC_API_KEY || "ai_video_demo_2026";

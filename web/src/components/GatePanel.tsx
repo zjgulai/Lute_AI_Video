@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CandidateSelector, { type Candidate } from "@/components/CandidateSelector";
 import { useI18n } from "@/i18n/I18nProvider";
-
-const API_BASE = "http://localhost:8001";
+import { API_BASE } from "./api";
 
 function getHeaders(): Record<string, string> {
   const apiKey =

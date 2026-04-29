@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { API_BASE } from "./api";
 
 const ACCEPT_TYPES = {
   video: ".mp4,.mov,.webm",
@@ -61,7 +62,7 @@ export default function AssetUploader({ onUpload }: Props) {
       formData.append("file", file);
 
       try {
-        const res = await fetch("http://localhost:8001/api/upload", {
+        const res = await fetch(API_BASE + "/api/upload", {
           method: "POST",
           body: formData,
         });

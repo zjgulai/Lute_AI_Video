@@ -66,7 +66,7 @@ services:
       - /app/node_modules
       - /app/.next
     command: >
-      sh -c "npm install && npm run dev"
+      sh -c "npm install && npm run build && npm run start"
     depends_on:
       - backend
     networks:
