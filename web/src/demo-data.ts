@@ -589,3 +589,60 @@ export const DEMO_ASSETS = [
     tags: ["audio", "voiceover", "tts"],
   },
 ];
+
+// ── Demo Brand Packages ──
+
+export const DEMO_BRAND_PACKAGES = [
+  {
+    package_id: "bp-demo-001",
+    name: "Lute Smart Breast Pump — Brand Kit",
+    description: "Complete brand identity and creative assets for Lute wearable breast pump product line. Includes product shots, lifestyle imagery, brand guidelines, and campaign templates.",
+    brand_name: "Lute",
+    guidelines: "Brand Voice: Empowering, modern, supportive. Primary Color: #7CB342. Tagline: 'Pump anywhere. Live everywhere.' Tone should feel like a trusted friend who understands the challenges of modern motherhood.",
+    created_at: new Date(Date.now() - 86400 * 7 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 86400 * 2 * 1000).toISOString(),
+    logo_url: "",
+    primary_color: "#7CB342",
+    secondary_color: "#4CAF50",
+    assets: [
+      "/api/media/clip_office_demo.mp4",
+      "/api/media/clip_park_demo.mp4",
+      "/api/media/thumb_tiktok_demo.png",
+      "/api/media/thumb_fb_demo.png",
+      "/api/media/final_demo_video.mp4",
+    ],
+  },
+  {
+    package_id: "bp-demo-002",
+    name: "Lute Eco Pump — Sustainability Campaign",
+    description: "Earth Day themed brand package highlighting Lute's commitment to sustainability. Features recycling program visuals, eco-friendly packaging shots, and founder story content.",
+    brand_name: "Lute",
+    guidelines: "Brand Voice: Authentic, mission-driven, warm. Primary Color: #4CAF50. Tagline: 'Pump for your baby. Protect their planet.' Emphasize transparency and genuine care for both mothers and the environment.",
+    created_at: new Date(Date.now() - 86400 * 5 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 86400 * 1000).toISOString(),
+    logo_url: "",
+    primary_color: "#4CAF50",
+    secondary_color: "#8BC34A",
+    assets: [
+      "/api/media/clip_story_demo.mp4",
+      "/api/media/clip_recycle_demo.mp4",
+      "/api/media/clip_product_demo.mp4",
+      "/api/media/thumb_yt_demo.png",
+      "/api/media/thumb_ig_demo.png",
+      "/api/media/final_brand_demo.mp4",
+    ],
+  },
+  {
+    package_id: "bp-demo-003",
+    name: "Momcozy Trunk Organizer — Product Launch",
+    description: "Car trunk organizer product launch package. Focus on convenience, organization, and family travel lifestyle. Includes product demonstration shots and use-case scenarios.",
+    brand_name: "Momcozy",
+    guidelines: "Brand Voice: Practical, family-focused, reliable. Highlight problem-solution narrative. Show real family moments in cars, road trips, and daily routines.",
+    created_at: new Date(Date.now() - 86400 * 3 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 86400 * 1000).toISOString(),
+    logo_url: "",
+    primary_color: "#FF6B6B",
+    secondary_color: "#FFE66D",
+    assets: [],
+  },
+];

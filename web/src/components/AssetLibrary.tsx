@@ -150,19 +150,33 @@ export default function AssetLibrary({ onClose }: Props) {
                 >
                   <div className="aspect-video bg-[#f5f5f7] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom">
                     {asset.type === "image" ? (
-                      <img
-                        src={getMediaUrl(asset.path)}
-                        alt={asset.filename}
-                        className="w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
+                      getMediaUrl(asset.path) ? (
+                        <img
+                          src={getMediaUrl(asset.path)}
+                          alt={asset.filename}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-1 text-center px-2">
+                          <span className="text-2xl">🖼️</span>
+                          <span className="text-[9px] text-[#aeaeb2]">Demo</span>
+                        </div>
+                      )
                     ) : asset.type === "video" ? (
-                      <video
-                        src={getMediaUrl(asset.path)}
-                        className="w-full h-full object-cover"
-                        preload="metadata"
-                        muted
-                      />
+                      getMediaUrl(asset.path) ? (
+                        <video
+                          src={getMediaUrl(asset.path)}
+                          className="w-full h-full object-cover"
+                          preload="metadata"
+                          muted
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-1 text-center px-2">
+                          <span className="text-2xl">🎬</span>
+                          <span className="text-[9px] text-[#aeaeb2]">Demo</span>
+                        </div>
+                      )
                     ) : (
                       <span className="text-3xl">{getIcon(asset.type)}</span>
                     )}

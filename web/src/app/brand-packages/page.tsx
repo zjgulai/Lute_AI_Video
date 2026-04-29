@@ -56,6 +56,19 @@ export default function BrandPackagesPage() {
   }, []);
 
   useEffect(() => {
+    // Demo mode: skip API, load mock data
+    const isDemo =
+      process.env.NEXT_PUBLIC_IS_DEMO === "true" ||
+      (typeof window !== "undefined" &&
+        (window.location.hostname.includes("github.io") ||
+          window.location.hostname.endsWith(".vercel.app")));
+    if (isDemo) {
+      import("@/demo-data").then((mod) => {
+        setPackages(mod.DEMO_BRAND_PACKAGES || []);
+        setLoading(false);
+      });
+      return;
+    }
     fetchPackages();
   }, [fetchPackages]);
 
@@ -79,8 +92,19 @@ export default function BrandPackagesPage() {
     setShowForm(true);
   };
 
+  const isDemo =
+    process.env.NEXT_PUBLIC_IS_DEMO === "true" ||
+    (typeof window !== "undefined" &&
+      (window.location.hostname.includes("github.io") ||
+        window.location.hostname.endsWith(".vercel.app")));
+
   const handleSave = async () => {
     if (!formName.trim()) return;
+    if (isDemo) {
+      setError("Demo mode — create/edit is not available");
+      setShowForm(false);
+      return;
+    }
     setSaving(true);
     try {
       const body: any = {
@@ -128,6 +152,11 @@ export default function BrandPackagesPage() {
   };
 
   const handleDelete = async (packageId: string) => {
+    if (isDemo) {
+      setError("Demo mode — delete is not available");
+      setDeleteConfirm(null);
+      return;
+    }
     try {
       const res = await fetch(API_BASE + "/api/assets/brand-packages/" + packageId, {
         method: "DELETE",
