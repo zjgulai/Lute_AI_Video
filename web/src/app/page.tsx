@@ -164,6 +164,13 @@ export default function Home() {
   ];
 
   useEffect(() => {
+    // Demo mode: clear any stale localStorage and skip all API recovery
+    if (IS_DEMO) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("ai_video_expert_session");
+      return;
+    }
+
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       setThreadId(stored);

@@ -211,6 +211,10 @@ export function downloadJson(data: any, filename: string) {
 }
 
 export async function fetchAssets(): Promise<any[]> {
+  if (IS_DEMO_MODE) {
+    const { DEMO_ASSETS } = await import("@/demo-data");
+    return DEMO_ASSETS;
+  }
   const res = await fetch(API_BASE + "/api/files", {
     headers: getHeaders(false),
   });

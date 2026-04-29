@@ -89,7 +89,7 @@ export default function SplashScreen({ onEnter }: Props) {
       {/* Fullscreen container: image centered with contain */}
       <div className="absolute inset-0 flex items-center justify-center">
         <img
-          src="/splash-final.png"
+          src={`${process.env.NEXT_PUBLIC_ASSET_PREFIX || ""}/splash-final.png`}
           alt=""
           className="max-w-full max-h-full"
           style={{
