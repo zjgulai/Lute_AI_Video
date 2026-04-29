@@ -35,6 +35,31 @@ const SCENARIO_LABELS: Record<string, string> = {
   influencer_remix: "scene.influencer_remix.title",
 };
 
+// Demo mode detection (same logic as page.tsx)
+const IS_DEMO_VIEW =
+  typeof window !== "undefined" &&
+  (window.location.hostname.includes("github.io") ||
+    window.location.hostname.endsWith(".vercel.app"));
+
+// Placeholder shown when media URL is empty (demo mode — no backend)
+function DemoPlaceholder({ label }: { label: string }) {
+  return (
+    <div className="w-full rounded-xl bg-[#f5f5f7] border border-dashed border-[#d2d2d7] flex flex-col items-center justify-center gap-2 text-center"
+      style={{ minHeight: 180 }}>
+      <div className="w-10 h-10 rounded-full bg-[#e8e8ed] flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#86868b" strokeWidth="2">
+          <rect x="2" y="2" width="20" height="20" rx="2" />
+          <path d="M2 12h20M12 2v20" />
+        </svg>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-[#86868b]">Demo Mode</p>
+        <p className="text-[10px] text-[#aeaeb2]">{label}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function OneShotResultView({ scenario, result, onReset, onEdit }: Props) {
   const { t } = useI18n();
   const [tab, setTab] = useState<"briefs" | "scripts" | "videos" | "thumbnails" | "media" | "quality" | "performance" | "raw">("briefs");
@@ -344,12 +369,18 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
           <div className="grid grid-cols-2 gap-2">
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-lg overflow-hidden aspect-[9/16]">
-                <img
-                  src={getMediaUrl(p)}
-                  alt={`thumbnail-${i}`}
-                  className="w-full h-full object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
+                {getMediaUrl(p) ? (
+                  <img
+                    src={getMediaUrl(p)}
+                    alt={`thumbnail-${i}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-[#f5f5f7]">
+                    <span className="text-[10px] text-[#aeaeb2]">Thumbnail (Demo)</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -453,22 +484,28 @@ function MediaView({
               >
                 {t("perf.publishTitle")}
               </button>
-              <a
-                href={getMediaUrl(finalVideo)}
-                download
-                className="text-[10px] text-[#7CB342] hover:underline cursor-pointer"
-              >
-                {t("result.download")}
-              </a>
+              {getMediaUrl(finalVideo) && (
+                <a
+                  href={getMediaUrl(finalVideo)}
+                  download
+                  className="text-[10px] text-[#7CB342] hover:underline cursor-pointer"
+                >
+                  {t("result.download")}
+                </a>
+              )}
             </div>
           </div>
-          <video
-            src={getMediaUrl(finalVideo)}
-            controls
-            className="w-full rounded-xl bg-black"
-            style={{ maxHeight: 480 }}
-            preload="metadata"
-          />
+          {getMediaUrl(finalVideo) ? (
+            <video
+              src={getMediaUrl(finalVideo)}
+              controls
+              className="w-full rounded-xl bg-black"
+              style={{ maxHeight: 480 }}
+              preload="metadata"
+            />
+          ) : (
+            <DemoPlaceholder label="Final Video (Demo)" />
+          )}
         </div>
       )}
 
@@ -500,13 +537,17 @@ function MediaView({
           <div className="grid grid-cols-2 gap-2">
             {clipPaths.map((p, i) => (
               <div key={i} className="space-y-1">
-                <video
-                  src={getMediaUrl(p)}
-                  controls
-                  className="w-full rounded-xl bg-black"
-                  style={{ maxHeight: 220 }}
-                  preload="metadata"
-                />
+                {getMediaUrl(p) ? (
+                  <video
+                    src={getMediaUrl(p)}
+                    controls
+                    className="w-full rounded-xl bg-black"
+                    style={{ maxHeight: 220 }}
+                    preload="metadata"
+                  />
+                ) : (
+                  <DemoPlaceholder label={`Clip ${i + 1} (Demo)`} />
+                )}
                 <p className="text-[9px] text-[#aeaeb2] truncate px-1">{p.split("/").pop()}</p>
               </div>
             ))}
@@ -530,14 +571,20 @@ function MediaView({
           <div className="grid grid-cols-2 gap-2">
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-xl overflow-hidden aspect-[9/16] group">
-                <img
-                  src={getMediaUrl(p)}
-                  alt={`thumbnail-${i}`}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
+                {getMediaUrl(p) ? (
+                  <img
+                    src={getMediaUrl(p)}
+                    alt={`thumbnail-${i}`}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-[#f5f5f7]">
+                    <span className="text-[10px] text-[#aeaeb2]">Thumbnail (Demo)</span>
+                  </div>
+                )}
                 <a
-                  href={getMediaUrl(p)}
+                  href={getMediaUrl(p) || "#"}
                   download
                   className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
@@ -577,7 +624,11 @@ function MediaView({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-[#1d1d1f] truncate">{p.split("/").pop()}</p>
-                  <audio src={getMediaUrl(p)} controls className="w-full h-8" />
+                  {getMediaUrl(p) ? (
+                    <audio src={getMediaUrl(p)} controls className="w-full h-8" />
+                  ) : (
+                    <p className="text-[10px] text-[#aeaeb2] py-1">Audio preview unavailable (demo mode)</p>
+                  )}
                 </div>
               </div>
             ))}

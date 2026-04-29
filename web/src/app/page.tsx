@@ -31,8 +31,16 @@ import RecommendPanel from "@/components/RecommendPanel";
 import QualityDashboard from "@/components/QualityDashboard";
 import Nav from "@/components/Nav";
 import { useI18n } from "@/i18n/I18nProvider";
+import { DEMO_RESULT_1, DEMO_RESULT_2 } from "@/demo-data";
 
 const STORAGE_KEY = "ai_video_thread_id";
+
+// Demo mode: auto-detect GitHub Pages or env var
+const IS_DEMO =
+  process.env.NEXT_PUBLIC_IS_DEMO === "true" ||
+  (typeof window !== "undefined" &&
+    (window.location.hostname.includes("github.io") ||
+      window.location.hostname.endsWith(".vercel.app")));
 
 const LANGGRAPH_SCENARIOS = new Set(["influencer_remix", "brand_campaign"]);
 
@@ -272,6 +280,17 @@ export default function Home() {
   }, []);
 
   const startSmartCreate = async (config: any) => {
+    // Demo mode: skip API calls, serve mock data instantly
+    if (IS_DEMO) {
+      const scenario = config.content_scenario || "product_direct";
+      const isBrand = scenario === "brand_campaign";
+      setOneshotResult(isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1);
+      setOneshotScenario(scenario);
+      setStage("result");
+      showToast(t("toast.autoDone"), "success");
+      return;
+    }
+
     setShowStageProgress(true);
     try {
       // Use existing auto pipeline endpoint
@@ -306,6 +325,17 @@ export default function Home() {
   };
 
   const handleStart = async (config: any) => {
+    // Demo mode: skip all API calls, serve mock data instantly
+    if (IS_DEMO) {
+      const scenario = config.content_scenario || "product_direct";
+      const isBrand = scenario === "brand_campaign";
+      setOneshotResult(isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1);
+      setOneshotScenario(scenario);
+      setStage("result");
+      showToast(t("toast.autoDone"), "success");
+      return;
+    }
+
     setLoading(true);
     const scenario = config.content_scenario || "product_direct";
 

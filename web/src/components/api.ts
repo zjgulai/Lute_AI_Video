@@ -219,8 +219,18 @@ export async function fetchAssets(): Promise<any[]> {
   return data.files || [];
 }
 
+// Detect demo mode (GitHub Pages / static deploy with no backend)
+const IS_DEMO_MODE =
+  typeof process !== "undefined" &&
+  ((process as any).env?.NEXT_PUBLIC_IS_DEMO === "true" ||
+    (typeof window !== "undefined" &&
+      (window.location.hostname.includes("github.io") ||
+        window.location.hostname.endsWith(".vercel.app"))));
+
 export function getMediaUrl(filePath: string): string {
   if (!filePath) return "";
+  // Demo mode: backend media endpoint is unavailable
+  if (IS_DEMO_MODE) return "";
   const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
   return API_BASE + "/api/media/" + encodeURIComponent(name);
 }
