@@ -12,6 +12,7 @@ import {
   resumeS1,
   fetchS1State,
   getMediaUrl,
+  isDemoMode,
 } from "@/components/api";
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
@@ -30,17 +31,11 @@ import SplashScreen from "@/components/SplashScreen";
 import RecommendPanel from "@/components/RecommendPanel";
 import QualityDashboard from "@/components/QualityDashboard";
 import Nav from "@/components/Nav";
+import SettingsPanel from "@/components/SettingsPanel";
 import { useI18n } from "@/i18n/I18nProvider";
 import { DEMO_RESULT_1, DEMO_RESULT_2 } from "@/demo-data";
 
 const STORAGE_KEY = "ai_video_thread_id";
-
-// Demo mode: auto-detect GitHub Pages or env var
-const IS_DEMO =
-  process.env.NEXT_PUBLIC_IS_DEMO === "true" ||
-  (typeof window !== "undefined" &&
-    (window.location.hostname.includes("github.io") ||
-      window.location.hostname.endsWith(".vercel.app")));
 
 const LANGGRAPH_SCENARIOS = new Set(["influencer_remix", "brand_campaign"]);
 
@@ -129,6 +124,7 @@ export default function Home() {
   const [workflowState, setWorkflowState] = useState<any | null>(null);
   const [showWorkflow, setShowWorkflow] = useState(false);
   const [workflowRerenderKey, setWorkflowRerenderKey] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
 
   const { t } = useI18n();
 
@@ -165,7 +161,7 @@ export default function Home() {
 
   useEffect(() => {
     // Demo mode: clear any stale localStorage and skip all API recovery
-    if (IS_DEMO) {
+    if (isDemoMode()) {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem("ai_video_expert_session");
       return;
@@ -288,7 +284,7 @@ export default function Home() {
 
   const startSmartCreate = async (config: any) => {
     // Demo mode: skip API calls, serve mock data instantly
-    if (IS_DEMO) {
+    if (isDemoMode()) {
       const scenario = config.content_scenario || "product_direct";
       const isBrand = scenario === "brand_campaign";
       setOneshotResult(isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1);
@@ -333,7 +329,7 @@ export default function Home() {
 
   const handleStart = async (config: any) => {
     // Demo mode: skip all API calls, serve mock data instantly
-    if (IS_DEMO) {
+    if (isDemoMode()) {
       const scenario = config.content_scenario || "product_direct";
       const isBrand = scenario === "brand_campaign";
       const effectiveMode = config.mode || pipelineMode;
@@ -686,6 +682,16 @@ export default function Home() {
                 </svg>
                 {t("app.assetLibrary")}
               </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#e8e8ed]/50 text-[#86868b] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+                title="Settings"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
               {(threadId || oneshotResult) && (
                 <button
                   onClick={resetAll}
@@ -783,7 +789,7 @@ export default function Home() {
                       try {
                         showToast(t("gate.finalReview") + " approved — loading results...", "info");
                         // Demo mode: build versions directly from workflowState
-                        if (IS_DEMO) {
+                        if (isDemoMode()) {
                           const demoVersions = extractVersions({ steps: workflowState?.steps || {} });
                           setCompareVersions(demoVersions.length > 0 ? demoVersions : [{
                             label: "Version A",
@@ -967,6 +973,9 @@ export default function Home() {
 
         {showAssetLibrary && (
           <AssetLibrary onClose={() => setShowAssetLibrary(false)} />
+        )}
+        {showSettings && (
+          <SettingsPanel onClose={() => setShowSettings(false)} />
         )}
       </div>
     </>

@@ -2,15 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE } from "@/components/api";
-
-// Detect demo mode (same logic as api.ts)
-const IS_DEMO_MODE =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
-  (typeof window !== "undefined" &&
-    (window.location.hostname.includes("github.io") ||
-      window.location.hostname.endsWith(".vercel.app")));
+import { API_BASE, isDemoMode } from "@/components/api";
 import { Users, Plus, Edit, Trash2, X, AlertCircle, Loader2 } from "lucide-react";
 
 interface InfluencerProfile {
@@ -47,7 +39,7 @@ export default function InfluencersPage() {
     setLoading(true);
     setError(null);
     // Demo mode: load mock data
-    if (IS_DEMO_MODE) {
+    if (isDemoMode()) {
       try {
         const { DEMO_INFLUENCERS } = await import("@/demo-data");
         setInfluencers(DEMO_INFLUENCERS || []);
@@ -100,7 +92,7 @@ export default function InfluencersPage() {
 
   const handleSave = async () => {
     if (!formName.trim()) return;
-    if (IS_DEMO_MODE) {
+    if (isDemoMode()) {
       setError("Demo mode — create/edit is not available");
       return;
     }
@@ -150,7 +142,7 @@ export default function InfluencersPage() {
   };
 
   const handleDelete = async (influencerId: string) => {
-    if (IS_DEMO_MODE) {
+    if (isDemoMode()) {
       setError("Demo mode — delete is not available");
       setDeleteConfirm(null);
       return;

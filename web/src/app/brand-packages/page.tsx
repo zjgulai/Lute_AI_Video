@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE } from "@/components/api";
+import { API_BASE, isDemoMode } from "@/components/api";
 import { Package, Upload, Edit, Trash2, Plus, X, AlertCircle, Loader2 } from "lucide-react";
 
 interface BrandPackage {
@@ -57,12 +57,7 @@ export default function BrandPackagesPage() {
 
   useEffect(() => {
     // Demo mode: skip API, load mock data
-    const isDemo =
-      process.env.NEXT_PUBLIC_IS_DEMO === "true" ||
-      (typeof window !== "undefined" &&
-        (window.location.hostname.includes("github.io") ||
-          window.location.hostname.endsWith(".vercel.app")));
-    if (isDemo) {
+    if (isDemoMode()) {
       import("@/demo-data").then((mod) => {
         setPackages(mod.DEMO_BRAND_PACKAGES || []);
         setLoading(false);
@@ -92,15 +87,9 @@ export default function BrandPackagesPage() {
     setShowForm(true);
   };
 
-  const isDemo =
-    process.env.NEXT_PUBLIC_IS_DEMO === "true" ||
-    (typeof window !== "undefined" &&
-      (window.location.hostname.includes("github.io") ||
-        window.location.hostname.endsWith(".vercel.app")));
-
   const handleSave = async () => {
     if (!formName.trim()) return;
-    if (isDemo) {
+    if (isDemoMode()) {
       setError("Demo mode — create/edit is not available");
       setShowForm(false);
       return;
@@ -152,7 +141,7 @@ export default function BrandPackagesPage() {
   };
 
   const handleDelete = async (packageId: string) => {
-    if (isDemo) {
+    if (isDemoMode()) {
       setError("Demo mode — delete is not available");
       setDeleteConfirm(null);
       return;

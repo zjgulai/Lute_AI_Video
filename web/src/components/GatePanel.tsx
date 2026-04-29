@@ -3,15 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CandidateSelector, { type Candidate } from "@/components/CandidateSelector";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE } from "./api";
+import { API_BASE, isDemoMode } from "./api";
 
-// Detect demo mode (same logic as api.ts)
-const IS_DEMO =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
-  (typeof window !== "undefined" &&
-    (window.location.hostname.includes("github.io") ||
-      window.location.hostname.endsWith(".vercel.app")));
+
 
 function getHeaders(): Record<string, string> {
   const apiKey =
@@ -128,7 +122,7 @@ export default function GatePanel({
     hasGenerated.current = true;
 
     // Demo mode: generate candidates from mock data
-    if (IS_DEMO) {
+    if (isDemoMode()) {
       try {
         const demoCandidates = await generateDemoCandidates(gateId);
         setCandidates(demoCandidates);
@@ -182,7 +176,7 @@ export default function GatePanel({
     setLoadingText(t("gate.regenerating"));
 
     // Demo mode: rotate candidates
-    if (IS_DEMO) {
+    if (isDemoMode()) {
       try {
         const fresh = await generateDemoCandidates(gateId);
         // Slightly shuffle scores to simulate regeneration
@@ -235,7 +229,7 @@ export default function GatePanel({
     setApproving(true);
 
     // Demo mode: skip API, directly approve
-    if (IS_DEMO) {
+    if (isDemoMode()) {
       setApproved(true);
       setTimeout(() => {
         onApprove(selectedIds);

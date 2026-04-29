@@ -35,11 +35,7 @@ const SCENARIO_LABELS: Record<string, string> = {
   influencer_remix: "scene.influencer_remix.title",
 };
 
-// Demo mode detection (same logic as page.tsx)
-const IS_DEMO_VIEW =
-  typeof window !== "undefined" &&
-  (window.location.hostname.includes("github.io") ||
-    window.location.hostname.endsWith(".vercel.app"));
+
 
 // Placeholder shown when media URL is empty (demo mode — no backend)
 function DemoPlaceholder({ label }: { label: string }) {

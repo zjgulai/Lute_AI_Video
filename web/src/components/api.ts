@@ -1,40 +1,103 @@
 // AI Video Pipeline backend API helpers
+// Runtime-configurable via localStorage or build-time env vars.
 
-// Deployment: set NEXT_PUBLIC_API_BASE_URL on Vercel/Netlify/etc.
-// Local dev: falls back to localhost:8001
-// Same-domain deploy: set to "" (empty) to use relative paths
-const _envBase =
-  typeof process !== "undefined"
-    ? (process as any).env?.NEXT_PUBLIC_API_BASE_URL
-    : undefined;
+const STORAGE_KEYS = {
+  apiBase: "ai_video_api_base",
+  apiKey: "ai_video_api_key",
+  demoMode: "ai_video_demo_mode",
+};
 
-export const API_BASE =
-  _envBase === undefined || _envBase === ""
-    ? "http://localhost:8001"
-    : String(_envBase);
+// ── Runtime configuration ──
 
-// Backend API Key for authentication (must match backend API_KEY env var)
-let _apiKey = process.env.NEXT_PUBLIC_API_KEY || "ai_video_demo_2026";
+function readEnv(key: string): string | undefined {
+  if (typeof process === "undefined") return undefined;
+  return (process as any).env?.[key] as string | undefined;
+}
+
+/** Backend API base URL (runtime-configurable via localStorage or env). */
+export function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem(STORAGE_KEYS.apiBase);
+    if (stored) return stored;
+  }
+  const env = readEnv("NEXT_PUBLIC_API_BASE_URL");
+  if (env) return env;
+  return "http://localhost:8001";
+}
+
+export function setApiBase(url: string) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STORAGE_KEYS.apiBase, url);
+  }
+}
+
+/** Backend API Key (runtime-configurable via localStorage or env). */
+export function getApiKey(): string {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem(STORAGE_KEYS.apiKey);
+    if (stored) return stored;
+  }
+  return readEnv("NEXT_PUBLIC_API_KEY") || "ai_video_demo_2026";
+}
 
 export function setApiKey(key: string) {
-  _apiKey = key;
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STORAGE_KEYS.apiKey, key);
+  }
 }
 
-export function getApiKey(): string {
-  return _apiKey;
+/** Demo mode detection (runtime-configurable via localStorage or env/hostname). */
+export function isDemoMode(): boolean {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem(STORAGE_KEYS.demoMode);
+    if (stored === "true") return true;
+    if (stored === "false") return false;
+  }
+  const env = readEnv("NEXT_PUBLIC_IS_DEMO");
+  if (env === "true") return true;
+  if (env === "false") return false;
+  if (typeof window !== "undefined") {
+    return (
+      window.location.hostname.includes("github.io") ||
+      window.location.hostname.endsWith(".vercel.app")
+    );
+  }
+  return false;
 }
 
-function getHeaders(contentType = true): Record<string, string> {
+export function setDemoMode(enabled: boolean) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STORAGE_KEYS.demoMode, enabled ? "true" : "false");
+  }
+}
+
+/** Reset all runtime config to defaults. */
+export function resetApiConfig() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(STORAGE_KEYS.apiBase);
+    localStorage.removeItem(STORAGE_KEYS.apiKey);
+    localStorage.removeItem(STORAGE_KEYS.demoMode);
+  }
+}
+
+// Backward-compatible constant (reads from env/localStorage at call time via getApiBase)
+export const API_BASE = getApiBase();
+
+// ── Headers ──
+
+export function getHeaders(contentType = true): Record<string, string> {
   const headers: Record<string, string> = {};
   if (contentType) {
     headers["Content-Type"] = "application/json";
   }
-  headers["X-API-Key"] = _apiKey;
+  headers["X-API-Key"] = getApiKey();
   return headers;
 }
 
+// ── Core pipeline APIs ──
+
 export async function startPipeline(body: any): Promise<any> {
-  const res = await fetch(API_BASE + "/pipeline/start", {
+  const res = await fetch(getApiBase() + "/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -44,7 +107,7 @@ export async function startPipeline(body: any): Promise<any> {
 }
 
 export async function fetchState(threadId: string): Promise<any> {
-  const res = await fetch(API_BASE + "/pipeline/" + threadId + "/state", {
+  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/state", {
     headers: getHeaders(false),
   });
   if (!res.ok) throw new Error("Failed to fetch state (" + res.status + ")");
@@ -57,7 +120,7 @@ export async function submitReview(
   action: string,
   reviewerNotes: string
 ): Promise<any> {
-  const res = await fetch(API_BASE + "/pipeline/" + threadId + "/review/" + reviewNode, {
+  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/review/" + reviewNode, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ action, reviewer_notes: reviewerNotes }),
@@ -67,7 +130,7 @@ export async function submitReview(
 }
 
 export async function fetchDistribution(threadId: string): Promise<any> {
-  const res = await fetch(API_BASE + "/pipeline/" + threadId + "/distribution", {
+  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/distribution", {
     headers: getHeaders(false),
   });
   if (!res.ok) throw new Error("Failed to fetch distribution info (" + res.status + ")");
@@ -75,7 +138,7 @@ export async function fetchDistribution(threadId: string): Promise<any> {
 }
 
 export async function fetchOutput(threadId: string): Promise<any> {
-  const res = await fetch(API_BASE + "/pipeline/" + threadId + "/output", {
+  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/output", {
     headers: getHeaders(false),
   });
   if (!res.ok) throw new Error("Failed to fetch output (" + res.status + ")");
@@ -85,7 +148,7 @@ export async function fetchOutput(threadId: string): Promise<any> {
 // ── Scenario pipelines (skill-based, no LangGraph) ──
 
 export async function runS1ProductDirect(config: any): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s1", {
+  const res = await fetch(getApiBase() + "/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(config),
@@ -100,7 +163,7 @@ export async function runS2BrandCampaign(body: {
   target_languages?: string[];
   week?: string;
 }): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s2", {
+  const res = await fetch(getApiBase() + "/scenario/s2", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -116,7 +179,7 @@ export async function runS3InfluencerRemix(body: {
   brief_id?: string;
   video_duration?: number;
 }): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s3", {
+  const res = await fetch(getApiBase() + "/scenario/s3", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -131,7 +194,7 @@ export async function runS4LiveShoot(body: {
   topic?: string;
   target_platforms?: string[];
 }): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s4", {
+  const res = await fetch(getApiBase() + "/scenario/s4", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -143,7 +206,7 @@ export async function runS4LiveShoot(body: {
 // ── S1 Step-by-step pipeline APIs ──
 
 export async function startS1StepByStep(config: any): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s1/start", {
+  const res = await fetch(getApiBase() + "/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ ...config, mode: "step_by_step" }),
@@ -153,7 +216,7 @@ export async function startS1StepByStep(config: any): Promise<any> {
 }
 
 export async function runS1Step(label: string, stepName: string): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s1/step/" + stepName, {
+  const res = await fetch(getApiBase() + "/scenario/s1/step/" + stepName, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
@@ -163,7 +226,7 @@ export async function runS1Step(label: string, stepName: string): Promise<any> {
 }
 
 export async function regenerateS1Step(label: string, stepName: string): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s1/regenerate", {
+  const res = await fetch(getApiBase() + "/scenario/s1/regenerate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label, step: stepName }),
@@ -173,7 +236,7 @@ export async function regenerateS1Step(label: string, stepName: string): Promise
 }
 
 export async function resumeS1(label: string): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s1/resume", {
+  const res = await fetch(getApiBase() + "/scenario/s1/resume", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
@@ -183,7 +246,7 @@ export async function resumeS1(label: string): Promise<any> {
 }
 
 export async function fetchS1State(label: string): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s1/state/" + label, {
+  const res = await fetch(getApiBase() + "/scenario/s1/state/" + label, {
     headers: getHeaders(false),
   });
   if (!res.ok) throw new Error("S1 fetch state failed (" + res.status + ")");
@@ -191,7 +254,7 @@ export async function fetchS1State(label: string): Promise<any> {
 }
 
 export async function updateS1State(label: string, updates: any): Promise<any> {
-  const res = await fetch(API_BASE + "/scenario/s1/state/" + label, {
+  const res = await fetch(getApiBase() + "/scenario/s1/state/" + label, {
     method: "PUT",
     headers: getHeaders(),
     body: JSON.stringify(updates),
@@ -211,11 +274,11 @@ export function downloadJson(data: any, filename: string) {
 }
 
 export async function fetchAssets(): Promise<any[]> {
-  if (IS_DEMO_MODE) {
+  if (isDemoMode()) {
     const { DEMO_ASSETS } = await import("@/demo-data");
     return DEMO_ASSETS;
   }
-  const res = await fetch(API_BASE + "/api/files", {
+  const res = await fetch(getApiBase() + "/api/files", {
     headers: getHeaders(false),
   });
   if (!res.ok) throw new Error("Failed to fetch assets list (" + res.status + ")");
@@ -223,31 +286,38 @@ export async function fetchAssets(): Promise<any[]> {
   return data.files || [];
 }
 
-// Detect demo mode (GitHub Pages / static deploy with no backend)
-// NOTE: use exact `process.env.NEXT_PUBLIC_IS_DEMO` so Next.js DefinePlugin replaces it at build time.
-const IS_DEMO_MODE =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
-  (typeof window !== "undefined" &&
-    (window.location.hostname.includes("github.io") ||
-      window.location.hostname.endsWith(".vercel.app")));
-
 export function getMediaUrl(filePath: string): string {
   if (!filePath) return "";
   const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
   // Demo mode: serve from static public folder
-  if (IS_DEMO_MODE) {
-    const prefix = process.env.NEXT_PUBLIC_ASSET_PREFIX || "";
-    // Check if file exists in portfolio (copied media assets)
+  if (isDemoMode()) {
+    const prefix = readEnv("NEXT_PUBLIC_ASSET_PREFIX") || "";
     return prefix + "/portfolio/" + encodeURIComponent(name);
   }
-  return API_BASE + "/api/media/" + encodeURIComponent(name);
+  return getApiBase() + "/api/media/" + encodeURIComponent(name);
+}
+
+// ── Connection test ──
+
+export async function testConnection(): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
+  try {
+    const res = await fetch(getApiBase() + "/health", {
+      headers: getHeaders(false),
+    });
+    if (!res.ok) {
+      return { ok: false, status: res.status, error: "HTTP " + res.status };
+    }
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, status: res.status, data };
+  } catch (e: any) {
+    return { ok: false, status: 0, error: e.message || "Network error" };
+  }
 }
 
 // ── Distribution publishing APIs ──
 
 export async function fetchPlatforms(): Promise<any[]> {
-  const res = await fetch(API_BASE + "/distribution/platforms", {
+  const res = await fetch(getApiBase() + "/distribution/platforms", {
     headers: getHeaders(false),
   });
   if (!res.ok) throw new Error("Failed to fetch platform list (" + res.status + ")");
@@ -256,7 +326,7 @@ export async function fetchPlatforms(): Promise<any[]> {
 }
 
 export async function publishContent(platform: string, content: any): Promise<any> {
-  const res = await fetch(API_BASE + "/distribution/publish", {
+  const res = await fetch(getApiBase() + "/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ platform, content }),
@@ -267,7 +337,7 @@ export async function publishContent(platform: string, content: any): Promise<an
 
 export async function fetchPublishStatus(platform: string, postId: string): Promise<any> {
   const res = await fetch(
-    API_BASE + "/distribution/status/" + encodeURIComponent(platform) + "/" + encodeURIComponent(postId),
+    getApiBase() + "/distribution/status/" + encodeURIComponent(platform) + "/" + encodeURIComponent(postId),
     { headers: getHeaders(false) }
   );
   if (!res.ok) throw new Error("Failed to fetch status (" + res.status + ")");
@@ -277,7 +347,7 @@ export async function fetchPublishStatus(platform: string, postId: string): Prom
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
 export async function publishVideo(videoId: string, platforms: string[], metadata: any): Promise<any> {
-  const res = await fetch(API_BASE + "/publish/" + videoId, {
+  const res = await fetch(getApiBase() + "/publish/" + videoId, {
     method: "POST", headers: getHeaders(),
     body: JSON.stringify({ platforms, metadata }),
   });
@@ -287,7 +357,7 @@ export async function publishVideo(videoId: string, platforms: string[], metadat
 
 export async function fetchVideoMetrics(videoId: string, platform?: string): Promise<any> {
   const params = platform ? "?platform=" + platform : "";
-  const res = await fetch(API_BASE + "/metrics/" + videoId + params, { headers: getHeaders(false) });
+  const res = await fetch(getApiBase() + "/metrics/" + videoId + params, { headers: getHeaders(false) });
   if (!res.ok) throw new Error("Failed to fetch metrics");
   return res.json();
 }
@@ -297,7 +367,7 @@ export async function fetchDashboardOverview(scenario?: string, platform?: strin
   if (scenario) params.set("scenario", scenario);
   if (platform) params.set("platform", platform);
   if (days) params.set("days", String(days));
-  const res = await fetch(API_BASE + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false) });
+  const res = await fetch(getApiBase() + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false) });
   if (!res.ok) throw new Error("Failed to fetch dashboard");
   return res.json();
 }

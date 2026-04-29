@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE, getMediaUrl as getApiMediaUrl } from "@/components/api";
+import { API_BASE, getMediaUrl as getApiMediaUrl, isDemoMode } from "@/components/api";
 import {
   Film,
   Upload,
@@ -56,18 +56,10 @@ function formatDate(dateStr: string): string {
   }
 }
 
-// Detect demo mode (same logic as api.ts)
-const IS_DEMO_MODE =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
-  (typeof window !== "undefined" &&
-    (window.location.hostname.includes("github.io") ||
-      window.location.hostname.endsWith(".vercel.app")));
-
 function getMediaUrl(filename: string): string {
   if (!filename) return "";
   // Demo mode: serve from static public folder
-  if (IS_DEMO_MODE) {
+  if (isDemoMode()) {
     return getApiMediaUrl(filename);
   }
   // Assets stored via api_assets.py use the filename as the media path
@@ -110,7 +102,7 @@ export default function FootagePage() {
     setLoading(true);
     setError(null);
     // Demo mode: load mock data
-    if (IS_DEMO_MODE) {
+    if (isDemoMode()) {
       try {
         const { DEMO_FOOTAGE_ASSETS } = await import("@/demo-data");
         setAssets(DEMO_FOOTAGE_ASSETS || []);
@@ -170,7 +162,7 @@ export default function FootagePage() {
   };
 
   const uploadFiles = async (files: File[]) => {
-    if (IS_DEMO_MODE) {
+    if (isDemoMode()) {
       setError("Demo mode — upload is not available");
       return;
     }

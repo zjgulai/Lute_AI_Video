@@ -4,15 +4,9 @@ import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import DurationSlider from "./DurationSlider";
-import { startS1StepByStep, runS1Step } from "./api";
+import { startS1StepByStep, runS1Step, isDemoMode } from "./api";
 
-// Detect demo mode (same logic as api.ts)
-const IS_DEMO =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
-  (typeof window !== "undefined" &&
-    (window.location.hostname.includes("github.io") ||
-      window.location.hostname.endsWith(".vercel.app")));
+
 
 interface Props {
   config: any;  // The config from SceneForm
@@ -37,7 +31,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
 
   async function fetchRecommendation() {
     // Demo mode: use mock data, skip all API calls
-    if (IS_DEMO) {
+    if (isDemoMode()) {
       try {
         const { DEMO_RESULT_1, DEMO_RESULT_2 } = await import("@/demo-data");
         const isBrand = config.content_scenario === "brand_campaign";
