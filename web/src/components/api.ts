@@ -1,11 +1,55 @@
 // AI Video Pipeline backend API helpers
-// Runtime-configurable via localStorage or build-time env vars.
+// Runtime-configurable via localStorage (with cookie fallback) or build-time env vars.
 
 const STORAGE_KEYS = {
   apiBase: "ai_video_api_base",
   apiKey: "ai_video_api_key",
   demoMode: "ai_video_demo_mode",
 };
+
+// ── P3-5: Cookie fallback for privacy / incognito mode ──
+
+function setCookie(name: string, value: string, days = 365) {
+  if (typeof document === "undefined") return;
+  const d = new Date();
+  d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/;SameSite=Lax`;
+}
+
+function getCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const match = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/([.$?*|{}()\[\]\\\/+^])/g, "\\$1") + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function removeCookie(name: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+}
+
+/** Storage abstraction: localStorage with cookie fallback. */
+function storageGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const val = localStorage.getItem(key);
+    if (val !== null) return val;
+  } catch (_) { /* localStorage unavailable (privacy mode) */ }
+  return getCookie(key) ?? null;
+}
+
+function storageSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) { /* fall through to cookie */ }
+  setCookie(key, value);
+}
+
+function storageRemove(key: string): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.removeItem(key); } catch (_) {}
+  removeCookie(key);
+}
 
 // ── Runtime configuration ──
 
@@ -17,7 +61,7 @@ function readEnv(key: string): string | undefined {
 /** Backend API base URL (runtime-configurable via localStorage or env). */
 export function getApiBase(): string {
   if (typeof window !== "undefined") {
-    const stored = localStorage.getItem(STORAGE_KEYS.apiBase);
+    const stored = storageGet(STORAGE_KEYS.apiBase);
     if (stored) return stored;
   }
   const env = readEnv("NEXT_PUBLIC_API_BASE_URL");
@@ -27,14 +71,14 @@ export function getApiBase(): string {
 
 export function setApiBase(url: string) {
   if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEYS.apiBase, url);
+    storageSet(STORAGE_KEYS.apiBase, url);
   }
 }
 
 /** Backend API Key (runtime-configurable via localStorage or env). */
 export function getApiKey(): string {
   if (typeof window !== "undefined") {
-    const stored = localStorage.getItem(STORAGE_KEYS.apiKey);
+    const stored = storageGet(STORAGE_KEYS.apiKey);
     if (stored) return stored;
   }
   return readEnv("NEXT_PUBLIC_API_KEY") || "ai_video_demo_2026";
@@ -42,14 +86,14 @@ export function getApiKey(): string {
 
 export function setApiKey(key: string) {
   if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEYS.apiKey, key);
+    storageSet(STORAGE_KEYS.apiKey, key);
   }
 }
 
 /** Demo mode detection (runtime-configurable via localStorage or env/hostname). */
 export function isDemoMode(): boolean {
   if (typeof window !== "undefined") {
-    const stored = localStorage.getItem(STORAGE_KEYS.demoMode);
+    const stored = storageGet(STORAGE_KEYS.demoMode);
     if (stored === "true") return true;
     if (stored === "false") return false;
   }
@@ -67,16 +111,16 @@ export function isDemoMode(): boolean {
 
 export function setDemoMode(enabled: boolean) {
   if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEYS.demoMode, enabled ? "true" : "false");
+    storageSet(STORAGE_KEYS.demoMode, enabled ? "true" : "false");
   }
 }
 
 /** Reset all runtime config to defaults. */
 export function resetApiConfig() {
   if (typeof window !== "undefined") {
-    localStorage.removeItem(STORAGE_KEYS.apiBase);
-    localStorage.removeItem(STORAGE_KEYS.apiKey);
-    localStorage.removeItem(STORAGE_KEYS.demoMode);
+    storageRemove(STORAGE_KEYS.apiBase);
+    storageRemove(STORAGE_KEYS.apiKey);
+    storageRemove(STORAGE_KEYS.demoMode);
   }
 }
 

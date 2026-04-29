@@ -47,6 +47,13 @@ from src.models import ApprovalStatus, ContentScenario, HumanReview, REVIEW_NODE
 _pipeline = compile_pipeline()
 _active_threads: dict[str, dict[str, Any]] = {}
 
+# P2-1: Thread index persistence file — survives process restarts.
+# Each entry maps thread_id → {"configurable": {"thread_id": thread_id}}
+_THREAD_INDEX_PATH = Path(__file__).parent.parent / "output" / ".thread_index.json"
+
+import asyncio as _asyncio
+_pipeline_semaphore = _asyncio.Semaphore(10)  # P3-4: Max 10 concurrent pipelines
+
 
 class PipelineStartRequest(BaseModel):
     product_catalog: dict[str, Any] = {}
@@ -125,7 +132,6 @@ if HAS_FASTAPI:
     async def startup():
         if HAS_STORAGE:
             await init_db()
-            # Log persistence status for operational visibility
             try:
                 from src.storage.db import check_pg_health, is_pg_available
                 health = await check_pg_health()
@@ -139,6 +145,8 @@ if HAS_FASTAPI:
                 )
             except Exception:
                 pass
+        # P2-1: Restore active threads from disk
+        _restore_thread_index()
 
     API_KEY = os.getenv("API_KEY", "")
     if not API_KEY:
@@ -166,6 +174,66 @@ if HAS_FASTAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-API-Key", "Authorization"],
     )
+
+    # ── P2-1: Thread persistence helpers ──
+
+    def _save_thread_index():
+        """Persist _active_threads keys to JSON for crash recovery."""
+        try:
+            _THREAD_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(_THREAD_INDEX_PATH, "w") as f:
+                json.dump(list(_active_threads.keys()), f)
+        except Exception:
+            pass  # Non-critical — best-effort persistence
+
+    def _restore_thread_index():
+        """Restore thread IDs from disk on startup."""
+        try:
+            if _THREAD_INDEX_PATH.exists():
+                with open(_THREAD_INDEX_PATH) as f:
+                    ids = json.load(f)
+                for tid in ids:
+                    if isinstance(tid, str):
+                        _active_threads[tid] = {"configurable": {"thread_id": tid}}
+        except Exception:
+            pass
+
+    import json as _json
+
+    # Restore on module load
+    _restore_thread_index()
+
+    # ── P3-1: Rate limiting middleware (simple sliding window) ──
+
+    _rate_window_sec = 60
+    _rate_max_requests = 120  # 120 requests per 60s = 2 req/s average
+    _rate_store: dict[str, list[float]] = {}  # client_ip → [timestamps]
+
+    @app.middleware("http")
+    async def rate_limit_middleware(request, call_next):
+        from fastapi import Request, Response
+        from fastapi.responses import JSONResponse
+
+        # Skip health endpoint
+        if request.url.path == "/health":
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        timestamps = _rate_store.get(client_ip, [])
+        # Remove expired entries
+        timestamps = [t for t in timestamps if now - t < _rate_window_sec]
+        if len(timestamps) >= _rate_max_requests:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down.", "retry_after_sec": _rate_window_sec},
+            )
+        timestamps.append(now)
+        _rate_store[client_ip] = timestamps
+        # Cleanup old entries periodically (keep store bounded)
+        if len(_rate_store) > 1000:
+            _rate_store.clear()
+        return await call_next(request)
 
     # Mount asset management endpoints (requires python-multipart for File/Form)
     try:
@@ -226,14 +294,16 @@ if HAS_FASTAPI:
         # Run until first interrupt
         events = []
         try:
-            async for event in _pipeline.astream(initial_state, config):
-                events.append(event)
+            async with _pipeline_semaphore:
+                async for event in _pipeline.astream(initial_state, config):
+                    events.append(event)
         except Exception as e:
             import logging
             logging.error("pipeline start failed: %s", e)
             raise HTTPException(status_code=500, detail=_safe_error(e))
 
         _active_threads[thread_id] = config
+        _save_thread_index()
         if HAS_STORAGE:
             repo = ThreadRepository()
             await repo.create({
@@ -258,6 +328,7 @@ if HAS_FASTAPI:
             if thread:
                 config = {"configurable": {"thread_id": thread_id}}
                 _active_threads[thread_id] = config
+                _save_thread_index()
         if not config:
             config = {"configurable": {"thread_id": thread_id}}
 
@@ -310,6 +381,7 @@ if HAS_FASTAPI:
             if thread:
                 config = {"configurable": {"thread_id": thread_id}}
                 _active_threads[thread_id] = config
+                _save_thread_index()
         if not config:
             config = {"configurable": {"thread_id": thread_id}}
         import structlog
@@ -386,9 +458,10 @@ if HAS_FASTAPI:
         try:
             # D10: Use astream(None) — pure resume without overwriting checkpoint state.
             # The update_state(...) call above already persisted the human review.
-            # _HUMAN_REVIEW_OVERRIDE (set above) ensures routing reads the decision.
-            async for event in _pipeline.astream(None, config):
-                events.append(event)
+            # _set_override (set above) ensures routing reads the decision.
+            async with _pipeline_semaphore:
+                async for event in _pipeline.astream(None, config):
+                    events.append(event)
 
         except Exception as e:
             import traceback
@@ -420,6 +493,7 @@ if HAS_FASTAPI:
             if thread:
                 config = {"configurable": {"thread_id": thread_id}}
                 _active_threads[thread_id] = config
+                _save_thread_index()
         if not config:
             config = {"configurable": {"thread_id": thread_id}}
         return config
@@ -617,7 +691,7 @@ if HAS_FASTAPI:
             "audio_paths": audio_paths,
             "lyrics_paths": lyrics_paths,
             "thumbnail_image_paths": _get_step_output(steps, "thumbnail_images") or [],
-            "steps_completed": 12,
+            "steps_completed": len(_SCENARIO_STEP_ORDER.get("s1", [])),
         }
 
         # Extract assemble_final output (may be tuple or dict)

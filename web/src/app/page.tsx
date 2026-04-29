@@ -32,6 +32,7 @@ import RecommendPanel from "@/components/RecommendPanel";
 import QualityDashboard from "@/components/QualityDashboard";
 import Nav from "@/components/Nav";
 import SettingsPanel from "@/components/SettingsPanel";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { useI18n } from "@/i18n/I18nProvider";
 import { DEMO_RESULT_1, DEMO_RESULT_2 } from "@/demo-data";
 
@@ -261,15 +262,22 @@ export default function Home() {
     }
   }, [threadId]);
 
+  // P3-2: Adaptive polling — active 3s, complete 10s, disconnected 30s
+  const getPollInterval = useCallback((): number => {
+    if (disconnected) return 30000;
+    if (reviewState?.pipeline_complete) return 10000;
+    return 3000;
+  }, [disconnected, reviewState?.pipeline_complete]);
+
   useEffect(() => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     if (threadId) {
-      pollingRef.current = setInterval(refreshState, 3000);
+      pollingRef.current = setInterval(refreshState, getPollInterval());
     }
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [threadId, refreshState]);
+  }, [threadId, refreshState, getPollInterval]);
 
   const configRef = useRef<any>(null);
 
@@ -566,6 +574,7 @@ export default function Home() {
   return (
     <>
       {showSplash && <SplashScreen onEnter={() => setShowSplash(false)} />}
+      <ErrorBoundary>
       <div className={`min-h-screen bg-[var(--color-bg)] transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
         {/* Toast */}
         {toast && (
@@ -978,6 +987,7 @@ export default function Home() {
           <SettingsPanel onClose={() => setShowSettings(false)} />
         )}
       </div>
+      </ErrorBoundary>
     </>
   );
 }
