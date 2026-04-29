@@ -1,0 +1,38 @@
+# Render Blueprint — auto-deploy backend from GitHub
+# Usage: Go to https://dashboard.render.com/blueprint, connect this repo, and Render
+# will create the services defined below automatically.
+
+services:
+  - type: web
+    name: lute-ai-video-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    plan: free
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+      - key: API_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: ""  # Will be updated after frontend deploy
+      - key: VIDEO_OUTPUT_DIR
+        value: /app/output
+      - key: DEFAULT_LLM_PROVIDER
+        value: kimi
+      - key: DATABASE_URL
+        value: ""  # Set manually if using Render PostgreSQL
+      # API keys — set manually in Render Dashboard for real functionality
+      # Leave empty for stub/demo mode
+      - key: OPENAI_API_KEY
+        value: ""
+      - key: POYO_API_KEY
+        value: ""
+      - key: ELEVENLABS_API_KEY
+        value: ""
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - src/**
+        - requirements.txt
+        - Dockerfile.backend
+        - pyproject.toml
