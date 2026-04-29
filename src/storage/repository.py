@@ -21,12 +21,14 @@ class BaseRepository:
     def _generate_id(self) -> str:
         return str(uuid.uuid4())
 
-    def _to_json(self, value: Any) -> str:
+    def _to_json(self, value: Any) -> Any:
         if isinstance(value, (dict, list)):
             return json.dumps(value, default=self._json_default)
         if hasattr(value, "isoformat"):
             return json.dumps(value.isoformat())
-        return value if isinstance(value, str) else json.dumps(value, default=self._json_default)
+        if isinstance(value, (bool, int, float, str)) or value is None:
+            return value
+        return json.dumps(value, default=self._json_default)
 
     @staticmethod
     def _json_default(obj: Any) -> str:
