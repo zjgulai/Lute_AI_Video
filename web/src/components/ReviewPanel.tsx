@@ -302,17 +302,23 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
               className="apple-input resize-none"
               rows={2}
             />
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => onAction("approve", notes)} disabled={loading} className="apple-btn apple-btn-success">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 6.5L4.5 9L10 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <div className="flex items-center gap-2">
+              {/* Primary action: Approve — full green fill, largest */}
+              <button onClick={() => onAction("approve", notes)} disabled={loading}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#7CB342] hover:bg-[#5A8F2E] active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 {t("review.approve")}
               </button>
-              <button onClick={() => onAction("request_changes", notes)} disabled={loading} className="apple-btn apple-btn-warning">
+              {/* Secondary action: Request Changes — outline */}
+              <button onClick={() => onAction("request_changes", notes)} disabled={loading}
+                className="px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#86868b] bg-white border border-[#e8e8ed] hover:border-[#d2d2d7] hover:text-[#1d1d1f] active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                 {t("review.requestChanges")}
               </button>
-              <button onClick={() => onAction("reject", notes)} disabled={loading} className="apple-btn apple-btn-danger">
+              {/* Destructive action: Reject — subtle red, rightmost */}
+              <button onClick={() => onAction("reject", notes)} disabled={loading}
+                className="px-3 py-2.5 rounded-xl text-xs font-medium text-[#ff453a] bg-white border border-[#ffe0dd] hover:bg-[#fff5f5] hover:border-[#ff453a]/30 active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                 {t("review.reject")}
               </button>
             </div>

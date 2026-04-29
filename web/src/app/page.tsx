@@ -714,6 +714,7 @@ export default function Home() {
         </header>
 
         <main className="max-w-5xl mx-auto px-4 py-6">
+          <div key={stage + (activeScene || "")} className="animate-scale-in">
           {/* Stage 0: Home — Scene selection + form */}
           {stage === "home" && showSelector && (
             <div className="space-y-3">
@@ -978,6 +979,7 @@ export default function Home() {
               </button>
             </div>
           )}
+          </div>
         </main>
 
         {showAssetLibrary && (
