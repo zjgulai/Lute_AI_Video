@@ -9,18 +9,45 @@ CHANGES_REQUESTED is treated as APPROVED to prevent infinite loops.
 
 from __future__ import annotations
 
+import contextvars
+
 from src.models.state import VideoPipelineState
 
 MAX_RETRIES = 3
 
-# D10: Global override for human review decisions.
+# D10: Per-request override for human review decisions.
 # LangGraph's checkpoint recovery does not preserve update_state across
 # the astream boundary in interrupt_after resume scenarios, so the routing
 # function cannot read newly-written human_reviews from state.
 # This override is set by submit_review (api.py) before astream resume,
 # and read by routing functions here.
-_HUMAN_REVIEW_OVERRIDE: dict[str, dict[str, str]] = {}
+#
+# Using contextvars.ContextVar instead of a plain module-level dict ensures
+# that concurrent pipeline runs (multiple asyncio tasks) are isolated from
+# each other — each task gets its own copy of the override map.
+_HUMAN_REVIEW_OVERRIDE: contextvars.ContextVar[dict] = contextvars.ContextVar(
+    "human_review_override", default={}
+)
 # ^ Keyed by checkpoint key ("strategy"/"script"/"edit"/"thumbnail"), value = {"node_key": ..., "status": ...}
+
+
+def _get_override(checkpoint_key: str) -> dict | None:
+    """Read the D10 routing override for a checkpoint (thread-safe)."""
+    return _get_override().get(checkpoint_key)
+
+
+def _set_override(checkpoint_key: str, value: dict) -> None:
+    """Set the D10 routing override for a checkpoint (thread-safe)."""
+    current = dict(_get_override())
+    current[checkpoint_key] = value
+    _HUMAN_REVIEW_OVERRIDE.set(current)
+
+
+def _pop_override(checkpoint_key: str) -> None:
+    """Remove the D10 routing override for a checkpoint (thread-safe)."""
+    current = dict(_get_override())
+    current.pop(checkpoint_key, None)
+    _HUMAN_REVIEW_OVERRIDE.set(current)
 
 # -- Audit-driven decision thresholds (defaults) --
 # Per-checkpoint thresholds can be overridden by strategy_source/<scenario>/quality_thresholds.json
@@ -124,17 +151,17 @@ def route_after_strategy(state: VideoPipelineState) -> str:
       4. Default: re-loop to strategy_node
     """
     # D10: Check global routing override first (bypasses checkpoint recovery issue)
-    d10_override = _HUMAN_REVIEW_OVERRIDE.get("strategy")
+    d10_override = _get_override("strategy")
     if d10_override:
         user_status = d10_override.get("status", "")
         if user_status == "approved":
-            del _HUMAN_REVIEW_OVERRIDE["strategy"]
+            _pop_override("strategy")
             return "script_node"
         elif user_status == "rejected":
-            del _HUMAN_REVIEW_OVERRIDE["strategy"]
+            _pop_override("strategy")
             return "__end__"
         elif user_status == "changes_requested":
-            del _HUMAN_REVIEW_OVERRIDE["strategy"]
+            _pop_override("strategy")
             return "strategy_node"
 
     # Check human review FIRST -- explicit user action overrides auto decisions
@@ -169,17 +196,17 @@ def route_after_script(state: VideoPipelineState) -> str:
       4. Audit-driven: high score -> auto-approve, low score -> reject, middle -> re-loop
     """
     # D10: Check global routing override first
-    d10_override = _HUMAN_REVIEW_OVERRIDE.get("script")
+    d10_override = _get_override("script")
     if d10_override:
         user_status = d10_override.get("status", "")
         if user_status == "approved":
-            del _HUMAN_REVIEW_OVERRIDE["script"]
+            _pop_override("script")
             return "compliance_node"
         elif user_status == "rejected":
-            del _HUMAN_REVIEW_OVERRIDE["script"]
+            _pop_override("script")
             return "__end__"
         elif user_status == "changes_requested":
-            del _HUMAN_REVIEW_OVERRIDE["script"]
+            _pop_override("script")
             return "script_node"
 
     # Check human review FIRST
@@ -239,17 +266,17 @@ def route_after_editing(state: VideoPipelineState) -> str:
       3. Audit-driven: high score -> auto-approve, low score -> reject, middle -> re-loop
     """
     # D10: Check global routing override first
-    d10_override = _HUMAN_REVIEW_OVERRIDE.get("edit")
+    d10_override = _get_override("edit")
     if d10_override:
         user_status = d10_override.get("status", "")
         if user_status == "approved":
-            del _HUMAN_REVIEW_OVERRIDE["edit"]
+            _pop_override("edit")
             return "audio_node"
         elif user_status == "rejected":
-            del _HUMAN_REVIEW_OVERRIDE["edit"]
+            _pop_override("edit")
             return "__end__"
         elif user_status == "changes_requested":
-            del _HUMAN_REVIEW_OVERRIDE["edit"]
+            _pop_override("edit")
             return "editing_node"
 
     # Check human review FIRST
@@ -282,17 +309,17 @@ def route_after_thumbnail(state: VideoPipelineState) -> str:
       3. Audit-driven: high score -> auto-approve, low score -> reject, middle -> re-loop
     """
     # D10: Check global routing override first
-    d10_override = _HUMAN_REVIEW_OVERRIDE.get("thumbnail")
+    d10_override = _get_override("thumbnail")
     if d10_override:
         user_status = d10_override.get("status", "")
         if user_status == "approved":
-            del _HUMAN_REVIEW_OVERRIDE["thumbnail"]
+            _pop_override("thumbnail")
             return "distribution_node"
         elif user_status == "rejected":
-            del _HUMAN_REVIEW_OVERRIDE["thumbnail"]
+            _pop_override("thumbnail")
             return "__end__"
         elif user_status == "changes_requested":
-            del _HUMAN_REVIEW_OVERRIDE["thumbnail"]
+            _pop_override("thumbnail")
             return "thumbnail_node"
 
     # Check human review FIRST

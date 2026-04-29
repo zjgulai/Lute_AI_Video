@@ -40,10 +40,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 启动 FastAPI 服务器
-python3 -m uvicorn src.api:app --reload --port 8000
+python3 -m uvicorn src.api:app --reload --port 8001
 ```
 
-后端地址 `http://localhost:8000`，可以用 `http://localhost:8000/health` 验证。
+后端地址 `http://localhost:8001`，可以用 `http://localhost:8001/health` 验证。
 
 ### 2. WebUI（Next.js）
 
@@ -105,7 +105,7 @@ ELEVENLABS_API_KEY=...
 
 ### Option C: Direct API call
 ```bash
-curl -X POST http://localhost:8000/pipeline/start \
+curl -X POST http://localhost:8001/pipeline/start \
   -H "Content-Type: application/json" \
   -d '{
     "api_keys": {

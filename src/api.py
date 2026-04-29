@@ -375,12 +375,12 @@ if HAS_FASTAPI:
         # This is the only way the routing function can see the review decision,
         # because LangGraph checkpoint recovery overwrites update_state values
         # during astream(None) resume.
-        from src.graph.routing import _HUMAN_REVIEW_OVERRIDE
+        from src.graph.routing import _set_override
         checkpoint_key = review_node.replace("_review", "")
-        _HUMAN_REVIEW_OVERRIDE[checkpoint_key] = {
+        _set_override(checkpoint_key, {
             "node_key": checkpoint_key,
             "status": action.action,
-        }
+        })
 
         events = []
         try:
