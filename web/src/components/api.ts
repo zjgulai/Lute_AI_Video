@@ -224,12 +224,13 @@ export async function fetchAssets(): Promise<any[]> {
 }
 
 // Detect demo mode (GitHub Pages / static deploy with no backend)
+// NOTE: use exact `process.env.NEXT_PUBLIC_IS_DEMO` so Next.js DefinePlugin replaces it at build time.
 const IS_DEMO_MODE =
-  typeof process !== "undefined" &&
-  ((process as any).env?.NEXT_PUBLIC_IS_DEMO === "true" ||
-    (typeof window !== "undefined" &&
-      (window.location.hostname.includes("github.io") ||
-        window.location.hostname.endsWith(".vercel.app"))));
+  (typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
+  (typeof window !== "undefined" &&
+    (window.location.hostname.includes("github.io") ||
+      window.location.hostname.endsWith(".vercel.app")));
 
 export function getMediaUrl(filePath: string): string {
   if (!filePath) return "";

@@ -3,6 +3,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { API_BASE } from "@/components/api";
+
+// Detect demo mode (same logic as api.ts)
+const IS_DEMO_MODE =
+  (typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
+  (typeof window !== "undefined" &&
+    (window.location.hostname.includes("github.io") ||
+      window.location.hostname.endsWith(".vercel.app")));
 import { Users, Plus, Edit, Trash2, X, AlertCircle, Loader2 } from "lucide-react";
 
 interface InfluencerProfile {
@@ -38,6 +46,18 @@ export default function InfluencersPage() {
   const fetchInfluencers = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // Demo mode: load mock data
+    if (IS_DEMO_MODE) {
+      try {
+        const { DEMO_INFLUENCERS } = await import("@/demo-data");
+        setInfluencers(DEMO_INFLUENCERS || []);
+      } catch (e: any) {
+        setError(e.message || t("common.fetchFailed"));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     try {
       const res = await fetch(API_BASE + "/api/assets/influencers", {
         headers: { "X-API-Key": "ai_video_demo_2026" },
@@ -80,6 +100,10 @@ export default function InfluencersPage() {
 
   const handleSave = async () => {
     if (!formName.trim()) return;
+    if (IS_DEMO_MODE) {
+      setError("Demo mode — create/edit is not available");
+      return;
+    }
     setSaving(true);
     try {
       const platforms = formPlatforms
@@ -126,6 +150,11 @@ export default function InfluencersPage() {
   };
 
   const handleDelete = async (influencerId: string) => {
+    if (IS_DEMO_MODE) {
+      setError("Demo mode — delete is not available");
+      setDeleteConfirm(null);
+      return;
+    }
     try {
       const res = await fetch(API_BASE + "/api/assets/influencers/" + influencerId, {
         method: "DELETE",

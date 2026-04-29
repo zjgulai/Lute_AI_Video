@@ -18,7 +18,9 @@ const BTN_W = 216;
 const BTN_H = 54;
 
 function useContainMetrics() {
-  const [m, setM] = useState({ offsetX: 0, offsetY: 0, displayW: 0, displayH: 0 });
+  // Default to image native size so SSR/Hydration renders a visible button
+  // (will be corrected to actual viewport on first client paint)
+  const [m, setM] = useState({ offsetX: 0, offsetY: 0, displayW: IMAGE_W, displayH: IMAGE_H });
 
   const update = useCallback(() => {
     const screenW = window.innerWidth;
@@ -54,12 +56,13 @@ function useContainMetrics() {
 export default function SplashScreen({ onEnter }: Props) {
   const { t } = useI18n();
   const [visible, setVisible] = useState(true);
-  const [animating, setAnimating] = useState(false);
+  const [animating, setAnimating] = useState(true);
   const { offsetX, offsetY, displayW, displayH } = useContainMetrics();
 
+  // No need for delayed fade-in; start visible immediately for better SSR/hydration
+  // and to prevent blank-screen if JS loads slowly.
   useEffect(() => {
-    const timer = setTimeout(() => setAnimating(true), 100);
-    return () => clearTimeout(timer);
+    // Ensure metrics are computed on mount (already done by useContainMetrics)
   }, []);
 
   const handleEnter = () => {

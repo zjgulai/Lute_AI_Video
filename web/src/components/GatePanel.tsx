@@ -7,11 +7,11 @@ import { API_BASE } from "./api";
 
 // Detect demo mode (same logic as api.ts)
 const IS_DEMO =
-  typeof process !== "undefined" &&
-  ((process as any).env?.NEXT_PUBLIC_IS_DEMO === "true" ||
-    (typeof window !== "undefined" &&
-      (window.location.hostname.includes("github.io") ||
-        window.location.hostname.endsWith(".vercel.app"))));
+  (typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
+  (typeof window !== "undefined" &&
+    (window.location.hostname.includes("github.io") ||
+      window.location.hostname.endsWith(".vercel.app")));
 
 function getHeaders(): Record<string, string> {
   const apiKey =

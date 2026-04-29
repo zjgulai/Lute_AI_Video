@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE } from "@/components/api";
+import { API_BASE, getMediaUrl as getApiMediaUrl } from "@/components/api";
 import {
   Film,
   Upload,
@@ -56,8 +56,20 @@ function formatDate(dateStr: string): string {
   }
 }
 
+// Detect demo mode (same logic as api.ts)
+const IS_DEMO_MODE =
+  (typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_IS_DEMO === "true") ||
+  (typeof window !== "undefined" &&
+    (window.location.hostname.includes("github.io") ||
+      window.location.hostname.endsWith(".vercel.app")));
+
 function getMediaUrl(filename: string): string {
   if (!filename) return "";
+  // Demo mode: serve from static public folder
+  if (IS_DEMO_MODE) {
+    return getApiMediaUrl(filename);
+  }
   // Assets stored via api_assets.py use the filename as the media path
   return API_BASE + "/api/media/" + encodeURIComponent(filename);
 }
@@ -97,6 +109,18 @@ export default function FootagePage() {
   const fetchAssets = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // Demo mode: load mock data
+    if (IS_DEMO_MODE) {
+      try {
+        const { DEMO_FOOTAGE_ASSETS } = await import("@/demo-data");
+        setAssets(DEMO_FOOTAGE_ASSETS || []);
+      } catch (e: any) {
+        setError(e.message || t("common.fetchFailed"));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     try {
       const res = await fetch(API_BASE + "/api/assets/", {
         headers: { "X-API-Key": "ai_video_demo_2026" },
@@ -146,6 +170,10 @@ export default function FootagePage() {
   };
 
   const uploadFiles = async (files: File[]) => {
+    if (IS_DEMO_MODE) {
+      setError("Demo mode — upload is not available");
+      return;
+    }
     setUploading(true);
     setError(null);
     for (let i = 0; i < files.length; i++) {

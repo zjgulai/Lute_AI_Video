@@ -11,7 +11,9 @@ process.env.NEXT_PUBLIC_ASSET_PREFIX = assetPrefix;
 const nextConfig: NextConfig = {
   output: isGhPages ? "export" : "standalone",
   distDir: isGhPages ? "dist" : ".next",
-  assetPrefix: assetPrefix || undefined,
+  basePath: isGhPages ? `/${repoName}` : "",
+  // assetPrefix is intentionally omitted — basePath already handles _next/static paths.
+  // NEXT_PUBLIC_ASSET_PREFIX is kept for manual <img src> references in components.
   trailingSlash: isGhPages ? true : undefined,
   images: {
     unoptimized: true,
