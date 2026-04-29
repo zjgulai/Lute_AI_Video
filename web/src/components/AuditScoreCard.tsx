@@ -1,0 +1,104 @@
+"use client";
+
+import type { AuditReport, AuditCriterion } from "./types";
+import { useI18n } from "@/i18n/I18nProvider";
+
+interface Props {
+  report: AuditReport;
+}
+
+export default function AuditScoreCard({ report }: Props) {
+  const { t } = useI18n();
+  const score = report.overall_score;
+  const status = report.overall_status;
+
+  return (
+    <div className="p-3 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed] space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          {t("audit.title")}
+        </h3>
+        <ScoreBadge score={score} status={status} t={t} />
+      </div>
+
+      {/* Score circle + summary */}
+      <div className="flex items-center gap-3">
+        <div className="relative shrink-0">
+          <svg width="56" height="56" viewBox="0 0 56 56">
+            <circle cx="28" cy="28" r="24" fill="none" stroke="#e8e8ed" strokeWidth="5" />
+            <circle
+              cx="28" cy="28" r="24"
+              fill="none"
+              stroke={score >= 0.9 ? "#7CB342" : score >= 0.6 ? "#ff9f0a" : "#ff453a"}
+              strokeWidth="5"
+              strokeDasharray={`${score * 151} 151`}
+              strokeLinecap="round"
+              transform="rotate(-90 28 28)"
+            />
+          </svg>
+          <span className={`absolute inset-0 flex items-center justify-center text-base font-bold ${
+            score >= 0.9 ? "text-[#7CB342]" : score >= 0.6 ? "text-[#ff9f0a]" : "text-[#ff453a]"
+          }`}>
+            {Math.round(score * 100)}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <p className={`text-sm font-semibold ${
+            score >= 0.9 ? "text-[#7CB342]" : score >= 0.6 ? "text-[#ff9f0a]" : "text-[#ff453a]"
+          }`}>
+            {score >= 0.9 ? t("audit.excellent")
+              : score >= 0.6 ? t("audit.pendingReview")
+              : t("audit.rejected")}
+          </p>
+          <p className="text-[11px] text-[#aeaeb2] mt-0.5 line-clamp-2">{report.summary}</p>
+        </div>
+      </div>
+
+      {/* Criteria bars */}
+      <div className="space-y-2">
+        {report.criteria.map((c: AuditCriterion) => (
+          <div key={c.name}>
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-[11px] text-[#86868b] truncate mr-2">{c.name}</span>
+              <span className="text-[11px] font-medium text-[#1d1d1f]">{Math.round(c.score * 100)}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#e8e8ed] overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  c.status === "PASS" ? "bg-[#7CB342]"
+                  : c.status === "WARN" ? "bg-[#ff9f0a]"
+                  : "bg-[#ff453a]"
+                }`}
+                style={{ width: `${c.score * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScoreBadge({ score, status, t }: { score: number; status: string; t: (k: string) => string }) {
+  const colors: Record<string, string> = {
+    PASS: "bg-[#7CB342]/10 text-[#7CB342] border-[#7CB342]/20",
+    WARN: "bg-[#ff9f0a]/10 text-[#ff9f0a] border-[#ff9f0a]/20",
+    FAIL: "bg-[#ff453a]/10 text-[#ff453a] border-[#ff453a]/20",
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${colors[status] || colors.FAIL}`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${
+          status === "PASS" ? "bg-[#7CB342]" : status === "WARN" ? "bg-[#ff9f0a]" : "bg-[#ff453a]"
+        }`}
+      />
+      {Math.round(score * 100)}{t("audit.scoreSuffix")}
+    </span>
+  );
+}

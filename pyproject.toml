@@ -1,0 +1,58 @@
+[project]
+name = "short-video-agent"
+version = "0.2.0"
+description = "Multi-agent short video creation system for cross-border e-commerce — wearable breast pump & feeding appliances"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.2.0",
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-anthropic>=0.3.0",
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+    "supabase>=2.0",
+    "httpx>=0.27",
+    "redis>=5.0",
+    "celery>=5.3",
+    "pyyaml>=6.0",
+    "structlog>=24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.12",
+    "pytest-cov>=4.1",
+    "ruff>=0.3",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "F",   # pyflakes — catches undefined names, unused imports (real bugs)
+    "I",   # isort — import ordering
+    "UP",  # pyupgrade — modern syntax
+]
+ignore = [
+    "F841",  # Locally imported/assigned but never used (common during refactors)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N"]  # Allow non-PEP8 naming in test files
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--tb=short -v"
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/prompts/*",
+    "*/__init__.py",
+]

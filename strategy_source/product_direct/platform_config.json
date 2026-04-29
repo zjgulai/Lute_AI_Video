@@ -1,0 +1,20 @@
+{
+  "tiktok": {
+    "max_duration_s": 45,
+    "aspect_ratio": "9:16",
+    "require_hook": true,
+    "max_text_overlay_chars": 30
+  },
+  "shopify": {
+    "max_duration_s": 60,
+    "aspect_ratio": "1:1",
+    "require_hook": false,
+    "max_text_overlay_chars": 50
+  },
+  "instagram": {
+    "max_duration_s": 30,
+    "aspect_ratio": "9:16",
+    "require_hook": true,
+    "max_text_overlay_chars": 25
+  }
+}

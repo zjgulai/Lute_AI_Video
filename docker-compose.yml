@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ai_video_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ai_video
+      POSTGRES_PASSWORD: ai_video_dev_2026
+      POSTGRES_DB: ai_video
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./src/storage/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_video"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai_video_net
+
+  backend:
+    image: python:3.12-slim
+    container_name: ai_video_backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://ai_video:ai_video_dev_2026@postgres:5432/ai_video
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+    working_dir: /app
+    volumes:
+      - ./src:/app/src
+      - ./output:/app/output
+      - ./scripts:/app/scripts
+      - ./rendering:/app/rendering
+      - ./requirements.txt:/app/requirements.txt
+      - ./.env:/app/.env
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./docs:/app/docs
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             uvicorn src.api:app --host 0.0.0.0 --port 8001 --reload"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ai_video_net
+
+  frontend:
+    image: node:22
+    container_name: ai_video_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - API_BASE_URL=http://backend:8001
+      - NEXT_TELEMETRY_DISABLED=1
+    working_dir: /app
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next
+    command: >
+      sh -c "npm install && npm run dev"
+    depends_on:
+      - backend
+    networks:
+      - ai_video_net
+
+volumes:
+  pg_data:
+  output_data:
+
+networks:
+  ai_video_net:
+    driver: bridge

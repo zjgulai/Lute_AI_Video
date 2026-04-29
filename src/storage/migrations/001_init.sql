@@ -1,0 +1,66 @@
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- threads: LangGraph pipeline threads
+CREATE TABLE IF NOT EXISTS threads (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    thread_id VARCHAR(16) UNIQUE NOT NULL,
+    state JSONB NOT NULL DEFAULT '{}',
+    current_step VARCHAR(50),
+    pipeline_complete BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- pipeline_states: S1 step-by-step states
+CREATE TABLE IF NOT EXISTS pipeline_states (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    label VARCHAR(64) UNIQUE NOT NULL,
+    scenario VARCHAR(32),
+    config JSONB DEFAULT '{}',
+    steps JSONB DEFAULT '{}',
+    current_step VARCHAR(50),
+    mode VARCHAR(16) DEFAULT 'auto',
+    errors JSONB DEFAULT '[]',
+    media_synthesis_errors JSONB DEFAULT '[]',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- brand_packages
+CREATE TABLE IF NOT EXISTS brand_packages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(128) NOT NULL,
+    brand_guidelines JSONB DEFAULT '{}',
+    assets JSONB DEFAULT '[]',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- influencers
+CREATE TABLE IF NOT EXISTS influencers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(128) NOT NULL,
+    platform VARCHAR(32),
+    profile JSONB DEFAULT '{}',
+    contact_info JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- publish_logs
+CREATE TABLE IF NOT EXISTS publish_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    platform VARCHAR(32) NOT NULL,
+    post_id VARCHAR(128),
+    content JSONB DEFAULT '{}',
+    status VARCHAR(32),
+    url TEXT,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_threads_thread_id ON threads(thread_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_states_label ON pipeline_states(label);
+CREATE INDEX IF NOT EXISTS idx_publish_logs_platform ON publish_logs(platform);

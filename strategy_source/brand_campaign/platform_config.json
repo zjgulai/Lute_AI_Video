@@ -1,0 +1,42 @@
+{
+  "shopify": {
+    "format": "1:1",
+    "duration_seconds": [30, 60],
+    "style": "brand_showcase",
+    "cta_type": "shop_now",
+    "caption_style": "static",
+    "audio_style": "professional_voiceover"
+  },
+  "amazon": {
+    "format": "16:9",
+    "duration_seconds": [30, 90],
+    "style": "trust_building",
+    "cta_type": "learn_more",
+    "caption_style": "static",
+    "audio_style": "professional_voiceover"
+  },
+  "youtube_shorts": {
+    "format": "9:16",
+    "duration_seconds": [15, 60],
+    "style": "premium_storytelling",
+    "cta_type": "subscribe_and_shop",
+    "caption_style": "minimal_overlays",
+    "audio_style": "full_mix"
+  },
+  "instagram": {
+    "format": "9:16",
+    "duration_seconds": [15, 60],
+    "style": "curated_aesthetic",
+    "cta_type": "link_in_bio",
+    "caption_style": "brand_font_static",
+    "audio_style": "trending_or_brand_audio"
+  },
+  "brand_site_hero": {
+    "format": "16:9",
+    "duration_seconds": [60, 90],
+    "style": "cinematic_storytelling",
+    "cta_type": "explore_product",
+    "caption_style": "minimal",
+    "audio_style": "custom_score_with_vo"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "compliance_weight": 0.30,
+  "brand_consistency_weight": 0.30,
+  "visual_quality_weight": 0.20,
+  "engagement_weight": 0.10,
+  "cta_strength_weight": 0.10
+}

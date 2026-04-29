@@ -1,0 +1,37 @@
+{
+  "strategy": {
+    "Platform Coverage": 0.10,
+    "Type Diversity": 0.10,
+    "USP Mapping": 0.15,
+    "Audience Specificity": 0.10,
+    "Competitor / Trend Anchoring": 0.20,
+    "Seasonal Relevance": 0.15,
+    "Conversion Potential": 0.20
+  },
+  "script": {
+    "Hook Strength": 0.20,
+    "Segment Completeness": 0.10,
+    "Duration Fit": 0.10,
+    "Voiceover Clarity": 0.15,
+    "Brand Voice": 0.10,
+    "CTA Clarity": 0.15,
+    "Compliance Pre-check": 0.20
+  },
+  "edit": {
+    "Shot Continuity": 0.10,
+    "Asset Coverage": 0.15,
+    "Duration Accuracy": 0.10,
+    "Transition Quality": 0.15,
+    "Aspect Ratio": 0.10,
+    "Pace Variation": 0.20,
+    "Platform Fit": 0.20
+  },
+  "thumbnail": {
+    "Variant Diversity": 0.15,
+    "CTR Potential": 0.25,
+    "Text Readability": 0.15,
+    "Brand Consistency": 0.10,
+    "Platform Compatibility": 0.20,
+    "Emotional Appeal": 0.15
+  }
+}

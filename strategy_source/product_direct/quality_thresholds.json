@@ -1,0 +1,7 @@
+{
+  "min_clip_duration_s": 5,
+  "min_overall_score": 0.6,
+  "require_face_detection": false,
+  "require_product_detection": true,
+  "max_motion_jitter": 0.3
+}

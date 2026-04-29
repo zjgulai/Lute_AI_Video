@@ -1,0 +1,94 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Environment (contains secrets — NEVER commit)
+.env
+.env.local
+.env.production
+
+# Generated output
+output/
+rendering/output/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Logs
+*.log
+
+# Rendering
+rendering/node_modules/
+rendering/.vite/
+
+# Temporary files (screenshots, images, scratch)
+*.webp
+*.png
+*.jpg
+*.jpeg
+*.gif
+!assets/**/*.png
+!assets/**/*.jpg
+!assets/**/*.webp
+!public/**/*.png
+!public/**/*.jpg
+!public/**/*.webp
+!web/public/**/*.png
+!web/public/**/*.jpg
+!web/public/**/*.webp
+!rendering/public/**/*.png
+
+# One-off scripts (not part of the project)
+test_*.py
+security_self_check.py
+
+# Claude / AI artifacts
+.claude/
+.kiro/
+.hermes/
+
+# Archive / drafts (keep locally, not in git)
+tmp/
+drafts/
+archive/
+*.log
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Large binaries
+*.mp4
+*.mp3
+*.wav
+*.mov
+*.avi
+!output/**/*.mp4
+!output/**/*.mp3
+
+# Next.js build cache
+.next/
+.next.old/

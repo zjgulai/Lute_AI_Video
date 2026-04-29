@@ -1,0 +1,6 @@
+{
+  "strategy": { "auto_approve": 0.80, "auto_reject": 0.50 },
+  "script": { "auto_approve": 0.80, "auto_reject": 0.50 },
+  "edit": { "auto_approve": 0.75, "auto_reject": 0.45 },
+  "thumbnail": { "auto_approve": 0.75, "auto_reject": 0.45 }
+}

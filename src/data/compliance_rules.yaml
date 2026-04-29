@@ -1,0 +1,97 @@
+# Compliance Rules — Baby-feeding wearable pump content
+# Phase 1: English market rules for TikTok, Facebook, YouTube, Shopify
+#
+# Pattern quoting rules:
+#   - Single-quoted strings: YAML passes everything literally (best for regex with \s, \b)
+#   - Double-quoted strings: ONLY when the pattern itself contains a single quote (')
+
+rules:
+  # ── Medical Claims ──
+  - id: MED-001
+    pattern: '\b(cures?|treats?|prevents?\s+mastitis|heals?|eliminates?\s+clogged\s+ducts?)\b'
+    severity: HIGH
+    issue: "Unsubstantiated medical claim"
+    suggestion: "Describe what the product DOES, not what it cures. Use 'helps maintain milk flow' instead of 'prevents clogged ducts'."
+    platforms: []
+
+  - id: MED-002
+    pattern: '\b(increases?\s+milk\s+supply|boosts?\s+supply|more\s+milk)\b'
+    severity: HIGH
+    issue: "Milk supply claim — requires clinical evidence for your specific device"
+    suggestion: "Avoid supply claims. If you have clinical data, cite the study explicitly."
+    platforms: []
+
+  - id: MED-003
+    pattern: '\b(doctor\s+recommended|#1\s+doctor|pediatrician\s+approved)\b'
+    severity: MEDIUM
+    issue: "Medical endorsement claim — needs documented proof"
+    suggestion: "Replace with verifiable claim: 'Used by over X moms' instead of 'Doctor recommended'."
+    platforms: []
+
+  # ── Body/Nudity Content ──
+  - id: NUD-001
+    pattern: '\b(bare\s+breast|nipple|areola|topless|exposed\s+chest)\b'
+    severity: HIGH
+    issue: "Potential nudity content — violates platform policies for breastfeeding-related content"
+    suggestion: "Never describe or show exposed breasts. All pumping visuals must be under clothing."
+    platforms: [tiktok, facebook, youtube_shorts]
+
+  - id: NUD-002
+    pattern: '\b(pumping\s+in\s+public|public\s+pumping|exposed\s+while\s+pumping)\b'
+    severity: MEDIUM
+    issue: "Public pumping narrative may trigger platform moderation for implied exposure"
+    suggestion: "Frame as 'pumping discreetly' or 'hands-free under clothing' instead."
+    platforms: [tiktok, facebook]
+
+  # ── Comparative Advertising ──
+  - id: CMP-001
+    pattern: '\b(better\s+than\s+(Elvie|Willow|Spectra|Momcozy|Medela)|superior\s+to|blows?\s+.*\s+out\s+of\s+the\s+water)\b'
+    severity: HIGH
+    issue: "Unsubstantiated comparative claim — may violate FTC guidelines"
+    suggestion: "Compare to 'traditional pumps' generically, or use verifiable specs with lab report citation."
+    platforms: []
+
+  - id: CMP-002
+    pattern: '\b(worst|terrible|garbage|junk|hate\s+(Elvie|Willow|Spectra|Momcozy|Medela))\b'
+    severity: MEDIUM
+    issue: "Disparaging competitor — brand reputation risk and possible legal issue"
+    suggestion: "Focus on your product's strengths without naming competitors negatively."
+    platforms: []
+
+  # ── Fear-Based Marketing ──
+  - id: FEAR-001
+    pattern: '\b(formula\s+(harms?|damages?|ruins?|is\s+bad)|breast\s+is\s+best|formula\s+shaming)\b'
+    severity: HIGH
+    issue: "Formula shaming / fear-based feeding narrative — brand-damaging and against community guidelines"
+    suggestion: "Celebrate all feeding journeys. Frame your product as a tool for moms who CHOOSE to pump."
+    platforms: []
+
+  - id: FEAR-002
+    pattern: '\b(don\W?t\s+let\s+your\s+baby|your\s+baby\s+deserves\s+better|you\W?re\s+failing)\b'
+    severity: HIGH
+    issue: "Parental guilt marketing — against brand Caregiver archetype, alienating"
+    suggestion: "Use empowering language. 'You deserve convenience' not 'You're failing your baby.'"
+    platforms: []
+
+  # ── Children in Content ──
+  - id: CHILD-001
+    pattern: '\b(baby\W?s\s+face|infant\s+close.?up|newborn\s+visible|child\s+appears?)\b'
+    severity: MEDIUM
+    issue: "Children appearing in commercial content — COPPA/privacy concerns"
+    suggestion: "Avoid describing children in video. If babies appear, ensure they are not identifiable."
+    platforms: [tiktok, youtube_shorts, facebook]
+
+  # ── Platform-Specific ──
+  - id: TK-001
+    pattern: '\b(click\s+the\s+link|swipe\s+up|visit\s+our\s+website)\b'
+    severity: LOW
+    issue: "Ineffective CTA for TikTok (no swipe-up for most accounts)"
+    suggestion: "Use 'link in bio' or 'comment PUMP for the link' — TikTok-native CTAs."
+    platforms: [tiktok]
+
+  - id: FB-001
+    pattern: '\b(limited\s+time|act\s+now|don\W?t\s+miss\s+out|hurry)\b'
+    severity: LOW
+    issue: "False urgency language — can trigger Facebook ad policy review"
+    suggestion: "Use genuine urgency only when tied to a real deadline or stock level."
+    platforms: [facebook]

@@ -1,0 +1,34 @@
+{
+  "shopify": {
+    "format": "1:1",
+    "duration_seconds": [30, 60],
+    "style": "product_focused",
+    "cta_type": "add_to_cart",
+    "caption_style": "static",
+    "audio_style": "professional_voiceover"
+  },
+  "amazon": {
+    "format": "16:9",
+    "duration_seconds": [30, 90],
+    "style": "trust_building",
+    "cta_type": "learn_more",
+    "caption_style": "static",
+    "audio_style": "professional_voiceover"
+  },
+  "tiktok": {
+    "format": "9:16",
+    "duration_seconds": [15, 45],
+    "style": "authentic_hook",
+    "cta_type": "bio_link",
+    "caption_style": "dynamic_captions",
+    "audio_style": "personal_voice"
+  },
+  "reddit": {
+    "format": "text_post_with_video",
+    "duration_seconds": [15, 45],
+    "style": "community_recommendation",
+    "cta_type": "embedded_link",
+    "caption_style": "none",
+    "audio_style": "personal_voice"
+  }
+}
