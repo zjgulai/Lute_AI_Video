@@ -233,9 +233,13 @@ const IS_DEMO_MODE =
 
 export function getMediaUrl(filePath: string): string {
   if (!filePath) return "";
-  // Demo mode: backend media endpoint is unavailable
-  if (IS_DEMO_MODE) return "";
   const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
+  // Demo mode: serve from static public folder
+  if (IS_DEMO_MODE) {
+    const prefix = process.env.NEXT_PUBLIC_ASSET_PREFIX || "";
+    // Check if file exists in portfolio (copied media assets)
+    return prefix + "/portfolio/" + encodeURIComponent(name);
+  }
   return API_BASE + "/api/media/" + encodeURIComponent(name);
 }
 

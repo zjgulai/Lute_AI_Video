@@ -6,6 +6,14 @@ import { useI18n } from "@/i18n/I18nProvider";
 import DurationSlider from "./DurationSlider";
 import { startS1StepByStep, runS1Step } from "./api";
 
+// Detect demo mode (same logic as api.ts)
+const IS_DEMO =
+  typeof process !== "undefined" &&
+  ((process as any).env?.NEXT_PUBLIC_IS_DEMO === "true" ||
+    (typeof window !== "undefined" &&
+      (window.location.hostname.includes("github.io") ||
+        window.location.hostname.endsWith(".vercel.app"))));
+
 interface Props {
   config: any;  // The config from SceneForm
   onBack: () => void;
@@ -28,6 +36,28 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   }, []);
 
   async function fetchRecommendation() {
+    // Demo mode: use mock data, skip all API calls
+    if (IS_DEMO) {
+      try {
+        const { DEMO_RESULT_1, DEMO_RESULT_2 } = await import("@/demo-data");
+        const isBrand = config.content_scenario === "brand_campaign";
+        const demoResult = isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
+        const firstBrief = demoResult.briefs?.[0];
+
+        if (firstBrief) {
+          setSummary(firstBrief.key_message || firstBrief.topic || "");
+          setTone(firstBrief.hook_type || "");
+        }
+        setPlatforms(config.target_platforms || ["tiktok", "shopify"]);
+        setDuration(config.video_duration || 30);
+        setLoading(false);
+      } catch (e: any) {
+        setError(e.message || "Failed to load demo recommendation");
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       // Initialize pipeline and run strategy step
       const initResult = await startS1StepByStep({ ...config, mode: "step_by_step" });

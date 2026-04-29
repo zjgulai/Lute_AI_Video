@@ -336,10 +336,41 @@ export default function Home() {
     if (IS_DEMO) {
       const scenario = config.content_scenario || "product_direct";
       const isBrand = scenario === "brand_campaign";
-      setOneshotResult(isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1);
-      setOneshotScenario(scenario);
-      setStage("result");
-      showToast(t("toast.autoDone"), "success");
+      const effectiveMode = config.mode || pipelineMode;
+
+      if (effectiveMode === "auto" || effectiveMode === "smart") {
+        // Smart/Auto mode: show final result directly
+        setOneshotResult(isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1);
+        setOneshotScenario(scenario);
+        setStage("result");
+        showToast(t("toast.autoDone"), "success");
+        return;
+      }
+
+      // Expert Studio mode: build workflow state from demo data and enter gate flow
+      const demoResult = isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
+      const demoState = {
+        steps: {
+          strategy: { status: "done", output: demoResult.briefs },
+          scripts: { status: "done", output: demoResult.scripts },
+          compliance: { status: "done", output: { briefs: demoResult.briefs, passed: true } },
+          storyboards: { status: "done", output: demoResult.storyboards },
+          video_prompts: { status: "done", output: demoResult.video_prompts },
+          thumbnail_prompts: { status: "done", output: demoResult.thumbnail_sets },
+          seedance_clips: { status: "done", output: demoResult.seedance_output },
+          tts_audio: { status: "done", output: { audio_paths: demoResult.audio_paths } },
+          thumbnail_images: { status: "done", output: demoResult.thumbnail_image_paths },
+          assemble_final: { status: "done", output: demoResult.final_video_path },
+          audit: { status: "done", output: demoResult.audit_report },
+        },
+        errors: [],
+      };
+      setWorkflowConfig(config);
+      setWorkflowLabel(`demo_${scenario}_${Date.now()}`);
+      setWorkflowState(demoState);
+      setShowWorkflow(true);
+      setCurrentGate(1);
+      showToast(t("toast.workflowInit"), "success");
       return;
     }
 
@@ -751,6 +782,23 @@ export default function Home() {
                       }
                       try {
                         showToast(t("gate.finalReview") + " approved — loading results...", "info");
+                        // Demo mode: build versions directly from workflowState
+                        if (IS_DEMO) {
+                          const demoVersions = extractVersions({ steps: workflowState?.steps || {} });
+                          setCompareVersions(demoVersions.length > 0 ? demoVersions : [{
+                            label: "Version A",
+                            scriptVariant: "standard",
+                            videoPath: workflowState?.steps?.assemble_final?.output || "",
+                            thumbnailPath: workflowState?.steps?.thumbnail_images?.output?.[0] || "",
+                            auditReport: workflowState?.steps?.audit?.output || null,
+                            duration: workflowState?.steps?.audit?.output?.duration_seconds || 0,
+                            fileSize: 0,
+                          }]);
+                          setShowCompare(true);
+                          setCurrentGate(0);
+                          showToast(t("toast.workflowDone"), "success");
+                          return;
+                        }
                         const state = await fetchS1State(workflowLabel);
                         const versions = extractVersions(state);
                         setCompareVersions(versions);
@@ -836,7 +884,8 @@ export default function Home() {
             />
           )}
 
-          {showWorkflow && workflowLabel && workflowState && (
+          {/* Backward-compatible: only show when stage-machine does NOT handle it */}
+          {!(stage === "generate" && mode === "expert") && showWorkflow && workflowLabel && workflowState && (
             <VideoWorkflow
               config={workflowConfig}
               label={workflowLabel}

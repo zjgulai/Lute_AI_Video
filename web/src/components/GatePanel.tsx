@@ -5,6 +5,14 @@ import CandidateSelector, { type Candidate } from "@/components/CandidateSelecto
 import { useI18n } from "@/i18n/I18nProvider";
 import { API_BASE } from "./api";
 
+// Detect demo mode (same logic as api.ts)
+const IS_DEMO =
+  typeof process !== "undefined" &&
+  ((process as any).env?.NEXT_PUBLIC_IS_DEMO === "true" ||
+    (typeof window !== "undefined" &&
+      (window.location.hostname.includes("github.io") ||
+        window.location.hostname.endsWith(".vercel.app"))));
+
 function getHeaders(): Record<string, string> {
   const apiKey =
     (typeof process !== "undefined" &&
@@ -14,6 +22,68 @@ function getHeaders(): Record<string, string> {
     "Content-Type": "application/json",
     "X-API-Key": apiKey,
   };
+}
+
+// ── Demo candidate generators ──
+
+async function generateDemoCandidates(gateId: string): Promise<Candidate[]> {
+  const { DEMO_RESULT_1 } = await import("@/demo-data");
+  const demo = DEMO_RESULT_1;
+
+  switch (gateId) {
+    case "gate_1_script": {
+      const scripts = demo.scripts || [];
+      if (scripts.length === 0) return [];
+      const variants: Array<"standard" | "creative" | "conservative"> = ["standard", "creative", "conservative"];
+      return scripts.slice(0, 3).map((s: any, i: number) => ({
+        id: `script-${i + 1}`,
+        variant: variants[i % variants.length],
+        score: { overall: 0.85 + Math.random() * 0.12, explanation: "Strong script with clear structure" },
+        data: s,
+        recommended: i === 0,
+      }));
+    }
+    case "gate_2_keyframe": {
+      const boards = demo.storyboards || [];
+      if (boards.length === 0) return [];
+      return boards.slice(0, 3).map((b: any, i: number) => ({
+        id: `keyframe-${i + 1}`,
+        variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as "standard" | "creative" | "conservative",
+        score: { overall: 0.82 + Math.random() * 0.15, explanation: "Good visual composition" },
+        data: b,
+        recommended: i === 0,
+      }));
+    }
+    case "gate_3_clips": {
+      const clips = demo.seedance_output?.clip_details || [];
+      if (clips.length === 0) return [];
+      return clips.slice(0, 3).map((c: any, i: number) => ({
+        id: `clip-${i + 1}`,
+        variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as "standard" | "creative" | "conservative",
+        score: { overall: 0.88 + Math.random() * 0.1, explanation: "High quality clip generation" },
+        data: c,
+        recommended: i === 0,
+      }));
+    }
+    case "gate_4_final": {
+      return [
+        {
+          id: "final-1",
+          variant: "standard" as const,
+          score: { overall: 0.91, explanation: "Excellent final output" },
+          data: {
+            final_video_path: demo.final_video_path,
+            audit_report: demo.audit_report,
+            thumbnail_image_paths: demo.thumbnail_image_paths,
+            duration: demo.seedance_output?.total_duration || demo.video_duration,
+          },
+          recommended: true,
+        },
+      ];
+    }
+    default:
+      return [];
+  }
 }
 
 interface Props {
@@ -57,6 +127,20 @@ export default function GatePanel({
     setError(null);
     hasGenerated.current = true;
 
+    // Demo mode: generate candidates from mock data
+    if (IS_DEMO) {
+      try {
+        const demoCandidates = await generateDemoCandidates(gateId);
+        setCandidates(demoCandidates);
+      } catch (e: any) {
+        console.error("GatePanel demo generate error:", e);
+        setError(e.message || String(e));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       const res = await fetch(
         `${API_BASE}/scenario/${scenario}/gate/${label}/${gateId}/generate`,
@@ -96,6 +180,30 @@ export default function GatePanel({
   const handleRegenerate = async (candidateId: string) => {
     setLoading(true);
     setLoadingText(t("gate.regenerating"));
+
+    // Demo mode: rotate candidates
+    if (IS_DEMO) {
+      try {
+        const fresh = await generateDemoCandidates(gateId);
+        // Slightly shuffle scores to simulate regeneration
+        setCandidates(
+          fresh.map((c) => ({
+            ...c,
+            score: {
+              overall: Math.min(0.99, (c.score?.overall || 0.8) + (Math.random() - 0.5) * 0.1),
+              explanation: c.score?.explanation || "Regenerated variant",
+            },
+          }))
+        );
+      } catch (e: any) {
+        console.error("GatePanel demo regenerate error:", e);
+        setError(e.message || String(e));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       const res = await fetch(
         `${API_BASE}/scenario/${scenario}/gate/${label}/${gateId}/regenerate/${candidateId}`,
@@ -125,6 +233,17 @@ export default function GatePanel({
   const handleApprove = async () => {
     if (selectedIds.length === 0) return;
     setApproving(true);
+
+    // Demo mode: skip API, directly approve
+    if (IS_DEMO) {
+      setApproved(true);
+      setTimeout(() => {
+        onApprove(selectedIds);
+      }, 800);
+      setApproving(false);
+      return;
+    }
+
     try {
       const res = await fetch(
         `${API_BASE}/scenario/${scenario}/gate/${label}/${gateId}/approve`,

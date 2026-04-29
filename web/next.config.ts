@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   output: isGhPages ? "export" : "standalone",
   distDir: isGhPages ? "dist" : ".next",
   assetPrefix: assetPrefix || undefined,
+  trailingSlash: isGhPages ? true : undefined,
   images: {
     unoptimized: true,
   },

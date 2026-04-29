@@ -6,7 +6,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.home": "首页",
     "nav.brandAssets": "品牌资产",
     "nav.influencers": "网红管理",
-    "nav.footage": "素材库",
+    "nav.footage": "作品集",
 
     // Locale toggle
     "locale.toggle": "EN",
@@ -328,7 +328,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "result.empty": "暂无",
 
     // Asset Library
-    "asset.title": "素材库",
+    "asset.title": "作品集",
     "asset.all": "全部",
     "asset.video": "视频",
     "asset.image": "图片",
@@ -493,7 +493,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     // App / Header
     "app.title": "路特创新视频创作平台",
-    "app.assetLibrary": "素材库",
+    "app.assetLibrary": "作品集",
     "app.abandon": "放弃",
     "app.loading": "处理中...",
     "app.step": "步骤",
@@ -832,7 +832,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.home": "Home",
     "nav.brandAssets": "Brand Assets",
     "nav.influencers": "Influencers",
-    "nav.footage": "Footage",
+    "nav.footage": "Portfolio",
 
     // Locale toggle
     "locale.toggle": "中",
@@ -1154,7 +1154,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "result.empty": "No",
 
     // Asset Library
-    "asset.title": "Asset Library",
+    "asset.title": "Portfolio",
     "asset.all": "All",
     "asset.video": "Video",
     "asset.image": "Image",
@@ -1377,7 +1377,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     // App / Header
     "app.title": "Root Innovation Video Creation Platform",
-    "app.assetLibrary": "Asset Library",
+    "app.assetLibrary": "Portfolio",
     "app.abandon": "Abandon",
     "app.loading": "Processing...",
     "app.step": "Step",
