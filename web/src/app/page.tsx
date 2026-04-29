@@ -859,15 +859,6 @@ export default function Home() {
             />
           )}
 
-          {/* Existing pipeline views (backward-compatible) */}
-          {showOneshot && (
-            <OneShotResultView
-              scenario={oneshotScenario}
-              result={oneshotResult}
-              onReset={resetAll}
-            />
-          )}
-
           {showStepByStep && stepByStepLabel && stepByStepState && (
             <StepByStepView
               label={stepByStepLabel}
@@ -885,7 +876,7 @@ export default function Home() {
           )}
 
           {/* Backward-compatible: only show when stage-machine does NOT handle it */}
-          {!(stage === "generate" && mode === "expert") && showWorkflow && workflowLabel && workflowState && (
+          {!(stage === "generate" && mode === "expert") && !(stage === "result" && oneshotResult) && showWorkflow && workflowLabel && workflowState && (
             <VideoWorkflow
               config={workflowConfig}
               label={workflowLabel}

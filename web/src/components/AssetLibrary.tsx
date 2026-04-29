@@ -144,11 +144,13 @@ export default function AssetLibrary({ onClose }: Props) {
                 <a
                   key={i}
                   href={getMediaUrl(asset.path)}
-                  download={asset.filename}
+                  target={asset.type === "video" ? "_blank" : undefined}
+                  rel={asset.type === "video" ? "noopener noreferrer" : undefined}
+                  download={asset.type !== "video" ? asset.filename : undefined}
                   className="apple-card p-3 hover-lift cursor-pointer group block no-underline"
-                  title={t("asset.download")}
+                  title={asset.type === "video" ? t("result.view") : t("asset.download")}
                 >
-                  <div className="aspect-video bg-[#f5f5f7] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom">
+                  <div className="aspect-video bg-[#1d1d1f] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom relative">
                     {asset.type === "image" ? (
                       getMediaUrl(asset.path) ? (
                         <img
@@ -165,12 +167,22 @@ export default function AssetLibrary({ onClose }: Props) {
                       )
                     ) : asset.type === "video" ? (
                       getMediaUrl(asset.path) ? (
-                        <video
-                          src={getMediaUrl(asset.path)}
-                          className="w-full h-full object-cover"
-                          preload="metadata"
-                          muted
-                        />
+                        <>
+                          <video
+                            src={getMediaUrl(asset.path)}
+                            className="w-full h-full object-cover"
+                            preload="metadata"
+                            muted
+                          />
+                          {/* Play button overlay */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors pointer-events-none">
+                            <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="#1d1d1f">
+                                <polygon points="8,5 19,12 8,19" />
+                              </svg>
+                            </div>
+                          </div>
+                        </>
                       ) : (
                         <div className="flex flex-col items-center justify-center gap-1 text-center px-2">
                           <span className="text-2xl">🎬</span>

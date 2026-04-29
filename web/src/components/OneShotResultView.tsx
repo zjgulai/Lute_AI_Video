@@ -62,7 +62,7 @@ function DemoPlaceholder({ label }: { label: string }) {
 
 export default function OneShotResultView({ scenario, result, onReset, onEdit }: Props) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"briefs" | "scripts" | "videos" | "thumbnails" | "media" | "quality" | "performance" | "raw">("briefs");
+  const [tab, setTab] = useState<"briefs" | "scripts" | "videos" | "thumbnails" | "media" | "quality" | "performance" | "raw">("media");
 
   const briefs: any[] = result?.briefs || [];
   const scripts: any[] = result?.scripts || [];

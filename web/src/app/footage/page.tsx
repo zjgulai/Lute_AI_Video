@@ -448,10 +448,26 @@ export default function FootagePage() {
                               (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
                             }}
                           />
+                        ) : isVideoType && mediaUrl ? (
+                          <>
+                            <video
+                              src={mediaUrl}
+                              className="w-full h-full object-cover"
+                              preload="metadata"
+                              muted
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                              <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-md">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="#1d1d1f">
+                                  <polygon points="8,5 19,12 8,19" />
+                                </svg>
+                              </div>
+                            </div>
+                          </>
                         ) : null}
                         <div
                           className={`absolute inset-0 flex items-center justify-center ${
-                            isImageType && mediaUrl ? "hidden" : ""
+                            (isImageType || isVideoType) && mediaUrl ? "hidden" : ""
                           }`}
                         >
                           {isVideoType ? (
@@ -535,6 +551,13 @@ export default function FootagePage() {
                       src={getMediaUrl(selectedAsset.filename)}
                       alt={selectedAsset.original_name}
                       className="w-full h-full object-contain"
+                    />
+                  ) : isVideo(selectedAsset.mime_type) ? (
+                    <video
+                      src={getMediaUrl(selectedAsset.filename)}
+                      controls
+                      className="w-full h-full object-contain"
+                      preload="metadata"
                     />
                   ) : (
                     <FileVideo className="w-10 h-10 text-white/40" />
