@@ -1,6 +1,10 @@
 # Render Blueprint — auto-deploy backend from GitHub
 # Usage: Go to https://dashboard.render.com/blueprint, connect this repo, and Render
 # will create the services defined below automatically.
+#
+# IMPORTANT: After first deploy, the service will be available at:
+#   https://lute-ai-video-backend.onrender.com
+# Copy this URL into the frontend SettingsPanel (gear icon) → Backend URL.
 
 services:
   - type: web
@@ -12,27 +16,41 @@ services:
       - key: PYTHONPATH
         value: /app
       - key: API_KEY
-        generateValue: true
+        value: ai_video_demo_2026
       - key: CORS_ORIGINS
-        value: ""  # Will be updated after frontend deploy
+        value: "https://zjgulai.github.io"
       - key: VIDEO_OUTPUT_DIR
         value: /app/output
       - key: DEFAULT_LLM_PROVIDER
         value: kimi
+      # PostgreSQL — Render will create a database and inject this automatically
+      # if you add a PostgreSQL service to the Blueprint. Otherwise leave empty
+      # for in-memory / stub mode.
       - key: DATABASE_URL
-        value: ""  # Set manually if using Render PostgreSQL
-      # API keys — set manually in Render Dashboard for real functionality
-      # Leave empty for stub/demo mode
+        value: ""
+      # API keys — set manually in Render Dashboard → Environment for real
+      # video generation / LLM calls. Leave empty for stub/demo responses.
       - key: OPENAI_API_KEY
         value: ""
       - key: POYO_API_KEY
         value: ""
       - key: ELEVENLABS_API_KEY
         value: ""
+      - key: SEEDANCE_API_KEY
+        value: ""
+      - key: ANTHROPIC_API_KEY
+        value: ""
+      - key: SUPABASE_URL
+        value: ""
+      - key: SUPABASE_SERVICE_KEY
+        value: ""
+      - key: LOG_LEVEL
+        value: INFO
     healthCheckPath: /health
     buildFilter:
       paths:
         - src/**
+        - scripts/**
         - requirements.txt
         - Dockerfile.backend
         - pyproject.toml
