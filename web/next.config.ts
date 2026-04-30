@@ -1,4 +1,10 @@
 import type { NextConfig } from "next";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Next 16 default bundler: Turbopack can mis-infer the workspace root (e.g. treat `src/app` as root)
+// and then fail to resolve `next/package.json`. Pin root to this package directory.
+const WEB_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 // Deployment target: gh-pages | cloudbase | standalone
 const deployTarget = process.env.DEPLOY_TARGET || "standalone";
@@ -19,6 +25,9 @@ const nextConfig: NextConfig = {
   trailingSlash: isGhPages || isCloudBase ? true : undefined,
   images: {
     unoptimized: true,
+  },
+  turbopack: {
+    root: WEB_ROOT,
   },
 };
 

@@ -10,6 +10,8 @@ venv/
 .env
 .env.local
 .env.production
+.env.prod
+deploy/lighthouse/.env.prod
 
 # Generated output
 output/

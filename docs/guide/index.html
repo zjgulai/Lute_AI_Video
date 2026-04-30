@@ -1,0 +1,1749 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI视频生成</title>
+  <style>
+    :root {
+      --brand: #02b96b;
+      --brand-soft: rgba(2, 185, 107, 0.12);
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #1e2226;
+      --text-secondary: #626973;
+      --text-muted: #8a9099;
+      --border: #dfe2e6;
+      --border-light: #e9ecf0;
+      --nav: #11161a;
+      --shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+      --radius: 6px;
+      --radius-lg: 12px;
+      --purple-start: #6b67ff;
+      --purple-end: #7f3dff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    .topbar {
+      height: 56px;
+      padding: 0 28px;
+      background: var(--nav);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .topbar-brand-mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #02b96b 0%, #7f3dff 100%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .topbar-meta {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .subnav {
+      height: 48px;
+      padding: 0 28px;
+      background: #f0f2f5;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .subnav-item {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      background: transparent;
+    }
+
+    .subnav-item.active {
+      color: var(--brand);
+      background: rgba(2, 185, 107, 0.08);
+      font-weight: 600;
+    }
+
+    .page {
+      padding: 24px 24px 110px;
+    }
+
+    .page-shell {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .main-column {
+      display: grid;
+      gap: 16px;
+    }
+
+    .page-header {
+      background: var(--card);
+      border: 1px solid var(--border-light);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 20px 24px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: 24px;
+      line-height: 32px;
+    }
+
+    .page-desc {
+      margin: 8px 0 0;
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 22px;
+    }
+
+    .status-card {
+      min-width: 220px;
+      padding: 16px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(2, 185, 107, 0.08) 0%, rgba(127, 61, 255, 0.08) 100%);
+      border: 1px solid rgba(2, 185, 107, 0.16);
+    }
+
+    .status-card-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .status-card-value {
+      margin-top: 8px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .status-card-meta {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 20px;
+    }
+
+    .form-card,
+    .side-card {
+      background: var(--card);
+      border: 1px solid var(--border-light);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 20px 24px 24px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 18px;
+      line-height: 28px;
+    }
+
+    .card-subtitle {
+      margin: 6px 0 0;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 20px;
+    }
+
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #f4f6f8;
+      color: var(--text-secondary);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px 20px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field.field-span-2 {
+      grid-column: span 2;
+    }
+
+    .label {
+      font-size: 13px;
+      line-height: 20px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .label .required {
+      color: #f53f3f;
+      margin-right: 4px;
+    }
+
+    .field-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 18px;
+    }
+
+    .select {
+      position: relative;
+    }
+
+    .select-trigger {
+      width: 100%;
+      min-height: 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0 12px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .select-trigger:hover {
+      border-color: #c8cdd3;
+    }
+
+    .select.open .select-trigger {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px var(--brand-soft);
+    }
+
+    .select-value.is-placeholder {
+      color: #b6babf;
+    }
+
+    .select-arrow {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .select-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 30px rgba(6, 8, 27, 0.12);
+      display: none;
+      z-index: 20;
+      max-height: 296px;
+      overflow: auto;
+    }
+
+    .select.open .select-menu {
+      display: block;
+    }
+
+    .select-option {
+      min-height: 36px;
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .select-option:hover {
+      background: #f6f8fb;
+    }
+
+    .select-option.active {
+      background: #f0fff6;
+      color: #0d8d55;
+      font-weight: 600;
+    }
+
+    .select-option-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 400;
+    }
+
+    .scene-grid,
+    .model-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .scene-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .scene-chip {
+      min-height: 56px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .scene-chip strong {
+      display: block;
+      font-size: 13px;
+      line-height: 20px;
+      margin-bottom: 4px;
+    }
+
+    .scene-chip span {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 18px;
+    }
+
+    .scene-chip.active {
+      border-color: rgba(2, 185, 107, 0.35);
+      background: linear-gradient(180deg, rgba(2, 185, 107, 0.08) 0%, rgba(2, 185, 107, 0.02) 100%);
+      box-shadow: 0 0 0 3px rgba(2, 185, 107, 0.08);
+    }
+
+    .product-summary {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 16px;
+      padding: 16px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border-light);
+      margin-bottom: 18px;
+    }
+
+    .product-hero {
+      min-height: 160px;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--product-accent, #7f3dff) 0%, rgba(255,255,255,0.18) 100%);
+    }
+
+    .product-hero::before,
+    .product-hero::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    .product-hero::before {
+      width: 140px;
+      height: 140px;
+      top: -30px;
+      right: -30px;
+    }
+
+    .product-hero::after {
+      width: 90px;
+      height: 90px;
+      bottom: -18px;
+      left: -18px;
+    }
+
+    .product-hero-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.22);
+      color: #fff;
+      font-size: 12px;
+      backdrop-filter: blur(6px);
+    }
+
+    .product-hero-name {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      color: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .product-meta-title {
+      margin: 0;
+      font-size: 18px;
+      line-height: 28px;
+    }
+
+    .product-meta-desc {
+      margin: 10px 0 0;
+      font-size: 13px;
+      line-height: 22px;
+      color: var(--text-secondary);
+    }
+
+    .product-tags {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .product-tag {
+      min-height: 24px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .six-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .view-card {
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .view-visual {
+      height: 148px;
+      position: relative;
+      background: linear-gradient(135deg, var(--view-color, #5b8cff) 0%, rgba(255,255,255,0.2) 100%);
+      overflow: hidden;
+    }
+
+    .view-visual::before,
+    .view-visual::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+    }
+
+    .view-visual::before {
+      width: 110px;
+      height: 110px;
+      top: -20px;
+      right: -10px;
+    }
+
+    .view-visual::after {
+      width: 70px;
+      height: 70px;
+      bottom: 12px;
+      left: 12px;
+    }
+
+    .view-device {
+      position: absolute;
+      inset: 24px 28px 24px auto;
+      width: 86px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 14px 28px rgba(13, 25, 43, 0.18);
+      transform: rotate(-10deg);
+    }
+
+    .view-device::before,
+    .view-device::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(2, 185, 107, 0.18);
+    }
+
+    .view-device::before {
+      width: 18px;
+      height: 18px;
+      top: 18px;
+      left: 18px;
+    }
+
+    .view-device::after {
+      width: 38px;
+      height: 38px;
+      bottom: 18px;
+      right: 18px;
+    }
+
+    .view-label {
+      position: absolute;
+      left: 16px;
+      top: 14px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.24);
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .view-copy {
+      position: absolute;
+      left: 16px;
+      bottom: 16px;
+      right: 120px;
+      color: #fff;
+    }
+
+    .view-copy strong {
+      display: block;
+      font-size: 18px;
+      line-height: 24px;
+      margin-bottom: 4px;
+    }
+
+    .view-copy span {
+      display: block;
+      font-size: 12px;
+      line-height: 18px;
+      opacity: 0.9;
+    }
+
+    .view-footer {
+      padding: 12px 14px 14px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .view-title {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 20px;
+    }
+
+    .view-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 20px;
+      min-height: 40px;
+    }
+
+    .model-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .model-option {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+      padding: 0;
+    }
+
+    .model-option.active {
+      border-color: rgba(2, 185, 107, 0.42);
+      box-shadow: 0 0 0 3px rgba(2, 185, 107, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .model-portrait {
+      height: 150px;
+      position: relative;
+      background: linear-gradient(135deg, var(--model-start, #7f3dff) 0%, var(--model-end, #1bc6ff) 100%);
+      overflow: hidden;
+    }
+
+    .model-portrait::before {
+      content: "";
+      position: absolute;
+      width: 72px;
+      height: 72px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.86);
+      left: 50%;
+      top: 32px;
+      transform: translateX(-50%);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+    }
+
+    .model-portrait::after {
+      content: "";
+      position: absolute;
+      width: 112px;
+      height: 126px;
+      left: 50%;
+      bottom: -28px;
+      transform: translateX(-50%);
+      border-radius: 56px 56px 0 0;
+      background: rgba(255, 255, 255, 0.84);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.1);
+    }
+
+    .model-initials {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      min-width: 34px;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      backdrop-filter: blur(4px);
+    }
+
+    .model-body {
+      padding: 12px 14px 14px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .model-name {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 20px;
+    }
+
+    .model-role {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      width: fit-content;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #f5f7fa;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .model-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 18px;
+    }
+
+    .selected-models {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .empty-box {
+      grid-column: 1 / -1;
+      min-height: 96px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: var(--text-muted);
+      font-size: 13px;
+      background: #fafbfc;
+      text-align: center;
+    }
+
+    .selected-model-card {
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .selected-model-card .model-portrait {
+      height: 176px;
+    }
+
+    .selected-model-meta {
+      padding: 12px 14px 16px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .selected-model-meta p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 20px;
+      color: var(--text-secondary);
+    }
+
+    .story-box {
+      width: 100%;
+      min-height: 156px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: #fff;
+      resize: vertical;
+      outline: none;
+      color: var(--text);
+      line-height: 22px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .story-box::placeholder {
+      color: #b6babf;
+    }
+
+    .story-box:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px var(--brand-soft);
+    }
+
+    .story-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .duration-panel {
+      padding: 18px;
+      border-radius: 14px;
+      border: 1px solid var(--border-light);
+      background: linear-gradient(180deg, #fbfbfd 0%, #f6f7fb 100%);
+    }
+
+    .duration-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .duration-option {
+      min-height: 80px;
+      border: 1px solid #eceff3;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #ffffff 0%, #f3f4f7 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    }
+
+    .duration-option strong {
+      font-size: 16px;
+      line-height: 22px;
+    }
+
+    .duration-option span {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .duration-option.active {
+      color: #fff;
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--purple-start) 0%, var(--purple-end) 100%);
+      box-shadow: 0 12px 24px rgba(107, 103, 255, 0.24);
+    }
+
+    .duration-option.active span {
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .side-column {
+      display: grid;
+      gap: 16px;
+      position: sticky;
+      top: 24px;
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 2px;
+    }
+
+    .summary-item {
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: #f7f9fb;
+      border: 1px solid var(--border-light);
+      display: grid;
+      gap: 6px;
+    }
+
+    .summary-item-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .summary-item-value {
+      font-size: 13px;
+      line-height: 20px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .summary-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .summary-tag {
+      padding: 0 10px;
+      min-height: 24px;
+      border-radius: 999px;
+      background: #eef3ff;
+      color: #4f6bff;
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .result-card {
+      padding: 16px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(2, 185, 107, 0.07) 0%, rgba(127, 61, 255, 0.05) 100%);
+      border: 1px solid rgba(2, 185, 107, 0.16);
+    }
+
+    .result-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: rgba(2, 185, 107, 0.12);
+      color: #0d8d55;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .result-title {
+      margin: 0;
+      font-size: 16px;
+      line-height: 24px;
+    }
+
+    .result-copy {
+      margin: 8px 0 0;
+      font-size: 13px;
+      line-height: 22px;
+      color: var(--text-secondary);
+    }
+
+    .result-points {
+      margin: 14px 0 0;
+      padding-left: 18px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 20px;
+    }
+
+    .bottom-bar {
+      position: fixed;
+      left: 24px;
+      right: 24px;
+      bottom: 18px;
+      padding: 14px 18px;
+      border: 1px solid var(--border-light);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 36px rgba(15, 23, 42, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 40;
+    }
+
+    .bottom-summary {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .bottom-summary strong {
+      color: var(--text);
+    }
+
+    .btn {
+      min-width: 112px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      padding: 0 16px;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(2, 185, 107, 0.22);
+    }
+
+    .btn-primary:hover {
+      background: #20c77b;
+      border-color: #20c77b;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    @media (max-width: 1280px) {
+      .page-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .side-column {
+        position: static;
+      }
+
+      .scene-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .model-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 960px) {
+      .page {
+        padding: 16px 16px 140px;
+      }
+
+      .page-header,
+      .form-card,
+      .side-card {
+        padding: 18px;
+      }
+
+      .page-header {
+        flex-direction: column;
+      }
+
+      .form-grid,
+      .product-summary,
+      .selected-models,
+      .six-grid,
+      .duration-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .field.field-span-2 {
+        grid-column: span 1;
+      }
+
+      .scene-grid,
+      .model-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .bottom-bar {
+        left: 16px;
+        right: 16px;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .bottom-summary {
+        gap: 10px;
+      }
+
+      .btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="topbar-brand-mark">AI</span>
+      <span>视频生成工作台</span>
+    </div>
+    <div class="topbar-meta">品牌素材规范化生成 / Demo Prototype</div>
+  </header>
+
+  <div class="subnav">
+    <span class="subnav-item">品牌资产</span>
+    <span class="subnav-item active">视频生成</span>
+    <span class="subnav-item">脚本中心</span>
+    <span class="subnav-item">历史任务</span>
+  </div>
+
+  <main class="page">
+    <div class="page-shell">
+      <div class="main-column">
+        <section class="page-header">
+          <div>
+            <h1 class="page-title">AI生成视频</h1>
+            <p class="page-desc">
+              先选择品牌规范、产品和模特图，系统会自动填充产品六视图、识别模特角色并生成适配场景的视频故事线。
+            </p>
+          </div>
+          <div class="status-card">
+            <div class="status-card-label">当前流程</div>
+            <div class="status-card-value">素材装配 -> 视频生成</div>
+            <div class="status-card-meta">
+              选完产品后自动回填六视图，选择模特后自动带出角色，无需手动补录。
+            </div>
+          </div>
+        </section>
+
+        <section class="form-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">基础配置</h2>
+              <p class="card-subtitle">先确定品牌、产品和主场景，系统会根据品牌规范绑定素材语言。</p>
+            </div>
+            <span class="badge">分组 1</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label class="label"><span class="required">*</span>品牌规范</label>
+              <div class="select" data-select="brand"></div>
+              <div class="field-hint">枚举值内置品牌规范，默认使用品牌主视觉、文案语气和镜头语言。</div>
+            </div>
+
+            <div class="field">
+              <label class="label"><span class="required">*</span>产品选择</label>
+              <div class="select" data-select="product"></div>
+              <div class="field-hint">选择产品后，系统自动把对应六视图和产品卖点同步到下方。</div>
+            </div>
+
+            <div class="field field-span-2">
+              <label class="label"><span class="required">*</span>场景选择</label>
+              <div class="scene-grid" id="sceneGrid"></div>
+              <div class="field-hint">用于约束背景环境、镜头道具和生活方式表达。</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">产品六视图</h2>
+              <p class="card-subtitle">产品选定后自动回填，不需要重复上传基础角度图。</p>
+            </div>
+            <span class="badge" id="viewBadge">6 视图已同步</span>
+          </div>
+
+          <div class="product-summary">
+            <div class="product-hero" id="productHero">
+              <div class="product-hero-badge" id="productHeroBrand"></div>
+              <div class="product-hero-name" id="productHeroName"></div>
+            </div>
+            <div>
+              <h3 class="product-meta-title" id="productTitle"></h3>
+              <p class="product-meta-desc" id="productDescription"></p>
+              <div class="product-tags" id="productTags"></div>
+            </div>
+          </div>
+
+          <div class="six-grid" id="sixGrid"></div>
+        </section>
+
+        <section class="form-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">模特图选择</h2>
+              <p class="card-subtitle">支持选择多个模特。每选中一个模特，下方自动展示图片和对应角色标签。</p>
+            </div>
+            <span class="badge" id="modelCounter">已选 0 个模特</span>
+          </div>
+
+          <div class="model-grid" id="modelGrid"></div>
+
+          <div class="selected-models" id="selectedModels"></div>
+        </section>
+
+        <section class="form-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">故事描述</h2>
+              <p class="card-subtitle">补充镜头氛围、人物动作、卖点顺序和结尾 CTA，AI 会据此生成完整视频脚本。</p>
+            </div>
+            <span class="badge">分组 4</span>
+          </div>
+
+          <div class="field">
+            <label class="label"><span class="required">*</span>故事描述</label>
+            <textarea class="story-box" id="storyInput" placeholder="例如：以年轻母亲在客厅单人轻松使用 Momcozy M5 为核心，穿插婴儿安静入睡的镜头，强调免手扶、静音和日常高效场景，结尾突出更自由的育儿体验。"></textarea>
+            <div class="story-footer">
+              <span>建议描述人物动作、情绪、卖点节奏和结尾指令，便于 AI 生成更完整的视频故事线。</span>
+              <span id="storyCount">0 / 300</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">视频参数</h2>
+              <p class="card-subtitle">固定时长按钮参考上传样式，便于快速选择产出目标。</p>
+            </div>
+            <span class="badge">分组 5</span>
+          </div>
+
+          <div class="duration-panel">
+            <div class="label"><span class="required">*</span>视频时长（上限）</div>
+            <div class="field-hint">内容丰富度会随时长档位自动调整镜头数量和旁白节奏。</div>
+            <div class="duration-strip" id="durationStrip"></div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="side-column">
+        <section class="side-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">生成摘要</h2>
+              <p class="card-subtitle">实时同步当前素材组合和生成参数。</p>
+            </div>
+          </div>
+
+          <div class="summary-list">
+            <div class="summary-item">
+              <div class="summary-item-label">品牌规范</div>
+              <div class="summary-item-value" id="summaryBrand"></div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-item-label">产品</div>
+              <div class="summary-item-value" id="summaryProduct"></div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-item-label">场景</div>
+              <div class="summary-item-value" id="summaryScene"></div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-item-label">模特角色</div>
+              <div class="summary-tags" id="summaryRoles"></div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-item-label">视频时长</div>
+              <div class="summary-item-value" id="summaryDuration"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="side-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">AI 输出预览</h2>
+              <p class="card-subtitle">点击底部按钮后，展示一版自动生成结果摘要。</p>
+            </div>
+          </div>
+
+          <div class="result-card" id="resultCard">
+            <div class="result-status">等待生成</div>
+            <h3 class="result-title">待生成视频脚本</h3>
+            <p class="result-copy">
+              当前会根据所选品牌、产品、模特角色、场景和时长档位，生成一版可用于评审的脚本摘要。
+            </p>
+            <ul class="result-points">
+              <li>自动拼装产品六视图素材</li>
+              <li>自动识别模特角色并写入分镜</li>
+              <li>自动按时长调整镜头节奏</li>
+            </ul>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div class="bottom-bar">
+    <div class="bottom-summary" id="bottomSummary"></div>
+    <button class="btn btn-primary" id="generateBtn" type="button">AI生成视频</button>
+  </div>
+
+  <script>
+    const data = {
+      brands: [
+        {
+          id: "momcozy",
+          name: "Momcozy",
+          tone: "温柔真实的母婴家庭叙事",
+          products: [
+            {
+              id: "m5",
+              name: "M5 Wearable Breast Pump",
+              shortName: "M5 Breast Pump",
+              description: "主打免手扶、静音、轻量通勤，适合家庭和职场多场景切换。",
+              accent: "#7f3dff",
+              tags: ["免手扶", "静音", "轻量通勤", "母婴场景"],
+              views: [
+                { label: "主视图", title: "Hero Angle", copy: "正面展示杯体与佩戴形态", desc: "用于首屏封面和品牌主镜头。", color: "#7f3dff" },
+                { label: "45度视图", title: "Dynamic Angle", copy: "突出轮廓和材质细节", desc: "适合和人物佩戴场景衔接。", color: "#5b8cff" },
+                { label: "侧视图", title: "Slim Profile", copy: "展示轻薄弧线和贴合度", desc: "适合强调隐形与舒适卖点。", color: "#02b96b" },
+                { label: "背视图", title: "Back Detail", copy: "展示结构与固定方式", desc: "用于解释佩戴稳定性和支撑感。", color: "#ff8a34" },
+                { label: "细节视图", title: "Material Close-up", copy: "突出亲肤材质和工艺细节", desc: "适合插入局部材质和按钮特写。", color: "#ff5c7a" },
+                { label: "包装视图", title: "Packaging View", copy: "强化套装完整度和礼盒感", desc: "适合作为收尾展示和购买引导。", color: "#00b8d9" }
+              ]
+            },
+            {
+              id: "carrier",
+              name: "Ergonomic Baby Carrier Pro",
+              shortName: "Baby Carrier Pro",
+              description: "强调承托舒适、科学受力和户外陪伴感，适合亲子出行类视频。",
+              accent: "#02b96b",
+              tags: ["人体工学", "亲子陪伴", "稳固承托", "户外出行"],
+              views: [
+                { label: "主视图", title: "Front Carry", copy: "展示整机承托结构", desc: "用于产品主封面。", color: "#02b96b" },
+                { label: "45度视图", title: "Lifestyle Angle", copy: "突出穿戴后的家庭氛围", desc: "连接人物和产品的首选角度。", color: "#5b8cff" },
+                { label: "侧视图", title: "Side Support", copy: "展示肩背受力分布", desc: "突出舒适和稳固。", color: "#7f3dff" },
+                { label: "背视图", title: "Back Harness", copy: "强调背带调节结构", desc: "用于说明细节操作。", color: "#ff8a34" },
+                { label: "细节视图", title: "Fabric Detail", copy: "展示面料、卡扣、缝线", desc: "适合卖点特写。", color: "#ff5c7a" },
+                { label: "包装视图", title: "Set Preview", copy: "展示完整组合与附件", desc: "适合作为收尾强化购买感。", color: "#00b8d9" }
+              ]
+            }
+          ]
+        },
+        {
+          id: "cozycare",
+          name: "CozyCare",
+          tone: "高效、克制、都市生活方式表达",
+          products: [
+            {
+              id: "bottle",
+              name: "Bottle Washer Max",
+              shortName: "Bottle Washer Max",
+              description: "强调高效清洗、母婴安全和台面收纳感，适合厨房和生活方式场景。",
+              accent: "#5b8cff",
+              tags: ["高效清洗", "母婴安全", "厨房台面", "自动化"],
+              views: [
+                { label: "主视图", title: "Countertop Hero", copy: "展示台面摆放和整体造型", desc: "适合作为场景开场镜头。", color: "#5b8cff" },
+                { label: "45度视图", title: "Workflow Angle", copy: "突出操作动线和开合结构", desc: "适合说明使用流程。", color: "#02b96b" },
+                { label: "侧视图", title: "Compact Side", copy: "展示占地体积和侧面细节", desc: "突出节省空间感。", color: "#7f3dff" },
+                { label: "背视图", title: "Back Setup", copy: "展示排水和线缆走向", desc: "适合补充完整结构。", color: "#ff8a34" },
+                { label: "细节视图", title: "Cleaning Detail", copy: "展示喷淋、托架、内胆细节", desc: "用于卖点特写。", color: "#00b8d9" },
+                { label: "包装视图", title: "Pack Shot", copy: "展示机器和配件套装", desc: "用于购买收尾和礼包展示。", color: "#ff5c7a" }
+              ]
+            }
+          ]
+        },
+        {
+          id: "lullabloom",
+          name: "LullaBloom",
+          tone: "柔和高级的亲子生活方式表达",
+          products: [
+            {
+              id: "monitor",
+              name: "Smart Baby Monitor",
+              shortName: "Smart Monitor",
+              description: "强调夜间守护、远程看护和安心陪伴，适合卧室与儿童房场景。",
+              accent: "#ff8a34",
+              tags: ["夜间守护", "远程看护", "安心陪伴", "儿童房"],
+              views: [
+                { label: "主视图", title: "Monitor Hero", copy: "展示摄像头主体和底座", desc: "用于主视觉镜头。", color: "#ff8a34" },
+                { label: "45度视图", title: "Warm Angle", copy: "结合儿童房布景表达氛围", desc: "适合和环境镜头搭配。", color: "#7f3dff" },
+                { label: "侧视图", title: "Slim Side", copy: "展示转动结构和轮廓", desc: "适合表现灵活监测角度。", color: "#5b8cff" },
+                { label: "背视图", title: "Back Ports", copy: "展示接口与背部细节", desc: "用于功能补充说明。", color: "#02b96b" },
+                { label: "细节视图", title: "Lens Detail", copy: "突出镜头、夜视和指示灯", desc: "用于特写插入镜头。", color: "#ff5c7a" },
+                { label: "包装视图", title: "Gift Bundle", copy: "突出套装与品牌礼盒感", desc: "用于结尾购买引导。", color: "#00b8d9" }
+              ]
+            }
+          ]
+        }
+      ],
+      models: [
+        {
+          id: "model-mom",
+          name: "Ava",
+          role: "母亲",
+          desc: "温柔母婴场景，适合哺乳器和居家内容。",
+          initials: "MOM",
+          gradient: ["#ff7eb3", "#7f3dff"]
+        },
+        {
+          id: "model-dad",
+          name: "Liam",
+          role: "父亲",
+          desc: "家庭陪伴和户外亲子场景，更适合背带类内容。",
+          initials: "DAD",
+          gradient: ["#2f80ed", "#56ccf2"]
+        },
+        {
+          id: "model-baby",
+          name: "Noah",
+          role: "婴儿",
+          desc: "用于补充亲子互动和安睡镜头。",
+          initials: "BABY",
+          gradient: ["#f6c667", "#f58b54"]
+        },
+        {
+          id: "model-parent",
+          name: "Emma",
+          role: "孕妈",
+          desc: "适合孕产和母婴生活方式内容。",
+          initials: "MAMA",
+          gradient: ["#8e54e9", "#4776e6"]
+        },
+        {
+          id: "model-caregiver",
+          name: "Sophia",
+          role: "护理师",
+          desc: "适合专业演示、护理流程和安全感表达。",
+          initials: "CARE",
+          gradient: ["#02b96b", "#18c6a3"]
+        },
+        {
+          id: "model-couple",
+          name: "Mia & Jack",
+          role: "父母双人",
+          desc: "适合家庭合拍和双人互动镜头。",
+          initials: "2P",
+          gradient: ["#ff5c7a", "#ffb347"]
+        }
+      ],
+      scenes: [
+        { id: "office", name: "职场", desc: "突出高效与通勤节奏" },
+        { id: "living-room", name: "客厅", desc: "轻松陪伴和家庭氛围" },
+        { id: "bedroom", name: "卧室", desc: "安静、亲密、睡前场景" },
+        { id: "nursery", name: "儿童房", desc: "亲子布景和成长陪伴" },
+        { id: "outdoor", name: "户外", desc: "日常出行与生活方式" },
+        { id: "kitchen", name: "厨房", desc: "高效家务和台面操作" }
+      ],
+      durations: [
+        { id: "5-15", label: "5-15s", note: "超短" },
+        { id: "15-30", label: "15-30s", note: "标准" },
+        { id: "30-45", label: "30-45s", note: "加长" },
+        { id: "45-60", label: "45-60s", note: "中长" },
+        { id: "60-90", label: "60-90s", note: "长片" }
+      ]
+    };
+
+    const state = {
+      brandId: "momcozy",
+      productId: "m5",
+      sceneId: "living-room",
+      selectedModelIds: [],
+      durationId: "15-30",
+      story: ""
+    };
+
+    const brandSelectRoot = document.querySelector('[data-select="brand"]');
+    const productSelectRoot = document.querySelector('[data-select="product"]');
+    const sceneGrid = document.getElementById("sceneGrid");
+    const sixGrid = document.getElementById("sixGrid");
+    const productTitle = document.getElementById("productTitle");
+    const productDescription = document.getElementById("productDescription");
+    const productTags = document.getElementById("productTags");
+    const productHero = document.getElementById("productHero");
+    const productHeroBrand = document.getElementById("productHeroBrand");
+    const productHeroName = document.getElementById("productHeroName");
+    const modelGrid = document.getElementById("modelGrid");
+    const selectedModels = document.getElementById("selectedModels");
+    const modelCounter = document.getElementById("modelCounter");
+    const storyInput = document.getElementById("storyInput");
+    const storyCount = document.getElementById("storyCount");
+    const durationStrip = document.getElementById("durationStrip");
+    const summaryBrand = document.getElementById("summaryBrand");
+    const summaryProduct = document.getElementById("summaryProduct");
+    const summaryScene = document.getElementById("summaryScene");
+    const summaryRoles = document.getElementById("summaryRoles");
+    const summaryDuration = document.getElementById("summaryDuration");
+    const resultCard = document.getElementById("resultCard");
+    const bottomSummary = document.getElementById("bottomSummary");
+    const generateBtn = document.getElementById("generateBtn");
+
+    function getCurrentBrand() {
+      return data.brands.find((brand) => brand.id === state.brandId);
+    }
+
+    function getProductsForBrand() {
+      return getCurrentBrand().products;
+    }
+
+    function getCurrentProduct() {
+      return getProductsForBrand().find((product) => product.id === state.productId);
+    }
+
+    function getCurrentScene() {
+      return data.scenes.find((scene) => scene.id === state.sceneId);
+    }
+
+    function getSelectedModels() {
+      return data.models.filter((model) => state.selectedModelIds.includes(model.id));
+    }
+
+    function createSelect(root, options, currentValue, onSelect) {
+      const current = options.find((item) => item.id === currentValue);
+      root.innerHTML = `
+        <button class="select-trigger" type="button">
+          <span class="select-value ${current ? "" : "is-placeholder"}">${current ? current.name : "请选择"}</span>
+          <span class="select-arrow">▼</span>
+        </button>
+        <div class="select-menu">
+          ${options.map((item) => `
+            <div class="select-option ${item.id === currentValue ? "active" : ""}" data-value="${item.id}">
+              <span>${item.name}</span>
+              ${item.meta ? `<span class="select-option-meta">${item.meta}</span>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      `;
+
+      root.classList.remove("open");
+
+      const trigger = root.querySelector(".select-trigger");
+      trigger.addEventListener("click", (event) => {
+        event.stopPropagation();
+        document.querySelectorAll(".select.open").forEach((node) => {
+          if (node !== root) {
+            node.classList.remove("open");
+          }
+        });
+        root.classList.toggle("open");
+      });
+
+      root.querySelectorAll(".select-option").forEach((optionNode) => {
+        optionNode.addEventListener("click", (event) => {
+          event.stopPropagation();
+          onSelect(optionNode.dataset.value);
+          root.classList.remove("open");
+        });
+      });
+    }
+
+    function renderBrandSelect() {
+      createSelect(
+        brandSelectRoot,
+        data.brands.map((brand) => ({
+          id: brand.id,
+          name: brand.name,
+          meta: brand.tone
+        })),
+        state.brandId,
+        (brandId) => {
+          state.brandId = brandId;
+          const nextProduct = getProductsForBrand()[0];
+          state.productId = nextProduct.id;
+          renderAll();
+        }
+      );
+    }
+
+    function renderProductSelect() {
+      createSelect(
+        productSelectRoot,
+        getProductsForBrand().map((product) => ({
+          id: product.id,
+          name: product.name,
+          meta: product.tags.slice(0, 2).join(" / ")
+        })),
+        state.productId,
+        (productId) => {
+          state.productId = productId;
+          renderAll();
+        }
+      );
+    }
+
+    function renderScenes() {
+      sceneGrid.innerHTML = data.scenes.map((scene) => `
+        <button class="scene-chip ${scene.id === state.sceneId ? "active" : ""}" type="button" data-scene="${scene.id}">
+          <strong>${scene.name}</strong>
+          <span>${scene.desc}</span>
+        </button>
+      `).join("");
+
+      sceneGrid.querySelectorAll(".scene-chip").forEach((node) => {
+        node.addEventListener("click", () => {
+          state.sceneId = node.dataset.scene;
+          renderScenes();
+          renderSummary();
+          renderBottomBar();
+        });
+      });
+    }
+
+    function renderProductModule() {
+      const brand = getCurrentBrand();
+      const product = getCurrentProduct();
+
+      productTitle.textContent = product.name;
+      productDescription.textContent = product.description;
+      productHeroBrand.textContent = brand.name;
+      productHeroName.textContent = product.shortName;
+      productHero.style.setProperty("--product-accent", product.accent);
+      productTags.innerHTML = product.tags.map((tag) => `<span class="product-tag">${tag}</span>`).join("");
+
+      sixGrid.innerHTML = product.views.map((view) => `
+        <div class="view-card">
+          <div class="view-visual" style="--view-color:${view.color}">
+            <div class="view-label">${view.label}</div>
+            <div class="view-copy">
+              <strong>${view.title}</strong>
+              <span>${view.copy}</span>
+            </div>
+            <div class="view-device"></div>
+          </div>
+          <div class="view-footer">
+            <div class="view-title">${view.label}</div>
+            <div class="view-desc">${view.desc}</div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderModelOptions() {
+      modelGrid.innerHTML = data.models.map((model) => `
+        <button class="model-option ${state.selectedModelIds.includes(model.id) ? "active" : ""}" type="button" data-model="${model.id}">
+          <div class="model-portrait" style="--model-start:${model.gradient[0]}; --model-end:${model.gradient[1]};">
+            <div class="model-initials">${model.initials}</div>
+          </div>
+          <div class="model-body">
+            <div class="model-name">${model.name}</div>
+            <div class="model-role">${model.role}</div>
+            <div class="model-desc">${model.desc}</div>
+          </div>
+        </button>
+      `).join("");
+
+      modelGrid.querySelectorAll(".model-option").forEach((node) => {
+        node.addEventListener("click", () => {
+          const modelId = node.dataset.model;
+          const exists = state.selectedModelIds.includes(modelId);
+          if (exists) {
+            state.selectedModelIds = state.selectedModelIds.filter((id) => id !== modelId);
+          } else {
+            state.selectedModelIds = [...state.selectedModelIds, modelId];
+          }
+          renderModelOptions();
+          renderSelectedModels();
+          renderSummary();
+          renderBottomBar();
+        });
+      });
+    }
+
+    function renderSelectedModels() {
+      const selected = getSelectedModels();
+      modelCounter.textContent = `已选 ${selected.length} 个模特`;
+
+      if (!selected.length) {
+        selectedModels.innerHTML = `
+          <div class="empty-box">
+            请选择至少一个模特图，系统会在这里自动展示对应模特图片和角色标签。
+          </div>
+        `;
+        return;
+      }
+
+      selectedModels.innerHTML = selected.map((model) => `
+        <div class="selected-model-card">
+          <div class="model-portrait" style="--model-start:${model.gradient[0]}; --model-end:${model.gradient[1]};">
+            <div class="model-initials">${model.initials}</div>
+          </div>
+          <div class="selected-model-meta">
+            <div class="model-name">${model.name}</div>
+            <div class="model-role">${model.role}</div>
+            <p>${model.desc}</p>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderDurations() {
+      durationStrip.innerHTML = data.durations.map((duration) => `
+        <button class="duration-option ${duration.id === state.durationId ? "active" : ""}" type="button" data-duration="${duration.id}">
+          <strong>${duration.label}</strong>
+          <span>${duration.note}</span>
+        </button>
+      `).join("");
+
+      durationStrip.querySelectorAll(".duration-option").forEach((node) => {
+        node.addEventListener("click", () => {
+          state.durationId = node.dataset.duration;
+          renderDurations();
+          renderSummary();
+          renderBottomBar();
+        });
+      });
+    }
+
+    function renderSummary() {
+      const brand = getCurrentBrand();
+      const product = getCurrentProduct();
+      const scene = getCurrentScene();
+      const duration = data.durations.find((item) => item.id === state.durationId);
+      const selected = getSelectedModels();
+
+      summaryBrand.textContent = `${brand.name} / ${brand.tone}`;
+      summaryProduct.textContent = product.name;
+      summaryScene.textContent = `${scene.name} / ${scene.desc}`;
+      summaryDuration.textContent = `${duration.label} / ${duration.note}`;
+      summaryRoles.innerHTML = selected.length
+        ? selected.map((model) => `<span class="summary-tag">${model.role}</span>`).join("")
+        : `<span class="summary-tag">待选择模特</span>`;
+    }
+
+    function renderBottomBar() {
+      const selected = getSelectedModels();
+      const duration = data.durations.find((item) => item.id === state.durationId);
+      bottomSummary.innerHTML = `
+        <span><strong>${getCurrentBrand().name}</strong></span>
+        <span>${getCurrentProduct().shortName}</span>
+        <span>${getCurrentScene().name}</span>
+        <span>${selected.length ? `模特 ${selected.length} 个` : "待选模特"}</span>
+        <span>${duration.label}</span>
+      `;
+    }
+
+    function renderStoryCount() {
+      storyCount.textContent = `${state.story.length} / 300`;
+    }
+
+    function generateResult() {
+      const brand = getCurrentBrand();
+      const product = getCurrentProduct();
+      const scene = getCurrentScene();
+      const duration = data.durations.find((item) => item.id === state.durationId);
+      const selected = getSelectedModels();
+      const roleText = selected.length ? selected.map((model) => model.role).join("、") : "单人产品特写";
+      const story = state.story.trim() || "突出产品核心卖点，并以真实家庭互动镜头串联完整情绪起承转合。";
+
+      resultCard.innerHTML = `
+        <div class="result-status">已生成</div>
+        <h3 class="result-title">${brand.name} ${product.shortName} ${scene.name} 视频脚本</h3>
+        <p class="result-copy">
+          以 ${roleText} 为主角，在 ${scene.name} 中展开 ${duration.label} 的节奏化故事。主线围绕“${story}”展开，前段用产品六视图建立认知，中段切入人物使用场景，结尾强化品牌购买动机。
+        </p>
+        <ul class="result-points">
+          <li>开场 3 秒：品牌主视图 + 产品 Hero 镜头建立识别度</li>
+          <li>中段：${roleText} 与产品真实互动，突出 ${product.tags.slice(0, 2).join("、")}</li>
+          <li>收尾：包装视图与品牌口号收束，生成一版 CTA 结尾</li>
+        </ul>
+      `;
+    }
+
+    function renderAll() {
+      renderBrandSelect();
+      renderProductSelect();
+      renderScenes();
+      renderProductModule();
+      renderModelOptions();
+      renderSelectedModels();
+      renderDurations();
+      renderSummary();
+      renderBottomBar();
+      renderStoryCount();
+    }
+
+    storyInput.addEventListener("input", (event) => {
+      state.story = event.target.value.slice(0, 300);
+      if (event.target.value !== state.story) {
+        event.target.value = state.story;
+      }
+      renderStoryCount();
+    });
+
+    generateBtn.addEventListener("click", () => {
+      generateBtn.disabled = true;
+      generateBtn.textContent = "生成中...";
+      setTimeout(() => {
+        generateResult();
+        generateBtn.disabled = false;
+        generateBtn.textContent = "AI生成视频";
+      }, 700);
+    });
+
+    document.addEventListener("click", () => {
+      document.querySelectorAll(".select.open").forEach((node) => {
+        node.classList.remove("open");
+      });
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>

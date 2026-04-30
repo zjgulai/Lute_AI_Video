@@ -16,6 +16,13 @@ const SCENE_CARDS = [
   { emoji: "⚡", name: "快速模式", desc: "一句话描述，10-15 秒快速测试大模型矩阵能力。" },
 ];
 
+const DESIGN_PHILOSOPHY = [
+  { icon: "🎯", title: "教练式引导", desc: "每张输入卡片都会告诉你「为什么填」和「填了会怎样」。不只是表单——是你的视频创作教练，一步步带你完成策略构思。" },
+  { icon: "🔄", title: "信息只填一次", desc: "从输入到生成到发布到复盘，同一份信息全链路自动流转。选了品牌形象片，后面的发布平台和数据看板都自动适配。" },
+  { icon: "📐", title: "方法论内置", desc: "🎯定主角 → 💡找冲突 → 🎨定调性 → 🎬选舞台 → 🔍找差异。完成每一步，你也在学会如何策划一条好视频。" },
+  { icon: "📊", title: "按目标衡量成功", desc: "品牌片和种草片不该用同一把尺。我们自动根据你选的视频类型，展示不同的数据指标和优化建议。" },
+];
+
 const NOTICES = [
   { title: "API 连接", desc: "首次使用需检查后端连接。点击顶栏 ⚙ 设置 → 测试连接，确认返回 OK。Demo 模式无需配置。" },
   { title: "中途中止", desc: "长等待中点击「取消」可中断当前步骤。Expert Studio 模式保留已完成步骤，Smart Create 尝试恢复部分结果。" },
@@ -73,7 +80,7 @@ export default function SplashScreen({ onEnter }: Props) {
 
       {/* CTA */}
       <div className="animate-splash-in absolute bottom-[12%] flex flex-wrap items-center justify-center gap-3 px-4" style={{ animationDelay: "280ms" }}>
-        <button className={btnBase} onClick={() => setShowGuide(true)}>{t("splash.guide")}</button>
+        <button className={btnBase} onClick={() => setShowGuide(true)}>{t("splash.creationGuide")}</button>
         <button onClick={handleEnter} className="px-8 py-3 rounded-[24px] text-[16px] font-medium cursor-pointer transition-all duration-300 ease-out bg-white/15 text-white border border-white/20 hover:bg-white/25 hover:border-white/40 hover:scale-[1.02] active:scale-[0.98]">{t("splash.enter")}</button>
         <button className={btnBase} onClick={() => setShowBlueprint(true)}>{t("splash.blueprint")}</button>
       </div>
@@ -91,7 +98,7 @@ export default function SplashScreen({ onEnter }: Props) {
         <div className="absolute inset-0 z-50 overflow-y-auto bg-[#FEF9F6]" style={{ fontFamily: "'Inter', 'Noto Sans SC', -apple-system, sans-serif" }}>
           {/* Sticky header */}
           <div className="sticky top-0 z-20 flex items-center justify-between px-6 md:px-12 py-4 bg-[#FEF9F6]/90 backdrop-blur-md border-b border-[#EDD3D1]">
-            <h2 className="text-[16px] font-semibold text-[#35353B]">{t("app.title")} · {t("splash.guide")}</h2>
+            <h2 className="text-[16px] font-semibold text-[#35353B]">{t("app.title")} · {t("splash.creationGuide")}</h2>
             <button onClick={() => setShowGuide(false)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
               返回
@@ -142,6 +149,20 @@ export default function SplashScreen({ onEnter }: Props) {
                     12 个步骤逐步执行，每步可查看、编辑、重做。4 个 Gate 关口自动暂停等待审核。适合需要精细控制和品牌审查的场景。
                   </div>
                 </div>
+              </div>
+            </section>
+
+            {/* ── Design Philosophy ── */}
+            <section>
+              <h3 className="text-[18px] font-semibold text-[#35353B] mb-4">设计理念</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {DESIGN_PHILOSOPHY.map((p, i) => (
+                  <div key={i} className="p-4 rounded-xl bg-gradient-to-br from-[#FFF0EF] to-[#FEF9F6] border border-[#EDD3D1]">
+                    <div className="text-lg mb-1">{p.icon}</div>
+                    <div className="text-[14px] font-semibold text-[#35353B]">{p.title}</div>
+                    <div className="text-[12px] text-[#59585E] leading-relaxed mt-1">{p.desc}</div>
+                  </div>
+                ))}
               </div>
             </section>
 
