@@ -58,7 +58,9 @@ function DemoPlaceholder({ label }: { label: string }) {
 
 export default function OneShotResultView({ scenario, result, onReset, onEdit }: Props) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"briefs" | "scripts" | "videos" | "thumbnails" | "media" | "quality" | "performance" | "raw">("media");
+  // P0-2: Merged tabs — 8→4 with content sub-navigation
+  const [tab, setTab] = useState<"content" | "media" | "quality" | "data">("media");
+  const [contentSub, setContentSub] = useState<"briefs" | "scripts" | "videos" | "thumbnails">("briefs");
 
   const briefs: any[] = result?.briefs || [];
   const scripts: any[] = result?.scripts || [];
@@ -75,14 +77,17 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
   const mediaCount = (finalVideo ? 1 : 0) + thumbImages.length + audioPaths.length + clipPaths.length;
 
   const TABS = [
-    { id: "briefs", label: t("result.tab.briefs"), count: briefs.length, icon: "M12 6v6l4 2" },
-    { id: "scripts", label: t("result.tab.scripts"), count: scripts.length, icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2 14 8 20 8" },
-    { id: "videos", label: t("result.tab.videos"), count: videoPrompts.length, icon: "M23 7l-7 5 7 5V7z M1 5h15v14H1z" },
-    { id: "thumbnails", label: t("result.tab.thumbnails"), count: thumbnails.length, icon: "M3 3h18v18H3z M8.5 8.5a1.5 1.5 0 1 1 0-3 M21 15l-5-5-11 11" },
-    { id: "media", label: t("result.tab.media"), count: mediaCount, icon: "M23 7l-7 5 7 5V7z M1 5h15v14H1z" },
-    { id: "quality", label: t("result.tab.quality"), count: audit ? (audit.criteria?.length || 0) : 0, icon: "M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" },
-    { id: "performance", label: t("perf.title"), count: 0, icon: "M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" },
-    { id: "raw", label: t("result.tab.raw"), count: 0, icon: "M9 11l3 3 8-8 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" },
+    { id: "content", label: t("result.tab.content"), count: briefs.length + scripts.length + videoPrompts.length + thumbnails.length },
+    { id: "media", label: t("result.tab.media"), count: mediaCount },
+    { id: "quality", label: t("result.tab.quality"), count: audit ? (audit.criteria?.length || 0) : 0 },
+    { id: "data", label: t("result.tab.data"), count: 0 },
+  ];
+
+  const CONTENT_SUBTABS = [
+    { id: "briefs", label: t("result.tab.briefs"), count: briefs.length },
+    { id: "scripts", label: t("result.tab.scripts"), count: scripts.length },
+    { id: "videos", label: t("result.tab.videos"), count: videoPrompts.length },
+    { id: "thumbnails", label: t("result.tab.thumbnails"), count: thumbnails.length },
   ];
 
   return (
@@ -160,14 +165,39 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
         </div>
 
         <div className="p-4 space-y-2 min-h-[200px]">
-          {tab === "briefs" && <BriefsView briefs={briefs} onEdit={(index, data) => onEdit?.("briefs", index, data)} />}
-          {tab === "scripts" && <ScriptsView scripts={scripts} onEdit={(index, data) => onEdit?.("scripts", index, data)} />}
-          {tab === "videos" && <VideoPromptsView prompts={videoPrompts} onRegenerate={(index) => onEdit?.("videos", index, { action: "regenerate" })} />}
-          {tab === "thumbnails" && <ThumbnailsView sets={thumbnails} thumbImages={thumbImages} onRegenerate={(index) => onEdit?.("thumbnails", index, { action: "regenerate" })} />}
+          {tab === "content" && (
+            <div className="space-y-3">
+              {/* Sub-navigation pills */}
+              <div className="flex gap-1.5 border-b border-[#e8e8ed] pb-2">
+                {CONTENT_SUBTABS.map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => setContentSub(st.id as typeof contentSub)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                      contentSub === st.id
+                        ? "bg-[#7CB342]/10 text-[#7CB342]"
+                        : "text-[#86868b] hover:text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                    }`}>
+                    {st.label}
+                    {st.count > 0 && <span className="ml-1 text-[10px] opacity-60">{st.count}</span>}
+                  </button>
+                ))}
+              </div>
+              {/* Sub-content */}
+              {contentSub === "briefs" && <BriefsView briefs={briefs} onEdit={(index, data) => onEdit?.("briefs", index, data)} />}
+              {contentSub === "scripts" && <ScriptsView scripts={scripts} onEdit={(index, data) => onEdit?.("scripts", index, data)} />}
+              {contentSub === "videos" && <VideoPromptsView prompts={videoPrompts} onRegenerate={(index) => onEdit?.("videos", index, { action: "regenerate" })} />}
+              {contentSub === "thumbnails" && <ThumbnailsView sets={thumbnails} thumbImages={thumbImages} onRegenerate={(index) => onEdit?.("thumbnails", index, { action: "regenerate" })} />}
+            </div>
+          )}
           {tab === "media" && <MediaView finalVideo={finalVideo} thumbImages={thumbImages} audioPaths={audioPaths} clipPaths={clipPaths} audit={audit} scenario={scenario} result={result} />}
           {tab === "quality" && <QualityDashboard qualityReport={audit} />}
-          {tab === "performance" && <PerformanceDashboard scenario={scenario} />}
-          {tab === "raw" && <RawView data={result} />}
+          {tab === "data" && (
+            <div className="space-y-3">
+              <PerformanceDashboard scenario={scenario} />
+              <RawView data={result} />
+            </div>
+          )}
         </div>
       </div>
     </div>

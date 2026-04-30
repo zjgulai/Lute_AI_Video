@@ -112,8 +112,8 @@ export default function VideoWorkflow({
       setViewingStep(stepName);
     } catch (e: any) {
       const msg = e?.message || String(e);
-      try { await refreshState(); } catch {}
-      alert(t("toast.stepExecFailed") + `: ${msg}`);
+      try { await refreshState(); } catch { /* best-effort reload */ }
+      showToast(t("toast.stepExecFailed") + `: ${msg}`, "error");
     } finally {
       setLoading(false);
       setRunningStep(null);
@@ -134,8 +134,8 @@ export default function VideoWorkflow({
       setEditingStep(null);
     } catch (e: any) {
       const msg = e?.message || String(e);
-      try { await refreshState(); } catch {}
-      alert(t("toast.regenerateFailed") + `: ${msg}`);
+      try { await refreshState(); } catch { /* best-effort reload */ }
+      showToast(t("toast.regenerateFailed") + `: ${msg}`, "error");
     } finally {
       setLoading(false);
       setRunningStep(null);
@@ -160,7 +160,7 @@ export default function VideoWorkflow({
       setEditingStep(null);
       showToast(t("toast.saveSuccess"), "success");
     } catch (e: any) {
-      alert(t("toast.saveFailed") + `: ${e?.message || String(e)}`);
+      showToast(t("toast.saveFailed") + `: ${e?.message || String(e)}`, "error");
     } finally {
       setLoading(false);
       setLoadingText(t("app.loading"));
@@ -178,8 +178,8 @@ export default function VideoWorkflow({
       onComplete(finalState);
     } catch (e: any) {
       const msg = e?.message || String(e);
-      try { await refreshState(); } catch {}
-      alert(t("toast.resumeFailed") + `: ${msg}`);
+      try { await refreshState(); } catch { /* best-effort reload */ }
+      showToast(t("toast.resumeFailed") + `: ${msg}`, "error");
     } finally {
       setLoading(false);
       setLoadingText(t("app.loading"));
@@ -709,7 +709,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
         onChange={(e) => {
           try {
             setDraft(JSON.parse(e.target.value));
-          } catch {}
+          } catch { /* invalid JSON — user is still typing */ }
         }}
         className="apple-input text-xs w-full font-mono resize-none"
         rows={10}

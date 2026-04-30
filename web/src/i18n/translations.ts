@@ -18,6 +18,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "scene.brand_campaign.desc": "专业品牌形象展示，多平台统一调性",
     "scene.product_direct.title": "商品直拍",
     "scene.product_direct.desc": "直接输入商品信息，AI 生成产品展示视频和缩略图",
+    "scene.fast_mode.title": "快速模式",
+    "scene.fast_mode.desc": "输入简单描述，直接测试大模型矩阵的视频生成能力，10-15秒快速出片",
     "scene.contentScenario": "内容场景",
     "scene.defaultScenario": "默认场景",
     "scene.manualSelect": "手动选择",
@@ -29,6 +31,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "scene.desc.influencer_remix": "员工全员 IP 输出，签约网红批量分发带商品链接的内容。适用于有内部创作者团队的内容工厂模式。",
     "scene.desc.brand_campaign": "专业品牌形象展示，多平台统一调性。适用于新品发布、品牌周年等正式营销活动。",
     "scene.desc.product_direct": "直接输入商品信息，无需预设场景。AI 生成产品展示视频、脚本和缩略图。",
+    "scene.desc.fast_mode": "输入简单描述，直接测试大模型矩阵的视频生成能力。10-15秒快速出片，不走标准工作流。",
     "scene.platforms.influencer_remix": "Shopify 独立站 + Amazon + TikTok + Reddit",
     "scene.platforms.brand_campaign": "Shopify 独立站 + TikTok + YouTube Shorts",
     "scene.platforms.product_direct": "TikTok + Shopify",
@@ -302,12 +305,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     "format.9:16": "9:16 竖屏",
 
     // One Shot Result
+    "result.tab.content": "内容",
     "result.tab.briefs": "策略",
     "result.tab.scripts": "脚本",
     "result.tab.videos": "视频提示词",
     "result.tab.thumbnails": "缩略图",
     "result.tab.media": "媒体",
     "result.tab.quality": "质量",
+    "result.tab.data": "数据",
     "result.tab.raw": "原始数据",
     "result.complete": "完成",
     "result.error": "生成出错",
@@ -520,6 +525,26 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mode.smartCreate": "智能创作",
     "mode.expertStudio": "专家工作室",
 
+    // Fast Mode
+    "fastMode.title": "快速模式",
+    "fastMode.subtitle": "直接测试大模型矩阵的视频生成能力",
+    "fastMode.inputPlaceholder": "描述你想生成的视频场景，例如：一位职场妈妈在咖啡厅用笔记本电脑工作，阳光透过窗户洒在她身上...",
+    "fastMode.inputHint": "用自然语言描述场景、人物、动作、氛围，AI 会自动优化为专业视频提示词",
+    "fastMode.duration": "视频时长",
+    "fastMode.duration10s": "10 秒",
+    "fastMode.duration15s": "15 秒",
+    "fastMode.enableTTS": "生成配音（CosyVoice）",
+    "fastMode.generate": "生成视频",
+    "fastMode.generating": "生成中...",
+    "fastMode.result.title": "生成结果",
+    "fastMode.result.debugInfo": "调试信息",
+    "fastMode.result.llmPrompt": "LLM 生成的视频提示词",
+    "fastMode.result.modelInfo": "使用的模型",
+    "fastMode.result.generationTime": "生成耗时",
+    "fastMode.result.videoInfo": "视频信息",
+    "fastMode.result.regenerate": "重新生成",
+    "fastMode.result.copyPrompt": "复制提示词",
+
     // Toast messages
     "toast.autoDone": "自动执行完成",
     "toast.stepByStepDone": "逐步确认模式完成",
@@ -656,6 +681,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gate.score": "评分",
     "gate.selectHint": "选择 1 至 2 个方案",
     "gate.approved": "已审批通过，继续执行...",
+    "gate.processing": "后台处理中，请稍候...",
 
     // Stage Progress (Smart Create)
     "stage.writing": "撰写脚本",
@@ -855,6 +881,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "scene.desc.influencer_remix": "Employee IP creation with contracted influencers distributing content with product links. Suitable for content factory models with internal creator teams.",
     "scene.desc.brand_campaign": "Professional brand image showcase with unified multi-platform messaging. Ideal for product launches, brand anniversaries, and formal marketing campaigns.",
     "scene.desc.product_direct": "Input product info directly. No preset scenario needed. AI generates product showcase videos, scripts, and thumbnails.",
+    "scene.desc.fast_mode": "Enter a simple description to directly test the LLM matrix video generation capability. 10-15s quick generation without standard workflow.",
     "scene.platforms.influencer_remix": "Shopify + Amazon + TikTok + Reddit",
     "scene.platforms.brand_campaign": "Shopify + TikTok + YouTube Shorts",
     "scene.platforms.product_direct": "TikTok + Shopify",
@@ -1128,12 +1155,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     "format.9:16": "9:16 Portrait",
 
     // One Shot Result
+    "result.tab.content": "Content",
     "result.tab.briefs": "Strategy",
     "result.tab.scripts": "Scripts",
     "result.tab.videos": "Video Prompts",
     "result.tab.thumbnails": "Thumbnails",
     "result.tab.media": "Media",
     "result.tab.quality": "Quality",
+    "result.tab.data": "Data",
     "result.tab.raw": "Raw Data",
     "result.complete": "Complete",
     "result.error": "Generation error",
@@ -1300,6 +1329,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gate.score": "Score",
     "gate.selectHint": "Select 1 to 2 candidates",
     "gate.approved": "Approved, continuing...",
+    "gate.processing": "Processing in background...",
 
     // Stage Progress (Smart Create)
     "stage.writing": "Writing Script",
@@ -1401,6 +1431,27 @@ export const translations: Record<Locale, Record<string, string>> = {
     // Mode selector
     "mode.smartCreate": "Smart Create",
     "mode.expertStudio": "Expert Studio",
+
+    // Fast Mode
+    "fastMode.title": "Fast Mode",
+    "fastMode.subtitle": "Test LLM matrix video generation capability directly",
+    "fastMode.inputPlaceholder": "Describe the video scene you want to generate, e.g.: A working mom typing on her laptop in a coffee shop, sunlight streaming through the window...",
+    "fastMode.inputHint": "Describe the scene, characters, actions, and atmosphere in natural language. AI will automatically optimize it into a professional video prompt.",
+    "fastMode.duration": "Video Duration",
+    "fastMode.duration10s": "10s",
+    "fastMode.duration15s": "15s",
+    "fastMode.enableTTS": "Generate voiceover (CosyVoice)",
+    "fastMode.generate": "Generate Video",
+    "fastMode.generating": "Generating...",
+    "fastMode.result.title": "Generation Result",
+    "fastMode.result.debugInfo": "Debug Info",
+    "fastMode.result.llmPrompt": "LLM Generated Video Prompt",
+    "fastMode.result.modelInfo": "Models Used",
+    "fastMode.result.generationTime": "Generation Time",
+    "fastMode.result.videoInfo": "Video Info",
+    "fastMode.result.regenerate": "Regenerate",
+    "fastMode.result.copyPrompt": "Copy Prompt",
+
     // Toast messages
     "toast.autoDone": "Auto execution complete",
     "toast.stepByStepDone": "Step-by-step mode complete",

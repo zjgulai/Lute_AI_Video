@@ -57,6 +57,14 @@ GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Step name -> SkillRegistry skill name mapping
+STEP_TO_SKILL_NAME: dict[str, str | None] = {
+    "scripts": "script-writer-skill",
+    "keyframe_images": "keyframe-images",
+    "seedance_clips": "seedance-video-generate-skill",
+    "assemble_final": None,
+}
+
 # STEP_ORDER constant — must match step_runner.py
 STEP_ORDER = [
     "strategy",
@@ -141,13 +149,67 @@ async def generate_candidates(label: str, gate_id: str) -> dict:
         return {"error": f"Unknown gate: {gate_id}", "gate_id": gate_id}
 
     candidate_step = definition.get("candidate_step")
-    if candidate_step is None:
-        return {"error": f"Gate {gate_id} has no candidate_step", "gate_id": gate_id}
 
     state_manager = PipelineStateManager()
     state = await state_manager.load(label)
     if state is None:
         return {"error": f"State not found for label: {label}", "gate_id": gate_id, "label": label}
+
+    # ── Gate 4: Final Review — no skill generation, assemble from state ──
+    if gate_id == "gate_4_final":
+        steps_data = state.get("steps", {})
+        assemble_out = steps_data.get("assemble_final", {}).get("output")
+        audit_out = steps_data.get("audit", {}).get("output") or {}
+        thumbnail_out = steps_data.get("thumbnail_images", {}).get("output") or []
+        seedance_out = steps_data.get("seedance_clips", {}).get("output") or {}
+
+        video_path = ""
+        if isinstance(assemble_out, (list, tuple)) and len(assemble_out) >= 1:
+            video_path = assemble_out[0]
+        elif isinstance(assemble_out, dict):
+            video_path = assemble_out.get("video_path", "")
+
+        total_duration = 0
+        if isinstance(seedance_out, dict):
+            total_duration = seedance_out.get("total_duration", 0)
+        if not total_duration and isinstance(audit_out, dict):
+            total_duration = audit_out.get("duration_seconds", 0)
+
+        candidate = {
+            "id": "gate_4_final_c0",
+            "variant": "standard",
+            "data": {
+                "final_video_path": video_path,
+                "audit_report": audit_out,
+                "thumbnail_image_paths": thumbnail_out if isinstance(thumbnail_out, list) else [],
+                "duration": total_duration,
+            },
+            "score": {
+                "overall": 0.9,
+                "explanation": "Final assembled video ready for review",
+            },
+            "recommended": True,
+        }
+
+        gates_state = dict(state.get("gates", {}))
+        gates_state[gate_id] = {
+            "status": "awaiting_approval",
+            "candidates": [candidate],
+            "selected_ids": [],
+            "approved": False,
+            "generated_at": datetime.now().isoformat(),
+        }
+        state["gates"] = gates_state
+        await state_manager.save(label, state)
+
+        return {
+            "candidates": [candidate],
+            "gate_id": gate_id,
+            "label": label,
+        }
+
+    if candidate_step is None:
+        return {"error": f"Gate {gate_id} has no candidate_step", "gate_id": gate_id}
 
     # Read the existing step output to use as context
     steps_data = state.get("steps", {})
@@ -186,20 +248,14 @@ async def generate_candidates(label: str, gate_id: str) -> dict:
         variant = CANDIDATE_VARIANTS[len(valid_candidates) % 3]
         variant_name = variant["variant"]
 
-        skill_params = {
-            "step_output": step_output,
-            "state": state,
-            "variant": variant_name,
-            **variant["params"],
-        }
-        # Gate 4 has no candidate_step; use the assemble_final output directly
-        if candidate_step == "assemble_final":
-            skill_params["input_data"] = step_output
-        else:
-            skill_params["input_data"] = _extract_step_input(state, candidate_step)
+        # Build skill-specific params for each candidate step
+        skill_params = _build_skill_params(candidate_step, state, variant_name, variant["params"])
 
         try:
-            skill_result = await SkillRegistry.execute(candidate_step, skill_params)
+            skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
+            if skill_name is None:
+                raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
+            skill_result = await SkillRegistry.execute(skill_name, skill_params)
             if skill_result.success and skill_result.data:
                 candidate_data = skill_result.data
                 # Exclude error-only data
@@ -379,10 +435,37 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
     candidate_step = definition.get("candidate_step")
     if candidate_step and candidate_step in STEP_ORDER:
         primary_candidate = selected_candidates[0]
+        raw_data = primary_candidate.get("data", {})
+
+        # Skills return wrapper dicts or single items, but pipeline _step_* methods
+        # extract / wrap into specific formats. Align edited_output to match.
+        if candidate_step == "scripts":
+            # script-writer-skill returns {"scripts": [...], "count": N}
+            # _step_scripts returns res.data.get("scripts", []) → list
+            edited_output = raw_data.get("scripts", []) if isinstance(raw_data, dict) else raw_data
+        elif candidate_step == "keyframe_images":
+            # keyframe-images returns a single storyboard dict
+            # _step_keyframe_images appends each result to a list → list[dict]
+            edited_output = [raw_data] if isinstance(raw_data, dict) and raw_data else raw_data
+        elif candidate_step == "seedance_clips":
+            # seedance-video-generate-skill returns a single clip dict
+            # _step_seedance_clips returns aggregated dict with clip_paths, clip_details
+            if isinstance(raw_data, dict) and raw_data:
+                edited_output = {
+                    "clip_paths": [raw_data.get("video_path", "")],
+                    "clip_details": [raw_data],
+                    "total_duration": raw_data.get("duration_seconds", 0),
+                    "target_duration": 30,
+                }
+            else:
+                edited_output = raw_data
+        else:
+            edited_output = raw_data
+
         steps_data = dict(state.get("steps", {}))
         step_data = dict(steps_data.get(candidate_step, {}))
         step_data["edited"] = True
-        step_data["edited_output"] = primary_candidate.get("data", {})
+        step_data["edited_output"] = edited_output
         step_data["gate_selected"] = True
         step_data["selected_variants"] = [c["variant"] for c in selected_candidates]
         steps_data[candidate_step] = step_data
@@ -491,18 +574,17 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
     }
     temperature = temperature_map.get(variant_name, 0.7)
 
-    skill_params = {
-        "step_output": step_output,
-        "state": state,
-        "variant": variant_name,
-        "temperature": temperature,
-        "input_data": _extract_step_input(state, candidate_step),
-    }
+    skill_params = _build_skill_params(
+        candidate_step, state, variant_name, {"temperature": temperature}
+    )
 
     new_candidate_id = f"{gate_id}_{variant_name}_{int(time.time())}"
 
     try:
-        skill_result = await SkillRegistry.execute(candidate_step, skill_params)
+        skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
+        if skill_name is None:
+            raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
+        skill_result = await SkillRegistry.execute(skill_name, skill_params)
         candidate_data = skill_result.data if skill_result.success else {}
     except Exception as exc:
         logger.error(
@@ -591,6 +673,104 @@ def _extract_step_input(state: dict, step_name: str) -> Any:
     if step_data.get("edited") and step_data.get("edited_output") is not None:
         return step_data["edited_output"]
     return step_data.get("output")
+
+
+def _build_skill_params(candidate_step: str, state: dict, variant_name: str, variant_params: dict) -> dict:
+    """Build skill-specific parameters for candidate generation.
+
+    Each skill expects a different parameter set. This function maps
+    candidate_step names to the correct parameters required by each skill.
+    """
+    config = state.get("config", {})
+    steps_data = state.get("steps", {})
+    strategy_output = steps_data.get("strategy", {}).get("output") or {}
+    brand_guidelines = config.get("brand_guidelines") or {}
+    target_languages = config.get("target_languages", ["en"])
+
+    if candidate_step == "scripts":
+        briefs = strategy_output.get("briefs") or strategy_output.get("strategy_briefs") or []
+        if not briefs:
+            # Fallback: construct a minimal brief from config
+            product_catalog = config.get("product_catalog", {})
+            briefs = [{
+                "id": "fb_1",
+                "topic": product_catalog.get("product_name", "Product"),
+                "audience": product_catalog.get("target_audience", "general"),
+                "platforms": product_catalog.get("platforms", ["shopify"]),
+            }]
+        return {
+            "briefs": briefs,
+            "brand_guidelines": brand_guidelines,
+            "target_languages": target_languages,
+            "variant": variant_name,
+            **variant_params,
+        }
+
+    if candidate_step == "keyframe_images":
+        storyboards = _extract_step_input(state, "storyboards") or []
+        scripts = _extract_step_input(state, "scripts") or []
+        # keyframe-images skill expects one storyboard at a time
+        # For candidate generation, use the first storyboard
+        sb = storyboards[0] if storyboards else {"shots": [], "script_id": "default"}
+        return {
+            "storyboard": sb,
+            "scripts": scripts,
+            "brand_guidelines": brand_guidelines,
+            "size": "1024x1792",
+            "quality": "high",
+            "variant": variant_name,
+            **variant_params,
+        }
+
+    if candidate_step == "seedance_clips":
+        video_prompts = _extract_step_input(state, "video_prompts") or []
+        keyframe_images = _extract_step_input(state, "keyframe_images") or []
+        product_catalog = config.get("product_catalog", {})
+
+        # seedance-video-generate-skill expects a single prompt dict, not lists
+        first_prompt = ""
+        if video_prompts and isinstance(video_prompts, list):
+            vp = video_prompts[0]
+            if isinstance(vp, dict):
+                first_prompt = vp.get("segment_prompt", "") or vp.get("prompt", "")
+                if isinstance(first_prompt, dict):
+                    first_prompt = first_prompt.get("segment_prompt", "") or first_prompt.get("prompt", "")
+
+        # Extract first keyframe image path for anchoring
+        keyframe_path = ""
+        if keyframe_images and isinstance(keyframe_images, list):
+            kf = keyframe_images[0]
+            if isinstance(kf, dict):
+                for shot in kf.get("shots", []):
+                    path = shot.get("keyframe_image_path", "")
+                    if path:
+                        keyframe_path = path
+                        break
+
+        return {
+            "prompt": first_prompt or f"{product_catalog.get('product_name', 'Product')} in natural usage scene",
+            "duration": 5,
+            "resolution": "720p",
+            "output_label": f"{state.get('label', 'default')}_gate3",
+            "keyframe_image_path": keyframe_path,
+            "variant": variant_name,
+            **variant_params,
+        }
+
+    if candidate_step == "assemble_final":
+        return {
+            "input_data": _extract_step_input(state, "assemble_final") or {},
+            "variant": variant_name,
+            **variant_params,
+        }
+
+    # Generic fallback
+    return {
+        "input_data": _extract_step_input(state, candidate_step),
+        "state": state,
+        "variant": variant_name,
+        **variant_params,
+    }
 
 
 def _extract_usps(strategy_data: dict, config: dict) -> list[str]:

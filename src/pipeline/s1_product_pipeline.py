@@ -323,6 +323,10 @@ class S1ProductDirectPipeline:
                 lyrics_paths = []
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else (seedance_out if isinstance(seedance_out, list) else [])
+            # Guard: if all clips are stubs, skip assembly — nothing to assemble
+            if not clip_paths or all("stub" in str(p).lower() for p in clip_paths):
+                media_errors.append("all_seedance_clips_are_stubs; skipping assembly")
+                return "", ""
             return await self._step_assemble_final(
                 reg=reg,
                 storyboards=storyboards,
@@ -349,6 +353,10 @@ class S1ProductDirectPipeline:
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else (seedance_out if isinstance(seedance_out, list) else [])
             scripts = self._get_step_output(steps, "scripts") or []
             thumbnails = self._get_step_output(steps, "thumbnail_prompts") or []
+            # Guard: if all clips are stubs, audit is meaningless
+            if not clip_paths or all("stub" in str(p).lower() for p in clip_paths):
+                media_errors.append("all_seedance_clips_are_stubs; skipping audit")
+                return {}
 
             return await self._step_audit(
                 reg=reg,
@@ -536,25 +544,40 @@ class S1ProductDirectPipeline:
         product_name: str,
         errors: list[str],
     ) -> list[dict]:
-        prompts: list[dict] = []
+        """Generate per-segment structured video prompts (narrative shot architecture).
+
+        Each script segment produces one prompt dict with shot_type, camera,
+        action, lighting, and full visual_description — never a concatenated string.
+        """
+        all_prompts: list[dict] = []
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
+            segments = script.get("segments", [])
+            if not segments:
+                continue
+            # Pass ALL segments together — seedance_prompt skill now returns list[dict]
             res = await reg.execute("seedance-video-prompt", {
                 "script_segments": [
-                    {"type": s.get("segment_type", "body"),
-                     "description": s.get("visual_description", "") or s.get("description", ""),
-                     "duration_seconds": float(s.get("end_time", 5)) - float(s.get("start_time", 0))}
-                    for s in script.get("segments", [])
+                    {
+                        "segment_type": s.get("segment_type", "body"),
+                        "visual_description": s.get("visual_description", "") or s.get("description", ""),
+                        "voiceover": s.get("voiceover", ""),
+                        "start_time": float(s.get("start_time", 0)),
+                        "end_time": float(s.get("end_time", 5)),
+                    }
+                    for s in segments
                 ],
                 "product_name": script.get("product_name", product_name),
+                "style_ref_images": [],
+                "product_images": [],
             })
-            if res.success and res.data:
-                prompts.append({
-                    "script_id": script.get("id"),
-                    "prompt": res.data.get("seedance_prompt", "") or res.data,
-                })
+            if res.success and res.data and isinstance(res.data, list):
+                for p_dict in res.data:
+                    p_dict["script_id"] = script.get("id", "")
+                    p_dict["product_name"] = script.get("product_name", product_name)
+                all_prompts.extend(res.data)
             else:
-                errors.append(f"video_prompt_{script.get('id')}_failed: {res.error}")
-        return prompts
+                errors.append(f"video_prompt_{script.get('id', '?')}_failed: {res.error}")
+        return all_prompts
 
     async def _step_thumbnail_prompts(
         self,
@@ -633,17 +656,15 @@ class S1ProductDirectPipeline:
         video_duration: int = 30,
         keyframe_images: list[dict] | None = None,
     ) -> dict:
-        clip_paths: list[str] = []
-        # Flatten: take the first prompt from each script's prompt set
-        flat_prompts: list[str] = []
-        for vp in video_prompts:
-            p = vp.get("prompt", "")
-            if isinstance(p, dict):
-                p = p.get("seedance_prompt", "") or p.get("prompt", "")
-            if p:
-                flat_prompts.append(str(p))
+        """Generate video clips per segment using Sora 2 Pro (25s cap).
 
-        # Collect keyframe image paths per clip for image_to_video mode
+        Each prompt dict from seedance-video-prompt is sent as a separate
+        image_to_video call with keyframe anchoring. Continuity chain
+        preserves visual consistency across segment boundaries.
+        """
+        clip_paths: list[str] = []
+
+        # Collect keyframe image paths per segment
         kf_image_paths: list[str] = []
         if keyframe_images:
             for kf in keyframe_images:
@@ -656,33 +677,37 @@ class S1ProductDirectPipeline:
         # ── Continuity chain: last frame of clip N feeds clip N+1 ──
         last_frame_path: str | None = None
 
-        # Each clip capped at 15s (Seedance API limit); generate enough clips to fill total duration
-        per_clip_duration = min(15, video_duration)
-        num_clips = max(1, min(MAX_CLIPS_PER_DEMO, (video_duration + 14) // 15))
-
-        # Pad prompts if fewer than needed (e.g. 1 brief → 1 script → 1 prompt, but 30s needs 2 clips)
-        while len(flat_prompts) < num_clips:
-            base = flat_prompts[-1] if flat_prompts else f"{product_name} product showcase, professional lighting"
-            part = len(flat_prompts) + 1
-            flat_prompts.append(
-                f"{base} (seamless continuation part {part}/{num_clips}, maintain exact same scene, lighting, and subject position)"
-            )
+        # Sora 2 Pro via PoYo: single call up to 25s
+        VIDEO_MAX_DURATION = 15  # Happy Horse API limit
+        per_clip_duration = min(VIDEO_MAX_DURATION, video_duration)
 
         clip_durations: list[float] = []
         clip_details: list[dict] = []
 
-        for i, prompt in enumerate(flat_prompts[:num_clips]):
+        # Iterate each segment prompt as a separate clip call
+        for i, vp in enumerate(video_prompts):
+            # Extract the structured prompt text from the segment dict
+            prompt_text = vp.get("segment_prompt", "") or vp.get("prompt", "")
+            if isinstance(prompt_text, dict):
+                prompt_text = prompt_text.get("segment_prompt", "") or prompt_text.get("prompt", "")
+            if not prompt_text:
+                prompt_text = str(vp) if vp else f"{product_name} in natural usage scene"
+
+            seg_duration = float(vp.get("duration_seconds", per_clip_duration))
+            # Clamp to API limits
+            seg_duration = max(4, min(seg_duration, VIDEO_MAX_DURATION))
+
             gen_params: dict[str, Any] = {
-                "prompt": prompt or f"{product_name} product showcase, professional lighting",
-                "duration": per_clip_duration,
+                "prompt": prompt_text,
+                "duration": int(seg_duration),
                 "resolution": "720p",
-                "output_label": f"{label}_clip_{i}",
+                "output_label": f"{label}_seg_{i}",
             }
 
-            # Priority chain: continuity_frame_path > keyframe image
-            # First clip (i==0): NO image reference — let Seedance generate freely
-            # from the text prompt for richer scene variety (not locked to product photo)
-            if last_frame_path:
+            # Keyframe anchoring priority: keyframe image for this segment > continuity frame
+            if i < len(kf_image_paths) and kf_image_paths[i]:
+                gen_params["keyframe_image_path"] = kf_image_paths[i]
+            elif last_frame_path:
                 gen_params["continuity_frame_path"] = last_frame_path
             elif i > 0 and i < len(kf_image_paths) and kf_image_paths[i]:
                 gen_params["image_refs"] = [kf_image_paths[i]]
@@ -701,6 +726,8 @@ class S1ProductDirectPipeline:
                         "file_size": res.data.get("file_size_bytes", 0),
                         "verification": res.data.get("verification", {}),
                         "prompt_used": res.data.get("prompt_used", ""),
+                        "segment_type": vp.get("segment_type", "body"),
+                        "shot_type": vp.get("shot_type", ""),
                         "continuity_frame": bool(last_frame_path),
                     })
 
@@ -725,7 +752,7 @@ class S1ProductDirectPipeline:
                 last_frame_path = None
 
             # ── Delay between clips to avoid poyo.ai queue contention ──
-            if i < num_clips - 1:
+            if i < len(video_prompts) - 1:
                 await asyncio.sleep(3.0)
 
         # ── Duration fallback: if total clip duration < 80% target, generate filler ──
@@ -738,10 +765,9 @@ class S1ProductDirectPipeline:
                 required=min_required,
                 target=video_duration,
             )
-            filler_prompt = (
-                flat_prompts[len(clip_paths) - 1]
-                + " (extended continuation, seamless extension of previous scene)"
-            )
+            # Build filler from the last segment's prompt
+            last_prompt = video_prompts[-1].get("segment_prompt", "") if video_prompts else ""
+            filler_prompt = str(last_prompt) + " (extended continuation, seamless extension of previous scene)" if last_prompt else f"{product_name} natural usage scene, extended"
             filler_params: dict[str, Any] = {
                 "prompt": filler_prompt,
                 "duration": per_clip_duration,

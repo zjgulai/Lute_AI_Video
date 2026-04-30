@@ -1,0 +1,115 @@
+{
+  "_meta": {
+    "style_name": "luxury_minimal",
+    "style_description": "奢华极简风格 - 适用于高端美妆、珠宝、设计师品牌",
+    "typical_brands": ["Apple", "Chanel", "Muji", "Aesop"],
+    "target_emotion": "克制的高级感、安静的自信",
+    "version": "1.0.0"
+  },
+  "color_palette": {
+    "primary": "#1A1A1A",
+    "primary_description": "深炭黑 - 占据60-70%画面，作为基底",
+    "secondary": "#C9A96E",
+    "secondary_description": "香槟金 - 占据15-20%，用于点缀和结构线",
+    "accent": "#F5F5F5",
+    "accent_description": "象牙白 - 占据10-15%，用于高光和呼吸空间",
+    "bg_ratio": [0.65, 0.2, 0.15],
+    "bg_ratio_note": "primary:secondary:accent 画面占比",
+    "prohibited_colors": ["高饱和红", "荧光色", "彩虹渐变"],
+    "color_temperature": "偏暖中性"
+  },
+  "typography": {
+    "title_font": "Noto Serif SC",
+    "title_weight": "Light (300)",
+    "title_size_ratio": "8-12%画面高度",
+    "body_font": "Noto Sans SC",
+    "body_weight": "Regular (400)",
+    "body_size_ratio": "4-6%画面高度",
+    "brand_font": "Custom",
+    "brand_font_description": "品牌定制字体或Didot/Bodoni类衬线体",
+    "letter_spacing": "0.05-0.1em",
+    "line_height": "1.6-1.8",
+    "text_color": "#F5F5F5 on dark, #1A1A1A on light",
+    "text_placement": "左下或居中，避免右上角"
+  },
+  "composition": {
+    "safe_zone": "85% center",
+    "safe_zone_description": "关键元素不超出画面中心85%区域",
+    "logo_position": "bottom_center",
+    "logo_position_description": "底部居中，距底边8-12%",
+    "product_focus": "golden_ratio",
+    "product_focus_description": "产品主体位于黄金分割点",
+    "depth_of_field": "very_shallow",
+    "depth_of_field_description": "f/1.4-f/2.8，背景完全虚化",
+    "negative_space": "40-50%",
+    "negative_space_description": "留白占画面40-50%",
+    "grid_system": "3x3 golden grid",
+    "alignment": "center or left-aligned, never right"
+  },
+  "lighting": {
+    "style": "soft_directional",
+    "style_description": "柔和定向光，单主光源+弱补光",
+    "key_light": "45度侧上方，暖白光5600K",
+    "fill_light": "-3EV补光，仅消除死黑",
+    "rim_light": "可选，勾勒产品边缘",
+    "shadow_quality": "柔和渐变，无硬边",
+    "contrast_ratio": "中等对比，保留暗部细节",
+    "mood": "清晨或黄昏的自然光感"
+  },
+  "texture": {
+    "surface_quality": "matte_premium",
+    "surface_description": "哑光质感，拒绝塑料感",
+    "material_keywords": [" brushed metal", "matte ceramic", "raw linen", "stone"],
+    "reflection": "soft and diffused, no sharp highlights",
+    "grain": "subtle film grain, 2-4%",
+    "bokeh": "circular, creamy, warm-tinted"
+  },
+  "motion_style": {
+    "pace": "very_slow",
+    "pace_description": "极慢节奏，单镜5-8秒",
+    "camera_movement": "minimal",
+    "camera_description": "以静为主，微动为辅",
+    "allowed_moves": ["slow_push_in", "subtle_pan", "gentle_float"],
+    "prohibited_moves": ["fast_zoom", "shake", "whip_pan", "spin"],
+    "transition": "fade or dissolve, no cuts under 3s",
+    "easing": "ease-in-out, very smooth"
+  },
+  "brand_elements": {
+    "logo_usage": "minimal, single placement",
+    "logo_animation": "fade in, no scale or rotation",
+    "product_presentation": "hero shot, 70% frame dominance",
+    "packaging_show": "slow rotation or unwrap",
+    "lifestyle_integration": "aspirational but understated"
+  },
+  "prohibited": [
+    "高饱和度色彩",
+    "复杂图案背景",
+    "多人拥挤场景",
+    "夸张表情和动作",
+    "快节奏剪辑",
+    "卡通/插画元素",
+    "霓虹/赛博朋克",
+    "过度装饰",
+    "硬阴影",
+    "塑料质感"
+  ],
+  "reference_mood": [
+    "Aesop门店空间",
+    "Apple产品页",
+    "Celine广告大片",
+    "日本侘寂美学",
+    "北欧极简室内"
+  ],
+  "prompt_keywords": [
+    "minimalist",
+    "premium",
+    "understated elegance",
+    "soft lighting",
+    "matte texture",
+    "negative space",
+    "refined",
+    "sophisticated",
+    "quiet luxury",
+    "timeless"
+  ]
+}

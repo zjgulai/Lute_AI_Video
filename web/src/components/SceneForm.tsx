@@ -706,7 +706,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                     onClick={() => setMode("smart")}
                     className={`text-[9px] px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer ${
                       mode === "smart"
-                        ? "bg-[#7CB342] text-white"
+                        ? "bg-[#5B8DEF] text-white"
                         : "bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]"
                     }`}
                   >

@@ -329,15 +329,29 @@ class S3InfluencerRemixPipeline:
         })
 
         if result.success and result.data:
-            prompt_data = result.data.get("seedance_prompt", "")
-            return [
-                {
-                    "segment_index": i,
-                    "segment_type": seg.get("segment_type", "body"),
-                    "prompt": prompt_data,
-                }
-                for i, seg in enumerate(segments)
-            ]
+            if isinstance(result.data, list):
+                # New narrative_shot architecture: list[dict] per segment
+                return [
+                    {
+                        "segment_index": i,
+                        "segment_type": p.get("segment_type", "body"),
+                        "prompt": p.get("segment_prompt", ""),
+                        "shot_type": p.get("shot_type", ""),
+                        "duration_seconds": p.get("duration_seconds", 5.0),
+                    }
+                    for i, p in enumerate(result.data)
+                ]
+            else:
+                # Backward compat: old dict format with seedance_prompt key
+                prompt_data = result.data.get("seedance_prompt", "") if isinstance(result.data, dict) else str(result.data)
+                return [
+                    {
+                        "segment_index": i,
+                        "segment_type": seg.get("segment_type", "body"),
+                        "prompt": prompt_data,
+                    }
+                    for i, seg in enumerate(segments)
+                ]
 
         return []
 
@@ -562,13 +576,16 @@ class S3InfluencerRemixPipeline:
 
         # Cap to MAX_CLIPS_PER_DEMO to keep total time bounded
         capped = video_prompts[:MAX_CLIPS_PER_DEMO]
-        clip_duration = min(15, max(4, self._video_duration // max(len(capped), 1)))
+        # Sora 2 Pro via PoYo: 25s cap
+        VIDEO_MAX_DURATION = 15  # Happy Horse API limit
+        clip_duration = min(VIDEO_MAX_DURATION, max(4, self._video_duration // max(len(capped), 1)))
 
         # ── Continuity chain: last frame of clip N feeds clip N+1 ──
         last_frame_path: str | None = None
 
         for i, vp in enumerate(capped):
-            prompt = vp.get("prompt", "") or f"{product_name} product showcase, professional studio lighting"
+            # Use new segment_prompt if available (narrative_shot architecture), fallback to prompt key
+            prompt = vp.get("segment_prompt", "") or vp.get("prompt", "") or f"{product_name} in natural usage scene, authentic real-world context"
             gen_params: dict[str, Any] = {
                 "prompt": prompt,
                 "duration": clip_duration,

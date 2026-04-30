@@ -63,12 +63,28 @@ class SeedanceVideoGenerateSkill(SkillCallable):
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         prompt = params.get("prompt", "")
         if not prompt or not prompt.strip():
-            prompt = f"{params.get('output_label', 'clip')} product showcase"
+            prompt = f"{params.get('output_label', 'clip')} natural usage scene, authentic context"
             logger.info("seedance: using fallback prompt", prompt=prompt)
 
+        # ── P4: Prompt quality guard — warn on generic rotation/showcase patterns ──
+        _generic_patterns = [
+            "product showcase", "product rotation", "360 rotation",
+            "camera slowly orbits", "slowly rotate", "turntable",
+            "spinning product",
+        ]
+        prompt_lower = prompt.lower() if isinstance(prompt, str) else ""
+        hits = [w for w in _generic_patterns if w in prompt_lower]
+        if hits:
+            logger.warning(
+                "seedance_video_generate: generic rotation pattern detected in prompt — "
+                "video likely lacks narrative variety. Review seedance_prompt skill output.",
+                hits=hits,
+                prompt_preview=(prompt[:120] if isinstance(prompt, str) else str(prompt)[:120]),
+            )
+
         duration = int(params.get("duration", DEFAULT_DURATION))
-        # Clamp duration to valid range [4, 15] seconds (Seedance API limit)
-        duration = max(4, min(duration, 15))
+        # Clamp duration to valid range [3, 15] seconds (Happy Horse API limit)
+        duration = max(3, min(duration, 15))
         resolution = params.get("resolution", DEFAULT_RESOLUTION)
         image_refs = params.get("image_refs") or []
         output_label = params.get("output_label", "clip")

@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, Megaphone, Package } from "lucide-react";
+import { Users, Megaphone, Package, Zap } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 
 interface Props {
@@ -9,18 +9,20 @@ interface Props {
   videoCounts: Record<string, number>;
 }
 
-const SCENE_IDS = ["product_direct", "brand_campaign", "influencer_remix"];
+const SCENE_IDS = ["product_direct", "brand_campaign", "influencer_remix", "fast_mode"];
 
 const SCENE_DESC_KEYS: Record<string, string> = {
   product_direct: "scene.desc.product_direct",
   brand_campaign: "scene.desc.brand_campaign",
   influencer_remix: "scene.desc.influencer_remix",
+  fast_mode: "scene.desc.fast_mode",
 };
 
 const SCENE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
   product_direct: Package,
   brand_campaign: Megaphone,
   influencer_remix: Users,
+  fast_mode: Zap,
 };
 
 export default function SceneTabs({ activeScene, onChange, videoCounts }: Props) {

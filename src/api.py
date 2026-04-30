@@ -116,10 +116,14 @@ def _serialize(obj: Any) -> Any:
 
 
 def _safe_error(exc: Exception, is_dev: bool = False) -> str:
-    """Return a generic error message unless in dev mode."""
+    """Return a generic error message unless in dev mode. Includes trace_id for production debugging."""
     if is_dev:
         return str(exc)
-    return "Internal server error"
+    import uuid as _uuid
+    _trace = str(_uuid.uuid4())[:8]
+    import logging
+    logging.getLogger("api.error").error("internal_error trace_id=%s error=%s", _trace, str(exc)[:200])
+    return f"Internal server error [trace: {_trace}]"
 
 
 # ── FastAPI app — only defined when fastapi is installed ──
@@ -162,7 +166,13 @@ if HAS_FASTAPI:
 
     # CORS: allow comma-separated origins via CORS_ORIGINS env var
     _cors_env = os.getenv("CORS_ORIGINS", "")
-    _default_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost"]
+    _default_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost",
+        "https://lute-ai-video.tcloudbaseapp.com",
+        "https://*.tcloudbaseapp.com",
+    ]
     if _cors_env:
         allow_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
     else:
@@ -234,6 +244,21 @@ if HAS_FASTAPI:
         if len(_rate_store) > 1000:
             _rate_store.clear()
         return await call_next(request)
+
+    # ── Request logging middleware ──
+    @app.middleware("http")
+    async def request_log_middleware(request, call_next):
+        import time as _time
+        _start = _time.perf_counter()
+        response = await call_next(request)
+        _duration_ms = (_time.perf_counter() - _start) * 1000
+        import logging
+        _log = logging.getLogger("api.request")
+        _log.info(
+            "%s %s → %s (%.0fms)",
+            request.method, request.url.path, response.status_code, _duration_ms,
+        )
+        return response
 
     # Mount asset management endpoints (requires python-multipart for File/Form)
     try:
@@ -769,6 +794,57 @@ if HAS_FASTAPI:
         )
         return r
 
+    # ── Fast Mode: direct text-to-video (no pipeline) ──
+
+    class FastModeRequest(BaseModel):
+        user_prompt: str
+        duration: int = 15
+        enable_tts: bool = False
+
+    @app.post("/fast/generate", dependencies=[Depends(verify_api_key)])
+    async def fast_generate(req: FastModeRequest):
+        """Fast Mode: direct text-to-video generation without pipeline.
+
+        Uses LLM to enhance user prompt, then calls Seedance directly.
+        No LangGraph, no steps, no gates. Returns video + debug info.
+
+        Request:
+            user_prompt: Simple text description (any language)
+            duration: 10 or 15 seconds (default 15)
+            enable_tts: Whether to generate CosyVoice voiceover
+
+        Returns:
+            {
+                success: bool,
+                video_path: str,
+                video_url: str,
+                filename: str,
+                llm_prompt: str,
+                scene_description: str,
+                duration_seconds: int,
+                file_size_bytes: int,
+                generation_time_ms: int,
+                timing: { llm_ms, video_ms, tts_ms },
+                model_info: { llm, video, tts },
+                is_stub: bool,
+                tts_path: str | null,
+            }
+        """
+        from src.services.fast_mode import FastModeService
+
+        service = FastModeService()
+        try:
+            result = await service.generate(
+                user_prompt=req.user_prompt,
+                duration=max(10, min(15, req.duration)),
+                enable_tts=req.enable_tts,
+            )
+            return result
+        except Exception as e:
+            import logging
+            logging.error("fast_mode failed: %s", e)
+            raise HTTPException(status_code=500, detail=_safe_error(e))
+
     # ── S1 Pipeline Controllability (P0-1) ──
 
     @app.post("/scenario/s1/start", dependencies=[Depends(verify_api_key)])
@@ -1294,6 +1370,27 @@ if HAS_FASTAPI:
                 if "already approved" in result.get("error", ""):
                     status_code = 409
                 raise HTTPException(status_code=status_code, detail=result["error"])
+
+            # Auto-resume pipeline after gate approval (step-by-step mode)
+            # Resume runs from current_step until the next gate or completion.
+            # Resume can take 5-30 minutes (keyframe generation + video synthesis).
+            # Run in background to avoid HTTP 504 Gateway Timeout.
+            async def _background_resume() -> None:
+                try:
+                    from src.pipeline.step_runner import StepRunner
+                    from src.pipeline.state_manager import PipelineStateManager
+
+                    step_runner = StepRunner(PipelineStateManager())
+                    await step_runner.resume(label)
+                except Exception as resume_err:
+                    import logging
+
+                    logging.warning("approve_gate_decision: background resume failed: %s", resume_err)
+
+            asyncio.create_task(_background_resume())
+            result["resumed"] = True
+            result["resuming"] = True
+
             return result
         except HTTPException:
             raise

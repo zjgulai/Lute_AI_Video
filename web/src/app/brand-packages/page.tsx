@@ -248,17 +248,19 @@ export default function BrandPackagesPage() {
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state — branded */}
         {!loading && packages.length === 0 && (
-          <div className="apple-card p-12 text-center">
-            <Package className="w-10 h-10 text-[#e8e8ed] mx-auto mb-3" />
-            <p className="text-sm font-medium text-[#86868b] mb-1">{t("brand.empty")}</p>
-            <p className="text-xs text-[#aeaeb2] mb-4">{t("brand.emptyHint")}</p>
+          <div className="apple-card p-12 text-center" style={{background: "linear-gradient(180deg, rgba(124,179,66,0.03) 0%, #fff 100%)"}}>
+            <div className="w-14 h-14 rounded-2xl bg-[#7CB342]/10 flex items-center justify-center mx-auto mb-4">
+              <Package className="w-7 h-7 text-[#7CB342]" strokeWidth={1.5} />
+            </div>
+            <h3 className="text-base font-semibold text-[#1d1d1f] mb-1">{t("brand.empty")}</h3>
+            <p className="text-sm text-[#86868b] mb-5 max-w-xs mx-auto leading-relaxed">{t("brand.emptyHint")}</p>
             <button
               onClick={openCreateForm}
-              className="apple-btn apple-btn-primary text-xs py-2 px-3"
+              className="apple-btn apple-btn-primary text-sm py-2.5 px-5"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               {t("brand.create")}
             </button>
           </div>

@@ -106,6 +106,8 @@ export default function StageProgress({ label, onComplete }: Props) {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedRef = useRef(false);
+  const failureCountRef = useRef(0);
+  const POLL_FAILURE_THRESHOLD = 15;
   const [prevComplete, setPrevComplete] = useState<boolean[]>([false, false, false]);
   const [celebrations, setCelebrations] = useState<boolean[]>([false, false, false]);
 
@@ -145,6 +147,7 @@ export default function StageProgress({ label, onComplete }: Props) {
   const poll = useCallback(async () => {
     try {
       const data = await fetchS1State(label);
+      failureCountRef.current = 0; // Reset on success
       const newSteps = data?.steps || data?.state?.steps || {};
       setSteps(newSteps);
 
@@ -162,7 +165,11 @@ export default function StageProgress({ label, onComplete }: Props) {
         setTimeout(() => onComplete(data), 1500);
       }
     } catch {
-      // Silently retry on next poll
+      failureCountRef.current += 1;
+      if (failureCountRef.current >= POLL_FAILURE_THRESHOLD) {
+        console.error("StageProgress: polling failed after %d consecutive attempts", failureCountRef.current);
+        // Don't stop polling — just log. The user sees elapsed time continuing.
+      }
     }
   }, [label, onComplete]);
 

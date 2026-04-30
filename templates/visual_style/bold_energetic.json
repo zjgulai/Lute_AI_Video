@@ -1,0 +1,113 @@
+{
+  "_meta": {
+    "style_name": "bold_energetic",
+    "style_description": "大胆活力风格 - 适用于运动品牌、能量饮料、年轻潮流、游戏电竞",
+    "typical_brands": ["Nike", "Red Bull", "Supreme", "Gymshark"],
+    "target_emotion": "肾上腺素、不服输、年轻态度",
+    "version": "1.0.0"
+  },
+  "color_palette": {
+    "primary": "#FF3366",
+    "primary_description": "电光粉 - 占据40-50%，视觉冲击力",
+    "secondary": "#000000",
+    "secondary_description": "纯黑 - 占据30-35%，力量感基底",
+    "accent": "#00FFFF",
+    "accent_description": "电光蓝 - 占据15-20%，速度感点缀",
+    "bg_ratio": [0.45, 0.35, 0.2],
+    "bg_ratio_note": "primary:secondary:accent 画面占比",
+    "prohibited_colors": [" pastel", " beige", " grey-brown", " muted tones"],
+    "color_temperature": "冷暖对冲"
+  },
+  "typography": {
+    "title_font": "Druk / Impact / 站酷酷黑",
+    "title_weight": "Heavy (900)",
+    "title_size_ratio": "15-20%画面高度",
+    "body_font": "DIN / Roboto / 思源黑体",
+    "body_weight": "Bold (700)",
+    "body_size_ratio": "5-8%画面高度",
+    "brand_font": "Custom Display",
+    "brand_font_description": "超粗体展示字体，可倾斜或变形",
+    "letter_spacing": "-0.02 to 0em",
+    "line_height": "1.0-1.2",
+    "text_color": "#FFFFFF on dark, #000000 on light",
+    "text_placement": "满版、倾斜、突破安全区"
+  },
+  "composition": {
+    "safe_zone": "突破常规，元素可出血",
+    "safe_zone_description": "动态构图，元素可超出传统安全区",
+    "logo_position": "dynamic",
+    "logo_position_description": "动态位置，可旋转/倾斜",
+    "product_focus": "action_center",
+    "product_focus_description": "产品在动作中心，充满张力",
+    "depth_of_field": "deep",
+    "depth_of_field_description": "全景深，所有元素锐利",
+    "negative_space": "20-30%",
+    "negative_space_description": "留白20-30%，信息密集",
+    "grid_system": "diagonal or broken grid",
+    "alignment": "intentionally off-center, tilted, dynamic"
+  },
+  "lighting": {
+    "style": "dramatic_high_contrast",
+    "style_description": "戏剧性高对比，强调力量",
+    "key_light": "硬光，侧光或底光，制造强烈阴影",
+    "fill_light": "极少，保持暗部深邃",
+    "rim_light": "强轮廓光，突出肌肉/产品线条",
+    "shadow_quality": "硬边，几何感，可保留",
+    "contrast_ratio": "极高对比，暗部可纯黑",
+    "mood": "赛场/舞台/街头/深夜"
+  },
+  "texture": {
+    "surface_quality": "high_energy",
+    "surface_description": "高能量质感，光滑+粗糙对比",
+    "material_keywords": ["sweat", "rubber", "carbon fiber", "neon", "asphalt"],
+    "reflection": "sharp, high contrast, dramatic",
+    "grain": "aggressive grain or digital noise, 5-10%",
+    "bokeh": "minimal, everything sharp"
+  },
+  "motion_style": {
+    "pace": "fast",
+    "pace_description": "快节奏，单镜1-3秒",
+    "camera_movement": "dynamic_action",
+    "camera_description": "动感十足，跟随动作",
+    "allowed_moves": ["whip_pan", "fast_zoom", "spin", "follow_action", "crash_zoom"],
+    "prohibited_moves": ["slow_static", "gentle_float", "minimal_move"],
+    "transition": "hard cut, flash, glitch, speed ramp",
+    "easing": "ease-in, snappy, aggressive"
+  },
+  "brand_elements": {
+    "logo_usage": "large, bold, integrated into action",
+    "logo_animation": "fast reveal, glitch, scale burst",
+    "product_presentation": "in action, mid-use, sweat/dust flying",
+    "packaging_show": "quick flash, part of montage",
+    "lifestyle_integration": "extreme sports, street culture, competition"
+  },
+  "prohibited": [
+    "柔和色调",
+    "慢节奏",
+    "过度留白",
+    "精致优雅",
+    "自然光线",
+    "静态摆拍",
+    "传统构图",
+    "温暖质感"
+  ],
+  "reference_mood": [
+    "Nike广告片",
+    "Red Bull极限运动",
+    "街头涂鸦文化",
+    "电竞赛事开场",
+    "Hiphop MV"
+  ],
+  "prompt_keywords": [
+    "bold",
+    "energetic",
+    "dynamic",
+    "high contrast",
+    "action",
+    "street",
+    "power",
+    "speed",
+    "attitude",
+    "unstoppable"
+  ]
+}

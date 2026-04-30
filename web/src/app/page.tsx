@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { ReviewState } from "@/components/types";
+import { REVIEW_NODES } from "@/components/types";
 import {
   startPipeline,
   fetchState,
@@ -29,6 +30,7 @@ import StageProgress from "@/components/StageProgress";
 import AssetLibrary from "@/components/AssetLibrary";
 import SplashScreen from "@/components/SplashScreen";
 import RecommendPanel from "@/components/RecommendPanel";
+import FastModePanel from "@/components/FastModePanel";
 import QualityDashboard from "@/components/QualityDashboard";
 import Nav from "@/components/Nav";
 import SettingsPanel from "@/components/SettingsPanel";
@@ -291,6 +293,7 @@ export default function Home() {
   }, []);
 
   const startSmartCreate = async (config: any) => {
+    if (loading) return;
     // Demo mode: skip API calls, serve mock data instantly
     if (isDemoMode()) {
       const scenario = config.content_scenario || "product_direct";
@@ -470,7 +473,7 @@ export default function Home() {
     action: "approve" | "reject" | "request_changes",
     notes?: string,
   ) => {
-    if (!threadId || !reviewState?.current_review) return;
+    if (loading || !threadId || !reviewState?.current_review) return;
     setLoading(true);
 
     const labels: Record<string, string> = {
@@ -721,13 +724,17 @@ export default function Home() {
               <SceneTabs
                 activeScene={activeScene}
                 onChange={setActiveScene}
-                videoCounts={{ product_direct: 0, brand_campaign: 0, influencer_remix: 0 }}
+                videoCounts={{ product_direct: 0, brand_campaign: 0, influencer_remix: 0, fast_mode: 0 }}
               />
-              <SceneForm
-                scene={activeScene}
-                onSubmit={handleSceneSubmit}
-                loading={loading}
-              />
+              {activeScene === "fast_mode" ? (
+                <FastModePanel />
+              ) : (
+                <SceneForm
+                  scene={activeScene}
+                  onSubmit={handleSceneSubmit}
+                  loading={loading}
+                />
+              )}
             </div>
           )}
 
@@ -789,6 +796,7 @@ export default function Home() {
                   maxSelections={GATE_SEQUENCE[currentGate - 1]?.maxSelections || 1}
                   currentStep={currentGate}
                   totalSteps={GATE_SEQUENCE.length}
+                  gateSequence={GATE_SEQUENCE}
                   onApprove={async (selectedIds) => {
                     if (currentGate === GATE_SEQUENCE.length) {
                       // Gate 4 (final) approved — fetch final state and show CompareView
@@ -887,6 +895,7 @@ export default function Home() {
                 setOneshotScenario("product_direct");
                 showToast(t("toast.stepByStepDone"), "success");
               }}
+              onError={(msg) => showToast(msg, "error")}
               loading={loading}
             />
           )}
@@ -945,6 +954,37 @@ export default function Home() {
                     <p className="text-sm text-[#ff453a] font-medium">{t("app.backendDisconnected")}</p>
                   </div>
                 )}
+                {/* P1-2: Review progress indicator */}
+                <div className="flex items-center gap-1.5 mb-3 px-1">
+                  {REVIEW_NODES.map((node, i) => {
+                    const nodeKey = node.replace("_review", "");
+                    const isCurrent = currentReview === node;
+                    const reviewData = reviewState?.state?.human_reviews?.[node];
+                    const isDone = reviewData?.status === "approved";
+                    const isRejected = reviewData?.status === "rejected";
+                    return (
+                      <div key={node} className="flex items-center gap-1.5 flex-1 last:flex-none">
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${
+                          isCurrent ? "bg-[#7CB342]/10 text-[#7CB342] ring-1 ring-[#7CB342]/20" :
+                          isDone ? "bg-[#f5f5f7] text-[#7CB342]" :
+                          isRejected ? "bg-[#ff453a]/5 text-[#ff453a]" :
+                          "bg-[#f5f5f7] text-[#aeaeb2]"
+                        }`}>
+                          <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold ${
+                            isDone ? "bg-[#7CB342] text-white" :
+                            isRejected ? "bg-[#ff453a] text-white" :
+                            isCurrent ? "bg-[#7CB342] text-white" :
+                            "bg-[#e8e8ed] text-[#aeaeb2]"
+                          }`}>{isDone ? "✓" : isRejected ? "✗" : i + 1}</span>
+                          {t(`step.${nodeKey}`)}
+                        </div>
+                        {i < REVIEW_NODES.length - 1 && (
+                          <div className={`flex-1 h-px ${isDone ? "bg-[#7CB342]" : "bg-[#e8e8ed]"}`} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
                 {currentReview ? (
                   <ReviewPanel
                     currentReview={currentReview}

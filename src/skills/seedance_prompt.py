@@ -1,197 +1,195 @@
-"""Seedance Video Prompt Skill.
+"""Sora-compatible Video Prompt Skill (Narrative Shot architecture).
 
-Generates Seedance 2.0-compatible prompts from script segments.
-Encapsulates best practices from GitHub seedance prompt repos.
+Generates structured, per-segment prompts designed for Sora 2 Pro / Seedance 2.0.
+Each script segment produces a self-contained prompt with explicit shot type,
+camera direction, action, and scene description — never a generic product rotation.
 
-Key patterns:
-- Product 360 showcase: @image1 [product] as subject, camera ref @video1
-- Comparison: @image1 [scene A], @image2 [scene B]
-- Timeline segmentation: 0-3s / 3-6s / 6-9s format
-- @material_name reference validation
+Key design decisions:
+- Per-segment output: one prompt per narrative beat (not a concatenated long string)
+- Direct segment_type usage: no keyword-guessing classifier — trust the script's own labels
+- Full visual_description: never truncate the scene description
+- Forbidden word detection: "product showcase", "360", "rotation" trigger validation warnings
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
-# Prompt templates for different shot types
-SHOT_TEMPLATES = {
-    "product_360": (
-        "{product_name} shown in a real usage scene, "
-        "a parent quickly finds and grabs what they need from organized compartments, "
-        "natural warm lighting through car trunk, handheld camera feel, "
-        "cinematic short-form video style, authentic family moment"
-    ),
-    "product_closeup": (
-        "close-up of {product_name} in use, hands interacting with the product, "
-        "shallow depth of field, soft natural light, "
-        "showing texture and quality details in real context"
-    ),
-    "lifestyle_usage": (
-        "@image1 {product_name} in use, "
-        "natural lighting, warm atmosphere, "
-        "realistic everyday setting, "
-        "cinematic 24fps feel"
-    ),
-    "comparison": (
-        "@image1 {product_a} on the left, @image2 {product_b} on the right, "
-        "camera pans slowly from left to right, "
-        "split-screen comparison, "
-        "clean studio setup"
-    ),
-    "before_after": (
-        "@image1 the before state, "
-        "camera transitions smoothly to @image2 the after state, "
-        "wipe transition effect, "
-        "consistent lighting and framing throughout"
-    ),
-    "brand_story": (
-        "Cinematic brand storytelling sequence:\n"
-        "0-3s: @image1 establishing shot, warm golden light, slow push-in\n"
-        "3-6s: @image2 product detail, gentle camera pan\n"
-        "6-9s: @image3 lifestyle scene with natural motion\n"
-        "9-12s: @image4 brand moment, slow fade to text overlay\n"
-        "No scene cuts throughout, seamless transitions"
-    ),
-    "influencer_intro": (
-        "@image1 {creator_name} looking at camera, friendly expression, "
-        "home setting, natural window lighting, "
-        "warm and authentic atmosphere"
-    ),
-    "demo_step": (
-        "@image1 {step_description}, "
-        "overhead shot, hands visible, "
-        "clear and well-lit workspace, informative pacing"
-    ),
-    "cta_end": (
-        "@image1 {product_name} prominently displayed, "
-        "text overlay with {cta_text}, "
-        "clean minimal background, brand colors"
-    ),
-}
+logger = logging.getLogger(__name__)
+
+# ── Words that indicate a generic product-rotation prompt ──
+FORBIDDEN_PATTERNS = [
+    "product showcase", "product rotation", "360 rotation",
+    "camera slowly orbits", "slowly rotate", "360 view",
+    "product 360", "turntable", "spinning product",
+]
+
+# ── Narrative shot template ──
+# Each segment gets its own prompt built from the script's visual_description.
+# No template.format() with truncated strings — use the full description directly.
+
+NARRATIVE_SHOT_TEMPLATE = (
+    "Scene: {visual_description}. "
+    "Shot type: {shot_type}. "
+    "Action: {action_description}. "
+    "Lighting: {lighting}. "
+    "Camera: {camera_direction}. "
+    "Pacing: {pacing}."
+)
+
+
+def _build_single_prompt(
+    segment: dict,
+    shot_type: str,
+    action_desc: str,
+    lighting: str,
+    camera: str,
+    pacing: str,
+    duration: float,
+) -> dict:
+    """Build a single structured prompt dict for one segment."""
+    visual = (segment.get("visual_description", "") or
+              segment.get("description", "") or
+              segment.get("voiceover", ""))
+
+    prompt_text = NARRATIVE_SHOT_TEMPLATE.format(
+        visual_description=visual,
+        shot_type=shot_type,
+        action_description=action_desc,
+        lighting=lighting,
+        camera_direction=camera,
+        pacing=pacing,
+    )
+
+    # Detect and warn on forbidden patterns
+    prompt_lower = prompt_text.lower()
+    hits = [w for w in FORBIDDEN_PATTERNS if w in prompt_lower]
+    if hits:
+        logger.warning(
+            "seedance_prompt: forbidden pattern detected in prompt",
+            hits=hits,
+            segment_type=segment.get("segment_type", "?"),
+        )
+
+    return {
+        "segment_prompt": prompt_text,
+        "segment_type": segment.get("segment_type", "body"),
+        "duration_seconds": duration,
+        "shot_type": shot_type,
+        "camera": camera,
+        "lighting": lighting,
+        "has_forbidden_words": len(hits) > 0,
+        "forbidden_hits": hits,
+    }
+
+
+def _shot_type_from_segment(seg_type: str, description: str, index: int, total: int) -> str:
+    """Derive shot type from the script's own segment_type label (not keyword guessing)."""
+    seg = (seg_type or "").lower()
+    desc = (description or "").lower()
+
+    if "hook" in seg:
+        return "close-up"
+    if "pain" in seg or "problem" in seg:
+        return "mid-shot"
+    if "solution" in seg or "demo" in seg or "tutorial" in seg:
+        return "over-shoulder"
+    if "trust" in seg or "testimonial" in seg or "social" in seg:
+        return "mid-shot"
+    if "cta" in seg or "conclusion" in seg:
+        return "static beauty shot"
+    if "comparison" in seg:
+        return "split-screen"
+    if "before" in seg and "after" in seg:
+        return "transition"
+
+    # Fallback: use description heuristics as soft hint
+    if "close" in desc or "detail" in desc or "texture" in desc:
+        return "close-up"
+    if "over-shoulder" in desc or "over shoulder" in desc or "behind" in desc:
+        return "over-shoulder"
+
+    # First segment defaults to establishing close-up, last to beauty
+    if index == 0 and total > 1:
+        return "close-up"
+    if index == total - 1 and total > 1:
+        return "static beauty shot"
+
+    return "mid-shot"
 
 
 class SeedancePromptSkill(SkillCallable):
-    """Generates Seedance 2.0-compatible video generation prompts.
+    """Generates per-segment structured video prompts for Sora 2 Pro / Seedance 2.0.
 
-    Takes script segments and product assets, returns structured 
-    prompts with @material_name references that Seedance API understands.
+    Returns a list of prompt dicts — one per script segment — each with
+    explicit shot type, camera, action, and full visual description.
     """
 
     name = "seedance-video-prompt"
-    description = "Generates Seedance 2.0-compatible video prompts from script segments"
-
+    description = "Generates per-segment structured video prompts (narrative shot architecture)"
     max_retries = 2
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
-        """Build prompt from script segments using templates."""
+        """Build one prompt per script segment using the narrative_shot template."""
         segments = params.get("script_segments", [])
         product_name = params.get("product_name", "Product")
-        style_refs = params.get("style_ref_images", [])
-        product_images = params.get("product_images", [])
 
         if not segments:
-            return SkillResult(success=True, data=self._build_fallback(product_name))
+            return SkillResult(success=True, data=[self._build_single_fallback(product_name)])
 
-        # Build prompt from segments
-        prompt_parts = []
-        total_duration = 0
+        prompts: list[dict] = []
+        total = len(segments)
 
         for i, seg in enumerate(segments):
-            seg_type = self._classify_segment(seg, i, len(segments))
-            template = SHOT_TEMPLATES.get(seg_type, SHOT_TEMPLATES["product_closeup"])
+            seg_type = seg.get("segment_type", "") or seg.get("type", "body")
+            visual = (seg.get("visual_description", "") or
+                      seg.get("description", "") or
+                      seg.get("voiceover", ""))
+            voice = seg.get("voiceover", "") or visual
+            start_t = float(seg.get("start_time", 0))
+            end_t = float(seg.get("end_time", start_t + 5))
+            duration = max(1.0, end_t - start_t)
 
-            # Build focus_detail from visual_description + voiceover for richer scene context
-            visual = seg.get("visual_description", "")
-            voice = seg.get("voiceover", "")
-            focus_detail = (visual + " " + voice)[:120].strip() if visual else voice[:80]
-            step_desc = voice[:60] if voice else visual[:60]
+            shot_type = _shot_type_from_segment(seg_type, visual, i, total)
 
-            prompt = template.format(
-                product_name=product_name,
-                focus_detail=focus_detail,
-                step_description=step_desc,
-                creator_name=params.get("creator_name", ""),
-                cta_text=seg.get("cta", "Learn more"),
-                product_a=product_name,
-                product_b=f"{product_name} alternative",
+            # Action description: use voiceover as the "what happens" anchor
+            action = voice[:200] if voice else visual[:200]
+
+            prompt_dict = _build_single_prompt(
+                segment=seg,
+                shot_type=shot_type,
+                action_desc=action,
+                lighting="natural warm daylight" if "warm" in (visual + voice).lower() else "natural clean lighting",
+                camera="handheld intimate" if i == 0 else "smooth cinematic",
+                pacing="fast cut, urgent" if i == 0 else ("slow reveal, breathing room" if i == total - 1 else "steady informative"),
+                duration=duration,
             )
+            prompts.append(prompt_dict)
 
-            # Add timing prefix
-            duration = seg.get("duration_seconds", 3)
-            start = total_duration
-            end = start + duration
-            prompt_parts.append(f"[{start}-{end}s] {prompt}")
-            total_duration = end
+        return SkillResult(success=True, data=prompts)
 
-            # Add @material references if available
-            if i < len(style_refs):
-                prompt_parts[-1] += f" @image{ref_idx} {product_name} reference"
-
-        full_prompt = " ".join(prompt_parts)
-
-        # Add quality spec at the end
-        full_prompt += (
-            f" Output duration: {total_duration}s total. "
-            f"Resolution: 720p. "
-            f"Natural motion, smooth transitions, photorealistic quality."
-        )
-
-        return SkillResult(success=True, data={
-            "seedance_prompt": full_prompt,
-            "material_references": {
-                "images": style_refs + product_images,
-                "count": len(style_refs) + len(product_images),
-            },
-            "total_duration_seconds": total_duration,
-            "prompt_length": len(full_prompt),
-        })
-
-    def _classify_segment(self, seg: dict, index: int, total: int) -> str:
-        """Classify a script segment into a shot template type."""
-        text = (seg.get("voiceover", "") + seg.get("visual_description", "")).lower()
-
-        # First segment = hook/intro → lifestyle scene with product in context
-        if index == 0 and total > 1:
-            if any(w in text for w in ["review", "unbox", "try"]):
-                return "influencer_intro"
-            if any(w in text for w in ["compare", "vs", "versus"]):
-                return "comparison"
-            # Default: show product in real-life usage scene, not sterile rotation
-            return "lifestyle_usage"
-
-        # Last segment often is CTA
-        if index == total - 1:
-            return "cta_end"
-
-        # Middle segments
-        if any(w in text for w in ["compare", "vs", "versus", "difference"]):
-            return "comparison"
-        if any(w in text for w in ["before", "after", "result"]):
-            return "before_after"
-        if any(w in text for w in ["step", "how to", "first", "next", "then"]):
-            return "demo_step"
-        if any(w in text for w in ["close up", "detail", "texture", "zoom"]):
-            return "product_closeup"
-        if any(w in text for w in ["lifestyle", "everyday", "daily", "home", "mom", "dad", "family", "baby", "using", "grab"]):
-            return "lifestyle_usage"
-
-        return "product_360"
-
-    def _build_fallback(self, product_name: str) -> dict:
-        """Generate a simple fallback prompt."""
+    def _build_single_fallback(self, product_name: str) -> dict:
+        """Safe fallback: structured prompt without rotation keywords."""
         return {
-            "seedance_prompt": (
-                f"@image1 {product_name} centered on clean background, "
-                f"camera slowly orbits around product, "
-                f"professional studio lighting, photorealistic, 10s duration"
+            "segment_prompt": (
+                f"Scene: {product_name} in a real home setting. "
+                "Shot type: mid-shot. "
+                "Action: person interacts naturally with the product. "
+                "Lighting: natural window light. "
+                "Camera: smooth handheld. "
+                "Pacing: calm and authentic."
             ),
-            "material_references": {"images": [], "count": 0},
-            "total_duration_seconds": 10,
-            "prompt_length": 0,
+            "segment_type": "body",
+            "duration_seconds": 10.0,
+            "shot_type": "mid-shot",
+            "camera": "smooth handheld",
+            "lighting": "natural window light",
+            "has_forbidden_words": False,
+            "forbidden_hits": [],
             "_fallback": True,
         }
 
@@ -205,22 +203,30 @@ class SeedancePromptSkill(SkillCallable):
         errors = []
         if not data:
             return ["output is None"]
-        if "seedance_prompt" not in data:
-            errors.append("missing 'seedance_prompt' in output")
-        elif len(data["seedance_prompt"]) < 10:
-            errors.append("seedance_prompt too short (< 10 chars)")
+        if not isinstance(data, list):
+            return [f"output must be list[dict], got {type(data).__name__}"]
+        for i, item in enumerate(data):
+            if not isinstance(item, dict):
+                errors.append(f"item[{i}] is not dict")
+                continue
+            prompt = item.get("segment_prompt", "")
+            if len(prompt) < 10:
+                errors.append(f"item[{i}] segment_prompt too short")
+            # Check forbidden words
+            pl = prompt.lower()
+            for w in FORBIDDEN_PATTERNS:
+                if w in pl:
+                    errors.append(f"item[{i}] contains forbidden word: '{w}'")
         return errors
 
     def fallback(self, params: dict[str, Any]) -> SkillResult:
         product_name = params.get("product_name", "Product")
-        return SkillResult(success=True, data=self._build_fallback(product_name))
+        return SkillResult(success=True, data=[self._build_single_fallback(product_name)])
 
 
 # Auto-register
-import structlog
-_logger_sd = structlog.get_logger()
 try:
     SkillRegistry.register(SeedancePromptSkill())
-    _logger_sd.info("seedance_prompt_skill: registered")
+    logger.info("seedance_prompt_skill: registered (narrative shot architecture)")
 except ValueError:
     pass

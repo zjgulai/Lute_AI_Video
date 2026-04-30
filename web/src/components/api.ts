@@ -64,7 +64,11 @@ export function getApiBase(): string {
     const stored = storageGet(STORAGE_KEYS.apiBase);
     if (stored) return stored;
   }
-  const env = readEnv("NEXT_PUBLIC_API_BASE_URL");
+  // Production: use relative path via Nginx reverse proxy
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
+    return "/api";
+  }
+  const env = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (env) return env;
   return "http://localhost:8001";
 }
@@ -413,5 +417,41 @@ export async function fetchDashboardOverview(scenario?: string, platform?: strin
   if (days) params.set("days", String(days));
   const res = await fetch(getApiBase() + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false) });
   if (!res.ok) throw new Error("Failed to fetch dashboard");
+  return res.json();
+}
+
+// ── Fast Mode: direct text-to-video (no pipeline) ──
+
+export interface FastModeResult {
+  success: boolean;
+  video_path: string;
+  video_url: string;
+  filename: string;
+  llm_prompt: string;
+  scene_description: string;
+  user_prompt: string;
+  duration_seconds: number;
+  file_size_bytes: number;
+  generation_time_ms: number;
+  timing: { llm_ms: number; video_ms: number; tts_ms: number };
+  model_info: { llm: string; video: string; tts: string | null };
+  is_stub: boolean;
+  tts_path: string | null;
+}
+
+export async function generateFastMode(body: {
+  user_prompt: string;
+  duration: number;
+  enable_tts: boolean;
+}): Promise<FastModeResult> {
+  const res = await fetch(getApiBase() + "/fast/generate", {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "Fast Mode generation failed");
+    throw new Error(err);
+  }
   return res.json();
 }

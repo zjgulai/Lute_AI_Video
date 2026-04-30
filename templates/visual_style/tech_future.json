@@ -1,0 +1,113 @@
+{
+  "_meta": {
+    "style_name": "tech_future",
+    "style_description": "科技未来风格 - 适用于数码3C、AI产品、智能汽车、SaaS品牌",
+    "typical_brands": ["Tesla", "Nothing", "OnePlus", "Stripe"],
+    "target_emotion": "前沿的兴奋感、理性的信任",
+    "version": "1.0.0"
+  },
+  "color_palette": {
+    "primary": "#0A1628",
+    "primary_description": "深空蓝黑 - 占据50-60%，科技感基底",
+    "secondary": "#00D4AA",
+    "secondary_description": "电光青绿 - 占据20-25%，数据流动感",
+    "accent": "#FFFFFF",
+    "accent_description": "纯白 - 占据15-20%，高光和信息层级",
+    "bg_ratio": [0.55, 0.25, 0.2],
+    "bg_ratio_note": "primary:secondary:accent 画面占比",
+    "prohibited_colors": ["暖橙", "粉红", "土黄", "渐变彩虹"],
+    "color_temperature": "偏冷中性"
+  },
+  "typography": {
+    "title_font": "DIN Alternate / Roboto Mono",
+    "title_weight": "Bold (700)",
+    "title_size_ratio": "10-14%画面高度",
+    "body_font": "Inter / Noto Sans SC",
+    "body_weight": "Regular (400)",
+    "body_size_ratio": "4-6%画面高度",
+    "brand_font": "Custom Tech",
+    "brand_font_description": "等宽或几何无衬线体，强调精确感",
+    "letter_spacing": "0.02-0.05em",
+    "line_height": "1.4-1.6",
+    "text_color": "#FFFFFF on dark, #0A1628 on light",
+    "text_placement": "左对齐或居中，数据信息右对齐"
+  },
+  "composition": {
+    "safe_zone": "90% center",
+    "safe_zone_description": "关键元素不超出画面中心90%",
+    "logo_position": "top_left",
+    "logo_position_description": "左上角，建立技术文档感",
+    "product_focus": "center_dominant",
+    "product_focus_description": "产品居中，60-70%画面占比",
+    "depth_of_field": "deep_to_shallow",
+    "depth_of_field_description": "整体清晰，仅背景适度虚化",
+    "negative_space": "30-40%",
+    "negative_space_description": "留白30-40%，信息密度高但不拥挤",
+    "grid_system": "12-column tech grid",
+    "alignment": "strong left alignment for data, center for product"
+  },
+  "lighting": {
+    "style": "dramatic_tech",
+    "style_description": "戏剧性科技光，强调产品轮廓",
+    "key_light": "顶部或底部轮廓光，冷白6500K",
+    "fill_light": "极低，保持暗部深邃",
+    "rim_light": "强，勾勒产品边缘，青绿色",
+    "shadow_quality": "硬边阴影，几何感",
+    "contrast_ratio": "高对比，暗部可压黑",
+    "mood": "实验室/太空舱/深夜编程"
+  },
+  "texture": {
+    "surface_quality": "glossy_precision",
+    "surface_description": "光滑精密，金属+玻璃质感",
+    "material_keywords": ["brushed aluminum", "tempered glass", "carbon fiber", "LED mesh"],
+    "reflection": "sharp, precise, environmental mapping",
+    "grain": "clean digital, no film grain",
+    "bokeh": "hexagonal, tech-flavored"
+  },
+  "motion_style": {
+    "pace": "dynamic",
+    "pace_description": "动态节奏，单镜3-5秒",
+    "camera_movement": "fluid_tech",
+    "camera_description": "流畅但带有机械精确感",
+    "allowed_moves": ["smooth_push_in", "orbital_rotate", "data_zoom", "slide_transition"],
+    "prohibited_moves": ["handheld_shake", "whip_pan", "random_zoom"],
+    "transition": "slide or tech wipe, data-driven",
+    "easing": "ease-out-expo, snappy start smooth end"
+  },
+  "brand_elements": {
+    "logo_usage": "subtle watermark or top placement",
+    "logo_animation": "draw-on or digital reveal",
+    "product_presentation": "exploded view, component highlight",
+    "packaging_show": "minimal, focus on product itself",
+    "lifestyle_integration": "futuristic environment, user in flow state"
+  },
+  "prohibited": [
+    "暖色调",
+    "自然材质（木/棉/麻）",
+    "复古元素",
+    "手写体",
+    "过度留白",
+    "卡通插画",
+    "柔焦/梦幻感",
+    "有机曲线（多用几何）"
+  ],
+  "reference_mood": [
+    "Tesla产品发布",
+    "Nothing Phone设计",
+    "Stripe开发者文档",
+    "《黑镜》UI设计",
+    "Apple WWDC开场"
+  ],
+  "prompt_keywords": [
+    "futuristic",
+    "precision",
+    "tech",
+    "glowing",
+    "holographic",
+    "minimal",
+    "geometric",
+    "sleek",
+    "innovation",
+    "cutting-edge"
+  ]
+}

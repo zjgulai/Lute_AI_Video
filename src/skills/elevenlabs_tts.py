@@ -51,23 +51,54 @@ class ElevenLabsTTSSkill(SkillCallable):
         stability = float(params.get("stability", 0.5))
         similarity_boost = float(params.get("similarity_boost", 0.75))
 
-        from src.tools.elevenlabs_client import ElevenLabsClient, VOICE_PRESETS
-        from src.config import ELEVENLABS_API_KEY, POYO_API_KEY
+        from src.config import SILICONFLOW_API_KEY, ELEVENLABS_API_KEY, POYO_API_KEY
 
-        client = ElevenLabsClient()
-        try:
-            path: Path = await client.synthesize(
-                text=text,
-                voice_id=voice_id,
-                language=language,
-                stability=stability,
-                similarity_boost=similarity_boost,
-            )
-        except Exception as e:
-            return SkillResult(success=False, error=f"tts_call_failed: {e}")
+        # ── Priority 1: SiliconFlow CosyVoice (Pro version TTS) ──
+        if SILICONFLOW_API_KEY:
+            from src.tools.cosyvoice_client import CosyVoiceClient, VOICE_PRESETS as COSY_PRESETS
 
-        has_key = bool(ELEVENLABS_API_KEY or POYO_API_KEY)
-        is_stub = (not has_key) or path.name.startswith("stub_")
+            cosy_client = CosyVoiceClient()
+            try:
+                # Map ElevenLabs voice_id to CosyVoice voice if possible,
+                # otherwise let CosyVoiceClient pick by language.
+                cosy_voice = None
+                if voice_id and voice_id in COSY_PRESETS:
+                    cosy_voice = COSY_PRESETS[voice_id]
+
+                path: Path = await cosy_client.synthesize(
+                    text=text,
+                    voice=cosy_voice,
+                    language=language,
+                    response_format="mp3",
+                    speed=1.0,
+                )
+            except Exception as e:
+                return SkillResult(success=False, error=f"cosyvoice_tts_call_failed: {e}")
+            finally:
+                await cosy_client.close()
+
+            is_stub = path.name.startswith("stub_")
+            used_voice = cosy_voice or COSY_PRESETS.get(language, COSY_PRESETS["en"])
+
+        # ── Priority 2: ElevenLabs (legacy fallback) ──
+        else:
+            from src.tools.elevenlabs_client import ElevenLabsClient, VOICE_PRESETS
+
+            client = ElevenLabsClient()
+            try:
+                path: Path = await client.synthesize(
+                    text=text,
+                    voice_id=voice_id,
+                    language=language,
+                    stability=stability,
+                    similarity_boost=similarity_boost,
+                )
+            except Exception as e:
+                return SkillResult(success=False, error=f"tts_call_failed: {e}")
+
+            has_key = bool(ELEVENLABS_API_KEY or POYO_API_KEY)
+            is_stub = (not has_key) or path.name.startswith("stub_")
+            used_voice = voice_id or VOICE_PRESETS.get(language, VOICE_PRESETS["en"])
 
         # Stub mode: ensure placeholder file exists with at least minimal mp3 header
         if is_stub and (not path.exists() or path.stat().st_size == 0):
@@ -89,7 +120,8 @@ class ElevenLabsTTSSkill(SkillCallable):
             duration_seconds = max(MIN_DURATION_SECONDS, len(text) / 6 / 150 * 60)
 
         file_size = path.stat().st_size if path.exists() else 0
-        resolved_voice = voice_id or VOICE_PRESETS.get(language, VOICE_PRESETS["en"])
+        # `used_voice` already resolved above (cosyvoice or elevenlabs branch)
+        resolved_voice = used_voice
 
         # Check for companion lyrics file (generate-lyrics produces .txt, not audio)
         lyrics_path = path.with_suffix(".txt")

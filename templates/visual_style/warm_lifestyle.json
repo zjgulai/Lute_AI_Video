@@ -1,0 +1,113 @@
+{
+  "_meta": {
+    "style_name": "warm_lifestyle",
+    "style_description": "温暖生活风格 - 适用于母婴、家居、食品、生活方式品牌",
+    "typical_brands": ["宜家", "全棉时代", "三只松鼠", "小仙炖"],
+    "target_emotion": "家的温暖、日常的幸福感",
+    "version": "1.0.0"
+  },
+  "color_palette": {
+    "primary": "#F5F0E8",
+    "primary_description": "暖米白 - 占据50-60%，温暖基底",
+    "secondary": "#D4A574",
+    "secondary_description": "焦糖棕 - 占据20-25%，自然温暖",
+    "accent": "#7BA05B",
+    "accent_description": "苔藓绿 - 占据15-20%，生机点缀",
+    "bg_ratio": [0.55, 0.25, 0.2],
+    "bg_ratio_note": "primary:secondary:accent 画面占比",
+    "prohibited_colors": ["冷蓝", "荧光色", "纯黑", "高饱和紫"],
+    "color_temperature": "偏暖"
+  },
+  "typography": {
+    "title_font": "Noto Serif SC / 思源宋体",
+    "title_weight": "Medium (500)",
+    "title_size_ratio": "8-10%画面高度",
+    "body_font": "Noto Sans SC / 苹方",
+    "body_weight": "Regular (400)",
+    "body_size_ratio": "4-5%画面高度",
+    "brand_font": "Handwritten or Rounded",
+    "brand_font_description": "手写体或圆体，增加亲切感",
+    "letter_spacing": "0.01-0.03em",
+    "line_height": "1.6-1.8",
+    "text_color": "#4A3728 on light, #F5F0E8 on dark",
+    "text_placement": "自然融入场景，如书本/标签/黑板"
+  },
+  "composition": {
+    "safe_zone": "85% center",
+    "safe_zone_description": "关键元素不超出画面中心85%",
+    "logo_position": "natural_integration",
+    "logo_position_description": "自然融入场景，如包装/围裙/门牌",
+    "product_focus": "lifestyle_context",
+    "product_focus_description": "产品在生活场景中自然出现，不突兀",
+    "depth_of_field": "moderate",
+    "depth_of_field_description": "适度虚化，保留环境信息",
+    "negative_space": "35-45%",
+    "negative_space_description": "留白35-45%，呼吸感",
+    "grid_system": "golden ratio with organic flow",
+    "alignment": "organic, follow natural lines"
+  },
+  "lighting": {
+    "style": "natural_window_light",
+    "style_description": "自然窗光，柔和散射",
+    "key_light": "侧窗光，暖白5500K偏暖",
+    "fill_light": "自然反射，无人工感",
+    "rim_light": "无，保持自然",
+    "shadow_quality": "柔和渐变，边缘模糊",
+    "contrast_ratio": "低对比，明亮通透",
+    "mood": "清晨或午后的居家时光"
+  },
+  "texture": {
+    "surface_quality": "natural_warm",
+    "surface_description": "自然温暖质感，棉/木/陶瓷",
+    "material_keywords": ["linen", "oak wood", "ceramic", "cotton", "wicker"],
+    "reflection": "soft and warm, no harsh glare",
+    "grain": "subtle film grain, 3-5%",
+    "bokeh": "circular, warm, creamy"
+  },
+  "motion_style": {
+    "pace": "gentle",
+    "pace_description": "温和节奏，单镜4-6秒",
+    "camera_movement": "human_handheld",
+    "camera_description": "轻微手持感，模拟人眼观察",
+    "allowed_moves": ["slow_walk_through", "gentle_reveal", "natural_pan"],
+    "prohibited_moves": ["fast_zoom", "spin", "whip_pan", "robotic_move"],
+    "transition": "soft cut or dissolve, scene-to-scene flow",
+    "easing": "natural ease, like breathing"
+  },
+  "brand_elements": {
+    "logo_usage": "natural placement on product/packaging",
+    "logo_animation": "no animation, static and natural",
+    "product_presentation": "in-use, hands interacting, real moment",
+    "packaging_show": "unboxing or storage, part of life",
+    "lifestyle_integration": "family, home, kitchen, garden - real spaces"
+  },
+  "prohibited": [
+    "冷色调",
+    "科技感元素",
+    "几何硬边",
+    "过度修饰",
+    "模特摆拍感",
+    "快节奏",
+    "暗调压抑",
+    "塑料质感"
+  ],
+  "reference_mood": [
+    "宜家生活场景",
+    "日系家居杂志",
+    "《小森林》电影",
+    "Kinfolk杂志",
+    "北欧hygge风格"
+  ],
+  "prompt_keywords": [
+    "warm",
+    "cozy",
+    "natural light",
+    "lifestyle",
+    "home",
+    "organic",
+    "authentic",
+    "soft",
+    "comforting",
+    "everyday joy"
+  ]
+}

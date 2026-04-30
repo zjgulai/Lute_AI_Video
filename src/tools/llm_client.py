@@ -16,7 +16,15 @@ from typing import Any
 import structlog
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.config import ANTHROPIC_API_KEY, DEFAULT_LLM_PROVIDER, KIMI_MODEL, OPENAI_API_KEY
+from src.config import (
+    ANTHROPIC_API_KEY,
+    DEFAULT_LLM_PROVIDER,
+    DEEPSEEK_API_BASE,
+    DEEPSEEK_API_KEY,
+    DEEPSEEK_MODEL,
+    KIMI_MODEL,
+    OPENAI_API_KEY,
+)
 
 # Optional LLM provider imports — only needed when API keys are configured
 try:
@@ -74,6 +82,18 @@ class LLMClient:
                     model=model or KIMI_MODEL,
                     api_key=OPENAI_API_KEY,
                     base_url="https://api.moonshot.cn/v1",
+                    temperature=0.7,
+                    max_tokens=4096,
+                    timeout=self.timeout,
+                )
+            elif self.provider == "deepseek":
+                # DeepSeek V4 Pro — native API, OpenAI-compatible
+                # Reference: https://api-docs.deepseek.com/
+                from langchain_openai import ChatOpenAI
+                self._clients[cache_key] = ChatOpenAI(
+                    model=model or DEEPSEEK_MODEL,
+                    api_key=DEEPSEEK_API_KEY,
+                    base_url=DEEPSEEK_API_BASE,
                     temperature=0.7,
                     max_tokens=4096,
                     timeout=self.timeout,

@@ -8,6 +8,7 @@ interface Props {
   state: any;
   onStepComplete: (newState: any) => void;
   onResume: (finalState: any) => void;
+  onError?: (message: string) => void;
   loading: boolean;
 }
 
@@ -53,7 +54,7 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   audit: "stepDesc.audit",
 };
 
-export default function StepByStepView({ label, state, onStepComplete, onResume, loading }: Props) {
+export default function StepByStepView({ label, state, onStepComplete, onResume, onError, loading }: Props) {
   const { t } = useI18n();
   const [viewingStep, setViewingStep] = useState<string | null>(null);
   const [editingStep, setEditingStep] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
       onStepComplete(result?.state || result);
     } catch (err: any) {
       console.error("Step execution failed:", err);
-      // Reload current state from server to show error
+      onError?.(t("toast.stepExecFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
       const { fetchS1State } = await import("./api");
       const freshState = await fetchS1State(label);
       onStepComplete(freshState);
@@ -103,6 +104,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
       onStepComplete(result?.state || result);
     } catch (err: any) {
       console.error("Regeneration failed:", err);
+      onError?.(t("toast.regenerateFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
       const { fetchS1State } = await import("./api");
       const freshState = await fetchS1State(label);
       onStepComplete(freshState);
@@ -116,6 +118,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
       onResume(result?.state || result);
     } catch (err: any) {
       console.error("Resume failed:", err);
+      onError?.(t("toast.resumeFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
     }
   };
 
@@ -160,6 +163,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
       setEditValue("");
     } catch (err: any) {
       console.error("Save edit failed:", err);
+      onError?.(t("toast.saveFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
     }
   };
 

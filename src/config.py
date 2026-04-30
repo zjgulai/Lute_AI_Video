@@ -94,6 +94,17 @@ HUMAN_REVIEW_NODES = [
 ]
 
 
+# ── DeepSeek V4 Pro (native API) ──
+DEEPSEEK_API_KEY: str = os.environ.get("DEEPSEEK_API_KEY", "")
+DEEPSEEK_API_BASE: str = os.environ.get("DEEPSEEK_API_BASE", "https://api.deepseek.com")
+DEEPSEEK_MODEL: str = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro")
+
+# ── SiliconFlow CosyVoice TTS ──
+SILICONFLOW_API_KEY: str = os.environ.get("SILICONFLOW_API_KEY", "")
+SILICONFLOW_API_BASE: str = os.environ.get("SILICONFLOW_API_BASE", "https://api.siliconflow.cn/v1")
+COSYVOICE_MODEL: str = os.environ.get("COSYVOICE_MODEL", "FunAudioLLM/CosyVoice2-0.5B")
+COSYVOICE_VOICE: str = os.environ.get("COSYVOICE_VOICE", "FunAudioLLM/CosyVoice2-0.5B:alex")
+
 # ── Seedance 2.0 Video Generation ──
 # Supports: native Seedance API, or poyo.ai proxy
 SEEDANCE_API_KEY: str = os.environ.get("SEEDANCE_API_KEY", "")
@@ -105,4 +116,5 @@ POYO_API_BASE_URL: str = os.environ.get("POYO_API_BASE_URL", "https://api.poyo.a
 
 # poyo.ai model names (override if provider changes slugs)
 POYO_IMAGE_MODEL: str = os.environ.get("POYO_IMAGE_MODEL", "gpt-image-2")
+POYO_VIDEO_MODEL: str = os.environ.get("POYO_VIDEO_MODEL", "happy-horse")
 POYO_TTS_MODEL: str = os.environ.get("POYO_TTS_MODEL", "generate-music")

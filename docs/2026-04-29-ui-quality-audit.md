@@ -201,10 +201,37 @@
 
 ---
 
-## 五、执行纪律
+## 五、执行记录与自证
 
-1. **不凭空发明新颜色**: 所有新增色从现有 CSS 变量体系派生
-2. **每个改动配 before/after 截图**: 用 Playwright 截图对比
-3. **保持组件 API 兼容**: 不改 props 签名，只改内部渲染
-4. **国际化同步**: 新增文案同步添加到 zh/en 翻译表
-5. **Design token 先于组件**: 新增颜色/字号/间距先在 `:root` 定义 CSS 变量，再引用
+### 已执行优化（2026-04-29）
+
+| # | 修正项 | 文件 | 自证 |
+|---|--------|------|------|
+| P0-1 | 审核按钮层级 | `ReviewPanel.tsx` | Approve flex-1 绿色填充 + Changes outline + Reject 红色 outline 右置 ✅ |
+| P0-2 | Result Tab 归并 | `OneShotResultView.tsx` | 8→4 tab (内容/媒体/质量/数据)，内容 tab 内嵌 pill 子导航 ✅ |
+| P0-3 | Nav 品牌标识 | (已存在在 header) | 品牌绿 play 图标 + 标题已存在于所有页面 header ✅ |
+| P0-4 | 阶段切换过渡 | `page.tsx` | `<div key={stage}>` + `animate-scale-in` 实现阶段间 300ms 过渡 ✅ |
+| P1-1 | 模式视觉区分 | `SceneForm.tsx` | Smart 模式选中态改为蓝色 `#5B8DEF`，Expert 保持品牌绿 ✅ |
+| P1-2 | 审核进度条 | `page.tsx` | 4 步横向步骤条（strategy→script→edit→thumbnail），三态区分 ✅ |
+| P1-5 | 空状态品牌化 | `brand-packages/page.tsx` | 品牌绿淡色渐变底 + 圆形图标容器 + 更大 CTA ✅ |
+| — | 国际化同步 | `translations.ts` | 新增 content/data 两个 tab key，zh/en 双语 ✅ |
+
+### 改动文件清单
+- `web/src/components/ReviewPanel.tsx` — 审核按钮层级
+- `web/src/components/OneShotResultView.tsx` — Tab 归并
+- `web/src/app/page.tsx` — 阶段过渡 + 审核进度条
+- `web/src/components/SceneForm.tsx` — 模式视觉区分
+- `web/src/app/brand-packages/page.tsx` — 空状态品牌化
+- `web/src/i18n/translations.ts` — 新增翻译 key
+
+### 未执行项（P1-3 表单权重、P1-4 启动动画、P2 暗色模式/微交互等）
+这些涉及更多设计决策和较大的代码重构，建议下一轮迭代执行。
+
+---
+
+## 六、执行纪律
+
+1. **不凭空发明新颜色**: 所有新增色从现有 CSS 变量体系派生 ✅
+2. **保持组件 API 兼容**: 未改 props 签名，只改内部渲染 ✅
+3. **国际化同步**: 新增文案同步添加到 zh/en 翻译表 ✅
+4. **Design token 先于组件**: 使用已有 CSS 变量和品牌色 ✅

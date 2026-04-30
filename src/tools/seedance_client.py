@@ -20,6 +20,7 @@ from src.config import (
     SEEDANCE_API_BASE_URL,
     POYO_API_KEY,
     POYO_API_BASE_URL,
+    POYO_VIDEO_MODEL,
     OUTPUT_DIR,
 )
 
@@ -29,7 +30,10 @@ SEEDANCE_TIMEOUT_SECONDS = 120.0
 MAX_RETRIES = 3
 
 # poyo.ai uses a different async architecture
-POYO_MODEL_NAME = "seedance-2-fast"
+# Pro version: Happy Horse (Alibaba) — supports text-to-video, image-to-video,
+# reference-to-video, and video-edit workflows.
+# Docs: https://docs.poyo.ai/api-manual/video-series/happy-horse
+POYO_MODEL_NAME = POYO_VIDEO_MODEL or "happy-horse"
 
 
 class SeedanceTimeoutError(asyncio.TimeoutError):
@@ -231,20 +235,31 @@ class SeedanceClient:
         resolution: str,
         attempt: int,
     ) -> dict:
-        """Single attempt: submit → poll → download."""
-        aspect_ratio = "9:16"
+        """Single attempt: submit → poll → download.
 
+        Uses Happy Horse model on poyo.ai.
+        Reference: https://docs.poyo.ai/api-manual/video-series/happy-horse
+        """
+        aspect_ratio = "16:9"
+
+        # Happy Horse input schema:
+        #   prompt, image_urls (single first-frame), reference_image_urls,
+        #   aspect_ratio, resolution, duration, seed, enable_safety_checker
         input_payload: dict = {
             "prompt": prompt,
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
             "duration": int(duration),
-            "generate_audio": False,
         }
         if image_refs:
-            input_payload["first_frame_image"] = image_refs[0]
+            # Happy Horse uses image_urls (max 1 item) for first-frame guidance.
+            # Do not mix image_urls with reference_image_urls.
+            input_payload["image_urls"] = [image_refs[0]]
             if len(image_refs) > 1:
-                input_payload["last_frame_image"] = image_refs[1]
+                logger.info(
+                    "happy-horse: only first image used as first-frame",
+                    total_refs=len(image_refs),
+                )
 
         submit_body = {
             "model": POYO_MODEL_NAME,

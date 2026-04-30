@@ -12,9 +12,11 @@ pyyaml>=6.0
 # Backend API (optional: skip if no fastapi)
 fastapi>=0.110
 uvicorn>=0.29
+python-multipart>=0.0.9
 
 # Database (optional: skip if using mock only)
 supabase>=2.0
+asyncpg>=0.29
 
 # Development
 pytest>=8.0

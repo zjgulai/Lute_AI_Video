@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CandidateSelector, { type Candidate } from "@/components/CandidateSelector";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE, isDemoMode } from "./api";
+import { API_BASE, isDemoMode, fetchS1State } from "./api";
 
 
 
@@ -80,6 +80,12 @@ async function generateDemoCandidates(gateId: string): Promise<Candidate[]> {
   }
 }
 
+interface GateDef {
+  gateId: string;
+  gateLabel: string;
+  maxSelections: number;
+}
+
 interface Props {
   label: string;
   gateId: string; // "gate_1_script" | "gate_2_keyframe" | "gate_3_clips" | "gate_4_final"
@@ -87,6 +93,7 @@ interface Props {
   maxSelections: number;
   currentStep: number;
   totalSteps: number;
+  gateSequence?: GateDef[];
   onApprove: (selectedIds: string[]) => void;
   onBack: () => void;
 }
@@ -98,6 +105,7 @@ export default function GatePanel({
   maxSelections,
   currentStep,
   totalSteps,
+  gateSequence,
   onApprove,
   onBack,
 }: Props) {
@@ -109,8 +117,10 @@ export default function GatePanel({
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [editCandidateId, setEditCandidateId] = useState<string | null>(null);
   const hasGenerated = useRef(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scenario = label.startsWith("s") ? label.charAt(0) + label.charAt(1) : "s1";
 
@@ -224,6 +234,15 @@ export default function GatePanel({
     }
   };
 
+  // Cleanup poll timer on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleApprove = async () => {
     if (selectedIds.length === 0) return;
     setApproving(true);
@@ -251,11 +270,94 @@ export default function GatePanel({
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody?.detail || `Approve failed (${res.status})`);
       }
-      setApproved(true);
-      // Brief success display then call onApprove
-      setTimeout(() => {
-        onApprove(selectedIds);
-      }, 800);
+      const approveResult = await res.json();
+
+      // Backend is resuming in background. Poll for completion.
+      if (approveResult.resuming) {
+        setApproving(false);
+        setProcessing(true);
+        setLoadingText(t("gate.processing") || "Processing in background...");
+
+        const seq = gateSequence || [];
+        const currentIdx = seq.findIndex((g) => g.gateId === gateId);
+        const nextGateId = currentIdx >= 0 && currentIdx + 1 < seq.length ? seq[currentIdx + 1].gateId : null;
+        const isLastGate = currentIdx >= 0 && currentIdx + 1 === seq.length;
+
+        let lastStateHash = "";
+        let stableCount = 0;
+        const maxPolls = 360; // 30 minutes max (5s * 360)
+
+        const poll = async (pollCount: number) => {
+          if (pollCount >= maxPolls) {
+            setProcessing(false);
+            onApprove(selectedIds);
+            return;
+          }
+
+          try {
+            const state = await fetchS1State(label);
+            const gates = state.gates || {};
+            const currentStepName = state.current_step;
+
+            // Completion check 1: pipeline fully complete (current_step is null)
+            if (currentStepName === null) {
+              setProcessing(false);
+              onApprove(selectedIds);
+              return;
+            }
+
+            // Completion check 2: next gate is awaiting approval
+            if (nextGateId && gates[nextGateId]?.status === "awaiting_approval") {
+              setProcessing(false);
+              onApprove(selectedIds);
+              return;
+            }
+
+            // Completion check 3: last gate — assemble_final or audit done
+            if (isLastGate) {
+              const steps = state.steps || {};
+              if (steps.audit?.status === "done" || steps.assemble_final?.status === "done") {
+                setProcessing(false);
+                onApprove(selectedIds);
+                return;
+              }
+            }
+
+            // Completion check 4: state has stabilized (no changes for 3 consecutive polls)
+            const stateHash = JSON.stringify({
+              current_step: currentStepName,
+              gates: Object.entries(gates).map(([k, v]) => `${k}:${(v as any)?.status}`),
+              steps: Object.entries(state.steps || {}).map(([k, v]) => `${k}:${(v as any)?.status}`),
+            });
+            if (stateHash === lastStateHash) {
+              stableCount++;
+              if (stableCount >= 3) {
+                setProcessing(false);
+                onApprove(selectedIds);
+                return;
+              }
+            } else {
+              stableCount = 0;
+              lastStateHash = stateHash;
+            }
+
+            // Continue polling
+            pollTimerRef.current = setTimeout(() => poll(pollCount + 1), 5000);
+          } catch (pollErr: any) {
+            console.error("GatePanel poll error:", pollErr);
+            // Continue polling on error
+            pollTimerRef.current = setTimeout(() => poll(pollCount + 1), 5000);
+          }
+        };
+
+        // Start polling after a short delay to let backend begin resume
+        pollTimerRef.current = setTimeout(() => poll(0), 3000);
+      } else {
+        setApproved(true);
+        setTimeout(() => {
+          onApprove(selectedIds);
+        }, 800);
+      }
     } catch (e: any) {
       console.error("GatePanel approve error:", e);
       setError(e.message || String(e));
@@ -440,23 +542,34 @@ export default function GatePanel({
         </div>
       )}
 
-      {/* Approved success state */}
-      {approved && (
-        <div className="apple-card p-4 border-[#7CB342] bg-[#f0faf0]">
+      {/* Approved / processing state */}
+      {(approved || processing) && (
+        <div className={`apple-card p-4 ${processing ? "border-[#007AFF] bg-[#f0f7ff]" : "border-[#7CB342] bg-[#f0faf0]"}`}>
           <div className="flex items-center gap-2 justify-center">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="7" fill="#7CB342" />
-              <path d="M5 8.5L7 10.5L11 5.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="text-sm font-medium text-[#7CB342]">
-              {t("gate.approved") || "Approved, continuing..."}
-            </span>
+            {processing ? (
+              <>
+                <div className="animate-spin w-4 h-4 border-2 border-[#007AFF]/30 border-t-[#007AFF] rounded-full" />
+                <span className="text-sm font-medium text-[#007AFF]">
+                  {t("gate.processing") || "Processing in background..."}
+                </span>
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="7" fill="#7CB342" />
+                  <path d="M5 8.5L7 10.5L11 5.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="text-sm font-medium text-[#7CB342]">
+                  {t("gate.approved") || "Approved, continuing..."}
+                </span>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* Action buttons */}
-      {!loading && !error && !approved && (
+      {!loading && !error && !approved && !processing && (
         <div className="flex items-center justify-between">
           <button
             onClick={onBack}
