@@ -386,6 +386,41 @@ export function getMediaUrl(filePath: string, forceReal: boolean = false): strin
   return `/api/media/${encodedPath}`;
 }
 
+/** P1-8: Generate a short-lived signed URL for media access (15 min expiry).
+ *
+ * Use this when sharing media links externally or when stricter access
+ * control is needed. Falls back to unsigned URL on signing failure.
+ */
+export async function getSignedMediaUrl(filePath: string): Promise<string> {
+  if (!filePath) return "";
+  let mediaRel = filePath.replace(/\\/g, "/");
+  if (mediaRel.startsWith("/api/media/")) {
+    mediaRel = mediaRel.slice("/api/media/".length);
+  }
+  try {
+    mediaRel = decodeURIComponent(mediaRel);
+  } catch {
+    /* keep encoded segments */
+  }
+  const segments = mediaRel.split("/").filter(Boolean);
+  const encodedPath = segments.map((s) => encodeURIComponent(s)).join("/");
+  if (!encodedPath) return "";
+
+  try {
+    const base = getApiBase().replace(/\/$/, "");
+    const res = await fetch(`${base}/api/media/sign?path=${encodeURIComponent(encodedPath)}`, {
+      headers: getHeaders(),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.url || getMediaUrl(filePath);
+    }
+  } catch {
+    /* fallback to unsigned */
+  }
+  return getMediaUrl(filePath);
+}
+
 // ── Connection test ──
 
 export async function testConnection(options?: { signal?: AbortSignal }): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {

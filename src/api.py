@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
-    from fastapi import FastAPI, HTTPException, Header, Depends
+    from fastapi import FastAPI, HTTPException, Header, Depends, Request
     from fastapi.middleware.cors import CORSMiddleware
     HAS_FASTAPI = True
 except ImportError:
@@ -209,9 +209,33 @@ if HAS_FASTAPI:
         API_KEY = secrets.token_urlsafe(32)
         logging.warning("SECURITY: Temporary API_KEY = %s  (set this in your .env for persistence)", API_KEY)
 
-    def verify_api_key(x_api_key: str | None = Header(None)):
+    DEMO_KEY = "ai_video_demo_2026"
+
+    def verify_api_key(request: Request, x_api_key: str | None = Header(None)):
         if x_api_key != API_KEY:
             raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+        # P0-11: Demo key restrictions — read and generate only
+        if x_api_key == DEMO_KEY:
+            method = request.method
+            path = request.url.path
+
+            # Block all DELETE operations
+            if method == "DELETE":
+                raise HTTPException(status_code=403, detail="Demo key cannot delete resources")
+
+            # Block publish endpoints
+            if path.startswith("/distribution/publish") or path.startswith("/publish/"):
+                raise HTTPException(status_code=403, detail="Demo key cannot publish")
+
+            # Block asset uploads and brand/influencer mutations
+            if path.startswith("/api/upload") or path.startswith("/api/assets/"):
+                if method in ("POST", "PUT"):
+                    raise HTTPException(status_code=403, detail="Demo key cannot modify assets")
+            if path.startswith("/brand-packages") or path.startswith("/influencers") or path.startswith("/remix-brief"):
+                if method in ("POST", "PUT", "DELETE"):
+                    raise HTTPException(status_code=403, detail="Demo key cannot modify resources")
+
         return True
 
     # CORS: allow comma-separated origins via CORS_ORIGINS env var
@@ -1920,13 +1944,73 @@ if HAS_FASTAPI:
         files.sort(key=lambda x: x["created"], reverse=True)
         return {"files": files}
 
-    # ── Media serving ──
+    # ── P1-8: Media serving with signed-token access ──
+
+    _MEDIA_TOKEN_SECRET = os.environ.get("MEDIA_SIGN_SECRET") or API_KEY
+    _MEDIA_TOKEN_TTL = 900  # 15 minutes
+
+    def _sign_media_token(media_path: str, expires_at: int) -> str:
+        """Generate a short-lived signed token for media access.
+
+        Uses HMAC-SHA256 with a secret key. The token includes the path
+        and expiration time to prevent replay and path tampering.
+        """
+        import hmac
+        import hashlib
+        import base64
+
+        payload = f"{media_path}:{expires_at}"
+        sig = hmac.new(
+            _MEDIA_TOKEN_SECRET.encode(),
+            payload.encode(),
+            hashlib.sha256,
+        ).digest()
+        return base64.urlsafe_b64encode(sig).decode().rstrip("=")
+
+    def _verify_media_token(media_path: str, token: str, expires_at: int) -> bool:
+        """Verify a media access token.
+
+        Checks signature match and expiration.
+        """
+        import time
+
+        if time.time() > expires_at:
+            return False
+        expected = _sign_media_token(media_path, expires_at)
+        import hmac
+        return hmac.compare_digest(expected, token)
+
+    def sign_media_url(media_path: str, expires_in_sec: int = _MEDIA_TOKEN_TTL) -> str:
+        """Generate a signed media URL with query token.
+
+        Returns URL like /api/media/path/to/file.mp4?token=xxx&expires=yyy
+        """
+        import time
+        expires_at = int(time.time()) + expires_in_sec
+        token = _sign_media_token(media_path, expires_at)
+        return f"/api/media/{media_path}?token={token}&expires={expires_at}"
 
     @app.get("/api/media/{media_path:path}")
-    async def serve_media(media_path: str):
-        """Serve files from OUTPUT_DIR; media_path is relative to OUTPUT_DIR (posix subpaths allowed)."""
+    async def serve_media(request: Request, media_path: str):
+        """Serve files from OUTPUT_DIR; media_path is relative to OUTPUT_DIR (posix subpaths allowed).
+
+        P1-8: Supports optional signed-token access. Anonymous access is allowed,
+        but signed URLs with ?token=&expires= provide path-level integrity.
+        """
         from fastapi.responses import FileResponse
         from src.config import OUTPUT_DIR
+
+        # P1-8: Validate signed token if present
+        token = request.query_params.get("token")
+        expires = request.query_params.get("expires")
+        if token is not None and expires is not None:
+            try:
+                expires_at = int(expires)
+            except ValueError:
+                raise HTTPException(status_code=403, detail="Invalid token")
+            if not _verify_media_token(media_path, token, expires_at):
+                raise HTTPException(status_code=403, detail="Invalid or expired token")
+        # If no token: allow anonymous access (threat model documented in P1-8)
 
         root = OUTPUT_DIR.resolve()
         if not media_path or media_path.startswith("/"):
@@ -1987,6 +2071,19 @@ if HAS_FASTAPI:
             media_type=content_type,
             filename=candidate.name,
         )
+
+    @app.get("/api/media/sign", dependencies=[Depends(verify_api_key)])
+    async def get_signed_media_url(request: Request):
+        """Generate a short-lived signed URL for a media file.
+
+        P1-8: Returns a signed URL with token + expires query params.
+        The token is valid for 15 minutes and binds to the specific path.
+        """
+        media_path = request.query_params.get("path", "")
+        if not media_path:
+            raise HTTPException(status_code=400, detail="path is required")
+        signed_url = sign_media_url(media_path)
+        return {"url": signed_url, "expires_in": _MEDIA_TOKEN_TTL}
 
 else:
     app = None  # type: ignore
