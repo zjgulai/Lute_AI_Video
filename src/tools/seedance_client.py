@@ -335,7 +335,7 @@ class SeedanceClient:
 
     async def _download_video(self, video_url: str, task_id: str, prompt: str) -> dict:
         """Download video from URL and save locally."""
-        async with httpx.AsyncClient() as dl_client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as dl_client:
             dl_resp = await dl_client.get(video_url)
             dl_resp.raise_for_status()
             filename = f"seedance_{task_id[:8]}_{hash(prompt) & 0xFFFF:04x}.mp4"

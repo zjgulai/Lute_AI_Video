@@ -141,7 +141,6 @@ class FastModeService:
             try:
                 tts_file = await self.cosyvoice.synthesize(
                     text=scene_description,
-                    voice="alex",
                     language="en",
                 )
                 tts_path = str(tts_file)
