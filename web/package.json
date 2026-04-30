@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "typegen:api": "npx openapi-typescript http://localhost:8001/openapi.json -o src/types/api.generated.ts"
   },
   "dependencies": {
     "lightningcss": "^1.32.0",
