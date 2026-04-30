@@ -45,6 +45,7 @@ from pydantic import BaseModel
 
 from src.graph.pipeline import compile_pipeline
 from src.models import ApprovalStatus, ContentScenario, HumanReview, REVIEW_NODES
+from src.config import OUTPUT_DIR
 
 # Global pipeline instance (one per process)
 _pipeline = compile_pipeline()
