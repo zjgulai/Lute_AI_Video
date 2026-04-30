@@ -163,6 +163,7 @@ export default function VideoWorkflow({
       showToast(t("toast.saveSuccess"), "success");
     } catch (e: any) {
       if (e instanceof DOMException && e.name === "AbortError") return;
+      try { await refreshState(); } catch { /* best-effort reload */ }
       showToast(t("toast.saveFailed") + `: ${e?.message || String(e)}`, "error");
     } finally {
       setLoading(false);

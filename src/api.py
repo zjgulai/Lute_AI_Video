@@ -296,6 +296,15 @@ if HAS_FASTAPI:
             _active_threads.pop(tid, None)
             _thread_cache_meta.pop(tid, None)
 
+    def _cleanup_thread_cache(thread_id: str) -> None:
+        """P1-1: Remove thread from in-memory cache when pipeline terminates.
+
+        Called on pipeline completion/rejection/failure to prevent
+        _active_threads from growing unbounded.
+        """
+        _active_threads.pop(thread_id, None)
+        _thread_cache_meta.pop(thread_id, None)
+
     async def _periodic_cache_eviction() -> None:
         """Background loop: evict stale thread cache entries every hour."""
         while True:
@@ -490,6 +499,10 @@ if HAS_FASTAPI:
 
             has_pipeline_complete = snapshot.values.get("pipeline_complete", False) if snapshot.values else False
 
+            # P1-1: Active cleanup on pipeline completion to prevent memory leak.
+            if has_pipeline_complete:
+                _cleanup_thread_cache(thread_id)
+
             return {
                 "thread_id": thread_id,
                 "status": "complete" if has_pipeline_complete else ("interrupted" if snapshot.next else "complete"),
@@ -577,6 +590,7 @@ if HAS_FASTAPI:
         # Handle reject: terminate pipeline directly, no resume needed
         if action.action == "reject":
             _pipeline.update_state(config, {"pipeline_complete": True, "current_step": "rejected"})
+            _cleanup_thread_cache(thread_id)
             return {
                 "thread_id": thread_id,
                 "review_node": review_node,
@@ -618,6 +632,7 @@ if HAS_FASTAPI:
         # which are "strategy_review"/"script_review"/"edit_review"/"thumbnail_review"
         if review_node == "thumbnail_review" and action.action == "approve":
             _pipeline.update_state(config, {"pipeline_complete": True})
+            _cleanup_thread_cache(thread_id)
 
         return {
             "thread_id": thread_id,
