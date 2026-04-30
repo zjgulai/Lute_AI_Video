@@ -28,13 +28,11 @@ services:
       start_period: 40s
 
   frontend:
-    build:
-      context: ../../web
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: https://101.34.52.232/api
-        NEXT_PUBLIC_IS_DEMO: "true"
+    # P4-1: Use pre-built standalone output (host builds, Docker runs)
+    # Build on host: cd /opt/ai-video/web && npm ci && npm run build
+    image: node:22-alpine
     container_name: ai_video_frontend
+    working_dir: /app
     restart: unless-stopped
     expose:
       - "3000"
@@ -42,6 +40,12 @@ services:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
       - HOSTNAME=0.0.0.0
+    volumes:
+      # Mount the pre-built standalone output
+      - ../../web/.next/standalone:/app
+      - ../../web/public:/app/public
+      - ../../web/.next/static:/app/.next/static
+    command: ["node", "server.js"]
     networks:
       - ai_video_net
     depends_on:

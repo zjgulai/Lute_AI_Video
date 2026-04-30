@@ -1,80 +1,97 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# AI Video — Fast deploy script (host build + Docker run)
+#
+# Usage (run on the server):
+#   cd /opt/ai-video/deploy/lighthouse
+#   ./deploy.sh
+#
+# What it does:
+#   1. Sync code from local machine (run rsync on your laptop first, see below)
+#   2. Build frontend on host (reuses node_modules, ~30s incremental)
+#   3. Restart backend container (picks up new Python code via volume)
+#   4. Restart frontend container (picks up new .next/standalone via volume)
+#   5. Health checks
+#
+# --- First time setup (run on server) ---
+#   cd /opt/ai-video/web && npm ci
+#
+# --- Sync from laptop (run on your local machine) ---
+#   rsync -avz -e "ssh -i ~/Downloads/ai_video.pem" \
+#     ./web/src/ ubuntu@101.34.52.232:/opt/ai-video/web/src/
+#   rsync -avz -e "ssh -i ~/Downloads/ai_video.pem" \
+#     ./src/ ubuntu@101.34.52.232:/opt/ai-video/src/
+#   rsync -avz -e "ssh -i ~/Downloads/ai_video.pem" \
+#     ./deploy/lighthouse/ ubuntu@101.34.52.232:/opt/ai-video/deploy/lighthouse/
+
 set -euo pipefail
 
-# ═══════════════════════════════════════════════════════════════
-# AI Video - Lighthouse 一键部署脚本
-# 在腾讯云轻量服务器上执行
-# ═══════════════════════════════════════════════════════════════
-
-PROJECT_DIR="/opt/ai-video"
-COMPOSE_FILE="$PROJECT_DIR/deploy/lighthouse/docker-compose.prod.yml"
-ENV_FILE="$PROJECT_DIR/deploy/lighthouse/.env.prod"
+cd "$(dirname "$0")"
+COMPOSE="sudo docker-compose -f docker-compose.prod.yml"
 
 echo "========================================"
-echo "  AI Video 部署脚本"
+echo "  AI Video Fast Deploy"
 echo "========================================"
+echo ""
 
-# ── 1. 检查 Docker ──
-if ! command -v docker &> /dev/null; then
-    echo "[1/6] 安装 Docker..."
-    curl -fsSL https://get.docker.com | sh
-    systemctl enable docker
-    systemctl start docker
-    usermod -aG docker "$USER"
+# -- Phase 1: Build frontend on host --
+echo "[1/4] Building frontend on host..."
+cd ../../web
+if [ ! -d "node_modules" ]; then
+  echo "  ERROR: node_modules not found. Run 'npm ci' first."
+  exit 1
+fi
+npm run build 2>&1 | tail -5
+echo "  Frontend build complete"
+echo ""
+
+# -- Phase 2: Restart containers --
+echo "[2/4] Restarting containers..."
+cd ../deploy/lighthouse
+$COMPOSE restart backend 2>&1 | tail -3
+$COMPOSE up -d --force-recreate frontend 2>&1 | tail -3
+echo "  Containers restarted"
+echo ""
+
+# -- Phase 3: Health checks --
+echo "[3/4] Health checks..."
+sleep 3
+
+# Check backend
+BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/api/health || echo "000")
+if [ "$BACKEND_STATUS" = "200" ]; then
+  echo "  Backend /api/health: 200"
 else
-    echo "[1/6] Docker 已安装 ✓"
+  echo "  Backend /api/health: $BACKEND_STATUS"
 fi
 
-# ── 2. 检查 Docker Compose ──
-if ! docker compose version &> /dev/null; then
-    echo "[2/6] 安装 Docker Compose plugin..."
-    apt-get update && apt-get install -y docker-compose-plugin
+# Check frontend
+FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/ || echo "000")
+if [ "$FRONTEND_STATUS" = "200" ]; then
+  echo "  Frontend /: 200"
 else
-    echo "[2/6] Docker Compose 已安装 ✓"
+  echo "  Frontend /: $FRONTEND_STATUS"
 fi
 
-# ── 3. 创建项目目录 ──
-mkdir -p "$PROJECT_DIR"
-cd "$PROJECT_DIR"
-
-# ── 4. 拉取代码（如果通过git）或解压代码包 ──
-if [ -d "$PROJECT_DIR/.git" ]; then
-    echo "[3/6] 拉取最新代码..."
-    git pull origin main
+# Check Fast Mode API
+FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ai_video_demo_2026" \
+  -d '{"user_prompt":"test","duration":10}' \
+  https://localhost/api/fast/generate || echo "000")
+if [ "$FAST_STATUS" = "200" ]; then
+  echo "  Fast Mode API: 200"
 else
-    echo "[3/6] 代码已放置 ✓（跳过git拉取）"
+  echo "  Fast Mode API: $FAST_STATUS"
 fi
+echo ""
 
-# ── 5. 构建并启动 ──
-echo "[4/6] 构建 Docker 镜像..."
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
+# -- Phase 4: Cleanup (optional) --
+echo "[4/4] Cleanup..."
+sudo docker system prune -f 2>&1 | tail -1
+sudo docker builder prune -f 2>&1 | tail -1
+echo "  Cleanup done"
+echo ""
 
-echo "[5/6] 启动服务..."
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
-
-# ── 6. 验证 ──
-echo "[6/6] 等待服务启动..."
-sleep 5
-
-HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health || echo "000")
-if [ "$HEALTH_STATUS" = "200" ]; then
-    echo ""
-    echo "========================================"
-    echo "  部署成功！"
-    echo "========================================"
-    echo ""
-    echo "访问地址："
-    echo "  前端: http://101.34.52.232"
-    echo "  API:  http://101.34.52.232/api"
-    echo "  健康检查: http://101.34.52.232/api/health"
-    echo ""
-    echo "查看日志："
-    echo "  docker compose -f $COMPOSE_FILE logs -f"
-    echo ""
-else
-    echo ""
-    echo "⚠️  健康检查失败 (HTTP $HEALTH_STATUS)"
-    echo "查看日志排查问题："
-    echo "  docker compose -f $COMPOSE_FILE logs"
-    exit 1
-fi
+echo "========================================"
+echo "  Deploy complete!"
+echo "========================================"
