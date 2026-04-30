@@ -334,11 +334,11 @@ export async function fetchAssets(): Promise<any[]> {
   return data.files || [];
 }
 
-export function getMediaUrl(filePath: string): string {
+export function getMediaUrl(filePath: string, forceReal: boolean = false): string {
   if (!filePath) return "";
   const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
-  // Demo mode: serve from static public folder
-  if (isDemoMode()) {
+  // Demo mode: serve from static public folder (skip if forceReal)
+  if (!forceReal && isDemoMode()) {
     const prefix = readEnv("NEXT_PUBLIC_ASSET_PREFIX") || "";
     return prefix + "/portfolio/" + encodeURIComponent(name);
   }

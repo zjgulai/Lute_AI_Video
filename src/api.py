@@ -1751,6 +1751,8 @@ if HAS_FASTAPI:
             OUTPUT_DIR / "renders",
             OUTPUT_DIR / "demo",
             OUTPUT_DIR / "uploads",
+            OUTPUT_DIR / "fast_mode",
+            OUTPUT_DIR / "fast_mode" / "audio",
         ]
 
         for root in search_roots:

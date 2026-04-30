@@ -160,10 +160,10 @@ export default function FastModePanel() {
           </div>
 
           {/* Video Player */}
-          {result.filename && (
+          {result.video_url && (
             <div className="rounded-xl overflow-hidden bg-black">
               <video
-                src={getMediaUrl(result.filename)}
+                src={result.video_url}
                 controls
                 className="w-full max-h-[400px]"
                 poster=""
