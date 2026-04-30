@@ -107,15 +107,44 @@ class AssetStorage:
     ) -> AssetRecord:
         """Store a file and return its asset record.
 
-        Args:
-            file_data: Raw file bytes.
-            original_name: Original filename (used for extension detection).
-            tags: Optional tags for search/filtering.
-            metadata: Optional arbitrary metadata.
-
-        Returns:
-            AssetRecord with generated asset_id.
+        P1-5: For large files, use store_from_path() instead to avoid
+        loading the entire file into memory.
         """
+        return self._do_store(
+            file_data=file_data,
+            original_name=original_name,
+            tags=tags,
+            metadata=metadata,
+        )
+
+    def store_from_path(
+        self,
+        file_path: str,
+        original_name: str,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AssetRecord:
+        """Store a file from a local path (streaming, memory-efficient).
+
+        P1-5: Use this for large uploads to avoid loading the entire file
+        into memory. The file is copied via shutil.copy2.
+        """
+        return self._do_store(
+            file_path=file_path,
+            original_name=original_name,
+            tags=tags,
+            metadata=metadata,
+        )
+
+    def _do_store(
+        self,
+        original_name: str,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        file_data: bytes | None = None,
+        file_path: str | None = None,
+    ) -> AssetRecord:
+        """Internal store implementation — accepts either bytes or a file path."""
         if self.use_mock:
             return self._mock_record(original_name, tags)
 
@@ -128,15 +157,24 @@ class AssetStorage:
         filename = f"{asset_id}{ext}"
         asset_dir = self.storage_dir / asset_id
         asset_dir.mkdir(parents=True, exist_ok=True)
-        file_path = asset_dir / filename
-        file_path.write_bytes(file_data)
+        dst_path = asset_dir / filename
+
+        if file_path:
+            import shutil
+            shutil.copy2(file_path, dst_path)
+            file_size = dst_path.stat().st_size
+        elif file_data is not None:
+            dst_path.write_bytes(file_data)
+            file_size = len(file_data)
+        else:
+            raise ValueError("Either file_data or file_path must be provided")
 
         record = AssetRecord(
             asset_id=asset_id,
             filename=filename,
             original_name=original_name,
-            file_path=str(file_path),
-            file_size=len(file_data),
+            file_path=str(dst_path),
+            file_size=file_size,
             mime_type=self._guess_mime_type(ext),
             tags=tags or [],
             metadata=metadata or {},
@@ -145,7 +183,7 @@ class AssetStorage:
         self._index[asset_id] = record.to_dict()
         self._save_index()
 
-        logger.info("asset_storage: stored", asset_id=asset_id, size=len(file_data))
+        logger.info("asset_storage: stored", asset_id=asset_id, size=file_size)
         return record
 
     def get(self, asset_id: str) -> AssetRecord | None:

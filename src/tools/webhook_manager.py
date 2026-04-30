@@ -8,10 +8,12 @@ Failures are logged as warnings — never block the pipeline.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -41,6 +43,28 @@ ALL_EVENTS = [
 WEBHOOK_TIMEOUT_SECONDS = 5.0
 
 
+def _is_safe_webhook_url(url: str) -> None:
+    """Validate that a webhook URL does not point to private/internal addresses.
+
+    Raises ValueError if the URL is deemed unsafe.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"URL scheme '{parsed.scheme}' is not allowed")
+    if not parsed.hostname:
+        raise ValueError("URL has no hostname")
+
+    hostname = parsed.hostname
+    # Check for IP-based URLs
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise ValueError(f"URL resolves to a private/internal IP: {hostname}")
+    except ValueError:
+        # Not an IP address — DNS name is allowed.
+        pass
+
+
 class WebhookManager:
     """Manages webhook registrations and dispatches events.
 
@@ -58,10 +82,16 @@ class WebhookManager:
     def register(self, event_type: str, url: str) -> None:
         """Register a URL for a given event type.
 
-        Validates the URL format and deduplicates.
+        Validates the URL format, rejects private addresses, and deduplicates.
         """
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Invalid webhook URL: {url} (must start with http:// or https://)")
+
+        # Reject private / internal addresses (SSRF prevention)
+        try:
+            _is_safe_webhook_url(url)
+        except ValueError as exc:
+            raise ValueError(f"Unsafe webhook URL: {url} — {exc}") from exc
 
         existing = self._webhooks[event_type]
         # Prevent duplicates (use set-like membership check)

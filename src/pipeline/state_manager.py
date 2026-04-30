@@ -4,10 +4,12 @@ Manages saving and loading pipeline execution state to/from JSON files on disk
 and PostgreSQL (with SQLite fallback).
 Each pipeline run gets its own state file keyed by label.
 
-Persistence strategy (dual-write):
-  1. Filesystem JSON — always written; always available (crash-safe).
-  2. PostgreSQL — written when PG is healthy; takes priority on reads.
-  If PG is unavailable, the filesystem JSON serves as the sole source of truth.
+P1-4: Persistence strategy (PG-primary with FS fallback):
+  1. PostgreSQL — primary source of truth. Written first on save, read first on load.
+  2. Filesystem JSON — fallback when PG is unavailable. On load, if PG is empty
+     but FS has data (PG was down during a save), FS data is synced back to PG.
+  This eliminates the "write FS first, read PG first" anti-pattern where PG
+  recovery could yield older data than the filesystem.
 """
 
 from __future__ import annotations
@@ -83,10 +85,20 @@ class PipelineStateManager:
         return self._state_dir() / f"{label}.json"
 
     def _save_to_fs(self, label: str, state: dict) -> None:
-        """Serialize state to JSON file (crash-safe, always-on)."""
+        """Serialize state to JSON file (crash-safe, always-on).
+
+        P1-3: Writes to a temporary file first, then performs an atomic
+        rename via os.replace(). This ensures that a crash during write
+        never leaves a partially-written (truncated) JSON file.
+        """
         state_path = self._state_path(label)
-        with open(state_path, "w", encoding="utf-8") as f:
+        tmp_path = state_path.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False, default=_json_default)
+            f.flush()
+            os.fsync(f.fileno())  # Ensure data hits disk before rename
+        # Atomic replace: readers always see a complete file
+        os.replace(tmp_path, state_path)
 
     def _load_from_fs(self, label: str) -> dict | None:
         """Deserialize state from JSON file.
@@ -100,46 +112,59 @@ class PipelineStateManager:
             return json.load(f)
 
     async def save(self, label: str, state: dict) -> None:
-        """Save state to filesystem (always) + PG (when healthy)."""
-        # Filesystem always — crash-safe, works even if PG is completely down
-        self._save_to_fs(label, state)
-        # PG best-effort — skip if PG is known unhealthy to avoid wasted retries
+        """Save state — PG first (primary), then FS (fallback/cache).
+
+        P1-4: Reverses the old "FS first, PG second" order. PG is the single
+        source of truth; FS serves as a local cache for offline/backup scenarios.
+        """
+        # PG first — primary source of truth
+        pg_ok = False
         if self.use_pg and is_pg_available():
             try:
                 repo = PipelineStateRepository()
                 existing = await repo.get_by_label(label)
+                data = {
+                    "scenario": state.get("scenario"),
+                    "config": state.get("config"),
+                    "steps": state.get("steps"),
+                    "current_step": state.get("current_step"),
+                    "mode": state.get("mode"),
+                    "errors": state.get("errors"),
+                    "media_synthesis_errors": state.get("media_synthesis_errors"),
+                }
                 if existing:
-                    await repo.update(existing["id"], {
-                        "scenario": state.get("scenario"),
-                        "config": state.get("config"),
-                        "steps": state.get("steps"),
-                        "current_step": state.get("current_step"),
-                        "mode": state.get("mode"),
-                        "errors": state.get("errors"),
-                        "media_synthesis_errors": state.get("media_synthesis_errors"),
-                    })
+                    await repo.update(existing["id"], data)
                 else:
-                    await repo.create({
-                        "label": label,
-                        "scenario": state.get("scenario"),
-                        "config": state.get("config"),
-                        "steps": state.get("steps"),
-                        "current_step": state.get("current_step"),
-                        "mode": state.get("mode"),
-                        "errors": state.get("errors"),
-                        "media_synthesis_errors": state.get("media_synthesis_errors"),
-                    })
+                    await repo.create({"label": label, **data})
+                pg_ok = True
             except Exception as e:
-                logger.warning("PG save failed, filesystem fallback in use: %s", str(e)[:100])
+                logger.warning("PG save failed: %s", str(e)[:100])
+
+        # FS always — serves as fallback when PG is down, and as local cache
+        self._save_to_fs(label, state)
+
+        if self.use_pg and not pg_ok:
+            logger.warning(
+                "State saved to filesystem only (PG unavailable). "
+                "Next load will sync from FS to PG when PG recovers."
+            )
 
     async def load(self, label: str) -> dict | None:
-        """Load state — PG first (when healthy), filesystem fallback."""
+        """Load state — PG primary, with FS-backfill on PG miss.
+
+        P1-4: If PG is healthy but has no data for this label while FS does,
+        it means PG was down during a prior save. In that case, sync FS data
+        back to PG and return it. This ensures PG never stays behind FS.
+        """
+        fs_state = self._load_from_fs(label)
+        pg_state = None
+
         if self.use_pg and is_pg_available():
             try:
                 repo = PipelineStateRepository()
                 row = await repo.get_by_label(label)
                 if row:
-                    return {
+                    pg_state = {
                         "label": row["label"],
                         "scenario": row["scenario"],
                         "config": row["config"],
@@ -150,8 +175,37 @@ class PipelineStateManager:
                         "media_synthesis_errors": row["media_synthesis_errors"],
                     }
             except Exception as e:
-                logger.warning("PG load failed, falling back to filesystem: %s", str(e)[:100])
-        return self._load_from_fs(label)
+                logger.warning("PG load failed, using filesystem: %s", str(e)[:100])
+                return fs_state
+
+        # PG has data — return it (primary source of truth)
+        if pg_state is not None:
+            return pg_state
+
+        # PG is empty but FS has data — PG was down during save. Backfill.
+        if fs_state is not None and self.use_pg and is_pg_available():
+            logger.info(
+                "PG miss but FS hit for label=%s — backfilling PG from filesystem",
+                label,
+            )
+            try:
+                repo = PipelineStateRepository()
+                await repo.create({
+                    "label": label,
+                    "scenario": fs_state.get("scenario"),
+                    "config": fs_state.get("config"),
+                    "steps": fs_state.get("steps"),
+                    "current_step": fs_state.get("current_step"),
+                    "mode": fs_state.get("mode"),
+                    "errors": fs_state.get("errors"),
+                    "media_synthesis_errors": fs_state.get("media_synthesis_errors"),
+                })
+            except Exception as e:
+                logger.warning("PG backfill failed for %s: %s", label, str(e)[:100])
+            return fs_state
+
+        # Neither has data
+        return fs_state
 
     async def exists(self, label: str) -> bool:
         """Check if state exists (PG or filesystem)."""

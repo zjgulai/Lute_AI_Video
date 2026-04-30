@@ -256,7 +256,7 @@ class StepRunner:
         except Exception as exc:
             step_duration_ms = (time.perf_counter() - step_start) * 1000
             logger.error("step_runner: step failed", step=step_name, error=str(exc), trace_id=trace_id)
-            step_data["status"] = "pending"
+            step_data["status"] = "error"
             state["errors"].append(f"{step_name}_failed: {exc}")
             error_collector.collect(
                 label=state["label"],

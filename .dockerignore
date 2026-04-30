@@ -1,0 +1,25 @@
+# Node modules — installed inside container or on host, not copied (201MB+)
+rendering/node_modules/
+rendering/.next/
+rendering/out/
+rendering/dist/
+
+# Frontend build artifacts
+web/node_modules/
+web/.next/
+web/out/
+
+# Local output and temp files
+output/
+tmp/
+*.log
+
+# Git and IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

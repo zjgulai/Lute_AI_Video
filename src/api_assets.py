@@ -51,17 +51,36 @@ async def upload_asset(
         {asset_id, filename, file_size, mime_type, tags, metadata}
     """
     import json
+    import os
+    import tempfile
 
-    data = await file.read()
+    # P1-5: Enforce maximum upload size (500MB) to prevent OOM
+    MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB
+    if file.size and file.size > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum allowed: {MAX_UPLOAD_SIZE // (1024 * 1024)}MB",
+        )
+
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     meta_dict = json.loads(metadata) if metadata != "{}" else {}
 
-    record = _asset_storage.store(
-        file_data=data,
-        original_name=file.filename or "upload.bin",
-        tags=tag_list,
-        metadata=meta_dict,
-    )
+    # P1-5: Stream upload to temp file in 8KB chunks — avoids loading
+    # the entire file into memory for large video assets.
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        while chunk := await file.read(8192):  # 8KB chunks
+            tmp.write(chunk)
+        tmp_path = tmp.name
+
+    try:
+        record = _asset_storage.store_from_path(
+            file_path=tmp_path,
+            original_name=file.filename or "upload.bin",
+            tags=tag_list,
+            metadata=meta_dict,
+        )
+    finally:
+        os.unlink(tmp_path)
 
     logger.info("api: asset uploaded", asset_id=record.asset_id, size=record.file_size)
     return record.to_dict()

@@ -344,6 +344,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "asset.empty": "暂无素材",
     "asset.emptyHint": "上传或生成素材后将在此显示",
     "asset.download": "点击下载",
+    "asset.openInNewTab": "新标签打开",
+    "asset.preview": "预览",
     "asset.count": "个",
 
     // Asset Uploader
@@ -387,7 +389,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "brand.description": "描述",
     "brand.descriptionPlaceholder": "品牌包简短描述",
     "brand.guidelinesLabel": "品牌规范",
-    "brand.guidelinesPlaceholder": "品牌 Logo：提供透明背景 PNG\n品牌色：#7CB342 (主色), #5A8F2E (辅色)\n字体：PingFang SC, Helvetica Neue\n语调：温暖、专业、有同理心",
+    "brand.guidelinesPlaceholder": "品牌 Logo：提供透明背景 PNG\n品牌色：#6A2B3A (主色), #5A8F2E (辅色)\n字体：PingFang SC, Helvetica Neue\n语调：温暖、专业、有同理心",
     "brand.guidelinesHint": "输入品牌视觉规范、语调指南等",
     "brand.uploadAssets": "上传素材文件",
     "brand.dragUpload": "拖拽文件到此处，或点击选择",
@@ -701,6 +703,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "stage.substatus.assembling": "正在合成最终视频...",
     "stage.substatus.runningAudit": "正在执行质量审计...",
     "stage.substatus.exportComplete": "导出完成",
+    "stage.pollingError": "连接中断，请刷新页面重试",
 
     // Common
     "common.loading": "加载中...",
@@ -745,7 +748,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "distPlatform": "分发平台",
 
     // Splash
-    "splash.enter": "立即体验",
+    "splash.sloganZh": "为妈妈的舒适不断进化",
+    "splash.enter": "开始创作",
+    "splash.departmentCredit": "数字化-数据科学部 创作",
+    "splash.guide": "使用说明",
+    "splash.blueprint": "设计蓝图",
     "splash.title": "路特创新视频创作平台",
     "splash.subtitle": "AI 视频创作平台",
 
@@ -802,7 +809,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "campaign.values": "品牌价值观",
     "campaign.valuesPlaceholder": "每行一个。例如：赋能、可持续",
     "campaign.visualIdentity": "视觉风格",
-    "campaign.visualIdentityPlaceholder": "例如：主色 #7CB342，温暖自然光，避免冷色调",
+    "campaign.visualIdentityPlaceholder": "例如：主色 #6A2B3A，温暖自然光，避免冷色调",
     "campaign.competitorCampaigns": "竞品活动参考",
     "campaign.competitorCampaignsPlaceholder": "每行一个。类似品牌活动参考",
 
@@ -851,6 +858,26 @@ export const translations: Record<Locale, Record<string, string>> = {
     "compare.download": "下载",
     "compare.publish": "发布",
     "compare.publishing": "发布中...",
+
+    // Brand VLOG
+    "scene.brand_vlog.title": "品牌VLOG",
+    "scene.brand_vlog.desc": "选择产品SKU自动回填六视图，选择模特角色构建人物场景，输入故事方向，AI 生成完整 VLOG 叙事视频。",
+    "vlog.productSku": "产品SKU",
+    "vlog.productSkuHint": "选择产品后自动回填六视图",
+    "vlog.scene": "场景选择",
+    "vlog.sceneHint": "约束背景环境和生活方式表达",
+    "vlog.views": "产品六视图",
+    "vlog.viewsSynced": "六视图已同步",
+    "vlog.models": "模特图选择",
+    "vlog.modelsHint": "支持多选，不同角色可同时出镜",
+    "vlog.modelsEmpty": "请选择至少一个模特图",
+    "vlog.story": "故事描述",
+    "vlog.storyHint": "描述人物动作、情绪、卖点节奏和结尾指令",
+    "vlog.storyPlaceholder": "例如：以年轻母亲在客厅使用产品为核心，穿插婴儿安静入睡的镜头，强调免手扶、静音和日常高效场景，结尾突出更自由的使用体验。",
+    "vlog.storyCount": "{current} / {max}",
+    "vlog.duration": "视频时长",
+    "toast.vlogDone": "品牌VLOG 生成完成",
+    "toast.cancelNoPartial": "已取消，无法获取部分结果",
   },
 
   en: {
@@ -1194,6 +1221,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "asset.empty": "No assets yet",
     "asset.emptyHint": "Assets will appear here after upload or generation",
     "asset.download": "Click to download",
+    "asset.openInNewTab": "Open in new tab",
+    "asset.preview": "Preview",
     "asset.count": "",
 
     // Asset Uploader
@@ -1237,7 +1266,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "brand.description": "Description",
     "brand.descriptionPlaceholder": "Brief description of the brand package",
     "brand.guidelinesLabel": "Brand Guidelines",
-    "brand.guidelinesPlaceholder": "Brand Logo: transparent PNG\nBrand Colors: #7CB342 (primary), #5A8F2E (secondary)\nFonts: PingFang SC, Helvetica Neue\nTone: warm, professional, empathetic",
+    "brand.guidelinesPlaceholder": "Brand Logo: transparent PNG\nBrand Colors: #6A2B3A (primary), #5A8F2E (secondary)\nFonts: PingFang SC, Helvetica Neue\nTone: warm, professional, empathetic",
     "brand.guidelinesHint": "Enter brand visual guidelines, tone suggestions, etc.",
     "brand.uploadAssets": "Upload Asset Files",
     "brand.dragUpload": "Drag files here, or click to select",
@@ -1349,6 +1378,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "stage.substatus.assembling": "Assembling final video...",
     "stage.substatus.runningAudit": "Running quality audit...",
     "stage.substatus.exportComplete": "Export complete",
+    "stage.pollingError": "Connection lost. Please refresh to retry.",
 
     // Common
     "common.loading": "Loading...",
@@ -1594,6 +1624,10 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     // Splash
     "splash.enter": "Get Started",
+    "splash.sloganZh": "Evolving for Mom and Cozy",
+    "splash.departmentCredit": "Digital & Data Science Dept.",
+    "splash.guide": "Guide",
+    "splash.blueprint": "Blueprint",
     "splash.title": "Root Innovation Video Creation Platform",
     "splash.subtitle": "AI Video Creation Platform",
 
@@ -1616,7 +1650,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "campaign.values": "Brand Values",
     "campaign.valuesPlaceholder": "One per line. e.g. Empowerment, Sustainability",
     "campaign.visualIdentity": "Visual Identity",
-    "campaign.visualIdentityPlaceholder": "e.g. Primary color #7CB342, warm natural light, no cold tones",
+    "campaign.visualIdentityPlaceholder": "e.g. Primary color #6A2B3A, warm natural light, no cold tones",
     "campaign.competitorCampaigns": "Competitor Campaigns",
     "campaign.competitorCampaignsPlaceholder": "One per line. Similar brand campaigns for reference",
 
@@ -1699,5 +1733,25 @@ export const translations: Record<Locale, Record<string, string>> = {
     "compare.download": "Download",
     "compare.publish": "Publish",
     "compare.publishing": "Publishing...",
+
+    // Brand VLOG
+    "scene.brand_vlog.title": "Brand VLOG",
+    "scene.brand_vlog.desc": "Select product SKU to auto-fill six-view, choose model roles, input story direction, AI generates a complete VLOG narrative video.",
+    "vlog.productSku": "Product SKU",
+    "vlog.productSkuHint": "Auto-fills six-view after product selection",
+    "vlog.scene": "Scene",
+    "vlog.sceneHint": "Constrains background environment and lifestyle expression",
+    "vlog.views": "Product Six-View",
+    "vlog.viewsSynced": "Six views synced",
+    "vlog.models": "Model Selection",
+    "vlog.modelsHint": "Multi-select, different roles can appear together",
+    "vlog.modelsEmpty": "Please select at least one model",
+    "vlog.story": "Story Description",
+    "vlog.storyHint": "Describe character actions, emotions, selling point rhythm, and ending CTA",
+    "vlog.storyPlaceholder": "E.g.: A young mother using the product in the living room, interspersed with baby sleeping peacefully, emphasizing hands-free, quiet operation, and daily efficiency, ending with a freer parenting experience.",
+    "vlog.storyCount": "{current} / {max}",
+    "vlog.duration": "Video Duration",
+    "toast.vlogDone": "Brand VLOG generation complete",
+    "toast.cancelNoPartial": "Cancelled, unable to retrieve partial results",
   },
 };

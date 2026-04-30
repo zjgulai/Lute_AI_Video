@@ -5,12 +5,19 @@ to prevent pipeline hangs on slow or dead LLM calls.
 
 Preferred usage from async code:    await llm.invoke(...)
                                    await llm.invoke_json(...)
+
+SSOT for per-request API keys: _request_api_keys ContextVar.
+Callers (e.g. api.py) set this per-request so that concurrent pipelines do not
+contaminate each other's keys via the global os.environ.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import hashlib
 import json
+import os
 from typing import Any
 
 import structlog
@@ -46,6 +53,25 @@ logger = structlog.get_logger()
 # Timeout per LLM call in seconds — prevents pipeline hangs on dead connections
 LLM_TIMEOUT_SECONDS = 120.0
 
+# Per-request API keys — prevents cross-request contamination via os.environ.
+# Set by api.py _inject_api_keys before pipeline execution.
+_request_api_keys: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
+    "request_api_keys", default={}
+)
+
+
+def set_request_api_keys(keys: dict[str, str]) -> None:
+    """Set API keys for the current request context."""
+    _request_api_keys.set(keys)
+
+
+def get_request_api_key(env_name: str) -> str | None:
+    """Get an API key from request context, falling back to os.environ."""
+    request_keys = _request_api_keys.get()
+    if env_name in request_keys:
+        return request_keys[env_name]
+    return os.environ.get(env_name)
+
 
 class LLMTimeoutError(asyncio.TimeoutError):
     """Raised when an LLM call exceeds LLM_TIMEOUT_SECONDS."""
@@ -64,13 +90,31 @@ class LLMClient:
         self.timeout = timeout
         self._clients: dict[str, Any] = {}
 
+    def _resolve_api_key(self, env_name: str) -> str | None:
+        """Resolve API key from request context or global env."""
+        return get_request_api_key(env_name)
+
     def _get_client(self, model: str | None = None):
-        cache_key = f"{self.provider}:{model}"
+        # Build a cache key that includes the actual API key hash so that
+        # concurrent requests using different keys do not share (or evict)
+        # each other's client instances.
+        if self.provider == "anthropic":
+            key = self._resolve_api_key("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY or ""
+        elif self.provider == "kimi":
+            key = self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY or ""
+        elif self.provider == "deepseek":
+            key = self._resolve_api_key("DEEPSEEK_API_KEY") or DEEPSEEK_API_KEY or ""
+        else:
+            key = self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY or ""
+
+        key_hash = hashlib.sha256(key.encode()).hexdigest()[:16] if key else "default"
+        cache_key = f"{self.provider}:{model}:{key_hash}"
+
         if cache_key not in self._clients:
             if self.provider == "anthropic":
                 self._clients[cache_key] = ChatAnthropic(
                     model=model or "claude-sonnet-4-20250514",
-                    api_key=ANTHROPIC_API_KEY,
+                    api_key=self._resolve_api_key("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY,
                     temperature=0.7,
                     max_tokens=4096,
                     timeout=self.timeout,
@@ -80,7 +124,7 @@ class LLMClient:
                 from langchain_openai import ChatOpenAI
                 self._clients[cache_key] = ChatOpenAI(
                     model=model or KIMI_MODEL,
-                    api_key=OPENAI_API_KEY,
+                    api_key=self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY,
                     base_url="https://api.moonshot.cn/v1",
                     temperature=0.7,
                     max_tokens=4096,
@@ -92,7 +136,7 @@ class LLMClient:
                 from langchain_openai import ChatOpenAI
                 self._clients[cache_key] = ChatOpenAI(
                     model=model or DEEPSEEK_MODEL,
-                    api_key=DEEPSEEK_API_KEY,
+                    api_key=self._resolve_api_key("DEEPSEEK_API_KEY") or DEEPSEEK_API_KEY,
                     base_url=DEEPSEEK_API_BASE,
                     temperature=0.7,
                     max_tokens=4096,
@@ -103,7 +147,7 @@ class LLMClient:
                 from langchain_openai import ChatOpenAI
                 kwargs = {
                     "model": model or "gpt-4o",
-                    "api_key": OPENAI_API_KEY,
+                    "api_key": self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY,
                     "temperature": 0.7,
                     "max_tokens": 4096,
                     "timeout": self.timeout,

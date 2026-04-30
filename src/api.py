@@ -3,15 +3,18 @@
 Run with: uvicorn src.api:app --reload --port 8001
 
 API keys can be submitted at pipeline start via the api_keys field.
-When provided, they are injected into os.environ for the duration of the process.
+When provided, they are stored in a per-request context (contextvars) so that
+concurrent pipelines do not contaminate each other's keys.
 If not provided, the server falls back to .env file values (or mock mode).
 """
 
+import logging
 import os
 import secrets
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 from typing import Any
 
 # Load .env so API_KEY, DATABASE_URL, etc. are available before fastapi starts
@@ -54,6 +57,46 @@ _THREAD_INDEX_PATH = Path(__file__).parent.parent / "output" / ".thread_index.js
 import asyncio as _asyncio
 _pipeline_semaphore = _asyncio.Semaphore(10)  # P3-4: Max 10 concurrent pipelines
 
+# Background task registry — tracks async tasks spawned by API endpoints
+# Maps task_id → {"task": Task, "label": str, "started_at": float}
+_background_tasks: dict[str, dict[str, Any]] = {}
+
+
+def _register_background_task(task: _asyncio.Task, label: str) -> str:
+    """Register a background task and attach completion callback."""
+    import structlog
+    log = structlog.get_logger()
+    task_id = f"{label}_{id(task)}"
+    started_at = time.time()
+    _background_tasks[task_id] = {"task": task, "label": label, "started_at": started_at}
+
+    def _on_done(t: _asyncio.Task) -> None:
+        duration_sec = time.time() - started_at
+        try:
+            exc = t.exception()
+            if exc:
+                log.error(
+                    "background_task_failed",
+                    task_id=task_id,
+                    label=label,
+                    duration_sec=round(duration_sec, 2),
+                    error=str(exc)[:200],
+                )
+            else:
+                log.info(
+                    "background_task_completed",
+                    task_id=task_id,
+                    label=label,
+                    duration_sec=round(duration_sec, 2),
+                )
+        except (_asyncio.CancelledError, Exception):
+            pass
+        finally:
+            _background_tasks.pop(task_id, None)
+
+    task.add_done_callback(_on_done)
+    return task_id
+
 
 class PipelineStartRequest(BaseModel):
     product_catalog: dict[str, Any] = {}
@@ -71,11 +114,15 @@ class ReviewAction(BaseModel):
 
 
 def _inject_api_keys(api_keys: dict[str, str]) -> None:
-    """Inject API keys from request into environment (if provided).
+    """Store API keys in request context (not process-wide os.environ).
 
-    Only overwrites if the key was explicitly sent (non-empty string).
-    Does NOT persist — affects only this process's lifetime.
+    Using contextvars ensures concurrent requests do not contaminate each
+    other's keys. The LLM client reads from request context first, then
+    falls back to os.environ — no global client cache clearing needed.
     """
+    if not api_keys:
+        return
+
     key_map = {
         "openai": "OPENAI_API_KEY",
         "OPENAI_API_KEY": "OPENAI_API_KEY",
@@ -90,14 +137,15 @@ def _inject_api_keys(api_keys: dict[str, str]) -> None:
         "supabase_key": "SUPABASE_SERVICE_KEY",
         "SUPABASE_SERVICE_KEY": "SUPABASE_SERVICE_KEY",
     }
+    normalized: dict[str, str] = {}
     for key_or_alias, value in api_keys.items():
         if value and value.strip():
             env_key = key_map.get(key_or_alias, key_or_alias)
-            os.environ[env_key] = value.strip()
-            # Clear cached LLM client instances so they re-read the key
-            from src.tools.llm_client import llm as llm_singleton
+            normalized[env_key] = value.strip()
 
-            llm_singleton._clients.clear()
+    # Store in request context — isolated per asyncio task
+    from src.tools.llm_client import set_request_api_keys
+    set_request_api_keys(normalized)
 
 
 def _serialize(obj: Any) -> Any:
@@ -149,8 +197,10 @@ if HAS_FASTAPI:
                 )
             except Exception:
                 pass
-        # P2-1: Restore active threads from disk
+        # P2-1: Restore active threads from disk (standalone mode only)
         _restore_thread_index()
+        # P1-10: Start background thread cache eviction loop
+        _asyncio.create_task(_periodic_cache_eviction())
 
     API_KEY = os.getenv("API_KEY", "")
     if not API_KEY:
@@ -188,7 +238,13 @@ if HAS_FASTAPI:
     # ── P2-1: Thread persistence helpers ──
 
     def _save_thread_index():
-        """Persist _active_threads keys to JSON for crash recovery."""
+        """Persist _active_threads keys to JSON for crash recovery.
+
+        P1-10: When PostgreSQL is available, skip JSON — PG is the single source
+        of truth across workers. JSON only serves standalone (no-DB) deployments.
+        """
+        if HAS_STORAGE:
+            return  # PG handles persistence; JSON is meaningless across K8s replicas
         try:
             _THREAD_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
             with open(_THREAD_INDEX_PATH, "w") as f:
@@ -197,7 +253,13 @@ if HAS_FASTAPI:
             pass  # Non-critical — best-effort persistence
 
     def _restore_thread_index():
-        """Restore thread IDs from disk on startup."""
+        """Restore thread IDs from disk on startup.
+
+        P1-10: When PostgreSQL is available, skip JSON restore — threads are
+        loaded on-demand via _get_config_for_thread PG fallback.
+        """
+        if HAS_STORAGE:
+            return  # PG is the source of truth; JSON may be stale from another replica
         try:
             if _THREAD_INDEX_PATH.exists():
                 with open(_THREAD_INDEX_PATH) as f:
@@ -213,11 +275,43 @@ if HAS_FASTAPI:
     # Restore on module load
     _restore_thread_index()
 
-    # ── P3-1: Rate limiting middleware (simple sliding window) ──
+    # ── P1-10: In-memory thread cache TTL cleanup ──
+    # _active_threads is a local cache only. Threads are persisted in PG.
+    # Stale entries are evicted after 24h to prevent unbounded growth.
+    _THREAD_CACHE_TTL_SEC = 24 * 3600  # 24 hours
+    _thread_cache_meta: dict[str, float] = {}  # thread_id → last_accessed timestamp
+
+    def _touch_thread_cache(thread_id: str) -> None:
+        """Update last-accessed timestamp for a cached thread."""
+        _thread_cache_meta[thread_id] = time.time()
+
+    def _evict_stale_threads() -> None:
+        """Remove threads from memory cache that haven't been accessed recently."""
+        now = time.time()
+        stale = [
+            tid for tid, last_access in _thread_cache_meta.items()
+            if now - last_access > _THREAD_CACHE_TTL_SEC
+        ]
+        for tid in stale:
+            _active_threads.pop(tid, None)
+            _thread_cache_meta.pop(tid, None)
+
+    async def _periodic_cache_eviction() -> None:
+        """Background loop: evict stale thread cache entries every hour."""
+        while True:
+            await _asyncio.sleep(3600)
+            _evict_stale_threads()
+
+    # ── P3-1: Rate limiting middleware (sliding window + LRU eviction) ──
+    # Anti-pattern fixed: replaced global _rate_store.clear() with per-IP TTL + LRU eviction.
+    # This prevents attackers from using 1001 fake IPs to force a global reset and evade rate limits.
 
     _rate_window_sec = 60
     _rate_max_requests = 120  # 120 requests per 60s = 2 req/s average
-    _rate_store: dict[str, list[float]] = {}  # client_ip → [timestamps]
+    _rate_max_ips = 1000      # Max distinct IPs tracked; oldest touched IP is evicted (LRU)
+
+    from collections import OrderedDict
+    _rate_store: OrderedDict[str, list[float]] = OrderedDict()  # client_ip → [timestamps]
 
     @app.middleware("http")
     async def rate_limit_middleware(request, call_next):
@@ -228,33 +322,47 @@ if HAS_FASTAPI:
         if request.url.path == "/health":
             return await call_next(request)
 
-        client_ip = request.client.host if request.client else "unknown"
+        # Prefer X-Forwarded-For when behind a reverse proxy; fall back to direct client IP
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        else:
+            client_ip = request.client.host if request.client else "unknown"
+
         now = time.time()
+
+        # Move accessed IP to the end (most-recently-used)
+        if client_ip in _rate_store:
+            _rate_store.move_to_end(client_ip)
+
         timestamps = _rate_store.get(client_ip, [])
-        # Remove expired entries
+        # Remove expired entries within this IP's window
         timestamps = [t for t in timestamps if now - t < _rate_window_sec]
+
         if len(timestamps) >= _rate_max_requests:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please slow down.", "retry_after_sec": _rate_window_sec},
             )
+
         timestamps.append(now)
         _rate_store[client_ip] = timestamps
-        # Cleanup old entries periodically (keep store bounded)
-        if len(_rate_store) > 1000:
-            _rate_store.clear()
+
+        # LRU eviction: only drop the least-recently-used IP, never clear everything
+        while len(_rate_store) > _rate_max_ips:
+            _rate_store.popitem(last=False)
+
         return await call_next(request)
 
     # ── Request logging middleware ──
+    _request_log = logging.getLogger("api.request")
+
     @app.middleware("http")
     async def request_log_middleware(request, call_next):
-        import time as _time
-        _start = _time.perf_counter()
+        _start = time.perf_counter()
         response = await call_next(request)
-        _duration_ms = (_time.perf_counter() - _start) * 1000
-        import logging
-        _log = logging.getLogger("api.request")
-        _log.info(
+        _duration_ms = (time.perf_counter() - _start) * 1000
+        _request_log.info(
             "%s %s → %s (%.0fms)",
             request.method, request.url.path, response.status_code, _duration_ms,
         )
@@ -263,7 +371,7 @@ if HAS_FASTAPI:
     # Mount asset management endpoints (requires python-multipart for File/Form)
     try:
         from src import api_assets
-        app.include_router(api_assets.router)
+        app.include_router(api_assets.router, dependencies=[Depends(verify_api_key)])
     except (ImportError, RuntimeError) as _e:
         import logging
         logging.warning("api_assets router skipped: %s", _e)
@@ -273,7 +381,10 @@ if HAS_FASTAPI:
     try:
         from src import telemetry_endpoint
         if telemetry_endpoint.router:
-            app.include_router(telemetry_endpoint.router)
+            app.include_router(
+                telemetry_endpoint.router,
+                dependencies=[Depends(verify_api_key)],
+            )
     except (ImportError, RuntimeError) as _e:
         import logging
         logging.warning("telemetry router skipped: %s", _e)
@@ -291,7 +402,7 @@ if HAS_FASTAPI:
         """
         from src.tools.translate import translate_catalog_to_english
 
-        thread_id = str(uuid.uuid4())[:8]
+        thread_id = str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
 
         # Inject API keys from request into environment
@@ -327,8 +438,8 @@ if HAS_FASTAPI:
             logging.error("pipeline start failed: %s", e)
             raise HTTPException(status_code=500, detail=_safe_error(e))
 
-        _active_threads[thread_id] = config
-        _save_thread_index()
+        # P1-10: Write to PG first (single source of truth), then cache in memory.
+        # This ensures other workers can see the thread immediately.
         if HAS_STORAGE:
             repo = ThreadRepository()
             await repo.create({
@@ -337,6 +448,9 @@ if HAS_FASTAPI:
                 "current_step": "init",
                 "pipeline_complete": False,
             })
+        _active_threads[thread_id] = config
+        _touch_thread_cache(thread_id)
+        _save_thread_index()
         return {
             "thread_id": thread_id,
             "status": "interrupted",
@@ -347,13 +461,15 @@ if HAS_FASTAPI:
     async def get_pipeline_state(thread_id: str):
         """Get current pipeline state for a thread."""
         config = _active_threads.get(thread_id)
+        if config:
+            _touch_thread_cache(thread_id)
         if not config and HAS_STORAGE:
             repo = ThreadRepository()
             thread = await repo.get_by_field("thread_id", thread_id)
             if thread:
                 config = {"configurable": {"thread_id": thread_id}}
                 _active_threads[thread_id] = config
-                _save_thread_index()
+                _touch_thread_cache(thread_id)
         if not config:
             config = {"configurable": {"thread_id": thread_id}}
 
@@ -400,13 +516,15 @@ if HAS_FASTAPI:
         astream boundary in interrupt_after resume scenarios.
         """
         config = _active_threads.get(thread_id)
+        if config:
+            _touch_thread_cache(thread_id)
         if not config and HAS_STORAGE:
             repo = ThreadRepository()
             thread = await repo.get_by_field("thread_id", thread_id)
             if thread:
                 config = {"configurable": {"thread_id": thread_id}}
                 _active_threads[thread_id] = config
-                _save_thread_index()
+                _touch_thread_cache(thread_id)
         if not config:
             config = {"configurable": {"thread_id": thread_id}}
         import structlog
@@ -510,18 +628,28 @@ if HAS_FASTAPI:
         }
 
     async def _get_config_for_thread(thread_id: str) -> dict:
-        """Get config for thread from memory cache or DB."""
+        """Get config for thread from memory cache or DB.
+
+        P1-10: Memory cache is a local optimization; PG is the single source of
+        truth. On cache miss, load from PG and backfill. _touch_thread_cache
+        keeps recently-used entries alive across TTL sweeps.
+        """
         config = _active_threads.get(thread_id)
-        if not config and HAS_STORAGE:
+        if config:
+            _touch_thread_cache(thread_id)
+            return config
+
+        if HAS_STORAGE:
             repo = ThreadRepository()
             thread = await repo.get_by_field("thread_id", thread_id)
             if thread:
                 config = {"configurable": {"thread_id": thread_id}}
                 _active_threads[thread_id] = config
-                _save_thread_index()
-        if not config:
-            config = {"configurable": {"thread_id": thread_id}}
-        return config
+                _touch_thread_cache(thread_id)
+                return config
+
+        # Fallback: build a minimal config (pipeline may 404 if checkpoint missing)
+        return {"configurable": {"thread_id": thread_id}}
 
     @app.get("/pipeline/{thread_id}/output", dependencies=[Depends(verify_api_key)])
     async def get_pipeline_output(thread_id: str):
@@ -794,6 +922,30 @@ if HAS_FASTAPI:
         )
         return r
 
+    @app.post("/scenario/s5", dependencies=[Depends(verify_api_key)])
+    async def run_s5_brand_vlog(body: dict):
+        """Run S5 Brand VLOG pipeline.
+
+        Request body:
+            brand_id: str — brand identifier (e.g. "momcozy")
+            product_sku: dict — product SKU with views[] (six-view angles)
+            scene_id: str — scene identifier (office/living-room/bedroom/nursery/outdoor/kitchen)
+            selected_models: list[dict] — model profiles with name/role/description
+            story_description: str — user's story direction (max 300 chars)
+            video_duration: int — target video seconds (15/30/45/60/90)
+        """
+        from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
+        p = S5BrandVlogPipeline()
+        r = await p.run(
+            brand_id=body.get("brand_id", "momcozy"),
+            product_sku=body.get("product_sku", {}),
+            scene_id=body.get("scene_id", "living-room"),
+            selected_models=body.get("selected_models", []),
+            story_description=body.get("story_description", ""),
+            video_duration=body.get("video_duration", 30),
+        )
+        return r
+
     # ── Fast Mode: direct text-to-video (no pipeline) ──
 
     class FastModeRequest(BaseModel):
@@ -830,9 +982,9 @@ if HAS_FASTAPI:
                 tts_path: str | null,
             }
         """
-        from src.services.fast_mode import FastModeService
+        from src.services.fast_mode import get_fast_mode_service
 
-        service = FastModeService()
+        service = get_fast_mode_service()
         try:
             result = await service.generate(
                 user_prompt=req.user_prompt,
@@ -841,8 +993,7 @@ if HAS_FASTAPI:
             )
             return result
         except Exception as e:
-            import logging
-            logging.error("fast_mode failed: %s", e)
+            logger.error("fast_mode failed", error=str(e))
             raise HTTPException(status_code=500, detail=_safe_error(e))
 
     # ── S1 Pipeline Controllability (P0-1) ──
@@ -1376,20 +1527,34 @@ if HAS_FASTAPI:
             # Resume can take 5-30 minutes (keyframe generation + video synthesis).
             # Run in background to avoid HTTP 504 Gateway Timeout.
             async def _background_resume() -> None:
+                import structlog
+
+                log = structlog.get_logger()
                 try:
                     from src.pipeline.step_runner import StepRunner
                     from src.pipeline.state_manager import PipelineStateManager
 
                     step_runner = StepRunner(PipelineStateManager())
                     await step_runner.resume(label)
+                    log.info(
+                        "background_resume_complete",
+                        label=label,
+                        gate_id=gate_id,
+                    )
                 except Exception as resume_err:
-                    import logging
+                    log.warning(
+                        "background_resume_failed",
+                        label=label,
+                        gate_id=gate_id,
+                        error=str(resume_err)[:200],
+                    )
+                    raise  # Re-raise so _register_background_task logs it
 
-                    logging.warning("approve_gate_decision: background resume failed: %s", resume_err)
-
-            asyncio.create_task(_background_resume())
+            task = asyncio.create_task(_background_resume())
+            task_id = _register_background_task(task, label)
             result["resumed"] = True
             result["resuming"] = True
+            result["background_task_id"] = task_id
 
             return result
         except HTTPException:
@@ -1669,10 +1834,13 @@ if HAS_FASTAPI:
 
             dest.write_bytes(content)
 
+            rel_upload = (uploads_dir / unique_name).relative_to(OUTPUT_DIR.resolve())
+            media_suffix = "/".join(quote(p, safe="") for p in rel_upload.parts)
+
             return {
                 "filename": unique_name,
                 "original_name": original_name,
-                "path": f"/api/media/{unique_name}",
+                "path": f"/api/media/{media_suffix}",
                 "size": len(content),
                 "content_type": file.content_type,
             }
@@ -1683,97 +1851,127 @@ if HAS_FASTAPI:
 
     @app.get("/api/files", dependencies=[Depends(verify_api_key)])
     async def list_files():
-        """List all media files in OUTPUT_DIR and common subdirectories.
+        """List media files under OUTPUT_DIR (recursive).
 
-        Returns files with metadata for the asset library.
+        Video/image: strictly larger than 1 MiB. Audio: any positive size (no floor).
+        Documents (pdf, txt, etc.) are excluded — not treated as portfolio works.
         """
         from src.config import OUTPUT_DIR
 
-        search_roots = [
-            OUTPUT_DIR / "uploads",
-            OUTPUT_DIR / "seedance",
-            OUTPUT_DIR / "audio",
-            OUTPUT_DIR / "gpt_images",
-            OUTPUT_DIR / "renders",
-            OUTPUT_DIR / "demo",
-            OUTPUT_DIR,
-        ]
+        min_bytes = 1024 * 1024  # video / image only
+        root = OUTPUT_DIR.resolve()
+        files: list[dict[str, Any]] = []
+        if not root.is_dir():
+            return {"files": []}
 
-        files = []
-        seen = set()
-        for root in search_roots:
-            if not root.exists():
-                continue
-            for f in root.iterdir():
+        for f in root.rglob("*"):
+            try:
                 if not f.is_file():
                     continue
-                if f.name in seen:
-                    continue
-                seen.add(f.name)
-                ext = f.suffix.lower()
-                file_type = "document"
-                if ext in {".mp4", ".mov", ".webm", ".avi", ".mkv"}:
-                    file_type = "video"
-                elif ext in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
-                    file_type = "image"
-                elif ext in {".mp3", ".wav", ".m4a", ".ogg", ".flac"}:
-                    file_type = "audio"
-                files.append({
-                    "filename": f.name,
-                    "path": f"/api/media/{f.name}",
-                    "size": f.stat().st_size,
-                    "type": file_type,
-                    "created": f.stat().st_ctime,
-                })
+                rel = f.relative_to(root)
+            except ValueError:
+                continue
+            if any(part.startswith(".") for part in rel.parts):
+                continue
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            if st.st_size <= 0:
+                continue
+            ext = f.suffix.lower()
+            file_type = "document"
+            if ext in {".mp4", ".mov", ".webm", ".avi", ".mkv"}:
+                file_type = "video"
+            elif ext in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+                file_type = "image"
+            elif ext in {".mp3", ".wav", ".m4a", ".ogg", ".flac"}:
+                file_type = "audio"
+            if file_type == "document":
+                continue
+            if file_type != "audio" and st.st_size <= min_bytes:
+                continue
+            media_suffix = "/".join(quote(p, safe="") for p in rel.parts)
+            path_tags = [str(p) for p in rel.parts[:-1]]
+            files.append({
+                "filename": f.name,
+                "path": f"/api/media/{media_suffix}",
+                "size": st.st_size,
+                "type": file_type,
+                "created": st.st_ctime,
+                "tags": path_tags,
+            })
 
         files.sort(key=lambda x: x["created"], reverse=True)
         return {"files": files}
 
     # ── Media serving ──
 
-    @app.get("/api/media/{filename}")
-    async def serve_media(filename: str):
-        """Serve generated media files (mp4, mp3, png, jpg) from OUTPUT_DIR."""
+    @app.get("/api/media/{media_path:path}")
+    async def serve_media(media_path: str):
+        """Serve files from OUTPUT_DIR; media_path is relative to OUTPUT_DIR (posix subpaths allowed)."""
         from fastapi.responses import FileResponse
         from src.config import OUTPUT_DIR
 
-        # Sanitize filename: reject path traversal attempts
-        safe_name = Path(filename).name
-        if not safe_name or safe_name != filename or ".." in filename:
-            raise HTTPException(status_code=400, detail="Invalid filename")
+        root = OUTPUT_DIR.resolve()
+        if not media_path or media_path.startswith("/"):
+            raise HTTPException(status_code=400, detail="Invalid path")
 
-        # Search in OUTPUT_DIR and common subdirectories
-        search_roots = [
-            OUTPUT_DIR,
-            OUTPUT_DIR / "seedance",
-            OUTPUT_DIR / "audio",
-            OUTPUT_DIR / "gpt_images",
-            OUTPUT_DIR / "renders",
-            OUTPUT_DIR / "demo",
-            OUTPUT_DIR / "uploads",
-            OUTPUT_DIR / "fast_mode",
-            OUTPUT_DIR / "fast_mode" / "audio",
-        ]
+        rel = Path(media_path)
+        if rel.is_absolute():
+            raise HTTPException(status_code=400, detail="Invalid path")
 
-        for root in search_roots:
-            candidate = root / safe_name
-            if candidate.exists() and candidate.is_file():
-                # Guess content-type by extension
-                ext = candidate.suffix.lower()
-                content_type = {
-                    ".mp4": "video/mp4",
-                    ".mp3": "audio/mpeg",
-                    ".wav": "audio/wav",
-                    ".m4a": "audio/mp4",
-                    ".png": "image/png",
-                    ".jpg": "image/jpeg",
-                    ".jpeg": "image/jpeg",
-                    ".webp": "image/webp",
-                    ".webm": "video/webm",
-                }.get(ext, "application/octet-stream")
-                return FileResponse(str(candidate), media_type=content_type, filename=safe_name)
+        candidate = (root / rel).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid path")
 
-        raise HTTPException(status_code=404, detail="File not found")
+        if not candidate.is_file():
+            safe_name = rel.name
+            search_roots = [
+                OUTPUT_DIR,
+                OUTPUT_DIR / "seedance",
+                OUTPUT_DIR / "audio",
+                OUTPUT_DIR / "gpt_images",
+                OUTPUT_DIR / "renders",
+                OUTPUT_DIR / "demo",
+                OUTPUT_DIR / "uploads",
+                OUTPUT_DIR / "fast_mode",
+                OUTPUT_DIR / "fast_mode" / "audio",
+            ]
+            found: Path | None = None
+            for sr in search_roots:
+                cand2 = (sr / safe_name).resolve()
+                try:
+                    cand2.relative_to(root)
+                except ValueError:
+                    continue
+                if cand2.is_file():
+                    found = cand2
+                    break
+            if found is None:
+                raise HTTPException(status_code=404, detail="File not found")
+            candidate = found
+
+        ext = candidate.suffix.lower()
+        content_type = {
+            ".mp4": "video/mp4",
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".m4a": "audio/mp4",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".webm": "video/webm",
+            ".pdf": "application/pdf",
+        }.get(ext, "application/octet-stream")
+        return FileResponse(
+            str(candidate),
+            media_type=content_type,
+            filename=candidate.name,
+        )
 
 else:
     app = None  # type: ignore

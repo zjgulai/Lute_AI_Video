@@ -80,5 +80,8 @@ class VideoPipelineState(TypedDict, total=False):
     # ── Self-Verification (L5.x) ──
     self_verifications: dict[str, dict[str, Any]]  # Keyed by node_name
 
+    # ── Resilience ──
+    pipeline_degraded: bool  # P0-2: Any node failure sets this; routing functions check it and terminate pipeline
+
     # ── Telemetry ──
     pipeline_metrics: dict[str, Any]  # PipelineMetrics serialized as dict

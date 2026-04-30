@@ -15,6 +15,15 @@ COPY src ./src
 COPY scripts ./scripts
 COPY pyproject.toml ./
 
+# P1-15: Copy strategy_source/ and rendering/ so the container behaves
+# identically to local dev. strategy_source/ contains scenario configs and
+# quality thresholds; rendering/ contains Remotion templates referenced by
+# remotion_assemble.py and remotion_renderer.py.
+# NOTE: rendering/node_modules/ should be excluded via .dockerignore (201MB+)
+# and installed inside the container if Remotion rendering runs there.
+COPY strategy_source ./strategy_source
+COPY rendering ./rendering
+
 # Create output directory (used by VIDEO_OUTPUT_DIR)
 RUN mkdir -p /app/output
 

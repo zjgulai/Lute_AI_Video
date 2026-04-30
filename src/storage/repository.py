@@ -1,5 +1,6 @@
 """Repository pattern for PostgreSQL with SQLite fallback."""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -51,28 +52,36 @@ class BaseRepository:
         if pool is not None:
             async with pool.acquire() as conn:
                 return await conn.fetchrow(query, *args)
-        # SQLite fallback
+        # SQLite fallback — run in thread pool to avoid blocking the event loop
         conn = get_sqlite_conn()
         if conn is None:
             return None
-        cursor = conn.execute(query, args)
-        row = cursor.fetchone()
-        if row is None:
-            return None
-        return dict(row)
+
+        def _sync_fetchrow():
+            cursor = conn.execute(query, args)
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return dict(row)
+
+        return await asyncio.to_thread(_sync_fetchrow)
 
     async def _fetch(self, query: str, *args) -> list:
         pool = await get_pool()
         if pool is not None:
             async with pool.acquire() as conn:
                 return await conn.fetch(query, *args)
-        # SQLite fallback
+        # SQLite fallback — run in thread pool to avoid blocking the event loop
         conn = get_sqlite_conn()
         if conn is None:
             return []
-        cursor = conn.execute(query, args)
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+
+        def _sync_fetch():
+            cursor = conn.execute(query, args)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
+        return await asyncio.to_thread(_sync_fetch)
 
     async def _execute(self, query: str, *args) -> None:
         pool = await get_pool()
@@ -80,11 +89,15 @@ class BaseRepository:
             async with pool.acquire() as conn:
                 await conn.execute(query, *args)
             return
-        # SQLite fallback
+        # SQLite fallback — run in thread pool to avoid blocking the event loop
         conn = get_sqlite_conn()
         if conn is not None:
-            conn.execute(query, args)
-            conn.commit()
+
+            def _sync_execute():
+                conn.execute(query, args)
+                conn.commit()
+
+            await asyncio.to_thread(_sync_execute)
 
     async def create(self, data: dict) -> dict:
         record_id = self._generate_id()
@@ -102,21 +115,23 @@ class BaseRepository:
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(query, *values)
                 return dict(row)
-        # SQLite fallback
+        # SQLite fallback — run in thread pool to avoid blocking the event loop
         conn = get_sqlite_conn()
         if conn is not None:
-            placeholders_sql = ["?" for _ in columns]
-            query_sql = f"""
-                INSERT INTO {self.table_name} ({', '.join(columns)})
-                VALUES ({', '.join(placeholders_sql)})
-            """
-            conn.execute(query_sql, values)
-            conn.commit()
-            cursor = conn.execute(
-                f"SELECT * FROM {self.table_name} WHERE id = ?", (record_id,)
-            )
-            row = cursor.fetchone()
-            return dict(row) if row else data
+            def _sync_create():
+                placeholders_sql = ["?" for _ in columns]
+                query_sql = f"""
+                    INSERT INTO {self.table_name} ({', '.join(columns)})
+                    VALUES ({', '.join(placeholders_sql)})
+                """
+                conn.execute(query_sql, values)
+                conn.commit()
+                cursor = conn.execute(
+                    f"SELECT * FROM {self.table_name} WHERE id = ?", (record_id,)
+                )
+                row = cursor.fetchone()
+                return dict(row) if row else data
+            return await asyncio.to_thread(_sync_create)
         return data
 
     async def get_by_id(self, id: str) -> Optional[dict]:
@@ -171,17 +186,19 @@ class BaseRepository:
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(query, *values)
                 return dict(row) if row else None
-        # SQLite fallback
+        # SQLite fallback — run in thread pool to avoid blocking the event loop
         conn = get_sqlite_conn()
         if conn is not None:
-            set_clause_sql = ", ".join([f"{col} = ?" for col in columns])
-            query_sql = f"""
-                UPDATE {self.table_name}
-                SET {set_clause_sql}, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """
-            conn.execute(query_sql, [self._to_json(v) for v in data.values()] + [id])
-            conn.commit()
+            def _sync_update():
+                set_clause_sql = ", ".join([f"{col} = ?" for col in columns])
+                query_sql = f"""
+                    UPDATE {self.table_name}
+                    SET {set_clause_sql}, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """
+                conn.execute(query_sql, [self._to_json(v) for v in data.values()] + [id])
+                conn.commit()
+            await asyncio.to_thread(_sync_update)
             return await self.get_by_id(id)
         return None
 
@@ -192,12 +209,14 @@ class BaseRepository:
             async with pool.acquire() as conn:
                 result = await conn.execute(query, id)
                 return "DELETE 1" in result
-        # SQLite fallback
+        # SQLite fallback — run in thread pool to avoid blocking the event loop
         conn = get_sqlite_conn()
         if conn is not None:
-            cursor = conn.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (id,))
-            conn.commit()
-            return cursor.rowcount > 0
+            def _sync_delete():
+                cursor = conn.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (id,))
+                conn.commit()
+                return cursor.rowcount > 0
+            return await asyncio.to_thread(_sync_delete)
         return False
 
     async def list_all(self, limit: int = 100) -> list[dict]:

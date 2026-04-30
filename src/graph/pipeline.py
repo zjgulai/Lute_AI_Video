@@ -45,11 +45,13 @@ import structlog
 def _wrap_node_with_error_handling(node_func, node_name: str):
     """Wrap a LangGraph node with trace_id-aware error handling.
 
-    Best-effort wrapper: logs errors, collects them in ErrorCollector,
-    appends to state["errors"], and returns a degraded state (skipping
-    the failed node's output) so the pipeline can continue rather than
-    crashing. The degraded state is merged into the original state using
-    a key prefix that LangGraph accepts without breaking the type contract.
+    P0-2: On exception, marks the pipeline as degraded via
+    ``pipeline_degraded = True``. Routing functions check this flag
+    and immediately terminate the pipeline (route to ``__end__``).
+
+    Previously the wrapper returned ``_{node_name}_degraded = True``
+    without terminating the pipeline, causing downstream nodes to
+    execute on missing/empty data and produce meaningless output.
     """
     import functools
 
@@ -57,6 +59,17 @@ def _wrap_node_with_error_handling(node_func, node_name: str):
     async def wrapper(state: VideoPipelineState) -> dict:
         logger = structlog.get_logger()
         trace_id = state.get("trace_id", "unknown")
+
+        # P0-2: If a prior node already degraded the pipeline, do not execute
+        if state.get("pipeline_degraded"):
+            logger.warning(
+                "pipeline_node_skipped",
+                trace_id=trace_id,
+                node=node_name,
+                reason="pipeline_already_degraded",
+            )
+            return {}
+
         try:
             return await node_func(state)
         except Exception as exc:
@@ -75,12 +88,12 @@ def _wrap_node_with_error_handling(node_func, node_name: str):
                 error=str(exc),
                 context={"node": node_name, "trace_id": trace_id},
             )
-            # -- Degraded state: do NOT re-raise, allow pipeline to continue --
+            # P0-2: Mark pipeline degraded so routing functions terminate
             errors = list(state.get("errors", []))
             errors.append(error_msg)
             return {
                 "errors": errors,
-                f"_{node_name}_degraded": True,
+                "pipeline_degraded": True,
             }
 
     return wrapper
@@ -250,11 +263,21 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
                     db_url=db_url.split("@")[-1] if "@" in db_url else "local",
                 )
             except Exception as e:
-                log.warning(
-                    "pipeline: PostgresSaver failed, falling back to MemorySaver",
+                # P1-2: When db_url is explicitly provided, do NOT silently fall back
+                # to MemorySaver. Production relies on persistence; a failed connection
+                # means the deployment is misconfigured and should fail fast.
+                log.error(
+                    "pipeline: PostgresSaver connection failed and db_url was "
+                    "explicitly set. Refusing to fall back to MemorySaver "
+                    "(would lose all state on restart). Fix the connection or "
+                    "omit db_url to use in-memory mode intentionally.",
                     error=str(e),
                 )
-                checkpointer = MemorySaver(serde=serializer)
+                raise RuntimeError(
+                    f"PostgreSQL connection failed ({e}). "
+                    "Pipeline persistence is required in production. "
+                    "Check SUPABASE_DB_URL / DATABASE_URL configuration."
+                ) from e
         else:
             checkpointer = MemorySaver(serde=serializer)
 

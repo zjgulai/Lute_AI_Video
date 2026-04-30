@@ -33,7 +33,7 @@ _HUMAN_REVIEW_OVERRIDE: contextvars.ContextVar[dict] = contextvars.ContextVar(
 
 def _get_override(checkpoint_key: str) -> dict | None:
     """Read the D10 routing override for a checkpoint (thread-safe)."""
-    return _get_override().get(checkpoint_key)
+    return _HUMAN_REVIEW_OVERRIDE.get().get(checkpoint_key)
 
 
 def _set_override(checkpoint_key: str, value: dict) -> None:
@@ -130,6 +130,17 @@ def _audit_guard(state: VideoPipelineState, checkpoint_key: str) -> str | None:
     return None
 
 
+def _degraded_guard(state: VideoPipelineState) -> str | None:
+    """P0-2: If any upstream node failed, terminate the pipeline immediately.
+
+    Returns '__end__' if pipeline_degraded is set, None otherwise.
+    Must be checked FIRST in every routing function before any other logic.
+    """
+    if state.get("pipeline_degraded"):
+        return "__end__"
+    return None
+
+
 def _get_compliance_status(report) -> str | None:
     """Extract compliance status from either dict or Pydantic model."""
     if report is None:
@@ -145,11 +156,17 @@ def route_after_strategy(state: VideoPipelineState) -> str:
     """After strategy produces briefs: human review FIRST, then audit.
 
     Priority order:
+      0. Degraded guard: upstream node failed -> terminate
       1. Human review: explicit rejection or changes-requested overrides auto-approve
       2. Retry guard: exhausted retries -> force-approve
       3. Audit-driven: high score -> auto-approve, low score -> reject, middle -> re-loop
       4. Default: re-loop to strategy_node
     """
+    # P0-2: Terminate if any upstream node failed
+    degraded = _degraded_guard(state)
+    if degraded:
+        return degraded
+
     # D10: Check global routing override first (bypasses checkpoint recovery issue)
     d10_override = _get_override("strategy")
     if d10_override:
@@ -190,11 +207,17 @@ def route_after_script(state: VideoPipelineState) -> str:
     """After script: human review FIRST, then audit.
 
     Priority order:
+      0. Degraded guard: upstream node failed -> terminate
       1. Global routing override (D10)
       2. Human review: explicit user action overrides auto decisions
       3. Retry guard: exhausted retries -> force-approve
       4. Audit-driven: high score -> auto-approve, low score -> reject, middle -> re-loop
     """
+    # P0-2: Terminate if any upstream node failed
+    degraded = _degraded_guard(state)
+    if degraded:
+        return degraded
+
     # D10: Check global routing override first
     d10_override = _get_override("script")
     if d10_override:
@@ -232,6 +255,11 @@ def route_after_script(state: VideoPipelineState) -> str:
 
 def route_after_compliance(state: VideoPipelineState) -> str:
     """Check compliance results: proceed or halt."""
+    # P0-2: Terminate if any upstream node failed
+    degraded = _degraded_guard(state)
+    if degraded:
+        return degraded
+
     reports = state.get("compliance_reports", [])
     if not reports:
         return "storyboard_node"
@@ -245,6 +273,11 @@ def route_after_compliance(state: VideoPipelineState) -> str:
 
 def route_after_asset_sourcing(state: VideoPipelineState) -> str:
     """If gaps exist -> AI generation, else skip to editing."""
+    # P0-2: Terminate if any upstream node failed
+    degraded = _degraded_guard(state)
+    if degraded:
+        return degraded
+
     asset_plans = state.get("asset_plans", [])
     has_gaps = False
     for plan in asset_plans:
@@ -261,10 +294,16 @@ def route_after_editing(state: VideoPipelineState) -> str:
     """After editing: human review FIRST, then audit.
 
     Priority order:
+      0. Degraded guard: upstream node failed -> terminate
       1. Human review: explicit user action overrides auto decisions
       2. Retry guard: exhausted retries -> force-approve
       3. Audit-driven: high score -> auto-approve, low score -> reject, middle -> re-loop
     """
+    # P0-2: Terminate if any upstream node failed
+    degraded = _degraded_guard(state)
+    if degraded:
+        return degraded
+
     # D10: Check global routing override first
     d10_override = _get_override("edit")
     if d10_override:
@@ -304,10 +343,16 @@ def route_after_thumbnail(state: VideoPipelineState) -> str:
     """After thumbnails: human review FIRST, then audit.
 
     Priority order:
+      0. Degraded guard: upstream node failed -> terminate
       1. Human review: explicit user action overrides auto decisions
       2. Retry guard: exhausted retries -> force-approve
       3. Audit-driven: high score -> auto-approve, low score -> reject, middle -> re-loop
     """
+    # P0-2: Terminate if any upstream node failed
+    degraded = _degraded_guard(state)
+    if degraded:
+        return degraded
+
     # D10: Check global routing override first
     d10_override = _get_override("thumbnail")
     if d10_override:

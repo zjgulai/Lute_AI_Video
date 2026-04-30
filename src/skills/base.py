@@ -88,6 +88,10 @@ class SkillCallable(ABC):
 
         Must return a SkillResult with success=True and valid data.
         No external calls (LLM, API, network) allowed in fallback.
+
+        P0-3: safe_execute marks the returned SkillResult with
+        metadata["is_fallback"] = True so callers can distinguish
+        real success from degraded fallback data.
         """
         ...
 
@@ -151,4 +155,8 @@ class SkillCallable(ABC):
         fallback_result.metadata["latency_seconds"] = time.time() - start_time
         fallback_result.metadata["retries"] = self.max_retries
         fallback_result.metadata["fallback_reason"] = last_error
+        # P0-3: Explicitly mark fallback so callers can distinguish real
+        # success from degraded data. Previously this was indistinguishable
+        # from a genuine success, causing silent production of stub videos.
+        fallback_result.metadata["is_fallback"] = True
         return fallback_result

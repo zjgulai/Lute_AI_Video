@@ -10,10 +10,12 @@ Graceful fallback to mock when external tools unavailable.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
@@ -33,6 +35,10 @@ class VideoDownloadError(Exception):
 
 class TranscriptionError(Exception):
     """Raised when transcription fails."""
+
+
+class UnsafeUrlError(Exception):
+    """Raised when a URL points to a private/internal address."""
 
 
 class TranscribeSegment(BaseModel):
@@ -79,6 +85,12 @@ class VideoDownloader:
         Returns:
             VideoMetadata with local_path pointing to downloaded file.
         """
+        try:
+            self._validate_url(url)
+        except UnsafeUrlError as exc:
+            logger.error("video_downloader: unsafe URL rejected", url=url, error=str(exc))
+            return self._mock_metadata(url)
+
         if not self._ytdlp_available:
             logger.warning("video_downloader: yt-dlp not available, using mock")
             return self._mock_metadata(url)
@@ -256,3 +268,31 @@ class VideoDownloader:
             return result.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
+
+    def _validate_url(self, url: str) -> None:
+        """Validate that the URL is safe to pass to yt-dlp.
+
+        Rejects:
+          - Non-http(s) protocols (file://, ftp://, etc.)
+          - Private / loopback / link-local IP addresses
+          - URLs without a hostname
+
+        Raises:
+            UnsafeUrlError: If the URL is deemed unsafe.
+        """
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise UnsafeUrlError(f"URL scheme '{parsed.scheme}' is not allowed")
+        if not parsed.hostname:
+            raise UnsafeUrlError("URL has no hostname")
+
+        hostname = parsed.hostname
+        # Check for IP-based URLs
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                raise UnsafeUrlError(f"URL resolves to a private/internal IP: {hostname}")
+        except ValueError:
+            # Not an IP address — assume DNS name; allow public domains.
+            # If needed, A-record resolution could be added here in the future.
+            pass

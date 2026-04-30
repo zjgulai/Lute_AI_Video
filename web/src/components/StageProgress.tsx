@@ -103,11 +103,17 @@ export default function StageProgress({ label, onComplete }: Props) {
   const { t } = useI18n();
   const [steps, setSteps] = useState<Record<string, any>>({});
   const [elapsed, setElapsed] = useState(0);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedRef = useRef(false);
+
+  // P1-6: Exponential backoff for polling — prevents request storms during backend issues
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failureCountRef = useRef(0);
-  const POLL_FAILURE_THRESHOLD = 15;
+  const POLL_FAILURE_THRESHOLD = 10;          // Stop after 10 consecutive failures
+  const POLL_BASE_INTERVAL_MS = 2000;         // Start at 2s
+  const POLL_MAX_INTERVAL_MS = 30000;         // Cap at 30s
+  const [pollError, setPollError] = useState<string | null>(null);
+
   const [prevComplete, setPrevComplete] = useState<boolean[]>([false, false, false]);
   const [celebrations, setCelebrations] = useState<boolean[]>([false, false, false]);
 
@@ -143,11 +149,15 @@ export default function StageProgress({ label, onComplete }: Props) {
     };
   }, []);
 
-  // Polling for state
+  // P1-6: Polling with exponential backoff — prevents request storms on backend issues
   const poll = useCallback(async () => {
+    // Don't poll if already complete or stopped
+    if (completedRef.current || pollError) return;
+
     try {
       const data = await fetchS1State(label);
       failureCountRef.current = 0; // Reset on success
+      setPollError(null);
       const newSteps = data?.steps || data?.state?.steps || {};
       setSteps(newSteps);
 
@@ -159,26 +169,35 @@ export default function StageProgress({ label, onComplete }: Props) {
       );
       if (allDone && !completedRef.current) {
         completedRef.current = true;
-        if (pollingRef.current) clearInterval(pollingRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         if (timerRef.current) clearInterval(timerRef.current);
-        // Brief delay so the user sees the completion animation
         setTimeout(() => onComplete(data), 1500);
+        return;
       }
     } catch {
       failureCountRef.current += 1;
       if (failureCountRef.current >= POLL_FAILURE_THRESHOLD) {
-        console.error("StageProgress: polling failed after %d consecutive attempts", failureCountRef.current);
-        // Don't stop polling — just log. The user sees elapsed time continuing.
+        setPollError(t("stage.pollingError") || "Connection lost. Please refresh to retry.");
+        return; // Stop polling — error state displayed to user
       }
     }
-  }, [label, onComplete]);
+
+    // Schedule next poll with exponential backoff: 2s → 4s → 8s → ... → 30s cap
+    const backoffMs = Math.min(
+      POLL_BASE_INTERVAL_MS * Math.pow(2, failureCountRef.current),
+      POLL_MAX_INTERVAL_MS
+    );
+    timeoutRef.current = setTimeout(poll, backoffMs);
+  }, [label, onComplete, pollError, t]);
 
   useEffect(() => {
-    pollingRef.current = setInterval(poll, 2000);
+    // Start first poll immediately
+    timeoutRef.current = setTimeout(poll, POLL_BASE_INTERVAL_MS);
     return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [poll]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const formatTime = (seconds: number): string => {
     const m = Math.floor(seconds / 60);
@@ -233,7 +252,7 @@ export default function StageProgress({ label, onComplete }: Props) {
       {/* Full completion celebration razzle */}
       {allComplete && (
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute inset-0 bg-gradient-to-b from-[#7CB342]/5 via-transparent to-transparent animate-pulse" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#6A2B3A]/5 via-transparent to-transparent animate-pulse" />
         </div>
       )}
 
@@ -245,8 +264,8 @@ export default function StageProgress({ label, onComplete }: Props) {
             <div
               className={`absolute inset-0 rounded-full transition-all duration-1000 ${
                 allComplete
-                  ? "bg-[#7CB342]"
-                  : "bg-[#7CB342]"
+                  ? "bg-[#6A2B3A]"
+                  : "bg-[#6A2B3A]"
               }`}
               style={{
                 animation: allComplete
@@ -258,17 +277,17 @@ export default function StageProgress({ label, onComplete }: Props) {
             />
             {stageStates[activeStageIdx]?.anyStarted && !allComplete && (
               <div
-                className="absolute inset-0 rounded-full bg-[#7CB342]/30"
+                className="absolute inset-0 rounded-full bg-[#6A2B3A]/30"
                 style={{ animation: "stageRipple 2s ease-out infinite" }}
               />
             )}
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[#1d1d1f] leading-tight">
+            <h3 className="text-sm font-semibold text-[#35353B] leading-tight">
               {allComplete ? t("pipeline.allDone") : t("mode.smartCreate")}
             </h3>
             {!allComplete && (
-              <p className="text-[10px] text-[#aeaeb2] leading-tight">
+              <p className="text-[11px] text-[#9FA0A0] leading-tight">
                 {totalProgress}% &middot; {stageStates.filter((s) => s.allDone).length}/{STAGES.length} {t("step.items")}
               </p>
             )}
@@ -276,10 +295,10 @@ export default function StageProgress({ label, onComplete }: Props) {
         </div>
         {/* Elapsed counter */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-widest text-[#aeaeb2] font-medium">
+          <span className="text-[11px] uppercase tracking-widest text-[#9FA0A0] font-medium">
             {allComplete ? t("stage.export") : t("stage.elapsed")}
           </span>
-          <span className="text-sm font-mono font-semibold text-[#1d1d1f] tabular-nums">
+          <span className="text-sm font-mono font-semibold text-[#35353B] tabular-nums">
             {formatTime(elapsed)}
           </span>
         </div>
@@ -288,14 +307,14 @@ export default function StageProgress({ label, onComplete }: Props) {
       {/* Animated pipeline — fills as stages complete */}
       <div className="relative">
         {/* Pipeline track */}
-        <div className="absolute left-[11px] top-3 bottom-3 w-1 rounded-full bg-[#e8e8ed]" />
+        <div className="absolute left-[11px] top-3 bottom-3 w-1 rounded-full bg-[#EDD3D1]" />
 
         {/* Pipeline fill — animated gradient */}
         <div
           className="absolute left-[11px] top-3 w-1 rounded-full transition-all duration-1000 ease-out"
           style={{
             height: `${allComplete ? 100 : Math.min((totalDone / totalSteps) * 100, 100)}%`,
-            background: "linear-gradient(to bottom, #7CB342, #5B8DEF)",
+            background: "linear-gradient(to bottom, #6A2B3A, #7A96BB)",
             opacity: totalDone > 0 ? 1 : 0,
           }}
         />
@@ -316,10 +335,10 @@ export default function StageProgress({ label, onComplete }: Props) {
                   <div
                     className={`w-[7px] h-[7px] rounded-full transition-all duration-500 ${
                       isComplete
-                        ? "bg-[#7CB342] shadow-[0_0_6px_rgba(124,179,66,0.4)]"
+                        ? "bg-[#6A2B3A] shadow-[0_0_6px_rgba(124,179,66,0.4)]"
                         : isActive
-                        ? "bg-[#7CB342]"
-                        : "bg-[#e8e8ed]"
+                        ? "bg-[#6A2B3A]"
+                        : "bg-[#EDD3D1]"
                     } ${
                       celebrating ? "animate-[stagePop_0.5s_ease-out]" : ""
                     }`}
@@ -327,7 +346,7 @@ export default function StageProgress({ label, onComplete }: Props) {
                   {/* Celebration ripple */}
                   {celebrating && (
                     <div
-                      className="absolute inset-0 rounded-full bg-[#7CB342]/40"
+                      className="absolute inset-0 rounded-full bg-[#6A2B3A]/40"
                       style={{
                         animation: "stageRipple 0.8s ease-out forwards",
                         transform: "scale(1)",
@@ -354,10 +373,10 @@ export default function StageProgress({ label, onComplete }: Props) {
                     <span
                       className={`text-[13px] font-medium transition-colors duration-500 ${
                         isComplete
-                          ? "text-[#1d1d1f]"
+                          ? "text-[#35353B]"
                           : isActive
-                          ? "text-[#7CB342]"
-                          : "text-[#aeaeb2]"
+                          ? "text-[#6A2B3A]"
+                          : "text-[#9FA0A0]"
                       }`}
                     >
                       {t(stage.label)}
@@ -373,7 +392,7 @@ export default function StageProgress({ label, onComplete }: Props) {
                       >
                         <path
                           d="M3 7.5L5.5 10L11 4"
-                          stroke="#7CB342"
+                          stroke="#6A2B3A"
                           strokeWidth="1.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -386,7 +405,7 @@ export default function StageProgress({ label, onComplete }: Props) {
                   <div className="ml-0 space-y-1.5">
                     {/* Completed */}
                     {isComplete && !isActive && (
-                      <p className="text-[11px] text-[#86868b] italic">
+                      <p className="text-[11px] text-[#59585E] italic">
                         {stage.steps.filter((s) => steps[s]?.status === "done").length} {t("step.items")} &middot;{" "}
                         {t("stage.completed")}
                       </p>
@@ -395,23 +414,23 @@ export default function StageProgress({ label, onComplete }: Props) {
                     {/* Active — breathing progress */}
                     {isActive && (
                       <>
-                        <p className="text-[11px] text-[#86868b]">{statusText}</p>
-                        <div className="h-1.5 w-full bg-[#f5f5f7] rounded-full overflow-hidden">
+                        <p className="text-[11px] text-[#59585E]">{statusText}</p>
+                        <div className="h-1.5 w-full bg-[#FCE4E2] rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all duration-1000 ease-out"
                             style={{
                               width: `${progress}%`,
                               background:
                                 stage.id === "writing"
-                                  ? "linear-gradient(to right, #C8A96E, #7CB342)"
+                                  ? "linear-gradient(to right, #C8A96E, #6A2B3A)"
                                   : stage.id === "visuals"
-                                  ? "linear-gradient(to right, #7CB342, #5B8DEF)"
-                                  : "linear-gradient(to right, #5B8DEF, #7C3AED)",
+                                  ? "linear-gradient(to right, #6A2B3A, #7A96BB)"
+                                  : "linear-gradient(to right, #7A96BB, #6A2B3A)",
                             }}
                           />
                         </div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-[#aeaeb2]">
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-[#9FA0A0]">
                             {stage.steps.filter((s) => steps[s]?.status === "done").length}/{stage.steps.length}
                           </span>
                           <span
@@ -421,8 +440,8 @@ export default function StageProgress({ label, onComplete }: Props) {
                                 stage.id === "writing"
                                   ? "#C8A96E"
                                   : stage.id === "visuals"
-                                  ? "#5B8DEF"
-                                  : "#7C3AED",
+                                  ? "#7A96BB"
+                                  : "#6A2B3A",
                             }}
                           >
                             {progress}%
@@ -433,7 +452,7 @@ export default function StageProgress({ label, onComplete }: Props) {
 
                     {/* Waiting */}
                     {isWaiting && (
-                      <p className="text-[11px] text-[#aeaeb2] italic">{t("stage.waiting")}</p>
+                      <p className="text-[11px] text-[#9FA0A0] italic">{t("stage.waiting")}</p>
                     )}
                   </div>
                 </div>
@@ -444,21 +463,34 @@ export default function StageProgress({ label, onComplete }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-3 border-t border-[#e8e8ed]">
-        <span className="text-[10px] text-[#aeaeb2]">
+      <div className="flex items-center justify-between pt-3 border-t border-[#EDD3D1]">
+        <span className="text-[11px] text-[#9FA0A0]">
           {t("stage.elapsed")}: {formatTime(elapsed)}
         </span>
-        {estimatedRemaining !== null && !allComplete && (
-          <span className="text-[10px] text-[#86868b]">
+        {estimatedRemaining !== null && !allComplete && !pollError && (
+          <span className="text-[11px] text-[#59585E]">
             {t("stage.estimatedTime")}: ~{formatTime(estimatedRemaining)}
           </span>
         )}
         {allComplete && (
-          <span className="text-[10px] font-medium text-[#7CB342]">
+          <span className="text-[11px] font-medium text-[#6A2B3A]">
             {t("pipeline.allDone")} &middot; {formatTime(elapsed)}
           </span>
         )}
       </div>
+
+      {/* P1-6: Error banner — shown when polling exceeds failure threshold */}
+      {pollError && (
+        <div className="mt-3 p-2.5 rounded-lg bg-red-50 border border-red-200">
+          <p className="text-[11px] text-red-700 flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
+              <circle cx="6" cy="6" r="5.5" stroke="currentColor" />
+              <path d="M6 3.5v3M6 8v.5" stroke="currentColor" strokeLinecap="round" />
+            </svg>
+            {pollError}
+          </p>
+        </div>
+      )}
 
       {/* Inline CSS keyframes — scoped to this component via unique names */}
       <style jsx>{`
@@ -493,7 +525,7 @@ function StageIcon({
   complete: boolean;
   celebrating: boolean;
 }) {
-  const color = complete ? "#7CB342" : active ? "#7CB342" : "#aeaeb2";
+  const color = complete ? "#6A2B3A" : active ? "#6A2B3A" : "#9FA0A0";
   const size = 16;
 
   // Writing stage: quill pen — bobs when active
