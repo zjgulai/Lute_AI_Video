@@ -136,24 +136,24 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
         {/* Scenario Picker */}
         <div className="apple-card p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">{t("scene.contentScenario")}</h3>
+            <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("scene.contentScenario")}</h3>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => onModeChange?.("step_by_step")}
-                className={`text-[9px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
+                className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
                   pipelineMode === "step_by_step"
-                    ? "bg-[#7CB342] text-white"
-                    : "bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]"
+                    ? "bg-[#6A2B3A] text-white"
+                    : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
                 }`}
               >
                 {t("pipeline.stepByStep")}
               </button>
               <button
                 onClick={() => onModeChange?.("auto")}
-                className={`text-[9px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
+                className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
                   pipelineMode === "auto"
-                    ? "bg-[#7CB342] text-white"
-                    : "bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]"
+                    ? "bg-[#6A2B3A] text-white"
+                    : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
                 }`}
               >
                 {t("pipeline.auto")}
@@ -169,15 +169,15 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   onClick={() => setSelectedScenario(s.id)}
                   className={`text-left p-2 rounded-lg border transition-all cursor-pointer ${
                     active
-                      ? "border-[#7CB342] bg-[#7CB342]/5 ring-1 ring-[#7CB342]/20"
-                      : "border-[#e8e8ed] bg-white hover:border-[#d2d2d7]"
+                      ? "border-[#6A2B3A] bg-[#6A2B3A]/5 ring-1 ring-[#6A2B3A]/20"
+                      : "border-[#EDD3D1] bg-white hover:border-[#D9A8A3]"
                   }`}
                 >
-                  {React.createElement(SCENE_ICON_MAP[s.id] || Package, { size: 24, strokeWidth: 1.5, className: "block mb-0.5 text-[#7CB342]" })}
-                  <span className={`text-[11px] font-semibold block ${active ? "text-[#7CB342]" : "text-[#1d1d1f]"}`}>
+                  {React.createElement(SCENE_ICON_MAP[s.id] || Package, { size: 24, strokeWidth: 1.5, className: "block mb-0.5 text-[#6A2B3A]" })}
+                  <span className={`text-[11px] font-semibold block ${active ? "text-[#6A2B3A]" : "text-[#35353B]"}`}>
                     {t(`scene.${s.id}.title`)}
                   </span>
-                  <span className="text-[9px] text-[#aeaeb2] mt-0.5 block leading-tight line-clamp-2">
+                  <span className="text-[11px] text-[#9FA0A0] mt-0.5 block leading-tight line-clamp-2">
                     {t(`scene.${s.id}.desc`)}
                   </span>
                 </button>
@@ -188,9 +188,9 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
 
         {/* Product Config */}
         <div className="apple-card p-3 space-y-2">
-          <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">{t("product.title")}</h3>
+          <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("product.title")}</h3>
           <div>
-            <label className="block text-[11px] font-medium text-[#86868b] mb-1">
+            <label className="block text-[11px] font-medium text-[#59585E] mb-1">
               {t("product.nameRequired")}
             </label>
             <input
@@ -202,7 +202,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-[#86868b] mb-1">{t("product.usps")}</label>
+            <label className="block text-[11px] font-medium text-[#59585E] mb-1">{t("product.usps")}</label>
             <textarea
               value={uspsStr}
               onChange={(e) => setUspsStr(e.target.value)}
@@ -210,10 +210,10 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
               className="apple-input resize-none text-sm"
               rows={2}
             />
-            <p className="text-[10px] text-[#aeaeb2] mt-0.5">{t("product.uspHint")}</p>
+            <p className="text-[11px] text-[#9FA0A0] mt-0.5">{t("product.uspHint")}</p>
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-[#86868b] mb-1">{t("product.brandName")}</label>
+            <label className="block text-[11px] font-medium text-[#59585E] mb-1">{t("product.brandName")}</label>
             <input
               type="text" value={brandName}
               onChange={(e) => setBrandName(e.target.value)}
@@ -222,7 +222,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
           </div>
           {(selectedScenario === "product_direct" || selectedScenario === "live_shoot_to_video") && (
             <div>
-              <label className="block text-[11px] font-medium text-[#86868b] mb-1">{t("workflow.duration")}</label>
+              <label className="block text-[11px] font-medium text-[#59585E] mb-1">{t("workflow.duration")}</label>
               <div className="flex gap-1.5">
                 {[5, 7, 10].map((duration) => (
                   <button
@@ -241,9 +241,9 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
         {/* Asset Upload */}
         <div className="apple-card p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">{t("upload.title")}</h3>
+            <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("upload.title")}</h3>
             {uploadedAssets.length > 0 && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#7CB342]/10 text-[#7CB342]">
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A]">
                 {uploadedAssets.length}{t("upload.count")}
               </span>
             )}
@@ -253,7 +253,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
 
         {/* Platform Chips */}
         <div className="apple-card p-3 space-y-2">
-          <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">{t("distPlatform")}</h3>
+          <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("distPlatform")}</h3>
           <div className="flex flex-wrap gap-1.5">
             {Object.keys(PLATFORM_LABELS).map((id) => {
               const active = selectedPlatforms.includes(id);
@@ -298,7 +298,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             </>
           )}
         </button>
-        <p className="text-[10px] text-[#aeaeb2]">
+        <p className="text-[11px] text-[#9FA0A0]">
           {pipelineMode === "step_by_step"
             ? t("pipeline.stepByStepHint")
             : t("pipeline.autoHint")}
@@ -310,27 +310,27 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
         {/* Active scenario highlight */}
         {scenario && (
           <>
-            <div className="flex items-center gap-3 pb-3 border-b border-[#e8e8ed]">
-              <span className="w-9 h-9 rounded-xl bg-[#7CB342]/5 text-[#7CB342] flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-3 pb-3 border-b border-[#EDD3D1]">
+              <span className="w-9 h-9 rounded-xl bg-[#6A2B3A]/5 text-[#6A2B3A] flex items-center justify-center shrink-0">
                 {React.createElement(SCENE_ICON_MAP[scenario.id] || Package, { size: 20, strokeWidth: 1.5 })}
               </span>
               <div>
-                <h2 className="text-base font-semibold text-[#1d1d1f]">{t(`scene.${scenario.id}.title`)}</h2>
-                <p className="text-xs text-[#7CB342] font-medium">{scenario.id === "influencer_remix" ? t("scene.defaultScenario") : t("scene.manualSelect")}</p>
+                <h2 className="text-base font-semibold text-[#35353B]">{t(`scene.${scenario.id}.title`)}</h2>
+                <p className="text-xs text-[#6A2B3A] font-medium">{scenario.id === "influencer_remix" ? t("scene.defaultScenario") : t("scene.manualSelect")}</p>
               </div>
             </div>
 
             <div className="space-y-3">
               <div>
-                <h4 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">{t("scene.description")}</h4>
-                <p className="text-xs text-[#1d1d1f] leading-relaxed">{detailDesc}</p>
+                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1">{t("scene.description")}</h4>
+                <p className="text-xs text-[#35353B] leading-relaxed">{detailDesc}</p>
               </div>
 
               <div>
-                <h4 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">{t("scene.recommendedPlatforms")}</h4>
+                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1">{t("scene.recommendedPlatforms")}</h4>
                 <div className="flex flex-wrap gap-1.5">
                   {scenario.platforms.map((p: string) => (
-                    <span key={p} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#7CB342]/5 text-[#7CB342] border border-[#7CB342]/15">
+                    <span key={p} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#6A2B3A]/5 text-[#6A2B3A] border border-[#6A2B3A]/15">
                       {React.createElement(PLATFORM_ICON_MAP[p] || ShoppingBag, { size: 12, strokeWidth: 1.5 })}
                       {t("platform." + p)}
                     </span>
@@ -339,13 +339,13 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
               </div>
 
               <div>
-                <h4 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">{t("scene.typicalFlow")}</h4>
-                <div className="flex items-center gap-1.5 text-[11px] text-[#86868b]">
+                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1">{t("scene.typicalFlow")}</h4>
+                <div className="flex items-center gap-1.5 text-[11px] text-[#59585E]">
                   {detailExample.split("→").map((step, i) => (
                     <span key={i} className="flex items-center gap-1">
-                      <span className="w-4 h-4 rounded-full bg-[#f5f5f7] flex items-center justify-center text-[9px] font-semibold text-[#aeaeb2]">{i + 1}</span>
+                      <span className="w-4 h-4 rounded-full bg-[#FCE4E2] flex items-center justify-center text-[11px] font-semibold text-[#9FA0A0]">{i + 1}</span>
                       <span>{step.trim()}</span>
-                      {i < detailExample.split("→").length - 1 && <span className="text-[#aeaeb2]">→</span>}
+                      {i < detailExample.split("→").length - 1 && <span className="text-[#9FA0A0]">→</span>}
                     </span>
                   ))}
                 </div>
@@ -353,8 +353,8 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             </div>
 
             {/* Pipeline steps preview */}
-            <div className="pt-3 border-t border-[#e8e8ed]">
-              <h4 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-2">{t("pipeline.progress")} (16)</h4>
+            <div className="pt-3 border-t border-[#EDD3D1]">
+              <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-2">{t("pipeline.progress")} (16)</h4>
               <div className="grid grid-cols-4 gap-1">
                 {[
                   { labelKey: "pstage.strategy", key: "strategy", done: true },
@@ -375,10 +375,10 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   { labelKey: "step.allDone", key: "thumbnail", done: true },
                 ].map((step, i) => (
                   <div key={i}
-                    className={`text-center p-1 rounded-md ${step.done ? "bg-[#f5f5f7]" : "bg-[#f5f5f7]/50"}`}
+                    className={`text-center p-1 rounded-md ${step.done ? "bg-[#FCE4E2]" : "bg-[#FCE4E2]/50"}`}
                   >
-                    {React.createElement(STAGE_ICON_MAP[step.key] || Clock, { size: 16, strokeWidth: 1.5, className: "w-4 h-4 mx-auto text-[#86868b]" })}
-                    <span className={`text-[8px] font-medium ${step.done ? "text-[#86868b]" : "text-[#aeaeb2]"}`}>
+                    {React.createElement(STAGE_ICON_MAP[step.key] || Clock, { size: 16, strokeWidth: 1.5, className: "w-4 h-4 mx-auto text-[#59585E]" })}
+                    <span className={`text-[8px] font-medium ${step.done ? "text-[#59585E]" : "text-[#9FA0A0]"}`}>
                       {t(step.labelKey)}
                     </span>
                   </div>
@@ -395,20 +395,20 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
       {/* ── Floating API Key button (bottom-right corner) ── */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
         {showApiKeys && (
-          <div className="apple-card p-3 w-72 animate-scale-in shadow-xl bg-white/95 backdrop-blur-sm border border-[#e8e8ed] rounded-xl">
+          <div className="apple-card p-3 w-72 animate-scale-in shadow-xl bg-white/95 backdrop-blur-sm border border-[#EDD3D1] rounded-xl">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">{t("apikey.title")}</span>
+              <span className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("apikey.title")}</span>
               <button onClick={() => setShowApiKeys(false)}
-                className="text-[#aeaeb2] hover:text-[#1d1d1f] transition-colors cursor-pointer p-0.5">
+                className="text-[#9FA0A0] hover:text-[#35353B] transition-colors cursor-pointer p-0.5">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               </button>
             </div>
-            <p className="text-[10px] text-[#aeaeb2] mb-2">{t("apikey.hint")}</p>
+            <p className="text-[11px] text-[#9FA0A0] mb-2">{t("apikey.hint")}</p>
             <div className="space-y-1.5">
               <div>
-                <label className="block text-[10px] font-medium text-[#ff9500] mb-0.5">{t("apikey.backend")}</label>
+                <label className="block text-[11px] font-medium text-[#ff9500] mb-0.5">{t("apikey.backend")}</label>
                 <input
                   type="password"
                   value={backendApiKey}
@@ -416,31 +416,31 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   placeholder={t("apikey.backendPlaceholder")}
                   className="apple-input text-xs w-full"
                 />
-                <p className="text-[9px] text-[#aeaeb2] mt-0.5">{t("apikey.backendHint")}</p>
+                <p className="text-[11px] text-[#9FA0A0] mt-0.5">{t("apikey.backendHint")}</p>
               </div>
-              <div className="border-t border-[#e8e8ed] pt-1.5" />
+              <div className="border-t border-[#EDD3D1] pt-1.5" />
               {apiFields.map((f) => (
                 <div key={f.key}>
-                  <label className="block text-[10px] font-medium text-[#86868b] mb-0.5">{t(f.labelKey)}</label>
+                  <label className="block text-[11px] font-medium text-[#59585E] mb-0.5">{t(f.labelKey)}</label>
                   <div className="flex gap-1">
                     <input type="password" value={apiKeys[f.key] || ""}
                       onChange={(e) => setApiKeys({ ...apiKeys, [f.key]: e.target.value })}
                       placeholder={t("apikey.inputPlaceholder")} className="apple-input text-xs flex-1" />
                     {f.url && (
                       <a href={f.url} target="_blank"
-                        className="shrink-0 flex items-center px-2 text-[10px] text-[#7CB342] bg-[#7CB342]/5 rounded-lg hover:bg-[#7CB342]/10 border border-[#7CB342]/20 transition-colors no-underline whitespace-nowrap">
+                        className="shrink-0 flex items-center px-2 text-[11px] text-[#6A2B3A] bg-[#6A2B3A]/5 rounded-lg hover:bg-[#6A2B3A]/10 border border-[#6A2B3A]/20 transition-colors no-underline whitespace-nowrap">
                         {t("apikey.apply")}
                       </a>
                     )}
                   </div>
-                  {f.noteKey && <p className="text-[9px] text-[#aeaeb2] mt-0.5">{t(f.noteKey)}</p>}
+                  {f.noteKey && <p className="text-[11px] text-[#9FA0A0] mt-0.5">{t(f.noteKey)}</p>}
                 </div>
               ))}
             </div>
           </div>
         )}
         <button onClick={() => setShowApiKeys(!showApiKeys)}
-          className="w-9 h-9 rounded-full bg-[#7CB342] text-white shadow-lg hover:bg-[#5A8F2E] hover:shadow-xl active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+          className="w-9 h-9 rounded-full bg-[#6A2B3A] text-white shadow-lg hover:bg-[#4E1F2A] hover:shadow-xl active:scale-95 transition-all cursor-pointer flex items-center justify-center"
           title={t("apikey.title")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" />

@@ -20,10 +20,10 @@ export default function DurationSlider({ value, onChange }: Props) {
 
   return (
     <div className="apple-card p-3">
-      <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-2">
+      <h3 className="text-[11px] font-semibold text-[#9FA0A0] uppercase tracking-wider mb-2">
         {t("duration.label")}
       </h3>
-      <p className="text-[9px] text-[#aeaeb2] mb-2 leading-tight">
+      <p className="text-[9px] text-[#9FA0A0] mb-2 leading-tight">
         {t("duration.hint")}
       </p>
       <div className="flex gap-1.5">
@@ -39,7 +39,7 @@ export default function DurationSlider({ value, onChange }: Props) {
                 ${
                   active
                     ? "bg-gradient-to-br from-[#5B8DEF] to-[#7C3AED] text-white shadow-md scale-[1.02]"
-                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed] active:scale-95"
+                    : "bg-[#FFF0EF] text-[#35353B] hover:bg-[#EDD3D1] active:scale-95"
                 }
               `}
             >
@@ -48,7 +48,7 @@ export default function DurationSlider({ value, onChange }: Props) {
               </span>
               <span
                 className={`text-[10px] leading-tight mt-0.5 ${
-                  active ? "text-white/80" : "text-[#aeaeb2]"
+                  active ? "text-white/80" : "text-[#9FA0A0]"
                 }`}
               >
                 {t(tier.sceneKey)}

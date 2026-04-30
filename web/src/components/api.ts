@@ -128,6 +128,15 @@ export function resetApiConfig() {
   }
 }
 
+/** Build URL for GET /api/files (works with absolute dev base or production /api prefix). */
+export function getFilesListUrl(): string {
+  const base = getApiBase().replace(/\/$/, "");
+  if (base.startsWith("http")) {
+    return `${base}/api/files`;
+  }
+  return `${base}/files`;
+}
+
 // Backward-compatible constant (reads from env/localStorage at call time via getApiBase)
 export const API_BASE = getApiBase();
 
@@ -144,19 +153,21 @@ export function getHeaders(contentType = true): Record<string, string> {
 
 // ── Core pipeline APIs ──
 
-export async function startPipeline(body: any): Promise<any> {
+export async function startPipeline(body: any, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Pipeline start failed (" + res.status + ")");
   return res.json();
 }
 
-export async function fetchState(threadId: string): Promise<any> {
+export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/state", {
     headers: getHeaders(false),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Failed to fetch state (" + res.status + ")");
   return res.json();
@@ -166,28 +177,32 @@ export async function submitReview(
   threadId: string,
   reviewNode: string,
   action: string,
-  reviewerNotes: string
+  reviewerNotes: string,
+  options?: { signal?: AbortSignal }
 ): Promise<any> {
   const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/review/" + reviewNode, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ action, reviewer_notes: reviewerNotes }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Review submit failed (" + res.status + ")");
   return res.json();
 }
 
-export async function fetchDistribution(threadId: string): Promise<any> {
+export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/distribution", {
     headers: getHeaders(false),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Failed to fetch distribution info (" + res.status + ")");
   return res.json();
 }
 
-export async function fetchOutput(threadId: string): Promise<any> {
+export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/output", {
     headers: getHeaders(false),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Failed to fetch output (" + res.status + ")");
   return res.json();
@@ -195,11 +210,12 @@ export async function fetchOutput(threadId: string): Promise<any> {
 
 // ── Scenario pipelines (skill-based, no LangGraph) ──
 
-export async function runS1ProductDirect(config: any): Promise<any> {
+export async function runS1ProductDirect(config: any, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(config),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 failed: " + res.statusText);
   return res.json();
@@ -210,11 +226,12 @@ export async function runS2BrandCampaign(body: {
   target_platforms?: string[];
   target_languages?: string[];
   week?: string;
-}): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s2", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Brand campaign scenario failed (" + res.status + ")");
   return res.json();
@@ -226,11 +243,12 @@ export async function runS3InfluencerRemix(body: {
   influencer_name?: string;
   brief_id?: string;
   video_duration?: number;
-}): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s3", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Influencer remix scenario failed (" + res.status + ")");
   return res.json();
@@ -241,11 +259,12 @@ export async function runS4LiveShoot(body: {
   product_info: any;
   topic?: string;
   target_platforms?: string[];
-}): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s4", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Live shoot scenario failed (" + res.status + ")");
   return res.json();
@@ -253,59 +272,65 @@ export async function runS4LiveShoot(body: {
 
 // ── S1 Step-by-step pipeline APIs ──
 
-export async function startS1StepByStep(config: any): Promise<any> {
+export async function startS1StepByStep(config: any, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ ...config, mode: "step_by_step" }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 step-by-step start failed: " + res.statusText);
   return res.json();
 }
 
-export async function runS1Step(label: string, stepName: string): Promise<any> {
+export async function runS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s1/step/" + stepName, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 step " + stepName + " failed: " + res.statusText);
   return res.json();
 }
 
-export async function regenerateS1Step(label: string, stepName: string): Promise<any> {
+export async function regenerateS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s1/regenerate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label, step: stepName }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 regenerate " + stepName + " failed: " + res.statusText);
   return res.json();
 }
 
-export async function resumeS1(label: string): Promise<any> {
+export async function resumeS1(label: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s1/resume", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 resume failed: " + res.statusText);
   return res.json();
 }
 
-export async function fetchS1State(label: string): Promise<any> {
+export async function fetchS1State(label: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s1/state/" + label, {
     headers: getHeaders(false),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 fetch state failed (" + res.status + ")");
   return res.json();
 }
 
-export async function updateS1State(label: string, updates: any): Promise<any> {
+export async function updateS1State(label: string, updates: any, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/scenario/s1/state/" + label, {
     method: "PUT",
     headers: getHeaders(),
     body: JSON.stringify(updates),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 update state failed (" + res.status + ")");
   return res.json();
@@ -321,13 +346,14 @@ export function downloadJson(data: any, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export async function fetchAssets(): Promise<any[]> {
+export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<any[]> {
   if (isDemoMode()) {
     const { DEMO_ASSETS } = await import("@/demo-data");
     return DEMO_ASSETS;
   }
-  const res = await fetch(getApiBase() + "/api/files", {
+  const res = await fetch(getFilesListUrl(), {
     headers: getHeaders(false),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Failed to fetch assets list (" + res.status + ")");
   const data = await res.json();
@@ -336,21 +362,37 @@ export async function fetchAssets(): Promise<any[]> {
 
 export function getMediaUrl(filePath: string, forceReal: boolean = false): string {
   if (!filePath) return "";
-  const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
-  // Demo mode: serve from static public folder (skip if forceReal)
   if (!forceReal && isDemoMode()) {
+    const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
     const prefix = readEnv("NEXT_PUBLIC_ASSET_PREFIX") || "";
     return prefix + "/portfolio/" + encodeURIComponent(name);
   }
-  return getApiBase() + "/api/media/" + encodeURIComponent(name);
+  let mediaRel = filePath.replace(/\\/g, "/");
+  if (mediaRel.startsWith("/api/media/")) {
+    mediaRel = mediaRel.slice("/api/media/".length);
+  }
+  try {
+    mediaRel = decodeURIComponent(mediaRel);
+  } catch {
+    /* keep encoded segments */
+  }
+  const segments = mediaRel.split("/").filter(Boolean);
+  const encodedPath = segments.map((s) => encodeURIComponent(s)).join("/");
+  if (!encodedPath) return "";
+  const base = getApiBase().replace(/\/$/, "");
+  if (base.startsWith("http")) {
+    return `${base}/api/media/${encodedPath}`;
+  }
+  return `/api/media/${encodedPath}`;
 }
 
 // ── Connection test ──
 
-export async function testConnection(): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
+export async function testConnection(options?: { signal?: AbortSignal }): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
   try {
     const res = await fetch(getApiBase() + "/health", {
       headers: getHeaders(false),
+      signal: options?.signal,
     });
     if (!res.ok) {
       return { ok: false, status: res.status, error: "HTTP " + res.status };
@@ -362,31 +404,53 @@ export async function testConnection(): Promise<{ ok: boolean; status: number; d
   }
 }
 
+// ── S5: Brand VLOG ──
+
+export async function runS5BrandVlog(body: {
+  brand_id: string;
+  product_sku: any;
+  scene_id: string;
+  selected_models: any[];
+  story_description: string;
+  video_duration: number;
+}, options?: { signal?: AbortSignal }): Promise<any> {
+  const res = await fetch(getApiBase() + "/scenario/s5", {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new Error("Brand VLOG scenario failed (" + res.status + ")");
+  return res.json();
+}
+
 // ── Distribution publishing APIs ──
 
-export async function fetchPlatforms(): Promise<any[]> {
+export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promise<any[]> {
   const res = await fetch(getApiBase() + "/distribution/platforms", {
     headers: getHeaders(false),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Failed to fetch platform list (" + res.status + ")");
   const data = await res.json();
   return data.platforms || [];
 }
 
-export async function publishContent(platform: string, content: any): Promise<any> {
+export async function publishContent(platform: string, content: any, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ platform, content }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Publish failed (" + res.status + ")");
   return res.json();
 }
 
-export async function fetchPublishStatus(platform: string, postId: string): Promise<any> {
+export async function fetchPublishStatus(platform: string, postId: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(
     getApiBase() + "/distribution/status/" + encodeURIComponent(platform) + "/" + encodeURIComponent(postId),
-    { headers: getHeaders(false) }
+    { headers: getHeaders(false), signal: options?.signal }
   );
   if (!res.ok) throw new Error("Failed to fetch status (" + res.status + ")");
   return res.json();
@@ -394,28 +458,29 @@ export async function fetchPublishStatus(platform: string, postId: string): Prom
 
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
-export async function publishVideo(videoId: string, platforms: string[], metadata: any): Promise<any> {
+export async function publishVideo(videoId: string, platforms: string[], metadata: any, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await fetch(getApiBase() + "/publish/" + videoId, {
     method: "POST", headers: getHeaders(),
     body: JSON.stringify({ platforms, metadata }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error("Publish failed (" + res.status + ")");
   return res.json();
 }
 
-export async function fetchVideoMetrics(videoId: string, platform?: string): Promise<any> {
+export async function fetchVideoMetrics(videoId: string, platform?: string, options?: { signal?: AbortSignal }): Promise<any> {
   const params = platform ? "?platform=" + platform : "";
-  const res = await fetch(getApiBase() + "/metrics/" + videoId + params, { headers: getHeaders(false) });
+  const res = await fetch(getApiBase() + "/metrics/" + videoId + params, { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch metrics");
   return res.json();
 }
 
-export async function fetchDashboardOverview(scenario?: string, platform?: string, days?: number): Promise<any> {
+export async function fetchDashboardOverview(scenario?: string, platform?: string, days?: number, options?: { signal?: AbortSignal }): Promise<any> {
   const params = new URLSearchParams();
   if (scenario) params.set("scenario", scenario);
   if (platform) params.set("platform", platform);
   if (days) params.set("days", String(days));
-  const res = await fetch(getApiBase() + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false) });
+  const res = await fetch(getApiBase() + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch dashboard");
   return res.json();
 }
@@ -437,17 +502,19 @@ export interface FastModeResult {
   model_info: { llm: string; video: string; tts: string | null };
   is_stub: boolean;
   tts_path: string | null;
+  error?: string;
 }
 
 export async function generateFastMode(body: {
   user_prompt: string;
   duration: number;
   enable_tts: boolean;
-}): Promise<FastModeResult> {
+}, options?: { signal?: AbortSignal }): Promise<FastModeResult> {
   const res = await fetch(getApiBase() + "/fast/generate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
+    signal: options?.signal,
   });
   if (!res.ok) {
     const err = await res.text().catch(() => "Fast Mode generation failed");

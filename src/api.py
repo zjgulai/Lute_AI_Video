@@ -51,8 +51,8 @@ _pipeline = compile_pipeline()
 _active_threads: dict[str, dict[str, Any]] = {}
 
 # P2-1: Thread index persistence file — survives process restarts.
-# Each entry maps thread_id → {"configurable": {"thread_id": thread_id}}
-_THREAD_INDEX_PATH = Path(__file__).parent.parent / "output" / ".thread_index.json"
+# P1-14: Use OUTPUT_DIR (env-configurable) instead of hard-coded repo path.
+_THREAD_INDEX_PATH = OUTPUT_DIR / ".thread_index.json"
 
 import asyncio as _asyncio
 _pipeline_semaphore = _asyncio.Semaphore(10)  # P3-4: Max 10 concurrent pipelines

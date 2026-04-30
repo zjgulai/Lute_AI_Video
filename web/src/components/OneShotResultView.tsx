@@ -40,17 +40,17 @@ const SCENARIO_LABELS: Record<string, string> = {
 // Placeholder shown when media URL is empty (demo mode — no backend)
 function DemoPlaceholder({ label }: { label: string }) {
   return (
-    <div className="w-full rounded-xl bg-[#f5f5f7] border border-dashed border-[#d2d2d7] flex flex-col items-center justify-center gap-2 text-center"
+    <div className="w-full rounded-xl bg-[#FCE4E2] border border-dashed border-[#D9A8A3] flex flex-col items-center justify-center gap-2 text-center"
       style={{ minHeight: 180 }}>
-      <div className="w-10 h-10 rounded-full bg-[#e8e8ed] flex items-center justify-center">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#86868b" strokeWidth="2">
+      <div className="w-10 h-10 rounded-full bg-[#EDD3D1] flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#59585E" strokeWidth="2">
           <rect x="2" y="2" width="20" height="20" rx="2" />
           <path d="M2 12h20M12 2v20" />
         </svg>
       </div>
       <div>
-        <p className="text-xs font-medium text-[#86868b]">Demo Mode</p>
-        <p className="text-[10px] text-[#aeaeb2]">{label}</p>
+        <p className="text-xs font-medium text-[#59585E]">Demo Mode</p>
+        <p className="text-[11px] text-[#9FA0A0]">{label}</p>
       </div>
     </div>
   );
@@ -96,7 +96,7 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
       <div className="apple-card p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${success ? "bg-[#7CB342]/10 text-[#7CB342]" : "bg-[#ff453a]/10 text-[#ff453a]"}`}>
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${success ? "bg-[#6A2B3A]/10 text-[#6A2B3A]" : "bg-[#C45B50]/10 text-[#C45B50]"}`}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {success
                   ? <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
@@ -105,8 +105,8 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
               </svg>
             </div>
             <div>
-              <h2 className="text-base font-semibold text-[#1d1d1f]">{t(SCENARIO_LABELS[scenario] || scenario)} {t("result.complete")}</h2>
-              <p className="text-xs text-[#86868b] mt-0.5">
+              <h2 className="text-base font-semibold text-[#35353B]">{t(SCENARIO_LABELS[scenario] || scenario)} {t("result.complete")}</h2>
+              <p className="text-xs text-[#59585E] mt-0.5">
                 {success ? `${t("result.generated")} ${stepsCompleted || briefs.length + scripts.length + thumbnails.length} ${t("result.items")}` : t("result.error")}
               </p>
             </div>
@@ -131,7 +131,7 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-5 gap-2 mt-4 pt-3 border-t border-[#e8e8ed]">
+        <div className="grid grid-cols-5 gap-2 mt-4 pt-3 border-t border-[#EDD3D1]">
           <Stat label={t("result.tab.briefs")} value={briefs.length} />
           <Stat label={t("result.tab.scripts")} value={scripts.length} />
           <Stat label={t("result.tab.videos")} value={videoPrompts.length} />
@@ -143,20 +143,20 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
 
       {/* Tab nav */}
       <div className="apple-card overflow-hidden">
-        <div className="flex border-b border-[#e8e8ed] bg-[#fafafc]">
+        <div className="flex border-b border-[#EDD3D1] bg-[#FFF5F2]">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id as any)}
               className={`flex-1 px-3 py-2.5 text-xs font-medium transition-all border-b-2 cursor-pointer ${
                 tab === t.id
-                  ? "border-[#7CB342] text-[#7CB342] bg-white"
-                  : "border-transparent text-[#86868b] hover:text-[#1d1d1f]"
+                  ? "border-[#6A2B3A] text-[#6A2B3A] bg-white"
+                  : "border-transparent text-[#59585E] hover:text-[#35353B]"
               }`}
             >
               {t.label}
               {t.count > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] bg-[#7CB342]/10 text-[#7CB342]">
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[11px] bg-[#6A2B3A]/10 text-[#6A2B3A]">
                   {t.count}
                 </span>
               )}
@@ -168,18 +168,18 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
           {tab === "content" && (
             <div className="space-y-3">
               {/* Sub-navigation pills */}
-              <div className="flex gap-1.5 border-b border-[#e8e8ed] pb-2">
+              <div className="flex gap-1.5 border-b border-[#EDD3D1] pb-2">
                 {CONTENT_SUBTABS.map((st) => (
                   <button
                     key={st.id}
                     onClick={() => setContentSub(st.id as typeof contentSub)}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
                       contentSub === st.id
-                        ? "bg-[#7CB342]/10 text-[#7CB342]"
-                        : "text-[#86868b] hover:text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                        ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+                        : "text-[#59585E] hover:text-[#35353B] hover:bg-[#FCE4E2]"
                     }`}>
                     {st.label}
-                    {st.count > 0 && <span className="ml-1 text-[10px] opacity-60">{st.count}</span>}
+                    {st.count > 0 && <span className="ml-1 text-[11px] opacity-60">{st.count}</span>}
                   </button>
                 ))}
               </div>
@@ -207,8 +207,8 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="text-center">
-      <div className="text-lg font-semibold text-[#1d1d1f]">{value}</div>
-      <div className="text-[10px] text-[#aeaeb2] uppercase tracking-wider">{label}</div>
+      <div className="text-lg font-semibold text-[#35353B]">{value}</div>
+      <div className="text-[11px] text-[#9FA0A0] uppercase tracking-wider">{label}</div>
     </div>
   );
 }
@@ -230,23 +230,23 @@ function BriefCard({ brief, index, onEdit }: { brief: any; index: number; onEdit
   const [editing, setEditing] = useState(false);
 
   return (
-    <div className="apple-card p-3 bg-[#fafafc]">
+    <div className="apple-card p-3 bg-[#FFF5F2]">
       <div className="flex items-start gap-2 mb-1">
         {brief.platform && (
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#7CB342]/10 text-[#7CB342] shrink-0">
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A] shrink-0">
             {t("platform." + brief.platform)}
           </span>
         )}
         {brief.hook_type && (
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#86868b]/10 text-[#86868b]">
+          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#59585E]/10 text-[#59585E]">
             {brief.hook_type}
           </span>
         )}
-        <span className="text-[10px] text-[#aeaeb2] ml-auto">{brief.id || `Brief ${index + 1}`}</span>
+        <span className="text-[11px] text-[#9FA0A0] ml-auto">{brief.id || `Brief ${index + 1}`}</span>
         {onEdit && (
           <button
             onClick={() => setEditing(!editing)}
-            className="text-[10px] text-[#7CB342] hover:underline cursor-pointer px-1"
+            className="text-[11px] text-[#6A2B3A] hover:underline cursor-pointer px-1"
           >
             {editing ? t("step.cancel") : t("step.edit")}
           </button>
@@ -262,13 +262,13 @@ function BriefCard({ brief, index, onEdit }: { brief: any; index: number; onEdit
         />
       ) : (
         <>
-          <h4 className="text-sm font-semibold text-[#1d1d1f] mb-1">{brief.product_name || brief.brand_name || "Brief"}</h4>
-          {brief.description && <p className="text-xs text-[#86868b] leading-relaxed">{brief.description}</p>}
-          {brief.key_message && <p className="text-xs text-[#86868b] leading-relaxed mt-1">💡 {brief.key_message}</p>}
+          <h4 className="text-sm font-semibold text-[#35353B] mb-1">{brief.product_name || brief.brand_name || "Brief"}</h4>
+          {brief.description && <p className="text-xs text-[#59585E] leading-relaxed">{brief.description}</p>}
+          {brief.key_message && <p className="text-xs text-[#59585E] leading-relaxed mt-1">💡 {brief.key_message}</p>}
           {brief.usp_priority && brief.usp_priority.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {brief.usp_priority.map((u: string, j: number) => (
-                <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-[#f5f5f7] text-[#86868b]">{u}</span>
+                <span key={j} className="text-[11px] px-1.5 py-0.5 rounded bg-[#FCE4E2] text-[#59585E]">{u}</span>
               ))}
             </div>
           )}
@@ -297,24 +297,24 @@ function ScriptCard({ script, index, onEdit }: { script: any; index: number; onE
   return (
     <details className="apple-card overflow-hidden">
       <summary className="p-3 cursor-pointer flex items-center gap-2 list-none">
-        <span className="text-[10px] font-mono text-[#aeaeb2]">{script.id || `S${index + 1}`}</span>
-        <span className="text-sm font-medium text-[#1d1d1f] flex-1">
+        <span className="text-[11px] font-mono text-[#9FA0A0]">{script.id || `S${index + 1}`}</span>
+        <span className="text-sm font-medium text-[#35353B] flex-1">
           {script.product_name || script.brand_name || "Script"}
         </span>
-        <span className="text-[10px] text-[#aeaeb2]">{(script.segments || []).length}{t("step.segments")}</span>
+        <span className="text-[11px] text-[#9FA0A0]">{(script.segments || []).length}{t("step.segments")}</span>
         {onEdit && (
           <button
             onClick={(e) => { e.preventDefault(); setEditing(!editing); }}
-            className="text-[10px] text-[#7CB342] hover:underline cursor-pointer px-1"
+            className="text-[11px] text-[#6A2B3A] hover:underline cursor-pointer px-1"
           >
             {editing ? t("step.cancel") : t("step.edit")}
           </button>
         )}
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-          <path d="M2.5 3.5L5 6.5L7.5 3.5" stroke="#aeaeb2" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M2.5 3.5L5 6.5L7.5 3.5" stroke="#9FA0A0" strokeWidth="1.2" strokeLinecap="round" />
         </svg>
       </summary>
-      <div className="px-3 pb-3 space-y-2 border-t border-[#e8e8ed] pt-2">
+      <div className="px-3 pb-3 space-y-2 border-t border-[#EDD3D1] pt-2">
         {editing ? (
           <EditableScript
             script={script}
@@ -325,16 +325,16 @@ function ScriptCard({ script, index, onEdit }: { script: any; index: number; onE
           />
         ) : (
           (script.segments || []).map((seg: any, j: number) => (
-            <div key={j} className="pl-3 border-l-2 border-[#e8e8ed]">
+            <div key={j} className="pl-3 border-l-2 border-[#EDD3D1]">
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-semibold text-[#7CB342] uppercase">{seg.segment_type}</span>
-                <span className="text-[10px] text-[#aeaeb2] font-mono">
+                <span className="text-[11px] font-semibold text-[#6A2B3A] uppercase">{seg.segment_type}</span>
+                <span className="text-[11px] text-[#9FA0A0] font-mono">
                   {seg.start_time ?? 0}s — {seg.end_time ?? 0}s
                 </span>
               </div>
-              <p className="text-xs text-[#1d1d1f]">{seg.description || seg.voiceover}</p>
+              <p className="text-xs text-[#35353B]">{seg.description || seg.voiceover}</p>
               {seg.visual_description && (
-                <p className="text-[11px] text-[#86868b] mt-1 italic">📷 {seg.visual_description}</p>
+                <p className="text-[11px] text-[#59585E] mt-1 italic">📷 {seg.visual_description}</p>
               )}
             </div>
           ))
@@ -352,13 +352,13 @@ function VideoPromptsView({ prompts, onRegenerate }: { prompts: any[]; onRegener
       {prompts.map((p: any, i: number) => {
         const txt = typeof p.prompt === "string" ? p.prompt : (p.prompt?.seedance_prompt || JSON.stringify(p.prompt, null, 2));
         return (
-          <div key={i} className="apple-card p-3 bg-[#fafafc]">
+          <div key={i} className="apple-card p-3 bg-[#FFF5F2]">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono text-[#aeaeb2]">{p.script_id || `Prompt ${i + 1}`}</span>
+              <span className="text-[11px] font-mono text-[#9FA0A0]">{p.script_id || `Prompt ${i + 1}`}</span>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => navigator.clipboard.writeText(txt)}
-                  className="text-[10px] text-[#7CB342] hover:underline cursor-pointer"
+                  className="text-[11px] text-[#6A2B3A] hover:underline cursor-pointer"
                   title={t("result.copyPrompt")}
                 >
                   {t("result.copy")}
@@ -366,14 +366,14 @@ function VideoPromptsView({ prompts, onRegenerate }: { prompts: any[]; onRegener
                 {onRegenerate && (
                   <button
                     onClick={() => onRegenerate(i)}
-                    className="text-[10px] text-[#86868b] hover:text-[#1d1d1f] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[#e8e8ed]/50"
+                    className="text-[11px] text-[#59585E] hover:text-[#35353B] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[#EDD3D1]/50"
                   >
                     {t("step.regenerate")}
                   </button>
                 )}
               </div>
             </div>
-            <p className="text-xs text-[#1d1d1f] font-mono whitespace-pre-wrap break-words">{txt}</p>
+            <p className="text-xs text-[#35353B] font-mono whitespace-pre-wrap break-words">{txt}</p>
           </div>
         );
       })}
@@ -390,8 +390,8 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
     <div className="space-y-3">
       {/* Real generated images */}
       {hasRealImages && (
-        <div className="apple-card p-3 bg-[#fafafc]">
-          <p className="text-[10px] font-mono text-[#aeaeb2] mb-2">{t("result.thumbnails")} ({thumbImages.length})</p>
+        <div className="apple-card p-3 bg-[#FFF5F2]">
+          <p className="text-[11px] font-mono text-[#9FA0A0] mb-2">{t("result.thumbnails")} ({thumbImages.length})</p>
           <div className="grid grid-cols-2 gap-2">
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-lg overflow-hidden aspect-[9/16]">
@@ -403,8 +403,8 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-[#f5f5f7]">
-                    <span className="text-[10px] text-[#aeaeb2]">Thumbnail (Demo)</span>
+                  <div className="w-full h-full flex items-center justify-center bg-[#FCE4E2]">
+                    <span className="text-[11px] text-[#9FA0A0]">Thumbnail (Demo)</span>
                   </div>
                 )}
               </div>
@@ -420,32 +420,32 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
         sets.map((set: any, i: number) => {
           const variants = set.variants || (Array.isArray(set) ? set : [set]);
           return (
-            <div key={i} className="apple-card p-3 bg-[#fafafc]">
-              <p className="text-[10px] font-mono text-[#aeaeb2] mb-2">{set.script_id || `Set ${i + 1}`}</p>
+            <div key={i} className="apple-card p-3 bg-[#FFF5F2]">
+              <p className="text-[11px] font-mono text-[#9FA0A0] mb-2">{set.script_id || `Set ${i + 1}`}</p>
               <div className="grid grid-cols-2 gap-2">
                 {variants.map((v: any, j: number) => (
                   <div key={j} className="apple-card p-3 bg-white">
-                    <div className="bg-gradient-to-br from-[#f5f5f7] to-[#e8e8ed] rounded-lg h-24 flex items-center justify-center mb-2">
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="#aeaeb2">
+                    <div className="bg-gradient-to-br from-[#FCE4E2] to-[#EDD3D1] rounded-lg h-24 flex items-center justify-center mb-2">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="#9FA0A0">
                         <rect x="3" y="3" width="18" height="18" rx="3" />
                         <circle cx="9" cy="9" r="2" />
                         <path d="M3 15l4-3 5 4 4-3 5 4" />
                       </svg>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-semibold text-[#1d1d1f]">
+                      <div className="text-[11px] font-semibold text-[#35353B]">
                         {v.style || v.variant_id || `${t("review.variant")} ${j + 1}`}
                       </div>
                       {onRegenerate && (
                         <button
                           onClick={() => onRegenerate(j)}
-                          className="text-[10px] text-[#86868b] hover:text-[#1d1d1f] cursor-pointer px-1"
+                          className="text-[11px] text-[#59585E] hover:text-[#35353B] cursor-pointer px-1"
                         >
                           {t("step.regenerate")}
                         </button>
                       )}
                     </div>
-                    <div className="text-[10px] text-[#86868b] line-clamp-2 mt-0.5">
+                    <div className="text-[11px] text-[#59585E] line-clamp-2 mt-0.5">
                       {v.concept || v.prompt || ""}
                     </div>
                   </div>
@@ -492,21 +492,21 @@ function MediaView({
     <div className="space-y-4">
       {/* Final video */}
       {finalVideo && (
-        <div className="apple-card p-3 bg-[#fafafc]">
+        <div className="apple-card p-3 bg-[#FFF5F2]">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-[#ff453a]/10 flex items-center justify-center">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff453a" strokeWidth="2">
+              <div className="w-6 h-6 rounded-md bg-[#C45B50]/10 flex items-center justify-center">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C45B50" strokeWidth="2">
                   <polygon points="23 7 16 12 23 17 23 7" />
                   <rect x="1" y="5" width="15" height="14" rx="2" />
                 </svg>
               </div>
-              <p className="text-[11px] font-semibold text-[#1d1d1f]">{t("result.finalVideo")}</p>
+              <p className="text-[11px] font-semibold text-[#35353B]">{t("result.finalVideo")}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowPublish(true)}
-                className="apple-btn apple-btn-primary text-[10px] py-1 px-2 cursor-pointer"
+                className="apple-btn apple-btn-primary text-[11px] py-1 px-2 cursor-pointer"
               >
                 {t("perf.publishTitle")}
               </button>
@@ -514,7 +514,7 @@ function MediaView({
                 <a
                   href={getMediaUrl(finalVideo)}
                   download
-                  className="text-[10px] text-[#7CB342] hover:underline cursor-pointer"
+                  className="text-[11px] text-[#6A2B3A] hover:underline cursor-pointer"
                 >
                   {t("result.download")}
                 </a>
@@ -550,15 +550,15 @@ function MediaView({
 
       {/* Raw clips */}
       {clipPaths.length > 0 && (
-        <div className="apple-card p-3 bg-[#fafafc]">
+        <div className="apple-card p-3 bg-[#FFF5F2]">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-6 h-6 rounded-md bg-[#007aff]/10 flex items-center justify-center">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#007aff" strokeWidth="2">
+            <div className="w-6 h-6 rounded-md bg-[#6A2B3A]/10 flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6A2B3A" strokeWidth="2">
                 <polygon points="23 7 16 12 23 17 23 7" />
                 <rect x="1" y="5" width="15" height="14" rx="2" />
               </svg>
             </div>
-            <p className="text-[11px] font-semibold text-[#1d1d1f]">{t("result.mediaClips")} ({clipPaths.length})</p>
+            <p className="text-[11px] font-semibold text-[#35353B]">{t("result.mediaClips")} ({clipPaths.length})</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {clipPaths.map((p, i) => (
@@ -574,7 +574,7 @@ function MediaView({
                 ) : (
                   <DemoPlaceholder label={`Clip ${i + 1} (Demo)`} />
                 )}
-                <p className="text-[9px] text-[#aeaeb2] truncate px-1">{p.split("/").pop()}</p>
+                <p className="text-[11px] text-[#9FA0A0] truncate px-1">{p.split("/").pop()}</p>
               </div>
             ))}
           </div>
@@ -583,16 +583,16 @@ function MediaView({
 
       {/* Thumbnail images */}
       {thumbImages.length > 0 && (
-        <div className="apple-card p-3 bg-[#fafafc]">
+        <div className="apple-card p-3 bg-[#FFF5F2]">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-6 h-6 rounded-md bg-[#7CB342]/10 flex items-center justify-center">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7CB342" strokeWidth="2">
+            <div className="w-6 h-6 rounded-md bg-[#6A2B3A]/10 flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6A2B3A" strokeWidth="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </div>
-            <p className="text-[11px] font-semibold text-[#1d1d1f]">{t("result.thumbnails")} ({thumbImages.length})</p>
+            <p className="text-[11px] font-semibold text-[#35353B]">{t("result.thumbnails")} ({thumbImages.length})</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {thumbImages.map((p, i) => (
@@ -605,8 +605,8 @@ function MediaView({
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-[#f5f5f7]">
-                    <span className="text-[10px] text-[#aeaeb2]">Thumbnail (Demo)</span>
+                  <div className="w-full h-full flex items-center justify-center bg-[#FCE4E2]">
+                    <span className="text-[11px] text-[#9FA0A0]">Thumbnail (Demo)</span>
                   </div>
                 )}
                 <a
@@ -628,7 +628,7 @@ function MediaView({
 
       {/* Audio clips */}
       {audioPaths.length > 0 && (
-        <div className="apple-card p-3 bg-[#fafafc]">
+        <div className="apple-card p-3 bg-[#FFF5F2]">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-md bg-[#ff9500]/10 flex items-center justify-center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9500" strokeWidth="2">
@@ -637,11 +637,11 @@ function MediaView({
                 <circle cx="18" cy="16" r="3" />
               </svg>
             </div>
-            <p className="text-[11px] font-semibold text-[#1d1d1f]">{t("result.audioTracks")} ({audioPaths.length})</p>
+            <p className="text-[11px] font-semibold text-[#35353B]">{t("result.audioTracks")} ({audioPaths.length})</p>
           </div>
           <div className="space-y-2">
             {audioPaths.map((p, i) => (
-              <div key={i} className="flex items-center gap-2 bg-white rounded-xl p-2 border border-[#e8e8ed]">
+              <div key={i} className="flex items-center gap-2 bg-white rounded-xl p-2 border border-[#EDD3D1]">
                 <div className="w-8 h-8 rounded-lg bg-[#ff9500]/10 flex items-center justify-center shrink-0">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9500" strokeWidth="2">
                     <path d="M9 18V5l12-2v13" />
@@ -649,11 +649,11 @@ function MediaView({
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-[#1d1d1f] truncate">{p.split("/").pop()}</p>
+                  <p className="text-[11px] text-[#35353B] truncate">{p.split("/").pop()}</p>
                   {getMediaUrl(p) ? (
                     <audio src={getMediaUrl(p)} controls className="w-full h-8" />
                   ) : (
-                    <p className="text-[10px] text-[#aeaeb2] py-1">Audio preview unavailable (demo mode)</p>
+                    <p className="text-[11px] text-[#9FA0A0] py-1">Audio preview unavailable (demo mode)</p>
                   )}
                 </div>
               </div>
@@ -663,17 +663,17 @@ function MediaView({
       )}
 
       {/* Platform Distribution */}
-      <div className="apple-card p-3 bg-[#fafafc]">
+      <div className="apple-card p-3 bg-[#FFF5F2]">
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-6 h-6 rounded-md bg-[#7CB342]/10 flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7CB342" strokeWidth="2">
+          <div className="w-6 h-6 rounded-md bg-[#6A2B3A]/10 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6A2B3A" strokeWidth="2">
               <polyline points="17 1 21 5 17 9" />
               <path d="M3 11V9a4 4 0 0 1 4-4h14" />
               <polyline points="7 23 3 19 7 15" />
               <path d="M21 13v2a4 4 0 0 1-4 4H3" />
             </svg>
           </div>
-          <p className="text-[11px] font-semibold text-[#1d1d1f]">{t("result.platformDistribution")}</p>
+          <p className="text-[11px] font-semibold text-[#35353B]">{t("result.platformDistribution")}</p>
         </div>
         <div className="space-y-2">
           {targetPlatforms.map((platform) => (
@@ -684,7 +684,7 @@ function MediaView({
 
       {/* Audit report */}
       {audit && (
-        <div className="apple-card p-3 bg-[#fafafc]">
+        <div className="apple-card p-3 bg-[#FFF5F2]">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-[#5856d6]/10 flex items-center justify-center">
@@ -693,32 +693,32 @@ function MediaView({
                   <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                 </svg>
               </div>
-              <p className="text-[11px] font-semibold text-[#1d1d1f]">{t("quality.title")}</p>
+              <p className="text-[11px] font-semibold text-[#35353B]">{t("quality.title")}</p>
             </div>
             <span
-              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                 audit.overall_status === "PASS"
-                  ? "bg-[#7CB342]/10 text-[#7CB342]"
+                  ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
                   : audit.overall_status === "WARN"
                   ? "bg-[#ff9500]/10 text-[#ff9500]"
-                  : "bg-[#ff453a]/10 text-[#ff453a]"
+                  : "bg-[#C45B50]/10 text-[#C45B50]"
               }`}
             >
               {audit.overall_status} · {(audit.overall_score * 100).toFixed(0)}%
             </span>
           </div>
-          <p className="text-xs text-[#86868b] mb-2">{audit.summary}</p>
+          <p className="text-xs text-[#59585E] mb-2">{audit.summary}</p>
           <div className="space-y-1">
             {audit.criteria?.map((c, i) => (
               <div key={i} className="flex items-center gap-2 text-[11px]">
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
-                    c.status === "PASS" ? "bg-[#7CB342]" : c.status === "WARN" ? "bg-[#ff9500]" : "bg-[#ff453a]"
+                    c.status === "PASS" ? "bg-[#6A2B3A]" : c.status === "WARN" ? "bg-[#ff9500]" : "bg-[#C45B50]"
                   }`}
                 />
-                <span className="text-[#1d1d1f] flex-1">{c.name}</span>
+                <span className="text-[#35353B] flex-1">{c.name}</span>
                 <span className={`font-medium ${
-                  c.status === "PASS" ? "text-[#7CB342]" : c.status === "WARN" ? "text-[#ff9500]" : "text-[#ff453a]"
+                  c.status === "PASS" ? "text-[#6A2B3A]" : c.status === "WARN" ? "text-[#ff9500]" : "text-[#C45B50]"
                 }`}>{c.status}</span>
               </div>
             ))}
@@ -731,7 +731,7 @@ function MediaView({
 
 function RawView({ data }: { data: any }) {
   return (
-    <pre className="text-[10px] font-mono text-[#86868b] bg-[#fafafc] p-3 rounded-lg overflow-auto max-h-[400px] whitespace-pre-wrap break-all">
+    <pre className="text-[11px] font-mono text-[#59585E] bg-[#FFF5F2] p-3 rounded-lg overflow-auto max-h-[400px] whitespace-pre-wrap break-all">
       {JSON.stringify(data, null, 2)}
     </pre>
   );
@@ -764,16 +764,16 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
   };
 
   return (
-    <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-[#e8e8ed]">
+    <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-[#EDD3D1]">
       <div className="flex items-center gap-2">
-        {React.createElement(PLATFORM_ICON_MAP[platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#86868b]" })}
-        <span className="text-xs font-medium text-[#1d1d1f]">{t("platform." + platform)}</span>
+        {React.createElement(PLATFORM_ICON_MAP[platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#59585E]" })}
+        <span className="text-xs font-medium text-[#35353B]">{t("platform." + platform)}</span>
       </div>
       {!pubResult && (
         <button
           onClick={handlePublish}
           disabled={isPublishing}
-          className="apple-btn apple-btn-primary text-[10px] py-1 px-2"
+          className="apple-btn apple-btn-primary text-[11px] py-1 px-2"
         >
           {isPublishing ? (
             <span className="inline-flex items-center gap-1">
@@ -788,13 +788,13 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
       )}
       {pubResult?.success && (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#7CB342]/10 text-[#7CB342] font-medium">{t("dist.published")}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#6A2B3A]/10 text-[#6A2B3A] font-medium">{t("dist.published")}</span>
           {pubResult.url && (
             <a
               href={pubResult.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] text-[#007aff] hover:underline"
+              className="text-[11px] text-[#6A2B3A] hover:underline"
             >
               {t("dist.view")}
             </a>
@@ -803,11 +803,11 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
       )}
       {pubResult && !pubResult.success && (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ff453a]/10 text-[#ff453a] font-medium">{t("dist.failed")}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#C45B50]/10 text-[#C45B50] font-medium">{t("dist.failed")}</span>
           <button
             onClick={handlePublish}
             disabled={isPublishing}
-            className="text-[10px] text-[#86868b] hover:text-[#1d1d1f] underline cursor-pointer"
+            className="text-[11px] text-[#59585E] hover:text-[#35353B] underline cursor-pointer"
           >
             {isPublishing ? t("dist.retrying") : t("dist.retry")}
           </button>
@@ -820,13 +820,13 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
 function Empty({ text }: { text: string }) {
   return (
     <div className="text-center py-10">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#e8e8ed" strokeWidth="1.5" className="mx-auto mb-2">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#EDD3D1" strokeWidth="1.5" className="mx-auto mb-2">
         <circle cx="12" cy="12" r="10" />
         <path d="M8 14s1.5 2 4 2 4-2 4-2" />
         <line x1="9" y1="9" x2="9.01" y2="9" />
         <line x1="15" y1="9" x2="15.01" y2="9" />
       </svg>
-      <p className="text-xs text-[#aeaeb2]">{text}</p>
+      <p className="text-xs text-[#9FA0A0]">{text}</p>
     </div>
   );
 }

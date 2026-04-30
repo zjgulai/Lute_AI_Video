@@ -105,8 +105,8 @@ export default function AssetUploader({ onUpload }: Props) {
         onClick={() => inputRef.current?.click()}
         className={`apple-card p-6 text-center cursor-pointer transition-all ${
           dragActive
-            ? "border-2 border-dashed border-[#7CB342] bg-[#7CB342]/5"
-            : "border-2 border-dashed border-[#e8e8ed] hover:border-[#d2d2d7]"
+            ? "border-2 border-dashed border-[#6A2B3A] bg-[#6A2B3A]/5"
+            : "border-2 border-dashed border-[#EDD3D1] hover:border-[#D9A8A3]"
         }`}
       >
         <input
@@ -117,34 +117,34 @@ export default function AssetUploader({ onUpload }: Props) {
           onChange={handleChange}
           accept={Object.values(ACCEPT_TYPES).join(",")}
         />
-        <div className="w-12 h-12 rounded-2xl bg-[#f5f5f7] flex items-center justify-center mx-auto mb-3">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#86868b" strokeWidth="1.5">
+        <div className="w-12 h-12 rounded-2xl bg-[#FFF0EF] flex items-center justify-center mx-auto mb-3">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9FA0A0" strokeWidth="1.5">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
         </div>
-        <p className="text-sm font-medium text-[#1d1d1f]">
+        <p className="text-sm font-medium text-[#35353B]">
           {uploading ? t("upload.uploading") : dragActive ? t("upload.dragActive") : t("upload.dragInactive")}
         </p>
-        <p className="text-[11px] text-[#aeaeb2] mt-1">
+        <p className="text-[11px] text-[#9FA0A0] mt-1">
           {t("upload.hint")}
         </p>
       </div>
 
       {/* Upload results */}
       {results.length > 0 && (
-        <div className="apple-card p-3 bg-[#fafafc]">
-          <p className="text-[10px] font-mono text-[#aeaeb2] mb-2">{t("upload.uploaded")} ({results.length})</p>
+        <div className="apple-card p-3 bg-[#FFF0EF]">
+          <p className="text-[10px] font-mono text-[#9FA0A0] mb-2">{t("upload.uploaded")} ({results.length})</p>
           <div className="space-y-1.5">
             {results.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 bg-white rounded-lg p-2 border border-[#e8e8ed]">
+              <div key={i} className="flex items-center gap-2 bg-white rounded-lg p-2 border border-[#EDD3D1]">
                 <span className="text-base">{getFileIcon(r.filename)}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-[#1d1d1f] truncate">{r.filename}</p>
-                  <p className="text-[9px] text-[#aeaeb2]">{formatSize(r.size)}</p>
+                  <p className="text-[11px] text-[#35353B] truncate">{r.filename}</p>
+                  <p className="text-[9px] text-[#9FA0A0]">{formatSize(r.size)}</p>
                 </div>
-                <span className="text-[10px] text-[#7CB342] font-medium">{t("upload.saved")}</span>
+                <span className="text-[10px] text-[#6A2B3A] font-medium">{t("upload.saved")}</span>
               </div>
             ))}
           </div>

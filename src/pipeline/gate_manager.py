@@ -585,7 +585,18 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
         if skill_name is None:
             raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
         skill_result = await SkillRegistry.execute(skill_name, skill_params)
-        candidate_data = skill_result.data if skill_result.success else {}
+        # P0: Guard against success=True but empty data — treat as failure
+        if skill_result.success and skill_result.data:
+            candidate_data = skill_result.data
+        elif skill_result.success and not skill_result.data:
+            logger.warning(
+                "gate_manager: regenerate skill returned success but empty data",
+                gate_id=gate_id,
+                variant=variant_name,
+            )
+            candidate_data = {"_error": "Skill returned success but no data"}
+        else:
+            candidate_data = {"_error": skill_result.error or "Skill execution failed"}
     except Exception as exc:
         logger.error(
             "gate_manager: regenerate skill execution failed",

@@ -59,16 +59,16 @@ export default function FastModePanel() {
       <div className="apple-card p-4">
         <div className="flex items-center gap-2 mb-2">
           <Zap size={20} className="text-[#FF6B35]" strokeWidth={1.5} />
-          <h2 className="text-base font-semibold text-[#1d1d1f]">{t("fastMode.title")}</h2>
+          <h2 className="text-base font-semibold text-[#35353B]">{t("fastMode.title")}</h2>
         </div>
-        <p className="text-xs text-[#86868b]">{t("fastMode.subtitle")}</p>
+        <p className="text-xs text-[#59585E]">{t("fastMode.subtitle")}</p>
       </div>
 
       {/* Input Panel */}
       <div className="apple-card p-4 space-y-4">
         {/* Text input */}
         <div>
-          <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">
+          <label className="block text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1.5">
             {t("fastMode.title")}
           </label>
           <textarea
@@ -76,14 +76,14 @@ export default function FastModePanel() {
             onChange={(e) => setUserPrompt(e.target.value)}
             placeholder={t("fastMode.inputPlaceholder")}
             rows={4}
-            className="w-full px-3 py-2 text-sm bg-[#f5f5f7] border border-[#e8e8ed] rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/30 focus:border-[#FF6B35] transition-all"
+            className="w-full px-3 py-2 text-sm bg-[#FCE4E2] border border-[#EDD3D1] rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/30 focus:border-[#FF6B35] transition-all"
           />
-          <p className="text-[10px] text-[#aeaeb2] mt-1">{t("fastMode.inputHint")}</p>
+          <p className="text-[11px] text-[#9FA0A0] mt-1">{t("fastMode.inputHint")}</p>
         </div>
 
         {/* Duration selector */}
         <div>
-          <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">
+          <label className="block text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1.5">
             <Clock size={12} className="inline mr-1" />
             {t("fastMode.duration")}
           </label>
@@ -95,7 +95,7 @@ export default function FastModePanel() {
                 className={`text-xs px-4 py-1.5 rounded-full font-medium transition-all cursor-pointer ${
                   duration === d
                     ? "bg-[#FF6B35] text-white"
-                    : "bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]"
+                    : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
                 }`}
               >
                 {d === 10 ? t("fastMode.duration10s") : t("fastMode.duration15s")}
@@ -110,8 +110,8 @@ export default function FastModePanel() {
             onClick={() => setEnableTTS(!enableTTS)}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all cursor-pointer ${
               enableTTS
-                ? "bg-[#7CB342]/10 text-[#7CB342] ring-1 ring-[#7CB342]/20"
-                : "bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]"
+                ? "bg-[#6A2B3A]/10 text-[#6A2B3A] ring-1 ring-[#6A2B3A]/20"
+                : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
             }`}
           >
             <Volume2 size={12} />
@@ -140,7 +140,7 @@ export default function FastModePanel() {
         </button>
 
         {error && (
-          <div className="text-xs text-[#ff453a] bg-[#ff453a]/5 px-3 py-2 rounded-lg">
+          <div className="text-xs text-[#C45B50] bg-[#C45B50]/5 px-3 py-2 rounded-lg">
             {error}
           </div>
         )}
@@ -150,17 +150,22 @@ export default function FastModePanel() {
       {result && (
         <div className="apple-card p-4 space-y-4 animate-slide-up">
           <div className="flex items-center gap-2 mb-2">
-            <Play size={18} className="text-[#7CB342]" strokeWidth={1.5} />
-            <h3 className="text-sm font-semibold text-[#1d1d1f]">{t("fastMode.result.title")}</h3>
+            <Play size={18} className="text-[#6A2B3A]" strokeWidth={1.5} />
+            <h3 className="text-sm font-semibold text-[#35353B]">{t("fastMode.result.title")}</h3>
             {result.is_stub && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FF9500]/10 text-[#FF9500]">
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#FF9500]/10 text-[#FF9500]">
                 STUB
               </span>
             )}
           </div>
 
-          {/* Video Player */}
-          {result.video_url && (
+          {/* Error or Video Player */}
+          {!result.success ? (
+            <div className="rounded-xl bg-[#C45B50]/5 border border-[#C45B50]/20 p-4">
+              <p className="text-xs text-[#C45B50] font-medium">{t("fastMode.result.generationFailed")}</p>
+              <p className="text-[11px] text-[#C45B50]/70 mt-1">{result.error || t("fastMode.result.unknownError")}</p>
+            </div>
+          ) : result.video_url && (
             <div className="rounded-xl overflow-hidden bg-black">
               <video
                 src={result.video_url}
@@ -173,35 +178,35 @@ export default function FastModePanel() {
 
           {/* Video info */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
-              <Timer size={14} className="mx-auto mb-1 text-[#86868b]" />
-              <p className="text-[10px] text-[#86868b]">{t("fastMode.result.generationTime")}</p>
-              <p className="text-xs font-semibold text-[#1d1d1f]">{formatTime(result.generation_time_ms)}</p>
+            <div className="bg-[#FCE4E2] rounded-lg p-2 text-center">
+              <Timer size={14} className="mx-auto mb-1 text-[#59585E]" />
+              <p className="text-[11px] text-[#59585E]">{t("fastMode.result.generationTime")}</p>
+              <p className="text-xs font-semibold text-[#35353B]">{formatTime(result.generation_time_ms)}</p>
             </div>
-            <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
-              <HardDrive size={14} className="mx-auto mb-1 text-[#86868b]" />
-              <p className="text-[10px] text-[#86868b]">{t("fastMode.result.videoInfo")}</p>
-              <p className="text-xs font-semibold text-[#1d1d1f]">{formatBytes(result.file_size_bytes)}</p>
+            <div className="bg-[#FCE4E2] rounded-lg p-2 text-center">
+              <HardDrive size={14} className="mx-auto mb-1 text-[#59585E]" />
+              <p className="text-[11px] text-[#59585E]">{t("fastMode.result.videoInfo")}</p>
+              <p className="text-xs font-semibold text-[#35353B]">{formatBytes(result.file_size_bytes)}</p>
             </div>
-            <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
-              <Cpu size={14} className="mx-auto mb-1 text-[#86868b]" />
-              <p className="text-[10px] text-[#86868b]">{t("fastMode.result.modelInfo")}</p>
-              <p className="text-xs font-semibold text-[#1d1d1f]">{result.model_info.video}</p>
+            <div className="bg-[#FCE4E2] rounded-lg p-2 text-center">
+              <Cpu size={14} className="mx-auto mb-1 text-[#59585E]" />
+              <p className="text-[11px] text-[#59585E]">{t("fastMode.result.modelInfo")}</p>
+              <p className="text-xs font-semibold text-[#35353B]">{result.model_info.video}</p>
             </div>
           </div>
 
           {/* Timing breakdown */}
-          <div className="text-[10px] text-[#86868b] flex gap-3">
+          <div className="text-[11px] text-[#59585E] flex gap-3">
             <span>LLM: {formatTime(result.timing.llm_ms)}</span>
             <span>Video: {formatTime(result.timing.video_ms)}</span>
             {result.timing.tts_ms > 0 && <span>TTS: {formatTime(result.timing.tts_ms)}</span>}
           </div>
 
           {/* Debug Info (collapsible) */}
-          <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+          <div className="border border-[#EDD3D1] rounded-xl overflow-hidden">
             <button
               onClick={() => setShowDebug(!showDebug)}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs text-[#86868b] hover:bg-[#f5f5f7] transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2 text-xs text-[#59585E] hover:bg-[#FCE4E2] transition-colors cursor-pointer"
             >
               <span className="flex items-center gap-1.5">
                 <FileText size={12} />
@@ -214,42 +219,42 @@ export default function FastModePanel() {
                 {/* LLM Prompt */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-medium text-[#86868b]">{t("fastMode.result.llmPrompt")}</span>
+                    <span className="text-[11px] font-medium text-[#59585E]">{t("fastMode.result.llmPrompt")}</span>
                     <button
                       onClick={handleCopyPrompt}
-                      className="text-[10px] flex items-center gap-1 text-[#FF6B35] hover:underline cursor-pointer"
+                      className="text-[11px] flex items-center gap-1 text-[#FF6B35] hover:underline cursor-pointer"
                     >
                       <Copy size={10} />
                       {copied ? "Copied!" : t("fastMode.result.copyPrompt")}
                     </button>
                   </div>
-                  <div className="bg-[#f5f5f7] rounded-lg p-2.5 text-[11px] text-[#1d1d1f] leading-relaxed max-h-40 overflow-y-auto">
+                  <div className="bg-[#FCE4E2] rounded-lg p-2.5 text-[11px] text-[#35353B] leading-relaxed max-h-40 overflow-y-auto">
                     {result.llm_prompt}
                   </div>
                 </div>
 
                 {/* User Prompt */}
                 <div>
-                  <span className="text-[10px] font-medium text-[#86868b] block mb-1">Original Input</span>
-                  <div className="bg-[#f5f5f7] rounded-lg p-2.5 text-[11px] text-[#86868b] leading-relaxed">
+                  <span className="text-[11px] font-medium text-[#59585E] block mb-1">Original Input</span>
+                  <div className="bg-[#FCE4E2] rounded-lg p-2.5 text-[11px] text-[#59585E] leading-relaxed">
                     {result.user_prompt}
                   </div>
                 </div>
 
                 {/* Models */}
-                <div className="grid grid-cols-2 gap-2 text-[10px]">
-                  <div className="bg-[#f5f5f7] rounded-lg p-2">
-                    <span className="text-[#86868b]">LLM: </span>
-                    <span className="font-medium text-[#1d1d1f]">{result.model_info.llm}</span>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="bg-[#FCE4E2] rounded-lg p-2">
+                    <span className="text-[#59585E]">LLM: </span>
+                    <span className="font-medium text-[#35353B]">{result.model_info.llm}</span>
                   </div>
-                  <div className="bg-[#f5f5f7] rounded-lg p-2">
-                    <span className="text-[#86868b]">Video: </span>
-                    <span className="font-medium text-[#1d1d1f]">{result.model_info.video}</span>
+                  <div className="bg-[#FCE4E2] rounded-lg p-2">
+                    <span className="text-[#59585E]">Video: </span>
+                    <span className="font-medium text-[#35353B]">{result.model_info.video}</span>
                   </div>
                   {result.model_info.tts && (
-                    <div className="bg-[#f5f5f7] rounded-lg p-2">
-                      <span className="text-[#86868b]">TTS: </span>
-                      <span className="font-medium text-[#1d1d1f]">{result.model_info.tts}</span>
+                    <div className="bg-[#FCE4E2] rounded-lg p-2">
+                      <span className="text-[#59585E]">TTS: </span>
+                      <span className="font-medium text-[#35353B]">{result.model_info.tts}</span>
                     </div>
                   )}
                 </div>

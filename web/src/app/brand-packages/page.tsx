@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { API_BASE, isDemoMode } from "@/components/api";
+import Link from "next/link";
 import { Package, Upload, Edit, Trash2, Plus, X, AlertCircle, Loader2 } from "lucide-react";
 
 interface BrandPackage {
@@ -207,12 +208,16 @@ export default function BrandPackagesPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#7CB342]/10 flex items-center justify-center">
-              <Package className="w-5 h-5 text-[#7CB342]" />
+            <Link href="/" className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              <span className="hidden sm:inline">{t("nav.home")}</span>
+            </Link>
+            <div className="w-9 h-9 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
+              <Package className="w-5 h-5 text-[#6A2B3A]" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-[#1d1d1f]">{t("brand.manageTitle")}</h1>
-              <p className="text-[11px] text-[#86868b] mt-0.5">
+              <h1 className="text-base font-semibold text-[#35353B]">{t("brand.manageTitle")}</h1>
+              <p className="text-[11px] text-[#59585E] mt-0.5">
                 {t("brand.manageDesc")}
               </p>
             </div>
@@ -228,12 +233,12 @@ export default function BrandPackagesPage() {
 
         {/* Error banner */}
         {error && (
-          <div className="apple-card p-3 border-l-4 border-[#ff453a] bg-[#fff5f5] flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#ff453a] shrink-0" />
-            <span className="text-xs text-[#ff453a] font-medium">{error}</span>
+          <div className="apple-card p-3 border-l-4 border-[#C45B50] bg-[#fff5f5] flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-[#C45B50] shrink-0" />
+            <span className="text-xs text-[#C45B50] font-medium">{error}</span>
             <button
               onClick={() => setError(null)}
-              className="ml-auto text-[#ff453a] hover:opacity-70 cursor-pointer"
+              className="ml-auto text-[#C45B50] hover:opacity-70 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -243,19 +248,19 @@ export default function BrandPackagesPage() {
         {/* Loading state */}
         {loading && (
           <div className="apple-card p-12 text-center">
-            <Loader2 className="w-8 h-8 text-[#7CB342] mx-auto mb-3 animate-spin" />
-            <p className="text-sm text-[#86868b]">{t("brand.loading")}</p>
+            <Loader2 className="w-8 h-8 text-[#6A2B3A] mx-auto mb-3 animate-spin" />
+            <p className="text-sm text-[#59585E]">{t("brand.loading")}</p>
           </div>
         )}
 
         {/* Empty state — branded */}
         {!loading && packages.length === 0 && (
           <div className="apple-card p-12 text-center" style={{background: "linear-gradient(180deg, rgba(124,179,66,0.03) 0%, #fff 100%)"}}>
-            <div className="w-14 h-14 rounded-2xl bg-[#7CB342]/10 flex items-center justify-center mx-auto mb-4">
-              <Package className="w-7 h-7 text-[#7CB342]" strokeWidth={1.5} />
+            <div className="w-14 h-14 rounded-2xl bg-[#6A2B3A]/10 flex items-center justify-center mx-auto mb-4">
+              <Package className="w-7 h-7 text-[#6A2B3A]" strokeWidth={1.5} />
             </div>
-            <h3 className="text-base font-semibold text-[#1d1d1f] mb-1">{t("brand.empty")}</h3>
-            <p className="text-sm text-[#86868b] mb-5 max-w-xs mx-auto leading-relaxed">{t("brand.emptyHint")}</p>
+            <h3 className="text-base font-semibold text-[#35353B] mb-1">{t("brand.empty")}</h3>
+            <p className="text-sm text-[#59585E] mb-5 max-w-xs mx-auto leading-relaxed">{t("brand.emptyHint")}</p>
             <button
               onClick={openCreateForm}
               className="apple-btn apple-btn-primary text-sm py-2.5 px-5"
@@ -278,29 +283,29 @@ export default function BrandPackagesPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#7CB342]/10 flex items-center justify-center shrink-0">
-                        <Package className="w-5 h-5 text-[#7CB342]" />
+                      <div className="w-10 h-10 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center shrink-0">
+                        <Package className="w-5 h-5 text-[#6A2B3A]" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-sm font-semibold text-[#1d1d1f] truncate">
+                        <h3 className="text-sm font-semibold text-[#35353B] truncate">
                           {pkg.name}
                         </h3>
                         {pkg.brand_name && (
-                          <p className="text-[11px] text-[#7CB342] font-medium mt-0.5">
+                          <p className="text-[11px] text-[#6A2B3A] font-medium mt-0.5">
                             {pkg.brand_name}
                           </p>
                         )}
                         {pkg.description && (
-                          <p className="text-xs text-[#86868b] mt-1 line-clamp-2">
+                          <p className="text-xs text-[#59585E] mt-1 line-clamp-2">
                             {pkg.description}
                           </p>
                         )}
                         <div className="flex items-center gap-3 mt-2">
-                          <span className="text-[10px] text-[#aeaeb2] flex items-center gap-1">
+                          <span className="text-[11px] text-[#9FA0A0] flex items-center gap-1">
                             <Package className="w-3 h-3" />
                             {assetCount}{t("brand.assetCount")}
                           </span>
-                          <span className="text-[10px] text-[#aeaeb2]">
+                          <span className="text-[11px] text-[#9FA0A0]">
                             {t("brand.updatedAt")} {formatDate(pkg.updated_at)}
                           </span>
                         </div>
@@ -309,14 +314,14 @@ export default function BrandPackagesPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => openEditForm(pkg)}
-                        className="p-2 rounded-lg text-[#86868b] hover:text-[#7CB342] hover:bg-[#7CB342]/5 transition-all cursor-pointer"
+                        className="p-2 rounded-lg text-[#59585E] hover:text-[#6A2B3A] hover:bg-[#6A2B3A]/5 transition-all cursor-pointer"
                         title={t("brand.editTooltip")}
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(pkg.package_id)}
-                        className="p-2 rounded-lg text-[#86868b] hover:text-[#ff453a] hover:bg-[#ff453a]/5 transition-all cursor-pointer"
+                        className="p-2 rounded-lg text-[#59585E] hover:text-[#C45B50] hover:bg-[#C45B50]/5 transition-all cursor-pointer"
                         title={t("brand.deleteTooltip")}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -334,12 +339,12 @@ export default function BrandPackagesPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="apple-card w-full max-w-lg mx-4 p-5 max-h-[85vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-[#1d1d1f]">
+                <h2 className="text-sm font-semibold text-[#35353B]">
                   {editingId ? t("brand.editPackage") : t("brand.newPackage")}
                 </h2>
                 <button
                   onClick={() => setShowForm(false)}
-                  className="p-1 rounded-lg text-[#aeaeb2] hover:text-[#1d1d1f] hover:bg-[#f5f5f7] transition-all cursor-pointer"
+                  className="p-1 rounded-lg text-[#9FA0A0] hover:text-[#35353B] hover:bg-[#FCE4E2] transition-all cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -348,7 +353,7 @@ export default function BrandPackagesPage() {
               <div className="space-y-3">
                 {/* Brand package name */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#86868b] mb-1">
+                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
                     {t("brand.packageNameRequired")}
                   </label>
                   <input
@@ -362,7 +367,7 @@ export default function BrandPackagesPage() {
 
                 {/* Brand name */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#86868b] mb-1">
+                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
                     {t("brand.brandName")}
                   </label>
                   <input
@@ -376,7 +381,7 @@ export default function BrandPackagesPage() {
 
                 {/* Description */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#86868b] mb-1">
+                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
                     {t("brand.description")}
                   </label>
                   <input
@@ -390,7 +395,7 @@ export default function BrandPackagesPage() {
 
                 {/* Guidelines textarea */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#86868b] mb-1">
+                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
                     {t("brand.guidelinesLabel")}
                   </label>
                   <textarea
@@ -400,14 +405,14 @@ export default function BrandPackagesPage() {
                     className="apple-input resize-none text-sm"
                     rows={4}
                   />
-                  <p className="text-[10px] text-[#aeaeb2] mt-0.5">
+                  <p className="text-[11px] text-[#9FA0A0] mt-0.5">
                     {t("brand.guidelinesHint")}
                   </p>
                 </div>
 
                 {/* File upload zone */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#86868b] mb-1">
+                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
                     {t("brand.uploadAssets")}
                   </label>
                   <div
@@ -417,15 +422,15 @@ export default function BrandPackagesPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
                       dragOver
-                        ? "border-[#7CB342] bg-[#7CB342]/5"
-                        : "border-[#e8e8ed] hover:border-[#d2d2d7] hover:bg-[#fafafc]"
+                        ? "border-[#6A2B3A] bg-[#6A2B3A]/5"
+                        : "border-[#EDD3D1] hover:border-[#D9A8A3] hover:bg-[#FFF5F2]"
                     }`}
                   >
-                    <Upload className="w-6 h-6 text-[#aeaeb2] mx-auto mb-2" />
-                    <p className="text-xs text-[#86868b] font-medium">
+                    <Upload className="w-6 h-6 text-[#9FA0A0] mx-auto mb-2" />
+                    <p className="text-xs text-[#59585E] font-medium">
                       {t("brand.dragUpload")}
                     </p>
-                    <p className="text-[10px] text-[#aeaeb2] mt-1">
+                    <p className="text-[11px] text-[#9FA0A0] mt-1">
                       {t("brand.supportedFormats")}
                     </p>
                     <input
@@ -442,21 +447,21 @@ export default function BrandPackagesPage() {
                 {/* Uploaded files list */}
                 {uploadedFiles.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-[10px] font-medium text-[#86868b]">
+                    <p className="text-[11px] font-medium text-[#59585E]">
                       {t("brand.filesSelected")} {uploadedFiles.length}{t("brand.filesCount")}
                     </p>
                     <div className="space-y-1 max-h-[120px] overflow-y-auto">
                       {uploadedFiles.map((file, i) => (
                         <div
                           key={i}
-                          className="flex items-center justify-between px-2 py-1 rounded-lg bg-[#f5f5f7]"
+                          className="flex items-center justify-between px-2 py-1 rounded-lg bg-[#FCE4E2]"
                         >
-                          <span className="text-[10px] text-[#1d1d1f] truncate">
+                          <span className="text-[11px] text-[#35353B] truncate">
                             {file.name}
                           </span>
                           <button
                             onClick={() => removeFile(i)}
-                            className="text-[#aeaeb2] hover:text-[#ff453a] transition-colors cursor-pointer shrink-0 ml-2"
+                            className="text-[#9FA0A0] hover:text-[#C45B50] transition-colors cursor-pointer shrink-0 ml-2"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -468,7 +473,7 @@ export default function BrandPackagesPage() {
               </div>
 
               {/* Form actions */}
-              <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[#e8e8ed]">
+              <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[#EDD3D1]">
                 <button
                   onClick={() => setShowForm(false)}
                   className="apple-btn text-xs py-2 px-3"
@@ -503,12 +508,12 @@ export default function BrandPackagesPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="apple-card p-5 max-w-sm mx-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-full bg-[#ff453a]/10 flex items-center justify-center">
-                  <AlertCircle className="w-4 h-4 text-[#ff453a]" />
+                <div className="w-8 h-8 rounded-full bg-[#C45B50]/10 flex items-center justify-center">
+                  <AlertCircle className="w-4 h-4 text-[#C45B50]" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-[#1d1d1f]">{t("brand.deleteConfirm")}</h3>
-                  <p className="text-[11px] text-[#86868b]">
+                  <h3 className="text-sm font-semibold text-[#35353B]">{t("brand.deleteConfirm")}</h3>
+                  <p className="text-[11px] text-[#59585E]">
                     {t("brand.deleteHint")}
                   </p>
                 </div>

@@ -394,15 +394,15 @@ export default function GatePanel({
       <div className="apple-card p-4">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-[#1d1d1f]">
+            <h2 className="text-base font-semibold text-[#35353B]">
               {t(gateLabelKey)}
             </h2>
-            <span className="text-[10px] text-[#86868b] font-mono">
+            <span className="text-[11px] text-[#59585E] font-mono">
               {gateId.replace(/_/g, " ")}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-[#86868b] font-medium">
+            <span className="text-[11px] text-[#59585E] font-medium">
               {progressLabel}
             </span>
             {/* Progress dots */}
@@ -412,10 +412,10 @@ export default function GatePanel({
                   key={i}
                   className={`w-2 h-2 rounded-full ${
                     i + 1 < currentStep
-                      ? "bg-[#7CB342]"
+                      ? "bg-[#6A2B3A]"
                       : i + 1 === currentStep
-                      ? "bg-[#007AFF]"
-                      : "bg-[#e8e8ed]"
+                      ? "bg-[#6A2B3A]"
+                      : "bg-[#EDD3D1]"
                   }`}
                 />
               ))}
@@ -430,11 +430,11 @@ export default function GatePanel({
           <div className="flex flex-col items-center gap-3 py-6">
             <div className="relative w-8 h-8">
               <svg className="animate-spin w-8 h-8" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="#e8e8ed" strokeWidth="3" />
-                <path d="M12 2a10 10 0 0 1 10 10" stroke="#7CB342" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="12" cy="12" r="10" stroke="#EDD3D1" strokeWidth="3" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="#6A2B3A" strokeWidth="3" strokeLinecap="round" />
               </svg>
             </div>
-            <p className="text-sm text-[#86868b]">{loadingText}</p>
+            <p className="text-sm text-[#59585E]">{loadingText}</p>
           </div>
           {/* Show skeleton during load */}
           <CandidateSelector
@@ -449,28 +449,28 @@ export default function GatePanel({
 
       {/* Error state */}
       {error && !loading && (
-        <div className="apple-card p-6 border-l-4 border-[#ff453a] bg-[#fff5f5]">
+        <div className="apple-card p-6 border-l-4 border-[#C45B50] bg-[#fff5f5]">
           <div className="flex items-start gap-3">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0 mt-0.5">
-              <circle cx="8" cy="8" r="7" stroke="#ff453a" strokeWidth="1.2" />
-              <line x1="8" y1="4.5" x2="8" y2="8.5" stroke="#ff453a" strokeWidth="1.2" strokeLinecap="round" />
-              <circle cx="8" cy="10.5" r="0.8" fill="#ff453a" />
+              <circle cx="8" cy="8" r="7" stroke="#C45B50" strokeWidth="1.2" />
+              <line x1="8" y1="4.5" x2="8" y2="8.5" stroke="#C45B50" strokeWidth="1.2" strokeLinecap="round" />
+              <circle cx="8" cy="10.5" r="0.8" fill="#C45B50" />
             </svg>
             <div className="flex-1">
-              <p className="text-sm font-medium text-[#ff453a] mb-1">
+              <p className="text-sm font-medium text-[#C45B50] mb-1">
                 {t("common.error")}
               </p>
-              <p className="text-xs text-[#86868b] mb-3">{error}</p>
+              <p className="text-xs text-[#59585E] mb-3">{error}</p>
               <div className="flex gap-2">
                 <button
                   onClick={generateCandidates}
-                  className="text-xs bg-[#ff453a] text-white px-3 py-1.5 rounded-lg hover:bg-[#ff453a]/90 cursor-pointer"
+                  className="text-xs bg-[#C45B50] text-white px-3 py-1.5 rounded-lg hover:bg-[#C45B50]/90 cursor-pointer"
                 >
                   {t("step.retry")}
                 </button>
                 <button
                   onClick={onBack}
-                  className="text-xs text-[#86868b] px-3 py-1.5 rounded-lg hover:bg-[#e8e8ed]/50 cursor-pointer"
+                  className="text-xs text-[#59585E] px-3 py-1.5 rounded-lg hover:bg-[#EDD3D1]/50 cursor-pointer"
                 >
                   {t("common.cancel")}
                 </button>
@@ -499,7 +499,7 @@ export default function GatePanel({
                   key={`regen-${c.id}`}
                   onClick={() => handleRegenerate(c.id)}
                   disabled={loading}
-                  className="text-[10px] text-[#86868b] hover:text-[#007AFF] transition-colors px-2 py-1 rounded hover:bg-[#e8e8ed]/30 disabled:opacity-50 cursor-pointer"
+                  className="text-[11px] text-[#59585E] hover:text-[#6A2B3A] transition-colors px-2 py-1 rounded hover:bg-[#EDD3D1]/30 disabled:opacity-50 cursor-pointer"
                 >
                   {t("gate.regenerate")} {t(getVariantLabelKey(c.variant))}
                 </button>
@@ -509,19 +509,19 @@ export default function GatePanel({
 
           {/* Edit panel placeholder */}
           {editCandidateId && (
-            <div className="mt-3 p-3 rounded-lg bg-[#fafafc] border border-[#e8e8ed]">
+            <div className="mt-3 p-3 rounded-lg bg-[#FFF5F2] border border-[#EDD3D1]">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-semibold text-[#1d1d1f]">
+                <span className="text-[11px] font-semibold text-[#35353B]">
                   {t("step.editTitle")} {editCandidateId}
                 </span>
                 <button
                   onClick={() => setEditCandidateId(null)}
-                  className="text-[10px] text-[#86868b] hover:text-[#1d1d1f] cursor-pointer"
+                  className="text-[11px] text-[#59585E] hover:text-[#35353B] cursor-pointer"
                 >
                   {t("workflow.cancelEdit")}
                 </button>
               </div>
-              <pre className="text-[10px] font-mono text-[#86868b] bg-white p-2 rounded border border-[#e8e8ed] overflow-auto max-h-[200px] whitespace-pre-wrap break-all">
+              <pre className="text-[11px] font-mono text-[#59585E] bg-white p-2 rounded border border-[#EDD3D1] overflow-auto max-h-[200px] whitespace-pre-wrap break-all">
                 {JSON.stringify(
                   candidates.find((c) => c.id === editCandidateId)?.data ?? {},
                   null,
@@ -533,7 +533,7 @@ export default function GatePanel({
 
           {/* Selection hint */}
           <div className="mt-3 text-center">
-            <p className="text-[10px] text-[#aeaeb2]">
+            <p className="text-[11px] text-[#9FA0A0]">
               {selectedIds.length === 0
                 ? t("gate.selectHint")
                 : `${selectedIds.length}/${maxSelections} ${t("review.selected")}`}
@@ -544,22 +544,22 @@ export default function GatePanel({
 
       {/* Approved / processing state */}
       {(approved || processing) && (
-        <div className={`apple-card p-4 ${processing ? "border-[#007AFF] bg-[#f0f7ff]" : "border-[#7CB342] bg-[#f0faf0]"}`}>
+        <div className={`apple-card p-4 ${processing ? "border-[#7A96BB] bg-[#F0F4F8]" : "border-[#6A2B3A] bg-[#FCE4E2]"}`}>
           <div className="flex items-center gap-2 justify-center">
             {processing ? (
               <>
-                <div className="animate-spin w-4 h-4 border-2 border-[#007AFF]/30 border-t-[#007AFF] rounded-full" />
-                <span className="text-sm font-medium text-[#007AFF]">
+                <div className="animate-spin w-4 h-4 border-2 border-[#7A96BB]/30 border-t-[#7A96BB] rounded-full" />
+                <span className="text-sm font-medium text-[#7A96BB]">
                   {t("gate.processing") || "Processing in background..."}
                 </span>
               </>
             ) : (
               <>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="8" r="7" fill="#7CB342" />
+                  <circle cx="8" cy="8" r="7" fill="#6A2B3A" />
                   <path d="M5 8.5L7 10.5L11 5.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span className="text-sm font-medium text-[#7CB342]">
+                <span className="text-sm font-medium text-[#6A2B3A]">
                   {t("gate.approved") || "Approved, continuing..."}
                 </span>
               </>
@@ -574,7 +574,7 @@ export default function GatePanel({
           <button
             onClick={onBack}
             disabled={approving}
-            className="text-xs text-[#86868b] px-4 py-2 rounded-lg hover:bg-[#e8e8ed]/50 transition-colors disabled:opacity-50 cursor-pointer"
+            className="text-xs text-[#59585E] px-4 py-2 rounded-lg hover:bg-[#EDD3D1]/50 transition-colors disabled:opacity-50 cursor-pointer"
           >
             {t("recommend.backToEdit")}
           </button>
@@ -584,7 +584,7 @@ export default function GatePanel({
             className={`apple-btn text-xs px-5 py-2 disabled:opacity-50 ${
               selectedIds.length > 0
                 ? "apple-btn-primary"
-                : "bg-[#f5f5f7] text-[#aeaeb2]"
+                : "bg-[#FCE4E2] text-[#9FA0A0]"
             }`}
           >
             {approving

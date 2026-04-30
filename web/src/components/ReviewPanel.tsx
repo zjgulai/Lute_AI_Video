@@ -100,7 +100,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
     if (currentReview === "strategy_review" && s?.weekly_calendar?.briefs) {
       return (
         <div className="space-y-2">
-          <p className="text-[11px] text-[#86868b] mb-3">
+          <p className="text-[11px] text-[#59585E] mb-3">
             {s.weekly_calendar.briefs.length}{t("review.briefs")}
           </p>
           {s.weekly_calendar.briefs.map((brief: any) => {
@@ -111,33 +111,33 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
                   onClick={() => toggleBrief(brief.id)}
                   className="w-full flex items-center gap-2 p-3 cursor-pointer text-left"
                 >
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#7CB342]/10 text-[#7CB342] shrink-0">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A] shrink-0">
                     {getTypeLabel(brief.video_type, t) || brief.video_type}
                   </span>
-                  <span className="text-[13px] font-medium text-[#1d1d1f] truncate">
+                  <span className="text-[13px] font-medium text-[#35353B] truncate">
                     {brief.topic}
                   </span>
                   <svg
                     width="10" height="10" viewBox="0 0 10 10" fill="none"
                     className={`ml-auto shrink-0 transition-transform ${exp ? "rotate-180" : ""}`}
                   >
-                    <path d="M2.5 3.5L5 6.5L7.5 3.5" stroke="#aeaeb2" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2.5 3.5L5 6.5L7.5 3.5" stroke="#9FA0A0" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
                 {exp && (
                   <div className="px-3 pb-3 space-y-2 animate-slide-down">
-                    <p className="text-xs text-[#86868b]">{brief.key_message}</p>
+                    <p className="text-xs text-[#59585E]">{brief.key_message}</p>
                     {brief.usp_priority?.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {brief.usp_priority.map((usp: string, i: number) => (
-                          <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-[#f5f5f7] text-[#86868b] border border-[#e8e8ed]">
+                          <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-[#FCE4E2] text-[#59585E] border border-[#EDD3D1]">
                             {usp}
                           </span>
                         ))}
                       </div>
                     )}
                     {brief.target_audience && (
-                      <p className="text-[11px] text-[#aeaeb2]">{t("review.targetAudience")}: {brief.target_audience}</p>
+                      <p className="text-[11px] text-[#9FA0A0]">{t("review.targetAudience")}: {brief.target_audience}</p>
                     )}
                   </div>
                 )}
@@ -152,7 +152,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
     if (currentReview === "script_review" && s?.scripts) {
       return (
         <div className="space-y-2">
-          <p className="text-[11px] text-[#86868b] mb-3">{t("review.scripts")} {s.scripts.length}{t("review.scriptsCount")}</p>
+          <p className="text-[11px] text-[#59585E] mb-3">{t("review.scripts")} {s.scripts.length}{t("review.scriptsCount")}</p>
           {s.scripts.map((script: any, i: number) => {
             const key = `${script.id}-${script.platform}-${i}`;
             const exp = expandedScripts.has(key);
@@ -162,36 +162,36 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
                   onClick={() => toggleScript(key)}
                   className="w-full flex items-center gap-2 p-3 cursor-pointer text-left"
                 >
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#86868b]/10 text-[#86868b] shrink-0">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#59585E]/10 text-[#59585E] shrink-0">
                     {t("platform." + script.platform) || script.platform}
                   </span>
-                  <span className="text-[11px] text-[#aeaeb2] font-mono">{script.id}</span>
-                  <span className="text-[11px] text-[#aeaeb2]">{script.total_duration}s</span>
+                  <span className="text-[11px] text-[#9FA0A0] font-mono">{script.id}</span>
+                  <span className="text-[11px] text-[#9FA0A0]">{script.total_duration}s</span>
                   <svg
                     width="10" height="10" viewBox="0 0 10 10" fill="none"
                     className={`ml-auto shrink-0 transition-transform ${exp ? "rotate-180" : ""}`}
                   >
-                    <path d="M2.5 3.5L5 6.5L7.5 3.5" stroke="#aeaeb2" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2.5 3.5L5 6.5L7.5 3.5" stroke="#9FA0A0" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
                 {exp && script.segments?.map((seg: any, i: number) => (
                   <div key={i} className="px-3 pb-2 last:pb-3">
-                    <div className="pl-3 border-l-2 border-[#e8e8ed]">
+                    <div className="pl-3 border-l-2 border-[#EDD3D1]">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[11px] font-semibold text-[#86868b]">
+                        <span className="text-[11px] font-semibold text-[#59585E]">
                           {t("segment." + seg.segment_type) || seg.segment_type}
                         </span>
-                        <span className="text-[10px] text-[#aeaeb2] font-mono">
+                        <span className="text-[11px] text-[#9FA0A0] font-mono">
                           {seg.start_time}s — {seg.end_time}s
                         </span>
                       </div>
-                      <p className="text-[13px] text-[#1d1d1f] leading-relaxed">{seg.voiceover}</p>
+                      <p className="text-[13px] text-[#35353B] leading-relaxed">{seg.voiceover}</p>
                       {seg.visual_description && (
-                        <div className="flex items-start gap-1.5 mt-1 text-[11px] text-[#aeaeb2]">
+                        <div className="flex items-start gap-1.5 mt-1 text-[11px] text-[#9FA0A0]">
                           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="mt-0.5 shrink-0">
-                            <rect x="1" y="2" width="10" height="8" rx="1" stroke="#aeaeb2" strokeWidth="0.8" />
-                            <circle cx="4.5" cy="5.5" r="1.5" stroke="#aeaeb2" strokeWidth="0.8" />
-                            <path d="M1 8l2.5-2 2 1.5L8 5l3 3" stroke="#aeaeb2" strokeWidth="0.8" />
+                            <rect x="1" y="2" width="10" height="8" rx="1" stroke="#9FA0A0" strokeWidth="0.8" />
+                            <circle cx="4.5" cy="5.5" r="1.5" stroke="#9FA0A0" strokeWidth="0.8" />
+                            <path d="M1 8l2.5-2 2 1.5L8 5l3 3" stroke="#9FA0A0" strokeWidth="0.8" />
                           </svg>
                           {seg.visual_description}
                         </div>
@@ -212,7 +212,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
         <div className="space-y-3">
           {s.thumbnail_sets.map((ts: any, idx: number) => (
             <div key={`ts-${idx}`} className="apple-card p-3 space-y-2">
-              <p className="text-[11px] font-semibold text-[#86868b]">{ts.script_id}</p>
+              <p className="text-[11px] font-semibold text-[#59585E]">{ts.script_id}</p>
               <div className="grid grid-cols-2 gap-2">
                 {(ts.variants || []).map((v: any) => {
                   const selected = selectedThumbnails[ts.script_id] === v.variant_id;
@@ -221,22 +221,22 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
                       key={v.variant_id}
                       onClick={() => setSelectedThumbnails((prev) => ({ ...prev, [ts.script_id]: v.variant_id }))}
                       className={`apple-card p-3 text-left cursor-pointer transition-all ${
-                        selected ? "ring-2 ring-[#7CB342] ring-offset-2" : "hover:shadow-md"
+                        selected ? "ring-2 ring-[#6A2B3A] ring-offset-2" : "hover:shadow-md"
                       }`}
                     >
-                      <div className="bg-gradient-to-br from-[#f5f5f7] to-[#e8e8ed] rounded-lg h-20 flex items-center justify-center mb-2">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="#aeaeb2">
+                      <div className="bg-gradient-to-br from-[#FCE4E2] to-[#EDD3D1] rounded-lg h-20 flex items-center justify-center mb-2">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="#9FA0A0">
                           <rect x="3" y="3" width="18" height="18" rx="3" />
                           <circle cx="9" cy="9" r="3" />
                           <path d="M3 15l4.5-4 3.5 3 4.5-4.5L21 15" />
                         </svg>
                       </div>
-                      <div className="text-xs font-semibold text-[#1d1d1f]">{t("review.variant")} {v.variant_id}</div>
-                      <div className="text-[10px] text-[#86868b] line-clamp-2">{v.concept}</div>
+                      <div className="text-xs font-semibold text-[#35353B]">{t("review.variant")} {v.variant_id}</div>
+                      <div className="text-[11px] text-[#59585E] line-clamp-2">{v.concept}</div>
                       {selected && (
-                        <div className="text-[10px] font-semibold text-[#7CB342] mt-1 flex items-center gap-1">
+                        <div className="text-[11px] font-semibold text-[#6A2B3A] mt-1 flex items-center gap-1">
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5.5L4 7.5L8 2.5" stroke="#7CB342" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M2 5.5L4 7.5L8 2.5" stroke="#6A2B3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                           {t("review.selected")}
                         </div>
@@ -253,9 +253,9 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
 
     // ── Fallback: raw data ──
     return (
-      <details className="text-xs text-[#aeaeb2] cursor-pointer">
+      <details className="text-xs text-[#9FA0A0] cursor-pointer">
         <summary>{t("review.viewRaw")}</summary>
-        <pre className="mt-2 p-3 rounded-lg bg-[#f5f5f7] overflow-auto text-[10px] max-h-60 border border-[#e8e8ed]">
+        <pre className="mt-2 p-3 rounded-lg bg-[#FCE4E2] overflow-auto text-[11px] max-h-60 border border-[#EDD3D1]">
           {JSON.stringify(s, null, 2)}
         </pre>
       </details>
@@ -271,22 +271,22 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
         <div className="p-3 space-y-2">
           {/* Header */}
           <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-xl bg-[#7CB342]/5 text-[#7CB342] flex items-center justify-center shrink-0">
+            <span className="w-9 h-9 rounded-xl bg-[#6A2B3A]/5 text-[#6A2B3A] flex items-center justify-center shrink-0">
               {React.createElement(REVIEW_ICON_MAP[config.iconKey] || Clock, { size: 20, strokeWidth: 1.5 })}
             </span>
             <div>
-              <h2 className="text-base font-semibold text-[#1d1d1f]">{t(config.titleKey)}</h2>
-              <p className="text-xs text-[#86868b] mt-0.5">{t(config.subtitleKey)}</p>
+              <h2 className="text-base font-semibold text-[#35353B]">{t(config.titleKey)}</h2>
+              <p className="text-xs text-[#59585E] mt-0.5">{t(config.subtitleKey)}</p>
             </div>
           </div>
-          <p className="text-xs text-[#aeaeb2] leading-relaxed">{t(config.descKey)}</p>
+          <p className="text-xs text-[#9FA0A0] leading-relaxed">{t(config.descKey)}</p>
 
           {/* Audit Score */}
           {auditReport ? (
             <AuditScoreCard report={auditReport} />
           ) : (
-            <div className="text-center py-4 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed]">
-              <p className="text-xs text-[#aeaeb2]">{t("review.noAudit")}</p>
+            <div className="text-center py-4 rounded-xl bg-[#FCE4E2] border border-[#EDD3D1]">
+              <p className="text-xs text-[#9FA0A0]">{t("review.noAudit")}</p>
             </div>
           )}
 
@@ -294,7 +294,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
           <div>{renderContent()}</div>
 
           {/* Decision */}
-          <div className="border-t border-[#e8e8ed] pt-3 space-y-2">
+          <div className="border-t border-[#EDD3D1] pt-3 space-y-2">
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -305,7 +305,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
             <div className="flex items-center gap-2">
               {/* Primary action: Approve — full green fill, largest */}
               <button onClick={() => onAction("approve", notes)} disabled={loading}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#7CB342] hover:bg-[#5A8F2E] active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm">
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#6A2B3A] hover:bg-[#4E1F2A] active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -313,12 +313,12 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
               </button>
               {/* Secondary action: Request Changes — outline */}
               <button onClick={() => onAction("request_changes", notes)} disabled={loading}
-                className="px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#86868b] bg-white border border-[#e8e8ed] hover:border-[#d2d2d7] hover:text-[#1d1d1f] active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                className="px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#59585E] bg-white border border-[#EDD3D1] hover:border-[#D9A8A3] hover:text-[#35353B] active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                 {t("review.requestChanges")}
               </button>
               {/* Destructive action: Reject — subtle red, rightmost */}
               <button onClick={() => onAction("reject", notes)} disabled={loading}
-                className="px-3 py-2.5 rounded-xl text-xs font-medium text-[#ff453a] bg-white border border-[#ffe0dd] hover:bg-[#fff5f5] hover:border-[#ff453a]/30 active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                className="px-3 py-2.5 rounded-xl text-xs font-medium text-[#C45B50] bg-white border border-[#ffe0dd] hover:bg-[#fff5f5] hover:border-[#C45B50]/30 active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                 {t("review.reject")}
               </button>
             </div>

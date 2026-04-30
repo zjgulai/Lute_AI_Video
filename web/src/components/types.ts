@@ -70,6 +70,7 @@ export const SCENE_ICON_NAMES: Record<string, string> = {
   influencer_remix: "Users",
   brand_campaign: "Megaphone",
   product_direct: "Package",
+  brand_vlog: "Camera",
   general: "Zap",
   live_shoot_to_video: "Camera",
 };
@@ -120,4 +121,46 @@ export const CONTENT_SCENARIOS = [
     iconName: SCENE_ICON_NAMES.product_direct,
     platforms: ["tiktok", "shopify"],
   },
+  {
+    id: "brand_vlog",
+    title: "品牌VLOG",
+    desc: "基于品牌素材（六视图+模特+场景+故事）一键生成 VLOG 风格短片",
+    iconName: SCENE_ICON_NAMES.brand_vlog,
+    platforms: ["tiktok", "shopify", "youtube_shorts"],
+  },
 ] as const;
+
+// 品牌VLOG — 产品六视图角度
+export interface ProductViewAngle {
+  label: string;
+  title: string;
+  description: string;
+  usage_note: string;
+  color: string;
+}
+
+// 品牌VLOG — 产品SKU
+export interface ProductSku {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+  tags: string[];
+  views: ProductViewAngle[];
+}
+
+// 品牌VLOG — 模特
+export interface ModelProfile {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  gradient: [string, string];
+}
+
+// 品牌VLOG — 品牌定义
+export interface VlogBrand {
+  id: string;
+  name: string;
+  tone: string;
+}

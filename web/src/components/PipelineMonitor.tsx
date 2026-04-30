@@ -123,10 +123,10 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
     <div className="px-4 py-3 space-y-0">
       {/* Thread context bar */}
       {threadId && (
-        <div className="flex items-center justify-between mb-2 pb-2 border-b border-[#e8e8ed]">
-          <span className="text-[10px] text-[#aeaeb2] font-mono">#{threadId}</span>
+        <div className="flex items-center justify-between mb-2 pb-2 border-b border-[#EDD3D1]">
+          <span className="text-[11px] text-[#9FA0A0] font-mono">#{threadId}</span>
           {onReset && !pipelineComplete && (
-            <button onClick={onReset} className="text-[9px] text-[#aeaeb2] hover:text-[#ff453a] transition-colors cursor-pointer">
+            <button onClick={onReset} className="text-[11px] text-[#9FA0A0] hover:text-[#C45B50] transition-colors cursor-pointer">
               {t("pipeline.abandon")}
             </button>
           )}
@@ -134,14 +134,14 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
       )}
 
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider flex items-center gap-1.5">
+        <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider flex items-center gap-1.5">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
-            <circle cx="7" cy="7" r="5.5" stroke="#86868b" strokeWidth="1" />
-            <path d="M7 4v3.5l2.5 1.5" stroke="#86868b" strokeWidth="1" strokeLinecap="round" />
+            <circle cx="7" cy="7" r="5.5" stroke="#59585E" strokeWidth="1" />
+            <path d="M7 4v3.5l2.5 1.5" stroke="#59585E" strokeWidth="1" strokeLinecap="round" />
           </svg>
           {t("pipeline.progress")}
         </h3>
-        <span className="text-[10px] text-[#aeaeb2] font-mono">
+        <span className="text-[11px] text-[#9FA0A0] font-mono">
           {STAGES.filter((s) => s.check(state)).length}/{STAGES.length}
         </span>
       </div>
@@ -149,7 +149,7 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
       {/* Stage timeline */}
       <div className="relative">
         {/* Vertical line */}
-        <div className="absolute left-[15px] top-2 bottom-2 w-px bg-[#e8e8ed]" />
+        <div className="absolute left-[15px] top-2 bottom-2 w-px bg-[#EDD3D1]" />
 
         <div className="space-y-0">
           {STAGES.map((stage, i) => {
@@ -158,22 +158,22 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
             const isActive = i === activeIdx;
             const isPast = i < activeIdx;
 
-            let dotColor = "bg-[#e8e8ed]";
+            let dotColor = "bg-[#EDD3D1]";
             let dotRing = "";
             if (done || hasAudit || isPast) {
-              dotColor = "bg-[#7CB342]";
-              dotRing = "ring-2 ring-[#7CB342]/20";
+              dotColor = "bg-[#6A2B3A]";
+              dotRing = "ring-2 ring-[#6A2B3A]/20";
             }
             if (isActive) {
-              dotColor = "bg-[#7CB342]";
-              dotRing = "ring-4 ring-[#7CB342]/30 animate-pulse";
+              dotColor = "bg-[#6A2B3A]";
+              dotRing = "ring-4 ring-[#6A2B3A]/30 animate-pulse";
             }
 
             return (
               <div
                 key={stage.key}
               className={`relative flex items-center gap-3 pl-8 py-1.5 rounded-lg transition-all ${
-                isActive ? "bg-[#7CB342]/5 -mx-1 px-1" : ""
+                isActive ? "bg-[#6A2B3A]/5 -mx-1 px-1" : ""
               }`}
               >
                 {/* Dot */}
@@ -182,23 +182,23 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
                 />
 
                 {/* Icon */}
-                {React.createElement(STAGE_ICON_MAP[stage.iconKey] || Clock, { size: 16, strokeWidth: 1.5, className: "w-4 h-4 shrink-0 text-[#86868b]" })}
+                {React.createElement(STAGE_ICON_MAP[stage.iconKey] || Clock, { size: 16, strokeWidth: 1.5, className: "w-4 h-4 shrink-0 text-[#59585E]" })}
 
                 {/* Label + Status */}
                 <div className="flex-1 min-w-0">
                   <span
                     className={`text-[13px] font-medium transition-colors ${
                       isActive
-                        ? "text-[#7CB342]"
+                        ? "text-[#6A2B3A]"
                         : done || isPast || pipelineComplete
-                        ? "text-[#1d1d1f]"
-                        : "text-[#aeaeb2]"
+                        ? "text-[#35353B]"
+                        : "text-[#9FA0A0]"
                     }`}
                   >
                     {t(stage.label)}
                   </span>
                   {hasAudit && (
-                    <span className="ml-2 text-[10px] text-[#ff9f0a] font-semibold bg-[#ff9f0a]/10 px-1.5 py-0.5 rounded-full">
+                    <span className="ml-2 text-[11px] text-[#ff9f0a] font-semibold bg-[#ff9f0a]/10 px-1.5 py-0.5 rounded-full">
                       {t("pipeline.selfAudited")}
                     </span>
                   )}
@@ -209,7 +209,7 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
                     <path
                       d="M3 7.5L5.5 10L11 4"
-                      stroke="#7CB342"
+                      stroke="#6A2B3A"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -225,11 +225,11 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
       {/* Pipeline complete badge */}
       {pipelineComplete && (
         <div className="pt-2">
-          <div className="flex items-center justify-center gap-2 py-2 rounded-lg bg-[#7CB342]/10 text-[#7CB342] text-xs font-semibold">
+          <div className="flex items-center justify-center gap-2 py-2 rounded-lg bg-[#6A2B3A]/10 text-[#6A2B3A] text-xs font-semibold">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
                 d="M3 7.5L5.5 10L11 4"
-                stroke="#7CB342"
+                stroke="#6A2B3A"
                 strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"

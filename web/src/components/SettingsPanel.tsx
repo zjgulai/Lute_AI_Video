@@ -83,18 +83,18 @@ export default function SettingsPanel({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#e8e8ed]">
+        <div className="flex items-center justify-between p-4 border-b border-[#EDD3D1]">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#7CB342]/10 flex items-center justify-center">
-              <Server className="w-4 h-4 text-[#7CB342]" />
+            <div className="w-8 h-8 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
+              <Server className="w-4 h-4 text-[#6A2B3A]" />
             </div>
-            <h2 className="text-base font-semibold text-[#1d1d1f]">API Configuration</h2>
+            <h2 className="text-base font-semibold text-[#35353B]">API Configuration</h2>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-[#f5f5f7] flex items-center justify-center cursor-pointer"
+            className="w-8 h-8 rounded-lg hover:bg-[#FCE4E2] flex items-center justify-center cursor-pointer"
           >
-            <X className="w-4 h-4 text-[#86868b]" />
+            <X className="w-4 h-4 text-[#59585E]" />
           </button>
         </div>
 
@@ -102,7 +102,7 @@ export default function SettingsPanel({ onClose }: Props) {
         <div className="p-4 space-y-4">
           {/* Backend URL */}
           <div>
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[#86868b] mb-1.5">
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[#59585E] mb-1.5">
               <Server className="w-3 h-3" />
               Backend URL
             </label>
@@ -113,14 +113,14 @@ export default function SettingsPanel({ onClose }: Props) {
               placeholder="https://your-backend.onrender.com"
               className="apple-input text-sm"
             />
-            <p className="text-[10px] text-[#aeaeb2] mt-1">
+            <p className="text-[11px] text-[#9FA0A0] mt-1">
               e.g. https://lute-ai-video-backend.onrender.com or http://localhost:8001
             </p>
           </div>
 
           {/* API Key */}
           <div>
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[#86868b] mb-1.5">
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[#59585E] mb-1.5">
               <Key className="w-3 h-3" />
               API Key
             </label>
@@ -131,18 +131,18 @@ export default function SettingsPanel({ onClose }: Props) {
               placeholder="ai_video_demo_2026"
               className="apple-input text-sm"
             />
-            <p className="text-[10px] text-[#aeaeb2] mt-1">
+            <p className="text-[11px] text-[#9FA0A0] mt-1">
               Must match the API_KEY environment variable on your backend.
             </p>
           </div>
 
           {/* Demo mode toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#f5f5f7]">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-[#FCE4E2]">
             <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-[#86868b]" />
+              <Zap className="w-4 h-4 text-[#59585E]" />
               <div>
-                <p className="text-xs font-medium text-[#1d1d1f]">Demo Mode</p>
-                <p className="text-[10px] text-[#aeaeb2]">Skip API calls, use mock data</p>
+                <p className="text-xs font-medium text-[#35353B]">Demo Mode</p>
+                <p className="text-[11px] text-[#9FA0A0]">Skip API calls, use mock data</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -152,7 +152,7 @@ export default function SettingsPanel({ onClose }: Props) {
                 onChange={(e) => setDemo(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-10 h-5.5 bg-[#e8e8ed] rounded-full peer peer-checked:bg-[#7CB342] transition-colors after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:w-[18px] after:h-[18px] after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-[18px]" />
+              <div className="w-10 h-5.5 bg-[#EDD3D1] rounded-full peer peer-checked:bg-[#6A2B3A] transition-colors after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:w-[18px] after:h-[18px] after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-[18px]" />
             </label>
           </div>
 
@@ -160,11 +160,11 @@ export default function SettingsPanel({ onClose }: Props) {
           <button
             onClick={handleTest}
             disabled={testing || !baseUrl.trim()}
-            className="w-full apple-btn text-xs py-2 border border-[#e8e8ed] hover:bg-[#f5f5f7] disabled:opacity-50"
+            className="w-full apple-btn text-xs py-2 border border-[#EDD3D1] hover:bg-[#FCE4E2] disabled:opacity-50"
           >
             {testing ? (
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 border-2 border-[#86868b] border-t-transparent rounded-full animate-spin" />
+                <span className="w-3 h-3 border-2 border-[#59585E] border-t-transparent rounded-full animate-spin" />
                 Testing...
               </span>
             ) : (
@@ -180,8 +180,8 @@ export default function SettingsPanel({ onClose }: Props) {
             <div
               className={`flex items-center gap-2 p-2.5 rounded-lg text-xs ${
                 testResult.ok
-                  ? "bg-[#7CB342]/10 text-[#7CB342]"
-                  : "bg-[#ff453a]/10 text-[#ff453a]"
+                  ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+                  : "bg-[#C45B50]/10 text-[#C45B50]"
               }`}
             >
               {testResult.ok ? (
@@ -195,10 +195,10 @@ export default function SettingsPanel({ onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-[#e8e8ed]">
+        <div className="flex items-center justify-between p-4 border-t border-[#EDD3D1]">
           <button
             onClick={handleReset}
-            className="flex items-center gap-1 text-[11px] text-[#86868b] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-[11px] text-[#59585E] hover:text-[#35353B] transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3 h-3" />
             Reset Defaults

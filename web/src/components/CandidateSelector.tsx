@@ -26,21 +26,21 @@ interface Props {
 }
 
 function getScoreColor(score: number): string {
-  if (score >= 0.8) return "bg-[#7CB342]";
+  if (score >= 0.8) return "bg-[#6A2B3A]";
   if (score >= 0.5) return "bg-[#ff9500]";
-  return "bg-[#ff453a]";
+  return "bg-[#C45B50]";
 }
 
 function getScoreBgColor(score: number): string {
-  if (score >= 0.8) return "bg-[#7CB342]/10";
+  if (score >= 0.8) return "bg-[#6A2B3A]/10";
   if (score >= 0.5) return "bg-[#ff9500]/10";
-  return "bg-[#ff453a]/10";
+  return "bg-[#C45B50]/10";
 }
 
 function getScoreTextColor(score: number): string {
-  if (score >= 0.8) return "text-[#7CB342]";
+  if (score >= 0.8) return "text-[#6A2B3A]";
   if (score >= 0.5) return "text-[#ff9500]";
-  return "text-[#ff453a]";
+  return "text-[#C45B50]";
 }
 
 function getVariantLabelKey(variant: string): string {
@@ -69,23 +69,23 @@ function SkeletonCard() {
       <div className="apple-card p-4 space-y-3">
         {/* Variant badge skeleton */}
         <div className="flex justify-end">
-          <div className="h-4 w-20 rounded-full bg-[#e8e8ed]" />
+          <div className="h-4 w-20 rounded-full bg-[#EDD3D1]" />
         </div>
         {/* Score bar skeleton */}
         <div className="space-y-1">
-          <div className="h-2 w-full rounded-full bg-[#e8e8ed]" />
-          <div className="h-3 w-12 rounded bg-[#e8e8ed]" />
+          <div className="h-2 w-full rounded-full bg-[#EDD3D1]" />
+          <div className="h-3 w-12 rounded bg-[#EDD3D1]" />
         </div>
         {/* Content preview skeleton */}
         <div className="space-y-1.5">
-          <div className="h-2.5 w-full rounded bg-[#e8e8ed]" />
-          <div className="h-2.5 w-3/4 rounded bg-[#e8e8ed]" />
-          <div className="h-2.5 w-1/2 rounded bg-[#e8e8ed]" />
+          <div className="h-2.5 w-full rounded bg-[#EDD3D1]" />
+          <div className="h-2.5 w-3/4 rounded bg-[#EDD3D1]" />
+          <div className="h-2.5 w-1/2 rounded bg-[#EDD3D1]" />
         </div>
         {/* Button skeleton */}
-        <div className="h-8 w-full rounded-lg bg-[#e8e8ed]" />
+        <div className="h-8 w-full rounded-lg bg-[#EDD3D1]" />
         {/* Edit link skeleton */}
-        <div className="h-3 w-12 mx-auto rounded bg-[#e8e8ed]" />
+        <div className="h-3 w-12 mx-auto rounded bg-[#EDD3D1]" />
       </div>
     </div>
   );
@@ -137,21 +137,21 @@ export default function CandidateSelector({
         const scorePct = Math.round(score * 100);
         const preview = getDataPreview(candidate.data);
 
-        let borderClass = "border-[#e8e8ed]";
-        if (isSelected) borderClass = "border-[#007AFF]";
-        else if (candidate.recommended) borderClass = "border-[#7CB342]";
+        let borderClass = "border-[#EDD3D1]";
+        if (isSelected) borderClass = "border-[#6A2B3A]";
+        else if (candidate.recommended) borderClass = "border-[#6A2B3A]";
 
         return (
           <div
             key={candidate.id}
             className={`flex-1 min-w-[200px] max-w-[260px] apple-card p-4 border-2 transition-all relative ${
-              isSelected ? "ring-2 ring-[#007AFF]/20" : ""
+              isSelected ? "ring-2 ring-[#6A2B3A]/20" : ""
             } ${borderClass}`}
           >
             {/* AI Recommended badge */}
             {candidate.recommended && (
               <div className="absolute -top-2.5 left-3">
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#7CB342] text-white shadow-sm">
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#6A2B3A] text-white shadow-sm">
                   <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
                     <path d="M6 1L7.5 4.5L11 5L8.5 7.5L9 11L6 9L3 11L3.5 7.5L1 5L4.5 4.5L6 1Z" fill="white" />
                   </svg>
@@ -163,7 +163,7 @@ export default function CandidateSelector({
             {/* Selected checkmark */}
             {isSelected && (
               <div className="absolute -top-2.5 right-3">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#007AFF] text-white shadow-sm">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#6A2B3A] text-white shadow-sm">
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                     <path d="M2 5.5L4 7.5L8 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -181,14 +181,14 @@ export default function CandidateSelector({
             {/* Score bar */}
             <div className="mb-2">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-[#86868b] font-medium">
+                <span className="text-[10px] text-[#9FA0A0] font-medium">
                   {t("gate.score")}
                 </span>
                 <span className={`text-[10px] font-semibold ${getScoreTextColor(score)}`}>
                   {scorePct}%
                 </span>
               </div>
-              <div className="h-1.5 w-full bg-[#f5f5f7] rounded-full overflow-hidden">
+              <div className="h-1.5 w-full bg-[#FFF0EF] rounded-full overflow-hidden">
                 <div
                   className={`h-full ${getScoreColor(score)} rounded-full transition-all duration-500`}
                   style={{ width: `${scorePct}%` }}
@@ -199,20 +199,20 @@ export default function CandidateSelector({
             {/* Content preview */}
             <div className="mb-3 min-h-[40px]">
               {preview ? (
-                <p className="text-[11px] text-[#86868b] leading-relaxed whitespace-pre-wrap break-words">
+                <p className="text-[11px] text-[#9FA0A0] leading-relaxed whitespace-pre-wrap break-words">
                   {preview}
                   {preview.length >= 100 && (
-                    <span className="text-[#aeaeb2]">...</span>
+                    <span className="text-[#9FA0A0]">...</span>
                   )}
                 </p>
               ) : (
-                <p className="text-[11px] text-[#aeaeb2] italic">{t("common.empty")}</p>
+                <p className="text-[11px] text-[#9FA0A0] italic">{t("common.empty")}</p>
               )}
             </div>
 
             {/* Score explanation */}
             {candidate.score?.explanation && (
-              <p className="text-[9px] text-[#aeaeb2] mb-2 leading-relaxed line-clamp-2">
+              <p className="text-[9px] text-[#9FA0A0] mb-2 leading-relaxed line-clamp-2">
                 {candidate.score.explanation}
               </p>
             )}
@@ -222,10 +222,10 @@ export default function CandidateSelector({
               onClick={() => handleToggle(candidate.id)}
               className={`w-full text-xs font-medium py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
                 isSelected
-                  ? "bg-[#007AFF] text-white shadow-sm"
+                  ? "bg-[#6A2B3A] text-white shadow-sm"
                   : isAtMax
-                  ? "bg-[#f5f5f7] text-[#aeaeb2] cursor-not-allowed"
-                  : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed]"
+                  ? "bg-[#FFF0EF] text-[#9FA0A0] cursor-not-allowed"
+                  : "bg-[#FFF0EF] text-[#35353B] hover:bg-[#EDD3D1]"
               }`}
               disabled={!isSelected && isAtMax}
             >
@@ -236,7 +236,7 @@ export default function CandidateSelector({
             <div className="text-center mt-1.5">
               <button
                 onClick={() => onEdit(candidate.id)}
-                className="text-[10px] text-[#86868b] hover:text-[#007AFF] transition-colors cursor-pointer"
+                className="text-[10px] text-[#9FA0A0] hover:text-[#6A2B3A] transition-colors cursor-pointer"
               >
                 {"✎"} {t("step.edit")}
               </button>

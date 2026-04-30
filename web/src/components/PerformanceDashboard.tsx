@@ -97,10 +97,10 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
   if (loading) {
     return (
       <div className="space-y-3 animate-pulse">
-        <div className="h-8 bg-[#f5f5f7] rounded-lg w-2/3" />
-        <div className="h-10 bg-[#f5f5f7] rounded-lg" />
+        <div className="h-8 bg-[#FFF0EF] rounded-lg w-2/3" />
+        <div className="h-10 bg-[#FFF0EF] rounded-lg" />
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-16 bg-[#f5f5f7] rounded-lg" />
+          <div key={i} className="h-16 bg-[#FFF0EF] rounded-lg" />
         ))}
       </div>
     );
@@ -109,12 +109,12 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
   if (error) {
     return (
       <div className="text-center py-10">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ff453a" strokeWidth="1.5" className="mx-auto mb-2">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C45B50" strokeWidth="1.5" className="mx-auto mb-2">
           <circle cx="12" cy="12" r="10" />
           <line x1="12" y1="8" x2="12" y2="12" />
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
-        <p className="text-xs text-[#ff453a]">{error}</p>
+        <p className="text-xs text-[#C45B50]">{error}</p>
       </div>
     );
   }
@@ -125,24 +125,24 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[#1d1d1f]">{t("perf.title")}</h3>
+        <h3 className="text-sm font-semibold text-[#35353B]">{t("perf.title")}</h3>
         {onClose && (
-          <button onClick={onClose} className="text-[10px] text-[#86868b] hover:text-[#1d1d1f] cursor-pointer">
+          <button onClick={onClose} className="text-[10px] text-[#9FA0A0] hover:text-[#35353B] cursor-pointer">
             {t("common.close")}
           </button>
         )}
       </div>
 
       {/* View tabs */}
-      <div className="flex border-b border-[#e8e8ed]">
+      <div className="flex border-b border-[#EDD3D1]">
         {viewTabs.map((vt) => (
           <button
             key={vt.id}
             onClick={() => setViewTab(vt.id)}
             className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer ${
               viewTab === vt.id
-                ? "border-[#7CB342] text-[#7CB342]"
-                : "border-transparent text-[#86868b] hover:text-[#1d1d1f]"
+                ? "border-[#6A2B3A] text-[#6A2B3A]"
+                : "border-transparent text-[#9FA0A0] hover:text-[#35353B]"
             }`}
           >
             {vt.label}
@@ -156,7 +156,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
           <select
             value={scenarioFilter}
             onChange={(e) => setScenarioFilter(e.target.value)}
-            className="text-[11px] px-2 py-1 rounded-lg border border-[#e8e8ed] bg-white text-[#1d1d1f] cursor-pointer"
+            className="text-[11px] px-2 py-1 rounded-lg border border-[#EDD3D1] bg-white text-[#35353B] cursor-pointer"
           >
             {SCENARIO_OPTIONS.map((s) => (
               <option key={s} value={s}>{s === "All" ? t("perf.filterAll") : s}</option>
@@ -165,7 +165,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
           <select
             value={platformFilter}
             onChange={(e) => setPlatformFilter(e.target.value)}
-            className="text-[11px] px-2 py-1 rounded-lg border border-[#e8e8ed] bg-white text-[#1d1d1f] cursor-pointer"
+            className="text-[11px] px-2 py-1 rounded-lg border border-[#EDD3D1] bg-white text-[#35353B] cursor-pointer"
           >
             <option value="All">{t("perf.filterAll")}</option>
             <option value="tiktok">TikTok</option>
@@ -178,8 +178,8 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
                 onClick={() => setTimeFilter(opt.value)}
                 className={`text-[10px] px-2 py-1 rounded-lg border cursor-pointer ${
                   timeFilter === opt.value
-                    ? "bg-[#7CB342] text-white border-[#7CB342]"
-                    : "bg-white text-[#86868b] border-[#e8e8ed] hover:border-[#86868b]"
+                    ? "bg-[#6A2B3A] text-white border-[#6A2B3A]"
+                    : "bg-white text-[#9FA0A0] border-[#EDD3D1] hover:border-[#9FA0A0]"
                 }`}
               >
                 {opt.label}
@@ -192,13 +192,13 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
       {/* No data state */}
       {!hasVideoData && (
         <div className="text-center py-10">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#e8e8ed" strokeWidth="1.5" className="mx-auto mb-2">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#EDD3D1" strokeWidth="1.5" className="mx-auto mb-2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <path d="M3 9h18" />
             <path d="M9 21V9" />
           </svg>
-          <p className="text-xs text-[#aeaeb2]">{t("perf.noData")}</p>
-          <p className="text-[10px] text-[#aeaeb2] mt-1">{t("perf.noDataHint")}</p>
+          <p className="text-xs text-[#9FA0A0]">{t("perf.noData")}</p>
+          <p className="text-[10px] text-[#9FA0A0] mt-1">{t("perf.noDataHint")}</p>
         </div>
       )}
 
@@ -228,13 +228,13 @@ function VideoListView({ videos }: { videos: VideoRow[] }) {
   return (
     <div className="space-y-1">
       {videos.map((v) => (
-        <div key={v.video_id} className="apple-card p-2 bg-white border border-[#e8e8ed]">
+        <div key={v.video_id} className="apple-card p-2 bg-white border border-[#EDD3D1]">
           <button
             onClick={() => setExpandedId(expandedId === v.video_id ? null : v.video_id)}
             className="w-full text-left cursor-pointer"
           >
             <div className="flex items-center gap-2 text-[11px]">
-              <span className="flex-1 font-medium text-[#1d1d1f] truncate">{v.title}</span>
+              <span className="flex-1 font-medium text-[#35353B] truncate">{v.title}</span>
               <ScenarioBadge scenario={v.scenario} />
               <PlatformBadge platform={v.platform} />
               <MetricCell value={v.ctr} format="pct" />
@@ -246,14 +246,14 @@ function VideoListView({ videos }: { videos: VideoRow[] }) {
                 width="10" height="10" viewBox="0 0 10 10" fill="none"
                 className={`transition-transform ${expandedId === v.video_id ? "rotate-180" : ""}`}
               >
-                <path d="M2.5 3.5 L5 6.5 L7.5 3.5" stroke="#aeaeb2" strokeWidth="1.2" strokeLinecap="round" />
+                <path d="M2.5 3.5 L5 6.5 L7.5 3.5" stroke="#9FA0A0" strokeWidth="1.2" strokeLinecap="round" />
               </svg>
             </div>
           </button>
 
           {/* Expanded: mini trend chart */}
           {expandedId === v.video_id && v.history && v.history.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-[#e8e8ed]">
+            <div className="mt-2 pt-2 border-t border-[#EDD3D1]">
               <MiniTrendChart history={v.history} />
             </div>
           )}
@@ -271,7 +271,7 @@ function ScenarioBadge({ scenario }: { scenario: string }) {
     S3: "bg-[#5856d6]/10 text-[#5856d6]",
   };
   return (
-    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[s] || "bg-[#86868b]/10 text-[#86868b]"}`}>
+    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[s] || "bg-[#9FA0A0]/10 text-[#9FA0A0]"}`}>
       {s}
     </span>
   );
@@ -280,11 +280,11 @@ function ScenarioBadge({ scenario }: { scenario: string }) {
 function PlatformBadge({ platform }: { platform: string }) {
   const p = platform.toLowerCase();
   const colorMap: Record<string, string> = {
-    tiktok: "bg-[#1d1d1f]/10 text-[#1d1d1f]",
+    tiktok: "bg-[#35353B]/10 text-[#35353B]",
     shopify: "bg-[#5e6ad2]/10 text-[#5e6ad2]",
   };
   return (
-    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[p] || "bg-[#86868b]/10 text-[#86868b]"}`}>
+    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[p] || "bg-[#9FA0A0]/10 text-[#9FA0A0]"}`}>
       {p === "tiktok" ? "TT" : p === "shopify" ? "SP" : p.toUpperCase()}
     </span>
   );
@@ -298,9 +298,9 @@ function MetricCell({ value, format }: { value: number; format: "pct" | "num" })
   const isHighCtr = format === "pct" && value > 0.04;
   const isLowCtr = format === "pct" && value < 0.02;
 
-  let textClass = "text-[#86868b]";
-  if (isHighCtr) textClass = "text-[#7CB342] font-semibold";
-  else if (isLowCtr) textClass = "text-[#ff453a]";
+  let textClass = "text-[#9FA0A0]";
+  if (isHighCtr) textClass = "text-[#6A2B3A] font-semibold";
+  else if (isLowCtr) textClass = "text-[#C45B50]";
 
   return (
     <span className={`text-[10px] tabular-nums w-10 text-right shrink-0 ${textClass}`}>
@@ -327,12 +327,12 @@ function MiniTrendChart({ history }: { history: { pulled_at: string; ctr: number
   return (
     <div className="flex items-center gap-4">
       <svg width={w} height={h} className="shrink-0">
-        <path d={makePath("ctr")} fill="none" stroke="#7CB342" strokeWidth="1.5" />
+        <path d={makePath("ctr")} fill="none" stroke="#6A2B3A" strokeWidth="1.5" />
         <path d={makePath("watch_rate")} fill="none" stroke="#007aff" strokeWidth="1.5" strokeDasharray="3 2" />
       </svg>
-      <div className="text-[9px] text-[#aeaeb2] space-y-0.5">
+      <div className="text-[9px] text-[#9FA0A0] space-y-0.5">
         <div className="flex items-center gap-1">
-          <span className="w-2 h-0.5 bg-[#7CB342]" />
+          <span className="w-2 h-0.5 bg-[#6A2B3A]" />
           <span>CTR</span>
         </div>
         <div className="flex items-center gap-1">
@@ -351,7 +351,7 @@ function ScenarioView({ scenarios, onScenarioClick }: { scenarios: ScenarioCard[
   if (scenarios.length === 0) {
     return (
       <div className="text-center py-10">
-        <p className="text-xs text-[#aeaeb2]">{t("perf.noData")}</p>
+        <p className="text-xs text-[#9FA0A0]">{t("perf.noData")}</p>
       </div>
     );
   }
@@ -368,31 +368,31 @@ function ScenarioView({ scenarios, onScenarioClick }: { scenarios: ScenarioCard[
             key={s.scenario}
             onClick={() => onScenarioClick(s.scenario)}
             className={`apple-card p-4 text-left cursor-pointer transition-all hover:shadow-md ${
-              isBest ? "bg-[#7CB342]/5 border-[#7CB342]/20 border" : "bg-white border border-[#e8e8ed]"
+              isBest ? "bg-[#6A2B3A]/5 border-[#6A2B3A]/20 border" : "bg-white border border-[#EDD3D1]"
             }`}
           >
-            <p className="text-[13px] font-bold text-[#1d1d1f] mb-3">{s.scenario}</p>
+            <p className="text-[13px] font-bold text-[#35353B] mb-3">{s.scenario}</p>
             <div className="space-y-2 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-[#86868b]">{t("perf.avgWatchRate")}</span>
-                <span className="font-medium text-[#1d1d1f]">{(s.avg_watch_rate * 100).toFixed(1)}%</span>
+                <span className="text-[#9FA0A0]">{t("perf.avgWatchRate")}</span>
+                <span className="font-medium text-[#35353B]">{(s.avg_watch_rate * 100).toFixed(1)}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#86868b]">{t("perf.avgCtr")}</span>
-                <span className="font-medium text-[#1d1d1f]">{(s.avg_ctr * 100).toFixed(1)}%</span>
+                <span className="text-[#9FA0A0]">{t("perf.avgCtr")}</span>
+                <span className="font-medium text-[#35353B]">{(s.avg_ctr * 100).toFixed(1)}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#86868b]">{t("perf.avgCvr")}</span>
-                <span className="font-medium text-[#1d1d1f]">{(s.avg_cvr * 100).toFixed(1)}%</span>
+                <span className="text-[#9FA0A0]">{t("perf.avgCvr")}</span>
+                <span className="font-medium text-[#35353B]">{(s.avg_cvr * 100).toFixed(1)}%</span>
               </div>
-              <div className="border-t border-[#e8e8ed] pt-2 mt-2">
+              <div className="border-t border-[#EDD3D1] pt-2 mt-2">
                 <div className="flex justify-between">
-                  <span className="text-[#86868b]">{t("perf.totalVideos")}</span>
-                  <span className="font-medium text-[#1d1d1f]">{s.total_videos}</span>
+                  <span className="text-[#9FA0A0]">{t("perf.totalVideos")}</span>
+                  <span className="font-medium text-[#35353B]">{s.total_videos}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#86868b]">{t("perf.totalSales")}</span>
-                  <span className="font-medium text-[#1d1d1f]">{s.total_sales}</span>
+                  <span className="text-[#9FA0A0]">{t("perf.totalSales")}</span>
+                  <span className="font-medium text-[#35353B]">{s.total_sales}</span>
                 </div>
               </div>
             </div>
@@ -411,7 +411,7 @@ function PlatformView({ platforms }: { platforms: PlatformComparison[] }) {
   if (platforms.length === 0) {
     return (
       <div className="text-center py-10">
-        <p className="text-xs text-[#aeaeb2]">{t("perf.noData")}</p>
+        <p className="text-xs text-[#9FA0A0]">{t("perf.noData")}</p>
       </div>
     );
   }
@@ -419,41 +419,41 @@ function PlatformView({ platforms }: { platforms: PlatformComparison[] }) {
   return (
     <div className="space-y-4">
       {platforms.map((p) => (
-        <div key={p.platform} className="apple-card p-3 bg-white border border-[#e8e8ed]">
-          <p className="text-[12px] font-semibold text-[#1d1d1f] mb-2">
+        <div key={p.platform} className="apple-card p-3 bg-white border border-[#EDD3D1]">
+          <p className="text-[12px] font-semibold text-[#35353B] mb-2">
             {p.platform === "tiktok" ? "TikTok" : p.platform === "shopify" ? "Shopify" : p.platform}
           </p>
 
           {/* Overall metrics */}
           <div className="grid grid-cols-4 gap-2 mb-3 text-[11px]">
             <div>
-              <p className="text-[#86868b]">{t("perf.ctr")}</p>
-              <p className="font-semibold text-[#1d1d1f]">{(p.avg_ctr * 100).toFixed(1)}%</p>
+              <p className="text-[#9FA0A0]">{t("perf.ctr")}</p>
+              <p className="font-semibold text-[#35353B]">{(p.avg_ctr * 100).toFixed(1)}%</p>
             </div>
             <div>
-              <p className="text-[#86868b]">{t("perf.cvr")}</p>
-              <p className="font-semibold text-[#1d1d1f]">{(p.avg_cvr * 100).toFixed(1)}%</p>
+              <p className="text-[#9FA0A0]">{t("perf.cvr")}</p>
+              <p className="font-semibold text-[#35353B]">{(p.avg_cvr * 100).toFixed(1)}%</p>
             </div>
             <div>
-              <p className="text-[#86868b]">{t("perf.watchRate")}</p>
-              <p className="font-semibold text-[#1d1d1f]">{(p.avg_watch_rate * 100).toFixed(1)}%</p>
+              <p className="text-[#9FA0A0]">{t("perf.watchRate")}</p>
+              <p className="font-semibold text-[#35353B]">{(p.avg_watch_rate * 100).toFixed(1)}%</p>
             </div>
             <div>
-              <p className="text-[#86868b]">{t("perf.views")}</p>
-              <p className="font-semibold text-[#1d1d1f]">{p.total_views}</p>
+              <p className="text-[#9FA0A0]">{t("perf.views")}</p>
+              <p className="font-semibold text-[#35353B]">{p.total_views}</p>
             </div>
           </div>
 
           {/* Scenario breakdown */}
           {p.scenario_breakdown && Object.keys(p.scenario_breakdown).length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] text-[#aeaeb2] uppercase tracking-wider">{t("perf.scenario")}</p>
+              <p className="text-[10px] text-[#9FA0A0] uppercase tracking-wider">{t("perf.scenario")}</p>
               {Object.entries(p.scenario_breakdown).map(([scenario, metrics]) => (
-                <div key={scenario} className="grid grid-cols-4 gap-2 text-[10px] pl-2 border-l-2 border-[#e8e8ed]">
-                  <span className="font-medium text-[#1d1d1f]">{scenario}</span>
-                  <span className="text-[#86868b]">{(metrics.avg_ctr * 100).toFixed(1)}%</span>
-                  <span className="text-[#86868b]">{(metrics.avg_cvr * 100).toFixed(1)}%</span>
-                  <span className="text-[#86868b]">{(metrics.avg_watch_rate * 100).toFixed(1)}%</span>
+                <div key={scenario} className="grid grid-cols-4 gap-2 text-[10px] pl-2 border-l-2 border-[#EDD3D1]">
+                  <span className="font-medium text-[#35353B]">{scenario}</span>
+                  <span className="text-[#9FA0A0]">{(metrics.avg_ctr * 100).toFixed(1)}%</span>
+                  <span className="text-[#9FA0A0]">{(metrics.avg_cvr * 100).toFixed(1)}%</span>
+                  <span className="text-[#9FA0A0]">{(metrics.avg_watch_rate * 100).toFixed(1)}%</span>
                 </div>
               ))}
             </div>

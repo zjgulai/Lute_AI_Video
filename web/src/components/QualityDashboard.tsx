@@ -25,12 +25,12 @@ function statusColor(status: string) {
   switch (status) {
     case "PASS":
       return {
-        bg: "bg-[#30d158]/10",
-        text: "text-[#30d158]",
-        border: "border-[#30d158]/20",
-        bar: "bg-[#30d158]",
-        dot: "bg-[#30d158]",
-        ring: "ring-[#30d158]/20",
+        bg: "bg-[#6A2B3A]/10",
+        text: "text-[#6A2B3A]",
+        border: "border-[#6A2B3A]/20",
+        bar: "bg-[#6A2B3A]",
+        dot: "bg-[#6A2B3A]",
+        ring: "ring-[#6A2B3A]/20",
       };
     case "WARN":
       return {
@@ -43,21 +43,21 @@ function statusColor(status: string) {
       };
     case "FAIL":
       return {
-        bg: "bg-[#ff453a]/10",
-        text: "text-[#ff453a]",
-        border: "border-[#ff453a]/20",
-        bar: "bg-[#ff453a]",
-        dot: "bg-[#ff453a]",
-        ring: "ring-[#ff453a]/20",
+        bg: "bg-[#C45B50]/10",
+        text: "text-[#C45B50]",
+        border: "border-[#C45B50]/20",
+        bar: "bg-[#C45B50]",
+        dot: "bg-[#C45B50]",
+        ring: "ring-[#C45B50]/20",
       };
     default:
       return {
-        bg: "bg-[#e8e8ed]/50",
-        text: "text-[#aeaeb2]",
-        border: "border-[#e8e8ed]",
-        bar: "bg-[#e8e8ed]",
-        dot: "bg-[#aeaeb2]",
-        ring: "ring-[#e8e8ed]",
+        bg: "bg-[#EDD3D1]/50",
+        text: "text-[#9FA0A0]",
+        border: "border-[#EDD3D1]",
+        bar: "bg-[#EDD3D1]",
+        dot: "bg-[#9FA0A0]",
+        ring: "ring-[#EDD3D1]",
       };
   }
 }
@@ -66,13 +66,13 @@ function ScoreBar({ score, color }: { score: number; color: string }) {
   const pct = Math.round(Math.min(score, 1) * 100);
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-[#f5f5f7] rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-[#FFF0EF] rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-700 ease-out ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[11px] font-semibold text-[#1d1d1f] tabular-nums w-8 text-right">
+      <span className="text-[11px] font-semibold text-[#35353B] tabular-nums w-8 text-right">
         {pct}%
       </span>
     </div>
@@ -85,11 +85,11 @@ export default function QualityDashboard({ qualityReport }: Props) {
   if (!qualityReport) {
     return (
       <div className="text-center py-12">
-        <div className="w-14 h-14 rounded-2xl bg-[#f5f5f7] flex items-center justify-center mx-auto mb-3">
-          <AlertCircle className="w-7 h-7 text-[#aeaeb2]" />
+        <div className="w-14 h-14 rounded-2xl bg-[#FFF0EF] flex items-center justify-center mx-auto mb-3">
+          <AlertCircle className="w-7 h-7 text-[#9FA0A0]" />
         </div>
-        <p className="text-sm font-medium text-[#86868b] mb-1">{t("quality.noData")}</p>
-        <p className="text-xs text-[#aeaeb2]">
+        <p className="text-sm font-medium text-[#9FA0A0] mb-1">{t("quality.noData")}</p>
+        <p className="text-xs text-[#9FA0A0]">
           {t("quality.hint")}
         </p>
       </div>
@@ -108,7 +108,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">
+            <p className="text-[11px] font-semibold text-[#9FA0A0] uppercase tracking-wider mb-1">
               {t("quality.overallStatus")}
             </p>
             <span
@@ -119,7 +119,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
             </span>
           </div>
           <div className="text-right">
-            <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">
+            <p className="text-[11px] font-semibold text-[#9FA0A0] uppercase tracking-wider mb-1">
               {t("quality.overallScore")}
             </p>
             <span className={`text-lg font-bold ${overall.text}`}>
@@ -133,7 +133,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
 
         {/* Summary */}
         {qualityReport.summary && (
-          <p className="text-xs text-[#86868b] mt-2 leading-relaxed">
+          <p className="text-xs text-[#9FA0A0] mt-2 leading-relaxed">
             {qualityReport.summary}
           </p>
         )}
@@ -142,7 +142,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
       {/* Criteria list */}
       {criteria.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider px-1">
+          <h3 className="text-[11px] font-semibold text-[#9FA0A0] uppercase tracking-wider px-1">
             {t("quality.criteria")}
           </h3>
           {criteria.map((c, i) => {
@@ -155,7 +155,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm shrink-0">{statusIcon(c.status)}</span>
-                    <span className="text-xs font-semibold text-[#1d1d1f] truncate">
+                    <span className="text-xs font-semibold text-[#35353B] truncate">
                       {c.name}
                     </span>
                   </div>
@@ -171,7 +171,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
 
                 {/* Observation / reason */}
                 {c.reason && (
-                  <p className="text-[11px] text-[#86868b] mt-1.5 leading-relaxed">
+                  <p className="text-[11px] text-[#9FA0A0] mt-1.5 leading-relaxed">
                     {c.reason}
                   </p>
                 )}

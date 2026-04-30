@@ -9,6 +9,7 @@ Flow:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,17 @@ logger = structlog.get_logger()
 
 FAST_MODE_OUTPUT_DIR = OUTPUT_DIR / "fast_mode"
 FAST_MODE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Module-level singleton instance — avoids rebuilding clients per request
+_fast_mode_service_instance: FastModeService | None = None
+
+
+def get_fast_mode_service() -> FastModeService:
+    """Return the singleton FastModeService instance."""
+    global _fast_mode_service_instance
+    if _fast_mode_service_instance is None:
+        _fast_mode_service_instance = FastModeService()
+    return _fast_mode_service_instance
 
 # System prompt for converting user's simple description into a professional
 # Seedance video generation prompt.
@@ -58,6 +70,21 @@ class FastModeService:
         self.llm = LLMClient()
         self.seedance = SeedanceClient(output_dir=FAST_MODE_OUTPUT_DIR)
         self.cosyvoice = CosyVoiceClient(output_dir=FAST_MODE_OUTPUT_DIR / "audio")
+        # P2: Cache model metadata once at init — avoids per-request reflection
+        self._llm_model = self._resolve_llm_model()
+        self._video_model = "poyo-happy-horse" if self.seedance._is_poyo else "seedance-2.0"
+
+    def _resolve_llm_model(self) -> str:
+        """Resolve the actual LLM model name once at initialization."""
+        try:
+            client = self.llm._get_client()
+            # langchain clients expose model name via different attrs
+            for attr in ("model_name", "model", "model_id"):
+                if hasattr(client, attr):
+                    return str(getattr(client, attr))
+        except Exception:
+            pass
+        return DEFAULT_LLM_PROVIDER
 
     async def generate(
         self,
@@ -101,21 +128,52 @@ class FastModeService:
             prompt_length=len(video_prompt),
         )
 
-        # ── Step 2: Video generation ──
+        # ── Step 2: Video + optional TTS in parallel ──
         video_start = time.perf_counter()
-        logger.info("fast_mode: generating video", duration=duration)
+        logger.info("fast_mode: generating video", duration=duration, enable_tts=enable_tts)
 
-        try:
-            video_result = await self.seedance.text_to_video(
-                prompt=video_prompt,
-                duration=duration,
-                resolution="720p",
+        video_future = self.seedance.text_to_video(
+            prompt=video_prompt,
+            duration=duration,
+            resolution="720p",
+        )
+
+        tts_future = None
+        if enable_tts and scene_description:
+            tts_future = self.cosyvoice.synthesize(
+                text=scene_description,
+                language="en",
             )
-        except Exception as e:
-            logger.error("fast_mode: video generation failed", error=str(e))
-            raise RuntimeError(f"Video generation failed: {e}") from e
+
+        if tts_future is not None:
+            results = await asyncio.gather(video_future, tts_future, return_exceptions=True)
+            video_result = results[0]
+            tts_result = results[1]
+
+            # TTS failure is non-fatal — log and continue
+            tts_path = None
+            tts_time_ms = 0
+            if isinstance(tts_result, Exception):
+                logger.warning("fast_mode: TTS generation failed", error=str(tts_result))
+            elif tts_result:
+                tts_path = str(tts_result)
+                tts_time_ms = int((time.perf_counter() - video_start) * 1000)
+                logger.info("fast_mode: TTS generated", tts_path=tts_path)
+        else:
+            try:
+                video_result = await video_future
+            except Exception as e:
+                logger.error("fast_mode: video generation failed", error=str(e))
+                raise RuntimeError(f"Video generation failed: {e}") from e
+            tts_path = None
+            tts_time_ms = 0
 
         video_time_ms = int((time.perf_counter() - video_start) * 1000)
+
+        # Video failure is fatal
+        if isinstance(video_result, Exception):
+            logger.error("fast_mode: video generation failed", error=str(video_result))
+            raise RuntimeError(f"Video generation failed: {video_result}") from video_result
 
         local_path = video_result.get("local_path", "")
         video_url = video_result.get("video_url", "")
@@ -133,30 +191,48 @@ class FastModeService:
             file_size=file_size,
         )
 
-        # ── Step 3: Optional TTS ──
-        tts_path = None
-        tts_time_ms = 0
-        if enable_tts and scene_description:
-            tts_start = time.perf_counter()
-            try:
-                tts_file = await self.cosyvoice.synthesize(
-                    text=scene_description,
-                    language="en",
-                )
-                tts_path = str(tts_file)
-                tts_time_ms = int((time.perf_counter() - tts_start) * 1000)
-                logger.info("fast_mode: TTS generated", tts_path=tts_path, tts_time_ms=tts_time_ms)
-            except Exception as e:
-                logger.warning("fast_mode: TTS generation failed", error=str(e))
-                tts_time_ms = int((time.perf_counter() - tts_start) * 1000)
-
-        # ── Step 4: Build result ──
+        # ── Step 3: Build result ──
         total_time_ms = int((time.perf_counter() - total_start) * 1000)
 
         # Extract filename for media serving
-        filename = ""
-        if local_path:
-            filename = Path(local_path).name
+        filename = Path(local_path).name if local_path else ""
+
+        model_info = {
+            "llm": DEFAULT_LLM_PROVIDER,
+            "llm_model": self._llm_model,
+            "video": self._video_model,
+            "tts": "cosyvoice2" if enable_tts else None,
+        }
+
+        # If stub mode (video generation failed), mark as failure and do not
+        # return a non-existent filename that would cause a 404 on media fetch.
+        if is_stub:
+            logger.warning(
+                "fast_mode: video generation failed (stub mode)",
+                mode=video_result.get("_stub_mode", "unknown"),
+                total_time_ms=total_time_ms,
+            )
+            return {
+                "success": False,
+                "error": f"Video generation failed: {video_result.get('_stub_mode', 'unknown')}",
+                "video_path": "",
+                "video_url": "",
+                "filename": "",
+                "llm_prompt": video_prompt,
+                "scene_description": scene_description,
+                "user_prompt": user_prompt,
+                "duration_seconds": duration,
+                "file_size_bytes": 0,
+                "generation_time_ms": total_time_ms,
+                "timing": {
+                    "llm_ms": llm_time_ms,
+                    "video_ms": video_time_ms,
+                    "tts_ms": tts_time_ms,
+                },
+                "model_info": model_info,
+                "is_stub": True,
+                "tts_path": None,
+            }
 
         result = {
             "success": True,
@@ -174,20 +250,15 @@ class FastModeService:
                 "video_ms": video_time_ms,
                 "tts_ms": tts_time_ms,
             },
-            "model_info": {
-                "llm": DEFAULT_LLM_PROVIDER,
-                "llm_model": getattr(self.llm, "_get_client")().model_name if hasattr(self.llm, "_get_client") else DEFAULT_LLM_PROVIDER,
-                "video": "seedance-2.0" if not self.seedance._is_poyo else "poyo-happy-horse",
-                "tts": "cosyvoice2" if enable_tts else None,
-            },
-            "is_stub": is_stub,
+            "model_info": model_info,
+            "is_stub": False,
             "tts_path": tts_path,
         }
 
         logger.info(
             "fast_mode: complete",
             total_time_ms=total_time_ms,
-            is_stub=is_stub,
+            is_stub=False,
             filename=filename,
         )
         return result

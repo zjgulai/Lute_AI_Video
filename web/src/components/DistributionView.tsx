@@ -104,13 +104,13 @@ export default function DistributionView({ threadId, onRestart }: Props) {
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div className="text-center space-y-2 py-4">
-        <div className="w-14 h-14 rounded-full bg-[#7CB342]/10 flex items-center justify-center mx-auto">
+        <div className="w-14 h-14 rounded-full bg-[#6A2B3A]/10 flex items-center justify-center mx-auto">
           <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-            <path d="M5 13.5L10 18.5L21 7.5" stroke="#7CB342" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M5 13.5L10 18.5L21 7.5" stroke="#6A2B3A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <h2 className="text-xl font-semibold text-[#1d1d1f]">{t("dist.title")}</h2>
-        <p className="text-sm text-[#86868b]">
+        <h2 className="text-xl font-semibold text-[#35353B]">{t("dist.title")}</h2>
+        <p className="text-sm text-[#59585E]">
           {t("dist.subtitle")}
         </p>
       </div>
@@ -119,13 +119,13 @@ export default function DistributionView({ threadId, onRestart }: Props) {
       {!loading && plans.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: t("dist.contentCount"), value: Object.keys(groups).length, color: "text-[#7CB342]" },
-            { label: t("dist.versionCount"), value: plans.length, color: "text-[#7CB342]" },
+            { label: t("dist.contentCount"), value: Object.keys(groups).length, color: "text-[#6A2B3A]" },
+            { label: t("dist.versionCount"), value: plans.length, color: "text-[#6A2B3A]" },
             { label: t("dist.platformCount"), value: new Set(plans.flatMap((p) => (p.posts || []).map((pp: any) => pp.platform))).size, color: "text-[#ff9f0a]" },
           ].map((stat) => (
             <div key={stat.label} className="apple-card p-3 text-center">
               <div className={`text-xl font-bold ${stat.color}`}>{stat.value}</div>
-              <div className="text-[10px] text-[#aeaeb2] mt-0.5">{stat.label}</div>
+              <div className="text-[11px] text-[#9FA0A0] mt-0.5">{stat.label}</div>
             </div>
           ))}
         </div>
@@ -154,15 +154,15 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                   onClick={() => setExpandedBrief(exp ? null : briefId)}
                   className="w-full flex items-center gap-2 p-3 cursor-pointer text-left"
                 >
-                  <span className="text-xs font-mono text-[#aeaeb2]">{briefId}</span>
-                  <span className="text-xs text-[#86868b]">
+                  <span className="text-xs font-mono text-[#9FA0A0]">{briefId}</span>
+                  <span className="text-xs text-[#59585E]">
                     {briefPlans.length}{t("dist.platformVersions")}
                   </span>
                   <svg
                     width="12" height="12" viewBox="0 0 12 12" fill="none"
                     className={`ml-auto shrink-0 transition-transform ${exp ? "rotate-180" : ""}`}
                   >
-                    <path d="M3 4.5L6 7.5L9 4.5" stroke="#aeaeb2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M3 4.5L6 7.5L9 4.5" stroke="#9FA0A0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
 
@@ -170,12 +170,12 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                   <div className="px-3 pb-3 space-y-2 animate-slide-down">
                     {briefPlans.map((plan) => (
                       <div key={plan.script_id} className="space-y-2">
-                        <p className="text-[11px] font-semibold text-[#86868b]">
+                        <p className="text-[11px] font-semibold text-[#59585E]">
                           {t("dist.script_id_prefix")}: {plan.script_id}
                         </p>
                         {/* Publish section */}
-                        <div className="p-3 rounded-xl bg-[#fafafc] border border-[#e8e8ed] space-y-2">
-                          <p className="text-[11px] font-semibold text-[#1d1d1f]">{t("dist.publishToPlatform")}</p>
+                        <div className="p-3 rounded-xl bg-[#FFF5F2] border border-[#EDD3D1] space-y-2">
+                          <p className="text-[11px] font-semibold text-[#35353B]">{t("dist.publishToPlatform")}</p>
                           <div className="grid grid-cols-2 gap-2">
                             {(plan.posts || []).map((post: any) => {
                               const key = getKey(plan, post.platform);
@@ -184,11 +184,11 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                               return (
                                 <div
                                   key={post.platform}
-                                  className="p-3 rounded-xl bg-white border border-[#e8e8ed] space-y-1.5"
+                                  className="p-3 rounded-xl bg-white border border-[#EDD3D1] space-y-1.5"
                                 >
                                   <div className="flex items-center gap-1.5">
-                                    {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#86868b]" })}
-                                    <span className="text-xs font-semibold text-[#1d1d1f]">
+                                    {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#59585E]" })}
+                                    <span className="text-xs font-semibold text-[#35353B]">
                                       {t("platform." + post.platform) || post.platform}
                                     </span>
                                   </div>
@@ -196,7 +196,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                                     <button
                                       onClick={() => handlePublish(plan, post.platform)}
                                       disabled={isPub}
-                                      className="apple-btn apple-btn-primary text-[10px] py-1 px-2 w-full"
+                                      className="apple-btn apple-btn-primary text-[11px] py-1 px-2 w-full"
                                     >
                                       {isPub ? (
                                         <span className="inline-flex items-center gap-1">
@@ -211,7 +211,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                                   )}
                                   {pub?.success && (
                                     <div className="space-y-1">
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#7CB342]/10 text-[#7CB342] font-medium">
+                                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#6A2B3A]/10 text-[#6A2B3A] font-medium">
                                         {t("dist.publishedStatus")}
                                       </span>
                                       {pub.url && (
@@ -219,14 +219,14 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                                           href={pub.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="block text-[10px] text-[#007aff] hover:underline truncate"
+                                          className="block text-[11px] text-[#6A2B3A] hover:underline truncate"
                                         >
                                           {pub.url}
                                         </a>
                                       )}
                                       <button
                                         onClick={() => handleCheckStatus(post.platform, pub.post_id)}
-                                        className="text-[10px] text-[#86868b] hover:text-[#1d1d1f] underline cursor-pointer"
+                                        className="text-[11px] text-[#59585E] hover:text-[#35353B] underline cursor-pointer"
                                       >
                                         {t("dist.viewStatus")}
                                       </button>
@@ -234,14 +234,14 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                                   )}
                                   {pub && !pub.success && (
                                     <div className="space-y-1">
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ff453a]/10 text-[#ff453a] font-medium">
+                                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#C45B50]/10 text-[#C45B50] font-medium">
                                         {t("dist.failedStatus")}
                                       </span>
-                                      <p className="text-[10px] text-[#ff453a]">{pub.error}</p>
+                                      <p className="text-[11px] text-[#C45B50]">{pub.error}</p>
                                       <button
                                         onClick={() => handlePublish(plan, post.platform)}
                                         disabled={isPub}
-                                        className="apple-btn apple-btn-primary text-[10px] py-1 px-2 w-full"
+                                        className="apple-btn apple-btn-primary text-[11px] py-1 px-2 w-full"
                                       >
                                         {isPub ? t("dist.retryingStatus") : t("dist.retry")}
                                       </button>
@@ -257,29 +257,29 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                           {(plan.posts || []).map((post: any) => (
                             <div
                               key={post.platform}
-                              className="p-3 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed] space-y-1.5"
+                              className="p-3 rounded-xl bg-[#FCE4E2] border border-[#EDD3D1] space-y-1.5"
                             >
                               <div className="flex items-center gap-1.5">
-                                {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#86868b]" })}
-                                <span className="text-xs font-semibold text-[#1d1d1f]">
+                                {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#59585E]" })}
+                                <span className="text-xs font-semibold text-[#35353B]">
                                   {t("platform." + post.platform) || post.platform}
                                 </span>
                               </div>
                               <div className="flex flex-wrap gap-1">
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#7CB342]/10 text-[#7CB342] font-medium">
+                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#6A2B3A]/10 text-[#6A2B3A] font-medium">
                                   {t("cta." + post.cta_type) || post.cta_type}
                                 </span>
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#86868b]/10 text-[#86868b] font-medium">
+                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#59585E]/10 text-[#59585E] font-medium">
                                   {t("format." + post.video_format) || post.video_format}
                                 </span>
                               </div>
                               {post.product_link_placeholder && (
-                                <div className="text-[10px] text-[#aeaeb2] font-mono bg-white rounded px-1.5 py-1 border border-[#e8e8ed] truncate">
+                                <div className="text-[11px] text-[#9FA0A0] font-mono bg-white rounded px-1.5 py-1 border border-[#EDD3D1] truncate">
                                   {post.product_link_placeholder}
                                 </div>
                               )}
                               {post.post_body && (
-                                <p className="text-[10px] text-[#86868b] line-clamp-3 leading-relaxed">
+                                <p className="text-[11px] text-[#59585E] line-clamp-3 leading-relaxed">
                                   {post.post_body}
                                 </p>
                               )}
@@ -313,12 +313,12 @@ export default function DistributionView({ threadId, onRestart }: Props) {
       {/* Toggle raw data */}
       <button
         onClick={() => setShowRaw(!showRaw)}
-        className="text-xs text-[#aeaeb2] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+        className="text-xs text-[#9FA0A0] hover:text-[#35353B] transition-colors cursor-pointer"
       >
         {showRaw ? t("dist.hide") : t("dist.view")}{t("dist.rawData")}
       </button>
       {showRaw && (
-        <pre className="p-4 rounded-xl bg-[#f5f5f7] text-[10px] overflow-auto max-h-96 border border-[#e8e8ed]">
+        <pre className="p-4 rounded-xl bg-[#FCE4E2] text-[11px] overflow-auto max-h-96 border border-[#EDD3D1]">
           {JSON.stringify(plans, null, 2)}
         </pre>
       )}
@@ -328,8 +328,8 @@ export default function DistributionView({ threadId, onRestart }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setStatusPopup(null)}>
           <div className="apple-card p-4 w-80 max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-[#1d1d1f]">{t("dist.publishStatusPopupTitle")}</p>
-              <button onClick={() => setStatusPopup(null)} className="text-[#aeaeb2] hover:text-[#1d1d1f] cursor-pointer">
+              <p className="text-sm font-semibold text-[#35353B]">{t("dist.publishStatusPopupTitle")}</p>
+              <button onClick={() => setStatusPopup(null)} className="text-[#9FA0A0] hover:text-[#35353B] cursor-pointer">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -338,45 +338,45 @@ export default function DistributionView({ threadId, onRestart }: Props) {
             </div>
             {statusLoading ? (
               <div className="flex items-center justify-center py-6">
-                <svg className="animate-spin h-5 w-5 text-[#7CB342]" viewBox="0 0 24 24">
+                <svg className="animate-spin h-5 w-5 text-[#6A2B3A]" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
               </div>
             ) : statusData?.error ? (
-              <p className="text-xs text-[#ff453a]">{statusData.error}</p>
+              <p className="text-xs text-[#C45B50]">{statusData.error}</p>
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[#86868b]">{t("dist.platformLabel")}</span>
-                  <span className="text-[11px] font-medium text-[#1d1d1f]">{t("platform." + (statusData?.platform || "")) || statusData?.platform}</span>
+                  <span className="text-[11px] text-[#59585E]">{t("dist.platformLabel")}</span>
+                  <span className="text-[11px] font-medium text-[#35353B]">{t("platform." + (statusData?.platform || "")) || statusData?.platform}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[#86868b]">{t("dist.statusLabel")}</span>
-                  <span className={`text-[11px] font-medium ${statusData?.status === 'published' ? 'text-[#7CB342]' : 'text-[#ff9500]'}`}>{statusData?.status}</span>
+                  <span className="text-[11px] text-[#59585E]">{t("dist.statusLabel")}</span>
+                  <span className={`text-[11px] font-medium ${statusData?.status === 'published' ? 'text-[#6A2B3A]' : 'text-[#ff9500]'}`}>{statusData?.status}</span>
                 </div>
                 {statusData?.views !== undefined && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#86868b]">{t("dist.viewsLabel")}</span>
-                    <span className="text-[11px] font-medium text-[#1d1d1f]">{statusData.views}</span>
+                    <span className="text-[11px] text-[#59585E]">{t("dist.viewsLabel")}</span>
+                    <span className="text-[11px] font-medium text-[#35353B]">{statusData.views}</span>
                   </div>
                 )}
                 {statusData?.likes !== undefined && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#86868b]">{t("dist.likesLabel")}</span>
-                    <span className="text-[11px] font-medium text-[#1d1d1f]">{statusData.likes}</span>
+                    <span className="text-[11px] text-[#59585E]">{t("dist.likesLabel")}</span>
+                    <span className="text-[11px] font-medium text-[#35353B]">{statusData.likes}</span>
                   </div>
                 )}
                 {statusData?.sales !== undefined && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#86868b]">{t("dist.salesLabel")}</span>
-                    <span className="text-[11px] font-medium text-[#1d1d1f]">{statusData.sales}</span>
+                    <span className="text-[11px] text-[#59585E]">{t("dist.salesLabel")}</span>
+                    <span className="text-[11px] font-medium text-[#35353B]">{statusData.sales}</span>
                   </div>
                 )}
                 {statusData?.published_at && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#86868b]">{t("dist.publishTimeLabel")}</span>
-                    <span className="text-[11px] font-medium text-[#1d1d1f]">{new Date(statusData.published_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</span>
+                    <span className="text-[11px] text-[#59585E]">{t("dist.publishTimeLabel")}</span>
+                    <span className="text-[11px] font-medium text-[#35353B]">{new Date(statusData.published_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</span>
                   </div>
                 )}
               </div>

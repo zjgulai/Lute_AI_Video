@@ -28,7 +28,7 @@ export default function PortfolioGallery() {
     fetchAssets()
       .then((files) => {
         const filtered = files.filter(
-          (f: any) => (f.type === "video" || f.type === "image") && f.size >= 500 * 1024
+          (f: any) => f.type === "video" || f.type === "image"
         );
         // Sort by raw timestamp first, then map to display format
         filtered.sort((a: any, b: any) => b.created - a.created);
@@ -70,9 +70,9 @@ export default function PortfolioGallery() {
 
   if (loading) {
     return (
-      <div className="pt-4 border-t border-[#e8e8ed]">
+      <div className="pt-4 border-t border-[#EDD3D1]">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">
+          <h4 className="text-[11px] font-semibold text-[#9FA0A0] uppercase tracking-wider">
             {t("gallery.title")}
           </h4>
         </div>
@@ -90,18 +90,18 @@ export default function PortfolioGallery() {
 
   if (items.length === 0) {
     return (
-      <div className="pt-4 border-t border-[#e8e8ed]">
-        <h4 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">
+      <div className="pt-4 border-t border-[#EDD3D1]">
+        <h4 className="text-[11px] font-semibold text-[#9FA0A0] uppercase tracking-wider mb-3">
           {t("gallery.title")}
         </h4>
-        <div className="text-center py-8 rounded-2xl bg-[#fafafc] border border-dashed border-[#e8e8ed]">
-          <div className="w-10 h-10 rounded-xl bg-[#f5f5f7] flex items-center justify-center mx-auto mb-2.5">
+        <div className="text-center py-8 rounded-2xl bg-[#FFF0EF] border border-dashed border-[#EDD3D1]">
+          <div className="w-10 h-10 rounded-xl bg-[#FFF0EF] flex items-center justify-center mx-auto mb-2.5">
             <svg
               width="20"
               height="20"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#d2d2d7"
+              stroke="#D9A8A3"
               strokeWidth="1.5"
             >
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -109,8 +109,8 @@ export default function PortfolioGallery() {
               <polyline points="21 15 16 10 5 21" />
             </svg>
           </div>
-          <p className="text-[11px] text-[#aeaeb2] font-medium">{t("gallery.empty")}</p>
-          <p className="text-[10px] text-[#d2d2d7] mt-0.5">
+          <p className="text-[11px] text-[#9FA0A0] font-medium">{t("gallery.empty")}</p>
+          <p className="text-[10px] text-[#D9A8A3] mt-0.5">
             {t("gallery.emptyHint")}
           </p>
         </div>
@@ -119,10 +119,10 @@ export default function PortfolioGallery() {
   }
 
   return (
-    <div className="pt-4 border-t border-[#e8e8ed]">
+    <div className="pt-4 border-t border-[#EDD3D1]">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <h4 className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">
+        <h4 className="text-[11px] font-semibold text-[#9FA0A0] uppercase tracking-wider">
           {t("gallery.title")}
         </h4>
         <div className="flex gap-1">
@@ -141,8 +141,8 @@ export default function PortfolioGallery() {
               }}
               className={`text-[10px] font-semibold px-2 py-0.5 rounded-full transition-all ${
                 filter === f.key
-                  ? "bg-[#7CB342] text-white"
-                  : "bg-[#f5f5f7] text-[#aeaeb2] hover:bg-[#e8e8ed]"
+                  ? "bg-[#6A2B3A] text-white"
+                  : "bg-[#FFF0EF] text-[#9FA0A0] hover:bg-[#EDD3D1]"
               }`}
             >
               {f.label}
@@ -157,7 +157,7 @@ export default function PortfolioGallery() {
           <div
             key={i}
             onClick={() => setPreview(item)}
-            className="group relative rounded-2xl overflow-hidden bg-[#f5f5f7] block shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
+            className="group relative rounded-2xl overflow-hidden bg-[#FFF0EF] block shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
             title={item.filename}
           >
             {/* Media */}
@@ -185,7 +185,7 @@ export default function PortfolioGallery() {
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
                 <div className="w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all duration-300 shadow-lg">
                   {item.type === "video" ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#1d1d1f">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#35353B">
                       <polygon points="8,5 19,12 8,19" />
                     </svg>
                   ) : (
@@ -194,7 +194,7 @@ export default function PortfolioGallery() {
                       height="14"
                       viewBox="0 0 24 24"
                       fill="none"
-                      stroke="#1d1d1f"
+                      stroke="#35353B"
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -212,7 +212,7 @@ export default function PortfolioGallery() {
                 className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-md text-[9px] font-semibold backdrop-blur-md ${
                   item.type === "video"
                     ? "bg-black/50 text-white"
-                    : "bg-white/80 text-[#1d1d1f]"
+                    : "bg-white/80 text-[#35353B]"
                 }`}
               >
                 {item.type === "video" ? t("gallery.video") : t("gallery.image")}
@@ -221,15 +221,15 @@ export default function PortfolioGallery() {
 
             {/* Info bar */}
             <div className="px-2.5 py-2 bg-white">
-              <p className="text-[11px] font-medium text-[#1d1d1f] truncate leading-tight">
+              <p className="text-[11px] font-medium text-[#35353B] truncate leading-tight">
                 {getTitle(item.filename)}
               </p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[9px] text-[#aeaeb2]">
+                <span className="text-[9px] text-[#9FA0A0]">
                   {formatSize(item.size)}
                 </span>
-                <span className="w-0.5 h-0.5 rounded-full bg-[#d2d2d7]" />
-                <span className="text-[9px] text-[#aeaeb2]">{item.created}</span>
+                <span className="w-0.5 h-0.5 rounded-full bg-[#D9A8A3]" />
+                <span className="text-[9px] text-[#9FA0A0]">{item.created}</span>
               </div>
             </div>
           </div>
@@ -240,14 +240,14 @@ export default function PortfolioGallery() {
       {hasMore && (
         <button
           onClick={() => setPage((p) => p + 1)}
-          className="w-full mt-3 py-2 rounded-xl bg-[#fafafc] border border-[#e8e8ed] text-[11px] font-medium text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-all cursor-pointer"
+          className="w-full mt-3 py-2 rounded-xl bg-[#FFF0EF] border border-[#EDD3D1] text-[11px] font-medium text-[#9FA0A0] hover:bg-[#FFF0EF] hover:text-[#35353B] transition-all cursor-pointer"
         >
           {t("gallery.loadMore")} ({filtered.length - paged.length}{t("gallery.items")})
         </button>
       )}
 
       {/* Stats footer */}
-      <p className="text-[10px] text-[#d2d2d7] text-center mt-2">
+      <p className="text-[10px] text-[#D9A8A3] text-center mt-2">
         {t("gallery.total")} {filtered.length}{t("gallery.items")}
         {filter !== "all" && ` · ${filter === "video" ? t("gallery.video") : t("gallery.image")}`}
       </p>

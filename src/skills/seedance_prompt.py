@@ -84,6 +84,7 @@ def _build_single_prompt(
         "lighting": lighting,
         "has_forbidden_words": len(hits) > 0,
         "forbidden_hits": hits,
+        "product_angle": segment.get("product_angle", ""),
     }
 
 

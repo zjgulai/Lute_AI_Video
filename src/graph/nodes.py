@@ -332,14 +332,15 @@ async def analytics_node(state: VideoPipelineState) -> dict[str, Any]:
     reports = await agent.run(scripts=scripts, week=week)
     logger.info("analytics_node: done")
     # GAP-17: Dispatch webhook
+    # P2-4: Use async dispatch instead of sync — prevents blocking the event loop
     wh = get_webhook_manager()
     metrics = state.get("pipeline_metrics", {})
-    wh.dispatch_sync("pipeline.completed", {
+    asyncio.create_task(wh.dispatch("pipeline.completed", {
         "thread_id": state.get("content_calendar_week", ""),
         "total_duration_ms": metrics.get("total_duration_ms", 0),
         "node_count": metrics.get("node_count", 0),
         "error_count": metrics.get("error_count", 0),
-    })
+    }))
 
     # GAP-19: Persist metrics for cross-run analysis
     _try_save_metrics(state)
@@ -353,7 +354,9 @@ async def analytics_node(state: VideoPipelineState) -> dict[str, Any]:
 def _try_save_metrics(state: VideoPipelineState) -> None:
     """Attempt to persist pipeline metrics via configured repository.
 
-    Non-blocking: logs and swallows all errors.
+    P2-3: Logs failures as warnings instead of silently swallowing.
+    Callers rely on metrics for cross-run analysis; silent failure
+    means we never know when telemetry is broken.
     """
     try:
         from src.telemetry import save_run_metrics
@@ -361,8 +364,12 @@ def _try_save_metrics(state: VideoPipelineState) -> None:
         metrics = state.get("pipeline_metrics", {})
         if metrics:
             save_run_metrics(metrics)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "telemetry: save_run_metrics failed",
+            error=str(exc)[:200],
+            trace_id=state.get("trace_id", "unknown"),
+        )
 
 
 # ═══════════════════════════════════════════
@@ -422,15 +429,15 @@ async def strategy_audit_node(state: VideoPipelineState) -> dict[str, Any]:
         status=report.overall_status.value,
         retry_count=retry_counts.get("strategy", 0),
     )
-    # GAP-17: Dispatch webhook
+    # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    wh.dispatch_sync("audit.completed", {
+    asyncio.create_task(wh.dispatch("audit.completed", {
         "checkpoint": "strategy",
         "score": report.overall_score,
         "status": report.overall_status.value,
         "summary": report.summary,
         "thread_id": state.get("content_calendar_week", ""),
-    })
+    }))
     return {
         "audit_reports": audit_reports,
         "current_step": "strategy_audit_complete",
@@ -495,15 +502,15 @@ async def script_audit_node(state: VideoPipelineState) -> dict[str, Any]:
         avg_score=sum(r.overall_score for r in reports) / len(reports) if reports else 0,
         retry_count=retry_counts.get("script", 0),
     )
-    # GAP-17: Dispatch webhook
+    # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    wh.dispatch_sync("audit.completed", {
+    asyncio.create_task(wh.dispatch("audit.completed", {
         "checkpoint": "script",
         "score": sum(r.overall_score for r in reports) / len(reports) if reports else 0,
         "status": reports[0].overall_status.value if reports else "unknown",
         "summary": reports[0].summary if reports else "",
         "thread_id": state.get("content_calendar_week", ""),
-    })
+    }))
     return {
         "audit_reports": audit_reports,
         "current_step": "script_audit_complete",
@@ -561,15 +568,15 @@ async def editing_audit_node(state: VideoPipelineState) -> dict[str, Any]:
         report_count=len(reports),
         retry_count=retry_counts.get("edit", 0),
     )
-    # GAP-17: Dispatch webhook
+    # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    wh.dispatch_sync("audit.completed", {
+    asyncio.create_task(wh.dispatch("audit.completed", {
         "checkpoint": "edit",
         "score": reports[0].overall_score if reports else 0,
         "status": reports[0].overall_status.value if reports else "unknown",
         "summary": reports[0].summary if reports else "",
         "thread_id": state.get("content_calendar_week", ""),
-    })
+    }))
     return {
         "audit_reports": audit_reports,
         "current_step": "edit_audit_complete",
@@ -630,15 +637,15 @@ async def thumbnail_audit_node(state: VideoPipelineState) -> dict[str, Any]:
         report_count=len(reports),
         retry_count=retry_counts.get("thumbnail", 0),
     )
-    # GAP-17: Dispatch webhook
+    # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    wh.dispatch_sync("audit.completed", {
+    asyncio.create_task(wh.dispatch("audit.completed", {
         "checkpoint": "thumbnail",
         "score": reports[0].overall_score if reports else 0,
         "status": reports[0].overall_status.value if reports else "unknown",
         "summary": reports[0].summary if reports else "",
         "thread_id": state.get("content_calendar_week", ""),
-    })
+    }))
     return {
         "audit_reports": audit_reports,
         "current_step": "thumbnail_audit_complete",

@@ -3,6 +3,8 @@
  * Uses ONLY real files from public/portfolio/ so that all media previews work offline.
  */
 
+import type { ProductSku, ModelProfile } from "@/components/types";
+
 // Real portfolio filenames (must match files in public/portfolio/)
 const REAL_VIDEOS = {
   office: "seedance_W85PPT60_bff4.mp4",
@@ -13,16 +15,16 @@ const REAL_VIDEOS = {
 };
 
 const REAL_IMAGES = {
-  thumb1: "poyo_img_s1_thumb_1_4b0b.png",
-  thumb2: "poyo_img_s1_thumb_2_b301.png",
-  thumb3: "poyo_img_s1_1777216783_thumb_3_35b9.png",
-  thumb2alt: "poyo_img_s1_thumb_2_2739.png",
-  kf1a: "poyo_img_keyframe_script-BRIEF-001-en_001_43ea.png",
-  kf1b: "poyo_img_keyframe_script-BRIEF-001-en_002_894f.png",
-  kf2a: "poyo_img_keyframe_script-BRIEF-002-en_000_1aff.png",
-  kf2b: "poyo_img_keyframe_script-BRIEF-002-en_002_6df5.png",
-  kf3: "poyo_img_keyframe_script-BRIEF-003-en_002_316b.png",
-  kf1c: "poyo_img_keyframe_script-BRIEF-001-en_002_30ec.png",
+  thumb1: "poyo_img_s1_thumb_1_4b0b.webp",
+  thumb2: "poyo_img_s1_thumb_2_b301.webp",
+  thumb3: "poyo_img_s1_1777216783_thumb_3_35b9.webp",
+  thumb2alt: "poyo_img_s1_thumb_2_2739.webp",
+  kf1a: "poyo_img_keyframe_script-BRIEF-001-en_001_43ea.webp",
+  kf1b: "poyo_img_keyframe_script-BRIEF-001-en_002_894f.webp",
+  kf2a: "poyo_img_keyframe_script-BRIEF-002-en_000_1aff.webp",
+  kf2b: "poyo_img_keyframe_script-BRIEF-002-en_002_6df5.webp",
+  kf3: "poyo_img_keyframe_script-BRIEF-003-en_002_316b.webp",
+  kf1c: "poyo_img_keyframe_script-BRIEF-001-en_002_30ec.webp",
 };
 
 export const DEMO_RESULT_1 = {
@@ -750,3 +752,52 @@ export const DEMO_FOOTAGE_ASSETS = DEMO_ASSETS.map((a, i) => ({
     label: a.label,
   },
 }));
+
+// ═══ 品牌VLOG Mock 数据 ═══
+
+export const VLOG_BRANDS: { id: string; name: string; tone: string; products: ProductSku[] }[] = [
+  {
+    id: "momcozy", name: "Momcozy", tone: "温柔真实的母婴家庭叙事",
+    products: [
+      {
+        id: "m5", name: "M5 Wearable Breast Pump", shortName: "M5 Breast Pump",
+        description: "主打免手扶、静音、轻量通勤，适合家庭和职场多场景切换。",
+        tags: ["免手扶", "静音", "轻量通勤", "母婴场景"],
+        views: [
+          { label: "主视图", title: "Hero Angle", description: "正面展示杯体与佩戴形态", usage_note: "用于首屏封面和品牌主镜头", color: "#7f3dff" },
+          { label: "45度视图", title: "Dynamic Angle", description: "突出轮廓和材质细节", usage_note: "适合和人物佩戴场景衔接", color: "#5b8cff" },
+          { label: "侧视图", title: "Slim Profile", description: "展示轻薄弧线和贴合度", usage_note: "适合强调隐形与舒适卖点", color: "#02b96b" },
+          { label: "背视图", title: "Back Detail", description: "展示结构与固定方式", usage_note: "用于解释佩戴稳定性和支撑感", color: "#ff8a34" },
+          { label: "细节视图", title: "Material Close-up", description: "突出亲肤材质和工艺细节", usage_note: "适合插入局部材质和按钮特写", color: "#ff5c7a" },
+          { label: "包装视图", title: "Packaging View", description: "强化套装完整度和礼盒感", usage_note: "适合作为收尾展示和购买引导", color: "#00b8d9" },
+        ],
+      },
+    ],
+  },
+];
+
+export const VLOG_MODELS: ModelProfile[] = [
+  { id: "model-mom", name: "Ava", role: "母亲", description: "温柔母婴场景，适合哺乳器和居家内容", gradient: ["#ff7eb3", "#7f3dff"] },
+  { id: "model-dad", name: "Liam", role: "父亲", description: "家庭陪伴和户外亲子场景", gradient: ["#2f80ed", "#56ccf2"] },
+  { id: "model-baby", name: "Noah", role: "婴儿", description: "用于补充亲子互动和安睡镜头", gradient: ["#f6c667", "#f58b54"] },
+  { id: "model-parent", name: "Emma", role: "孕妈", description: "适合孕产和母婴生活方式内容", gradient: ["#8e54e9", "#4776e6"] },
+  { id: "model-caregiver", name: "Sophia", role: "护理师", description: "适合专业演示、护理流程和安全感表达", gradient: ["#02b96b", "#18c6a3"] },
+  { id: "model-couple", name: "Mia & Jack", role: "父母双人", description: "适合家庭合拍和双人互动镜头", gradient: ["#ff5c7a", "#ffb347"] },
+];
+
+export const VLOG_SCENES = [
+  { id: "office", name: "职场", desc: "突出高效与通勤节奏" },
+  { id: "living-room", name: "客厅", desc: "轻松陪伴和家庭氛围" },
+  { id: "bedroom", name: "卧室", desc: "安静、亲密、睡前场景" },
+  { id: "nursery", name: "儿童房", desc: "亲子布景和成长陪伴" },
+  { id: "outdoor", name: "户外", desc: "日常出行与生活方式" },
+  { id: "kitchen", name: "厨房", desc: "高效家务和台面操作" },
+];
+
+export const VLOG_DURATION_OPTIONS = [
+  { id: "5-15", label: "5-15s", note: "超短", seconds: 15 },
+  { id: "15-30", label: "15-30s", note: "标准", seconds: 30 },
+  { id: "30-45", label: "30-45s", note: "加长", seconds: 45 },
+  { id: "45-60", label: "45-60s", note: "中长", seconds: 60 },
+  { id: "60-90", label: "60-90s", note: "长片", seconds: 90 },
+];

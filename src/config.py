@@ -11,7 +11,40 @@ load_dotenv()
 # Without this, `logger.error("msg", error=...)` raises `Logger._log() got
 # an unexpected keyword argument 'error'` because Python's logging.Logger._log
 # does not accept arbitrary kwargs.
+import re
+
 import structlog
+
+
+class _SanitizeProcessor:
+    """Redact sensitive values from log events.
+
+    Matches:
+    - OpenAI-style keys: sk-xxxxxxxx...
+    - Anthropic-style keys: sk-ant-xxx...
+    - Generic long tokens (>32 chars, alphanumeric mix)
+    - Keys whose field name contains key/token/secret/password/auth.
+    """
+
+    _SK_PATTERN = re.compile(r"\bsk-[a-zA-Z0-9_-]+\b")
+    _GENERIC_TOKEN = re.compile(r"\b[a-zA-Z0-9_-]{32,}\b")
+    _SENSITIVE_KEYS = {"key", "token", "secret", "password", "auth", "apikey", "api_key"}
+
+    def __call__(self, logger, method_name, event_dict):
+        for k, v in list(event_dict.items()):
+            if not isinstance(v, str):
+                continue
+            # redact by key name
+            if any(s in k.lower() for s in self._SENSITIVE_KEYS):
+                event_dict[k] = "[REDACTED]"
+                continue
+            # redact by value pattern
+            v_redacted = self._SK_PATTERN.sub("[REDACTED]", v)
+            v_redacted = self._GENERIC_TOKEN.sub("[REDACTED]", v_redacted)
+            if v_redacted != v:
+                event_dict[k] = v_redacted
+        return event_dict
+
 
 try:
     structlog.configure(
@@ -23,6 +56,7 @@ try:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
+            _SanitizeProcessor(),
             structlog.dev.ConsoleRenderer(),
         ],
         context_class=dict,
@@ -41,6 +75,7 @@ except Exception:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
+            _SanitizeProcessor(),
             structlog.processors.KeyValueRenderer(key_order=["event", "level"]),
         ],
         context_class=dict,

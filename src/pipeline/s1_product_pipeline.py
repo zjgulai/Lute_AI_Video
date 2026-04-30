@@ -897,10 +897,18 @@ class S1ProductDirectPipeline:
                 logger.warning("tts: no voiceover text found for script", script_id=script.get("id"))
                 continue
 
-            # Merge with line breaks — poyo generate-music truncates to 200 chars,
-            # but that's a model constraint we accept. The merged prompt still
-            # captures the narrative arc better than single-segment prompts.
+            # Merge with line breaks
             merged_text = "\n".join(voiceover_parts)
+
+            # P2-2: poyo generate-music truncates at 200 chars. Warn if exceeded
+            # so the user knows the TTS may be incomplete.
+            if len(merged_text) > 200:
+                logger.warning(
+                    "tts: merged voiceover exceeds poyo 200-char limit — will be truncated",
+                    script_id=script.get("id"),
+                    char_count=len(merged_text),
+                    text_preview=merged_text[:120],
+                )
 
             res = await reg.execute("elevenlabs-tts-skill", {
                 "text": merged_text,

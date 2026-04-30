@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useI18n } from "@/i18n/I18nProvider";
 import { API_BASE, getMediaUrl as getApiMediaUrl, isDemoMode } from "@/components/api";
 import {
@@ -279,12 +280,16 @@ export default function FootagePage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#7CB342]/10 flex items-center justify-center">
-              <Film className="w-5 h-5 text-[#7CB342]" />
+            <Link href="/" className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              <span className="hidden sm:inline">{t("nav.home")}</span>
+            </Link>
+            <div className="w-9 h-9 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
+              <Film className="w-5 h-5 text-[#6A2B3A]" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-[#1d1d1f]">{t("footage.title")}</h1>
-              <p className="text-[11px] text-[#86868b] mt-0.5">
+              <h1 className="text-base font-semibold text-[#35353B]">{t("footage.title")}</h1>
+              <p className="text-[11px] text-[#59585E] mt-0.5">
                 {t("footage.manageDesc")}
               </p>
             </div>
@@ -308,7 +313,7 @@ export default function FootagePage() {
 
         {/* Search bar */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#aeaeb2]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9FA0A0]" />
           <input
             type="text"
             value={searchQuery}
@@ -320,12 +325,12 @@ export default function FootagePage() {
 
         {/* Error banner */}
         {error && (
-          <div className="apple-card p-3 border-l-4 border-[#ff453a] bg-[#fff5f5] flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#ff453a] shrink-0" />
-            <span className="text-xs text-[#ff453a] font-medium flex-1">{error}</span>
+          <div className="apple-card p-3 border-l-4 border-[#C45B50] bg-[#fff5f5] flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-[#C45B50] shrink-0" />
+            <span className="text-xs text-[#C45B50] font-medium flex-1">{error}</span>
             <button
               onClick={() => setError(null)}
-              className="text-[#ff453a] hover:opacity-70 cursor-pointer"
+              className="text-[#C45B50] hover:opacity-70 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -334,8 +339,8 @@ export default function FootagePage() {
 
         {/* Upload progress banner */}
         {(uploading || uploadProgress) && (
-          <div className="apple-card p-3 border-l-4 border-[#7CB342] bg-[#f7fbf0] flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-[#7CB342] animate-spin shrink-0" />
+          <div className="apple-card p-3 border-l-4 border-[#6A2B3A] bg-[#FCE4E2] flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-[#6A2B3A] animate-spin shrink-0" />
             <span className="text-xs text-[#558b2f] font-medium">
               {uploadProgress || t("footage.uploadProgress")}
             </span>
@@ -349,21 +354,21 @@ export default function FootagePage() {
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
             dragOver
-              ? "border-[#7CB342] bg-[#7CB342]/5 scale-[1.01]"
-              : "border-[#e8e8ed] hover:border-[#d2d2d7] hover:bg-[#fafafc]"
+              ? "border-[#6A2B3A] bg-[#6A2B3A]/5 scale-[1.01]"
+              : "border-[#EDD3D1] hover:border-[#D9A8A3] hover:bg-[#FFF5F2]"
           }`}
         >
-          <Upload className="w-8 h-8 text-[#aeaeb2] mx-auto mb-3" />
-          <p className="text-sm text-[#86868b] font-medium">
+          <Upload className="w-8 h-8 text-[#9FA0A0] mx-auto mb-3" />
+          <p className="text-sm text-[#59585E] font-medium">
             {t("footage.dragUpload")}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="text-[#7CB342] hover:underline font-semibold mx-1 cursor-pointer"
+              className="text-[#6A2B3A] hover:underline font-semibold mx-1 cursor-pointer"
             >
               {t("footage.clickSelect")}
             </button>
           </p>
-          <p className="text-[11px] text-[#aeaeb2] mt-1">
+          <p className="text-[11px] text-[#9FA0A0] mt-1">
             {t("footage.supportedFormats")}
           </p>
         </div>
@@ -390,9 +395,9 @@ export default function FootagePage() {
             {/* Empty state */}
             {!loading && filteredAssets.length === 0 && (
               <div className="apple-card p-12 text-center">
-                <Film className="w-10 h-10 text-[#e8e8ed] mx-auto mb-3" />
-                <p className="text-sm font-medium text-[#86868b] mb-1">{t("footage.empty")}</p>
-                <p className="text-xs text-[#aeaeb2] mb-4">
+                <Film className="w-10 h-10 text-[#EDD3D1] mx-auto mb-3" />
+                <p className="text-sm font-medium text-[#59585E] mb-1">{t("footage.empty")}</p>
+                <p className="text-xs text-[#9FA0A0] mb-4">
                   {t("footage.emptyHint")}
                 </p>
                 <button
@@ -423,12 +428,12 @@ export default function FootagePage() {
                       }}
                       className={`apple-card overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md group ${
                         isSelected
-                          ? "ring-2 ring-[#7CB342] shadow-md"
+                          ? "ring-2 ring-[#6A2B3A] shadow-md"
                           : ""
                       }`}
                     >
                       {/* Thumbnail */}
-                      <div className="aspect-video bg-[#1d1d1f] relative flex items-center justify-center overflow-hidden">
+                      <div className="aspect-video bg-[#35353B] relative flex items-center justify-center overflow-hidden">
                         {isImageType && mediaUrl ? (
                           <img
                             src={mediaUrl}
@@ -450,7 +455,7 @@ export default function FootagePage() {
                             />
                             <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
                               <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-md">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="#1d1d1f">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="#35353B">
                                   <polygon points="8,5 19,12 8,19" />
                                 </svg>
                               </div>
@@ -469,7 +474,7 @@ export default function FootagePage() {
                           )}
                         </div>
                         {isVideoType && (
-                          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-white/80 font-medium">
+                          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 text-[11px] text-white/80 font-medium">
                             {formatFileSize(asset.file_size)}
                           </div>
                         )}
@@ -477,10 +482,10 @@ export default function FootagePage() {
 
                       {/* Info */}
                       <div className="p-2.5">
-                        <p className="text-[11px] font-medium text-[#1d1d1f] truncate">
+                        <p className="text-[11px] font-medium text-[#35353B] truncate">
                           {asset.original_name}
                         </p>
-                        <p className="text-[10px] text-[#aeaeb2] mt-0.5">
+                        <p className="text-[11px] text-[#9FA0A0] mt-0.5">
                           {formatFileSize(asset.file_size)}
                         </p>
                         {asset.tags.length > 0 && (
@@ -488,13 +493,13 @@ export default function FootagePage() {
                             {asset.tags.slice(0, 3).map((tag, i) => (
                               <span
                                 key={i}
-                                className="px-1.5 py-0.5 rounded-full bg-[#7CB342]/10 text-[9px] text-[#7CB342] font-medium"
+                                className="px-1.5 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[11px] text-[#6A2B3A] font-medium"
                               >
                                 {tag}
                               </span>
                             ))}
                             {asset.tags.length > 3 && (
-                              <span className="text-[9px] text-[#aeaeb2]">
+                              <span className="text-[11px] text-[#9FA0A0]">
                                 +{asset.tags.length - 3}
                               </span>
                             )}
@@ -508,7 +513,7 @@ export default function FootagePage() {
                           e.stopPropagation();
                           setDeleteConfirm(asset.asset_id);
                         }}
-                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 text-white/70 hover:text-[#ff453a] hover:bg-black/60 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 text-white/70 hover:text-[#C45B50] hover:bg-black/60 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -524,20 +529,20 @@ export default function FootagePage() {
             <div className="w-72 shrink-0">
               <div className="apple-card p-4 sticky top-6 space-y-3">
                 <div className="flex items-start justify-between">
-                  <h3 className="text-sm font-semibold text-[#1d1d1f]">{t("footage.detailTitle")}</h3>
+                  <h3 className="text-sm font-semibold text-[#35353B]">{t("footage.detailTitle")}</h3>
                   <button
                     onClick={() => {
                       setSelectedAsset(null);
                       setEditingTags(false);
                     }}
-                    className="p-1 rounded-lg text-[#aeaeb2] hover:text-[#1d1d1f] hover:bg-[#f5f5f7] transition-all cursor-pointer"
+                    className="p-1 rounded-lg text-[#9FA0A0] hover:text-[#35353B] hover:bg-[#FCE4E2] transition-all cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {/* Preview */}
-                <div className="aspect-video bg-[#1d1d1f] rounded-lg flex items-center justify-center overflow-hidden">
+                <div className="aspect-video bg-[#35353B] rounded-lg flex items-center justify-center overflow-hidden">
                   {isImage(selectedAsset.mime_type) ? (
                     <img
                       src={getMediaUrl(selectedAsset.filename)}
@@ -559,41 +564,41 @@ export default function FootagePage() {
                 {/* Metadata */}
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <HardDrive className="w-3.5 h-3.5 text-[#aeaeb2] mt-0.5 shrink-0" />
+                    <HardDrive className="w-3.5 h-3.5 text-[#9FA0A0] mt-0.5 shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[10px] text-[#aeaeb2]">{t("footage.filename")}</p>
-                      <p className="text-[11px] text-[#1d1d1f] break-all">
+                      <p className="text-[11px] text-[#9FA0A0]">{t("footage.filename")}</p>
+                      <p className="text-[11px] text-[#35353B] break-all">
                         {selectedAsset.original_name}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <HardDrive className="w-3.5 h-3.5 text-[#aeaeb2] shrink-0" />
+                    <HardDrive className="w-3.5 h-3.5 text-[#9FA0A0] shrink-0" />
                     <div>
-                      <p className="text-[10px] text-[#aeaeb2]">{t("footage.fileSize")}</p>
-                      <p className="text-[11px] text-[#1d1d1f]">
+                      <p className="text-[11px] text-[#9FA0A0]">{t("footage.fileSize")}</p>
+                      <p className="text-[11px] text-[#35353B]">
                         {formatFileSize(selectedAsset.file_size)}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-3.5 h-3.5 text-[#aeaeb2] shrink-0" />
+                    <Calendar className="w-3.5 h-3.5 text-[#9FA0A0] shrink-0" />
                     <div>
-                      <p className="text-[10px] text-[#aeaeb2]">{t("footage.uploadTime")}</p>
-                      <p className="text-[11px] text-[#1d1d1f]">
+                      <p className="text-[11px] text-[#9FA0A0]">{t("footage.uploadTime")}</p>
+                      <p className="text-[11px] text-[#35353B]">
                         {formatDate(selectedAsset.metadata?.uploaded_at || selectedAsset.file_path)}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Tag className="w-3.5 h-3.5 text-[#aeaeb2] mt-0.5 shrink-0" />
+                    <Tag className="w-3.5 h-3.5 text-[#9FA0A0] mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-[#aeaeb2]">{t("footage.tags")}</p>
+                        <p className="text-[11px] text-[#9FA0A0]">{t("footage.tags")}</p>
                         {!editingTags && (
                           <button
                             onClick={() => openTagEditor(selectedAsset)}
-                            className="text-[10px] text-[#7CB342] hover:underline cursor-pointer"
+                            className="text-[11px] text-[#6A2B3A] hover:underline cursor-pointer"
                           >
                             <Edit3 className="w-3 h-3 inline mr-0.5" />
                             {t("footage.editTags")}
@@ -614,20 +619,20 @@ export default function FootagePage() {
                               if (e.key === "Escape") setEditingTags(false);
                             }}
                           />
-                          <p className="text-[9px] text-[#aeaeb2]">
+                          <p className="text-[11px] text-[#9FA0A0]">
                             {t("footage.tagHint")}
                           </p>
                           <div className="flex gap-1.5">
                             <button
                               onClick={saveTags}
-                              className="apple-btn apple-btn-primary text-[10px] py-1 px-2"
+                              className="apple-btn apple-btn-primary text-[11px] py-1 px-2"
                             >
                               <Check className="w-3 h-3" />
                               {t("footage.save")}
                             </button>
                             <button
                               onClick={() => setEditingTags(false)}
-                              className="apple-btn text-[10px] py-1 px-2"
+                              className="apple-btn text-[11px] py-1 px-2"
                             >
                               {t("common.cancel")}
                             </button>
@@ -639,13 +644,13 @@ export default function FootagePage() {
                             selectedAsset.tags.map((tag, i) => (
                               <span
                                 key={i}
-                                className="px-1.5 py-0.5 rounded-full bg-[#7CB342]/10 text-[10px] text-[#7CB342] font-medium"
+                                className="px-1.5 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[11px] text-[#6A2B3A] font-medium"
                               >
                                 {tag}
                               </span>
                             ))
                           ) : (
-                            <span className="text-[10px] text-[#aeaeb2]">{t("footage.noTags")}</span>
+                            <span className="text-[11px] text-[#9FA0A0]">{t("footage.noTags")}</span>
                           )}
                         </div>
                       )}
@@ -656,7 +661,7 @@ export default function FootagePage() {
                 {/* Delete button */}
                 <button
                   onClick={() => setDeleteConfirm(selectedAsset.asset_id)}
-                  className="w-full apple-btn text-[11px] py-2 text-[#ff453a] hover:bg-[#ff453a]/5 border-[#ff453a]/20"
+                  className="w-full apple-btn text-[11px] py-2 text-[#C45B50] hover:bg-[#C45B50]/5 border-[#C45B50]/20"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {t("footage.deleteAsset")}
@@ -672,12 +677,12 @@ export default function FootagePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="apple-card p-5 max-w-sm mx-4">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-full bg-[#ff453a]/10 flex items-center justify-center">
-                <AlertCircle className="w-4 h-4 text-[#ff453a]" />
+              <div className="w-8 h-8 rounded-full bg-[#C45B50]/10 flex items-center justify-center">
+                <AlertCircle className="w-4 h-4 text-[#C45B50]" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-[#1d1d1f]">{t("footage.deleteConfirm")}</h3>
-                <p className="text-[11px] text-[#86868b]">
+                <h3 className="text-sm font-semibold text-[#35353B]">{t("footage.deleteConfirm")}</h3>
+                <p className="text-[11px] text-[#59585E]">
                   {t("footage.deleteHint")}
                 </p>
               </div>

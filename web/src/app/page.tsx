@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import {
@@ -9,6 +9,7 @@ import {
   submitReview,
   runS1ProductDirect,
   runS4LiveShoot,
+  runS5BrandVlog,
   startS1StepByStep,
   resumeS1,
   fetchS1State,
@@ -91,6 +92,60 @@ function extractVersions(state: any): Version[] {
   return versions;
 }
 
+// ── P2: Review progress indicator — extracted to avoid re-computation on every parent render ──
+interface ReviewProgressProps {
+  currentReview: string | null | undefined;
+  reviewState: ReviewState | null;
+}
+
+function ReviewProgressIndicator({ currentReview, reviewState }: ReviewProgressProps) {
+  const { t } = useI18n();
+
+  const nodes = useMemo(() => {
+    return REVIEW_NODES.map((node, i) => {
+      const nodeKey = node.replace("_review", "");
+      const isCurrent = currentReview === node;
+      const reviewData = reviewState?.state?.human_reviews?.[node];
+      const isDone = reviewData?.status === "approved";
+      const isRejected = reviewData?.status === "rejected";
+      return {
+        node,
+        nodeKey,
+        isCurrent,
+        isDone,
+        isRejected,
+        index: i,
+      };
+    });
+  }, [currentReview, reviewState]);
+
+  return (
+    <div className="flex items-center gap-1.5 mb-3 px-1">
+      {nodes.map(({ node, nodeKey, isCurrent, isDone, isRejected, index }) => (
+        <div key={node} className="flex items-center gap-1.5 flex-1 last:flex-none">
+          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
+            isCurrent ? "bg-[#6A2B3A]/10 text-[#6A2B3A] ring-1 ring-[#6A2B3A]/20" :
+            isDone ? "bg-[#FCE4E2] text-[#6A2B3A]" :
+            isRejected ? "bg-[#C45B50]/5 text-[#C45B50]" :
+            "bg-[#FCE4E2] text-[#9FA0A0]"
+          }`}>
+            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold ${
+              isDone ? "bg-[#6A2B3A] text-white" :
+              isRejected ? "bg-[#C45B50] text-white" :
+              isCurrent ? "bg-[#6A2B3A] text-white" :
+              "bg-[#EDD3D1] text-[#9FA0A0]"
+            }`}>{isDone ? "✓" : isRejected ? "✗" : index + 1}</span>
+            {t(`step.${nodeKey}`)}
+          </div>
+          {index < REVIEW_NODES.length - 1 && (
+            <div className={`flex-1 h-px ${isDone ? "bg-[#6A2B3A]" : "bg-[#EDD3D1]"}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true);
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -146,6 +201,20 @@ export default function Home() {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [showSteps, setShowSteps] = useState(false);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  /** Cancel current async operation, recover partial state if possible. */
+  const handleCancel = useCallback(async () => {
+    abortRef.current?.abort();
+    setLoading(false);
+    setShowStageProgress(false);
+    if (stepByStepLabel) {
+      try {
+        const partial = await fetchS1State(stepByStepLabel);
+        if (partial) { setStepByStepState(partial); setShowStepByStep(true); }
+      } catch { showToast(t("toast.cancelNoPartial"), "info"); }
+    }
+  }, [stepByStepLabel, t]);
 
   const S1_STEPS = [
     { label: t("wstep.strategy"), duration: 5000 },
@@ -298,13 +367,18 @@ export default function Home() {
     if (isDemoMode()) {
       const scenario = config.content_scenario || "product_direct";
       const isBrand = scenario === "brand_campaign";
-      setOneshotResult(isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1);
+      const isVlog = scenario === "brand_vlog";
+      const demoResult = isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
+      if (isVlog) { demoResult.scenario = "brand_vlog"; }
+      setOneshotResult(demoResult);
       setOneshotScenario(scenario);
       setStage("result");
-      showToast(t("toast.autoDone"), "success");
+      showToast(isVlog ? t("toast.vlogDone") : t("toast.autoDone"), "success");
       return;
     }
 
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
     setShowStageProgress(true);
     try {
       // Use existing auto pipeline endpoint
@@ -315,7 +389,7 @@ export default function Home() {
         target_languages: config.target_languages || ["en"],
         week: config.content_calendar_week || "",
         video_duration: config.video_duration || 30,
-      });
+      }, { signal: abortRef.current?.signal });
 
       // Store the label from the result for StageProgress polling
       // The auto endpoint returns the full result directly
@@ -323,15 +397,17 @@ export default function Home() {
       const label = result?.label || `s1_${Date.now()}`;
       setSmartCreateLabel(label);
     } catch (e: any) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
       // If auto-endpoint fails, fall back to step-by-step init + auto resume
       // Initialize pipeline in step-by-step mode, then resume in auto
       try {
-        const initResult = await startS1StepByStep({ ...config, mode: "step_by_step" });
+        const initResult = await startS1StepByStep({ ...config, mode: "step_by_step" }, { signal: abortRef.current?.signal });
         const label = initResult.label;
         setSmartCreateLabel(label);
         // Resume will auto-execute all remaining steps
         await resumeS1(label);
       } catch (fallbackErr: any) {
+          if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") return;
         showToast(t("toast.execFailed") + `: ${fallbackErr?.message || String(fallbackErr)}`, "error");
         setShowStageProgress(false);
       }
@@ -381,10 +457,40 @@ export default function Home() {
       return;
     }
 
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
     setLoading(true);
     const scenario = config.content_scenario || "product_direct";
 
     const effectiveMode = config.mode || pipelineMode;
+    if (scenario === "brand_vlog") {
+      // S5 Brand VLOG — dedicated endpoint
+      setLoadingText(t("app.loading"));
+      try {
+        const result = await runS5BrandVlog({
+          brand_id: config.brand_id || "momcozy",
+          product_sku: config.product_sku || {},
+          scene_id: config.scene_id || "living-room",
+          selected_models: config.selected_models || [],
+          story_description: config.story_description || "",
+          video_duration: config.video_duration || 30,
+        }, { signal: abortRef.current?.signal });
+        setOneshotResult(result);
+        setOneshotScenario(scenario);
+        showToast(t("toast.vlogDone"), "success");
+      } catch (e: any) {
+        const msg = e?.message || String(e);
+        if (e instanceof TypeError && (msg.includes("Failed to fetch") || msg.includes("NetworkError"))) {
+          setDisconnected(true);
+          showToast(t("toast.backendDisconnected"), "error");
+        } else {
+          showToast(t("toast.execFailed") + `: ${msg}`, "error");
+        }
+      }
+      setLoading(false);
+      return;
+    }
+
     if (effectiveMode === "auto") {
       // Auto mode: run all steps in one shot
       setLoadingText(t("app.loading"));
@@ -401,7 +507,7 @@ export default function Home() {
           target_languages: config.target_languages || ["en"],
           week: config.content_calendar_week || "",
           video_duration: config.video_duration || videoDuration,
-        });
+        }, { signal: abortRef.current?.signal });
 
         setOneshotResult(result);
         setOneshotScenario(scenario);
@@ -442,7 +548,7 @@ export default function Home() {
         target_languages: config.target_languages || ["en"],
         week: config.content_calendar_week || "",
         video_duration: config.video_duration || videoDuration,
-      });
+      }, { signal: abortRef.current?.signal });
       if (!result || !result.label) {
         showToast(t("toast.abnormalData"), "error");
         setLoading(false);
@@ -474,6 +580,8 @@ export default function Home() {
     notes?: string,
   ) => {
     if (loading || !threadId || !reviewState?.current_review) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
     setLoading(true);
 
     const labels: Record<string, string> = {
@@ -490,7 +598,7 @@ export default function Home() {
       for (let i = 0; i < 5; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         try {
-          const data = await fetchState(threadId);
+          const data = await fetchState(threadId, { signal: abortRef.current?.signal });
           if (
             data.current_review !== reviewState?.current_review ||
             data.pipeline_complete ||
@@ -504,6 +612,7 @@ export default function Home() {
         }
       }
     } catch (e: any) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       if (
         e instanceof TypeError &&
         (e.message.includes("Failed to fetch") || e.message.includes("NetworkError"))
@@ -607,29 +716,29 @@ export default function Home() {
             <div className="apple-card px-8 py-8 flex flex-col items-center gap-5 w-full max-w-md mx-4">
               <div className="relative w-10 h-10">
                 <svg className="animate-spin w-10 h-10" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#e8e8ed" strokeWidth="3" />
-                  <path d="M12 2a10 10 0 0 1 10 10" stroke="#7CB342" strokeWidth="3" strokeLinecap="round" />
+                  <circle cx="12" cy="12" r="10" stroke="#EDD3D1" strokeWidth="3" />
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="#6A2B3A" strokeWidth="3" strokeLinecap="round" />
                 </svg>
               </div>
               <div className="text-center space-y-1">
-                <p className="text-sm text-[#86868b]">{loadingText}</p>
+                <p className="text-sm text-[#59585E]">{loadingText}</p>
                 {showSteps && currentStepIdx < S1_STEPS.length && currentStepIdx >= 0 && (
-                  <p className="text-base font-semibold text-[#1d1d1f]">
+                  <p className="text-base font-semibold text-[#35353B]">
                     {S1_STEPS[currentStepIdx]?.label}
                   </p>
                 )}
               </div>
               {showSteps && (
                 <div className="w-full space-y-2">
-                  <div className="h-1.5 w-full bg-[#f5f5f7] rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-[#FCE4E2] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#7CB342] rounded-full transition-all duration-700 ease-out"
+                      className="h-full bg-[#6A2B3A] rounded-full transition-all duration-700 ease-out"
                       style={{
                         width: `${Math.min(((currentStepIdx + 0.5) / S1_STEPS.length) * 100, 100)}%`,
                       }}
                     />
                   </div>
-                  <div className="flex justify-between text-[10px] text-[#aeaeb2]">
+                  <div className="flex justify-between text-[11px] text-[#9FA0A0]">
                     <span>{t("app.step")} {Math.min(currentStepIdx + 1, S1_STEPS.length)} / {S1_STEPS.length}</span>
                     <span>{Math.round(Math.min(((currentStepIdx + 0.5) / S1_STEPS.length) * 100, 100))}%</span>
                   </div>
@@ -643,12 +752,12 @@ export default function Home() {
                     return (
                       <span
                         key={i}
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-all duration-300 ${
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all duration-300 ${
                           done
-                            ? "bg-[#7CB342]/10 text-[#7CB342]"
+                            ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
                             : active
-                            ? "bg-[#7CB342] text-white shadow-sm ring-2 ring-[#7CB342]/20"
-                            : "bg-[#f5f5f7] text-[#aeaeb2]"
+                            ? "bg-[#6A2B3A] text-white shadow-sm ring-2 ring-[#6A2B3A]/20"
+                            : "bg-[#FCE4E2] text-[#9FA0A0]"
                         }`}
                       >
                         {done && (
@@ -665,6 +774,12 @@ export default function Home() {
                   })}
                 </div>
               )}
+              <button
+                onClick={handleCancel}
+                className="mt-3 px-4 py-2 rounded-xl text-xs font-medium text-[#9FA0A0] border border-[#EDD3D1] hover:text-[#C45B50] hover:border-[#C45B50]/30 hover:bg-[#FFF5F2] transition-colors duration-200 cursor-pointer"
+              >
+                {t("common.cancel")}
+              </button>
             </div>
           </div>
         )}
@@ -673,18 +788,18 @@ export default function Home() {
         <header className="sticky top-0 z-40 bg-[var(--color-bg)]/80 backdrop-blur-xl border-b border-[var(--color-border-light)]">
           <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-[#69FF68] flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-[#6A2B3A] flex items-center justify-center">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                   <path d="M8 5v14l11-7z" fill="white" />
                 </svg>
               </div>
-              <span className="text-sm font-semibold text-[#1d1d1f] tracking-tight">{t("app.title")}</span>
+              <span className="text-sm font-semibold text-[#35353B] tracking-tight">{t("app.title")}</span>
               <Nav />
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowAssetLibrary(true)}
-                className="flex items-center gap-1.5 text-xs text-[#86868b] hover:text-[#1d1d1f] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#e8e8ed]/50 cursor-pointer"
+                className="flex items-center gap-1.5 text-xs text-[#59585E] hover:text-[#35353B] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#EDD3D1]/50 cursor-pointer"
                 title={t("app.assetLibrary")}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -696,7 +811,7 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setShowSettings(true)}
-                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#e8e8ed]/50 text-[#86868b] hover:text-[#1d1d1f] transition-colors cursor-pointer"
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#EDD3D1]/50 text-[#59585E] hover:text-[#35353B] transition-colors cursor-pointer"
                 title="Settings"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -707,7 +822,7 @@ export default function Home() {
               {(threadId || oneshotResult) && (
                 <button
                   onClick={resetAll}
-                  className="text-xs text-[#86868b] hover:text-[#1d1d1f] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#e8e8ed]/50 cursor-pointer"
+                  className="text-xs text-[#59585E] hover:text-[#35353B] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#EDD3D1]/50 cursor-pointer"
                 >
                   {t("app.abandon")}
                 </button>
@@ -950,41 +1065,12 @@ export default function Home() {
               </div>
               <div>
                 {disconnected && (
-                  <div className="apple-card p-4 mb-4 border-l-4 border-[#ff453a] bg-[#fff5f5]">
-                    <p className="text-sm text-[#ff453a] font-medium">{t("app.backendDisconnected")}</p>
+                  <div className="apple-card p-4 mb-4 border-l-4 border-[#C45B50] bg-[#FFF5F2]">
+                    <p className="text-sm text-[#C45B50] font-medium">{t("app.backendDisconnected")}</p>
                   </div>
                 )}
                 {/* P1-2: Review progress indicator */}
-                <div className="flex items-center gap-1.5 mb-3 px-1">
-                  {REVIEW_NODES.map((node, i) => {
-                    const nodeKey = node.replace("_review", "");
-                    const isCurrent = currentReview === node;
-                    const reviewData = reviewState?.state?.human_reviews?.[node];
-                    const isDone = reviewData?.status === "approved";
-                    const isRejected = reviewData?.status === "rejected";
-                    return (
-                      <div key={node} className="flex items-center gap-1.5 flex-1 last:flex-none">
-                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${
-                          isCurrent ? "bg-[#7CB342]/10 text-[#7CB342] ring-1 ring-[#7CB342]/20" :
-                          isDone ? "bg-[#f5f5f7] text-[#7CB342]" :
-                          isRejected ? "bg-[#ff453a]/5 text-[#ff453a]" :
-                          "bg-[#f5f5f7] text-[#aeaeb2]"
-                        }`}>
-                          <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold ${
-                            isDone ? "bg-[#7CB342] text-white" :
-                            isRejected ? "bg-[#ff453a] text-white" :
-                            isCurrent ? "bg-[#7CB342] text-white" :
-                            "bg-[#e8e8ed] text-[#aeaeb2]"
-                          }`}>{isDone ? "✓" : isRejected ? "✗" : i + 1}</span>
-                          {t(`step.${nodeKey}`)}
-                        </div>
-                        {i < REVIEW_NODES.length - 1 && (
-                          <div className={`flex-1 h-px ${isDone ? "bg-[#7CB342]" : "bg-[#e8e8ed]"}`} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                <ReviewProgressIndicator currentReview={currentReview} reviewState={reviewState} />
                 {currentReview ? (
                   <ReviewPanel
                     currentReview={currentReview}
@@ -994,13 +1080,13 @@ export default function Home() {
                   />
                 ) : (
                   <div className="apple-card p-6 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-[#7CB342]/10 flex items-center justify-center mx-auto mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-[#6A2B3A]/10 flex items-center justify-center mx-auto mb-3">
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" stroke="#7CB342" strokeWidth="2" />
-                        <path d="M12 6v6l4 2" stroke="#7CB342" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="12" cy="12" r="10" stroke="#6A2B3A" strokeWidth="2" />
+                        <path d="M12 6v6l4 2" stroke="#6A2B3A" strokeWidth="2" strokeLinecap="round" />
                       </svg>
                     </div>
-                    <p className="text-sm text-[#86868b]">{t("app.waitingReview")}</p>
+                    <p className="text-sm text-[#59585E]">{t("app.waitingReview")}</p>
                   </div>
                 )}
               </div>
@@ -1010,7 +1096,7 @@ export default function Home() {
           {/* Fallback: if nothing matches, recover to home stage */}
           {!showSelector && !showOneshot && !showStepByStep && !showWorkflow && !showCompletion && !showReview && (
             <div className="apple-card p-8 text-center space-y-3">
-              <p className="text-sm text-[#86868b]">{t("app.pageLoading")}</p>
+              <p className="text-sm text-[#59585E]">{t("app.pageLoading")}</p>
               <button
                 onClick={() => { setStage("home"); setThreadId(null); setShowSplash(false); setShowWorkflow(false); }}
                 className="apple-btn apple-btn-primary text-xs px-4 py-2"
