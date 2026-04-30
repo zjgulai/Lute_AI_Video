@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import type { ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import {
@@ -150,28 +151,6 @@ function ReviewProgressIndicator({ currentReview, reviewState }: ReviewProgressP
 }
 
 export default function Home() {
-  const [threadId, setThreadId] = useState<string | null>(null);
-  const [reviewState, setReviewState] = useState<ReviewState | null>(null);
-  const [oneshotResult, setOneshotResult] = useState<any | null>(null);
-  const [oneshotScenario, setOneshotScenario] = useState<string>("");
-  const [stepByStepLabel, setStepByStepLabel] = useState<string | null>(null);
-  const [stepByStepState, setStepByStepState] = useState<any | null>(null);
-  const [showStepByStep, setShowStepByStep] = useState(false);
-
-  // Smart Create states
-  const [smartCreateLabel, setSmartCreateLabel] = useState<string | null>(null);
-  const [showStageProgress, setShowStageProgress] = useState(false);
-
-  // CompareView states for Gate 4 completion
-  const [compareVersions, setCompareVersions] = useState<Version[]>([]);
-  const [showCompare, setShowCompare] = useState(false);
-
-  // Workflow mode states
-  const [workflowConfig, setWorkflowConfig] = useState<any | null>(null);
-  const [workflowLabel, setWorkflowLabel] = useState<string | null>(null);
-  const [workflowState, setWorkflowState] = useState<any | null>(null);
-  const [showWorkflow, setShowWorkflow] = useState(false);
-  const [workflowRerenderKey, setWorkflowRerenderKey] = useState(0);
   // Zustand stores (P1-13 — migrated incrementally)
   const {
     showSplash, setShowSplash,
@@ -188,10 +167,37 @@ export default function Home() {
     showAssetLibrary, setShowAssetLibrary,
   } = useAppStore();
 
+  const {
+    threadId, setThreadId,
+    reviewState, setReviewState,
+    oneshotResult, setOneshotResult,
+    oneshotScenario, setOneshotScenario,
+    stepByStepLabel, setStepByStepLabel,
+    stepByStepState, setStepByStepState,
+    showStepByStep, setShowStepByStep,
+    smartCreateLabel, setSmartCreateLabel,
+    workflowConfig, setWorkflowConfig,
+    workflowLabel, setWorkflowLabel,
+    workflowState, setWorkflowState,
+    showWorkflow, setShowWorkflow,
+    workflowRerenderKey, setWorkflowRerenderKey,
+  } = usePipelineStore();
+
+  const {
+    currentGate, setCurrentGate,
+    currentStepIdx, setCurrentStepIdx,
+    showSteps, setShowSteps,
+    showStageProgress, setShowStageProgress,
+    compareVersions, setCompareVersions,
+    showCompare, setShowCompare,
+  } = useExpertStore();
+
   const { t } = useI18n();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Expert Studio gate progression
-  const [currentGate, setCurrentGate] = useState(0); // 0 = not started, 1-4 = gate index
   const GATE_SEQUENCE = [
     { gateId: "gate_1_script", gateLabel: t("gate.selectScript"), maxSelections: 2 },
     { gateId: "gate_2_keyframe", gateLabel: t("gate.reviewKeyframes"), maxSelections: 1 },
@@ -202,10 +208,26 @@ export default function Home() {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // One-shot step progress
-  const [currentStepIdx, setCurrentStepIdx] = useState(0);
-  const [showSteps, setShowSteps] = useState(false);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // P1-12: Sync URL with current scene/mode state
+  useEffect(() => {
+    const sceneToPath: Record<string, string> = {
+      product_direct: "/s1",
+      brand_campaign: "/s2",
+      influencer_remix: "/s3",
+      live_shoot: "/s4",
+      brand_vlog: "/s5",
+      fast_mode: "/fast",
+    };
+    const targetPath = sceneToPath[activeScene];
+    if (targetPath && pathname !== targetPath) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (mode) params.set("mode", mode);
+      router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
+    }
+  }, [activeScene, mode, pathname, router, searchParams]);
 
   /** Cancel current async operation, recover partial state if possible. */
   const handleCancel = useCallback(async () => {
