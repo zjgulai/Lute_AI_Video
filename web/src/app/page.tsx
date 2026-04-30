@@ -38,6 +38,9 @@ import SettingsPanel from "@/components/SettingsPanel";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useI18n } from "@/i18n/I18nProvider";
 import { DEMO_RESULT_1, DEMO_RESULT_2 } from "@/demo-data";
+import { useAppStore } from "@/stores/useAppStore";
+import { usePipelineStore } from "@/stores/usePipelineStore";
+import { useExpertStore } from "@/stores/useExpertStore";
 
 const STORAGE_KEY = "ai_video_thread_id";
 
@@ -147,18 +150,10 @@ function ReviewProgressIndicator({ currentReview, reviewState }: ReviewProgressP
 }
 
 export default function Home() {
-  const [showSplash, setShowSplash] = useState(true);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
   const [oneshotResult, setOneshotResult] = useState<any | null>(null);
   const [oneshotScenario, setOneshotScenario] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-  const [disconnected, setDisconnected] = useState(false);
-  const [showAssetLibrary, setShowAssetLibrary] = useState(false);
-  const [pipelineMode, setPipelineMode] = useState<"auto" | "step_by_step">("step_by_step");
-  const [videoDuration, setVideoDuration] = useState(30);
   const [stepByStepLabel, setStepByStepLabel] = useState<string | null>(null);
   const [stepByStepState, setStepByStepState] = useState<any | null>(null);
   const [showStepByStep, setShowStepByStep] = useState(false);
@@ -171,18 +166,27 @@ export default function Home() {
   const [compareVersions, setCompareVersions] = useState<Version[]>([]);
   const [showCompare, setShowCompare] = useState(false);
 
-  // 4-stage state machine
-  const [stage, setStage] = useState<"home" | "recommend" | "generate" | "result">("home");
-  const [activeScene, setActiveScene] = useState<string>("product_direct");
-  const [mode, setMode] = useState<"expert" | "smart">("expert");
-
   // Workflow mode states
   const [workflowConfig, setWorkflowConfig] = useState<any | null>(null);
   const [workflowLabel, setWorkflowLabel] = useState<string | null>(null);
   const [workflowState, setWorkflowState] = useState<any | null>(null);
   const [showWorkflow, setShowWorkflow] = useState(false);
   const [workflowRerenderKey, setWorkflowRerenderKey] = useState(0);
-  const [showSettings, setShowSettings] = useState(false);
+  // Zustand stores (P1-13 — migrated incrementally)
+  const {
+    showSplash, setShowSplash,
+    showSettings, setShowSettings,
+    loading, setLoading,
+    loadingText, setLoadingText,
+    toast, showToast, clearToast,
+    stage, setStage,
+    activeScene, setActiveScene,
+    mode, setMode,
+    pipelineMode, setPipelineMode,
+    videoDuration, setVideoDuration,
+    disconnected, setDisconnected,
+    showAssetLibrary, setShowAssetLibrary,
+  } = useAppStore();
 
   const { t } = useI18n();
 
@@ -289,15 +293,7 @@ export default function Home() {
     }
   }, []);
 
-  const showToast = (message: string, type: "success" | "error" | "info") => {
-    setToast({ message, type });
-  };
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(timer);
-  }, [toast]);
+  // showToast is now useAppStore.getState().showToast
 
   // Persist expert mode session on gate changes
   useEffect(() => {
@@ -692,7 +688,7 @@ export default function Home() {
         {toast && (
           <div
             className={`apple-toast apple-toast-${toast.type}`}
-            onClick={() => setToast(null)}
+            onClick={() => clearToast()}
           >
             <div className="flex items-center gap-2">
               {toast.type === "success" && (
