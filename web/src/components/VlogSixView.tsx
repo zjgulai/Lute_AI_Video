@@ -11,7 +11,7 @@ export default function VlogSixView({ views }: Props) {
   if (!views || views.length === 0) {
     return (
       <div className="apple-card p-8 text-center">
-        <p className="text-xs text-[#59585E]">请先选择产品SKU以自动回填六视图</p>
+        <p className="text-xs text-[var(--text-body)]">请先选择产品SKU以自动回填六视图</p>
       </div>
     );
   }
@@ -41,7 +41,7 @@ export default function VlogSixView({ views }: Props) {
           </div>
           {/* Footer */}
           <div className="p-3">
-            <div className="text-[11px] text-[#59585E] leading-relaxed">
+            <div className="text-[11px] text-[var(--text-body)] leading-relaxed">
               {view.usage_note}
             </div>
           </div>

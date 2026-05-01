@@ -14,18 +14,18 @@ interface Props {
 
 const PRIORITY_STYLES: Record<string, { border: string; badge: string; badgeText: string }> = {
   required: {
-    border: "border-l-[3px] border-l-[#6A2B3A]",
-    badge: "bg-[#6A2B3A]",
+    border: "border-l-[3px] border-l-[var(--fortune-red)]",
+    badge: "bg-[var(--fortune-red)]",
     badgeText: "text-white",
   },
   recommended: {
-    border: "border-l-[3px] border-l-[#B27A7E]",
-    badge: "bg-[#B27A7E]",
+    border: "border-l-[3px] border-l-[var(--gold-foil)]",
+    badge: "bg-[var(--gold-foil)]",
     badgeText: "text-white",
   },
   optional: {
-    border: "border-l-[3px] border-l-[#6B8578]",
-    badge: "bg-[#6B8578]",
+    border: "border-l-[3px] border-l-[var(--jade-accent)]",
+    badge: "bg-[var(--jade-accent)]",
     badgeText: "text-white",
   },
 };
@@ -111,7 +111,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
               type="button"
               onClick={() => handleChange(value === "true" ? "false" : "true")}
               className={`relative w-11 h-6 rounded-full transition-colors ${
-                value === "true" ? "bg-[#6A2B3A]" : "bg-[#EDD3D1]"
+                value === "true" ? "bg-[var(--fortune-red)]" : "bg-[var(--border-default)]"
               }`}
             >
               <span
@@ -189,7 +189,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
           <span className="text-xs text-[var(--color-text-tertiary)] truncate flex-1">
             {value}
           </span>
-          <span className="text-xs text-[#6B8578]">✓</span>
+          <span className="text-xs text-[var(--jade-accent)]">✓</span>
         </div>
       </div>
     );

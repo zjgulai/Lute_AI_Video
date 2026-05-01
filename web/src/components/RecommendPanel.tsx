@@ -94,8 +94,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   if (loading) {
     return (
       <div className="apple-card p-6 text-center">
-        <div className="animate-spin w-8 h-8 border-2 border-[#6A2B3A] border-t-transparent rounded-full mx-auto mb-3" />
-        <p className="text-sm text-[#59585E]">{t("recommend.analyzing")}</p>
+        <div className="animate-spin w-8 h-8 border-2 border-[var(--fortune-red)] border-t-transparent rounded-full mx-auto mb-3" />
+        <p className="text-sm text-[var(--text-body)]">{t("recommend.analyzing")}</p>
       </div>
     );
   }
@@ -103,7 +103,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   if (error) {
     return (
       <div className="apple-card p-6 text-center">
-        <p className="text-sm text-[#C45B50] mb-3">{error}</p>
+        <p className="text-sm text-[var(--crimson-mist)] mb-3">{error}</p>
         <button onClick={onBack} className="apple-btn text-xs">{t("common.back")}</button>
       </div>
     );
@@ -113,10 +113,10 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
     <div className="space-y-3 animate-slide-up">
       <div className="apple-card p-4">
         <div className="flex items-center gap-2 mb-4">
-          <Sparkle size={20} weight="fill" className="text-[#6A2B3A]" />
-          <h2 className="text-base font-semibold text-[#35353B]">{t("recommend.title")}</h2>
+          <Sparkle size={20} weight="fill" className="text-[var(--fortune-red)]" />
+          <h2 className="text-base font-semibold text-[var(--text-h1)]">{t("recommend.title")}</h2>
         </div>
-        <p className="text-xs text-[#59585E] mb-4">{t("recommend.subtitle")}</p>
+        <p className="text-xs text-[var(--text-body)] mb-4">{t("recommend.subtitle")}</p>
 
         {/* Duration Recommendation */}
         <div className="mb-4">
@@ -124,8 +124,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
         </div>
 
         {/* Platform Recommendation */}
-        <div className="apple-card p-3 mb-4 bg-[#FCE4E2]">
-          <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-2">
+        <div className="apple-card p-3 mb-4 bg-[var(--bg-panel)]">
+          <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-2">
             {t("recommend.platforms")}
           </h4>
           <div className="flex flex-wrap gap-2">
@@ -139,8 +139,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
                   )}
                   className={`text-xs px-3 py-1 rounded-full transition-all ${
                     active
-                      ? "bg-[#6A2B3A] text-white"
-                      : "bg-white text-[#59585E] border border-[#EDD3D1] hover:border-[#6A2B3A]"
+                      ? "bg-[var(--fortune-red)] text-white"
+                      : "bg-[var(--bg-card)] text-[var(--text-body)] border border-[var(--border-default)] hover:border-[var(--fortune-red)]"
                   }`}
                 >
                   {t(`platform.${p}`)}
@@ -152,22 +152,22 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
 
         {/* Strategy Summary */}
         {summary && (
-          <div className="apple-card p-3 mb-4 bg-[#FCE4E2]">
-            <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1">
+          <div className="apple-card p-3 mb-4 bg-[var(--bg-panel)]">
+            <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1">
               {t("recommend.strategy")}
             </h4>
-            <p className="text-xs text-[#35353B] leading-relaxed">{summary}</p>
-            {tone && <p className="text-[11px] text-[#9FA0A0] mt-1">{t("recommend.tone")}: {tone}</p>}
+            <p className="text-xs text-[var(--text-h1)] leading-relaxed">{summary}</p>
+            {tone && <p className="text-[11px] text-[var(--text-muted)] mt-1">{t("recommend.tone")}: {tone}</p>}
           </div>
         )}
 
         {/* Mode Selector */}
         <div className="flex items-center gap-4 mb-4">
-          <span className="text-[11px] font-semibold text-[#59585E]">{t("recommend.mode")}:</span>
+          <span className="text-[11px] font-semibold text-[var(--text-body)]">{t("recommend.mode")}:</span>
           <button
             onClick={() => setMode("smart")}
             className={`text-xs px-3 py-1.5 rounded-full transition-all ${
-              mode === "smart" ? "bg-[#7A96BB] text-white" : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
+              mode === "smart" ? "bg-[var(--cinema-azure)] text-white" : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[var(--border-default)]"
             }`}
           >
             {t("mode.smartCreate")}
@@ -175,7 +175,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
           <button
             onClick={() => setMode("expert")}
             className={`text-xs px-3 py-1.5 rounded-full transition-all ${
-              mode === "expert" ? "bg-[#6A2B3A] text-white" : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
+              mode === "expert" ? "bg-[var(--fortune-red)] text-white" : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[var(--border-default)]"
             }`}
           >
             {t("mode.expertStudio")}
