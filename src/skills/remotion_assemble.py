@@ -31,6 +31,7 @@ Output schema:
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -103,6 +104,56 @@ class RemotionAssembleSkill(SkillCallable):
             json.dump(render_payload, f, indent=2, default=str)
 
         output_filename = f"{output_label}.mp4"
+
+        # === PRIORITY 0: Delegate to dedicated rendering container if configured ===
+        rendering_url = os.environ.get("RENDERING_SERVICE_URL", "").rstrip("/")
+        if rendering_url:
+            remote_result = await self._render_via_service(
+                rendering_url=rendering_url,
+                clip_paths=clip_paths,
+                audio_paths=audio_paths,
+                render_payload=render_payload,
+                output_label=output_label,
+            )
+            if remote_result is not None:
+                video_path = Path(remote_result["video_path"])
+                is_stub_remote = bool(remote_result.get("is_stub", False))
+                verification = self._self_verify(video_path, is_stub=is_stub_remote)
+                if not is_stub_remote and not verification["all_ok"]:
+                    return SkillResult(
+                        success=False,
+                        error=f"final video verification failed: {verification['failures']}",
+                        metadata={
+                            "verification": verification,
+                            "video_path": str(video_path),
+                            "render_json_path": str(render_json_path),
+                            "render_mode": remote_result.get("render_mode", "rendering_service"),
+                        },
+                    )
+                file_size = video_path.stat().st_size if video_path.exists() else int(remote_result.get("file_size_bytes", 0))
+                duration_seconds = self._measure_duration(video_path) if video_path.exists() else float(total_duration)
+                return SkillResult(
+                    success=True,
+                    data={
+                        "video_path": str(video_path),
+                        "render_json_path": str(render_json_path),
+                        "duration_seconds": duration_seconds or float(total_duration),
+                        "file_size_bytes": file_size,
+                        "resolution": f"{DEFAULT_RESOLUTION[0]}x{DEFAULT_RESOLUTION[1]}",
+                        "fps": DEFAULT_FPS,
+                        "shot_count": len(shots),
+                        "is_stub": is_stub_remote,
+                        "verification": verification,
+                    },
+                    metadata={
+                        "render_mode": remote_result.get("render_mode", "rendering_service"),
+                        "rendering_service": rendering_url,
+                        "audio_muxed": bool(audio_paths) and not is_stub_remote,
+                        "clip_count": len(clip_paths),
+                    },
+                )
+            logger.warning("remotion_assemble: rendering service unavailable, falling back to local path", url=rendering_url)
+
         output_path = renders_dir / output_filename
 
         # === PRIORITY 1: Concatenate multiple Seedance clips if available ===
@@ -210,6 +261,53 @@ class RemotionAssembleSkill(SkillCallable):
                 "clip_count": len(valid_clips),
             },
         )
+
+    # === Rendering service (HTTP) bridge ===
+
+    async def _render_via_service(
+        self,
+        rendering_url: str,
+        clip_paths: list[str],
+        audio_paths: list[str],
+        render_payload: dict,
+        output_label: str,
+    ) -> dict | None:
+        try:
+            import httpx
+        except ImportError:
+            logger.warning("remotion_assemble: httpx not available, skipping rendering service")
+            return None
+
+        body = {
+            "clip_paths": [str(p) for p in clip_paths if p],
+            "audio_paths": [str(p) for p in audio_paths if p],
+            "render_payload": render_payload,
+            "output_label": output_label,
+        }
+        url = f"{rendering_url}/assemble"
+        try:
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                resp = await client.post(url, json=body)
+                if resp.status_code != 200:
+                    logger.error(
+                        "remotion_assemble: rendering service returned non-200",
+                        url=url,
+                        status=resp.status_code,
+                        body=resp.text[:300],
+                    )
+                    return None
+                data = resp.json()
+                if not data.get("success"):
+                    logger.error("remotion_assemble: rendering service reported failure", data=data)
+                    return None
+                return data
+        except Exception as e:
+            logger.warning(
+                "remotion_assemble: rendering service call failed",
+                url=url,
+                error=str(e),
+            )
+            return None
 
     # === Render payload construction ===
 

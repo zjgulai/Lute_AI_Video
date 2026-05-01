@@ -14,18 +14,44 @@ services:
     environment:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
+      - RENDERING_SERVICE_URL=http://rendering:3001
     volumes:
       - backend_output:/app/output
       - ../../src:/app/src:ro
       - ../../requirements.txt:/app/requirements.txt:ro
     networks:
       - ai_video_net
+    depends_on:
+      - rendering
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  rendering:
+    build:
+      context: ../../rendering
+      dockerfile: Dockerfile
+    container_name: ai_video_rendering
+    restart: unless-stopped
+    expose:
+      - "3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - backend_output:/app/output
+    networks:
+      - ai_video_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   frontend:
     # P4-1: Use pre-built standalone output (host builds, Docker runs)
