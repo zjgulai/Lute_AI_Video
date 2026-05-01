@@ -14,6 +14,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN" data-theme="dark" style={{ colorScheme: "dark" }}>
       <body className="antialiased">
         <I18nProvider>{children}</I18nProvider>
+        <div className="vignette-overlay" aria-hidden="true" />
+        <div className="film-grain-overlay" aria-hidden="true" />
       </body>
     </html>
   );
