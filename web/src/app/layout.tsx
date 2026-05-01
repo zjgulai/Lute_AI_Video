@@ -11,7 +11,7 @@ export const viewport = "width=device-width, initial-scale=1";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" data-theme="dark" style={{ colorScheme: "dark" }}>
       <body className="antialiased">
         <I18nProvider>{children}</I18nProvider>
       </body>

@@ -1,92 +1,178 @@
 /* ═══════════════════════════════════════════
-   Momcozy Brand Design System — Warm Chestnut
+   Fortune Red Cinema — Dark Mode Token System
    ═══════════════════════════════════════════ */
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Inter:wght@400;500&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── CSS Custom Properties (override Tailwind) ── */
+/* ─── 核心色板（通用，跨主题不变） ─── */
 :root {
-  /* Typography */
+  /* 字体 */
   --font-display: 'Montserrat', -apple-system, sans-serif;
   --font-body: 'Inter', -apple-system, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', monospace;
 
-  /* Brand — Momcozy warm chestnut */
-  --brand-primary: #6A2B3A;
-  --brand-primary-light: rgba(106, 43, 58, 0.08);
-  --brand-primary-mid: rgba(106, 43, 58, 0.12);
-  --brand-primary-glow: rgba(106, 43, 58, 0.30);
+  /* 核心色 */
+  --fortune-red: #D75C70;
+  --cinnabar: #D04E5A;
+  --neon-red: #FF4D6A;
+  --misty-pink: #EAAFB7;
+  --coral-orange: #F37969;
+  --ember-glow: #B44658;
+  --crimson-mist: #8C3C4B;
 
-  /* Accent colors — used for mode distinction */
-  --accent-smart: #7A96BB;
-  --accent-expert: #6A2B3A;
+  /* 金色系 */
+  --gold-foil: #DCBE78;
+  --antique-gold: #B99B5F;
+  --pale-gold: #A58C5A;
 
-  /* Text */
-  --ink-primary: #35353B;
-  --ink-secondary: #59585E;
-  --ink-tertiary: #9FA0A0;
+  /* 功能色 */
+  --jade-accent: #78AF8C;
+  --cool-steel: #829BAF;
 
-  /* Surfaces */
-  --surface-card: #FFF0EF;
-  --surface-subtle: #FCE4E2;
-  --surface-hover: #EDD3D1;
+  /* 数据可视化扩展 */
+  --cinema-violet: #9B7CC4;
+  --cinema-azure: #5C8DC9;
 
-  /* Borders */
-  --border-default: #EDD3D1;
-  --border-hover: #D9A8A3;
-
-  /* Semantic */
-  --status-error: #C45B50;
-  --status-error-light: rgba(196, 91, 80, 0.10);
-
-  /* Legacy vars — kept for backward compatibility */
-  --color-bg: #FEF9F6;
-  --color-surface: #FFF0EF;
-  --color-surface-secondary: #FCE4E2;
-  --color-text-primary: #35353B;
-  --color-text-secondary: #59585E;
-  --color-text-tertiary: #9FA0A0;
-  --color-accent: #6A2B3A;
-  --color-accent-hover: #4E1F2A;
-  --color-border: #D9A8A3;
-  --color-border-light: #EDD3D1;
-  --color-green-bg-light: #FCE4E2;
-  --color-green-border-light: #D9A8A3;
-  --color-success: #6B8578;
-  --color-warning: #ff9f0a;
-  --color-error: #ff453a;
-
+  /* 圆角 */
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 22px;
-
-  --shadow-sm: 0 1px 3px rgba(106,43,58,0.04);
-  --shadow-md: 0 4px 12px rgba(106,43,58,0.06);
-  --shadow-lg: 0 8px 30px rgba(106,43,58,0.08);
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
 }
 
+/* ─── 深色模式（唯一使用） ─── */
+:root,
+[data-theme="dark"] {
+  /* 背景层级 */
+  --bg-page: #100C0D;
+  --bg-card: #1C1415;
+  --bg-panel: #2A1E20;
+  --bg-layer3: #3A2A2D;
+  --bg-selected: #2A1E20;
+  --bg-hover: #1C1415;
+  --bg-elevated: #1C1415;
+
+  /* Cinema 别名（语义化） */
+  --cinema-black: #100C0D;
+  --film-reel: #1C1415;
+  --dark-slate: #2A1E20;
+  --charcoal-rose: #3A2A2D;
+  --warm-shadow: #4E3A3D;
+
+  /* 边框 */
+  --border-default: #4E3A3D;
+  --border-selected: #D75C70;
+  --border-hover-strong: #FF4D6A;
+  --border-error: #8C3C4B;
+  --border-success: #78AF8C;
+  --border-gold: #DCBE78;
+  --blood-red: #8C3C4B;
+
+  /* 文字 */
+  --text-display: #FFF8F5;
+  --text-h1: #FAF0EB;
+  --text-h2: #EBDCD7;
+  --text-body: #D2C3BE;
+  --text-muted: #A0918E;
+  --text-placeholder: #6E6260;
+  --text-disabled: #4E413F;
+  --text-link: #D75C70;
+  --text-link-active: #FF4D6A;
+
+  /* Ink 别名（语义化） */
+  --ink-primary-dark: #FAF0EB;
+  --ink-secondary-dark: #D2C3BE;
+  --ink-tertiary-dark: #A0918E;
+
+  /* 引导线 */
+  --line-primary: rgba(234, 175, 183, 0.6);
+  --line-gold: rgba(220, 190, 120, 0.8);
+  --line-glow: rgba(255, 77, 106, 0.5);
+  --line-complete: rgba(120, 175, 140, 0.7);
+  --line-dashed: rgba(140, 110, 115, 0.4);
+
+  /* 卡片边框 */
+  --card-border: 1px solid #4E3A3D;
+  --card-border-selected: 2px solid #D75C70;
+  --card-border-hover: 2px solid #FF4D6A;
+
+  /* 按钮 */
+  --btn-primary-bg: #FF4D6A;
+  --btn-primary-text: #FFFFFF;
+  --btn-primary-glow: 0 0 8px rgba(255, 77, 106, 0.5);
+  --btn-secondary-bg: #1C1415;
+  --btn-secondary-border: 2px solid #D75C70;
+  --btn-secondary-text: #D75C70;
+  --btn-ghost-bg: transparent;
+  --btn-ghost-border: 1px solid #4E3A3D;
+  --btn-ghost-text: #A0918E;
+  --btn-cta-bg: #F37969;
+  --btn-cta-text: #FFFFFF;
+  --btn-disabled-bg: #3A2A2D;
+  --btn-disabled-text: #6E6260;
+
+  /* 输入框 */
+  --input-bg: #1C1415;
+  --input-border: 1px solid #4E3A3D;
+  --input-border-focus: 2px solid #FF4D6A;
+  --input-text: #FAF0EB;
+  --input-placeholder: #6E6260;
+  --input-focus-glow: 0 0 12px rgba(255, 77, 106, 0.2);
+
+  /* 阴影 */
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow-red: 0 0 12px rgba(255, 77, 106, 0.25);
+  --shadow-glow-gold: 0 0 12px rgba(220, 190, 120, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+
+  /* 导航 */
+  --nav-bg: #1C1415;
+  --nav-border: 1px solid #3A2A2D;
+  --nav-link: #A0918E;
+  --nav-link-active: #FF4D6A;
+
+  /* 分割线 */
+  --divider-light: #4E3A3D;
+  --divider-subtle: #3A2A2D;
+  --divider-strong: #8C3C4B;
+  --divider-gold: #B99B5F;
+
+  /* 影视特效 */
+  --vignette-edge: rgba(16, 12, 13, 0.85);
+  --neon-glow: 0 0 24px rgba(255, 77, 106, 0.45);
+  --film-grain-opacity: 0.02;
+}
+
+/* ─── Body 与全局 ─── */
 body {
   font-family: var(--font-body);
-  background-color: var(--color-bg);
-  color: var(--color-text-primary);
+  background-color: var(--bg-page);
+  color: var(--text-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.55;
+}
 
-/* Heading signature — clean sans-serif display for key moments */
 h1, h2, .font-display {
   font-family: var(--font-display);
   font-weight: 400;
   letter-spacing: 0.02em;
+  color: var(--text-h1);
 }
 h2 { font-weight: 500; }
+
+/* 视频/音频原生控件深色化 */
+video, audio {
+  color-scheme: dark;
 }
 
-/* ── Animations ── */
+/* ─── 动画 ─── */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -114,8 +200,7 @@ h2 { font-weight: 500; }
 .animate-scale-in { animation: scaleIn 0.3s ease-out; }
 .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 
-/* ── Apple-style Components ── */
-/* Buttons */
+/* ─── Apple 风格组件（保留结构，颜色走 token） ─── */
 .apple-btn {
   font-size: 13px;
   font-weight: 500;
@@ -133,51 +218,74 @@ h2 { font-weight: 500; }
 .apple-btn:active { transform: scale(0.97); }
 .apple-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
-.apple-btn-primary { background: var(--color-accent); color: white; }
-.apple-btn-primary:hover:not(:disabled) { background: var(--color-accent-hover); }
+.apple-btn-primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  box-shadow: var(--btn-primary-glow);
+}
+.apple-btn-primary:hover:not(:disabled) {
+  background: var(--neon-red);
+  box-shadow: 0 0 6px rgba(255, 77, 106, 0.6), 0 0 18px rgba(255, 77, 106, 0.4), 0 0 36px rgba(255, 77, 106, 0.2);
+}
 
 .apple-btn-secondary {
-  background: var(--color-surface);
-  color: var(--color-accent);
-  border: 1px solid var(--color-border);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: var(--btn-secondary-border);
 }
-.apple-btn-secondary:hover:not(:disabled) { border-color: var(--color-accent); background: rgba(106,43,58,0.06); }
+.apple-btn-secondary:hover:not(:disabled) {
+  border-color: var(--neon-red);
+  background: rgba(255, 77, 106, 0.06);
+  box-shadow: var(--shadow-glow-red);
+}
 
-.apple-btn-success { background: var(--color-success); color: white; }
-.apple-btn-success:hover:not(:disabled) { background: #5a7568; }
+.apple-btn-success {
+  background: var(--jade-accent);
+  color: white;
+}
+.apple-btn-success:hover:not(:disabled) { background: #6BA079; }
 
-.apple-btn-warning { background: var(--color-warning); color: white; }
-.apple-btn-warning:hover:not(:disabled) { background: #e68a00; }
+.apple-btn-warning {
+  background: var(--gold-foil);
+  color: var(--cinema-black);
+}
+.apple-btn-warning:hover:not(:disabled) { background: var(--antique-gold); }
 
-.apple-btn-danger { background: var(--color-error); color: white; }
-.apple-btn-danger:hover:not(:disabled) { background: #d63a2e; }
+.apple-btn-danger {
+  background: var(--crimson-mist);
+  color: white;
+}
+.apple-btn-danger:hover:not(:disabled) { background: var(--ember-glow); }
 
-/* Cards */
+/* 卡片 */
 .apple-card {
-  background: var(--color-surface);
+  background: var(--bg-card);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Inputs */
+/* 输入 */
 .apple-input {
   font-size: 14px;
   padding: 10px 14px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
+  border: var(--input-border);
+  background: var(--input-bg);
+  color: var(--input-text);
   transition: all 0.2s ease;
   outline: none;
   width: 100%;
   font-family: inherit;
 }
-.apple-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(106,43,58,0.12); }
-.apple-input::placeholder { color: var(--color-text-tertiary); }
+.apple-input:focus {
+  border: var(--input-border-focus);
+  box-shadow: var(--input-focus-glow);
+}
+.apple-input::placeholder { color: var(--input-placeholder); }
 
-/* Select / Pill */
+/* 选择/胶囊 */
 .apple-pill {
   display: inline-flex;
   align-items: center;
@@ -188,21 +296,21 @@ h2 { font-weight: 500; }
   font-weight: 600;
   transition: all 0.2s ease;
   cursor: pointer;
-  border: 1px solid var(--color-border-light);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  color: var(--text-muted);
 }
-.apple-pill:hover { border-color: var(--color-accent); color: var(--color-accent); }
-.apple-pill.active { background: var(--color-accent); color: white; border-color: var(--color-accent); }
+.apple-pill:hover { border-color: var(--fortune-red); color: var(--fortune-red); }
+.apple-pill.active { background: var(--fortune-red); color: white; border-color: var(--fortune-red); }
 .apple-pill:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Modal shadow overlay */
+/* Modal 遮罩 */
 .apple-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(42, 31, 34, 0.6);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -216,18 +324,18 @@ h2 { font-weight: 500; }
   z-index: 1000;
   padding: 12px 20px;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-elevated);
   font-size: 14px;
   font-weight: 500;
   animation: slideDown 0.3s ease-out;
   backdrop-filter: blur(20px);
   color: white;
 }
-.apple-toast-success { background: rgba(107,133,120,0.95); }
-.apple-toast-error { background: rgba(196,91,80,0.95); }
-.apple-toast-info { background: rgba(106,43,58,0.95); }
+.apple-toast-success { background: rgba(120, 175, 140, 0.95); }
+.apple-toast-error { background: rgba(140, 60, 75, 0.95); }
+.apple-toast-info { background: rgba(215, 92, 112, 0.95); }
 
-/* Progress step */
+/* 进度步骤 */
 .progress-step {
   display: flex;
   align-items: center;
@@ -236,31 +344,34 @@ h2 { font-weight: 500; }
   border-radius: var(--radius-md);
   transition: all 0.3s ease;
 }
-.progress-step.active { background: rgba(106,43,58,0.08); }
+.progress-step.active {
+  background: rgba(255, 77, 106, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(255, 77, 106, 0.30);
+}
 .progress-step.done { opacity: 0.7; }
 
-/* Skeleton shimmer */
+/* Skeleton 闪烁 */
 @keyframes shimmer {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }
 }
 .skeleton {
-  background: linear-gradient(90deg, var(--color-border-light) 25%, #f0f0f2 50%, var(--color-border-light) 75%);
+  background: linear-gradient(90deg, var(--bg-panel) 25%, var(--bg-layer3) 50%, var(--bg-panel) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-sm);
 }
 
-/* Hover lift effect for cards */
+/* 卡片 hover 抬升 */
 .hover-lift {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .hover-lift:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-elevated);
 }
 
-/* Image hover zoom */
+/* 图片 hover 缩放 */
 .img-zoom {
   overflow: hidden;
 }
@@ -271,7 +382,7 @@ h2 { font-weight: 500; }
   transform: scale(1.03);
 }
 
-/* Stagger animation for lists */
+/* 列表 stagger 动画 */
 .stagger-item {
   opacity: 0;
   animation: slideUp 0.4s ease-out forwards;
@@ -282,18 +393,16 @@ h2 { font-weight: 500; }
 .stagger-item:nth-child(4) { animation-delay: 0.2s; }
 .stagger-item:nth-child(5) { animation-delay: 0.25s; }
 
-/* Video player styling */
+/* 视频/音频 */
 video {
   border-radius: var(--radius-lg);
 }
-
-/* Audio player compact */
 audio {
   height: 32px;
   border-radius: var(--radius-md);
 }
 
-/* Scrollbar styling */
+/* 滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -302,30 +411,9 @@ audio {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: var(--border-default);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-tertiary);
-}
-
-/* ── Dark Mode ── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #2A1F22;
-    --color-surface: #3A2A2E;
-    --color-text-primary: #FEF9F6;
-    --color-text-secondary: #D9A8A3;
-    --color-text-tertiary: #B27A7E;
-    --color-border: #4A3A3E;
-    --color-border-light: #3A2A2E;
-    --color-accent: #8B4A5A;
-    --color-accent-hover: #A05A6A;
-    --surface-card: #3A2A2E;
-    --surface-subtle: #2A1F22;
-    --surface-hover: #4A3A3E;
-    --ink-primary: #FEF9F6;
-    --ink-secondary: #D9A8A3;
-    --ink-tertiary: #B27A7E;
-  }
+  background: var(--fortune-red);
 }
