@@ -48,13 +48,16 @@ Requirements:
 - Output MUST be in English (the video model requires English prompts)
 - Include: scene description, camera angles, lighting, movement, atmosphere
 - Be vivid and specific — describe exactly what the viewer sees
-- Length: 200-500 words
+- Length: STRICTLY 200-400 words, MAX 1800 characters total
 - Do NOT include any product showcase / 360 rotation / turntable patterns
 - Focus on cinematic, lifestyle, or narrative shots
 
+HARD CONSTRAINT: The video_prompt field MUST be a string of <= 1800 characters.
+The downstream POYO/Happy Horse API rejects prompts > 2500 chars; we leave a 700-char safety margin.
+
 Respond in strict JSON format:
 {
-  "video_prompt": "the full professional prompt (200-500 words)...",
+  "video_prompt": "the full professional prompt (200-400 words, <= 1800 chars)...",
   "scene_description": "a 1-sentence summary of the scene"
 }
 """

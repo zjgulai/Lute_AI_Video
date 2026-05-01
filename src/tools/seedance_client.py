@@ -240,6 +240,21 @@ class SeedanceClient:
         Uses Happy Horse model on poyo.ai.
         Reference: https://docs.poyo.ai/api-manual/video-series/happy-horse
         """
+        # POYO Happy Horse hard limit: prompt must be <= 2500 chars.
+        # Truncate at word boundary with 100-char safety buffer to avoid 400 errors
+        # when LLM exceeds the upstream constraint.
+        POYO_PROMPT_HARD_LIMIT = 2400
+        if len(prompt) > POYO_PROMPT_HARD_LIMIT:
+            logger.warning(
+                "poyo: prompt exceeds hard limit, truncating",
+                original_length=len(prompt),
+                truncated_to=POYO_PROMPT_HARD_LIMIT,
+            )
+            cut = prompt[:POYO_PROMPT_HARD_LIMIT]
+            # Word-boundary cut: prefer last space; fallback to raw cut if no space.
+            last_space = cut.rfind(" ")
+            prompt = cut[:last_space] if last_space > 0 else cut
+
         aspect_ratio = "16:9"
 
         # Happy Horse input schema:
