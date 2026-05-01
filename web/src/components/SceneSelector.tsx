@@ -151,14 +151,14 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
         {/* Scenario Picker */}
         <div className="apple-card p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("scene.contentScenario")}</h3>
+            <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">{t("scene.contentScenario")}</h3>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => onModeChange?.("step_by_step")}
                 className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
                   pipelineMode === "step_by_step"
-                    ? "bg-[#6A2B3A] text-white"
-                    : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
+                    ? "bg-[var(--fortune-red)] text-white"
+                    : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[rgba(215,92,112,0.18)]"
                 }`}
               >
                 {t("pipeline.stepByStep")}
@@ -167,8 +167,8 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                 onClick={() => onModeChange?.("auto")}
                 className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
                   pipelineMode === "auto"
-                    ? "bg-[#6A2B3A] text-white"
-                    : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
+                    ? "bg-[var(--fortune-red)] text-white"
+                    : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[rgba(215,92,112,0.18)]"
                 }`}
               >
                 {t("pipeline.auto")}
@@ -184,15 +184,15 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   onClick={() => setSelectedScenario(s.id)}
                   className={`text-left p-2 rounded-lg border transition-all cursor-pointer ${
                     active
-                      ? "border-[#6A2B3A] bg-[#6A2B3A]/5 ring-1 ring-[#6A2B3A]/20"
-                      : "border-[#EDD3D1] bg-white hover:border-[#D9A8A3]"
+                      ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.05)] ring-1 ring-[rgba(215,92,112,0.20)]"
+                      : "border-[rgba(215,92,112,0.18)] bg-[var(--bg-card)] hover:border-[var(--border-default)]"
                   }`}
                 >
-                  {React.createElement(SCENE_ICON_MAP[s.id] || Package, { size: 24, weight: "fill", className: "block mb-0.5 text-[#6A2B3A]" })}
-                  <span className={`text-[11px] font-semibold block ${active ? "text-[#6A2B3A]" : "text-[#35353B]"}`}>
+                  {React.createElement(SCENE_ICON_MAP[s.id] || Package, { size: 24, weight: "fill", className: "block mb-0.5 text-[var(--fortune-red)]" })}
+                  <span className={`text-[11px] font-semibold block ${active ? "text-[var(--fortune-red)]" : "text-[var(--text-h1)]"}`}>
                     {t(`scene.${s.id}.title`)}
                   </span>
-                  <span className="text-[11px] text-[#9FA0A0] mt-0.5 block leading-tight line-clamp-2">
+                  <span className="text-[11px] text-[var(--text-muted)] mt-0.5 block leading-tight line-clamp-2">
                     {t(`scene.${s.id}.desc`)}
                   </span>
                 </button>
@@ -203,9 +203,9 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
 
         {/* Product Config */}
         <div className="apple-card p-3 space-y-2">
-          <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("product.title")}</h3>
+          <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">{t("product.title")}</h3>
           <div>
-            <label className="block text-[11px] font-medium text-[#59585E] mb-1">
+            <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
               {t("product.nameRequired")}
             </label>
             <input
@@ -217,7 +217,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-[#59585E] mb-1">{t("product.usps")}</label>
+            <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">{t("product.usps")}</label>
             <textarea
               value={uspsStr}
               onChange={(e) => setUspsStr(e.target.value)}
@@ -225,10 +225,10 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
               className="apple-input resize-none text-sm"
               rows={2}
             />
-            <p className="text-[11px] text-[#9FA0A0] mt-0.5">{t("product.uspHint")}</p>
+            <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t("product.uspHint")}</p>
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-[#59585E] mb-1">{t("product.brandName")}</label>
+            <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">{t("product.brandName")}</label>
             <input
               type="text" value={brandName}
               onChange={(e) => setBrandName(e.target.value)}
@@ -237,7 +237,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
           </div>
           {(selectedScenario === "product_direct" || selectedScenario === "live_shoot_to_video") && (
             <div>
-              <label className="block text-[11px] font-medium text-[#59585E] mb-1">{t("workflow.duration")}</label>
+              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">{t("workflow.duration")}</label>
               <div className="flex gap-1.5">
                 {[5, 7, 10].map((duration) => (
                   <button
@@ -256,9 +256,9 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
         {/* Asset Upload */}
         <div className="apple-card p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("upload.title")}</h3>
+            <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">{t("upload.title")}</h3>
             {uploadedAssets.length > 0 && (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A]">
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
                 {uploadedAssets.length}{t("upload.count")}
               </span>
             )}
@@ -268,7 +268,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
 
         {/* Platform Chips */}
         <div className="apple-card p-3 space-y-2">
-          <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("distPlatform")}</h3>
+          <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">{t("distPlatform")}</h3>
           <div className="flex flex-wrap gap-1.5">
             {Object.keys(PLATFORM_LABELS).map((id) => {
               const active = selectedPlatforms.includes(id);
@@ -313,7 +313,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             </>
           )}
         </button>
-        <p className="text-[11px] text-[#9FA0A0]">
+        <p className="text-[11px] text-[var(--text-muted)]">
           {pipelineMode === "step_by_step"
             ? t("pipeline.stepByStepHint")
             : t("pipeline.autoHint")}
@@ -325,27 +325,27 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
         {/* Active scenario highlight */}
         {scenario && (
           <>
-            <div className="flex items-center gap-3 pb-3 border-b border-[#EDD3D1]">
-              <span className="w-9 h-9 rounded-xl bg-[#6A2B3A]/5 text-[#6A2B3A] flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-3 pb-3 border-b border-[rgba(215,92,112,0.18)]">
+              <span className="w-9 h-9 rounded-xl bg-[rgba(215,92,112,0.05)] text-[var(--fortune-red)] flex items-center justify-center shrink-0">
                 {React.createElement(SCENE_ICON_MAP[scenario.id] || Package, { size: 20, weight: "fill" })}
               </span>
               <div>
-                <h2 className="text-base font-semibold text-[#35353B]">{t(`scene.${scenario.id}.title`)}</h2>
-                <p className="text-xs text-[#6A2B3A] font-medium">{scenario.id === "influencer_remix" ? t("scene.defaultScenario") : t("scene.manualSelect")}</p>
+                <h2 className="text-base font-semibold text-[var(--text-h1)]">{t(`scene.${scenario.id}.title`)}</h2>
+                <p className="text-xs text-[var(--fortune-red)] font-medium">{scenario.id === "influencer_remix" ? t("scene.defaultScenario") : t("scene.manualSelect")}</p>
               </div>
             </div>
 
             <div className="space-y-3">
               <div>
-                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1">{t("scene.description")}</h4>
-                <p className="text-xs text-[#35353B] leading-relaxed">{detailDesc}</p>
+                <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1">{t("scene.description")}</h4>
+                <p className="text-xs text-[var(--text-h1)] leading-relaxed">{detailDesc}</p>
               </div>
 
               <div>
-                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1">{t("scene.recommendedPlatforms")}</h4>
+                <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1">{t("scene.recommendedPlatforms")}</h4>
                 <div className="flex flex-wrap gap-1.5">
                   {scenario.platforms.map((p: string) => (
-                    <span key={p} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#6A2B3A]/5 text-[#6A2B3A] border border-[#6A2B3A]/15">
+                    <span key={p} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.05)] text-[var(--fortune-red)] border border-[rgba(215,92,112,0.15)]">
                       {React.createElement(PLATFORM_ICON_MAP[p] || ShoppingBag, { size: 12, weight: "fill" })}
                       {t("platform." + p)}
                     </span>
@@ -354,13 +354,13 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
               </div>
 
               <div>
-                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1">{t("scene.typicalFlow")}</h4>
-                <div className="flex items-center gap-1.5 text-[11px] text-[#59585E]">
+                <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1">{t("scene.typicalFlow")}</h4>
+                <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-body)]">
                   {detailExample.split("→").map((step, i) => (
                     <span key={i} className="flex items-center gap-1">
-                      <span className="w-4 h-4 rounded-full bg-[#FCE4E2] flex items-center justify-center text-[11px] font-semibold text-[#9FA0A0]">{i + 1}</span>
+                      <span className="w-4 h-4 rounded-full bg-[var(--bg-panel)] flex items-center justify-center text-[11px] font-semibold text-[var(--text-muted)]">{i + 1}</span>
                       <span>{step.trim()}</span>
-                      {i < detailExample.split("→").length - 1 && <span className="text-[#9FA0A0]">→</span>}
+                      {i < detailExample.split("→").length - 1 && <span className="text-[var(--text-muted)]">→</span>}
                     </span>
                   ))}
                 </div>
@@ -368,8 +368,8 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             </div>
 
             {/* Pipeline steps preview */}
-            <div className="pt-3 border-t border-[#EDD3D1]">
-              <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-2">{t("pipeline.progress")} (16)</h4>
+            <div className="pt-3 border-t border-[rgba(215,92,112,0.18)]">
+              <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-2">{t("pipeline.progress")} (16)</h4>
               <div className="grid grid-cols-4 gap-1">
                 {[
                   { labelKey: "pstage.strategy", key: "strategy", done: true },
@@ -390,10 +390,10 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   { labelKey: "step.allDone", key: "thumbnail", done: true },
                 ].map((step, i) => (
                   <div key={i}
-                    className={`text-center p-1 rounded-md ${step.done ? "bg-[#FCE4E2]" : "bg-[#FCE4E2]/50"}`}
+                    className={`text-center p-1 rounded-md ${step.done ? "bg-[var(--bg-panel)]" : "bg-[rgba(42,30,32,0.5)]"}`}
                   >
-                    {React.createElement(STAGE_ICON_MAP[step.key] || Clock, { size: 16, weight: "fill", className: "mx-auto text-[#59585E]" })}
-                    <span className={`text-[8px] font-medium ${step.done ? "text-[#59585E]" : "text-[#9FA0A0]"}`}>
+                    {React.createElement(STAGE_ICON_MAP[step.key] || Clock, { size: 16, weight: "fill", className: "mx-auto text-[var(--text-body)]" })}
+                    <span className={`text-[8px] font-medium ${step.done ? "text-[var(--text-body)]" : "text-[var(--text-muted)]"}`}>
                       {t(step.labelKey)}
                     </span>
                   </div>
@@ -402,21 +402,21 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             </div>
 
             {/* Recent Works Preview */}
-            <div className="pt-3 border-t border-[#EDD3D1]">
+            <div className="pt-3 border-t border-[rgba(215,92,112,0.18)]">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">
+                <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
                   {t("gallery.title")}
                 </h4>
                 <Link
                   href="/footage"
-                  className="text-[11px] text-[#6A2B3A] font-medium hover:underline flex items-center gap-0.5 transition-colors"
+                  className="text-[11px] text-[var(--fortune-red)] font-medium hover:underline flex items-center gap-0.5 transition-colors"
                 >
                   {t("gallery.viewAll")} →
                 </Link>
               </div>
               {recentWorks.length === 0 ? (
-                <div className="text-center py-4 rounded-xl bg-[#FCE4E2]/50 border border-dashed border-[#EDD3D1]">
-                  <p className="text-[11px] text-[#9FA0A0]">{t("gallery.emptyHint")}</p>
+                <div className="text-center py-4 rounded-xl bg-[rgba(42,30,32,0.5)] border border-dashed border-[rgba(215,92,112,0.18)]">
+                  <p className="text-[11px] text-[var(--text-muted)]">{t("gallery.emptyHint")}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
@@ -424,7 +424,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                     <Link
                       key={item.id}
                       href="/footage"
-                      className="group relative rounded-xl overflow-hidden bg-[#FCE4E2] block shadow-sm hover:shadow-md transition-all duration-200"
+                      className="group relative rounded-xl overflow-hidden bg-[var(--bg-panel)] block shadow-sm hover:shadow-md transition-all duration-200"
                     >
                       <div className="aspect-[4/3] relative">
                         {item.thumbnail ? (
@@ -436,7 +436,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D9A8A3" strokeWidth="1.5">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4E3A3D" strokeWidth="1.5">
                               <rect x="3" y="3" width="18" height="18" rx="2" />
                               <circle cx="8.5" cy="8.5" r="1.5" />
                               <polyline points="21 15 16 10 5 21" />
@@ -444,8 +444,8 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                           </div>
                         )}
                       </div>
-                      <div className="px-2 py-1.5 bg-white">
-                        <p className="text-[10px] font-medium text-[#35353B] truncate">{item.title}</p>
+                      <div className="px-2 py-1.5 bg-[var(--bg-card)]">
+                        <p className="text-[10px] font-medium text-[var(--text-h1)] truncate">{item.title}</p>
                       </div>
                     </Link>
                   ))}
@@ -459,20 +459,20 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
       {/* ── Floating API Key button (bottom-right corner) ── */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
         {showApiKeys && (
-          <div className="apple-card p-3 w-72 animate-scale-in shadow-xl bg-white/95 backdrop-blur-sm border border-[#EDD3D1] rounded-xl">
+          <div className="apple-card p-3 w-72 animate-scale-in shadow-xl bg-[var(--bg-card)]/95 backdrop-blur-sm border border-[rgba(215,92,112,0.18)] rounded-xl">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">{t("apikey.title")}</span>
+              <span className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">{t("apikey.title")}</span>
               <button onClick={() => setShowApiKeys(false)}
-                className="text-[#9FA0A0] hover:text-[#35353B] transition-colors cursor-pointer p-0.5">
+                className="text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer p-0.5">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               </button>
             </div>
-            <p className="text-[11px] text-[#9FA0A0] mb-2">{t("apikey.hint")}</p>
+            <p className="text-[11px] text-[var(--text-muted)] mb-2">{t("apikey.hint")}</p>
             <div className="space-y-1.5">
               <div>
-                <label className="block text-[11px] font-medium text-[#ff9500] mb-0.5">{t("apikey.backend")}</label>
+                <label className="block text-[11px] font-medium text-[var(--gold-foil)] mb-0.5">{t("apikey.backend")}</label>
                 <input
                   type="password"
                   value={backendApiKey}
@@ -480,31 +480,31 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   placeholder={t("apikey.backendPlaceholder")}
                   className="apple-input text-xs w-full"
                 />
-                <p className="text-[11px] text-[#9FA0A0] mt-0.5">{t("apikey.backendHint")}</p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t("apikey.backendHint")}</p>
               </div>
-              <div className="border-t border-[#EDD3D1] pt-1.5" />
+              <div className="border-t border-[rgba(215,92,112,0.18)] pt-1.5" />
               {apiFields.map((f) => (
                 <div key={f.key}>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-0.5">{t(f.labelKey)}</label>
+                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{t(f.labelKey)}</label>
                   <div className="flex gap-1">
                     <input type="password" value={apiKeys[f.key] || ""}
                       onChange={(e) => setApiKeys({ ...apiKeys, [f.key]: e.target.value })}
                       placeholder={t("apikey.inputPlaceholder")} className="apple-input text-xs flex-1" />
                     {f.url && (
                       <a href={f.url} target="_blank"
-                        className="shrink-0 flex items-center px-2 text-[11px] text-[#6A2B3A] bg-[#6A2B3A]/5 rounded-lg hover:bg-[#6A2B3A]/10 border border-[#6A2B3A]/20 transition-colors no-underline whitespace-nowrap">
+                        className="shrink-0 flex items-center px-2 text-[11px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.05)] rounded-lg hover:bg-[rgba(215,92,112,0.10)] border border-[rgba(215,92,112,0.20)] transition-colors no-underline whitespace-nowrap">
                         {t("apikey.apply")}
                       </a>
                     )}
                   </div>
-                  {f.noteKey && <p className="text-[11px] text-[#9FA0A0] mt-0.5">{t(f.noteKey)}</p>}
+                  {f.noteKey && <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t(f.noteKey)}</p>}
                 </div>
               ))}
             </div>
           </div>
         )}
         <button onClick={() => setShowApiKeys(!showApiKeys)}
-          className="w-9 h-9 rounded-full bg-[#6A2B3A] text-white shadow-lg hover:bg-[#4E1F2A] hover:shadow-xl active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+          className="w-9 h-9 rounded-full bg-[var(--fortune-red)] text-white shadow-lg hover:bg-[var(--neon-red)] hover:shadow-xl active:scale-95 transition-all cursor-pointer flex items-center justify-center"
           title={t("apikey.title")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" />

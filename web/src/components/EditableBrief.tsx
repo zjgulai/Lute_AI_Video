@@ -14,9 +14,9 @@ export default function EditableBrief({ brief, onChange }: Props) {
   };
 
   return (
-    <div className="apple-card p-3 bg-white space-y-2">
+    <div className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
       <div>
-        <label className="block text-[10px] font-medium text-[#9FA0A0] mb-0.5">{t("editors.productName")}</label>
+        <label className="block text-[10px] font-medium text-[var(--text-muted)] mb-0.5">{t("editors.productName")}</label>
         <input
           type="text"
           value={brief.product_name || ""}
@@ -26,7 +26,7 @@ export default function EditableBrief({ brief, onChange }: Props) {
         />
       </div>
       <div>
-        <label className="block text-[10px] font-medium text-[#9FA0A0] mb-0.5">{t("editors.description")}</label>
+        <label className="block text-[10px] font-medium text-[var(--text-muted)] mb-0.5">{t("editors.description")}</label>
         <textarea
           value={brief.description || ""}
           onChange={(e) => handleChange("description", e.target.value)}
@@ -36,7 +36,7 @@ export default function EditableBrief({ brief, onChange }: Props) {
         />
       </div>
       <div>
-        <label className="block text-[10px] font-medium text-[#9FA0A0] mb-0.5">{t("editors.key_message")}</label>
+        <label className="block text-[10px] font-medium text-[var(--text-muted)] mb-0.5">{t("editors.key_message")}</label>
         <input
           type="text"
           value={brief.key_message || ""}
@@ -46,7 +46,7 @@ export default function EditableBrief({ brief, onChange }: Props) {
         />
       </div>
       <div>
-        <label className="block text-[10px] font-medium text-[#9FA0A0] mb-0.5">{t("editors.hook_type")}</label>
+        <label className="block text-[10px] font-medium text-[var(--text-muted)] mb-0.5">{t("editors.hook_type")}</label>
         <input
           type="text"
           value={brief.hook_type || ""}

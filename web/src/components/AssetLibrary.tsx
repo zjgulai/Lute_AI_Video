@@ -86,19 +86,19 @@ export default function AssetLibrary({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#EDD3D1]">
+        <div className="flex items-center justify-between p-4 border-b border-[rgba(215,92,112,0.18)]">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6A2B3A" strokeWidth="2">
+            <div className="w-8 h-8 rounded-xl bg-[rgba(215,92,112,0.10)] flex items-center justify-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D75C70" strokeWidth="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-[#35353B]">{t("asset.title")}</h2>
+            <h2 className="text-base font-semibold text-[var(--text-h1)]">{t("asset.title")}</h2>
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-[#FCE4E2] flex items-center justify-center cursor-pointer">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#59585E" strokeWidth="2">
+          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-[var(--bg-panel)] flex items-center justify-center cursor-pointer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D2C3BE" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -106,7 +106,7 @@ export default function AssetLibrary({ onClose }: Props) {
         </div>
 
         {/* Filters */}
-        <div className="flex gap-1.5 p-3 border-b border-[#EDD3D1] overflow-x-auto">
+        <div className="flex gap-1.5 p-3 border-b border-[rgba(215,92,112,0.18)] overflow-x-auto">
           {(["all", "video", "image", "audio"] as const).map((f) => (
             <button
               type="button"
@@ -132,29 +132,29 @@ export default function AssetLibrary({ onClose }: Props) {
             </div>
           ) : error ? (
             <div className="text-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-[#fff5f5] flex items-center justify-center mx-auto mb-3">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C45B50" strokeWidth="1.5">
+              <div className="w-16 h-16 rounded-2xl bg-[rgba(140,60,75,0.10)] flex items-center justify-center mx-auto mb-3">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8C3C4B" strokeWidth="1.5">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="15" y1="9" x2="9" y2="15" />
                   <line x1="9" y1="9" x2="15" y2="15" />
                 </svg>
               </div>
-              <p className="text-sm text-[#59585E]">{t("asset.loadFailed")}</p>
+              <p className="text-sm text-[var(--text-body)]">{t("asset.loadFailed")}</p>
               <button type="button" onClick={loadAssets} className="apple-btn apple-btn-primary mt-3 text-xs py-1.5 px-4">
                 {t("asset.retry")}
               </button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-[#FCE4E2] flex items-center justify-center mx-auto mb-3">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9FA0A0" strokeWidth="1.5">
+              <div className="w-16 h-16 rounded-2xl bg-[var(--bg-panel)] flex items-center justify-center mx-auto mb-3">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#A0918E" strokeWidth="1.5">
                   <rect x="3" y="3" width="18" height="18" rx="2" />
                   <circle cx="8.5" cy="8.5" r="1.5" />
                   <polyline points="21 15 16 10 5 21" />
                 </svg>
               </div>
-              <p className="text-sm text-[#59585E]">{t("asset.empty")}</p>
-              <p className="text-[11px] text-[#9FA0A0] mt-1">{t("asset.emptyHint")}</p>
+              <p className="text-sm text-[var(--text-body)]">{t("asset.empty")}</p>
+              <p className="text-[11px] text-[var(--text-muted)] mt-1">{t("asset.emptyHint")}</p>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-3">
@@ -173,7 +173,7 @@ export default function AssetLibrary({ onClose }: Props) {
                   className="apple-card p-3 hover-lift cursor-pointer group block text-left"
                   title={t("asset.preview")}
                 >
-                  <div className="aspect-video bg-[#35353B] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom relative">
+                  <div className="aspect-video bg-[var(--bg-panel)] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom relative">
                     {asset.type === "image" ? (
                       getMediaUrl(asset.path) ? (
                         <img
@@ -186,7 +186,7 @@ export default function AssetLibrary({ onClose }: Props) {
                       ) : (
                         <div className="flex flex-col items-center justify-center gap-1 text-center px-2">
                           <span className="text-2xl">🖼️</span>
-                          <span className="text-[11px] text-[#9FA0A0]">Demo</span>
+                          <span className="text-[11px] text-[var(--text-muted)]">Demo</span>
                         </div>
                       )
                     ) : asset.type === "video" ? (
@@ -201,7 +201,7 @@ export default function AssetLibrary({ onClose }: Props) {
                           />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors pointer-events-none">
                             <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="#35353B">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="#1C1415">
                                 <polygon points="8,5 19,12 8,19" />
                               </svg>
                             </div>
@@ -210,7 +210,7 @@ export default function AssetLibrary({ onClose }: Props) {
                       ) : (
                         <div className="flex flex-col items-center justify-center gap-1 text-center px-2">
                           <span className="text-2xl">🎬</span>
-                          <span className="text-[11px] text-[#9FA0A0]">Demo</span>
+                          <span className="text-[11px] text-[var(--text-muted)]">Demo</span>
                         </div>
                       )
                     ) : (
@@ -219,14 +219,14 @@ export default function AssetLibrary({ onClose }: Props) {
                   </div>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] text-[#35353B] truncate">{asset.filename}</p>
-                      <p className="text-[11px] text-[#9FA0A0]">{formatSize(asset.size)} · {asset.created}</p>
+                      <p className="text-[11px] text-[var(--text-h1)] truncate">{asset.filename}</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">{formatSize(asset.size)} · {asset.created}</p>
                       {asset.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {asset.tags.map((tag) => (
                             <span
                               key={tag}
-                              className="inline-block max-w-[7rem] truncate text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A]"
+                              className="inline-block max-w-[7rem] truncate text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
                               title={tag}
                             >
                               {tag}
@@ -235,7 +235,7 @@ export default function AssetLibrary({ onClose }: Props) {
                         </div>
                       )}
                     </div>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9FA0A0" strokeWidth="2" className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A0918E" strokeWidth="2" className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
@@ -255,7 +255,7 @@ export default function AssetLibrary({ onClose }: Props) {
           role="presentation"
         >
           <div
-            className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl overflow-hidden bg-[#1a1a1c] shadow-2xl"
+            className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl overflow-hidden bg-[var(--bg-page)] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/10">

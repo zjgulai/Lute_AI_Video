@@ -27,9 +27,9 @@ interface Props {
 }
 
 const SOURCE_COLORS: Record<AssetSource, string> = {
-  ai: "bg-[#6A2B3A]/10 text-[#6A2B3A]",
-  manual: "bg-[#ff9500]/10 text-[#ff9500]",
-  imported: "bg-[#5856d6]/10 text-[#5856d6]",
+  ai: "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]",
+  manual: "bg-[rgba(220,190,120,0.10)] text-[var(--gold-foil)]",
+  imported: "bg-[rgba(155,124,196,0.10)] text-[var(--cinema-violet)]",
 };
 
 const SOURCE_LABELS: Record<AssetSource, string> = {
@@ -154,8 +154,8 @@ function AudioCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       className="apple-card p-3 cursor-pointer hover:shadow-md transition-all duration-200"
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#ff9500]/10 flex items-center justify-center shrink-0">
-          <MusicNotes size={18} weight="fill" className="text-[#ff9500]" />
+        <div className="w-10 h-10 rounded-xl bg-[rgba(220,190,120,0.10)] flex items-center justify-center shrink-0">
+          <MusicNotes size={18} weight="fill" className="text-[var(--gold-foil)]" />
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{asset.title}</h4>
@@ -193,8 +193,8 @@ function TextCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => void
       className="apple-card p-3 cursor-pointer hover:shadow-md transition-all duration-200"
     >
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#5856d6]/10 flex items-center justify-center shrink-0">
-          <Article size={18} weight="fill" className="text-[#5856d6]" />
+        <div className="w-10 h-10 rounded-xl bg-[rgba(155,124,196,0.10)] flex items-center justify-center shrink-0">
+          <Article size={18} weight="fill" className="text-[var(--cinema-violet)]" />
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{asset.title}</h4>

@@ -162,7 +162,7 @@ export default function InsightReport({ result, scenario }: Props) {
           const value = metrics[key];
           const { delta, direction } = compareMetric(key, value);
           const Icon = direction === "up" ? TrendUp : direction === "down" ? TrendDown : Minus;
-          const color = direction === "up" ? "text-[#6B8578]" : direction === "down" ? "text-[var(--color-warning)]" : "text-[var(--color-text-tertiary)]";
+          const color = direction === "up" ? "text-[var(--jade-accent)]" : direction === "down" ? "text-[var(--color-warning)]" : "text-[var(--color-text-tertiary)]";
 
           return (
             <div key={key} className="apple-card p-3 text-center">
@@ -223,7 +223,7 @@ export default function InsightReport({ result, scenario }: Props) {
             <RoiNode label={`${t("insight.cvr")}: ${formatMetric("cvr", metrics.cvr)} → ${formatMetric("sales", metrics.sales)} ${t("insight.sales")}`} level={2} />
             <div className="pl-8 pt-1 border-t border-[var(--color-border-light)] mt-2">
               <span className="text-[var(--color-text-secondary)]">
-                预估 ROI: <span className="font-bold text-[#6B8578]">{((metrics.sales * 50) / 500).toFixed(1)}x</span>
+                预估 ROI: <span className="font-bold text-[var(--jade-accent)]">{((metrics.sales * 50) / 500).toFixed(1)}x</span>
                 <span className="text-[var(--color-text-tertiary)] ml-1">(按客单价 $50, 投放成本 $500)</span>
               </span>
             </div>
@@ -234,7 +234,7 @@ export default function InsightReport({ result, scenario }: Props) {
       {/* Next Steps */}
       <div className="apple-card p-4">
         <div className="flex items-center gap-2 mb-2">
-          <Lightbulb size={14} weight="fill" className="text-[#6B8578]" />
+          <Lightbulb size={14} weight="fill" className="text-[var(--jade-accent)]" />
           <span className="text-xs font-semibold text-[var(--color-text-primary)]">{t("insight.nextStep")}</span>
         </div>
         <ul className="space-y-1.5">

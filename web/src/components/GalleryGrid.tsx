@@ -137,7 +137,7 @@ export default function GalleryGrid({ items, onPlay }: Props) {
                   )}
                   {/* Score badge */}
                   {item.score !== undefined && item.score > 0 && (
-                    <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#6B8578]/90 text-white text-[10px] font-medium"
+                    <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[rgba(120,175,140,0.90)] text-white text-[10px] font-medium"
                     >
                       <ChartBar size={10} weight="fill" />
                       {Math.round((item.score || 0) * 100)}%
