@@ -120,10 +120,10 @@ export default function PublishFlow({ result }: Props) {
                 disabled={disabled}
                 className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer border ${
                   isPublished
-                    ? "bg-[#6B8578]/10 border-[#6B8578] text-[#6B8578]"
+                    ? "bg-[rgba(120,175,140,0.10)] border-[var(--jade-accent)] text-[var(--jade-accent)]"
                     : isSelected
                     ? "bg-[var(--color-accent)]/10 border-[var(--color-accent)] text-[var(--color-accent)]"
-                    : "bg-white border-[var(--color-border-light)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/30"
+                    : "bg-[var(--bg-card)] border-[var(--color-border-light)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/30"
                 } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
               >
                 {isPublished && <CheckCircle size={12} weight="fill" />}
@@ -206,7 +206,7 @@ export default function PublishFlow({ result }: Props) {
           )}
         </button>
       ) : (
-        <div className="flex items-center justify-center gap-2 text-sm text-[#6B8578] font-medium py-2">
+        <div className="flex items-center justify-center gap-2 text-sm text-[var(--jade-accent)] font-medium py-2">
           <CheckCircle size={16} weight="fill" />
           {t("publish.success")}
         </div>

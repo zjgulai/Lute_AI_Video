@@ -56,12 +56,12 @@ function getVariantLabelKey(variant: string): string {
 function StatusDot({ status }: { status: string }) {
   const color =
     status === "PASS"
-      ? "bg-[#6B8578]"
+      ? "bg-[var(--jade-accent)]"
       : status === "WARN"
-      ? "bg-[#ff9f0a]"
+      ? "bg-[var(--gold-foil)]"
       : status === "FAIL"
-      ? "bg-[#C45B50]"
-      : "bg-[#9FA0A0]";
+      ? "bg-[var(--crimson-mist)]"
+      : "bg-[var(--text-muted)]";
   return <span className={`w-1.5 h-1.5 rounded-full ${color} shrink-0`} />;
 }
 
@@ -96,17 +96,17 @@ export default function CompareView({
     return (
       <div className="space-y-4 animate-slide-up">
         <div className="apple-card p-4">
-          <h2 className="text-base font-semibold text-[#35353B]">{t("compare.title")}</h2>
+          <h2 className="text-base font-semibold text-[var(--text-h1)]">{t("compare.title")}</h2>
         </div>
         <div className="apple-card p-8 text-center">
           <div className="flex flex-col items-center gap-3 py-6">
             <div className="relative w-8 h-8">
               <svg className="animate-spin w-8 h-8" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="#EDD3D1" strokeWidth="3" />
-                <path d="M12 2a10 10 0 0 1 10 10" stroke="#6A2B3A" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="12" cy="12" r="10" stroke="rgba(215,92,112,0.18)" strokeWidth="3" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="var(--fortune-red)" strokeWidth="3" strokeLinecap="round" />
               </svg>
             </div>
-            <p className="text-sm text-[#59585E]">{t("compare.generating")}</p>
+            <p className="text-sm text-[var(--text-body)]">{t("compare.generating")}</p>
           </div>
         </div>
       </div>
@@ -117,11 +117,11 @@ export default function CompareView({
     <div className="space-y-4 animate-slide-up">
       {/* Header */}
       <div className="apple-card p-4">
-        <h2 className="text-base font-semibold text-[#35353B]">
+        <h2 className="text-base font-semibold text-[var(--text-h1)]">
           {t(hasMultipleVersions ? "compare.title" : "compare.singleVersion")}
         </h2>
         {hasMultipleVersions && (
-          <p className="text-xs text-[#59585E] mt-0.5">
+          <p className="text-xs text-[var(--text-body)] mt-0.5">
             {versions.length} {t("compare.version")}
           </p>
         )}
@@ -149,21 +149,21 @@ export default function CompareView({
               key={v.label}
               className={`apple-card overflow-hidden transition-all duration-300 ${
                 isSelected
-                  ? "ring-2 ring-[#6A2B3A] shadow-md"
+                  ? "ring-2 ring-[var(--fortune-red)] shadow-md"
                   : isOtherSelected
                   ? "opacity-50"
                   : "hover:shadow-sm"
               }`}
             >
               {/* Version header */}
-              <div className="p-3 border-b border-[#EDD3D1] bg-[#FFF5F2]">
+              <div className="p-3 border-b border-[rgba(215,92,112,0.18)] bg-[var(--bg-card)]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-[#35353B]">
+                    <h3 className="text-sm font-semibold text-[var(--text-h1)]">
                       {v.label}
                     </h3>
                     {isSelected && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A]">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                           <path d="M2 5.5L4 7.5L8 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
@@ -171,7 +171,7 @@ export default function CompareView({
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#59585E]/10 text-[#59585E]">
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
                     {t(getVariantLabelKey(v.scriptVariant))}
                   </span>
                 </div>
@@ -185,7 +185,7 @@ export default function CompareView({
                       src={getMediaUrl(v.videoPath)}
                       controls
                       className="w-full"
-                      style={{ maxHeight: 400 }}
+                      style={{ maxHeight: 400, colorScheme: 'dark' }}
                       preload="metadata"
                       poster={v.thumbnailPath ? getMediaUrl(v.thumbnailPath) : undefined}
                       autoPlay
@@ -203,7 +203,7 @@ export default function CompareView({
                 ) : (
                   <button
                     onClick={() => setExpandedVersion(v.label)}
-                    className="w-full aspect-video flex items-center justify-center bg-gradient-to-br from-[#35353B] to-[#2d2d2f] hover:from-[#2d2d2f] hover:to-[#3d3d3f] transition-all duration-200 cursor-pointer group"
+                    className="w-full aspect-video flex items-center justify-center bg-gradient-to-br from-[var(--bg-panel)] to-[var(--bg-layer3)] hover:from-[var(--bg-layer3)] hover:to-[var(--bg-panel)] transition-all duration-200 cursor-pointer group"
                   >
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/20 transition-colors">
@@ -220,7 +220,7 @@ export default function CompareView({
               </div>
 
               {/* Metadata row */}
-              <div className="px-3 pt-3 flex items-center gap-4 text-[11px] text-[#59585E]">
+              <div className="px-3 pt-3 flex items-center gap-4 text-[11px] text-[var(--text-body)]">
                 <span className="flex items-center gap-1">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                     <circle cx="12" cy="12" r="10" />
@@ -241,29 +241,29 @@ export default function CompareView({
               {audit && (
                 <div className="px-3 pt-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">
+                    <span className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
                       {t("compare.quality")}
                     </span>
                     <span
                       className={`text-[11px] font-semibold ${
                         audit.overall_status === "PASS"
-                          ? "text-[#6B8578]"
+                          ? "text-[var(--jade-accent)]"
                           : audit.overall_status === "WARN"
-                          ? "text-[#ff9f0a]"
-                          : "text-[#C45B50]"
+                          ? "text-[var(--gold-foil)]"
+                          : "text-[var(--crimson-mist)]"
                       }`}
                     >
                       {overallScore}%
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-[#FCE4E2] rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-[var(--bg-panel)] rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ease-out ${
                         audit.overall_status === "PASS"
-                          ? "bg-[#6B8578]"
+                          ? "bg-[var(--jade-accent)]"
                           : audit.overall_status === "WARN"
-                          ? "bg-[#ff9f0a]"
-                          : "bg-[#C45B50]"
+                          ? "bg-[var(--gold-foil)]"
+                          : "bg-[var(--crimson-mist)]"
                       }`}
                       style={{ width: `${overallScore}%` }}
                     />
@@ -273,7 +273,7 @@ export default function CompareView({
                     {audit.criteria?.slice(0, 4).map((c, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-[#FCE4E2]"
+                        className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-[var(--bg-panel)]"
                       >
                         <StatusDot status={c.status} />
                         {c.score >= 0 ? `${Math.round(c.score * 100)}%` : ""}
@@ -324,7 +324,7 @@ export default function CompareView({
                 ) : (
                   <button
                     onClick={() => onSelect(v.label)}
-                    className="w-full apple-btn text-xs py-2 px-3 border border-[#EDD3D1] hover:bg-[#FCE4E2] transition-colors cursor-pointer"
+                    className="w-full apple-btn text-xs py-2 px-3 border border-[rgba(215,92,112,0.18)] hover:bg-[var(--bg-panel)] transition-colors cursor-pointer"
                   >
                     {t("compare.selectThis")}
                   </button>
@@ -338,21 +338,21 @@ export default function CompareView({
       {/* Quality comparison table (2+ versions only) */}
       {hasMultipleVersions && allCriteria.length > 0 && (
         <div className="apple-card p-4">
-          <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-3">
+          <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-3">
             {t("compare.qualityComparison")}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead>
-                <tr className="border-b border-[#EDD3D1]">
-                  <th className="text-left py-2 pr-4 text-[#59585E] font-medium">
+                <tr className="border-b border-[rgba(215,92,112,0.18)]">
+                  <th className="text-left py-2 pr-4 text-[var(--text-body)] font-medium">
                     {t("compare.criteria")}
                   </th>
                   {versions.map((v) => (
                     <th
                       key={v.label}
                       className={`text-center py-2 px-3 font-medium ${
-                        selectedVersion === v.label ? "text-[#6A2B3A]" : "text-[#59585E]"
+                        selectedVersion === v.label ? "text-[var(--fortune-red)]" : "text-[var(--text-body)]"
                       }`}
                     >
                       {v.label}
@@ -364,16 +364,16 @@ export default function CompareView({
                 {allCriteria.map((name, rowIdx) => (
                   <tr
                     key={name}
-                    className={rowIdx < allCriteria.length - 1 ? "border-b border-[#EDD3D1]/50" : ""}
+                    className={rowIdx < allCriteria.length - 1 ? "border-b border-[rgba(215,92,112,0.09)]" : ""}
                   >
-                    <td className="py-2 pr-4 text-[#35353B]">{name}</td>
+                    <td className="py-2 pr-4 text-[var(--text-h1)]">{name}</td>
                     {versions.map((v) => {
                       const criterion = v.auditReport?.criteria?.find(
                         (c: { name: string }) => c.name === name
                       );
                       if (!criterion) {
                         return (
-                          <td key={v.label} className="text-center py-2 px-3 text-[#9FA0A0]">
+                          <td key={v.label} className="text-center py-2 px-3 text-[var(--text-muted)]">
                             —
                           </td>
                         );
@@ -386,10 +386,10 @@ export default function CompareView({
                           key={v.label}
                           className={`text-center py-2 px-3 font-medium ${
                             isPass
-                              ? "text-[#6B8578]"
+                              ? "text-[var(--jade-accent)]"
                               : isWarn
-                              ? "text-[#ff9f0a]"
-                              : "text-[#C45B50]"
+                              ? "text-[var(--gold-foil)]"
+                              : "text-[var(--crimson-mist)]"
                           }`}
                         >
                           <div className="flex items-center justify-center gap-1">
@@ -411,7 +411,7 @@ export default function CompareView({
       <div className="flex items-center justify-between flex-wrap gap-2">
         <button
           onClick={onBack}
-          className="text-xs text-[#59585E] px-4 py-2 rounded-lg hover:bg-[#EDD3D1]/50 transition-colors cursor-pointer"
+          className="text-xs text-[var(--text-body)] px-4 py-2 rounded-lg hover:bg-[rgba(215,92,112,0.18)] transition-colors cursor-pointer"
         >
           <span className="inline-flex items-center gap-1">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -436,7 +436,7 @@ export default function CompareView({
           )}
           <button
             onClick={onNewCreation}
-            className="apple-btn px-5 py-2 text-xs border border-[#EDD3D1] hover:bg-[#FCE4E2] transition-colors cursor-pointer"
+            className="apple-btn px-5 py-2 text-xs border border-[rgba(215,92,112,0.18)] hover:bg-[var(--bg-panel)] transition-colors cursor-pointer"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />

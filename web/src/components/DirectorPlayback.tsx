@@ -39,7 +39,7 @@ export default function DirectorPlayback({ result, scenario }: Props) {
             src={getMediaUrl(videoPath)}
             controls
             className="w-full rounded-xl"
-            style={{ aspectRatio: "9/16", maxHeight: 480 }}
+            style={{ aspectRatio: "9/16", maxHeight: 480, colorScheme: 'dark' }}
           />
         ) : (
           <div className="apple-card p-8 text-center text-[var(--color-text-tertiary)]">
@@ -116,7 +116,7 @@ export default function DirectorPlayback({ result, scenario }: Props) {
         >
           <div className="apple-card p-4">
             <div className="flex items-center gap-3 mb-3">
-              <div className={`text-lg font-bold ${audit.overall_status === "PASS" ? "text-[#6B8578]" : "text-[var(--color-warning)]"}`}>
+              <div className={`text-lg font-bold ${audit.overall_status === "PASS" ? "text-[var(--jade-accent)]" : "text-[var(--color-warning)]"}`}>
                 {Math.round((audit.overall_score || 0) * 100)}%
               </div>
               <div>
@@ -129,7 +129,7 @@ export default function DirectorPlayback({ result, scenario }: Props) {
             {(audit.criteria || []).map((c: any, i: number) => (
               <div key={i} className="flex items-center justify-between py-1.5 border-t border-[var(--color-border-light)]">
                 <span className="text-xs text-[var(--color-text-secondary)]">{c.name}</span>
-                <span className={`text-xs font-medium ${c.status === "PASS" ? "text-[#6B8578]" : c.status === "WARN" ? "text-[var(--color-warning)]" : "text-[var(--color-error)]"}`}>
+                <span className={`text-xs font-medium ${c.status === "PASS" ? "text-[var(--jade-accent)]" : c.status === "WARN" ? "text-[var(--color-warning)]" : "text-[var(--color-error)]"}`}>
                   {c.status}
                 </span>
               </div>
