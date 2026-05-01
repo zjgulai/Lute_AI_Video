@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import type { GuidedCard as GuidedCardType } from "./types";
 import { useI18n } from "@/i18n/I18nProvider";
+import { API_BASE } from "./api";
 
 interface Props {
   card: GuidedCardType;
@@ -34,6 +35,8 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
   const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(card.priority !== "optional" || !value);
   const [isCompleted] = useState(!!value && value.trim().length > 0);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const styles = PRIORITY_STYLES[card.priority] || PRIORITY_STYLES.required;
 
@@ -48,6 +51,33 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
     setIsExpanded((prev) => !prev);
     onFocus();
   }, [onFocus]);
+
+  const handleUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch(API_BASE + "/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          handleChange(data.path || data.filename || file.name);
+        } else {
+          console.error("Upload failed", res.status);
+        }
+      } catch (err) {
+        console.error("Upload error", err);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [handleChange]
+  );
 
   const renderInput = () => {
     switch (card.inputType) {
@@ -149,14 +179,43 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
       case "image-upload":
       case "video-upload":
         return (
-          <div className="border-2 border-dashed border-[var(--color-border-light)] rounded-xl p-6 text-center hover:border-[var(--color-accent)] transition-colors cursor-pointer">
-            <div className="text-2xl mb-2">{card.inputType === "image-upload" ? "🖼️" : "🎬"}</div>
-            <p className="text-sm text-[var(--color-text-tertiary)]">
-              {t("upload.dragInactive")}
-            </p>
-            <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-              {t("upload.hint")}
-            </p>
+          <div className="space-y-2">
+            <div
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${
+                value
+                  ? "border-[var(--jade-accent)] bg-[rgba(120,175,140,0.05)]"
+                  : "border-[var(--color-border-light)] hover:border-[var(--color-accent)]"
+              } ${uploading ? "opacity-60 cursor-wait" : ""}`}
+            >
+              <div className="text-2xl mb-2">{card.inputType === "image-upload" ? "🖼️" : "🎬"}</div>
+              <p className="text-sm text-[var(--color-text-tertiary)]">
+                {uploading
+                  ? t("upload.uploading")
+                  : value
+                  ? value.split("/").pop()
+                  : t("upload.dragInactive")}
+              </p>
+              <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+                {t("upload.hint")}
+              </p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept={card.inputType === "image-upload" ? "image/*" : "video/*"}
+              onChange={handleUpload}
+            />
+            {value && (
+              <button
+                type="button"
+                onClick={() => handleChange("")}
+                className="text-[11px] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors"
+              >
+                {t("upload.clear") || "清除"}
+              </button>
+            )}
           </div>
         );
 

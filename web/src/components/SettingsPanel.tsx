@@ -62,7 +62,21 @@ export default function SettingsPanel({ onClose }: Props) {
     try {
       const result = await testConnection();
       if (result.ok) {
-        setTestResult({ ok: true, message: "Connected — " + JSON.stringify(result.data) });
+        const data = result.data || {};
+        const parts: string[] = [];
+        if (data.status) parts.push(String(data.status).toUpperCase());
+        if (data.version) parts.push("v" + data.version);
+        const persistence = data.persistence?.backend;
+        if (persistence) parts.push(persistence);
+        const remotion = data.remotion;
+        const renderUnavailable = remotion && remotion.available === false;
+        const summary = parts.length > 0 ? parts.join(" · ") : "OK";
+        setTestResult({
+          ok: true,
+          message: renderUnavailable
+            ? "Connected — " + summary + "(rendering 不可用,可上线但无法生成视频)"
+            : "Connected — " + summary,
+        });
       } else {
         setTestResult({ ok: false, message: result.error || "Connection failed (" + result.status + ")" });
       }

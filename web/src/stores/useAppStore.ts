@@ -106,6 +106,7 @@ export const useAppStore = create<AppState>((set, get) => {
         disconnected: false,
         showSettings: false,
         showAssetLibrary: false,
+        showSplash: true,
       }),
   };
 });

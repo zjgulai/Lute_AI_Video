@@ -709,7 +709,7 @@ export default function Home() {
   return (
     <>
       <Suspense fallback={null}>
-        <URLSync activeScene={activeScene} mode={mode} pathname={pathname} router={router} />
+        <URLSync activeScene={activeScene} mode={mode} pathname={pathname} router={router} showSplash={showSplash} />
       </Suspense>
       {showSplash && <SplashScreen onEnter={() => setShowSplash(false)} />}
       <ErrorBoundary>
@@ -1163,15 +1163,18 @@ function URLSync({
   mode,
   pathname,
   router,
+  showSplash,
 }: {
   activeScene: string;
   mode: string | null;
   pathname: string;
   router: ReturnType<typeof useRouter>;
+  showSplash: boolean;
 }) {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    if (showSplash) return;
     const sceneToPath: Record<string, string> = {
       product_direct: "/s1",
       brand_campaign: "/s2",
@@ -1186,7 +1189,7 @@ function URLSync({
       if (mode) params.set("mode", mode);
       router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
     }
-  }, [activeScene, mode, pathname, router, searchParams]);
+  }, [activeScene, mode, pathname, router, searchParams, showSplash]);
 
   return null;
 }
