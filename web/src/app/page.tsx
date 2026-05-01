@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import type { ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import {
@@ -225,7 +227,6 @@ export default function Home() {
 
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   // Expert Studio gate progression
   const GATE_SEQUENCE = [
@@ -240,24 +241,6 @@ export default function Home() {
   // One-shot step progress
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  // P1-12: Sync URL with current scene/mode state
-  useEffect(() => {
-    const sceneToPath: Record<string, string> = {
-      product_direct: "/s1",
-      brand_campaign: "/s2",
-      influencer_remix: "/s3",
-      live_shoot: "/s4",
-      brand_vlog: "/s5",
-      fast_mode: "/fast",
-    };
-    const targetPath = sceneToPath[activeScene];
-    if (targetPath && pathname !== targetPath) {
-      const params = new URLSearchParams(searchParams.toString());
-      if (mode) params.set("mode", mode);
-      router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
-    }
-  }, [activeScene, mode, pathname, router, searchParams]);
 
   /** Cancel current async operation, recover partial state if possible. */
   const handleCancel = useCallback(async () => {
@@ -725,6 +708,9 @@ export default function Home() {
 
   return (
     <>
+      <Suspense fallback={null}>
+        <URLSync activeScene={activeScene} mode={mode} pathname={pathname} router={router} />
+      </Suspense>
       {showSplash && <SplashScreen onEnter={() => setShowSplash(false)} />}
       <ErrorBoundary>
       <div className={`min-h-screen bg-[var(--color-bg)] transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
@@ -1169,4 +1155,38 @@ export default function Home() {
       </ErrorBoundary>
     </>
   );
+}
+
+// P1-12: URL sync — extracted to avoid useSearchParams() SSR bailout
+function URLSync({
+  activeScene,
+  mode,
+  pathname,
+  router,
+}: {
+  activeScene: string;
+  mode: string | null;
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const sceneToPath: Record<string, string> = {
+      product_direct: "/s1",
+      brand_campaign: "/s2",
+      influencer_remix: "/s3",
+      live_shoot: "/s4",
+      brand_vlog: "/s5",
+      fast_mode: "/fast",
+    };
+    const targetPath = sceneToPath[activeScene];
+    if (targetPath && pathname !== targetPath) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (mode) params.set("mode", mode);
+      router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
+    }
+  }, [activeScene, mode, pathname, router, searchParams]);
+
+  return null;
 }

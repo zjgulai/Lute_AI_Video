@@ -47,7 +47,7 @@ services:
       - ../../web/.next/standalone:/app
       - ../../web/public:/app/public
       - ../../web/.next/static:/app/.next/static
-    command: ["node", "server.js"]
+    command: ["node", "web/server.js"]
     networks:
       - ai_video_net
     depends_on:

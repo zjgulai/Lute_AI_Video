@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAppStore } from "@/stores/useAppStore";
 import Home from "../page";
 
-export default function S5Page() {
+function S5Inner() {
   const searchParams = useSearchParams();
   const { setActiveScene, setMode, setStage } = useAppStore();
 
@@ -17,4 +17,12 @@ export default function S5Page() {
   }, [searchParams, setActiveScene, setMode, setStage]);
 
   return <Home />;
+}
+
+export default function S5Page() {
+  return (
+    <Suspense fallback={null}>
+      <S5Inner />
+    </Suspense>
+  );
 }
