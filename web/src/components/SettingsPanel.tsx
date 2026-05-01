@@ -83,18 +83,18 @@ export default function SettingsPanel({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#EDD3D1]">
+        <div className="flex items-center justify-between p-4 border-b border-[var(--divider-light)]">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
-              <HardDrives size={16} weight="fill" className="text-[#6A2B3A]" />
+            <div className="w-8 h-8 rounded-xl bg-[rgba(215,92,112,0.12)] flex items-center justify-center shadow-[0_0_8px_rgba(255,77,106,0.18)]">
+              <HardDrives size={16} weight="fill" className="text-[var(--fortune-red)]" />
             </div>
-            <h2 className="text-base font-semibold text-[#35353B]">API Configuration</h2>
+            <h2 className="text-base font-semibold text-[var(--text-h1)]">API Configuration</h2>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-[#FCE4E2] flex items-center justify-center cursor-pointer"
+            className="w-8 h-8 rounded-lg hover:bg-[var(--bg-panel)] flex items-center justify-center cursor-pointer"
           >
-            <X size={16} weight="fill" className="text-[#59585E]" />
+            <X size={16} weight="fill" className="text-[var(--text-muted)]" />
           </button>
         </div>
 
@@ -102,7 +102,7 @@ export default function SettingsPanel({ onClose }: Props) {
         <div className="p-4 space-y-4">
           {/* Backend URL */}
           <div>
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[#59585E] mb-1.5">
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-body)] mb-1.5">
               <HardDrives size={12} weight="fill" />
               Backend URL
             </label>
@@ -113,14 +113,14 @@ export default function SettingsPanel({ onClose }: Props) {
               placeholder="https://your-backend.onrender.com"
               className="apple-input text-sm"
             />
-            <p className="text-[11px] text-[#9FA0A0] mt-1">
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">
               e.g. https://lute-ai-video-backend.onrender.com or http://localhost:8001
             </p>
           </div>
 
           {/* API Key */}
           <div>
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[#59585E] mb-1.5">
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-body)] mb-1.5">
               <Key size={12} weight="fill" />
               API Key
             </label>
@@ -131,18 +131,18 @@ export default function SettingsPanel({ onClose }: Props) {
               placeholder="ai_video_demo_2026"
               className="apple-input text-sm"
             />
-            <p className="text-[11px] text-[#9FA0A0] mt-1">
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">
               Must match the API_KEY environment variable on your backend.
             </p>
           </div>
 
           {/* Demo mode toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#FCE4E2]">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-panel)]">
             <div className="flex items-center gap-2">
-              <Lightning size={16} weight="fill" className="text-[#59585E]" />
+              <Lightning size={16} weight="fill" className="text-[var(--gold-foil)]" />
               <div>
-                <p className="text-xs font-medium text-[#35353B]">Demo Mode</p>
-                <p className="text-[11px] text-[#9FA0A0]">Skip API calls, use mock data</p>
+                <p className="text-xs font-medium text-[var(--text-h1)]">Demo Mode</p>
+                <p className="text-[11px] text-[var(--text-muted)]">Skip API calls, use mock data</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -152,7 +152,7 @@ export default function SettingsPanel({ onClose }: Props) {
                 onChange={(e) => setDemo(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-10 h-5.5 bg-[#EDD3D1] rounded-full peer peer-checked:bg-[#6A2B3A] transition-colors after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:w-[18px] after:h-[18px] after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-[18px]" />
+              <div className="w-10 h-5.5 bg-[var(--bg-layer3)] rounded-full peer peer-checked:bg-[var(--neon-red)] peer-checked:shadow-[0_0_10px_rgba(255,77,106,0.45)] transition-colors after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:w-[18px] after:h-[18px] after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-[18px]" />
             </label>
           </div>
 
@@ -160,11 +160,11 @@ export default function SettingsPanel({ onClose }: Props) {
           <button
             onClick={handleTest}
             disabled={testing || !baseUrl.trim()}
-            className="w-full apple-btn text-xs py-2 border border-[#EDD3D1] hover:bg-[#FCE4E2] disabled:opacity-50"
+            className="w-full apple-btn text-xs py-2 border border-[var(--border-default)] hover:bg-[var(--bg-panel)] disabled:opacity-50 text-[var(--text-body)]"
           >
             {testing ? (
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 border-2 border-[#59585E] border-t-transparent rounded-full animate-spin" />
+                <span className="w-3 h-3 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
                 Testing...
               </span>
             ) : (
@@ -180,8 +180,8 @@ export default function SettingsPanel({ onClose }: Props) {
             <div
               className={`flex items-center gap-2 p-2.5 rounded-lg text-xs ${
                 testResult.ok
-                  ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
-                  : "bg-[#C45B50]/10 text-[#C45B50]"
+                  ? "bg-[rgba(120,175,140,0.12)] text-[var(--jade-accent)]"
+                  : "bg-[rgba(140,60,75,0.12)] text-[var(--crimson-mist)]"
               }`}
             >
               {testResult.ok ? (
@@ -195,10 +195,10 @@ export default function SettingsPanel({ onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-[#EDD3D1]">
+        <div className="flex items-center justify-between p-4 border-t border-[var(--divider-light)]">
           <button
             onClick={handleReset}
-            className="flex items-center gap-1 text-[11px] text-[#59585E] hover:text-[#35353B] transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
           >
             <ArrowCounterClockwise size={12} weight="fill" />
             Reset Defaults
@@ -206,7 +206,7 @@ export default function SettingsPanel({ onClose }: Props) {
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="apple-btn text-xs py-2 px-3"
+              className="apple-btn text-xs py-2 px-3 bg-[var(--bg-panel)] text-[var(--text-body)] border border-[var(--border-default)]"
             >
               Cancel
             </button>

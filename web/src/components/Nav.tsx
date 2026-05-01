@@ -46,8 +46,8 @@ export default function Nav() {
             onClick={link.onClick}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               isActive
-                ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
-                : "text-[#59585E] hover:text-[#35353B] hover:bg-[#EDD3D1]/50"
+                ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[rgba(78,58,61,0.5)]"
             }`}
           >
             <Icon size={16} weight="fill" />
@@ -58,7 +58,7 @@ export default function Nav() {
       {/* Language toggle */}
       <button
         onClick={() => setLocale(locale === "en" ? "zh" : "en")}
-        className="ml-3 px-2 py-1 rounded-full text-[11px] font-semibold transition-all bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1] hover:text-[#35353B] cursor-pointer border border-[#EDD3D1] min-w-[36px] text-center"
+        className="ml-3 px-2 py-1 rounded-full text-[11px] font-semibold transition-all bg-[var(--bg-panel)] text-[var(--text-muted)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)] cursor-pointer border border-[var(--border-default)] min-w-[36px] text-center"
       >
         {t("locale.toggle")}
       </button>

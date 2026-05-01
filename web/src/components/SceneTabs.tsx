@@ -48,27 +48,27 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
               }}
               className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all cursor-pointer ${
                 isActive
-                  ? "border-[#6A2B3A] bg-[#6A2B3A]/5 ring-1 ring-[#6A2B3A]/20"
-                  : "border-[#EDD3D1] bg-white hover:border-[#D9A8A3]"
+                  ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(255,77,106,0.18)]"
+                  : "border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.04)]"
               }`}
             >
               {IconComponent && (
                 <IconComponent
                   size={24}
                   weight="fill"
-                  className={`shrink-0 ${isActive ? "text-[#6A2B3A]" : "text-[#59585E]"}`}
+                  className={`shrink-0 ${isActive ? "text-[var(--fortune-red)]" : "text-[var(--text-muted)]"}`}
                 />
               )}
               <div className="text-left min-w-0">
                 <span
                   className={`block text-[11px] font-semibold leading-tight ${
-                    isActive ? "text-[#35353B]" : "text-[#59585E]"
+                    isActive ? "text-[var(--text-h1)]" : "text-[var(--text-body)]"
                   }`}
                 >
                   {t(`scene.${id}.title`)}
                 </span>
                 {count > 0 && (
-                  <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A]">
+                  <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)]">
                     {count}{t("asset.count")}
                   </span>
                 )}
@@ -77,7 +77,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
           );
         })}
       </div>
-      <p className="text-[11px] text-[#59585E] leading-relaxed px-0.5">
+      <p className="text-[11px] text-[var(--text-muted)] leading-relaxed px-0.5">
         {t(SCENE_DESC_KEYS[activeScene] || SCENE_DESC_KEYS.product_direct)}
       </p>
     </div>

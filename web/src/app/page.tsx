@@ -132,21 +132,21 @@ function ReviewProgressIndicator({ currentReview, reviewState }: ReviewProgressP
       {nodes.map(({ node, nodeKey, isCurrent, isDone, isRejected, index }) => (
         <div key={node} className="flex items-center gap-1.5 flex-1 last:flex-none">
           <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
-            isCurrent ? "bg-[#6A2B3A]/10 text-[#6A2B3A] ring-1 ring-[#6A2B3A]/20" :
-            isDone ? "bg-[#FCE4E2] text-[#6A2B3A]" :
-            isRejected ? "bg-[#C45B50]/5 text-[#C45B50]" :
-            "bg-[#FCE4E2] text-[#9FA0A0]"
+            isCurrent ? "bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)] ring-1 ring-[rgba(255,77,106,0.30)] shadow-[0_0_8px_rgba(255,77,106,0.25)]" :
+            isDone ? "bg-[rgba(120,175,140,0.12)] text-[var(--jade-accent)]" :
+            isRejected ? "bg-[rgba(140,60,75,0.10)] text-[var(--crimson-mist)]" :
+            "bg-[var(--bg-panel)] text-[var(--text-muted)]"
           }`}>
             <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold ${
-              isDone ? "bg-[#6A2B3A] text-white" :
-              isRejected ? "bg-[#C45B50] text-white" :
-              isCurrent ? "bg-[#6A2B3A] text-white" :
-              "bg-[#EDD3D1] text-[#9FA0A0]"
+              isDone ? "bg-[var(--jade-accent)] text-white" :
+              isRejected ? "bg-[var(--crimson-mist)] text-white" :
+              isCurrent ? "bg-[var(--neon-red)] text-white shadow-[0_0_8px_rgba(255,77,106,0.55)]" :
+              "bg-[var(--bg-layer3)] text-[var(--text-muted)]"
             }`}>{isDone ? "✓" : isRejected ? "✗" : index + 1}</span>
             {t(`step.${nodeKey}`)}
           </div>
           {index < REVIEW_NODES.length - 1 && (
-            <div className={`flex-1 h-px ${isDone ? "bg-[#6A2B3A]" : "bg-[#EDD3D1]"}`} />
+            <div className={`flex-1 h-px ${isDone ? "bg-[var(--jade-accent)]" : "bg-[var(--divider-subtle)]"}`} />
           )}
         </div>
       ))}
@@ -738,33 +738,33 @@ export default function Home() {
 
         {/* Loading overlay */}
         {loading && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md">
             <div className="apple-card px-8 py-8 flex flex-col items-center gap-5 w-full max-w-md mx-4">
               <div className="relative w-10 h-10">
                 <svg className="animate-spin w-10 h-10" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#EDD3D1" strokeWidth="3" />
-                  <path d="M12 2a10 10 0 0 1 10 10" stroke="#6A2B3A" strokeWidth="3" strokeLinecap="round" />
+                  <circle cx="12" cy="12" r="10" stroke="var(--border-default)" strokeWidth="3" />
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="var(--neon-red)" strokeWidth="3" strokeLinecap="round" />
                 </svg>
               </div>
               <div className="text-center space-y-1">
-                <p className="text-sm text-[#59585E]">{loadingText}</p>
+                <p className="text-sm text-[var(--text-body)]">{loadingText}</p>
                 {showSteps && currentStepIdx < S1_STEPS.length && currentStepIdx >= 0 && (
-                  <p className="text-base font-semibold text-[#35353B]">
+                  <p className="text-base font-semibold text-[var(--text-h1)]">
                     {S1_STEPS[currentStepIdx]?.label}
                   </p>
                 )}
               </div>
               {showSteps && (
                 <div className="w-full space-y-2">
-                  <div className="h-1.5 w-full bg-[#FCE4E2] rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-[var(--bg-panel)] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#6A2B3A] rounded-full transition-all duration-700 ease-out"
+                      className="h-full bg-[var(--fortune-red)] rounded-full transition-all duration-700 ease-out shadow-[0_0_8px_rgba(255,77,106,0.5)]"
                       style={{
                         width: `${Math.min(((currentStepIdx + 0.5) / S1_STEPS.length) * 100, 100)}%`,
                       }}
                     />
                   </div>
-                  <div className="flex justify-between text-[11px] text-[#9FA0A0]">
+                  <div className="flex justify-between text-[11px] text-[var(--text-muted)]">
                     <span>{t("app.step")} {Math.min(currentStepIdx + 1, S1_STEPS.length)} / {S1_STEPS.length}</span>
                     <span>{Math.round(Math.min(((currentStepIdx + 0.5) / S1_STEPS.length) * 100, 100))}%</span>
                   </div>
@@ -780,10 +780,10 @@ export default function Home() {
                         key={i}
                         className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all duration-300 ${
                           done
-                            ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+                            ? "bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)]"
                             : active
-                            ? "bg-[#6A2B3A] text-white shadow-sm ring-2 ring-[#6A2B3A]/20"
-                            : "bg-[#FCE4E2] text-[#9FA0A0]"
+                            ? "bg-[var(--neon-red)] text-white shadow-[0_0_12px_rgba(255,77,106,0.55)] ring-2 ring-[rgba(255,77,106,0.30)]"
+                            : "bg-[var(--bg-panel)] text-[var(--text-muted)]"
                         }`}
                       >
                         {done && (
@@ -802,7 +802,7 @@ export default function Home() {
               )}
               <button
                 onClick={handleCancel}
-                className="mt-3 px-4 py-2 rounded-xl text-xs font-medium text-[#9FA0A0] border border-[#EDD3D1] hover:text-[#C45B50] hover:border-[#C45B50]/30 hover:bg-[#FFF5F2] transition-colors duration-200 cursor-pointer"
+                className="mt-3 px-4 py-2 rounded-xl text-xs font-medium text-[var(--text-muted)] border border-[var(--border-default)] hover:text-[var(--crimson-mist)] hover:border-[var(--crimson-mist)] hover:bg-[rgba(140,60,75,0.10)] transition-colors duration-200 cursor-pointer"
               >
                 {t("common.cancel")}
               </button>
@@ -811,21 +811,21 @@ export default function Home() {
         )}
 
         {/* Header */}
-        <header className="sticky top-0 z-40 bg-[var(--color-bg)]/80 backdrop-blur-xl border-b border-[var(--color-border-light)]">
+        <header className="sticky top-0 z-40 bg-[var(--bg-page)]/85 backdrop-blur-xl border-b border-[var(--divider-subtle)]">
           <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-[#6A2B3A] flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-[var(--fortune-red)] flex items-center justify-center shadow-[0_0_10px_rgba(255,77,106,0.45)]">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                   <path d="M8 5v14l11-7z" fill="white" />
                 </svg>
               </div>
-              <span className="text-sm font-semibold text-[#35353B] tracking-tight">{t("app.title")}</span>
+              <span className="text-sm font-semibold text-[var(--text-h1)] tracking-tight">{t("app.title")}</span>
               <Nav />
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowAssetLibrary(true)}
-                className="flex items-center gap-1.5 text-xs text-[#59585E] hover:text-[#35353B] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#EDD3D1]/50 cursor-pointer"
+                className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(78,58,61,0.5)] cursor-pointer"
                 title={t("app.assetLibrary")}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -837,7 +837,7 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setShowSettings(true)}
-                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#EDD3D1]/50 text-[#59585E] hover:text-[#35353B] transition-colors cursor-pointer"
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[rgba(78,58,61,0.5)] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
                 title="Settings"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -848,7 +848,7 @@ export default function Home() {
               {(threadId || oneshotResult) && (
                 <button
                   onClick={resetAll}
-                  className="text-xs text-[#59585E] hover:text-[#35353B] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#EDD3D1]/50 cursor-pointer"
+                  className="text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(78,58,61,0.5)] cursor-pointer"
                 >
                   {t("app.abandon")}
                 </button>
@@ -1093,8 +1093,8 @@ export default function Home() {
               </div>
               <div>
                 {disconnected && (
-                  <div className="apple-card p-4 mb-4 border-l-4 border-[#C45B50] bg-[#FFF5F2]">
-                    <p className="text-sm text-[#C45B50] font-medium">{t("app.backendDisconnected")}</p>
+                  <div className="apple-card p-4 mb-4 border-l-4 border-[var(--crimson-mist)] bg-[rgba(140,60,75,0.10)]">
+                    <p className="text-sm text-[var(--crimson-mist)] font-medium">{t("app.backendDisconnected")}</p>
                   </div>
                 )}
                 {/* P1-2: Review progress indicator */}
@@ -1108,13 +1108,13 @@ export default function Home() {
                   />
                 ) : (
                   <div className="apple-card p-6 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-[#6A2B3A]/10 flex items-center justify-center mx-auto mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-[rgba(215,92,112,0.12)] flex items-center justify-center mx-auto mb-3 shadow-[0_0_12px_rgba(255,77,106,0.20)]">
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" stroke="#6A2B3A" strokeWidth="2" />
-                        <path d="M12 6v6l4 2" stroke="#6A2B3A" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="12" cy="12" r="10" stroke="var(--fortune-red)" strokeWidth="2" />
+                        <path d="M12 6v6l4 2" stroke="var(--fortune-red)" strokeWidth="2" strokeLinecap="round" />
                       </svg>
                     </div>
-                    <p className="text-sm text-[#59585E]">{t("app.waitingReview")}</p>
+                    <p className="text-sm text-[var(--text-body)]">{t("app.waitingReview")}</p>
                   </div>
                 )}
               </div>
@@ -1124,7 +1124,7 @@ export default function Home() {
           {/* Fallback: if nothing matches, recover to home stage */}
           {!showSelector && !showOneshot && !showStepByStep && !showWorkflow && !showCompletion && !showReview && (
             <div className="apple-card p-8 text-center space-y-3">
-              <p className="text-sm text-[#59585E]">{t("app.pageLoading")}</p>
+              <p className="text-sm text-[var(--text-body)]">{t("app.pageLoading")}</p>
               <button
                 onClick={() => { setStage("home"); setThreadId(null); setShowSplash(false); setShowWorkflow(false); }}
                 className="apple-btn apple-btn-primary text-xs px-4 py-2"
