@@ -149,11 +149,59 @@
   --film-grain-opacity: 0.02;
 }
 
-/* ─── Body 与全局 ─── */
+/* ─── 旧命名兼容别名（迁移期保留） ─── */
+:root,
+[data-theme="dark"] {
+  /* 旧 --color-* 系列 → cinema token */
+  --color-bg: var(--bg-page);
+  --color-surface: var(--bg-card);
+  --color-surface-secondary: var(--bg-panel);
+  --color-text-primary: var(--text-h1);
+  --color-text-secondary: var(--text-body);
+  --color-text-tertiary: var(--text-muted);
+  --color-accent: var(--fortune-red);
+  --color-accent-hover: var(--neon-red);
+  --color-border: var(--border-default);
+  --color-border-light: rgba(215, 92, 112, 0.18);
+  --color-green-bg-light: var(--bg-panel);
+  --color-green-border-light: var(--border-default);
+  --color-success: var(--jade-accent);
+  --color-warning: var(--gold-foil);
+  --color-error: var(--crimson-mist);
+
+  /* 旧 --brand-* 系列 */
+  --brand-primary: var(--fortune-red);
+  --brand-primary-light: rgba(215, 92, 112, 0.10);
+  --brand-primary-mid: rgba(215, 92, 112, 0.18);
+  --brand-primary-glow: rgba(255, 77, 106, 0.40);
+
+  /* 旧 --accent-* 系列 */
+  --accent-smart: var(--cinema-azure);
+  --accent-expert: var(--fortune-red);
+
+  /* 旧 --surface-* 系列 */
+  --surface-card: var(--bg-card);
+  --surface-subtle: var(--bg-panel);
+  --surface-hover: rgba(215, 92, 112, 0.10);
+
+  /* 旧 --border-* 系列(语义版) */
+  --border-hover: var(--fortune-red);
+
+  /* 旧 --status-* 系列 */
+  --status-error: var(--crimson-mist);
+  --status-error-light: rgba(140, 60, 75, 0.18);
+
+  /* 旧 ink 别名 */
+  --ink-primary: var(--text-h1);
+  --ink-secondary: var(--text-body);
+  --ink-tertiary: var(--text-muted);
+}
+
+/* ─── 旧 Body 兼容(防止个别组件还引用 var(--color-bg)) ─── */
 body {
   font-family: var(--font-body);
-  background-color: var(--bg-page);
-  color: var(--text-body);
+  background-color: var(--color-bg);
+  color: var(--color-text-secondary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.55;
