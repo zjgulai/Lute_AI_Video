@@ -13,6 +13,11 @@ venv/
 .env.prod
 deploy/lighthouse/.env.prod
 
+# SSH keys / certificates (NEVER commit)
+*.pem
+*.key
+*.crt
+
 # Generated output
 output/
 rendering/output/
@@ -61,6 +66,9 @@ rendering/.vite/
 !web/public/**/*.jpg
 !web/public/**/*.webp
 !rendering/public/**/*.png
+!docs/guide/UI_design_info/*.png
+!docs/guide/UI_design_info/*.jpg
+!docs/guide/UI_design_info/*.jpeg
 
 # One-off scripts (not part of the project)
 test_*.py
