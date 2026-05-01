@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { logStateChange } from "@/components/api";
 
 export type Stage = "home" | "recommend" | "generate" | "result";
 export type Mode = "expert" | "smart";
@@ -40,37 +41,71 @@ interface AppState {
   setShowSettings: (v: boolean) => void;
   setShowAssetLibrary: (v: boolean) => void;
   setShowSplash: (v: boolean) => void;
+  resetApp: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  stage: "home",
-  activeScene: "product_direct",
-  mode: "expert",
-  pipelineMode: "step_by_step",
-  videoDuration: 30,
+// 带日志的 setter 包装器 — 只记录关键 state 变化
+function loggedSet(set: any, get: any) {
+  return (patch: any) => {
+    const prev = get();
+    set(patch);
+    const next = get();
+    // 只记录关键字段的变化
+    const trackedKeys = ["stage", "activeScene", "mode", "loading", "disconnected", "showSettings"];
+    for (const key of trackedKeys) {
+      if (key in patch && prev[key] !== next[key]) {
+        logStateChange("AppStore", key, prev[key], next[key]);
+      }
+    }
+  };
+}
 
-  loading: false,
-  loadingText: "",
-  toast: null,
-  disconnected: false,
-  showSettings: false,
-  showAssetLibrary: false,
-  showSplash: true,
+export const useAppStore = create<AppState>((set, get) => {
+  const lset = loggedSet(set, get);
+  return {
+    stage: "home",
+    activeScene: "product_direct",
+    mode: "expert",
+    pipelineMode: "step_by_step",
+    videoDuration: 30,
 
-  setStage: (stage) => set({ stage }),
-  setActiveScene: (activeScene) => set({ activeScene }),
-  setMode: (mode) => set({ mode }),
-  setPipelineMode: (pipelineMode) => set({ pipelineMode }),
-  setVideoDuration: (videoDuration) => set({ videoDuration }),
-  setLoading: (loading) => set({ loading }),
-  setLoadingText: (loadingText) => set({ loadingText }),
-  showToast: (message, type) => {
-    set({ toast: { message, type } });
-    setTimeout(() => set({ toast: null }), 4000);
-  },
-  clearToast: () => set({ toast: null }),
-  setDisconnected: (disconnected) => set({ disconnected }),
-  setShowSettings: (showSettings) => set({ showSettings }),
-  setShowAssetLibrary: (showAssetLibrary) => set({ showAssetLibrary }),
-  setShowSplash: (showSplash) => set({ showSplash }),
-}));
+    loading: false,
+    loadingText: "",
+    toast: null,
+    disconnected: false,
+    showSettings: false,
+    showAssetLibrary: false,
+    showSplash: true,
+
+    setStage: (stage) => lset({ stage }),
+    setActiveScene: (activeScene) => lset({ activeScene }),
+    setMode: (mode) => lset({ mode }),
+    setPipelineMode: (pipelineMode) => lset({ pipelineMode }),
+    setVideoDuration: (videoDuration) => lset({ videoDuration }),
+    setLoading: (loading) => lset({ loading }),
+    setLoadingText: (loadingText) => lset({ loadingText }),
+    showToast: (message, type) => {
+      lset({ toast: { message, type } });
+      setTimeout(() => set({ toast: null }), 4000);
+    },
+    clearToast: () => set({ toast: null }),
+    setDisconnected: (disconnected) => lset({ disconnected }),
+    setShowSettings: (showSettings) => lset({ showSettings }),
+    setShowAssetLibrary: (showAssetLibrary) => set({ showAssetLibrary }),
+    setShowSplash: (showSplash) => set({ showSplash }),
+    resetApp: () =>
+      lset({
+        stage: "home",
+        activeScene: "product_direct",
+        mode: "expert",
+        pipelineMode: "step_by_step",
+        videoDuration: 30,
+        loading: false,
+        loadingText: "",
+        toast: null,
+        disconnected: false,
+        showSettings: false,
+        showAssetLibrary: false,
+      }),
+  };
+});

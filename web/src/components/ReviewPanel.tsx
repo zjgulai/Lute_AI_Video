@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import type { AuditReport, ReviewState } from "./types";
-import { Clock, FileText, PenSquare, Image } from "lucide-react";
+import { Clock, Article, PencilSimple, Image } from "@phosphor-icons/react";
+import type { IconProps } from "@phosphor-icons/react";
 import AuditScoreCard from "./AuditScoreCard";
 import { useI18n } from "@/i18n/I18nProvider";
 
@@ -13,10 +14,10 @@ interface Props {
   loading: boolean;
 }
 
-const REVIEW_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const REVIEW_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   strategy_review: Clock,
-  script_review: FileText,
-  edit_review: PenSquare,
+  script_review: Article,
+  edit_review: PencilSimple,
   thumbnail_review: Image,
 };
 
@@ -272,7 +273,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
           {/* Header */}
           <div className="flex items-center gap-3">
             <span className="w-9 h-9 rounded-xl bg-[#6A2B3A]/5 text-[#6A2B3A] flex items-center justify-center shrink-0">
-              {React.createElement(REVIEW_ICON_MAP[config.iconKey] || Clock, { size: 20, strokeWidth: 1.5 })}
+              {React.createElement(REVIEW_ICON_MAP[config.iconKey] || Clock, { size: 20, weight: "fill" })}
             </span>
             <div>
               <h2 className="text-base font-semibold text-[#35353B]">{t(config.titleKey)}</h2>

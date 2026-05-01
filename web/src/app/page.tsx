@@ -36,12 +36,14 @@ import FastModePanel from "@/components/FastModePanel";
 import QualityDashboard from "@/components/QualityDashboard";
 import Nav from "@/components/Nav";
 import SettingsPanel from "@/components/SettingsPanel";
+import ExecutionBar from "@/components/ExecutionBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useI18n } from "@/i18n/I18nProvider";
 import { DEMO_RESULT_1, DEMO_RESULT_2 } from "@/demo-data";
 import { useAppStore } from "@/stores/useAppStore";
 import { usePipelineStore } from "@/stores/usePipelineStore";
 import { useExpertStore } from "@/stores/useExpertStore";
+import { useExecutionBar } from "@/hooks/useExecutionBar";
 
 const STORAGE_KEY = "ai_video_thread_id";
 
@@ -192,7 +194,35 @@ export default function Home() {
     showCompare, setShowCompare,
   } = useExpertStore();
 
+  // v2.0: Execution bar for Smart Create
+  const { isGenerating, generatingLabel, generatingProgress, startGenerating, stopGenerating } = useExecutionBar();
+
   const { t } = useI18n();
+
+  // v2.0: Save completed creations to gallery (localStorage)
+  const saveToGallery = useCallback((result: any, scenario: string) => {
+    try {
+      const brief = result?.briefs?.[0] || {};
+      const script = result?.scripts?.[0] || {};
+      const item = {
+        id: `${scenario}-${Date.now()}`,
+        title: brief.product_name || brief.brand_name || script.product_name || t("gallery.untitled") || "Untitled",
+        scene: scenario,
+        videoType: brief.video_type || "default",
+        thumbnail: result?.thumbnail_image_paths?.[0] || "",
+        videoPath: result?.final_video_path || "",
+        duration: result?.video_duration || 0,
+        score: result?.audit_report?.overall_score || 0,
+        createdAt: new Date().toISOString(),
+      };
+      const stored = JSON.parse(localStorage.getItem("hermes_gallery_items") || "[]");
+      stored.unshift(item);
+      localStorage.setItem("hermes_gallery_items", JSON.stringify(stored.slice(0, 50)));
+    } catch {
+      // ignore storage errors
+    }
+  }, [t]);
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -398,6 +428,7 @@ export default function Home() {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     setShowStageProgress(true);
+    startGenerating(t("exec.narrative.analyzing"));
     try {
       // Use existing auto pipeline endpoint
       const result = await runS1ProductDirect({
@@ -425,9 +456,13 @@ export default function Home() {
         // Resume will auto-execute all remaining steps
         await resumeS1(label);
       } catch (fallbackErr: any) {
-          if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") return;
+          if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") {
+            stopGenerating();
+            return;
+          }
         showToast(t("toast.execFailed") + `: ${fallbackErr?.message || String(fallbackErr)}`, "error");
         setShowStageProgress(false);
+        stopGenerating();
       }
     }
   };
@@ -495,6 +530,7 @@ export default function Home() {
         }, { signal: abortRef.current?.signal });
         setOneshotResult(result);
         setOneshotScenario(scenario);
+        saveToGallery(result, scenario);
         showToast(t("toast.vlogDone"), "success");
       } catch (e: any) {
         const msg = e?.message || String(e);
@@ -529,6 +565,7 @@ export default function Home() {
 
         setOneshotResult(result);
         setOneshotScenario(scenario);
+        saveToGallery(result, scenario);
         showToast(t("toast.autoDone"), "success");
       } catch (e: any) {
         const msg = e?.message || String(e);
@@ -671,24 +708,9 @@ export default function Home() {
   const resetAll = () => {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem("ai_video_expert_session");
-    setThreadId(null);
-    setReviewState(null);
-    setOneshotResult(null);
-    setOneshotScenario("");
-    setDisconnected(false);
-    setStepByStepLabel(null);
-    setStepByStepState(null);
-    setShowStepByStep(false);
-    setWorkflowConfig(null);
-    setWorkflowLabel(null);
-    setWorkflowState(null);
-    setShowWorkflow(false);
-    setCurrentGate(0);
-    setSmartCreateLabel(null);
-    setShowStageProgress(false);
-    setMode("expert");
-    setCompareVersions([]);
-    setShowCompare(false);
+    usePipelineStore.getState().resetAll();
+    useExpertStore.getState().resetExpert();
+    useAppStore.getState().resetApp();
   };
 
   const currentReview = reviewState?.current_review;
@@ -850,7 +872,7 @@ export default function Home() {
         </header>
 
         <main className="max-w-5xl mx-auto px-4 py-6">
-          <div key={stage + (activeScene || "")} className="animate-scale-in">
+          <div key={stage + (activeScene || "")}>
           {/* Stage 0: Home — Scene selection + form */}
           {stage === "home" && showSelector && (
             <div className="space-y-3">
@@ -996,8 +1018,10 @@ export default function Home() {
             <StageProgress
               label={smartCreateLabel}
               onComplete={(result) => {
+                const sc = activeScene === "brand_campaign" ? "brand_campaign" : "product_direct";
                 setOneshotResult(result);
-                setOneshotScenario(activeScene === "brand_campaign" ? "brand_campaign" : "product_direct");
+                setOneshotScenario(sc);
+                saveToGallery(result, sc);
                 setStage("result");
                 setShowStageProgress(false);
               }}
@@ -1125,6 +1149,15 @@ export default function Home() {
           )}
           </div>
         </main>
+
+        {/* v2.0: Smart Create execution bar */}
+        {isGenerating && (
+          <ExecutionBar
+            label={generatingLabel}
+            progress={generatingProgress}
+            onCancel={() => abortRef.current?.abort()}
+          />
+        )}
 
         {showAssetLibrary && (
           <AssetLibrary onClose={() => setShowAssetLibrary(false)} />

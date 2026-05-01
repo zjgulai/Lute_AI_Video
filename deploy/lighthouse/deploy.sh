@@ -40,6 +40,8 @@ if [ ! -d "node_modules" ]; then
   echo "  ERROR: node_modules not found. Run 'npm ci' first."
   exit 1
 fi
+export NEXT_PUBLIC_API_BASE_URL=/api
+export NEXT_PUBLIC_IS_DEMO=true
 npm run build 2>&1 | tail -5
 echo "  Frontend build complete"
 echo ""

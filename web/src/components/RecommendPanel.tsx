@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkle } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import DurationSlider from "./DurationSlider";
 import { startS1StepByStep, runS1Step, isDemoMode } from "./api";
@@ -113,7 +113,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
     <div className="space-y-3 animate-slide-up">
       <div className="apple-card p-4">
         <div className="flex items-center gap-2 mb-4">
-          <Sparkles size={20} className="text-[#6A2B3A]" strokeWidth={1.5} />
+          <Sparkle size={20} weight="fill" className="text-[#6A2B3A]" />
           <h2 className="text-base font-semibold text-[#35353B]">{t("recommend.title")}</h2>
         </div>
         <p className="text-xs text-[#59585E] mb-4">{t("recommend.subtitle")}</p>

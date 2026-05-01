@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import Link from "next/link";
 import { API_BASE, isDemoMode } from "@/components/api";
-import { Users, Plus, Edit, Trash2, X, AlertCircle, Loader2 } from "lucide-react";
+import { Users, Plus, PencilSimple, Trash, X, WarningCircle, Spinner } from "@phosphor-icons/react";
 
 interface InfluencerProfile {
   influencer_id: string;
@@ -188,7 +188,7 @@ export default function InfluencersPage() {
               <span className="hidden sm:inline">{t("nav.home")}</span>
             </Link>
             <div className="w-9 h-9 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
-              <Users className="w-5 h-5 text-[#6A2B3A]" />
+              <Users size={20} weight="fill" className="text-[#6A2B3A]" />
             </div>
             <div>
               <h1 className="text-base font-semibold text-[#35353B]">{t("inf.title")}</h1>
@@ -201,7 +201,7 @@ export default function InfluencersPage() {
             onClick={openCreateForm}
             className="apple-btn apple-btn-primary text-xs py-2 px-3"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus size={16} weight="fill" />
             {t("inf.add")}
           </button>
         </div>
@@ -209,13 +209,13 @@ export default function InfluencersPage() {
         {/* Error banner */}
         {error && (
           <div className="apple-card p-3 border-l-4 border-[#C45B50] bg-[#fff5f5] flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#C45B50] shrink-0" />
+            <WarningCircle size={16} weight="fill" className="text-[#C45B50] shrink-0" />
             <span className="text-xs text-[#C45B50] font-medium">{error}</span>
             <button
               onClick={() => setError(null)}
               className="ml-auto text-[#C45B50] hover:opacity-70 cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
+              <X size={16} weight="fill" />
             </button>
           </div>
         )}
@@ -223,7 +223,7 @@ export default function InfluencersPage() {
         {/* Loading state */}
         {loading && (
           <div className="apple-card p-12 text-center">
-            <Loader2 className="w-8 h-8 text-[#6A2B3A] mx-auto mb-3 animate-spin" />
+            <Spinner size={32} weight="fill" className="text-[#6A2B3A] mx-auto mb-3 animate-spin" />
             <p className="text-sm text-[#59585E]">{t("inf.loading")}</p>
           </div>
         )}
@@ -238,7 +238,7 @@ export default function InfluencersPage() {
               onClick={openCreateForm}
               className="apple-btn apple-btn-primary text-xs py-2 px-3"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus size={16} weight="fill" />
               {t("inf.add")}
             </button>
           </div>
@@ -256,7 +256,7 @@ export default function InfluencersPage() {
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     {/* Avatar placeholder */}
                     <div className="w-10 h-10 rounded-full bg-[#6A2B3A]/10 flex items-center justify-center shrink-0">
-                      <Users className="w-5 h-5 text-[#6A2B3A]" />
+                      <Users size={20} weight="fill" className="text-[#6A2B3A]" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -316,14 +316,14 @@ export default function InfluencersPage() {
                       className="p-2 rounded-lg text-[#59585E] hover:text-[#6A2B3A] hover:bg-[#6A2B3A]/5 transition-all cursor-pointer"
                       title={t("inf.editTooltip")}
                     >
-                      <Edit className="w-4 h-4" />
+                      <PencilSimple size={16} weight="fill" />
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(inf.influencer_id)}
                       className="p-2 rounded-lg text-[#59585E] hover:text-[#C45B50] hover:bg-[#C45B50]/5 transition-all cursor-pointer"
                       title={t("inf.deleteTooltip")}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash size={16} weight="fill" />
                     </button>
                   </div>
                 </div>
@@ -461,7 +461,7 @@ export default function InfluencersPage() {
                 >
                   {saving ? (
                     <span className="flex items-center gap-1.5">
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <Spinner size={12} weight="fill" className="animate-spin" />
                       {t("common.loading")}
                     </span>
                   ) : (
@@ -482,7 +482,7 @@ export default function InfluencersPage() {
             <div className="apple-card p-5 max-w-sm mx-4">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 rounded-full bg-[#C45B50]/10 flex items-center justify-center">
-                  <AlertCircle className="w-4 h-4 text-[#C45B50]" />
+                  <WarningCircle size={16} weight="fill" className="text-[#C45B50]" />
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-[#35353B]">{t("inf.deleteConfirm")}</h3>
@@ -502,7 +502,7 @@ export default function InfluencersPage() {
                   onClick={() => handleDelete(deleteConfirm)}
                   className="apple-btn apple-btn-danger text-xs py-2 px-3"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash size={14} weight="fill" />
                   {t("common.delete")}
                 </button>
               </div>

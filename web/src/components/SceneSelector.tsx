@@ -1,48 +1,49 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   CONTENT_SCENARIOS,
   PLATFORM_LABELS,
 } from "./types";
 import {
   Users, Megaphone, Package,
-  ShoppingBag, Music, MessageCircle, Video, ShoppingCart, ExternalLink,
-  Clock, FileText, CheckCircle, Image, Search, PenSquare, Headphones, Type, BarChart3, Repeat,
-} from "lucide-react";
+  ShoppingBag, MusicNotes, ChatCircle, VideoCamera, ShoppingCart, ArrowSquareOut,
+  Clock, Article, CheckCircle, Image, MagnifyingGlass, PencilSimple, Headphones, TextT, ChartBar, ArrowsClockwise,
+} from "@phosphor-icons/react";
+import type { IconProps } from "@phosphor-icons/react";
 import AssetUploader from "./AssetUploader";
-import PortfolioGallery from "./PortfolioGallery";
-import { setApiKey } from "./api";
+import { setApiKey, getMediaUrl } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
 
-const SCENE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   product_direct: Package,
   brand_campaign: Megaphone,
   influencer_remix: Users,
 };
 
-const PLATFORM_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   shopify: ShoppingBag,
   amazon: ShoppingCart,
-  tiktok: Music,
-  reddit: MessageCircle,
-  facebook: ExternalLink,
-  youtube_shorts: Video,
+  tiktok: MusicNotes,
+  reddit: ChatCircle,
+  facebook: ArrowSquareOut,
+  youtube_shorts: VideoCamera,
 };
 
-const STAGE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const STAGE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   strategy: Clock,
-  script: FileText,
+  script: Article,
   compliance: CheckCircle,
   storyboard: Image,
-  asset_sourcing: Search,
-  media_gen: Video,
-  editing: PenSquare,
+  asset_sourcing: MagnifyingGlass,
+  media_gen: VideoCamera,
+  editing: PencilSimple,
   audio: Headphones,
-  caption: Type,
+  caption: TextT,
   thumbnail: Image,
-  analytics: BarChart3,
-  distribution: Repeat,
+  analytics: ChartBar,
+  distribution: ArrowsClockwise,
 };
 
 interface Props {
@@ -86,6 +87,20 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
   const [videoDuration, setVideoDuration] = useState(10);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [backendApiKey, setBackendApiKey] = useState("");
+
+  // Recent works preview (loaded from gallery localStorage)
+  const [recentWorks, setRecentWorks] = useState<any[]>([]);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("hermes_gallery_items");
+      if (stored) {
+        const items = JSON.parse(stored);
+        setRecentWorks(items.slice(0, 2));
+      }
+    } catch {
+      setRecentWorks([]);
+    }
+  }, []);
 
   const scenario = CONTENT_SCENARIOS.find((s) => s.id === selectedScenario);
   useEffect(() => {
@@ -173,7 +188,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                       : "border-[#EDD3D1] bg-white hover:border-[#D9A8A3]"
                   }`}
                 >
-                  {React.createElement(SCENE_ICON_MAP[s.id] || Package, { size: 24, strokeWidth: 1.5, className: "block mb-0.5 text-[#6A2B3A]" })}
+                  {React.createElement(SCENE_ICON_MAP[s.id] || Package, { size: 24, weight: "fill", className: "block mb-0.5 text-[#6A2B3A]" })}
                   <span className={`text-[11px] font-semibold block ${active ? "text-[#6A2B3A]" : "text-[#35353B]"}`}>
                     {t(`scene.${s.id}.title`)}
                   </span>
@@ -267,7 +282,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   }
                   className={`apple-pill text-xs py-1 px-2.5 ${active ? "active" : ""}`}
                 >
-                  {React.createElement(PLATFORM_ICON_MAP[id] || ShoppingBag, { size: 12, strokeWidth: 1.5 })}
+                  {React.createElement(PLATFORM_ICON_MAP[id] || ShoppingBag, { size: 12, weight: "fill" })}
                   {t("platform." + id)}
                 </button>
               );
@@ -312,7 +327,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
           <>
             <div className="flex items-center gap-3 pb-3 border-b border-[#EDD3D1]">
               <span className="w-9 h-9 rounded-xl bg-[#6A2B3A]/5 text-[#6A2B3A] flex items-center justify-center shrink-0">
-                {React.createElement(SCENE_ICON_MAP[scenario.id] || Package, { size: 20, strokeWidth: 1.5 })}
+                {React.createElement(SCENE_ICON_MAP[scenario.id] || Package, { size: 20, weight: "fill" })}
               </span>
               <div>
                 <h2 className="text-base font-semibold text-[#35353B]">{t(`scene.${scenario.id}.title`)}</h2>
@@ -331,7 +346,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                 <div className="flex flex-wrap gap-1.5">
                   {scenario.platforms.map((p: string) => (
                     <span key={p} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#6A2B3A]/5 text-[#6A2B3A] border border-[#6A2B3A]/15">
-                      {React.createElement(PLATFORM_ICON_MAP[p] || ShoppingBag, { size: 12, strokeWidth: 1.5 })}
+                      {React.createElement(PLATFORM_ICON_MAP[p] || ShoppingBag, { size: 12, weight: "fill" })}
                       {t("platform." + p)}
                     </span>
                   ))}
@@ -377,7 +392,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                   <div key={i}
                     className={`text-center p-1 rounded-md ${step.done ? "bg-[#FCE4E2]" : "bg-[#FCE4E2]/50"}`}
                   >
-                    {React.createElement(STAGE_ICON_MAP[step.key] || Clock, { size: 16, strokeWidth: 1.5, className: "w-4 h-4 mx-auto text-[#59585E]" })}
+                    {React.createElement(STAGE_ICON_MAP[step.key] || Clock, { size: 16, weight: "fill", className: "mx-auto text-[#59585E]" })}
                     <span className={`text-[8px] font-medium ${step.done ? "text-[#59585E]" : "text-[#9FA0A0]"}`}>
                       {t(step.labelKey)}
                     </span>
@@ -386,8 +401,57 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
               </div>
             </div>
 
-            {/* Portfolio Gallery */}
-            <PortfolioGallery />
+            {/* Recent Works Preview */}
+            <div className="pt-3 border-t border-[#EDD3D1]">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">
+                  {t("gallery.title")}
+                </h4>
+                <Link
+                  href="/footage"
+                  className="text-[11px] text-[#6A2B3A] font-medium hover:underline flex items-center gap-0.5 transition-colors"
+                >
+                  {t("gallery.viewAll")} →
+                </Link>
+              </div>
+              {recentWorks.length === 0 ? (
+                <div className="text-center py-4 rounded-xl bg-[#FCE4E2]/50 border border-dashed border-[#EDD3D1]">
+                  <p className="text-[11px] text-[#9FA0A0]">{t("gallery.emptyHint")}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {recentWorks.map((item) => (
+                    <Link
+                      key={item.id}
+                      href="/footage"
+                      className="group relative rounded-xl overflow-hidden bg-[#FCE4E2] block shadow-sm hover:shadow-md transition-all duration-200"
+                    >
+                      <div className="aspect-[4/3] relative">
+                        {item.thumbnail ? (
+                          <img
+                            src={getMediaUrl(item.thumbnail)}
+                            alt={item.title}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D9A8A3" strokeWidth="1.5">
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-2 py-1.5 bg-white">
+                        <p className="text-[10px] font-medium text-[#35353B] truncate">{item.title}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

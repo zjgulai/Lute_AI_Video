@@ -15,18 +15,21 @@ const STAGES = [
   {
     id: "writing",
     label: "stage.writing",
+    narrative: "exec.narrative.analyzing",
     steps: ["strategy", "scripts", "compliance"],
     estimatedSeconds: 12,
   },
   {
     id: "visuals",
     label: "stage.visuals",
+    narrative: "exec.narrative.visualizing",
     steps: ["storyboards", "video_prompts", "thumbnail_prompts", "seedance_clips"],
     estimatedSeconds: 370,
   },
   {
     id: "export",
     label: "stage.export",
+    narrative: "exec.narrative.assembling",
     steps: ["tts_audio", "thumbnail_images", "assemble_final", "audit"],
     estimatedSeconds: 320,
   },
@@ -80,7 +83,20 @@ function getStageProgress(stage: (typeof STAGES)[0], steps: Record<string, any>)
   return total === 0 ? 0 : Math.round((done / total) * 100);
 }
 
-function getStageStatus(stageId: string, steps: Record<string, any>, t: (key: string) => string): string {
+function getStageStatus(
+  stageId: string,
+  steps: Record<string, any>,
+  t: (key: string) => string,
+  narrativeKey?: string,
+): string {
+  // v2.0: 优先使用 narrative 叙事文案
+  if (narrativeKey) {
+    const stage = STAGES.find((s) => s.id === stageId);
+    if (stage?.narrative) {
+      return t(stage.narrative);
+    }
+  }
+  // 回退到详细子状态
   if (stageId === "writing") {
     if (steps.scripts?.status === "done") return t("stage.substatus.scriptComplete");
     if (steps.strategy?.status === "done") return t("stage.substatus.generatingScripts");
@@ -325,7 +341,7 @@ export default function StageProgress({ label, onComplete }: Props) {
             const isComplete = stageStates[idx].allDone;
             const isWaiting = !stageStates[idx].anyStarted && !isComplete;
             const progress = stageStates[idx].progress;
-            const statusText = getStageStatus(stage.id, steps, t);
+            const statusText = getStageStatus(stage.id, steps, t, stage.narrative);
             const celebrating = celebrations[idx];
 
             return (

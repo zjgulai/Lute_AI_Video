@@ -3,16 +3,17 @@
 import { useState, useEffect } from "react";
 import { fetchDistribution, fetchOutput, downloadJson, publishContent, fetchPublishStatus } from "./api";
 import React from "react";
-import { ShoppingBag, ShoppingCart, Music, MessageCircle, ExternalLink, Video } from "lucide-react";
+import { ShoppingBag, ShoppingCart, MusicNotes, ChatCircle, ArrowSquareOut, VideoCamera } from "@phosphor-icons/react";
+import type { IconProps } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 
-const PLATFORM_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   shopify: ShoppingBag,
   amazon: ShoppingCart,
-  tiktok: Music,
-  reddit: MessageCircle,
-  facebook: ExternalLink,
-  youtube_shorts: Video,
+  tiktok: MusicNotes,
+  reddit: ChatCircle,
+  facebook: ArrowSquareOut,
+  youtube_shorts: VideoCamera,
 };
 
 interface Props {
@@ -187,7 +188,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                                   className="p-3 rounded-xl bg-white border border-[#EDD3D1] space-y-1.5"
                                 >
                                   <div className="flex items-center gap-1.5">
-                                    {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#59585E]" })}
+                                    {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, weight: "fill", className: "text-[#59585E]" })}
                                     <span className="text-xs font-semibold text-[#35353B]">
                                       {t("platform." + post.platform) || post.platform}
                                     </span>
@@ -260,7 +261,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                               className="p-3 rounded-xl bg-[#FCE4E2] border border-[#EDD3D1] space-y-1.5"
                             >
                               <div className="flex items-center gap-1.5">
-                                {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#59585E]" })}
+                                {React.createElement(PLATFORM_ICON_MAP[post.platform] || ShoppingBag, { size: 16, weight: "fill", className: "text-[#59585E]" })}
                                 <span className="text-xs font-semibold text-[#35353B]">
                                   {t("platform." + post.platform) || post.platform}
                                 </span>

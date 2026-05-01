@@ -2,7 +2,7 @@
 
 import { useI18n } from "@/i18n/I18nProvider";
 import { AuditReport } from "./types";
-import { AlertCircle } from "lucide-react";
+import { WarningCircle } from "@phosphor-icons/react";
 
 interface Props {
   qualityReport: AuditReport | null;
@@ -86,7 +86,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
     return (
       <div className="text-center py-12">
         <div className="w-14 h-14 rounded-2xl bg-[#FFF0EF] flex items-center justify-center mx-auto mb-3">
-          <AlertCircle className="w-7 h-7 text-[#9FA0A0]" />
+          <WarningCircle size={28} weight="fill" className="text-[#9FA0A0]" />
         </div>
         <p className="text-sm font-medium text-[#9FA0A0] mb-1">{t("quality.noData")}</p>
         <p className="text-xs text-[#9FA0A0]">

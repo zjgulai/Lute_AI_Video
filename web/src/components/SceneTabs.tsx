@@ -1,7 +1,9 @@
 "use client";
 
-import { Users, Megaphone, Package, Zap, Camera } from "lucide-react";
+import { Users, Megaphone, Package, Lightning, Camera } from "@phosphor-icons/react";
+import type { IconProps } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { logUI } from "./api";
 
 interface Props {
   activeScene: string;
@@ -19,12 +21,12 @@ const SCENE_DESC_KEYS: Record<string, string> = {
   fast_mode: "scene.desc.fast_mode",
 };
 
-const SCENE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   product_direct: Package,
   brand_campaign: Megaphone,
   influencer_remix: Users,
   brand_vlog: Camera,
-  fast_mode: Zap,
+  fast_mode: Lightning,
 };
 
 export default function SceneTabs({ activeScene, onChange, videoCounts }: Props) {
@@ -40,7 +42,10 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
           return (
             <button
               key={id}
-              onClick={() => onChange(id)}
+              onClick={() => {
+                logUI("SELECT", "SceneTabs", { scene: id, from: activeScene });
+                onChange(id);
+              }}
               className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all cursor-pointer ${
                 isActive
                   ? "border-[#6A2B3A] bg-[#6A2B3A]/5 ring-1 ring-[#6A2B3A]/20"
@@ -50,7 +55,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
               {IconComponent && (
                 <IconComponent
                   size={24}
-                  strokeWidth={1.5}
+                  weight="fill"
                   className={`shrink-0 ${isActive ? "text-[#6A2B3A]" : "text-[#59585E]"}`}
                 />
               )}

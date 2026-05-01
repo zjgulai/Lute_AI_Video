@@ -2,7 +2,8 @@
 
 import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { Clock, FileText, CheckCircle, Image, Search, Video, PenSquare, Headphones, Type, BarChart3, Repeat } from "lucide-react";
+import { Clock, Article, CheckCircle, Image, MagnifyingGlass, VideoCamera, PencilSimple, Headphones, TextT, ChartBar, ArrowsClockwise } from "@phosphor-icons/react";
+import type { IconProps } from "@phosphor-icons/react";
 
 // ── Pipeline stages with human-readable labels ──
 const STAGES = [
@@ -92,19 +93,19 @@ interface Props {
   onReset?: () => void;
 }
 
-const STAGE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const STAGE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   strategy: Clock,
-  script: FileText,
+  script: Article,
   compliance: CheckCircle,
   storyboard: Image,
-  asset_sourcing: Search,
-  media_gen: Video,
-  editing: PenSquare,
+  asset_sourcing: MagnifyingGlass,
+  media_gen: VideoCamera,
+  editing: PencilSimple,
   audio: Headphones,
-  caption: Type,
+  caption: TextT,
   thumbnail: Image,
-  analytics: BarChart3,
-  distribution: Repeat,
+  analytics: ChartBar,
+  distribution: ArrowsClockwise,
 };
 
 // ── Review node → stage index mapping ──
@@ -182,7 +183,7 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
                 />
 
                 {/* Icon */}
-                {React.createElement(STAGE_ICON_MAP[stage.iconKey] || Clock, { size: 16, strokeWidth: 1.5, className: "w-4 h-4 shrink-0 text-[#59585E]" })}
+                {React.createElement(STAGE_ICON_MAP[stage.iconKey] || Clock, { size: 16, weight: "fill", className: "shrink-0 text-[#59585E]" })}
 
                 {/* Label + Status */}
                 <div className="flex-1 min-w-0">

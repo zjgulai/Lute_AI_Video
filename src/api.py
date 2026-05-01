@@ -9,10 +9,12 @@ If not provided, the server falls back to .env file values (or mock mode).
 """
 
 import asyncio
+import json
 import logging
 import os
 import time
 from collections import OrderedDict
+from datetime import datetime, timezone
 from typing import Any
 
 from dotenv import load_dotenv
@@ -83,7 +85,7 @@ if HAS_FASTAPI:
         CORSMiddleware,
         allow_origins=allow_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+        allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Client-Trace-Id"],
     )
 
     # ── P3-1: Rate limiting middleware ──
@@ -140,6 +142,71 @@ if HAS_FASTAPI:
             request.method, request.url.path, response.status_code, _duration_ms,
         )
         return response
+
+    # ── P-TEST: Unified response wrapper middleware ──
+    # Injects _meta {trace_id, duration_ms, version, timestamp} into all JSON
+    # responses and echoes X-Client-Trace-Id back as X-Trace-Id header.
+
+    @app.middleware("http")
+    async def response_wrapper_middleware(request, call_next):
+        from fastapi.responses import JSONResponse
+        from starlette.responses import Response
+
+        _start = time.perf_counter()
+        client_trace_id = request.headers.get("X-Client-Trace-Id", "")
+
+        response = await call_next(request)
+
+        _duration_ms = round((time.perf_counter() - _start) * 1000, 1)
+        server_trace_id = client_trace_id or f"s{int(time.time() * 1000)}{os.urandom(2).hex()}"
+        response.headers["X-Trace-Id"] = server_trace_id
+
+        # Skip non-JSON and health endpoint
+        content_type = response.headers.get("content-type", "")
+        if "application/json" not in content_type:
+            return response
+        if request.url.path == "/health":
+            return response
+        # Skip streaming responses
+        if not hasattr(response, "body_iterator"):
+            return response
+
+        # Capture response body
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except Exception:
+            # Not valid JSON — return raw (strip content-length so Starlette recalculates)
+            raw_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+            return Response(
+                content=body,
+                status_code=response.status_code,
+                headers=raw_headers,
+            )
+
+        # Build _meta
+        meta = {
+            "trace_id": server_trace_id,
+            "duration_ms": _duration_ms,
+            "version": getattr(app, "version", "0.2.0"),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+        if isinstance(data, dict):
+            data["_meta"] = meta
+        else:
+            data = {"data": data, "_meta": meta}
+
+        # Strip content-length so JSONResponse recalculates for the wrapped body
+        wrapped_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+        return JSONResponse(
+            content=data,
+            status_code=response.status_code,
+            headers=wrapped_headers,
+        )
 
     # ── Mount domain routers (P1-11) ──
     from src.routers._deps import verify_api_key

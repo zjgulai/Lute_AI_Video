@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Zap, Clock, Volume2, ChevronDown, ChevronUp, Copy, RotateCcw, Play, FileText, Cpu, Timer, HardDrive } from "lucide-react";
+import { Lightning, Clock, SpeakerHigh, CaretDown, CaretUp, Copy, ArrowCounterClockwise, Play, Article, Cpu, Timer, HardDrives } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { generateFastMode, getMediaUrl, type FastModeResult } from "./api";
 
@@ -58,7 +58,7 @@ export default function FastModePanel() {
       {/* Header */}
       <div className="apple-card p-4">
         <div className="flex items-center gap-2 mb-2">
-          <Zap size={20} className="text-[#FF6B35]" strokeWidth={1.5} />
+          <Lightning size={20} weight="fill" className="text-[#FF6B35]" />
           <h2 className="text-base font-semibold text-[#35353B]">{t("fastMode.title")}</h2>
         </div>
         <p className="text-xs text-[#59585E]">{t("fastMode.subtitle")}</p>
@@ -84,7 +84,7 @@ export default function FastModePanel() {
         {/* Duration selector */}
         <div>
           <label className="block text-[11px] font-semibold text-[#59585E] uppercase tracking-wider mb-1.5">
-            <Clock size={12} className="inline mr-1" />
+            <Clock size={12} weight="fill" className="inline mr-1" />
             {t("fastMode.duration")}
           </label>
           <div className="flex gap-2">
@@ -114,7 +114,7 @@ export default function FastModePanel() {
                 : "bg-[#FCE4E2] text-[#59585E] hover:bg-[#EDD3D1]"
             }`}
           >
-            <Volume2 size={12} />
+            <SpeakerHigh size={12} weight="fill" />
             {t("fastMode.enableTTS")}
           </button>
         </div>
@@ -133,7 +133,7 @@ export default function FastModePanel() {
             </span>
           ) : (
             <span className="flex items-center justify-center gap-2">
-              <Zap size={16} />
+              <Lightning size={16} weight="fill" />
               {t("fastMode.generate")}
             </span>
           )}
@@ -150,7 +150,7 @@ export default function FastModePanel() {
       {result && (
         <div className="apple-card p-4 space-y-4 animate-slide-up">
           <div className="flex items-center gap-2 mb-2">
-            <Play size={18} className="text-[#6A2B3A]" strokeWidth={1.5} />
+            <Play size={18} weight="fill" className="text-[#6A2B3A]" />
             <h3 className="text-sm font-semibold text-[#35353B]">{t("fastMode.result.title")}</h3>
             {result.is_stub && (
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#FF9500]/10 text-[#FF9500]">
@@ -179,17 +179,17 @@ export default function FastModePanel() {
           {/* Video info */}
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-[#FCE4E2] rounded-lg p-2 text-center">
-              <Timer size={14} className="mx-auto mb-1 text-[#59585E]" />
+              <Timer size={14} weight="fill" className="mx-auto mb-1 text-[#59585E]" />
               <p className="text-[11px] text-[#59585E]">{t("fastMode.result.generationTime")}</p>
               <p className="text-xs font-semibold text-[#35353B]">{formatTime(result.generation_time_ms)}</p>
             </div>
             <div className="bg-[#FCE4E2] rounded-lg p-2 text-center">
-              <HardDrive size={14} className="mx-auto mb-1 text-[#59585E]" />
+              <HardDrives size={14} weight="fill" className="mx-auto mb-1 text-[#59585E]" />
               <p className="text-[11px] text-[#59585E]">{t("fastMode.result.videoInfo")}</p>
               <p className="text-xs font-semibold text-[#35353B]">{formatBytes(result.file_size_bytes)}</p>
             </div>
             <div className="bg-[#FCE4E2] rounded-lg p-2 text-center">
-              <Cpu size={14} className="mx-auto mb-1 text-[#59585E]" />
+              <Cpu size={14} weight="fill" className="mx-auto mb-1 text-[#59585E]" />
               <p className="text-[11px] text-[#59585E]">{t("fastMode.result.modelInfo")}</p>
               <p className="text-xs font-semibold text-[#35353B]">{result.model_info.video}</p>
             </div>
@@ -209,10 +209,10 @@ export default function FastModePanel() {
               className="w-full flex items-center justify-between px-3 py-2 text-xs text-[#59585E] hover:bg-[#FCE4E2] transition-colors cursor-pointer"
             >
               <span className="flex items-center gap-1.5">
-                <FileText size={12} />
+                <Article size={12} weight="fill" />
                 {t("fastMode.result.debugInfo")}
               </span>
-              {showDebug ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {showDebug ? <CaretUp size={14} weight="fill" /> : <CaretDown size={14} weight="fill" />}
             </button>
             {showDebug && (
               <div className="px-3 pb-3 space-y-3">
@@ -268,7 +268,7 @@ export default function FastModePanel() {
             disabled={loading}
             className="w-full flex items-center justify-center gap-2 text-xs text-[#FF6B35] hover:bg-[#FF6B35]/5 py-2 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
-            <RotateCcw size={14} />
+            <ArrowCounterClockwise size={14} weight="fill" />
             {t("fastMode.result.regenerate")}
           </button>
         </div>

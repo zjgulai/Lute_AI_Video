@@ -4,21 +4,23 @@ import { useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { downloadJson, getMediaUrl, publishContent } from "./api";
 import React from "react";
-import { ShoppingBag, Music, MessageCircle, Video, ShoppingCart, ExternalLink } from "lucide-react";
+import { ShoppingBag, MusicNotes, ChatCircle, VideoCamera, ShoppingCart, ArrowSquareOut, ListDashes, FilmStrip } from "@phosphor-icons/react";
+import type { IconProps } from "@phosphor-icons/react";
 import { AuditReport } from "./types";
 import EditableBrief from "./EditableBrief";
 import EditableScript from "./EditableScript";
 import QualityDashboard from "./QualityDashboard";
 import PerformanceDashboard from "./PerformanceDashboard";
 import PublishPanel from "./PublishPanel";
+import DirectorPlayback from "./DirectorPlayback";
 
-const PLATFORM_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   shopify: ShoppingBag,
   amazon: ShoppingCart,
-  tiktok: Music,
-  reddit: MessageCircle,
-  facebook: ExternalLink,
-  youtube_shorts: Video,
+  tiktok: MusicNotes,
+  reddit: ChatCircle,
+  facebook: ArrowSquareOut,
+  youtube_shorts: VideoCamera,
 };
 
 interface Props {
@@ -58,6 +60,8 @@ function DemoPlaceholder({ label }: { label: string }) {
 
 export default function OneShotResultView({ scenario, result, onReset, onEdit }: Props) {
   const { t } = useI18n();
+  // UI 2.0: Director Playback is the default narrative view
+  const [viewMode, setViewMode] = useState<"director" | "classic">("director");
   // P0-2: Merged tabs — 8→4 with content sub-navigation
   const [tab, setTab] = useState<"content" | "media" | "quality" | "data">("media");
   const [contentSub, setContentSub] = useState<"briefs" | "scripts" | "videos" | "thumbnails">("briefs");
@@ -138,68 +142,102 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
           <Stat label={t("result.tab.thumbnails")} value={thumbnails.length} />
           <Stat label={t("result.tab.media")} value={mediaCount} />
         </div>
-
       </div>
 
-      {/* Tab nav */}
-      <div className="apple-card overflow-hidden">
-        <div className="flex border-b border-[#EDD3D1] bg-[#FFF5F2]">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id as any)}
-              className={`flex-1 px-3 py-2.5 text-xs font-medium transition-all border-b-2 cursor-pointer ${
-                tab === t.id
-                  ? "border-[#6A2B3A] text-[#6A2B3A] bg-white"
-                  : "border-transparent text-[#59585E] hover:text-[#35353B]"
-              }`}
-            >
-              {t.label}
-              {t.count > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[11px] bg-[#6A2B3A]/10 text-[#6A2B3A]">
-                  {t.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+      {/* View Mode Toggle */}
+      <div className="flex items-center gap-2 px-1">
+        <button
+          onClick={() => setViewMode("director")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+            viewMode === "director"
+              ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+              : "text-[#59585E] hover:text-[#35353B]"
+          }`}
+        >
+          <FilmStrip size={14} weight="fill" />
+          {t("playback.directorView") || "Director Playback"}
+        </button>
+        <button
+          onClick={() => setViewMode("classic")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+            viewMode === "classic"
+              ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+              : "text-[#59585E] hover:text-[#35353B]"
+          }`}
+        >
+          <ListDashes size={14} weight="fill" />
+          {t("playback.classicView") || "Classic View"}
+        </button>
+      </div>
 
-        <div className="p-4 space-y-2 min-h-[200px]">
-          {tab === "content" && (
-            <div className="space-y-3">
-              {/* Sub-navigation pills */}
-              <div className="flex gap-1.5 border-b border-[#EDD3D1] pb-2">
-                {CONTENT_SUBTABS.map((st) => (
-                  <button
-                    key={st.id}
-                    onClick={() => setContentSub(st.id as typeof contentSub)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                      contentSub === st.id
-                        ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
-                        : "text-[#59585E] hover:text-[#35353B] hover:bg-[#FCE4E2]"
-                    }`}>
-                    {st.label}
-                    {st.count > 0 && <span className="ml-1 text-[11px] opacity-60">{st.count}</span>}
-                  </button>
-                ))}
+      {/* Director Playback (default) */}
+      {viewMode === "director" && (
+        <div className="animate-fade-in">
+          <DirectorPlayback result={result} scenario={scenario} />
+        </div>
+      )}
+
+      {/* Classic Tab View (legacy) */}
+      {viewMode === "classic" && (
+        <div className="apple-card overflow-hidden animate-fade-in">
+          <div className="flex border-b border-[#EDD3D1] bg-[#FFF5F2]">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id as any)}
+                className={`flex-1 px-3 py-2.5 text-xs font-medium transition-all border-b-2 cursor-pointer ${
+                  tab === t.id
+                    ? "border-[#6A2B3A] text-[#6A2B3A] bg-white"
+                    : "border-transparent text-[#59585E] hover:text-[#35353B]"
+                }`}
+              >
+                {t.label}
+                {t.count > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[11px] bg-[#6A2B3A]/10 text-[#6A2B3A]">
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-4 space-y-2 min-h-[200px]">
+            {tab === "content" && (
+              <div className="space-y-3">
+                {/* Sub-navigation pills */}
+                <div className="flex gap-1.5 border-b border-[#EDD3D1] pb-2">
+                  {CONTENT_SUBTABS.map((st) => (
+                    <button
+                      key={st.id}
+                      onClick={() => setContentSub(st.id as typeof contentSub)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                        contentSub === st.id
+                          ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+                          : "text-[#59585E] hover:text-[#35353B] hover:bg-[#FCE4E2]"
+                      }`}>
+                      {st.label}
+                      {st.count > 0 && <span className="ml-1 text-[11px] opacity-60">{st.count}</span>}
+                    </button>
+                  ))}
+                </div>
+                {/* Sub-content */}
+                {contentSub === "briefs" && <BriefsView briefs={briefs} onEdit={(index, data) => onEdit?.("briefs", index, data)} />}
+                {contentSub === "scripts" && <ScriptsView scripts={scripts} onEdit={(index, data) => onEdit?.("scripts", index, data)} />}
+                {contentSub === "videos" && <VideoPromptsView prompts={videoPrompts} onRegenerate={(index) => onEdit?.("videos", index, { action: "regenerate" })} />}
+                {contentSub === "thumbnails" && <ThumbnailsView sets={thumbnails} thumbImages={thumbImages} onRegenerate={(index) => onEdit?.("thumbnails", index, { action: "regenerate" })} />}
               </div>
-              {/* Sub-content */}
-              {contentSub === "briefs" && <BriefsView briefs={briefs} onEdit={(index, data) => onEdit?.("briefs", index, data)} />}
-              {contentSub === "scripts" && <ScriptsView scripts={scripts} onEdit={(index, data) => onEdit?.("scripts", index, data)} />}
-              {contentSub === "videos" && <VideoPromptsView prompts={videoPrompts} onRegenerate={(index) => onEdit?.("videos", index, { action: "regenerate" })} />}
-              {contentSub === "thumbnails" && <ThumbnailsView sets={thumbnails} thumbImages={thumbImages} onRegenerate={(index) => onEdit?.("thumbnails", index, { action: "regenerate" })} />}
-            </div>
-          )}
-          {tab === "media" && <MediaView finalVideo={finalVideo} thumbImages={thumbImages} audioPaths={audioPaths} clipPaths={clipPaths} audit={audit} scenario={scenario} result={result} />}
-          {tab === "quality" && <QualityDashboard qualityReport={audit} />}
-          {tab === "data" && (
-            <div className="space-y-3">
-              <PerformanceDashboard scenario={scenario} />
-              <RawView data={result} />
-            </div>
-          )}
+            )}
+            {tab === "media" && <MediaView finalVideo={finalVideo} thumbImages={thumbImages} audioPaths={audioPaths} clipPaths={clipPaths} audit={audit} scenario={scenario} result={result} />}
+            {tab === "quality" && <QualityDashboard qualityReport={audit} />}
+            {tab === "data" && (
+              <div className="space-y-3">
+                <PerformanceDashboard scenario={scenario} />
+                <RawView data={result} />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -766,7 +804,7 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
   return (
     <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-[#EDD3D1]">
       <div className="flex items-center gap-2">
-        {React.createElement(PLATFORM_ICON_MAP[platform] || ShoppingBag, { size: 16, strokeWidth: 1.5, className: "text-[#59585E]" })}
+        {React.createElement(PLATFORM_ICON_MAP[platform] || ShoppingBag, { size: 16, weight: "fill", className: "text-[#59585E]" })}
         <span className="text-xs font-medium text-[#35353B]">{t("platform." + platform)}</span>
       </div>
       {!pubResult && (

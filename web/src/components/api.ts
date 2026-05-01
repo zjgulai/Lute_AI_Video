@@ -151,10 +151,136 @@ export function getHeaders(contentType = true): Record<string, string> {
   return headers;
 }
 
+// ── Request/Response Logging ──
+
+/** Whether API logging is enabled (default: true). */
+let _apiLogEnabled = true;
+
+/** Toggle API request/response logging at runtime. */
+export function setApiLogging(enabled: boolean): void {
+  _apiLogEnabled = enabled;
+}
+
+/** Check if API logging is currently enabled. */
+export function isApiLoggingEnabled(): boolean {
+  return _apiLogEnabled;
+}
+
+/** Generate a short client-side trace ID. */
+export function genTraceId(): string {
+  return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+}
+
+/** Check if a URL is a media endpoint (body logging skipped). */
+function isMediaUrl(url: string): boolean {
+  return url.includes("/api/media/") || url.includes("/files");
+}
+
+/** Check if a URL is the health endpoint. */
+function isHealthUrl(url: string): boolean {
+  return url.endsWith("/health") || url.includes("/health?");
+}
+
+/** Native fetch reference (avoids recursion in apiFetch wrapper). */
+const _nativeFetch = globalThis.fetch.bind(globalThis);
+
+/**
+ * Wrapped fetch with unified logging for integration debugging.
+ *
+ * Log format:
+ *   [HERMES:REQ]  POST /scenario/s1 trace_id=cxxxxx {body preview...}
+ *   [HERMES:RES]  200 OK (2345ms) trace_id=cxxxxx→sxxxxx {response preview...}
+ *   [HERMES:ERR]  500 Internal Server Error (120ms) trace_id=cxxxxx {error body...}
+ *   [HERMES:ERR]  NETWORK_ERROR (0ms) trace_id=cxxxxx message
+ */
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (!_apiLogEnabled) {
+    return _nativeFetch(url, init);
+  }
+
+  const traceId = genTraceId();
+  const start = performance.now();
+  const method = (init?.method || "GET").toUpperCase();
+  const shortUrl = url.replace(getApiBase(), "") || url;
+  const skipBody = isMediaUrl(url);
+
+  // Merge trace ID into headers
+  const mergedHeaders: Record<string, string> = {
+    ...(init?.headers as Record<string, string> || {}),
+    "X-Client-Trace-Id": traceId,
+  };
+  const mergedInit = { ...init, headers: mergedHeaders };
+
+  // ── Log request ──
+  if (isHealthUrl(url)) {
+    console.log(`[HERMES:HEALTH] ${method} ${shortUrl} trace_id=${traceId}`);
+  } else {
+    let bodyPreview = "";
+    if (init?.body && typeof init.body === "string" && !skipBody) {
+      bodyPreview = init.body.length > 400 ? init.body.slice(0, 400) + "..." : init.body;
+    }
+    if (bodyPreview) {
+      console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`, bodyPreview);
+    } else {
+      console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`);
+    }
+  }
+
+  try {
+    const res = await _nativeFetch(url, mergedInit);
+    const duration = Math.round(performance.now() - start);
+    const serverTraceId = res.headers.get("X-Trace-Id") || res.headers.get("x-trace-id") || "";
+    const traceChain = serverTraceId ? `${traceId}→${serverTraceId}` : traceId;
+
+    if (!res.ok) {
+      // Error response
+      let errText = "";
+      if (!skipBody) {
+        try {
+          errText = await res.clone().text();
+        } catch {
+          errText = "[unreadable]";
+        }
+      }
+      console.error(
+        `[HERMES:ERR] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`,
+        errText.slice(0, 500) || "[no body]"
+      );
+      return res;
+    }
+
+    // Success response
+    if (isHealthUrl(url)) {
+      console.log(`[HERMES:HEALTH] ${res.status} OK (${duration}ms) trace_id=${traceChain}`);
+    } else if (skipBody) {
+      console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [media/binary]`);
+    } else {
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        try {
+          const text = await res.clone().text();
+          const preview = text.length > 400 ? text.slice(0, 400) + "..." : text;
+          console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`, preview);
+        } catch {
+          console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [body unreadable]`);
+        }
+      } else {
+        console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [${contentType || "unknown content-type"}]`);
+      }
+    }
+
+    return res;
+  } catch (err: any) {
+    const duration = Math.round(performance.now() - start);
+    console.error(`[HERMES:ERR] NETWORK_ERROR (${duration}ms) trace_id=${traceId}`, err.message || "Unknown error");
+    throw err;
+  }
+}
+
 // ── Core pipeline APIs ──
 
 export async function startPipeline(body: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/pipeline/start", {
+  const res = await apiFetch(getApiBase() + "/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -165,7 +291,7 @@ export async function startPipeline(body: any, options?: { signal?: AbortSignal 
 }
 
 export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/state", {
+  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/state", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -180,7 +306,7 @@ export async function submitReview(
   reviewerNotes: string,
   options?: { signal?: AbortSignal }
 ): Promise<any> {
-  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/review/" + reviewNode, {
+  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/review/" + reviewNode, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ action, reviewer_notes: reviewerNotes }),
@@ -191,7 +317,7 @@ export async function submitReview(
 }
 
 export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/distribution", {
+  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/distribution", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -200,7 +326,7 @@ export async function fetchDistribution(threadId: string, options?: { signal?: A
 }
 
 export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/pipeline/" + threadId + "/output", {
+  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/output", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -211,7 +337,7 @@ export async function fetchOutput(threadId: string, options?: { signal?: AbortSi
 // ── Scenario pipelines (skill-based, no LangGraph) ──
 
 export async function runS1ProductDirect(config: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s1", {
+  const res = await apiFetch(getApiBase() + "/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(config),
@@ -227,7 +353,7 @@ export async function runS2BrandCampaign(body: {
   target_languages?: string[];
   week?: string;
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s2", {
+  const res = await apiFetch(getApiBase() + "/scenario/s2", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -244,7 +370,7 @@ export async function runS3InfluencerRemix(body: {
   brief_id?: string;
   video_duration?: number;
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s3", {
+  const res = await apiFetch(getApiBase() + "/scenario/s3", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -260,7 +386,7 @@ export async function runS4LiveShoot(body: {
   topic?: string;
   target_platforms?: string[];
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s4", {
+  const res = await apiFetch(getApiBase() + "/scenario/s4", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -273,7 +399,7 @@ export async function runS4LiveShoot(body: {
 // ── S1 Step-by-step pipeline APIs ──
 
 export async function startS1StepByStep(config: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s1/start", {
+  const res = await apiFetch(getApiBase() + "/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ ...config, mode: "step_by_step" }),
@@ -284,7 +410,7 @@ export async function startS1StepByStep(config: any, options?: { signal?: AbortS
 }
 
 export async function runS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s1/step/" + stepName, {
+  const res = await apiFetch(getApiBase() + "/scenario/s1/step/" + stepName, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
@@ -295,7 +421,7 @@ export async function runS1Step(label: string, stepName: string, options?: { sig
 }
 
 export async function regenerateS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s1/regenerate", {
+  const res = await apiFetch(getApiBase() + "/scenario/s1/regenerate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label, step: stepName }),
@@ -306,7 +432,7 @@ export async function regenerateS1Step(label: string, stepName: string, options?
 }
 
 export async function resumeS1(label: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s1/resume", {
+  const res = await apiFetch(getApiBase() + "/scenario/s1/resume", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
@@ -317,7 +443,7 @@ export async function resumeS1(label: string, options?: { signal?: AbortSignal }
 }
 
 export async function fetchS1State(label: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s1/state/" + label, {
+  const res = await apiFetch(getApiBase() + "/scenario/s1/state/" + label, {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -326,7 +452,7 @@ export async function fetchS1State(label: string, options?: { signal?: AbortSign
 }
 
 export async function updateS1State(label: string, updates: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s1/state/" + label, {
+  const res = await apiFetch(getApiBase() + "/scenario/s1/state/" + label, {
     method: "PUT",
     headers: getHeaders(),
     body: JSON.stringify(updates),
@@ -351,7 +477,7 @@ export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<a
     const { DEMO_ASSETS } = await import("@/demo-data");
     return DEMO_ASSETS;
   }
-  const res = await fetch(getFilesListUrl(), {
+  const res = await apiFetch(getFilesListUrl(), {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -408,7 +534,7 @@ export async function getSignedMediaUrl(filePath: string): Promise<string> {
 
   try {
     const base = getApiBase().replace(/\/$/, "");
-    const res = await fetch(`${base}/api/media/sign?path=${encodeURIComponent(encodedPath)}`, {
+    const res = await apiFetch(`${base}/api/media/sign?path=${encodeURIComponent(encodedPath)}`, {
       headers: getHeaders(),
     });
     if (res.ok) {
@@ -425,7 +551,7 @@ export async function getSignedMediaUrl(filePath: string): Promise<string> {
 
 export async function testConnection(options?: { signal?: AbortSignal }): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
   try {
-    const res = await fetch(getApiBase() + "/health", {
+    const res = await apiFetch(getApiBase() + "/health", {
       headers: getHeaders(false),
       signal: options?.signal,
     });
@@ -449,7 +575,7 @@ export async function runS5BrandVlog(body: {
   story_description: string;
   video_duration: number;
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/scenario/s5", {
+  const res = await apiFetch(getApiBase() + "/scenario/s5", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -462,7 +588,7 @@ export async function runS5BrandVlog(body: {
 // ── Distribution publishing APIs ──
 
 export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promise<any[]> {
-  const res = await fetch(getApiBase() + "/distribution/platforms", {
+  const res = await apiFetch(getApiBase() + "/distribution/platforms", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -472,7 +598,7 @@ export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promis
 }
 
 export async function publishContent(platform: string, content: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/distribution/publish", {
+  const res = await apiFetch(getApiBase() + "/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ platform, content }),
@@ -483,7 +609,7 @@ export async function publishContent(platform: string, content: any, options?: {
 }
 
 export async function fetchPublishStatus(platform: string, postId: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(
+  const res = await apiFetch(
     getApiBase() + "/distribution/status/" + encodeURIComponent(platform) + "/" + encodeURIComponent(postId),
     { headers: getHeaders(false), signal: options?.signal }
   );
@@ -494,7 +620,7 @@ export async function fetchPublishStatus(platform: string, postId: string, optio
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
 export async function publishVideo(videoId: string, platforms: string[], metadata: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await fetch(getApiBase() + "/publish/" + videoId, {
+  const res = await apiFetch(getApiBase() + "/publish/" + videoId, {
     method: "POST", headers: getHeaders(),
     body: JSON.stringify({ platforms, metadata }),
     signal: options?.signal,
@@ -505,7 +631,7 @@ export async function publishVideo(videoId: string, platforms: string[], metadat
 
 export async function fetchVideoMetrics(videoId: string, platform?: string, options?: { signal?: AbortSignal }): Promise<any> {
   const params = platform ? "?platform=" + platform : "";
-  const res = await fetch(getApiBase() + "/metrics/" + videoId + params, { headers: getHeaders(false), signal: options?.signal });
+  const res = await apiFetch(getApiBase() + "/metrics/" + videoId + params, { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch metrics");
   return res.json();
 }
@@ -515,7 +641,7 @@ export async function fetchDashboardOverview(scenario?: string, platform?: strin
   if (scenario) params.set("scenario", scenario);
   if (platform) params.set("platform", platform);
   if (days) params.set("days", String(days));
-  const res = await fetch(getApiBase() + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false), signal: options?.signal });
+  const res = await apiFetch(getApiBase() + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch dashboard");
   return res.json();
 }
@@ -545,7 +671,7 @@ export async function generateFastMode(body: {
   duration: number;
   enable_tts: boolean;
 }, options?: { signal?: AbortSignal }): Promise<FastModeResult> {
-  const res = await fetch(getApiBase() + "/fast/generate", {
+  const res = await apiFetch(getApiBase() + "/fast/generate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -556,4 +682,62 @@ export async function generateFastMode(body: {
     throw new Error(err);
   }
   return res.json();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Wave 2: 标准化交互日志 — UI / STATE / PIPE
+// ═══════════════════════════════════════════════════════════════
+
+/** UI 交互日志 — 记录用户点击/切换/提交等操作 */
+export function logUI(
+  action: "CLICK" | "NAV" | "SUBMIT" | "TOGGLE" | "SELECT" | "INPUT" | "RESET",
+  component: string,
+  details?: Record<string, any>
+) {
+  const traceId = genTraceId();
+  const detailStr = details ? JSON.stringify(details) : "";
+  // eslint-disable-next-line no-console
+  console.log(`[HERMES:UI]   ${action.padEnd(6)} ${component.padEnd(24)} trace=${traceId}${detailStr ? " " + detailStr : ""}`);
+  return traceId;
+}
+
+/** Pipeline 生命周期日志 — 记录 pipeline 启动/步骤/完成/错误 */
+export function logPipe(
+  event: "START" | "STEP" | "GATE" | "COMPLETE" | "CANCEL" | "ERROR" | "RECOVER",
+  details?: Record<string, any>
+) {
+  const traceId = genTraceId();
+  const detailStr = details ? JSON.stringify(details) : "";
+  const level = event === "ERROR" ? "error" : "log";
+  // eslint-disable-next-line no-console
+  console[level](`[HERMES:PIPE]  ${event.padEnd(8)} ${detailStr ? " " + detailStr : ""} trace=${traceId}`);
+  return traceId;
+}
+
+/** 辅助：生成状态变化日志 */
+export function logStateChange(store: string, key: string, oldVal: any, newVal: any) {
+  const oldStr = oldVal === undefined || oldVal === null ? "null" : String(oldVal).slice(0, 40);
+  const newStr = newVal === undefined || newVal === null ? "null" : String(newVal).slice(0, 40);
+  // eslint-disable-next-line no-console
+  console.log(`[HERMES:STATE] ${store}.${key.padEnd(20)} ${oldStr} → ${newStr}`);
+}
+
+/** 辅助：生成 bug 检测日志（用于断言失败时） */
+export function logBug(assertion: string, expected: string, actual: string, context?: Record<string, any>) {
+  const traceId = genTraceId();
+  // eslint-disable-next-line no-console
+  console.error(
+    `[HERMES:BUG]   ASSERT_FAIL ${assertion} expected="${expected}" actual="${actual}" trace=${traceId}`,
+    context || ""
+  );
+  return traceId;
+}
+
+/** 辅助：生成测试通过/失败日志 */
+export function logTest(testId: string, passed: boolean, message?: string) {
+  const status = passed ? "PASS" : "FAIL";
+  const traceId = genTraceId();
+  // eslint-disable-next-line no-console
+  console[passed ? "log" : "error"](`[HERMES:TEST]  ${status.padEnd(4)} ${testId.padEnd(12)} ${message || ""} trace=${traceId}`);
+  return traceId;
 }

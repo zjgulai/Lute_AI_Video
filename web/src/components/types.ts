@@ -130,6 +130,51 @@ export const CONTENT_SCENARIOS = [
   },
 ] as const;
 
+// ═══ 会说话的 UI 2.0 — 引导卡片系统类型 ═══
+
+export type CardPriority = "required" | "recommended" | "optional";
+
+export interface VideoType {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+export interface GuidedCard {
+  priority: CardPriority;
+  stepName: string;
+  stepIcon: string;
+  question: string;
+  reason: string;
+  connectionText: string;
+  fieldKey: string;
+  inputType: "text" | "textarea" | "select" | "multiselect" | "image-upload" | "video-upload" | "toggle" | "duration";
+  options?: string[];
+  placeholder?: string;
+  maxLength?: number;
+}
+
+export interface CardSequence {
+  scene: string;
+  videoType: string;
+  cards: GuidedCard[];
+}
+
+export interface LiveSummaryEntry {
+  label: string;
+  value: string;
+  icon: string;
+}
+
+export interface TemplatePreset {
+  id: string;
+  name: string;
+  nameEn: string;
+  scene: string;
+  videoType: string;
+  values: Record<string, string>;
+}
+
 // 品牌VLOG — 产品六视图角度
 export interface ProductViewAngle {
   label: string;

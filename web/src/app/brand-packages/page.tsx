@@ -1,541 +1,536 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE, isDemoMode } from "@/components/api";
+import { isDemoMode, fetchAssets, getMediaUrl } from "@/components/api";
 import Link from "next/link";
-import { Package, Upload, Edit, Trash2, Plus, X, AlertCircle, Loader2 } from "lucide-react";
+import {
+  Package,
+  MagnifyingGlass,
+  Sparkle,
+  UploadSimple,
+  FolderOpen,
+  Image,
+  VideoCamera,
+  MusicNotes,
+  Article,
+  Palette,
+  Camera,
+  Spinner,
+  WarningCircle,
+  X,
+  CheckCircle,
+} from "@phosphor-icons/react";
+import AssetCard, { AssetItem, AssetType, AssetSource } from "@/components/AssetCard";
 
-interface BrandPackage {
-  package_id: string;
-  name: string;
-  description?: string;
-  brand_name?: string;
-  guidelines?: string;
-  created_at: string;
-  updated_at: string;
-  logo_url?: string;
-  primary_color?: string;
-  secondary_color?: string;
-  assets?: string[];
+// ── Category Tree ──
+
+interface Category {
+  id: string;
+  labelKey: string;
+  icon: React.ComponentType<any>;
+  /** Which AssetType values this category includes */
+  assetTypes: AssetType[];
+  /** Which AssetSource values this category includes (empty = all) */
+  sources: AssetSource[];
+  /** Special flag for gallery/finished works */
+  galleryOnly?: boolean;
 }
+
+const CATEGORIES: Category[] = [
+  {
+    id: "all",
+    labelKey: "brand.category.all",
+    icon: FolderOpen,
+    assetTypes: ["video", "image", "audio", "text"],
+    sources: [],
+  },
+  {
+    id: "brand_identity",
+    labelKey: "brand.category.identity",
+    icon: Palette,
+    assetTypes: ["video", "image", "audio", "text"],
+    sources: ["imported"],
+  },
+  {
+    id: "ai_produced",
+    labelKey: "brand.category.aiProduced",
+    icon: Sparkle,
+    assetTypes: ["video", "image", "audio", "text"],
+    sources: ["ai"],
+  },
+  {
+    id: "original",
+    labelKey: "brand.category.original",
+    icon: Camera,
+    assetTypes: ["video", "image", "audio", "text"],
+    sources: ["manual"],
+  },
+  {
+    id: "finished",
+    labelKey: "brand.category.finished",
+    icon: CheckCircle,
+    assetTypes: ["video"],
+    sources: ["ai"],
+    galleryOnly: true,
+  },
+];
+
+// ── Type Guards ──
+
+function isAssetType(v: string): v is AssetType {
+  return v === "video" || v === "image" || v === "audio" || v === "text";
+}
+
+function isAssetSource(v: string): v is AssetSource {
+  return v === "ai" || v === "manual" || v === "imported";
+}
+
+// ── MIME Type → AssetType ──
+
+function mimeTypeToAssetType(mimeType: string): AssetType {
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("audio/")) return "audio";
+  if (mimeType.startsWith("text/")) return "text";
+  // Fallbacks by extension
+  const lower = mimeType.toLowerCase();
+  if (lower.includes("json") || lower.includes("yaml") || lower.includes("xml")) return "text";
+  if (lower.includes("script") || lower.includes("prompt")) return "text";
+  return "text";
+}
+
+// ── File Path → AssetSource ──
+
+function inferSourceFromPath(filePath: string, mimeType: string, tags?: string[]): AssetSource {
+  const lower = filePath.toLowerCase();
+  // Check tags first (most explicit)
+  if (tags) {
+    const tagStr = tags.join(" ").toLowerCase();
+    if (tagStr.includes("ai-") || tagStr.includes("seedance") || tagStr.includes("generated")) return "ai";
+    if (tagStr.includes("upload") || tagStr.includes("manual")) return "manual";
+    if (tagStr.includes("brand") || tagStr.includes("imported")) return "imported";
+  }
+  // Path-based inference
+  if (lower.includes("/portfolio/") || lower.includes("/ai/") || lower.includes("/generated/")) return "ai";
+  if (lower.includes("/upload/") || lower.includes("/uploads/") || lower.includes("/manual/")) return "manual";
+  if (lower.includes("/brand/") || lower.includes("/identity/")) return "imported";
+  // Default: if it looks like a media generation output, mark as ai
+  if (lower.includes("seedance") || lower.includes("poyo") || lower.includes("clip")) return "ai";
+  // Conservative fallback: manual upload
+  return "manual";
+}
+
+// ── Backend File → AssetItem ──
+
+interface BackendFile {
+  filename?: string;
+  path?: string;
+  file_path?: string;
+  size?: number;
+  mime_type?: string;
+  type?: string;
+  created?: number;
+  created_at?: string;
+  label?: string;
+  original_name?: string;
+  tags?: string[];
+  metadata?: Record<string, any>;
+  duration?: number;
+}
+
+function backendFileToAssetItem(file: BackendFile): AssetItem | null {
+  const filePath = file.file_path || file.path || "";
+  const filename = file.filename || file.original_name || file.label || "";
+  if (!filePath && !filename) return null;
+
+  const mimeType = file.mime_type || "";
+  const assetType = mimeType ? mimeTypeToAssetType(mimeType) : (file.type as AssetType) || "text";
+  const source = inferSourceFromPath(filePath, mimeType, file.tags);
+  const title = file.label || file.original_name || file.filename || "Untitled";
+  const createdAt = file.created_at
+    ? new Date(file.created_at).toISOString()
+    : file.created
+      ? new Date(file.created * 1000).toISOString()
+      : new Date().toISOString();
+
+  // Determine thumbnail for videos/images
+  let thumbnail: string | undefined;
+  if (assetType === "video" || assetType === "image") {
+    thumbnail = filePath;
+  }
+
+  return {
+    id: `file-${filePath}-${file.created || Date.now()}`,
+    type: assetType,
+    source,
+    title,
+    thumbnail,
+    filePath,
+    duration: file.duration || file.metadata?.duration || 0,
+    createdAt,
+    metadata: {
+      ...file.metadata,
+      tags: file.tags || [],
+      size: file.size,
+      mimeType,
+    },
+  };
+}
+
+// ── Load Gallery Assets (from localStorage) ──
+
+function loadGalleryAssets(): AssetItem[] {
+  try {
+    const stored = localStorage.getItem("hermes_gallery_items");
+    if (!stored) return [];
+    const items = JSON.parse(stored);
+    return items.map((item: any) => ({
+      id: `gallery-${item.id}`,
+      type: "video" as AssetType,
+      source: "ai" as AssetSource,
+      title: item.title || "Untitled",
+      thumbnail: item.thumbnail,
+      filePath: item.videoPath,
+      duration: item.duration || 0,
+      createdAt: item.createdAt || new Date().toISOString(),
+      metadata: {
+        gallery: true,
+        scene: item.scene,
+        videoType: item.videoType,
+        score: item.score,
+      },
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Load Brand Packages (hardcoded fallback + API-ready structure) ──
+
+function loadBrandPackages(): AssetItem[] {
+  return [
+    {
+      id: "brand-logo",
+      type: "image",
+      source: "imported",
+      title: "Momcozy Logo",
+      createdAt: new Date().toISOString(),
+      metadata: { tags: ["logo", "brand-identity"] },
+    },
+    {
+      id: "brand-color",
+      type: "text",
+      source: "imported",
+      title: "Brand Color Guidelines",
+      textContent: "Primary: #6A2B3A · Secondary: #B27A7E · Accent: #6B8578",
+      createdAt: new Date().toISOString(),
+      metadata: { tags: ["color", "brand-guidelines"] },
+    },
+  ];
+}
+
+// ── Demo Assets → AssetItem ──
+
+function demoAssetsToItems(demoAssets: any[]): AssetItem[] {
+  return demoAssets.map((a, i) => {
+    const type = a.mime_type?.startsWith("video/")
+      ? "video"
+      : a.mime_type?.startsWith("image/")
+        ? "image"
+        : a.type || "text";
+    const isAi = a.tags?.some((t: string) => t.includes("ai-") || t.includes("seedance"));
+    return {
+      id: `demo-${i}-${a.filename}`,
+      type: type as AssetType,
+      source: (isAi ? "ai" : "manual") as AssetSource,
+      title: a.label || a.original_name || a.filename || "Untitled",
+      thumbnail: a.type === "video" || a.type === "image" ? a.path : undefined,
+      filePath: a.path,
+      duration: a.metadata?.duration || a.duration || 0,
+      createdAt: a.metadata?.uploaded_at || new Date(a.created * 1000).toISOString(),
+      metadata: {
+        tags: a.tags || [],
+        platform: a.platform,
+        size: a.file_size || a.size,
+        demo: true,
+      },
+    };
+  });
+}
+
+// ── Page ──
 
 export default function BrandPackagesPage() {
   const { t } = useI18n();
-  const [packages, setPackages] = useState<BrandPackage[]>([]);
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<AssetSource | "all">("all");
+  const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Form state
-  const [formName, setFormName] = useState("");
-  const [formBrandName, setFormBrandName] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formGuidelines, setFormGuidelines] = useState("");
-
-  const fetchPackages = useCallback(async () => {
+  const fetchAllAssets = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
-      const res = await fetch(API_BASE + "/api/assets/brand-packages", {
-        headers: { "X-API-Key": "ai_video_demo_2026" },
+      const allAssets: AssetItem[] = [];
+
+      // 1. Gallery items (finished videos from localStorage)
+      const gallery = loadGalleryAssets();
+      allAssets.push(...gallery);
+
+      // 2. Brand packages (hardcoded fallback)
+      const brand = loadBrandPackages();
+      allAssets.push(...brand);
+
+      if (isDemoMode()) {
+        // 3. Demo mode: load mock footage assets
+        try {
+          const { DEMO_FOOTAGE_ASSETS, DEMO_ASSETS } = await import("@/demo-data");
+          const demoFootage = (DEMO_FOOTAGE_ASSETS || []).map((a: any, i: number) => ({
+            id: `demo-footage-${i}`,
+            type: (a.mime_type?.startsWith("video/") ? "video" : "image") as AssetType,
+            source: "manual" as AssetSource,
+            title: a.original_name || a.filename || "Untitled",
+            thumbnail: a.file_path,
+            filePath: a.file_path,
+            duration: a.metadata?.duration || 0,
+            createdAt: a.metadata?.uploaded_at || new Date().toISOString(),
+            metadata: { tags: a.tags || [], demo: true },
+          }));
+          allAssets.push(...demoFootage);
+
+          // Also add DEMO_ASSETS as AI-produced
+          const demoAi = demoAssetsToItems(DEMO_ASSETS || []);
+          allAssets.push(...demoAi);
+        } catch {
+          // ignore demo data import errors
+        }
+      } else {
+        // 3. Real mode: call backend API
+        try {
+          const files = await fetchAssets();
+          const mapped = (files || [])
+            .map(backendFileToAssetItem)
+            .filter((item): item is AssetItem => item !== null);
+          allAssets.push(...mapped);
+        } catch (apiErr: any) {
+          console.error("[BrandAssets] API fetch failed:", apiErr);
+          // Non-blocking: still show gallery + brand packages
+          setError(t("brand.apiFetchHint") || "后端连接失败，显示本地数据");
+        }
+      }
+
+      // Deduplicate by id
+      const seen = new Set<string>();
+      const deduped = allAssets.filter((a) => {
+        if (seen.has(a.id)) return false;
+        seen.add(a.id);
+        return true;
       });
-      if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
-      const data = await res.json();
-      setPackages(data.packages || []);
+
+      setAssets(deduped);
     } catch (e: any) {
       setError(e.message || t("common.fetchFailed"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
-    // Demo mode: skip API, load mock data
-    if (isDemoMode()) {
-      import("@/demo-data").then((mod) => {
-        setPackages(mod.DEMO_BRAND_PACKAGES || []);
-        setLoading(false);
-      });
-      return;
-    }
-    fetchPackages();
-  }, [fetchPackages]);
+    fetchAllAssets();
+  }, [fetchAllAssets]);
 
-  const openCreateForm = () => {
-    setEditingId(null);
-    setFormName("");
-    setFormBrandName("");
-    setFormDescription("");
-    setFormGuidelines("");
-    setUploadedFiles([]);
-    setShowForm(true);
-  };
+  // Filter assets by category, source, and search
+  const filteredAssets = useMemo(() => {
+    const category = CATEGORIES.find((c) => c.id === activeCategory);
 
-  const openEditForm = (pkg: BrandPackage) => {
-    setEditingId(pkg.package_id);
-    setFormName(pkg.name || "");
-    setFormBrandName(pkg.brand_name || "");
-    setFormDescription(pkg.description || "");
-    setFormGuidelines(pkg.guidelines || "");
-    setUploadedFiles([]);
-    setShowForm(true);
-  };
-
-  const handleSave = async () => {
-    if (!formName.trim()) return;
-    if (isDemoMode()) {
-      setError("Demo mode — create/edit is not available");
-      setShowForm(false);
-      return;
-    }
-    setSaving(true);
-    try {
-      const body: any = {
-        name: formName.trim(),
-        brand_name: formBrandName.trim() || undefined,
-        description: formDescription.trim() || undefined,
-        guidelines: formGuidelines.trim() || undefined,
-      };
-
-      if (editingId) {
-        const res = await fetch(API_BASE + "/api/assets/brand-packages/" + editingId, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", "X-API-Key": "ai_video_demo_2026" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error(`${t("common.updateFailed")} (${res.status})`);
-      } else {
-        const res = await fetch(API_BASE + "/api/assets/brand-packages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-API-Key": "ai_video_demo_2026" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error(`${t("common.createFailed")} (${res.status})`);
+    return assets.filter((asset) => {
+      // Category filter
+      if (category) {
+        // Type check
+        if (!category.assetTypes.includes(asset.type)) return false;
+        // Source check
+        if (category.sources.length > 0 && !category.sources.includes(asset.source)) return false;
+        // Gallery-only check (finished videos)
+        if (category.galleryOnly && !asset.metadata?.gallery) return false;
       }
 
-      // Upload files if any
-      for (const file of uploadedFiles) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("tags", "brand-asset");
-        await fetch(API_BASE + "/api/assets/upload", {
-          method: "POST",
-          headers: { "X-API-Key": "ai_video_demo_2026" },
-          body: formData,
-        });
+      // Source filter
+      if (sourceFilter !== "all" && asset.source !== sourceFilter) return false;
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          asset.title.toLowerCase().includes(q) ||
+          (asset.textContent?.toLowerCase().includes(q) ?? false) ||
+          asset.metadata?.tags?.some((tag: string) => tag.toLowerCase().includes(q))
+        );
       }
 
-      setShowForm(false);
-      await fetchPackages();
-    } catch (e: any) {
-      setError(e.message || t("common.saveFailed"));
-    } finally {
-      setSaving(false);
+      return true;
+    });
+  }, [assets, activeCategory, sourceFilter, searchQuery]);
+
+  // Count assets per category (for sidebar badges)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const cat of CATEGORIES) {
+      counts[cat.id] = assets.filter((asset) => {
+        if (!cat.assetTypes.includes(asset.type)) return false;
+        if (cat.sources.length > 0 && !cat.sources.includes(asset.source)) return false;
+        if (cat.galleryOnly && !asset.metadata?.gallery) return false;
+        return true;
+      }).length;
     }
-  };
+    return counts;
+  }, [assets]);
 
-  const handleDelete = async (packageId: string) => {
-    if (isDemoMode()) {
-      setError("Demo mode — delete is not available");
-      setDeleteConfirm(null);
-      return;
-    }
-    try {
-      const res = await fetch(API_BASE + "/api/assets/brand-packages/" + packageId, {
-        method: "DELETE",
-        headers: { "X-API-Key": "ai_video_demo_2026" },
-      });
-      if (!res.ok) throw new Error(`${t("common.deleteFailed")} (${res.status})`);
-      setDeleteConfirm(null);
-      await fetchPackages();
-    } catch (e: any) {
-      setError(e.message || t("common.deleteFailed"));
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    setUploadedFiles((prev) => [...prev, ...files]);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setUploadedFiles((prev) => [...prev, ...files]);
-  };
-
-  const removeFile = (index: number) => {
-    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return "-";
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString("zh-CN", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  const activeLabel = CATEGORIES.find((c) => c.id === activeCategory)?.labelKey || "brand.category.all";
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-6xl mx-auto px-4 py-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <Link
+              href="/"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
               <span className="hidden sm:inline">{t("nav.home")}</span>
             </Link>
             <div className="w-9 h-9 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
-              <Package className="w-5 h-5 text-[#6A2B3A]" />
+              <Package size={20} weight="fill" className="text-[#6A2B3A]" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-[#35353B]">{t("brand.manageTitle")}</h1>
-              <p className="text-[11px] text-[#59585E] mt-0.5">
-                {t("brand.manageDesc")}
-              </p>
+              <h1 className="text-base font-semibold text-[#35353B]">{t("nav.brandAssets")}</h1>
+              <p className="text-[11px] text-[#59585E] mt-0.5">{t("brand.searchPlaceholder")}</p>
             </div>
           </div>
-          <button
-            onClick={openCreateForm}
-            className="apple-btn apple-btn-primary text-xs py-2 px-3"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            {t("brand.create")}
-          </button>
         </div>
 
-        {/* Error banner */}
+        {/* Search + Source Filter */}
+        <div className="flex gap-3 mb-6">
+          <div className="relative flex-1">
+            <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9FA0A0]" size={16} weight="fill" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("brand.searchPlaceholder")}
+              className="apple-input text-sm pl-9 pr-4 w-full"
+            />
+          </div>
+          <div className="flex gap-1">
+            {(["all", "ai", "manual", "imported"] as const).map((src) => (
+              <button
+                key={src}
+                onClick={() => setSourceFilter(src)}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
+                  sourceFilter === src
+                    ? "bg-[#6A2B3A]/10 border-[#6A2B3A] text-[#6A2B3A]"
+                    : "bg-white border-[#EDD3D1] text-[#59585E] hover:border-[#D9A8A3]"
+                }`}
+              >
+                {src === "all" && t("brand.filter.all")}
+                {src === "ai" && <><Sparkle size={12} weight="fill" className="inline mr-1" />{t("brand.filter.ai")}</>}
+                {src === "manual" && <><UploadSimple size={12} weight="fill" className="inline mr-1" />{t("brand.filter.manual")}</>}
+                {src === "imported" && <><Package size={12} weight="fill" className="inline mr-1" />{t("brand.filter.imported")}</>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Error */}
         {error && (
-          <div className="apple-card p-3 border-l-4 border-[#C45B50] bg-[#fff5f5] flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-[#C45B50] shrink-0" />
-            <span className="text-xs text-[#C45B50] font-medium">{error}</span>
-            <button
-              onClick={() => setError(null)}
-              className="ml-auto text-[#C45B50] hover:opacity-70 cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
+          <div className="apple-card p-3 border-l-4 border-[#C45B50] bg-[#fff5f5] flex items-center gap-2 mb-4">
+            <WarningCircle size={16} weight="fill" className="text-[#C45B50] shrink-0" />
+            <span className="text-xs text-[#C45B50] font-medium flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-[#C45B50] hover:opacity-70 cursor-pointer">
+              <X size={16} weight="fill" />
             </button>
           </div>
         )}
 
-        {/* Loading state */}
-        {loading && (
-          <div className="apple-card p-12 text-center">
-            <Loader2 className="w-8 h-8 text-[#6A2B3A] mx-auto mb-3 animate-spin" />
-            <p className="text-sm text-[#59585E]">{t("brand.loading")}</p>
-          </div>
-        )}
-
-        {/* Empty state — branded */}
-        {!loading && packages.length === 0 && (
-          <div className="apple-card p-12 text-center" style={{background: "linear-gradient(180deg, rgba(124,179,66,0.03) 0%, #fff 100%)"}}>
-            <div className="w-14 h-14 rounded-2xl bg-[#6A2B3A]/10 flex items-center justify-center mx-auto mb-4">
-              <Package className="w-7 h-7 text-[#6A2B3A]" strokeWidth={1.5} />
-            </div>
-            <h3 className="text-base font-semibold text-[#35353B] mb-1">{t("brand.empty")}</h3>
-            <p className="text-sm text-[#59585E] mb-5 max-w-xs mx-auto leading-relaxed">{t("brand.emptyHint")}</p>
-            <button
-              onClick={openCreateForm}
-              className="apple-btn apple-btn-primary text-sm py-2.5 px-5"
-            >
-              <Plus className="w-4 h-4" />
-              {t("brand.create")}
-            </button>
-          </div>
-        )}
-
-        {/* Package list */}
-        {!loading && packages.length > 0 && (
-          <div className="grid gap-3">
-            {packages.map((pkg) => {
-              const assetCount = pkg.assets?.length || 0;
-              return (
-                <div
-                  key={pkg.package_id}
-                  className="apple-card p-4 hover:shadow-md transition-all duration-200"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center shrink-0">
-                        <Package className="w-5 h-5 text-[#6A2B3A]" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-semibold text-[#35353B] truncate">
-                          {pkg.name}
-                        </h3>
-                        {pkg.brand_name && (
-                          <p className="text-[11px] text-[#6A2B3A] font-medium mt-0.5">
-                            {pkg.brand_name}
-                          </p>
-                        )}
-                        {pkg.description && (
-                          <p className="text-xs text-[#59585E] mt-1 line-clamp-2">
-                            {pkg.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className="text-[11px] text-[#9FA0A0] flex items-center gap-1">
-                            <Package className="w-3 h-3" />
-                            {assetCount}{t("brand.assetCount")}
-                          </span>
-                          <span className="text-[11px] text-[#9FA0A0]">
-                            {t("brand.updatedAt")} {formatDate(pkg.updated_at)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => openEditForm(pkg)}
-                        className="p-2 rounded-lg text-[#59585E] hover:text-[#6A2B3A] hover:bg-[#6A2B3A]/5 transition-all cursor-pointer"
-                        title={t("brand.editTooltip")}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(pkg.package_id)}
-                        className="p-2 rounded-lg text-[#59585E] hover:text-[#C45B50] hover:bg-[#C45B50]/5 transition-all cursor-pointer"
-                        title={t("brand.deleteTooltip")}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Create/Edit Form Modal */}
-        {showForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <div className="apple-card w-full max-w-lg mx-4 p-5 max-h-[85vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-[#35353B]">
-                  {editingId ? t("brand.editPackage") : t("brand.newPackage")}
-                </h2>
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="p-1 rounded-lg text-[#9FA0A0] hover:text-[#35353B] hover:bg-[#FCE4E2] transition-all cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {/* Brand package name */}
-                <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
-                    {t("brand.packageNameRequired")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    placeholder={t("brand.packageNamePlaceholder")}
-                    className="apple-input text-sm"
-                  />
-                </div>
-
-                {/* Brand name */}
-                <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
-                    {t("brand.brandName")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formBrandName}
-                    onChange={(e) => setFormBrandName(e.target.value)}
-                    placeholder={t("brand.brandNamePlaceholder")}
-                    className="apple-input text-sm"
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
-                    {t("brand.description")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    placeholder={t("brand.descriptionPlaceholder")}
-                    className="apple-input text-sm"
-                  />
-                </div>
-
-                {/* Guidelines textarea */}
-                <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
-                    {t("brand.guidelinesLabel")}
-                  </label>
-                  <textarea
-                    value={formGuidelines}
-                    onChange={(e) => setFormGuidelines(e.target.value)}
-                    placeholder={t("brand.guidelinesPlaceholder")}
-                    className="apple-input resize-none text-sm"
-                    rows={4}
-                  />
-                  <p className="text-[11px] text-[#9FA0A0] mt-0.5">
-                    {t("brand.guidelinesHint")}
-                  </p>
-                </div>
-
-                {/* File upload zone */}
-                <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
-                    {t("brand.uploadAssets")}
-                  </label>
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                      dragOver
-                        ? "border-[#6A2B3A] bg-[#6A2B3A]/5"
-                        : "border-[#EDD3D1] hover:border-[#D9A8A3] hover:bg-[#FFF5F2]"
+        {/* Main: Sidebar + Grid */}
+        <div className="flex gap-6">
+          {/* Left Sidebar */}
+          <div className="w-52 shrink-0">
+            <div className="sticky top-6 space-y-1">
+              {CATEGORIES.map((cat) => {
+                const Icon = cat.icon;
+                const count = categoryCounts[cat.id] || 0;
+                const isActive = activeCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer text-left ${
+                      isActive
+                        ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+                        : "text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#35353B]"
                     }`}
                   >
-                    <Upload className="w-6 h-6 text-[#9FA0A0] mx-auto mb-2" />
-                    <p className="text-xs text-[#59585E] font-medium">
-                      {t("brand.dragUpload")}
-                    </p>
-                    <p className="text-[11px] text-[#9FA0A0] mt-1">
-                      {t("brand.supportedFormats")}
-                    </p>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*,video/*"
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                  </div>
-                </div>
+                    <Icon size={16} weight="fill" />
+                    <span className="flex-1">{t(cat.labelKey)}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                      isActive ? "bg-[#6A2B3A]/20 text-[#6A2B3A]" : "bg-[#FCE4E2] text-[#9FA0A0]"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-                {/* Uploaded files list */}
-                {uploadedFiles.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[11px] font-medium text-[#59585E]">
-                      {t("brand.filesSelected")} {uploadedFiles.length}{t("brand.filesCount")}
-                    </p>
-                    <div className="space-y-1 max-h-[120px] overflow-y-auto">
-                      {uploadedFiles.map((file, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between px-2 py-1 rounded-lg bg-[#FCE4E2]"
-                        >
-                          <span className="text-[11px] text-[#35353B] truncate">
-                            {file.name}
-                          </span>
-                          <button
-                            onClick={() => removeFile(i)}
-                            className="text-[#9FA0A0] hover:text-[#C45B50] transition-colors cursor-pointer shrink-0 ml-2"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
+          {/* Right Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-[#35353B]">{t(activeLabel)}</h2>
+              <span className="text-[11px] text-[#9FA0A0]">
+                {filteredAssets.length} {t("brand.assetCount")}
+              </span>
+            </div>
+
+            {loading && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="apple-card overflow-hidden animate-pulse">
+                    <div className="aspect-video bg-[#f0f0f5]" />
+                    <div className="p-3 space-y-2">
+                      <div className="h-3 bg-[#f0f0f5] rounded w-3/4" />
+                      <div className="h-2 bg-[#f0f0f5] rounded w-1/2" />
                     </div>
                   </div>
-                )}
+                ))}
               </div>
+            )}
 
-              {/* Form actions */}
-              <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[#EDD3D1]">
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="apple-btn text-xs py-2 px-3"
-                  disabled={saving}
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !formName.trim()}
-                  className="apple-btn apple-btn-primary text-xs py-2 px-3"
-                >
-                  {saving ? (
-                    <span className="flex items-center gap-1.5">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      {t("common.loading")}
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5">
-                      <Package className="w-3.5 h-3.5" />
-                      {editingId ? t("brand.update") : t("common.create")}
-                    </span>
-                  )}
-                </button>
+            {!loading && filteredAssets.length === 0 && (
+              <div className="apple-card p-12 text-center">
+                <Package size={40} weight="fill" className="text-[#EDD3D1] mx-auto mb-3" />
+                <p className="text-sm font-medium text-[#59585E]">{t("brand.empty")}</p>
+                <p className="text-xs text-[#9FA0A0] mt-1">{t("brand.emptyHint")}</p>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Delete confirmation dialog */}
-        {deleteConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <div className="apple-card p-5 max-w-sm mx-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-full bg-[#C45B50]/10 flex items-center justify-center">
-                  <AlertCircle className="w-4 h-4 text-[#C45B50]" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-[#35353B]">{t("brand.deleteConfirm")}</h3>
-                  <p className="text-[11px] text-[#59585E]">
-                    {t("brand.deleteHint")}
-                  </p>
-                </div>
+            {!loading && filteredAssets.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {filteredAssets.map((asset) => (
+                  <AssetCard key={asset.id} asset={asset} />
+                ))}
               </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className="apple-btn text-xs py-2 px-3"
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  onClick={() => handleDelete(deleteConfirm)}
-                  className="apple-btn apple-btn-danger text-xs py-2 px-3"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {t("common.delete")}
-                </button>
-              </div>
-            </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

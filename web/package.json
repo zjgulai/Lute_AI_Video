@@ -12,6 +12,7 @@
     "typegen:api": "npx openapi-typescript http://localhost:8001/openapi.json -o src/types/api.generated.ts"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "lightningcss": "^1.32.0",
     "lucide-react": "^1.11.0",
     "next": "16.2.4",

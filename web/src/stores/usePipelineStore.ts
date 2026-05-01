@@ -30,6 +30,7 @@ interface PipelineState {
   setShowWorkflow: (v: boolean) => void;
   setWorkflowRerenderKey: (key: number) => void;
   resetWorkflow: () => void;
+  resetAll: () => void;
 }
 
 export const usePipelineStore = create<PipelineState>((set) => ({
@@ -66,5 +67,21 @@ export const usePipelineStore = create<PipelineState>((set) => ({
       workflowLabel: null,
       workflowState: null,
       showWorkflow: false,
+    }),
+  resetAll: () =>
+    set({
+      threadId: null,
+      reviewState: null,
+      oneshotResult: null,
+      oneshotScenario: "",
+      stepByStepLabel: null,
+      stepByStepState: null,
+      showStepByStep: false,
+      smartCreateLabel: null,
+      workflowConfig: null,
+      workflowLabel: null,
+      workflowState: null,
+      showWorkflow: false,
+      workflowRerenderKey: 0,
     }),
 }));

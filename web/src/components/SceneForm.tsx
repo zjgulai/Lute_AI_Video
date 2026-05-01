@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import { Users, Megaphone, Package, ShoppingBag, Music, MessageCircle, Video, ShoppingCart, ExternalLink, Camera } from "lucide-react";
+import { Users, Megaphone, Package, ShoppingBag, MusicNotes, ChatCircle, VideoCamera, ShoppingCart, ArrowSquareOut, Camera } from "@phosphor-icons/react";
+import type { IconProps } from "@phosphor-icons/react";
 import { PLATFORM_LABELS, CONTENT_SCENARIOS } from "./types";
 import { useI18n } from "@/i18n/I18nProvider";
 import VlogSixView from "./VlogSixView";
 import VlogModelSelector from "./VlogModelSelector";
 import { VLOG_BRANDS, VLOG_MODELS, VLOG_SCENES, VLOG_DURATION_OPTIONS } from "@/demo-data";
+import GuidedForm from "./GuidedForm";
+
+const USE_GUIDED_FORM = process.env.NEXT_PUBLIC_USE_GUIDED_FORM !== "false";
 
 interface Props {
   scene: string;
@@ -20,16 +24,16 @@ const BRAND_PACKAGES = [
   { id: "bp_default", nameKey: "brand.packageName" },
 ];
 
-const PLATFORM_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   shopify: ShoppingBag,
   amazon: ShoppingCart,
-  tiktok: Music,
-  reddit: MessageCircle,
-  facebook: ExternalLink,
-  youtube_shorts: Video,
+  tiktok: MusicNotes,
+  reddit: ChatCircle,
+  facebook: ArrowSquareOut,
+  youtube_shorts: VideoCamera,
 };
 
-const SCENE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   product_direct: Package,
   brand_campaign: Megaphone,
   influencer_remix: Users,
@@ -198,13 +202,20 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
   return (
     <div className="space-y-3">
-      {/* Scene-specific fields */}
+      {/* GuidedForm (v2.0) */}
+      {USE_GUIDED_FORM && (
+        <GuidedForm scene={scene} onSubmit={onSubmit} loading={loading} />
+      )}
+
+      {/* Legacy form (hidden when GuidedForm is active) */}
+      <div className={USE_GUIDED_FORM ? "hidden" : ""}>
+        {/* Scene-specific fields */}
       {scene === "product_direct" && (
         <div className="space-y-3">
           {/* S1: Product Direct */}
           <div className="apple-card p-3 space-y-2">
             <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">
-              <Package size={16} strokeWidth={1.5} className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
+              <Package size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
               {t("scene.product_direct.title")}
             </h3>
             <div>
@@ -384,7 +395,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
           {/* S2: Brand Campaign */}
           <div className="apple-card p-3 space-y-2">
             <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">
-              <Megaphone size={16} strokeWidth={1.5} className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
+              <Megaphone size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
               {t("scene.brand_campaign.title")}
             </h3>
             <div>
@@ -530,7 +541,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
           {/* S3: Influencer Remix */}
           <div className="apple-card p-3 space-y-2">
             <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">
-              <Users size={16} strokeWidth={1.5} className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
+              <Users size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
               {t("scene.influencer_remix.title")}
             </h3>
             <div>
@@ -671,7 +682,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
         <div className="space-y-3">
           <div className="apple-card p-3 space-y-2">
             <h3 className="text-[11px] font-semibold text-[#59585E] uppercase tracking-wider">
-              <Camera size={16} strokeWidth={1.5} className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
+              <Camera size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[#6A2B3A]" />
               品牌VLOG
             </h3>
             {/* Brand + Product SKU */}
@@ -816,7 +827,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                         onClick={() => togglePlatform(id)}
                         className={`apple-pill text-xs py-1 px-2.5 ${active ? "active" : ""}`}
                       >
-                        {React.createElement(PLATFORM_ICON_MAP[id] || ShoppingBag, { size: 12, strokeWidth: 1.5 })}
+                        {React.createElement(PLATFORM_ICON_MAP[id] || ShoppingBag, { size: 12, weight: "fill" })}
                         {t("platform." + id)}
                       </button>
                     );
@@ -882,6 +893,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
           )}
         </button>
       </div>
+      </div>{/* /legacy form */}
     </div>
   );
 }
