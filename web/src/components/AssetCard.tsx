@@ -66,11 +66,12 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Thumbnail — 3:2 ratio */}
       <div className="relative aspect-[3/2] bg-black overflow-hidden">
         {asset.thumbnail ? (
-          <img
+          <video
             src={getMediaUrl(asset.thumbnail)}
-            alt={asset.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
+            preload="metadata"
+            muted
+            playsInline
           />
         ) : (
           <div className="w-full h-full bg-[var(--color-bg-secondary)] flex items-center justify-center">
@@ -114,7 +115,12 @@ function ImageCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       <div className="relative aspect-square bg-[var(--color-bg-secondary)] overflow-hidden">
         {asset.thumbnail || asset.filePath ? (
           <img
-            src={getMediaUrl(asset.thumbnail || asset.filePath || "")}
+            src={(() => {
+              const raw = asset.thumbnail || asset.filePath || "";
+              return raw.startsWith("/") && !raw.startsWith("/api/")
+                ? raw
+                : getMediaUrl(raw);
+            })()}
             alt={asset.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"

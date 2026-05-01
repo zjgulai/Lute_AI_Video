@@ -1134,6 +1134,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "scene.brand_campaign.desc": "Professional brand showcase with unified multi-platform messaging",
     "scene.product_direct.title": "Product Direct",
     "scene.product_direct.desc": "Input product info directly, AI generates product showcase videos and thumbnails",
+    "scene.fast_mode.title": "Fast Mode",
+    "scene.fast_mode.desc": "Quick test of LLM matrix video generation. 10-15s output without standard workflow.",
     "scene.contentScenario": "Content Scenario",
     "scene.defaultScenario": "Default scenario",
     "scene.manualSelect": "Manual select",

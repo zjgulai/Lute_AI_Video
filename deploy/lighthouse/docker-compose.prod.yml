@@ -43,11 +43,11 @@ services:
       - NEXT_PUBLIC_API_BASE_URL=/api
       - NEXT_PUBLIC_IS_DEMO=true
     volumes:
-      # Mount the pre-built standalone output
+      # Mount the pre-built standalone output (server.js is at /app/server.js)
       - ../../web/.next/standalone:/app
       - ../../web/public:/app/public
       - ../../web/.next/static:/app/.next/static
-    command: ["node", "web/server.js"]
+    command: ["node", "server.js"]
     networks:
       - ai_video_net
     depends_on:

@@ -215,6 +215,8 @@ function loadBrandPackages(): AssetItem[] {
       type: "image",
       source: "imported",
       title: "Momcozy Logo",
+      thumbnail: "/brand/momcozy-logo.svg",
+      filePath: "/brand/momcozy-logo.svg",
       createdAt: new Date().toISOString(),
       metadata: { tags: ["logo", "brand-identity"] },
     },

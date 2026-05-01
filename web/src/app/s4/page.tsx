@@ -7,14 +7,15 @@ import Home from "../page";
 
 function S4Inner() {
   const searchParams = useSearchParams();
-  const { setActiveScene, setMode, setStage } = useAppStore();
+  const { setActiveScene, setMode, setStage, setShowSplash } = useAppStore();
 
   useEffect(() => {
     const modeParam = searchParams.get("mode") as "expert" | "smart" || "expert";
     setActiveScene("live_shoot");
     setMode(modeParam);
     setStage("home");
-  }, [searchParams, setActiveScene, setMode, setStage]);
+    setShowSplash(false);
+  }, [searchParams, setActiveScene, setMode, setStage, setShowSplash]);
 
   return <Home />;
 }
