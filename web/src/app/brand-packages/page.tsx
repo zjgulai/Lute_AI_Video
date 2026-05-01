@@ -401,19 +401,19 @@ export default function BrandPackagesPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[var(--text-body)] hover:bg-[var(--bg-panel)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
               <span className="hidden sm:inline">{t("nav.home")}</span>
             </Link>
-            <div className="w-9 h-9 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
-              <Package size={20} weight="fill" className="text-[#6A2B3A]" />
+            <div className="w-9 h-9 rounded-xl bg-[rgba(215,92,112,0.10)] flex items-center justify-center">
+              <Package size={20} weight="fill" className="text-[var(--fortune-red)]" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-[#35353B]">{t("nav.brandAssets")}</h1>
-              <p className="text-[11px] text-[#59585E] mt-0.5">{t("brand.searchPlaceholder")}</p>
+              <h1 className="text-base font-semibold text-[var(--text-h1)]">{t("nav.brandAssets")}</h1>
+              <p className="text-[11px] text-[var(--text-body)] mt-0.5">{t("brand.searchPlaceholder")}</p>
             </div>
           </div>
         </div>
@@ -421,7 +421,7 @@ export default function BrandPackagesPage() {
         {/* Search + Source Filter */}
         <div className="flex gap-3 mb-6">
           <div className="relative flex-1">
-            <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9FA0A0]" size={16} weight="fill" />
+            <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} weight="fill" />
             <input
               type="text"
               value={searchQuery}
@@ -437,8 +437,8 @@ export default function BrandPackagesPage() {
                 onClick={() => setSourceFilter(src)}
                 className={`px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
                   sourceFilter === src
-                    ? "bg-[#6A2B3A]/10 border-[#6A2B3A] text-[#6A2B3A]"
-                    : "bg-white border-[#EDD3D1] text-[#59585E] hover:border-[#D9A8A3]"
+                    ? "bg-[rgba(215,92,112,0.10)] border-[var(--fortune-red)] text-[var(--fortune-red)]"
+                    : "bg-[var(--bg-card)] border-[rgba(215,92,112,0.18)] text-[var(--text-body)] hover:border-[var(--border-default)]"
                 }`}
               >
                 {src === "all" && t("brand.filter.all")}
@@ -452,10 +452,10 @@ export default function BrandPackagesPage() {
 
         {/* Error */}
         {error && (
-          <div className="apple-card p-3 border-l-4 border-[#C45B50] bg-[#fff5f5] flex items-center gap-2 mb-4">
-            <WarningCircle size={16} weight="fill" className="text-[#C45B50] shrink-0" />
-            <span className="text-xs text-[#C45B50] font-medium flex-1">{error}</span>
-            <button onClick={() => setError(null)} className="text-[#C45B50] hover:opacity-70 cursor-pointer">
+          <div className="apple-card p-3 border-l-4 border-[var(--crimson-mist)] bg-[rgba(196,91,80,0.08)] flex items-center gap-2 mb-4">
+            <WarningCircle size={16} weight="fill" className="text-[var(--crimson-mist)] shrink-0" />
+            <span className="text-xs text-[var(--crimson-mist)] font-medium flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-[var(--crimson-mist)] hover:opacity-70 cursor-pointer">
               <X size={16} weight="fill" />
             </button>
           </div>
@@ -476,14 +476,14 @@ export default function BrandPackagesPage() {
                     onClick={() => setActiveCategory(cat.id)}
                     className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer text-left ${
                       isActive
-                        ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
-                        : "text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#35353B]"
+                        ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
+                        : "text-[var(--text-body)] hover:bg-[var(--bg-panel)] hover:text-[var(--text-h1)]"
                     }`}
                   >
                     <Icon size={16} weight="fill" />
                     <span className="flex-1">{t(cat.labelKey)}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                      isActive ? "bg-[#6A2B3A]/20 text-[#6A2B3A]" : "bg-[#FCE4E2] text-[#9FA0A0]"
+                      isActive ? "bg-[rgba(215,92,112,0.20)] text-[var(--fortune-red)]" : "bg-[var(--bg-panel)] text-[var(--text-muted)]"
                     }`}>
                       {count}
                     </span>
@@ -496,8 +496,8 @@ export default function BrandPackagesPage() {
           {/* Right Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[#35353B]">{t(activeLabel)}</h2>
-              <span className="text-[11px] text-[#9FA0A0]">
+              <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t(activeLabel)}</h2>
+              <span className="text-[11px] text-[var(--text-muted)]">
                 {filteredAssets.length} {t("brand.assetCount")}
               </span>
             </div>
@@ -506,10 +506,10 @@ export default function BrandPackagesPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="apple-card overflow-hidden animate-pulse">
-                    <div className="aspect-video bg-[#f0f0f5]" />
+                    <div className="aspect-video bg-[var(--bg-panel)]" />
                     <div className="p-3 space-y-2">
-                      <div className="h-3 bg-[#f0f0f5] rounded w-3/4" />
-                      <div className="h-2 bg-[#f0f0f5] rounded w-1/2" />
+                      <div className="h-3 bg-[var(--bg-panel)] rounded w-3/4" />
+                      <div className="h-2 bg-[var(--bg-panel)] rounded w-1/2" />
                     </div>
                   </div>
                 ))}
@@ -518,9 +518,9 @@ export default function BrandPackagesPage() {
 
             {!loading && filteredAssets.length === 0 && (
               <div className="apple-card p-12 text-center">
-                <Package size={40} weight="fill" className="text-[#EDD3D1] mx-auto mb-3" />
-                <p className="text-sm font-medium text-[#59585E]">{t("brand.empty")}</p>
-                <p className="text-xs text-[#9FA0A0] mt-1">{t("brand.emptyHint")}</p>
+                <Package size={40} weight="fill" className="text-[rgba(215,92,112,0.18)] mx-auto mb-3" />
+                <p className="text-sm font-medium text-[var(--text-body)]">{t("brand.empty")}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">{t("brand.emptyHint")}</p>
               </div>
             )}
 

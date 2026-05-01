@@ -183,16 +183,16 @@ export default function InfluencersPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer">
+            <Link href="/" className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[13px] font-medium text-[var(--text-body)] hover:bg-[var(--bg-panel)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
               <span className="hidden sm:inline">{t("nav.home")}</span>
             </Link>
-            <div className="w-9 h-9 rounded-xl bg-[#6A2B3A]/10 flex items-center justify-center">
-              <Users size={20} weight="fill" className="text-[#6A2B3A]" />
+            <div className="w-9 h-9 rounded-xl bg-[rgba(215,92,112,0.10)] flex items-center justify-center">
+              <Users size={20} weight="fill" className="text-[var(--fortune-red)]" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-[#35353B]">{t("inf.title")}</h1>
-              <p className="text-[11px] text-[#59585E] mt-0.5">
+              <h1 className="text-base font-semibold text-[var(--text-h1)]">{t("inf.title")}</h1>
+              <p className="text-[11px] text-[var(--text-body)] mt-0.5">
                 {t("inf.manageDesc")}
               </p>
             </div>
@@ -208,12 +208,12 @@ export default function InfluencersPage() {
 
         {/* Error banner */}
         {error && (
-          <div className="apple-card p-3 border-l-4 border-[#C45B50] bg-[#fff5f5] flex items-center gap-2">
-            <WarningCircle size={16} weight="fill" className="text-[#C45B50] shrink-0" />
-            <span className="text-xs text-[#C45B50] font-medium">{error}</span>
+          <div className="apple-card p-3 border-l-4 border-[var(--crimson-mist)] bg-[rgba(196,91,80,0.08)] flex items-center gap-2">
+            <WarningCircle size={16} weight="fill" className="text-[var(--crimson-mist)] shrink-0" />
+            <span className="text-xs text-[var(--crimson-mist)] font-medium">{error}</span>
             <button
               onClick={() => setError(null)}
-              className="ml-auto text-[#C45B50] hover:opacity-70 cursor-pointer"
+              className="ml-auto text-[var(--crimson-mist)] hover:opacity-70 cursor-pointer"
             >
               <X size={16} weight="fill" />
             </button>
@@ -223,17 +223,17 @@ export default function InfluencersPage() {
         {/* Loading state */}
         {loading && (
           <div className="apple-card p-12 text-center">
-            <Spinner size={32} weight="fill" className="text-[#6A2B3A] mx-auto mb-3 animate-spin" />
-            <p className="text-sm text-[#59585E]">{t("inf.loading")}</p>
+            <Spinner size={32} weight="fill" className="text-[var(--fortune-red)] mx-auto mb-3 animate-spin" />
+            <p className="text-sm text-[var(--text-body)]">{t("inf.loading")}</p>
           </div>
         )}
 
         {/* Empty state */}
         {!loading && influencers.length === 0 && (
           <div className="apple-card p-12 text-center">
-            <Users className="w-10 h-10 text-[#EDD3D1] mx-auto mb-3" />
-            <p className="text-sm font-medium text-[#59585E] mb-1">{t("inf.empty")}</p>
-            <p className="text-xs text-[#9FA0A0] mb-4">{t("inf.emptyHint")}</p>
+            <Users className="w-10 h-10 text-[rgba(215,92,112,0.18)] mx-auto mb-3" />
+            <p className="text-sm font-medium text-[var(--text-body)] mb-1">{t("inf.empty")}</p>
+            <p className="text-xs text-[var(--text-muted)] mb-4">{t("inf.emptyHint")}</p>
             <button
               onClick={openCreateForm}
               className="apple-btn apple-btn-primary text-xs py-2 px-3"
@@ -255,22 +255,22 @@ export default function InfluencersPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     {/* Avatar placeholder */}
-                    <div className="w-10 h-10 rounded-full bg-[#6A2B3A]/10 flex items-center justify-center shrink-0">
-                      <Users size={20} weight="fill" className="text-[#6A2B3A]" />
+                    <div className="w-10 h-10 rounded-full bg-[rgba(215,92,112,0.10)] flex items-center justify-center shrink-0">
+                      <Users size={20} weight="fill" className="text-[var(--fortune-red)]" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-[#35353B] truncate">
+                        <h3 className="text-sm font-semibold text-[var(--text-h1)] truncate">
                           {inf.name}
                         </h3>
                         {!inf.is_active && (
-                          <span className="text-[11px] text-[#9FA0A0] bg-[#FCE4E2] px-1.5 py-0.5 rounded">
+                          <span className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-panel)] px-1.5 py-0.5 rounded">
                             {t("inf.inactive")}
                           </span>
                         )}
                       </div>
                       {inf.handle && (
-                        <p className="text-[11px] text-[#6A2B3A] font-medium mt-0.5">
+                        <p className="text-[11px] text-[var(--fortune-red)] font-medium mt-0.5">
                           @{inf.handle}
                         </p>
                       )}
@@ -280,7 +280,7 @@ export default function InfluencersPage() {
                           {inf.platforms.map((platform, i) => (
                             <span
                               key={i}
-                              className="text-[11px] text-[#6A2B3A] bg-[#6A2B3A]/8 px-2 py-0.5 rounded-full font-medium"
+                              className="text-[11px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)] px-2 py-0.5 rounded-full font-medium"
                             >
                               {platform}
                             </span>
@@ -293,7 +293,7 @@ export default function InfluencersPage() {
                           {inf.style_tags.map((tag, i) => (
                             <span
                               key={i}
-                              className="text-[11px] text-[#59585E] bg-[#FCE4E2] px-2 py-0.5 rounded-full"
+                              className="text-[11px] text-[var(--text-body)] bg-[var(--bg-panel)] px-2 py-0.5 rounded-full"
                             >
                               {tag}
                             </span>
@@ -301,11 +301,11 @@ export default function InfluencersPage() {
                         </div>
                       )}
                       {inf.notes && (
-                        <p className="text-[11px] text-[#59585E] mt-1.5 line-clamp-1">
+                        <p className="text-[11px] text-[var(--text-body)] mt-1.5 line-clamp-1">
                           {inf.notes}
                         </p>
                       )}
-                      <span className="text-[11px] text-[#9FA0A0] block mt-1.5">
+                      <span className="text-[11px] text-[var(--text-muted)] block mt-1.5">
                         {t("inf.createdAt")} {formatDate(inf.created_at)}
                       </span>
                     </div>
@@ -313,14 +313,14 @@ export default function InfluencersPage() {
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => openEditForm(inf)}
-                      className="p-2 rounded-lg text-[#59585E] hover:text-[#6A2B3A] hover:bg-[#6A2B3A]/5 transition-all cursor-pointer"
+                      className="p-2 rounded-lg text-[var(--text-body)] hover:text-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.05)] transition-all cursor-pointer"
                       title={t("inf.editTooltip")}
                     >
                       <PencilSimple size={16} weight="fill" />
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(inf.influencer_id)}
-                      className="p-2 rounded-lg text-[#59585E] hover:text-[#C45B50] hover:bg-[#C45B50]/5 transition-all cursor-pointer"
+                      className="p-2 rounded-lg text-[var(--text-body)] hover:text-[var(--crimson-mist)] hover:bg-[rgba(196,91,80,0.05)] transition-all cursor-pointer"
                       title={t("inf.deleteTooltip")}
                     >
                       <Trash size={16} weight="fill" />
@@ -337,12 +337,12 @@ export default function InfluencersPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="apple-card w-full max-w-lg mx-4 p-5 max-h-[85vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-[#35353B]">
+                <h2 className="text-sm font-semibold text-[var(--text-h1)]">
                   {editingId ? t("inf.editProfile") : t("inf.addProfile")}
                 </h2>
                 <button
                   onClick={() => setShowForm(false)}
-                  className="p-1 rounded-lg text-[#9FA0A0] hover:text-[#35353B] hover:bg-[#FCE4E2] transition-all cursor-pointer"
+                  className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[var(--bg-panel)] transition-all cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -351,7 +351,7 @@ export default function InfluencersPage() {
               <div className="space-y-3">
                 {/* Name */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.nameRequired")}
                   </label>
                   <input
@@ -365,7 +365,7 @@ export default function InfluencersPage() {
 
                 {/* Handle */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.handle")}
                   </label>
                   <input
@@ -375,14 +375,14 @@ export default function InfluencersPage() {
                     placeholder={t("inf.handlePlaceholder")}
                     className="apple-input text-sm"
                   />
-                  <p className="text-[11px] text-[#9FA0A0] mt-0.5">
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                     {t("inf.handleHint")}
                   </p>
                 </div>
 
                 {/* Platforms */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.platforms")}
                   </label>
                   <input
@@ -392,14 +392,14 @@ export default function InfluencersPage() {
                     placeholder={t("inf.platformsPlaceholder")}
                     className="apple-input text-sm"
                   />
-                  <p className="text-[11px] text-[#9FA0A0] mt-0.5">
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                     {t("inf.platformsHint")}
                   </p>
                 </div>
 
                 {/* Style tags */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.styleTags")}
                   </label>
                   <input
@@ -409,14 +409,14 @@ export default function InfluencersPage() {
                     placeholder={t("inf.styleTagsPlaceholder")}
                     className="apple-input text-sm"
                   />
-                  <p className="text-[11px] text-[#9FA0A0] mt-0.5">
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                     {t("inf.styleTagsHint")}
                   </p>
                 </div>
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[#59585E] mb-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.notes")}
                   </label>
                   <textarea
@@ -437,16 +437,16 @@ export default function InfluencersPage() {
                       onChange={(e) => setFormIsActive(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-8 h-4.5 bg-[#EDD3D1] rounded-full peer peer-checked:bg-[#6A2B3A] transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3.5 after:h-3.5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-3.5" />
+                    <div className="w-8 h-4.5 bg-[rgba(215,92,112,0.18)] rounded-full peer peer-checked:bg-[var(--fortune-red)] transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3.5 after:h-3.5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-3.5" />
                   </label>
-                  <span className="text-[11px] text-[#59585E] font-medium">
+                  <span className="text-[11px] text-[var(--text-body)] font-medium">
                     {t("inf.active")}
                   </span>
                 </div>
               </div>
 
               {/* Form actions */}
-              <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[#EDD3D1]">
+              <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[rgba(215,92,112,0.18)]">
                 <button
                   onClick={() => setShowForm(false)}
                   className="apple-btn text-xs py-2 px-3"
@@ -481,12 +481,12 @@ export default function InfluencersPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="apple-card p-5 max-w-sm mx-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-full bg-[#C45B50]/10 flex items-center justify-center">
-                  <WarningCircle size={16} weight="fill" className="text-[#C45B50]" />
+                <div className="w-8 h-8 rounded-full bg-[rgba(196,91,80,0.10)] flex items-center justify-center">
+                  <WarningCircle size={16} weight="fill" className="text-[var(--crimson-mist)]" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-[#35353B]">{t("inf.deleteConfirm")}</h3>
-                  <p className="text-[11px] text-[#59585E]">
+                  <h3 className="text-sm font-semibold text-[var(--text-h1)]">{t("inf.deleteConfirm")}</h3>
+                  <p className="text-[11px] text-[var(--text-body)]">
                     {t("inf.deleteHint")}
                   </p>
                 </div>
