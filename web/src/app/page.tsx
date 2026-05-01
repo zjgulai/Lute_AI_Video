@@ -41,7 +41,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import ExecutionBar from "@/components/ExecutionBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useI18n } from "@/i18n/I18nProvider";
-import { DEMO_RESULT_1, DEMO_RESULT_2 } from "@/demo-data";
+import { DEMO_RESULT_1, DEMO_RESULT_2, DEMO_RESULT_VLOG } from "@/demo-data";
 import { useAppStore } from "@/stores/useAppStore";
 import { usePipelineStore } from "@/stores/usePipelineStore";
 import { useExpertStore } from "@/stores/useExpertStore";
@@ -399,8 +399,7 @@ export default function Home() {
       const scenario = config.content_scenario || "product_direct";
       const isBrand = scenario === "brand_campaign";
       const isVlog = scenario === "brand_vlog";
-      const demoResult = isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
-      if (isVlog) { demoResult.scenario = "brand_vlog"; }
+      const demoResult = isVlog ? DEMO_RESULT_VLOG : isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
       setOneshotResult(demoResult);
       setOneshotScenario(scenario);
       setStage("result");
@@ -455,19 +454,20 @@ export default function Home() {
     if (isDemoMode()) {
       const scenario = config.content_scenario || "product_direct";
       const isBrand = scenario === "brand_campaign";
+      const isVlog = scenario === "brand_vlog";
       const effectiveMode = config.mode || pipelineMode;
+      const demoResult = isVlog ? DEMO_RESULT_VLOG : isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
 
       if (effectiveMode === "auto" || effectiveMode === "smart") {
         // Smart/Auto mode: show final result directly
-        setOneshotResult(isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1);
+        setOneshotResult(demoResult);
         setOneshotScenario(scenario);
         setStage("result");
-        showToast(t("toast.autoDone"), "success");
+        showToast(isVlog ? t("toast.vlogDone") : t("toast.autoDone"), "success");
         return;
       }
 
       // Expert Studio mode: build workflow state from demo data and enter gate flow
-      const demoResult = isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
       const demoState = {
         steps: {
           strategy: { status: "done", output: demoResult.briefs },

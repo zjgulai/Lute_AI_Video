@@ -422,6 +422,176 @@ export const DEMO_RESULT_2 = {
   steps_completed: 12,
 };
 
+// ── Brand VLOG demo result (S5 pipeline shape, 30s = 2 × 15s clips) ──
+export const DEMO_RESULT_VLOG = {
+  success: true,
+  label: "demo_vlog_001",
+  scenario: "brand_vlog",
+  video_duration: 30,
+  errors: [],
+  media_synthesis_errors: [],
+  brand_id: "momcozy",
+  scene_id: "living-room",
+  selected_models: ["mom_30s", "infant"],
+  vlog_strategy: {
+    theme: "Parent-Child Bonding — A Quiet Afternoon",
+    arc: "Setup → Connection → Resolution",
+    emotional_beats: ["calm", "warmth", "joy"],
+    target_platforms: ["tiktok", "instagram"],
+  },
+  briefs: [
+    {
+      id: "VLOG-BRIEF-001",
+      platform: "tiktok",
+      topic: "A Mom's Afternoon — 30 Seconds of Quiet Joy",
+      target_audience: "New mothers 28-38, urban, lifestyle-driven",
+      key_message: "Real moments, real bonding — Momcozy moves with you.",
+      hook_type: "Lifestyle Story",
+      description:
+        "Documentary-style 30s spot: mom in her living room with baby. Soft afternoon light. Wearing the device under casual clothes. Two natural beats — quiet pumping moment and joyful play moment.",
+    },
+  ],
+  scripts: [
+    {
+      id: "VLOG-SCRIPT-001",
+      product_name: "Momcozy Wearable Pump",
+      brand_name: "Momcozy",
+      language: "en",
+      segments: [
+        {
+          segment_type: "scene_a",
+          start_time: 0,
+          end_time: 15,
+          voiceover: "There are moments when I just want to be still — and Momcozy lets me.",
+          visual_description:
+            "Mom on living-room sofa, baby napping beside her. Wearing pump under cardigan. Soft natural window light, slow camera push-in.",
+          text_overlay: "Quiet moments. Real bonding.",
+        },
+        {
+          segment_type: "scene_b",
+          start_time: 15,
+          end_time: 30,
+          voiceover: "Then he wakes up, and we just play. No interruptions, no schedule.",
+          visual_description:
+            "Same room, golden hour. Mom playing peek-a-boo with baby. Toys on rug. Genuine laughter, handheld camera, warm tones.",
+          text_overlay: "Move with you. Live with you.",
+        },
+      ],
+    },
+  ],
+  storyboards: [
+    {
+      scene_title: "Scene A — Quiet Afternoon",
+      visual_description:
+        "Mom seated on linen sofa with sleeping infant. Pump invisible under loose cardigan. Window light, dust motes, slow push-in. Calm music.",
+      shot_type: "Medium close-up, slow dolly",
+      total_duration: 15,
+    },
+    {
+      scene_title: "Scene B — Golden-Hour Play",
+      visual_description:
+        "Same living room, sun lower. Mom and baby on rug, playing with wooden toys. Handheld, intimate. Warm 3200K, natural smiles.",
+      shot_type: "Handheld, mixed angles",
+      total_duration: 15,
+    },
+  ],
+  video_prompts: [
+    {
+      platform: "tiktok",
+      prompt:
+        "Documentary-style scene: a young mother sits on a linen sofa in a sunlit living room, her infant napping beside her. She wears a wearable breast pump invisibly under a soft cardigan. The afternoon light streams through sheer curtains, dust motes floating. Slow push-in from medium to close-up. Warm color palette, ASMR-quiet ambient sound, no music. iPhone-cinematic aesthetic.",
+    },
+    {
+      platform: "tiktok",
+      prompt:
+        "Same living room, golden hour. Mother and a 9-month-old baby on a soft rug, playing peek-a-boo with wooden toys. Warm 3200K lighting through window. Handheld camera follows their interaction naturally. Real laughter, genuine eye contact. Documentary intimate aesthetic. Color graded warm with slight film grain.",
+    },
+  ],
+  thumbnail_sets: [
+    {
+      platform: "tiktok",
+      prompts: [
+        "Lifestyle thumbnail: mom and baby on sofa, soft window light, text overlay 'A Quiet Afternoon', warm tones, Momcozy logo bottom-right",
+      ],
+    },
+  ],
+  seedance_output: {
+    clip_paths: ["/portfolio/" + REAL_VIDEOS.story, "/portfolio/" + REAL_VIDEOS.recycle],
+    clip_details: [
+      {
+        path: "/portfolio/" + REAL_VIDEOS.story,
+        duration: 15.0,
+        is_stub: false,
+        file_size: 1160683,
+        verification: { all_ok: true, file_exists: true, size_ok: true, header_ok: true, duration_ok: true },
+        prompt_used: "Documentary-style scene: a young mother sits on a linen sofa...",
+        continuity_frame: false,
+        scene_label: "Scene A — Quiet Afternoon",
+      },
+      {
+        path: "/portfolio/" + REAL_VIDEOS.recycle,
+        duration: 15.0,
+        is_stub: false,
+        file_size: 1173601,
+        verification: { all_ok: true, file_exists: true, size_ok: true, header_ok: true, duration_ok: true },
+        prompt_used: "Same living room, golden hour. Mother and a 9-month-old baby...",
+        continuity_frame: true,
+        scene_label: "Scene B — Golden-Hour Play",
+      },
+    ],
+    total_duration: 30.0,
+    target_duration: 30,
+  },
+  clip_paths: ["/portfolio/" + REAL_VIDEOS.story, "/portfolio/" + REAL_VIDEOS.recycle],
+  audio_paths: [],
+  lyrics_paths: [],
+  thumbnail_image_paths: ["/portfolio/" + REAL_IMAGES.kf2a, "/portfolio/" + REAL_IMAGES.kf2b],
+  final_video_path: "/portfolio/" + REAL_VIDEOS.story,
+  audit_report: {
+    overall_status: "PASS",
+    overall_score: 0.89,
+    summary:
+      "Authentic lifestyle VLOG with strong emotional resonance. Two-scene structure provides natural narrative arc. Brand integration feels organic, not forced. Recommended for organic social distribution.",
+    criteria: [
+      { name: "Hook Strength", status: "PASS", score: 0.86, feedback: "Quiet opening builds intimacy quickly" },
+      { name: "Visual Quality", status: "PASS", score: 0.91, feedback: "Documentary cinematography feels authentic" },
+      { name: "Audio Clarity", status: "PASS", score: 0.84, feedback: "Ambient sound design supports mood" },
+      { name: "Brand Compliance", status: "PASS", score: 0.92, feedback: "Brand presence subtle and on-tone" },
+      { name: "Duration Target", status: "PASS", score: 0.95, feedback: "30s exactly matches target" },
+      { name: "Emotional Arc", status: "PASS", score: 0.90, feedback: "Calm-to-joy beat lands well" },
+      { name: "Platform Fit", status: "PASS", score: 0.88, feedback: "Strong fit for TikTok and Instagram Reels" },
+    ],
+  },
+  steps_completed: 6,
+};
+
+// ── Fast Mode demo result (matches FastModeResult shape in api.ts) ──
+export const DEMO_FAST_MODE_RESULT = {
+  success: true,
+  video_path: "/portfolio/" + REAL_VIDEOS.park,
+  video_url: "/portfolio/" + REAL_VIDEOS.park,
+  filename: REAL_VIDEOS.park,
+  llm_prompt:
+    "A breathtaking cinematic drone shot captures a lone hiker walking along a narrow mountain ridge during the golden hour. The camera starts in a wide establishing shot from behind the hiker, slowly tilting upward to reveal the expansive valley below, bathed in warm orange and pink hues. Dramatic clouds drift across the sky, casting moving shadows on the rugged terrain. The hiker's silhouette stands out against the vibrant horizon, emphasizing the scale and solitude of the landscape. Cinematic depth of field, smooth camera movement, professional color grading.",
+  scene_description: "Mountain ridge hiker · golden hour · cinematic drone",
+  user_prompt: "a hiker on a mountain ridge at sunset",
+  duration_seconds: 15,
+  file_size_bytes: 3584686,
+  generation_time_ms: 1240,
+  timing: {
+    llm_ms: 320,
+    video_ms: 820,
+    tts_ms: 0,
+  },
+  model_info: {
+    llm: "deepseek-v3",
+    video: "seedance-pro",
+    tts: "",
+  },
+  is_stub: false,
+  tts_path: "",
+};
+
 export const DEMO_CONFIG_1 = {
   product_catalog: {
     name: "Lute Smart Breast Pump",

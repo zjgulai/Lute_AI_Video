@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Lightning, Clock, SpeakerHigh, CaretDown, CaretUp, Copy, ArrowCounterClockwise, Play, Article, Cpu, Timer, HardDrives } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { generateFastMode, getMediaUrl, type FastModeResult } from "./api";
+import { generateFastMode, getMediaUrl, isDemoMode, type FastModeResult } from "./api";
+import { DEMO_FAST_MODE_RESULT } from "@/demo-data";
 
 export default function FastModePanel() {
   const { t } = useI18n();
@@ -21,6 +22,24 @@ export default function FastModePanel() {
     setLoading(true);
     setError("");
     setResult(null);
+    if (isDemoMode()) {
+      await new Promise((r) => setTimeout(r, 800));
+      setResult({
+        ...(DEMO_FAST_MODE_RESULT as FastModeResult),
+        user_prompt: userPrompt.trim(),
+        duration_seconds: duration,
+        timing: {
+          ...DEMO_FAST_MODE_RESULT.timing,
+          tts_ms: enableTTS ? 240 : 0,
+        },
+        model_info: {
+          ...DEMO_FAST_MODE_RESULT.model_info,
+          tts: enableTTS ? "doubao-tts" : "",
+        },
+      });
+      setLoading(false);
+      return;
+    }
     try {
       const res = await generateFastMode({
         user_prompt: userPrompt.trim(),
