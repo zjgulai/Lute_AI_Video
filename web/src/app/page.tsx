@@ -812,7 +812,7 @@ export default function Home() {
 
         {/* Header */}
         <header className="sticky top-0 z-40 bg-[var(--bg-page)]/85 backdrop-blur-xl border-b border-[var(--divider-subtle)]">
-          <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between">
+          <div className="max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-7 h-7 rounded-lg bg-[var(--fortune-red)] flex items-center justify-center shadow-[0_0_10px_rgba(255,77,106,0.45)]">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -857,7 +857,7 @@ export default function Home() {
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto px-4 py-6">
+        <main className="max-w-[1440px] mx-auto px-6 py-6">
           <div key={stage + (activeScene || "")}>
           {/* Stage 0: Home — Scene selection + form */}
           {stage === "home" && showSelector && (

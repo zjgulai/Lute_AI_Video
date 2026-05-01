@@ -34,7 +34,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
 
   return (
     <div className="space-y-3">
-      <div className="flex items-stretch gap-1.5">
+      <div className="flex items-stretch gap-3">
         {SCENE_IDS.map((id) => {
           const isActive = activeScene === id;
           const count = videoCounts[id] ?? 0;
@@ -46,7 +46,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
                 logUI("SELECT", "SceneTabs", { scene: id, from: activeScene });
                 onChange(id);
               }}
-              className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all cursor-pointer ${
+              className={`flex-1 flex items-center gap-2.5 px-4 py-3.5 rounded-lg border transition-all cursor-pointer min-h-[56px] ${
                 isActive
                   ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(255,77,106,0.18)]"
                   : "border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.04)]"
@@ -54,14 +54,14 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
             >
               {IconComponent && (
                 <IconComponent
-                  size={24}
+                  size={20}
                   weight="fill"
                   className={`shrink-0 ${isActive ? "text-[var(--fortune-red)]" : "text-[var(--text-muted)]"}`}
                 />
               )}
               <div className="text-left min-w-0">
                 <span
-                  className={`block text-[11px] font-semibold leading-tight ${
+                  className={`block text-[13px] font-semibold leading-tight ${
                     isActive ? "text-[var(--text-h1)]" : "text-[var(--text-body)]"
                   }`}
                 >

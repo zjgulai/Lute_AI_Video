@@ -35,7 +35,7 @@ export default function Nav() {
   ];
 
   return (
-    <nav className="flex items-center gap-1">
+    <nav className="flex items-center gap-2">
       {links.map((link) => {
         const isActive = pathname === link.href;
         const Icon = link.icon;
@@ -44,13 +44,13 @@ export default function Nav() {
             key={link.href}
             href={link.href}
             onClick={link.onClick}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               isActive
                 ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[rgba(78,58,61,0.5)]"
             }`}
           >
-            <Icon size={16} weight="fill" />
+            <Icon size={18} weight="fill" />
             {link.label}
           </Link>
         );
@@ -58,7 +58,7 @@ export default function Nav() {
       {/* Language toggle */}
       <button
         onClick={() => setLocale(locale === "en" ? "zh" : "en")}
-        className="ml-3 px-2 py-1 rounded-full text-[11px] font-semibold transition-all bg-[var(--bg-panel)] text-[var(--text-muted)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)] cursor-pointer border border-[var(--border-default)] min-w-[36px] text-center"
+        className="ml-3 px-3 py-1.5 rounded-full text-xs font-semibold transition-all bg-[var(--bg-panel)] text-[var(--text-muted)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)] cursor-pointer border border-[var(--border-default)] min-w-[44px] text-center"
       >
         {t("locale.toggle")}
       </button>

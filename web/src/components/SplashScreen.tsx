@@ -54,11 +54,11 @@ export default function SplashScreen({ onEnter }: Props) {
       className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-opacity duration-700 ease-in-out ${
         animating ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
-      style={{ background: "radial-gradient(ellipse at 30% 20%, #B27A7E 0%, #8A4A5A 45%, #6A2B3A 100%)" }}
+      style={{ background: "radial-gradient(ellipse at 30% 20%, rgba(140,60,75,0.55) 0%, rgba(28,20,21,1) 55%, #100C0D 100%)" }}
     >
       {/* Film grain */}
       <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E\")",
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E\")",
         backgroundSize: "256px 256px",
       }} />
 
@@ -68,7 +68,7 @@ export default function SplashScreen({ onEnter }: Props) {
           <span className="text-[12px] font-medium tracking-wider" style={{ color: "rgba(255,255,255,0.7)" }}>{t("app.title")}</span>
         </div>
         <div className="animate-splash-in relative flex items-center justify-center" style={{ animationDelay: "80ms" }}>
-          <div className="absolute rounded-full animate-lens-breathe" style={{ width: 220, height: 220, border: "1px solid rgba(178,122,126,0.12)", boxShadow: "0 0 80px rgba(178,122,126,0.06)" }} />
+          <div className="absolute rounded-full animate-lens-breathe" style={{ width: 220, height: 220, border: "1px solid rgba(255,77,106,0.18)", boxShadow: "0 0 80px rgba(255,77,106,0.18)" }} />
           <h1 className="relative text-[48px] md:text-[56px] font-medium tracking-[0.03em] text-white leading-none" style={{ fontFamily: "'Montserrat', -apple-system, sans-serif" }}>Momcozy</h1>
         </div>
         <div className="animate-splash-in flex flex-col items-center gap-1.5" style={{ animationDelay: "160ms" }}>
@@ -81,13 +81,13 @@ export default function SplashScreen({ onEnter }: Props) {
       {/* CTA */}
       <div className="animate-splash-in absolute bottom-[12%] flex flex-wrap items-center justify-center gap-3 px-4" style={{ animationDelay: "280ms" }}>
         <button className={btnBase} onClick={() => setShowGuide(true)}>{t("splash.creationGuide")}</button>
-        <button onClick={handleEnter} className="px-8 py-3 rounded-[24px] text-[16px] font-medium cursor-pointer transition-all duration-300 ease-out bg-white/15 text-white border border-white/20 hover:bg-white/25 hover:border-white/40 hover:scale-[1.02] active:scale-[0.98]">{t("splash.enter")}</button>
+        <button onClick={handleEnter} className="px-8 py-3 rounded-[24px] text-[16px] font-medium cursor-pointer transition-all duration-300 ease-out bg-[var(--fortune-red)] text-white border border-[var(--fortune-red)] hover:bg-[var(--neon-red)] hover:border-[var(--neon-red)] hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_24px_rgba(255,77,106,0.35)]">{t("splash.enter")}</button>
         <button className={btnBase} onClick={() => setShowBlueprint(true)}>{t("splash.blueprint")}</button>
       </div>
 
       {/* Timeline */}
       <div className="animate-splash-in absolute bottom-[4%] flex items-center gap-2" style={{ animationDelay: "350ms" }}>
-        <div className="w-2 h-2 rounded-full animate-timeline-pulse" style={{ background: "rgba(255,255,255,0.25)" }} />
+        <div className="w-2 h-2 rounded-full animate-timeline-pulse" style={{ background: "rgba(255,77,106,0.45)" }} />
         <div className="w-[60vw] max-w-[480px] h-px" style={{ background: "rgba(255,255,255,0.1)" }} />
         <div className="w-2 h-2 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />
         <span className="text-[10px] ml-1.5" style={{ color: "rgba(255,255,255,0.2)" }}>00:00</span>
@@ -95,11 +95,11 @@ export default function SplashScreen({ onEnter }: Props) {
 
       {/* ═══ GUIDE OVERLAY ═══ */}
       {showGuide && (
-        <div className="absolute inset-0 z-50 overflow-y-auto bg-[#FEF9F6]" style={{ fontFamily: "'Inter', 'Noto Sans SC', -apple-system, sans-serif" }}>
+        <div className="absolute inset-0 z-50 overflow-y-auto bg-[var(--cinema-black)]" style={{ fontFamily: "'Inter', 'Noto Sans SC', -apple-system, sans-serif" }}>
           {/* Sticky header */}
-          <div className="sticky top-0 z-20 flex items-center justify-between px-6 md:px-12 py-4 bg-[#FEF9F6]/90 backdrop-blur-md border-b border-[#EDD3D1]">
-            <h2 className="text-[16px] font-semibold text-[#35353B]">{t("app.title")} · {t("splash.creationGuide")}</h2>
-            <button onClick={() => setShowGuide(false)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer">
+          <div className="sticky top-0 z-20 flex items-center justify-between px-6 md:px-12 py-4 bg-[var(--cinema-black)]/90 backdrop-blur-md border-b border-[var(--border-default)]">
+            <h2 className="text-[16px] font-semibold text-[var(--text-h1)]">{t("app.title")} · {t("splash.creationGuide")}</h2>
+            <button onClick={() => setShowGuide(false)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[13px] font-medium text-[var(--text-muted)] hover:bg-[rgba(215,92,112,0.10)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
               返回
             </button>
@@ -108,26 +108,26 @@ export default function SplashScreen({ onEnter }: Props) {
           <div className="max-w-4xl mx-auto px-6 md:px-12 py-8 space-y-12 pb-20">
             {/* ── Hero ── */}
             <div className="text-center space-y-3 py-6">
-              <h1 className="text-[28px] md:text-[36px] font-semibold text-[#35353B] tracking-tight">AI 视频创作平台</h1>
-              <p className="text-[14px] text-[#59585E] max-w-2xl mx-auto leading-relaxed">
+              <h1 className="text-[28px] md:text-[36px] font-semibold text-[var(--text-h1)] tracking-tight">AI 视频创作平台</h1>
+              <p className="text-[14px] text-[var(--text-body)] max-w-2xl mx-auto leading-relaxed">
                 面向品牌营销团队的智能视频生产工具。输入产品信息和创作方向，AI 自动完成策略生成、脚本撰写、视频生成、配音配乐、质量审计——从创意到成片，全链路自动化。
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-2">
                 {["DeepSeek-V4-Pro 文本", "GPT-4o Image 图像", "Happy Horse 视频", "CosyVoice2 语音"].map(m => (
-                  <span key={m} className="px-3 py-1 rounded-full bg-[#FCE4E2] text-[11px] font-medium text-[#6A2B3A]">{m}</span>
+                  <span key={m} className="px-3 py-1 rounded-full bg-[rgba(215,92,112,0.10)] text-[11px] font-medium text-[var(--fortune-red)] border border-[rgba(215,92,112,0.18)]">{m}</span>
                 ))}
               </div>
             </div>
 
             {/* ── 6 Scenes ── */}
             <section>
-              <h3 className="text-[18px] font-semibold text-[#35353B] mb-4">视频创作场景</h3>
+              <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-4">视频创作场景</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {SCENE_CARDS.map(s => (
-                  <div key={s.name} className="p-4 rounded-xl bg-white border border-[#EDD3D1] hover:border-[#D9A8A3] transition-colors">
+                  <div key={s.name} className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)] hover:border-[var(--fortune-red)] transition-colors">
                     <div className="text-lg mb-1">{s.emoji}</div>
-                    <div className="text-[14px] font-semibold text-[#35353B]">{s.name}</div>
-                    <div className="text-[12px] text-[#59585E] leading-relaxed mt-1">{s.desc}</div>
+                    <div className="text-[14px] font-semibold text-[var(--text-h1)]">{s.name}</div>
+                    <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-1">{s.desc}</div>
                   </div>
                 ))}
               </div>
@@ -135,17 +135,17 @@ export default function SplashScreen({ onEnter }: Props) {
 
             {/* ── Modes ── */}
             <section>
-              <h3 className="text-[18px] font-semibold text-[#35353B] mb-4">两种操作模式</h3>
+              <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-4">两种操作模式</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-5 rounded-xl bg-gradient-to-br from-[#FCE4E2] to-[#FFF0EF] border border-[#EDD3D1]">
-                  <div className="text-[15px] font-semibold text-[#6A2B3A]">Smart Create 一键模式</div>
-                  <div className="text-[12px] text-[#59585E] leading-relaxed mt-2">
+                <div className="p-5 rounded-xl bg-gradient-to-br from-[rgba(215,92,112,0.14)] to-[rgba(255,77,106,0.06)] border border-[rgba(215,92,112,0.20)]">
+                  <div className="text-[15px] font-semibold text-[var(--fortune-red)]">Smart Create 一键模式</div>
+                  <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-2">
                     选场景 → 填信息 → 点生成。AI 做全部决策，适合快速验证、批量生产。30s-5min 等待后直接查看完整结果。
                   </div>
                 </div>
-                <div className="p-5 rounded-xl bg-gradient-to-br from-[#F8EEE8] to-[#FFF0EF] border border-[#EDD3D1]">
-                  <div className="text-[15px] font-semibold text-[#6A2B3A]">Expert Studio 逐步模式</div>
-                  <div className="text-[12px] text-[#59585E] leading-relaxed mt-2">
+                <div className="p-5 rounded-xl bg-gradient-to-br from-[rgba(220,190,120,0.12)] to-[rgba(255,77,106,0.06)] border border-[rgba(220,190,120,0.20)]">
+                  <div className="text-[15px] font-semibold text-[var(--gold-foil)]">Expert Studio 逐步模式</div>
+                  <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-2">
                     12 个步骤逐步执行，每步可查看、编辑、重做。4 个 Gate 关口自动暂停等待审核。适合需要精细控制和品牌审查的场景。
                   </div>
                 </div>
@@ -154,13 +154,13 @@ export default function SplashScreen({ onEnter }: Props) {
 
             {/* ── Design Philosophy ── */}
             <section>
-              <h3 className="text-[18px] font-semibold text-[#35353B] mb-4">设计理念</h3>
+              <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-4">设计理念</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {DESIGN_PHILOSOPHY.map((p, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-gradient-to-br from-[#FFF0EF] to-[#FEF9F6] border border-[#EDD3D1]">
+                  <div key={i} className="p-4 rounded-xl bg-gradient-to-br from-[var(--film-reel)] to-[rgba(255,77,106,0.04)] border border-[var(--border-default)]">
                     <div className="text-lg mb-1">{p.icon}</div>
-                    <div className="text-[14px] font-semibold text-[#35353B]">{p.title}</div>
-                    <div className="text-[12px] text-[#59585E] leading-relaxed mt-1">{p.desc}</div>
+                    <div className="text-[14px] font-semibold text-[var(--text-h1)]">{p.title}</div>
+                    <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-1">{p.desc}</div>
                   </div>
                 ))}
               </div>
@@ -168,49 +168,49 @@ export default function SplashScreen({ onEnter }: Props) {
 
             {/* ── Examples ── */}
             <section>
-              <h3 className="text-[18px] font-semibold text-[#35353B] mb-4">场景示例 · 输入参考</h3>
-              <p className="text-[12px] text-[#59585E] mb-4 leading-relaxed">以下示例基于 Momcozy M5 穿戴式吸奶器，展示每种场景的实际输入方式。直接参考填入即可获得高质量产出。</p>
+              <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-4">场景示例 · 输入参考</h3>
+              <p className="text-[12px] text-[var(--text-muted)] mb-4 leading-relaxed">以下示例基于 Momcozy M5 穿戴式吸奶器，展示每种场景的实际输入方式。直接参考填入即可获得高质量产出。</p>
               <div className="space-y-4">
                 {/* 商品直拍 */}
-                <div className="rounded-xl bg-white border border-[#EDD3D1] overflow-hidden">
-                  <div className="px-5 py-3 bg-[#FCE4E2] border-b border-[#EDD3D1] text-[13px] font-semibold text-[#6A2B3A]">📦 商品直拍</div>
-                  <div className="p-5 space-y-2 text-[12px] text-[#59585E]">
-                    <div><span className="font-semibold text-[#35353B]">产品名称:</span> M5 Wearable Breast Pump</div>
-                    <div><span className="font-semibold text-[#35353B]">品牌名:</span> Momcozy</div>
-                    <div><span className="font-semibold text-[#35353B]">核心卖点:</span> "免手扶穿戴式设计 · 3 秒快速佩戴 · 静音马达 &lt; 35dB · 轻量通勤可放入内衣 · APP 智能控制"</div>
-                    <div><span className="font-semibold text-[#35353B]">使用场景(高级):</span> "职场妈妈通勤泵奶、夜间低噪不惊扰宝宝、出差途中单手操作"</div>
-                    <div><span className="font-semibold text-[#35353B]">痛点(高级):</span> "传统吸奶器线缆杂乱、体积大不便携、噪音尴尬影响睡眠"</div>
-                    <div><span className="font-semibold text-[#35353B]">品牌语气 Do:</span> "温柔、真实、像妈妈之间分享使用心得"</div>
-                    <div><span className="font-semibold text-[#35353B]">品牌语气 Don't:</span> "不用'革命性'、'全球首创'等夸大词"</div>
+                <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)] overflow-hidden">
+                  <div className="px-5 py-3 bg-[rgba(215,92,112,0.10)] border-b border-[var(--border-default)] text-[13px] font-semibold text-[var(--fortune-red)]">📦 商品直拍</div>
+                  <div className="p-5 space-y-2 text-[12px] text-[var(--text-body)]">
+                    <div><span className="font-semibold text-[var(--text-h1)]">产品名称:</span> M5 Wearable Breast Pump</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">品牌名:</span> Momcozy</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">核心卖点:</span> &quot;免手扶穿戴式设计 · 3 秒快速佩戴 · 静音马达 &lt; 35dB · 轻量通勤可放入内衣 · APP 智能控制&quot;</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">使用场景(高级):</span> &quot;职场妈妈通勤泵奶、夜间低噪不惊扰宝宝、出差途中单手操作&quot;</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">痛点(高级):</span> &quot;传统吸奶器线缆杂乱、体积大不便携、噪音尴尬影响睡眠&quot;</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">品牌语气 Do:</span> &quot;温柔、真实、像妈妈之间分享使用心得&quot;</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">品牌语气 Don&apos;t:</span> &quot;不用&apos;革命性&apos;、&apos;全球首创&apos;等夸大词&quot;</div>
                   </div>
                 </div>
                 {/* 品牌VLOG */}
-                <div className="rounded-xl bg-white border border-[#EDD3D1] overflow-hidden">
-                  <div className="px-5 py-3 bg-[#F8EEE8] border-b border-[#EDD3D1] text-[13px] font-semibold text-[#6A2B3A]">📹 品牌VLOG</div>
-                  <div className="p-5 space-y-2 text-[12px] text-[#59585E]">
-                    <div><span className="font-semibold text-[#35353B]">品牌:</span> Momcozy · 产品SKU: M5 Breast Pump（选定后自动回填六视图）</div>
-                    <div><span className="font-semibold text-[#35353B]">场景:</span> 客厅</div>
-                    <div><span className="font-semibold text-[#35353B]">模特:</span> 多选 — Ava(母亲) + Noah(婴儿)</div>
-                    <div><span className="font-semibold text-[#35353B]">故事描述:</span> "以年轻母亲在客厅使用 M5 为核心，穿插婴儿安静入睡的镜头。开场 3 秒展示 M5 主视图建立产品认知，中段切换过肩镜头展示职场妈妈单手操作泵奶，背景婴儿在沙发安睡，突出免手扶和静音卖点。结尾品牌收尾——'为妈妈的舒适不断进化'——妈妈抱着宝宝微笑。"</div>
-                    <div><span className="font-semibold text-[#35353B]">时长:</span> 30-45s（加长）</div>
+                <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)] overflow-hidden">
+                  <div className="px-5 py-3 bg-[rgba(220,190,120,0.10)] border-b border-[var(--border-default)] text-[13px] font-semibold text-[var(--gold-foil)]">📹 品牌VLOG</div>
+                  <div className="p-5 space-y-2 text-[12px] text-[var(--text-body)]">
+                    <div><span className="font-semibold text-[var(--text-h1)]">品牌:</span> Momcozy · 产品SKU: M5 Breast Pump（选定后自动回填六视图）</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">场景:</span> 客厅</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">模特:</span> 多选 — Ava(母亲) + Noah(婴儿)</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">故事描述:</span> &quot;以年轻母亲在客厅使用 M5 为核心，穿插婴儿安静入睡的镜头。开场 3 秒展示 M5 主视图建立产品认知，中段切换过肩镜头展示职场妈妈单手操作泵奶，背景婴儿在沙发安睡，突出免手扶和静音卖点。结尾品牌收尾——&apos;为妈妈的舒适不断进化&apos;——妈妈抱着宝宝微笑。&quot;</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">时长:</span> 30-45s（加长）</div>
                   </div>
                 </div>
                 {/* 网红二创 */}
-                <div className="rounded-xl bg-white border border-[#EDD3D1] overflow-hidden">
-                  <div className="px-5 py-3 bg-[#FCE4E2] border-b border-[#EDD3D1] text-[13px] font-semibold text-[#6A2B3A]">📱 网红二创</div>
-                  <div className="p-5 space-y-2 text-[12px] text-[#59585E]">
-                    <div><span className="font-semibold text-[#35353B]">视频URL:</span> 员工/KOL 原始口播视频链接</div>
-                    <div><span className="font-semibold text-[#35353B]">产品:</span> M5 Wearable Breast Pump</div>
-                    <div><span className="font-semibold text-[#35353B]">网红名称:</span> Sophie（可选）</div>
-                    <div><span className="font-semibold text-[#35353B]">说明:</span> 上传已有员工或 KOL 的产品讲解视频 → AI 提取核心卖点 → 重混脚本 → 嵌入 Shopee/Amazon 产品链接 → 批量分发多平台</div>
+                <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)] overflow-hidden">
+                  <div className="px-5 py-3 bg-[rgba(215,92,112,0.10)] border-b border-[var(--border-default)] text-[13px] font-semibold text-[var(--fortune-red)]">📱 网红二创</div>
+                  <div className="p-5 space-y-2 text-[12px] text-[var(--text-body)]">
+                    <div><span className="font-semibold text-[var(--text-h1)]">视频URL:</span> 员工/KOL 原始口播视频链接</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">产品:</span> M5 Wearable Breast Pump</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">网红名称:</span> Sophie（可选）</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">说明:</span> 上传已有员工或 KOL 的产品讲解视频 → AI 提取核心卖点 → 重混脚本 → 嵌入 Shopee/Amazon 产品链接 → 批量分发多平台</div>
                   </div>
                 </div>
                 {/* 快速模式 */}
-                <div className="rounded-xl bg-white border border-[#EDD3D1] overflow-hidden">
-                  <div className="px-5 py-3 bg-[#F8EEE8] border-b border-[#EDD3D1] text-[13px] font-semibold text-[#6A2B3A]">⚡ 快速模式</div>
-                  <div className="p-5 space-y-2 text-[12px] text-[#59585E]">
-                    <div><span className="font-semibold text-[#35353B]">描述:</span> "Wearable breast pump, silent motor, mom using it in living room while baby sleeps nearby, natural warm light, cozy home atmosphere"</div>
-                    <div><span className="font-semibold text-[#35353B]">时长:</span> 10s · <span className="font-semibold text-[#35353B]">说明:</span> 直接测试大模型矩阵，不走完整 pipeline，10-15s 快速验证视频质量</div>
+                <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)] overflow-hidden">
+                  <div className="px-5 py-3 bg-[rgba(220,190,120,0.10)] border-b border-[var(--border-default)] text-[13px] font-semibold text-[var(--gold-foil)]">⚡ 快速模式</div>
+                  <div className="p-5 space-y-2 text-[12px] text-[var(--text-body)]">
+                    <div><span className="font-semibold text-[var(--text-h1)]">描述:</span> &quot;Wearable breast pump, silent motor, mom using it in living room while baby sleeps nearby, natural warm light, cozy home atmosphere&quot;</div>
+                    <div><span className="font-semibold text-[var(--text-h1)]">时长:</span> 10s · <span className="font-semibold text-[var(--text-h1)]">说明:</span> 直接测试大模型矩阵，不走完整 pipeline，10-15s 快速验证视频质量</div>
                   </div>
                 </div>
               </div>
@@ -218,11 +218,11 @@ export default function SplashScreen({ onEnter }: Props) {
 
             {/* ── Scene-specific SOP ── */}
             <section>
-              <h3 className="text-[18px] font-semibold text-[#35353B] mb-2">各场景操作 SOP</h3>
-              <p className="text-[12px] text-[#59585E] mb-4 leading-relaxed">不同场景的操作流程有差异，请按场景查阅对应 SOP。</p>
+              <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-2">各场景操作 SOP</h3>
+              <p className="text-[12px] text-[var(--text-muted)] mb-4 leading-relaxed">不同场景的操作流程有差异，请按场景查阅对应 SOP。</p>
               <div className="space-y-4">
                 {[
-                  { emoji:"📦", name:"商品直拍", color:"#FCE4E2",
+                  { emoji:"📦", name:"商品直拍", color:"rgba(215,92,112,0.10)", titleColor:"var(--fortune-red)",
                     steps:[
                       "① 输入产品名称、品牌名、核心卖点（每行一个）",
                       "②（可选）展开高级设置：使用场景、用户痛点、竞品对比、品牌语气 Do/Don't",
@@ -231,7 +231,7 @@ export default function SplashScreen({ onEnter }: Props) {
                       "⑤ Expert Studio：逐步点击「执行此步」→ 每步可查看/编辑/重做 → 4 个 Gate 关口审核 → 完成",
                     ]
                   },
-                  { emoji:"🎬", name:"品牌宣传片", color:"#F8EEE8",
+                  { emoji:"🎬", name:"品牌宣传片", color:"rgba(220,190,120,0.10)", titleColor:"var(--gold-foil)",
                     steps:[
                       "① 选择品牌规范包（从品牌资产页面预先创建）",
                       "② 输入活动主题、关键信息、目标受众",
@@ -240,7 +240,7 @@ export default function SplashScreen({ onEnter }: Props) {
                       "⑤ 品牌宣传片有 4 道人工审核（策略→脚本→成片→缩略图），每道需点击「通过」继续",
                     ]
                   },
-                  { emoji:"📱", name:"网红二创", color:"#FCE4E2",
+                  { emoji:"📱", name:"网红二创", color:"rgba(215,92,112,0.10)", titleColor:"var(--fortune-red)",
                     steps:[
                       "① 输入现有视频 URL（员工/KOL 原始口播素材）",
                       "② 输入要关联的产品名称",
@@ -249,7 +249,7 @@ export default function SplashScreen({ onEnter }: Props) {
                       "⑤ 产出多平台适配版本（Shopify/Amazon/TikTok/Reddit）",
                     ]
                   },
-                  { emoji:"📹", name:"品牌VLOG", color:"#F8EEE8",
+                  { emoji:"📹", name:"品牌VLOG", color:"rgba(220,190,120,0.10)", titleColor:"var(--gold-foil)",
                     steps:[
                       "① 选择品牌规范 + 产品 SKU（选定后六视图自动回填）",
                       "② 选择空间场景（6 选 1：职场/客厅/卧室/儿童房/户外/厨房）",
@@ -259,7 +259,7 @@ export default function SplashScreen({ onEnter }: Props) {
                       "⑥ 点击「AI生成视频」→ AI 根据六视图+模特+场景+故事生成分镜脚本 → 逐镜出片",
                     ]
                   },
-                  { emoji:"🎥", name:"实拍素材生成", color:"#FCE4E2",
+                  { emoji:"🎥", name:"实拍素材生成", color:"rgba(215,92,112,0.10)", titleColor:"var(--fortune-red)",
                     steps:[
                       "① 上传实拍素材文件（视频/图片，支持拖拽）",
                       "② 输入产品信息、主题",
@@ -267,7 +267,7 @@ export default function SplashScreen({ onEnter }: Props) {
                       "④ 合成最终成片（含 AI 配音 + 字幕）",
                     ]
                   },
-                  { emoji:"⚡", name:"快速模式", color:"#F8EEE8",
+                  { emoji:"⚡", name:"快速模式", color:"rgba(220,190,120,0.10)", titleColor:"var(--gold-foil)",
                     steps:[
                       "① 输入一段描述（中英文均可，建议包含：产品+场景+氛围）",
                       "② 选择时长（10s 或 15s）",
@@ -276,12 +276,12 @@ export default function SplashScreen({ onEnter }: Props) {
                     ]
                   },
                 ].map((s, i) => (
-                  <div key={i} className="rounded-xl bg-white border border-[#EDD3D1] overflow-hidden">
-                    <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: s.color, borderBottom: "1px solid #EDD3D1" }}>
+                  <div key={i} className="rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)] overflow-hidden">
+                    <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: s.color, borderBottom: "1px solid var(--border-default)" }}>
                       <span>{s.emoji}</span>
-                      <span className="text-[13px] font-semibold text-[#6A2B3A]">{s.name}</span>
+                      <span className="text-[13px] font-semibold" style={{ color: s.titleColor }}>{s.name}</span>
                     </div>
-                    <div className="p-4 space-y-1.5 text-[12px] text-[#59585E] leading-relaxed">
+                    <div className="p-4 space-y-1.5 text-[12px] text-[var(--text-body)] leading-relaxed">
                       {s.steps.map((st, j) => <div key={j}>{st}</div>)}
                     </div>
                   </div>
@@ -291,14 +291,14 @@ export default function SplashScreen({ onEnter }: Props) {
 
             {/* ── Notices ── */}
             <section>
-              <h3 className="text-[18px] font-semibold text-[#35353B] mb-4">注意事项</h3>
+              <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-4">注意事项</h3>
               <div className="space-y-2">
                 {NOTICES.map((n, i) => (
-                  <div key={i} className="flex gap-3 p-4 rounded-xl bg-[#FFF0EF] border border-[#EDD3D1]">
-                    <span className="text-[#6A2B3A] text-sm shrink-0 mt-0.5">⚠</span>
+                  <div key={i} className="flex gap-3 p-4 rounded-xl bg-[var(--film-reel)] border border-[var(--border-default)]">
+                    <span className="text-[var(--gold-foil)] text-sm shrink-0 mt-0.5">⚠</span>
                     <div>
-                      <div className="text-[13px] font-semibold text-[#35353B]">{n.title}</div>
-                      <div className="text-[12px] text-[#59585E] leading-relaxed mt-0.5">{n.desc}</div>
+                      <div className="text-[13px] font-semibold text-[var(--text-h1)]">{n.title}</div>
+                      <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-0.5">{n.desc}</div>
                     </div>
                   </div>
                 ))}
@@ -308,7 +308,7 @@ export default function SplashScreen({ onEnter }: Props) {
             {/* ── Footer CTA ── */}
             <div className="text-center pt-4">
               <button onClick={() => { setShowGuide(false); handleEnter(); }}
-                className="px-10 py-3.5 rounded-xl text-[16px] font-semibold text-white bg-[#6A2B3A] hover:bg-[#4E1F2A] active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-[#6A2B3A]/20">
+                className="px-10 py-3.5 rounded-xl text-[16px] font-semibold text-white bg-[var(--fortune-red)] hover:bg-[var(--neon-red)] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_24px_rgba(255,77,106,0.35)]">
                 {t("splash.enter")}
               </button>
             </div>
@@ -318,10 +318,10 @@ export default function SplashScreen({ onEnter }: Props) {
 
       {/* ── Blueprint IFrame Modal ── */}
       {showBlueprint && (
-        <div className="absolute inset-0 z-50 flex flex-col bg-[#FEF9F6]">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-[#EDD3D1] bg-[#FEF9F6]/90 backdrop-blur-md">
-            <span className="text-[14px] font-semibold text-[#35353B]">{t("splash.blueprint")}</span>
-            <button onClick={() => setShowBlueprint(false)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[13px] font-medium text-[#59585E] hover:bg-[#FCE4E2] hover:text-[#6A2B3A] transition-colors cursor-pointer">
+        <div className="absolute inset-0 z-50 flex flex-col bg-[var(--cinema-black)]">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-default)] bg-[var(--cinema-black)]/90 backdrop-blur-md">
+            <span className="text-[14px] font-semibold text-[var(--text-h1)]">{t("splash.blueprint")}</span>
+            <button onClick={() => setShowBlueprint(false)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[13px] font-medium text-[var(--text-muted)] hover:bg-[rgba(215,92,112,0.10)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
               返回
             </button>
@@ -337,7 +337,7 @@ export default function SplashScreen({ onEnter }: Props) {
         .animate-lens-breathe { animation: lensBreathe 3s ease-in-out infinite; }
         @keyframes lensBreathe { 0%,100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
         .animate-timeline-pulse { animation: timelinePulse 2s ease-in-out infinite; }
-        @keyframes timelinePulse { 0%,100% { opacity: 0.25; } 50% { opacity: 0.6; } }
+        @keyframes timelinePulse { 0%,100% { opacity: 0.45; } 50% { opacity: 0.85; } }
       `}</style>
     </div>
   );

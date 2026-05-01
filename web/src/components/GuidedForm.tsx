@@ -203,8 +203,8 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
                 }}
                 className={`text-left px-3 py-2.5 rounded-xl border transition-all ${
                   selectedVideoType === vt.id
-                    ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5 ring-1 ring-[var(--color-accent)]/20"
-                    : "border-[var(--color-border-light)] bg-white hover:border-[var(--color-border)]"
+                    ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(255,77,106,0.18)]"
+                    : "border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.04)]"
                 }`}
               >
                 <div className="text-xs font-semibold text-[var(--color-text-primary)]">
