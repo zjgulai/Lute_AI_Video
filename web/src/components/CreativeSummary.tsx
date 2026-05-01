@@ -33,7 +33,7 @@ export default function CreativeSummary({ result, onDismiss }: Props) {
       <div className="apple-card p-4 min-w-[240px] shadow-lg border border-[var(--color-accent)]/10">
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
-            <CheckCircle size={16} weight="fill" className="text-[#6B8578]" />
+            <CheckCircle size={16} weight="fill" className="text-[var(--jade-accent)]" />
             <span className="text-sm font-semibold text-[var(--color-text-primary)]">
               {t("creativeSummary.title")}
             </span>
@@ -62,7 +62,7 @@ export default function CreativeSummary({ result, onDismiss }: Props) {
           {score > 0 && (
             <div className="flex justify-between text-xs">
               <span className="text-[var(--color-text-tertiary)]">{t("creativeSummary.quality")}</span>
-              <span className="text-[#6B8578] font-medium">{Math.round(score * 100)}%</span>
+              <span className="text-[var(--jade-accent)] font-medium">{Math.round(score * 100)}%</span>
             </div>
           )}
           {platforms.length > 0 && (

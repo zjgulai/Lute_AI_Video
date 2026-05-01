@@ -268,7 +268,7 @@ export default function StageProgress({ label, onComplete }: Props) {
       {/* Full completion celebration razzle */}
       {allComplete && (
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute inset-0 bg-gradient-to-b from-[#6A2B3A]/5 via-transparent to-transparent animate-pulse" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[rgba(110,150,110,0.08)] via-transparent to-transparent animate-pulse" />
         </div>
       )}
 
@@ -280,8 +280,8 @@ export default function StageProgress({ label, onComplete }: Props) {
             <div
               className={`absolute inset-0 rounded-full transition-all duration-1000 ${
                 allComplete
-                  ? "bg-[#6A2B3A]"
-                  : "bg-[#6A2B3A]"
+                  ? "bg-[var(--jade-accent)]"
+                  : "bg-[var(--fortune-red)]"
               }`}
               style={{
                 animation: allComplete
@@ -293,17 +293,17 @@ export default function StageProgress({ label, onComplete }: Props) {
             />
             {stageStates[activeStageIdx]?.anyStarted && !allComplete && (
               <div
-                className="absolute inset-0 rounded-full bg-[#6A2B3A]/30"
+                className="absolute inset-0 rounded-full bg-[rgba(215,92,112,0.30)]"
                 style={{ animation: "stageRipple 2s ease-out infinite" }}
               />
             )}
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[#35353B] leading-tight">
+            <h3 className="text-sm font-semibold text-[var(--text-h1)] leading-tight">
               {allComplete ? t("pipeline.allDone") : t("mode.smartCreate")}
             </h3>
             {!allComplete && (
-              <p className="text-[11px] text-[#9FA0A0] leading-tight">
+              <p className="text-[11px] text-[var(--text-muted)] leading-tight">
                 {totalProgress}% &middot; {stageStates.filter((s) => s.allDone).length}/{STAGES.length} {t("step.items")}
               </p>
             )}
@@ -311,10 +311,10 @@ export default function StageProgress({ label, onComplete }: Props) {
         </div>
         {/* Elapsed counter */}
         <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-widest text-[#9FA0A0] font-medium">
+          <span className="text-[11px] uppercase tracking-widest text-[var(--text-muted)] font-medium">
             {allComplete ? t("stage.export") : t("stage.elapsed")}
           </span>
-          <span className="text-sm font-mono font-semibold text-[#35353B] tabular-nums">
+          <span className="text-sm font-mono font-semibold text-[var(--text-h1)] tabular-nums">
             {formatTime(elapsed)}
           </span>
         </div>
@@ -323,14 +323,14 @@ export default function StageProgress({ label, onComplete }: Props) {
       {/* Animated pipeline — fills as stages complete */}
       <div className="relative">
         {/* Pipeline track */}
-        <div className="absolute left-[11px] top-3 bottom-3 w-1 rounded-full bg-[#EDD3D1]" />
+        <div className="absolute left-[11px] top-3 bottom-3 w-1 rounded-full bg-[var(--border-default)]" />
 
         {/* Pipeline fill — animated gradient */}
         <div
           className="absolute left-[11px] top-3 w-1 rounded-full transition-all duration-1000 ease-out"
           style={{
             height: `${allComplete ? 100 : Math.min((totalDone / totalSteps) * 100, 100)}%`,
-            background: "linear-gradient(to bottom, #6A2B3A, #7A96BB)",
+            background: "linear-gradient(to bottom, var(--fortune-red), var(--neon-red), var(--cinema-azure))",
             opacity: totalDone > 0 ? 1 : 0,
           }}
         />
@@ -351,10 +351,10 @@ export default function StageProgress({ label, onComplete }: Props) {
                   <div
                     className={`w-[7px] h-[7px] rounded-full transition-all duration-500 ${
                       isComplete
-                        ? "bg-[#6A2B3A] shadow-[0_0_6px_rgba(124,179,66,0.4)]"
+                        ? "bg-[var(--jade-accent)] shadow-[0_0_6px_rgba(110,150,110,0.6)]"
                         : isActive
-                        ? "bg-[#6A2B3A]"
-                        : "bg-[#EDD3D1]"
+                        ? "bg-[var(--fortune-red)] shadow-[0_0_8px_rgba(215,92,112,0.6)]"
+                        : "bg-[var(--border-default)]"
                     } ${
                       celebrating ? "animate-[stagePop_0.5s_ease-out]" : ""
                     }`}
@@ -362,7 +362,7 @@ export default function StageProgress({ label, onComplete }: Props) {
                   {/* Celebration ripple */}
                   {celebrating && (
                     <div
-                      className="absolute inset-0 rounded-full bg-[#6A2B3A]/40"
+                      className="absolute inset-0 rounded-full bg-[rgba(110,150,110,0.40)]"
                       style={{
                         animation: "stageRipple 0.8s ease-out forwards",
                         transform: "scale(1)",
@@ -389,10 +389,10 @@ export default function StageProgress({ label, onComplete }: Props) {
                     <span
                       className={`text-[13px] font-medium transition-colors duration-500 ${
                         isComplete
-                          ? "text-[#35353B]"
+                          ? "text-[var(--text-h1)]"
                           : isActive
-                          ? "text-[#6A2B3A]"
-                          : "text-[#9FA0A0]"
+                          ? "text-[var(--fortune-red)]"
+                          : "text-[var(--text-muted)]"
                       }`}
                     >
                       {t(stage.label)}
@@ -408,7 +408,7 @@ export default function StageProgress({ label, onComplete }: Props) {
                       >
                         <path
                           d="M3 7.5L5.5 10L11 4"
-                          stroke="#6A2B3A"
+                          stroke="var(--jade-accent)"
                           strokeWidth="1.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -421,7 +421,7 @@ export default function StageProgress({ label, onComplete }: Props) {
                   <div className="ml-0 space-y-1.5">
                     {/* Completed */}
                     {isComplete && !isActive && (
-                      <p className="text-[11px] text-[#59585E] italic">
+                      <p className="text-[11px] text-[var(--text-body)] italic">
                         {stage.steps.filter((s) => steps[s]?.status === "done").length} {t("step.items")} &middot;{" "}
                         {t("stage.completed")}
                       </p>
@@ -430,23 +430,23 @@ export default function StageProgress({ label, onComplete }: Props) {
                     {/* Active — breathing progress */}
                     {isActive && (
                       <>
-                        <p className="text-[11px] text-[#59585E]">{statusText}</p>
-                        <div className="h-1.5 w-full bg-[#FCE4E2] rounded-full overflow-hidden">
+                        <p className="text-[11px] text-[var(--text-body)]">{statusText}</p>
+                        <div className="h-1.5 w-full bg-[var(--bg-panel)] rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all duration-1000 ease-out"
                             style={{
                               width: `${progress}%`,
                               background:
                                 stage.id === "writing"
-                                  ? "linear-gradient(to right, #C8A96E, #6A2B3A)"
+                                  ? "linear-gradient(to right, var(--gold-foil), var(--fortune-red))"
                                   : stage.id === "visuals"
-                                  ? "linear-gradient(to right, #6A2B3A, #7A96BB)"
-                                  : "linear-gradient(to right, #7A96BB, #6A2B3A)",
+                                  ? "linear-gradient(to right, var(--fortune-red), var(--neon-red), var(--cinema-azure))"
+                                  : "linear-gradient(to right, var(--cinema-azure), var(--fortune-red))",
                             }}
                           />
                         </div>
                         <div className="flex justify-between text-[11px]">
-                          <span className="text-[#9FA0A0]">
+                          <span className="text-[var(--text-muted)]">
                             {stage.steps.filter((s) => steps[s]?.status === "done").length}/{stage.steps.length}
                           </span>
                           <span
@@ -454,10 +454,10 @@ export default function StageProgress({ label, onComplete }: Props) {
                             style={{
                               color:
                                 stage.id === "writing"
-                                  ? "#C8A96E"
+                                  ? "var(--gold-foil)"
                                   : stage.id === "visuals"
-                                  ? "#7A96BB"
-                                  : "#6A2B3A",
+                                  ? "var(--cinema-azure)"
+                                  : "var(--fortune-red)",
                             }}
                           >
                             {progress}%
@@ -468,7 +468,7 @@ export default function StageProgress({ label, onComplete }: Props) {
 
                     {/* Waiting */}
                     {isWaiting && (
-                      <p className="text-[11px] text-[#9FA0A0] italic">{t("stage.waiting")}</p>
+                      <p className="text-[11px] text-[var(--text-muted)] italic">{t("stage.waiting")}</p>
                     )}
                   </div>
                 </div>
@@ -479,17 +479,17 @@ export default function StageProgress({ label, onComplete }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-3 border-t border-[#EDD3D1]">
-        <span className="text-[11px] text-[#9FA0A0]">
+      <div className="flex items-center justify-between pt-3 border-t border-[var(--border-default)]">
+        <span className="text-[11px] text-[var(--text-muted)]">
           {t("stage.elapsed")}: {formatTime(elapsed)}
         </span>
         {estimatedRemaining !== null && !allComplete && !pollError && (
-          <span className="text-[11px] text-[#59585E]">
+          <span className="text-[11px] text-[var(--text-body)]">
             {t("stage.estimatedTime")}: ~{formatTime(estimatedRemaining)}
           </span>
         )}
         {allComplete && (
-          <span className="text-[11px] font-medium text-[#6A2B3A]">
+          <span className="text-[11px] font-medium text-[var(--jade-accent)]">
             {t("pipeline.allDone")} &middot; {formatTime(elapsed)}
           </span>
         )}
@@ -541,7 +541,7 @@ function StageIcon({
   complete: boolean;
   celebrating: boolean;
 }) {
-  const color = complete ? "#6A2B3A" : active ? "#6A2B3A" : "#9FA0A0";
+  const color = complete ? "var(--jade-accent)" : active ? "var(--fortune-red)" : "var(--text-muted)";
   const size = 16;
 
   // Writing stage: quill pen — bobs when active

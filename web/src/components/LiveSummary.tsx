@@ -65,7 +65,7 @@ export default function LiveSummary({ values, cardLabels }: Props) {
       {/* 完成提示 */}
       {progress === 100 && (
         <div className="mt-3 pt-3 border-t border-[var(--color-border-light)]">
-          <p className="text-xs text-[#6B8578] font-medium">{t("summary.complete")}</p>
+          <p className="text-xs text-[var(--jade-accent)] font-medium">{t("summary.complete")}</p>
         </div>
       )}
     </div>

@@ -202,11 +202,11 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
       <div className="apple-card p-4">
         <div className="flex items-center justify-between mb-1">
           <div>
-            <h2 className="text-base font-semibold text-[#35353B]">{t("stepbystep.title")}</h2>
-            <p className="text-[11px] text-[#59585E] mt-0.5 font-mono">{t("stepbystep.runId")}: {label}</p>
+            <h2 className="text-base font-semibold text-[var(--text-h1)]">{t("stepbystep.title")}</h2>
+            <p className="text-[11px] text-[var(--text-body)] mt-0.5 font-mono">{t("stepbystep.runId")}: {label}</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${allDone ? "bg-[#6A2B3A]/10 text-[#6A2B3A]" : "bg-[#ff9500]/10 text-[#ff9500]"}`}>
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${allDone ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]" : "bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)]"}`}>
               {allDone ? t("step.allDone") : t("step.executing")}
             </span>
           </div>
@@ -234,10 +234,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
                 <div
                   className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all cursor-pointer ${
                     isDone
-                      ? "bg-[#FCE4E2] border-[#EDD3D1] hover:bg-[#f0f0f2]"
+                      ? "bg-[var(--bg-panel)] border-[var(--border-default)] hover:bg-[rgba(215,92,112,0.10)]"
                       : isCurrent
-                      ? "bg-white border-[#6A2B3A] ring-1 ring-[#6A2B3A]/20"
-                      : "bg-[#FFF5F2] border-[#EDD3D1] opacity-60"
+                      ? "bg-[var(--bg-card)] border-[var(--fortune-red)] ring-1 ring-[rgba(215,92,112,0.20)]"
+                      : "bg-[var(--bg-card)] border-[var(--border-default)] opacity-60"
                   }`}
                   onClick={() => {
                     if (isDone && !isEditing) {
@@ -245,20 +245,20 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
                     }
                   }}
                 >
-                  <span className="text-[11px] font-mono text-[#9FA0A0] w-5 shrink-0">{index + 1}</span>
+                  <span className="text-[11px] font-mono text-[var(--text-muted)] w-5 shrink-0">{index + 1}</span>
 
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${isDone ? "bg-[#6A2B3A]" : isCurrent ? "bg-[#ff9500] animate-pulse" : "bg-[#EDD3D1]"}`} />
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${isDone ? "bg-[var(--jade-accent)]" : isCurrent ? "bg-[var(--gold-foil)] animate-pulse" : "bg-[var(--border-default)]"}`} />
 
-                  <span className={`text-xs font-medium flex-1 min-w-0 ${isDone ? "text-[#35353B]" : isCurrent ? "text-[#35353B]" : "text-[#9FA0A0]"}`}>
+                  <span className={`text-xs font-medium flex-1 min-w-0 ${isDone ? "text-[var(--text-h1)]" : isCurrent ? "text-[var(--text-h1)]" : "text-[var(--text-muted)]"}`}>
                     {t(STEP_LABELS[stepName])}
                     {isDone && getOutputPreview(stepName) && (
-                      <span className="ml-2 text-[11px] text-[#9FA0A0] font-normal">
+                      <span className="ml-2 text-[11px] text-[var(--text-muted)] font-normal">
                         {getOutputPreview(stepName)}
                       </span>
                     )}
                   </span>
 
-                  <span className={`text-[11px] font-medium shrink-0 ${isDone ? "text-[#6A2B3A]" : isCurrent ? "text-[#ff9500]" : "text-[#9FA0A0]"}`}>
+                  <span className={`text-[11px] font-medium shrink-0 ${isDone ? "text-[var(--jade-accent)]" : isCurrent ? "text-[var(--gold-foil)]" : "text-[var(--text-muted)]"}`}>
                     {isDone ? t("step.done") : isCurrent ? t("step.pending") : t("step.notStarted")}
                   </span>
 
@@ -267,20 +267,20 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={(e) => { e.stopPropagation(); setViewingStep(viewingStep === stepName ? null : stepName); }}
-                        className="text-[11px] text-[#6A2B3A] hover:underline cursor-pointer px-1.5 py-0.5 rounded hover:bg-[#6A2B3A]/5"
+                        className="text-[11px] text-[var(--fortune-red)] hover:underline cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.05)]"
                       >
                         {viewingStep === stepName ? t("step.hide") : t("step.view")}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); openEditor(stepName); }}
-                        className="text-[11px] text-[#59585E] hover:text-[#35353B] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[#EDD3D1]/50"
+                        className="text-[11px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.18)]"
                       >
                         {t("step.edit")}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setConfirmRegen(confirmRegen === stepName ? null : stepName); }}
                         disabled={loading}
-                        className="text-[11px] text-[#59585E] hover:text-[#C45B50] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[#C45B50]/5 disabled:opacity-50"
+                        className="text-[11px] text-[var(--text-body)] hover:text-[var(--crimson-mist)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(196,91,80,0.05)] disabled:opacity-50"
                       >
                         {t("step.regenerate")}
                       </button>
@@ -303,7 +303,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRunStep(stepName); }}
                       disabled={loading}
-                      className="text-[11px] text-[#59585E] hover:text-[#35353B] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[#EDD3D1]/50 shrink-0"
+                      className="text-[11px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.18)] shrink-0"
                     >
                       {t("step.run")}
                     </button>
@@ -312,38 +312,38 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
                 {/* Regenerate confirmation warning */}
                 {confirmRegen === stepName && (
-                  <div className="ml-7 mt-1 mb-1 p-2.5 rounded-lg bg-[#fff5f5] border border-[#C45B50]/20 animate-slide-up">
+                  <div className="ml-7 mt-1 mb-1 p-2.5 rounded-lg bg-[rgba(196,91,80,0.08)] border border-[rgba(196,91,80,0.20)] animate-slide-up">
                     <div className="flex items-start gap-2">
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 mt-0.5">
-                        <circle cx="7" cy="7" r="6" stroke="#C45B50" strokeWidth="1.2" />
-                        <line x1="7" y1="4" x2="7" y2="8" stroke="#C45B50" strokeWidth="1.2" strokeLinecap="round" />
-                        <circle cx="7" cy="10" r="0.8" fill="#C45B50" />
+                        <circle cx="7" cy="7" r="6" stroke="var(--crimson-mist)" strokeWidth="1.2" />
+                        <line x1="7" y1="4" x2="7" y2="8" stroke="var(--crimson-mist)" strokeWidth="1.2" strokeLinecap="round" />
+                        <circle cx="7" cy="10" r="0.8" fill="var(--crimson-mist)" />
                       </svg>
                       <div className="flex-1">
-                        <p className="text-[11px] font-medium text-[#C45B50] mb-1">
+                        <p className="text-[11px] font-medium text-[var(--crimson-mist)] mb-1">
                           {t("step.regenerateWarning")} &ldquo;{t(STEP_LABELS[stepName])}&rdquo; {t("step.downstreamWarning")}
                         </p>
                         <div className="flex flex-wrap gap-1 mb-2">
                           {downstream.map((ds) => (
-                            <span key={ds} className="text-[11px] px-1.5 py-0.5 rounded bg-[#C45B50]/10 text-[#C45B50]">
+                            <span key={ds} className="text-[11px] px-1.5 py-0.5 rounded bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)]">
                               {t(STEP_LABELS[ds]) || ds}
                             </span>
                           ))}
                           {downstream.length === 0 && (
-                            <span className="text-[11px] text-[#59585E]">{t("step.noDownstream")}</span>
+                            <span className="text-[11px] text-[var(--text-body)]">{t("step.noDownstream")}</span>
                           )}
                         </div>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleRegenerate(stepName)}
                             disabled={loading}
-                            className="text-[11px] bg-[#C45B50] text-white px-2.5 py-1 rounded-lg hover:bg-[#C45B50]/90 disabled:opacity-50"
+                            className="text-[11px] bg-[var(--crimson-mist)] text-white px-2.5 py-1 rounded-lg hover:bg-[var(--neon-red)] disabled:opacity-50"
                           >
                             {loading ? t("step.regenerating") : t("step.confirmRegen")}
                           </button>
                           <button
                             onClick={() => setConfirmRegen(null)}
-                            className="text-[11px] text-[#59585E] px-2.5 py-1 rounded-lg hover:bg-[#EDD3D1]/50"
+                            className="text-[11px] text-[var(--text-body)] px-2.5 py-1 rounded-lg hover:bg-[rgba(215,92,112,0.18)]"
                           >
                             {t("step.cancel")}
                           </button>
@@ -362,17 +362,17 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
                 {/* Inline editor */}
                 {isEditing && (
-                  <div className="ml-7 mt-1 mb-1 p-3 rounded-lg bg-white border border-[#6A2B3A] ring-1 ring-[#6A2B3A]/20 animate-slide-up">
+                  <div className="ml-7 mt-1 mb-1 p-3 rounded-lg bg-[var(--bg-card)] border border-[var(--fortune-red)] ring-1 ring-[rgba(215,92,112,0.20)] animate-slide-up">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-semibold text-[#35353B]">
+                      <span className="text-[11px] font-semibold text-[var(--text-h1)]">
                         {t("step.editTitle")} &ldquo;{t(STEP_LABELS[stepName])}&rdquo; {t("step.editOutput")}
                       </span>
-                      <span className="text-[11px] text-[#9FA0A0]">{t("step.editDesc")}</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">{t("step.editDesc")}</span>
                     </div>
                     <textarea
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="w-full min-h-[120px] p-2.5 text-[11px] font-mono text-[#35353B] bg-[#FFF5F2] border border-[#EDD3D1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6A2B3A]/30 focus:border-[#6A2B3A] resize-y"
+                      className="w-full min-h-[120px] p-2.5 text-[11px] font-mono text-[var(--text-h1)] bg-[var(--bg-card)] border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgba(215,92,112,0.30)] focus:border-[var(--fortune-red)] resize-y"
                       placeholder={t("step.jsonPlaceholder")}
                     />
                     <div className="flex gap-2 mt-2">
@@ -385,7 +385,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
                       </button>
                       <button
                         onClick={cancelEdit}
-                        className="text-[11px] text-[#59585E] px-3 py-1.5 rounded-lg hover:bg-[#EDD3D1]/50"
+                        className="text-[11px] text-[var(--text-body)] px-3 py-1.5 rounded-lg hover:bg-[rgba(215,92,112,0.18)]"
                       >
                         {t("step.cancel")}
                       </button>
@@ -398,7 +398,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
         </div>
 
         {/* Bottom actions */}
-        <div className="mt-4 pt-3 border-t border-[#EDD3D1] space-y-2">
+        <div className="mt-4 pt-3 border-t border-[var(--border-default)] space-y-2">
           <button
             onClick={handleResume}
             disabled={loading || allDone}
@@ -409,7 +409,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
           {!allDone && (
             <div className="flex items-center justify-center gap-2">
-              <span className="text-[11px] text-[#9FA0A0]">
+              <span className="text-[11px] text-[var(--text-muted)]">
                 {t("stepbystep.progress")} {STEP_ORDER.filter((s) => (steps[s] || {}).status === "done").length}{t("stepbystep.of")}{STEP_ORDER.length}
               </span>
             </div>
@@ -417,9 +417,9 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
           {allDone && (
             <div className="text-center">
-              <div className="inline-flex items-center gap-1.5 text-xs text-[#6A2B3A] font-medium">
+              <div className="inline-flex items-center gap-1.5 text-xs text-[var(--jade-accent)] font-medium">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M3 6.5L5 8.5L9 3.5" stroke="#6A2B3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M3 6.5L5 8.5L9 3.5" stroke="var(--jade-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 {t("stepbystep.stepsComplete")}
               </div>
@@ -435,30 +435,30 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
 function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   const { t } = useI18n();
-  if (!output) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noOutput")}</p>;
+  if (!output) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noOutput")}</p>;
 
   if (stepName === "strategy" || stepName === "compliance") {
     const briefs = Array.isArray(output) ? output : output.briefs || output.reports || [];
-    if (briefs.length === 0) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noData")}</p>;
+    if (briefs.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noData")}</p>;
     return (
       <div className="space-y-2 p-2">
         {briefs.map((b: any, i: number) => (
-          <div key={i} className="apple-card p-3 bg-[#FFF5F2]">
+          <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-start gap-2 mb-1">
               {b.platform && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#6A2B3A]/10 text-[#6A2B3A] shrink-0">
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] shrink-0">
                   {t("platform." + b.platform)}
                 </span>
               )}
               {b.hook_type && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#59585E]/10 text-[#59585E]">
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
                   {b.hook_type}
                 </span>
               )}
             </div>
-            <h4 className="text-sm font-semibold text-[#35353B] mb-1">{b.product_name || b.brand_name || "Item"}</h4>
-            {b.description && <p className="text-xs text-[#59585E] leading-relaxed">{b.description}</p>}
-            {b.key_message && <p className="text-xs text-[#59585E] leading-relaxed mt-1">{b.key_message}</p>}
+            <h4 className="text-sm font-semibold text-[var(--text-h1)] mb-1">{b.product_name || b.brand_name || "Item"}</h4>
+            {b.description && <p className="text-xs text-[var(--text-body)] leading-relaxed">{b.description}</p>}
+            {b.key_message && <p className="text-xs text-[var(--text-body)] leading-relaxed mt-1">{b.key_message}</p>}
           </div>
         ))}
       </div>
@@ -467,28 +467,28 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
 
   if (stepName === "scripts") {
     const scripts = Array.isArray(output) ? output : output.scripts || [];
-    if (scripts.length === 0) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noScript")}</p>;
+    if (scripts.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noScript")}</p>;
     return (
       <div className="space-y-2 p-2">
         {scripts.map((s: any, i: number) => (
           <details key={i} className="apple-card overflow-hidden">
             <summary className="p-3 cursor-pointer flex items-center gap-2 list-none">
-              <span className="text-[11px] font-mono text-[#9FA0A0]">{s.id || `S${i + 1}`}</span>
-              <span className="text-sm font-medium text-[#35353B] flex-1">{s.product_name || s.brand_name || "Script"}</span>
-              <span className="text-[11px] text-[#9FA0A0]">{(s.segments || []).length}{t("step.segments")}</span>
+              <span className="text-[11px] font-mono text-[var(--text-muted)]">{s.id || `S${i + 1}`}</span>
+              <span className="text-sm font-medium text-[var(--text-h1)] flex-1">{s.product_name || s.brand_name || "Script"}</span>
+              <span className="text-[11px] text-[var(--text-muted)]">{(s.segments || []).length}{t("step.segments")}</span>
             </summary>
-            <div className="px-3 pb-3 space-y-2 border-t border-[#EDD3D1] pt-2">
+            <div className="px-3 pb-3 space-y-2 border-t border-[var(--border-default)] pt-2">
               {(s.segments || []).map((seg: any, j: number) => (
-                <div key={j} className="pl-3 border-l-2 border-[#EDD3D1]">
+                <div key={j} className="pl-3 border-l-2 border-[var(--border-default)]">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[11px] font-semibold text-[#6A2B3A] uppercase">{seg.segment_type}</span>
-                    <span className="text-[11px] text-[#9FA0A0] font-mono">
+                    <span className="text-[11px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
+                    <span className="text-[11px] text-[var(--text-muted)] font-mono">
                       {seg.start_time ?? 0}s — {seg.end_time ?? 0}s
                     </span>
                   </div>
-                  <p className="text-xs text-[#35353B]">{seg.voiceover || seg.description}</p>
+                  <p className="text-xs text-[var(--text-h1)]">{seg.voiceover || seg.description}</p>
                   {seg.visual_description && (
-                    <p className="text-[11px] text-[#59585E] mt-1 italic">{seg.visual_description}</p>
+                    <p className="text-[11px] text-[var(--text-body)] mt-1 italic">{seg.visual_description}</p>
                   )}
                 </div>
               ))}
@@ -501,16 +501,16 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
 
   if (stepName === "storyboards") {
     const boards = Array.isArray(output) ? output : output.storyboards || [];
-    if (boards.length === 0) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noStoryboard")}</p>;
+    if (boards.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noStoryboard")}</p>;
     return (
       <div className="space-y-2 p-2">
         {boards.map((board: any, i: number) => (
-          <div key={i} className="apple-card p-3 bg-[#FFF5F2]">
+          <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-mono text-[#9FA0A0]">{board.script_id || `Board ${i + 1}`}</span>
-              <span className="text-[11px] text-[#9FA0A0]">{board.total_duration || "?"}s</span>
+              <span className="text-[11px] font-mono text-[var(--text-muted)]">{board.script_id || `Board ${i + 1}`}</span>
+              <span className="text-[11px] text-[var(--text-muted)]">{board.total_duration || "?"}s</span>
             </div>
-            <p className="text-[11px] text-[#59585E]">{(board.shots || []).length}{t("step.shots")}</p>
+            <p className="text-[11px] text-[var(--text-body)]">{(board.shots || []).length}{t("step.shots")}</p>
           </div>
         ))}
       </div>
@@ -519,13 +519,13 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
 
   if (stepName === "video_prompts" || stepName === "thumbnail_prompts") {
     const items = Array.isArray(output) ? output : output.prompts || output.variants || [];
-    if (items.length === 0) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noData")}</p>;
+    if (items.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noData")}</p>;
     return (
       <div className="space-y-1 p-2">
         {items.map((item: any, i: number) => (
-          <div key={i} className="apple-card p-2 bg-[#FFF5F2]">
-            <p className="text-[11px] font-mono text-[#9FA0A0] mb-1">{item.script_id || `Item ${i + 1}`}</p>
-            <p className="text-[11px] text-[#35353B] font-mono whitespace-pre-wrap break-all">
+          <div key={i} className="apple-card p-2 bg-[var(--bg-card)]">
+            <p className="text-[11px] font-mono text-[var(--text-muted)] mb-1">{item.script_id || `Item ${i + 1}`}</p>
+            <p className="text-[11px] text-[var(--text-h1)] font-mono whitespace-pre-wrap break-all">
               {typeof item.prompt === "string" ? item.prompt.slice(0, 200) : JSON.stringify(item).slice(0, 200)}
             </p>
           </div>
@@ -538,19 +538,19 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
     const isNewFormat = output && !Array.isArray(output) && output.clip_paths;
     const paths = isNewFormat ? output.clip_paths : (Array.isArray(output) ? output : []);
     const details = isNewFormat ? (output.clip_details || []) : [];
-    if (paths.length === 0) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noMedia")}</p>;
+    if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2 space-y-1">
         {paths.map((path: string, i: number) => {
           const meta = details[i] || {};
           const name = path.split("/").pop() || path;
           return (
-            <div key={i} className="flex items-center gap-2 text-[11px] font-mono text-[#59585E]">
-              <span className="w-1 h-1 rounded-full bg-[#6A2B3A] shrink-0" />
+            <div key={i} className="flex items-center gap-2 text-[11px] font-mono text-[var(--text-body)]">
+              <span className="w-1 h-1 rounded-full bg-[var(--fortune-red)] shrink-0" />
               <span className="truncate">{name}</span>
-              {meta.duration > 0 && <span className="text-[#9FA0A0] shrink-0">{meta.duration.toFixed(1)}s</span>}
-              {meta.is_stub && <span className="text-[#ff9500] shrink-0">[stub]</span>}
-              {meta.is_filler && <span className="text-[#7A96BB] shrink-0">[filler]</span>}
+              {meta.duration > 0 && <span className="text-[var(--text-muted)] shrink-0">{meta.duration.toFixed(1)}s</span>}
+              {meta.is_stub && <span className="text-[var(--gold-foil)] shrink-0">[stub]</span>}
+              {meta.is_filler && <span className="text-[var(--cinema-azure)] shrink-0">[filler]</span>}
             </div>
           );
         })}
@@ -562,14 +562,14 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
     const paths = Array.isArray(output)
       ? output
       : (output.audio_paths || []);
-    if (paths.length === 0) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noMedia")}</p>;
+    if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2">
-        <p className="text-[11px] text-[#59585E]">{paths.length}{t("step.files")}</p>
+        <p className="text-[11px] text-[var(--text-body)]">{paths.length}{t("step.files")}</p>
         <div className="space-y-1 mt-1">
           {paths.map((path: string, i: number) => (
-            <div key={i} className="flex items-center gap-1 text-[11px] font-mono text-[#59585E] truncate">
-              <span className="w-1 h-1 rounded-full bg-[#6A2B3A] shrink-0" />
+            <div key={i} className="flex items-center gap-1 text-[11px] font-mono text-[var(--text-body)] truncate">
+              <span className="w-1 h-1 rounded-full bg-[var(--fortune-red)] shrink-0" />
               {path.split("/").pop() || path}
             </div>
           ))}
@@ -580,14 +580,14 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
 
   if (stepName === "thumbnail_images") {
     const paths = Array.isArray(output) ? output : [];
-    if (paths.length === 0) return <p className="text-xs text-[#9FA0A0] p-2">{t("step.noMedia")}</p>;
+    if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2">
-        <p className="text-[11px] text-[#59585E]">{paths.length}{t("step.files")}</p>
+        <p className="text-[11px] text-[var(--text-body)]">{paths.length}{t("step.files")}</p>
         <div className="space-y-1 mt-1">
           {paths.map((path: string, i: number) => (
-            <div key={i} className="flex items-center gap-1 text-[11px] font-mono text-[#59585E] truncate">
-              <span className="w-1 h-1 rounded-full bg-[#6A2B3A] shrink-0" />
+            <div key={i} className="flex items-center gap-1 text-[11px] font-mono text-[var(--text-body)] truncate">
+              <span className="w-1 h-1 rounded-full bg-[var(--fortune-red)] shrink-0" />
               {path.split("/").pop() || path}
             </div>
           ))}
@@ -598,18 +598,18 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
 
   if (stepName === "assemble_final") {
     if (typeof output === "string") {
-      return <p className="text-xs text-[#59585E] p-2">{output}</p>;
+      return <p className="text-xs text-[var(--text-body)] p-2">{output}</p>;
     }
     if (Array.isArray(output)) {
-      return <p className="text-xs text-[#59585E] p-2">{output[0] || "N/A"}</p>;
+      return <p className="text-xs text-[var(--text-body)] p-2">{output[0] || "N/A"}</p>;
     }
     return (
       <div className="p-2">
-        <p className="text-xs text-[#59585E]">
+        <p className="text-xs text-[var(--text-body)]">
           {output.video_path || output[0] || "N/A"}
         </p>
         {output.render_json_path && (
-          <p className="text-xs text-[#59585E] mt-1">
+          <p className="text-xs text-[var(--text-body)] mt-1">
             {output.render_json_path}
           </p>
         )}
@@ -624,28 +624,28 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
         <div className="flex items-center gap-2">
           <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
             report.overall_status === "PASS"
-              ? "bg-[#6A2B3A]/10 text-[#6A2B3A]"
+              ? "bg-[rgba(110,150,110,0.12)] text-[var(--jade-accent)]"
               : report.overall_status === "WARN"
-              ? "bg-[#ff9500]/10 text-[#ff9500]"
-              : "bg-[#C45B50]/10 text-[#C45B50]"
+              ? "bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)]"
+              : "bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)]"
           }`}>
             {report.overall_status || "UNKNOWN"}
           </span>
           {report.overall_score != null && (
-            <span className="text-[11px] text-[#59585E]">
+            <span className="text-[11px] text-[var(--text-body)]">
               {(report.overall_score * 100).toFixed(0)}%
             </span>
           )}
         </div>
-        {report.summary && <p className="text-xs text-[#59585E]">{report.summary}</p>}
+        {report.summary && <p className="text-xs text-[var(--text-body)]">{report.summary}</p>}
         {report.criteria && (
           <div className="space-y-0.5 mt-1">
             {report.criteria.map((c: any, i: number) => (
               <div key={i} className="flex items-center gap-1.5">
                 <span className={`w-1 h-1 rounded-full ${
-                  c.status === "PASS" ? "bg-[#6A2B3A]" : c.status === "WARN" ? "bg-[#ff9500]" : "bg-[#C45B50]"
+                  c.status === "PASS" ? "bg-[var(--jade-accent)]" : c.status === "WARN" ? "bg-[var(--gold-foil)]" : "bg-[var(--crimson-mist)]"
                 }`} />
-                <span className="text-[11px] text-[#35353B]">{c.name}</span>
+                <span className="text-[11px] text-[var(--text-h1)]">{c.name}</span>
               </div>
             ))}
           </div>
@@ -655,7 +655,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   return (
-    <pre className="text-[11px] font-mono text-[#59585E] bg-[#FFF5F2] p-3 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all">
+    <pre className="text-[11px] font-mono text-[var(--text-body)] bg-[var(--bg-card)] p-3 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all">
       {JSON.stringify(output, null, 2)}
     </pre>
   );
