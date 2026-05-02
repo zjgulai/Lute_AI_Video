@@ -50,8 +50,10 @@ except ImportError:
 
 logger = structlog.get_logger()
 
-# Timeout per LLM call in seconds — prevents pipeline hangs on dead connections
-LLM_TIMEOUT_SECONDS = 120.0
+# Timeout per LLM call in seconds — prevents pipeline hangs on dead connections.
+# 60s lets DeepSeek finish typical 80-150 word structured outputs while keeping
+# the fallback-to-raw-prompt path responsive when the upstream API is sluggish.
+LLM_TIMEOUT_SECONDS = 60.0
 
 # Per-request API keys — prevents cross-request contamination via os.environ.
 # Set by api.py _inject_api_keys before pipeline execution.
@@ -232,12 +234,15 @@ class LLMClient:
 
 
 async def _async_invoke(client, messages):
-    """Run the synchronous LangChain invoke in a thread.
+    """Use LangChain's native async invoke.
 
-    This avoids blocking the event loop and allows asyncio.wait_for
-    to cancel the call when it times out.
+    `client.ainvoke` runs through httpx's async client, so asyncio.wait_for
+    can actually cancel the request (cancellation propagates to httpx, which
+    closes the underlying connection). The earlier `asyncio.to_thread(
+    client.invoke, ...)` approach left zombie threads on timeout because
+    sync httpx ignores task cancellation.
     """
-    return await asyncio.to_thread(client.invoke, messages)
+    return await client.ainvoke(messages)
 
 
 # Global singleton

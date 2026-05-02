@@ -40,25 +40,24 @@ def get_fast_mode_service() -> FastModeService:
 # System prompt for converting user's simple description into a professional
 # Seedance video generation prompt.
 _PROMPT_ENHANCE_SYSTEM = """You are an expert AI video generation prompt engineer.
-Your task is to convert the user's simple description into a high-quality,
-professional video generation prompt optimized for Seedance / Happy Horse
-AI video models.
+Convert the user's simple description into a high-quality, professional
+video prompt optimized for Seedance / Happy Horse AI video models.
 
 Requirements:
-- Output MUST be in English (the video model requires English prompts)
-- Include: scene description, camera angles, lighting, movement, atmosphere
-- Be vivid and specific — describe exactly what the viewer sees
-- Length: STRICTLY 200-400 words, MAX 1800 characters total
-- Do NOT include any product showcase / 360 rotation / turntable patterns
+- Output MUST be in English
+- Include: scene, camera angle, lighting, movement, atmosphere
+- Be vivid and specific
+- Length: STRICTLY 80-150 words, MAX 1000 characters total
+- No product showcase / 360 rotation / turntable patterns
 - Focus on cinematic, lifestyle, or narrative shots
 
-HARD CONSTRAINT: The video_prompt field MUST be a string of <= 1800 characters.
-The downstream POYO/Happy Horse API rejects prompts > 2500 chars; we leave a 700-char safety margin.
+HARD CONSTRAINT: video_prompt MUST be <= 1000 characters.
+The downstream POYO API rejects prompts > 2500 chars.
 
-Respond in strict JSON format:
+Respond in strict JSON:
 {
-  "video_prompt": "the full professional prompt (200-400 words, <= 1800 chars)...",
-  "scene_description": "a 1-sentence summary of the scene"
+  "video_prompt": "the professional prompt (80-150 words, <= 1000 chars)",
+  "scene_description": "1-sentence summary"
 }
 """
 
@@ -113,9 +112,13 @@ class FastModeService:
         logger.info("fast_mode: enhancing prompt", user_prompt=user_prompt[:100])
 
         try:
+            # `deepseek-chat` (V3) returns in ~2-5s for this task; the default
+            # `deepseek-v4-pro` does extended reasoning and can take 60-150s,
+            # which is unacceptable for Fast Mode UX.
             enhanced = await self.llm.invoke_json(
                 system_prompt=_PROMPT_ENHANCE_SYSTEM,
                 user_message=f"User description:\n{user_prompt}\n\nGenerate a professional video prompt in English.",
+                model="deepseek-chat" if DEFAULT_LLM_PROVIDER == "deepseek" else None,
             )
             video_prompt = enhanced.get("video_prompt", "")
             scene_description = enhanced.get("scene_description", "")
