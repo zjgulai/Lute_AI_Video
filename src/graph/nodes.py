@@ -6,6 +6,7 @@ All 12 + 4 audit nodes are decorated with @timed_node for metrics collection.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import structlog

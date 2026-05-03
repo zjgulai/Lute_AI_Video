@@ -38,14 +38,14 @@ def _get_override(checkpoint_key: str) -> dict | None:
 
 def _set_override(checkpoint_key: str, value: dict) -> None:
     """Set the D10 routing override for a checkpoint (thread-safe)."""
-    current = dict(_get_override())
+    current = dict(_HUMAN_REVIEW_OVERRIDE.get())
     current[checkpoint_key] = value
     _HUMAN_REVIEW_OVERRIDE.set(current)
 
 
 def _pop_override(checkpoint_key: str) -> None:
     """Remove the D10 routing override for a checkpoint (thread-safe)."""
-    current = dict(_get_override())
+    current = dict(_HUMAN_REVIEW_OVERRIDE.get())
     current.pop(checkpoint_key, None)
     _HUMAN_REVIEW_OVERRIDE.set(current)
 
