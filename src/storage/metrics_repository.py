@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    # video_metrics columns are TIMESTAMP (no tz) — match schema by returning
+    # naive UTC. asyncpg refuses to compare a tz-aware param against a tz-naive
+    # column, so we strip tzinfo here.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _generate_id() -> str:
