@@ -1,5 +1,7 @@
 """scenario router — extracted from api.py (P1-11)."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Depends
 
 try:
