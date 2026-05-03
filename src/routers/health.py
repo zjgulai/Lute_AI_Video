@@ -3,9 +3,9 @@
 from fastapi import APIRouter
 
 try:
-    from src.storage import HAS_STORAGE
     from src.storage.db import check_pg_health, is_pg_available
     from src.tools.remotion_renderer import RemotionRenderer
+    HAS_STORAGE = True
 except ImportError:
     HAS_STORAGE = False
 
