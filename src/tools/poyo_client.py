@@ -68,6 +68,24 @@ class PoyoClient:
             httpx.HTTPStatusError: on non-2xx from submit endpoint.
             RuntimeError: if submit response indicates failure.
         """
+        # Apply content-moderation sanitization to any prompt-bearing key.
+        # POYO rejects common maternal/baby terms ("breast pump", "lactation",
+        # "吸奶器") with a 'content does not comply' error; sanitizer maps them
+        # to neutral product-equivalent phrases that preserve visual intent.
+        from src.tools.poyo_safety import sanitize_for_poyo
+
+        for key in ("prompt",):
+            val = input_payload.get(key)
+            if isinstance(val, str) and val:
+                cleaned, subs = sanitize_for_poyo(val)
+                if subs:
+                    logger.info(
+                        "poyo_safety: prompt sanitized",
+                        key=key,
+                        substitutions=subs,
+                    )
+                    input_payload = {**input_payload, key: cleaned}
+
         body = {"model": model, "input": input_payload}
         logger.info("poyo: submitting", model=model, keys=list(input_payload.keys()))
         import json as _json

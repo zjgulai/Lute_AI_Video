@@ -296,6 +296,18 @@ class SeedanceClient:
             last_space = cut.rfind(" ")
             prompt = cut[:last_space] if last_space > 0 else cut
 
+        # POYO content moderation rejects maternal/baby terms ("breast pump",
+        # "lactation", "吸奶器"). Sanitize trigger phrases to neutral product
+        # equivalents before submit. Same defense applies in poyo_client.submit
+        # for image generation.
+        from src.tools.poyo_safety import sanitize_for_poyo
+        prompt, _safety_subs = sanitize_for_poyo(prompt)
+        if _safety_subs:
+            logger.info(
+                "poyo_safety: video prompt sanitized",
+                substitutions=_safety_subs,
+            )
+
         aspect_ratio = "16:9"
 
         # Happy Horse input schema:
