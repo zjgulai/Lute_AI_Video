@@ -593,27 +593,81 @@ Key test areas:
 
 ## Known Gaps and TODOs
 
-From the 2026-05-03 production-readiness review:
+最近一次盘点:2026-05-04(Phase D 5 场景 e2e 通过后)。
+
+### 1. 已知功能缺陷(Phase D 期间观察到,未阻塞交付)
+
+- **Audit 形态 bug(F1, P1)** D4(S2)/D5(S3)的 auditor 误报
+  `audio_coverage` / `thumbnail_brand_alignment` / `thumbnail_count` FAIL,但磁盘上 audio
+  和 4 张 thumbnail 都真实存在。根因是 audit 函数读 `audio_paths` / `thumbnail_image_paths`
+  时假设 dict 形态,但 TTS / thumbnail skill 输出的是 list(或反之)。功能不受影响,只影响
+  audit 报告准确性。位置:`src/agents/auditor.py` + `src/skills/elevenlabs_tts.py` /
+  `src/skills/thumbnail_prompt.py` 输出形态对齐。
+- **POYO sanitizer 覆盖率非 100%(F3, P2)** `src/tools/poyo_safety.py` 已覆盖常见母婴触发词,
+  但 D5 仍有 1 个 thumbnail prompt 被 POYO CM 拒(管线 retry 一次后通过)。后续需在生产
+  日志中抓回被拒原始 prompt 文本,补充新规则。
+- **Health.remotion.available 永远 false** Remotion 渲染已迁到独立 `rendering:3001` HTTP 服务
+  (Phase D 多次成功输出 mp4),但 `/health` 端点的 `remotion` 探测仍在 backend 容器内查
+  `npx remotion`,自然查不到。SettingsPanel 因此显示"rendering 不可用,可上线但无法生成
+  视频",误导用户。需要把 health 检测改成对 `rendering:3001/health` 发 HTTP 请求。
+- **yt-dlp / whisper 未装进 backend 容器(F4, P3)** D5 KOL 视频分析 skill 走 mock 路径,
+  脚本生成不依赖真实 transcribe,管线下游不受影响。要让 video-analysis 真实工作需
+  `pip install yt-dlp openai-whisper` 进 `Dockerfile.backend`。
+
+### 2. 配置/历史遗留(已知)
+
 - **Configuration divergence:** `DEFAULT_LLM_PROVIDER` value differs across `config.py`
   fallback (`anthropic`), `render.yaml` (`kimi`), and `deploy/lighthouse/.env.prod`
   (`deepseek`, the live value). Pick one canonical default and align the rest.
 - **video_metrics in Docker init SQL:** Alembic has the PG table; `src/storage/migrations/001_init.sql`
   does not. Fresh `docker compose up` falls back to SQLite until `alembic upgrade head` runs.
-- **POYO content-moderation coverage:** `src/tools/poyo_safety.py` substitutes the most
-  common maternal/baby trigger phrases, but D5 still hit 1 thumbnail rejection (caught by
-  pipeline retry). Add new regex rules as new triggers surface in production logs.
-- **Long pipeline UX:** S2/S3/S5 can take 10-30 min. curl/HTTP clients commonly time out
-  before the pipeline finishes (backend keeps running). Consider async submit + GET
-  /status/{thread_id} polling for the long scenarios.
 - **api_assets.py compat shim:** `/api/assets/*` uses in-memory dicts (`_brand_packages`,
   `_influencers`). Frontend OpenAPI types still reference these paths, so don't remove the
   router; do migrate any new asset features to `src/routers/assets.py` instead.
 - **S2-S5 lack step-by-step / gate system:** S1 only. Adding gates to S2-S5 is a planned
   follow-up.
-- **Remotion rendering integration:** Now runs as a separate `rendering:3001` HTTP service
-  (since 2026-05-02). Backend posts pipeline state JSON to `/assemble`, no more
-  `npx remotion` shell out.
+- **Long pipeline UX:** S2/S3/S5 can take 10-30 min. curl/HTTP clients commonly time out
+  before the pipeline finishes (backend keeps running). Consider async submit + GET
+  /status/{thread_id} polling for the long scenarios. Phase D nginx timeout 已加到 1500s,
+  但 D5 实测 28 min 离上限不远,长链路场景仍可能截客户端连接。
 - **Redis/Celery declared but unused:** Still in `requirements.txt` but no live consumer.
+
+### 3. 未做端到端非 Demo 验证的前后端交互路径
+
+Phase D 通过的是 5 个业务场景的"主路径"(自动 score 高 → 全绿走完)。以下交叉路径在生产
+环境尚未端到端实测,前后端契约和真实外部依赖都没跑过:
+
+- **A. Human Review 4 个 checkpoint 的人工分支** Pipeline `strategy_audit` /
+  `script_audit` / `editing_audit` / `thumbnail_audit` 的 score 落在 0.60–0.90 区间会触发
+  HITL,前端 `GatePanel` + 后端 `POST /scenario/{s}/gate/{label}/{gate_id}/approve` 的
+  "APPROVED / CHANGES_REQUESTED / REJECTED" 三个分支以及 D10 contextvars 路由覆写,
+  Phase D 没触发到。需要构造低分输入或下调阈值实测。
+- **B. S1 step-by-step + Gate 候选生成全链路** `POST /scenario/s1/gate/.../generate` 一次
+  生成 3 个候选 + `CandidateScorer` 评分 + 前端 `CandidateSelector` 对比 + `regenerate/{candidate}`
+  单候选重生成 + 选定后 `approve` 触发后台续跑。Phase D D2 走的是 auto 模式,gate 系统的
+  完整闭环未实测。
+- **C. Distribution / Publish** `POST /distribution/publish` + TikTok / Shopify connector
+  实际发布。Phase D 没跑过,只有单元测试。需要真实 platform credentials 才能走通。
+- **D. Metrics 全链** `GET /metrics/*` 视频性能查询、`src/tasks/metrics_poller.py` 周期任务
+  在生产是否被调度、Alembic 的 `video_metrics` 表是否真的 `alembic upgrade head` 过、
+  PG 与 SQLite 双路是否在生产生效。前端 `PerformanceDashboard` 显示真数据未验证。
+- **E. Assets 上传链路** `/api/upload` + 前端 `GuidedCard` 文件选择(本地 Playwright 验过
+  点击触发 filechooser)在生产未走通"上传 → 后端落盘 → 管线引用 → 出现在最终视频"。
+  类似的还有 `/brand-packages` / `/influencers` 列表 CRUD 在生产是否真存了 PG。
+- **F. Webhook 事件分发** `src/tools/webhook_manager.py` 的 `audit.completed` /
+  `pipeline.completed` 事件,Phase D 期间生产 `WEBHOOK_URLS` 为空,从未触发。需要配上
+  接收端(可临时用 webhook.site)再跑任一场景验证。
+- **G. 错误降级路径** `pipeline_degraded = True` 在 5 场景中未被触发(都走绿)。Mock POYO /
+  DeepSeek 故障下的"降级 + 终止 + 错误上报"链路、`error_collector` FIFO、`/telemetry`
+  端点的可见性,均未做负向测试。
+- **H. 多用户并发 + API Key 隔离** `contextvars` 隔离机制在单机单请求 OK。同时跑 2+ 场景
+  使用不同 API key 时是否真的不串(尤其 LLM client + POYO client + Seedance client 三处
+  contextvars 读取),没压测过。
+- **I. i18n 切换** `zh-CN` / `en` 在生产页面切换后,所有按钮 / 表单 / 报错 / SettingsPanel /
+  GatePanel / DistributionView 文案是否都从翻译表读取(无硬编码中文/英文残留),未走查。
+- **J. 备用部署目标** `render.yaml`(海外)与 `deploy/tencent-cloudbase.md`(国内 CloudBase)
+  这两条 alternative 路径的现状,自从 Lighthouse 成为 canonical 后没人再验过。`render.yaml`
+  里 `DEFAULT_LLM_PROVIDER=kimi` 是否还能正常生成内容,未知。
 
 ---
 
