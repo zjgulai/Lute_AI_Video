@@ -749,16 +749,16 @@ class S1ProductDirectPipeline:
 
         raw_results = await asyncio.gather(*clip_tasks, return_exceptions=True)
 
+        # Surface any unhandled exceptions raised by clip generators
+        for raw in raw_results:
+            if isinstance(raw, Exception):
+                errors.append(f"clip_failed_with_exception: {raw}")
+
         # Process results in index order to maintain deterministic state
-        for i, res in sorted(
+        for i, skill_result in sorted(
             [r for r in raw_results if isinstance(r, tuple)],
             key=lambda x: x[0],
         ):
-            if isinstance(res, Exception):
-                errors.append(f"clip_{i}_failed: {res}")
-                continue
-
-            _idx, skill_result = res
             if skill_result.success and skill_result.data:
                 p = skill_result.data.get("video_path", "")
                 dur = float(skill_result.data.get("duration_seconds", 0.0))
