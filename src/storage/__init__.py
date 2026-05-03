@@ -6,3 +6,5 @@ from .repository import (
     InfluencerRepository,
     PublishLogRepository,
 )
+
+HAS_STORAGE = True
