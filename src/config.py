@@ -11,9 +11,19 @@ load_dotenv()
 # Without this, `logger.error("msg", error=...)` raises `Logger._log() got
 # an unexpected keyword argument 'error'` because Python's logging.Logger._log
 # does not accept arbitrary kwargs.
+import logging
 import re
 
 import structlog
+
+# Apply LOG_LEVEL to Python's root logger BEFORE structlog.configure runs.
+# structlog's `filter_by_level` defers to stdlib level — without this call,
+# the root logger defaults to WARNING and every INFO-level log gets silently
+# dropped, making long pipelines look "frozen" in production.
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+_log_level = getattr(logging, _log_level_name, logging.INFO)
+logging.basicConfig(level=_log_level, format="%(message)s")
+logging.getLogger().setLevel(_log_level)
 
 
 class _SanitizeProcessor:
