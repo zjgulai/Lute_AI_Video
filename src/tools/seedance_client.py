@@ -10,6 +10,7 @@ Every public method has asyncio.timeout() protection (120s default).
 from __future__ import annotations
 
 import asyncio
+import base64
 from pathlib import Path
 
 import httpx
@@ -38,6 +39,46 @@ POYO_MODEL_NAME = POYO_VIDEO_MODEL or "happy-horse"
 
 class SeedanceTimeoutError(asyncio.TimeoutError):
     """Raised when a Seedance call exceeds SEEDANCE_TIMEOUT_SECONDS."""
+
+
+# Mapping from file extension to MIME type for base64 data URLs.
+# POYO Happy Horse `image_urls[]` only accepts http(s) URLs or `data:image/...;base64,...`,
+# so local paths must be inlined here before submit.
+_IMAGE_MIME_BY_EXT = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+
+
+def _to_poyo_image_url(ref: str) -> str:
+    """Convert an image ref into a POYO-acceptable form.
+
+    POYO requires `http://`, `https://`, or `data:image/...;base64,...`.
+    Local paths get base64-encoded; URLs / data URLs pass through unchanged.
+
+    Why: avoids a per-attempt 400 "image_urls[0] must start with http://, https://,
+    or be a valid base64 image" rejection that wastes the full retry budget.
+    """
+    if not ref:
+        return ref
+    lowered = ref.lower()
+    if lowered.startswith(("http://", "https://", "data:image/")):
+        return ref
+
+    p = Path(ref)
+    if not p.exists() or not p.is_file():
+        # Not a known URL scheme and not a real file — let POYO reject so the
+        # error surfaces with the original value in logs.
+        return ref
+
+    ext = p.suffix.lower()
+    mime = _IMAGE_MIME_BY_EXT.get(ext, "image/png")
+    raw = p.read_bytes()
+    b64 = base64.b64encode(raw).decode("ascii")
+    return f"data:{mime};base64,{b64}"
 
 
 class SeedanceClient:
@@ -269,7 +310,8 @@ class SeedanceClient:
         if image_refs:
             # Happy Horse uses image_urls (max 1 item) for first-frame guidance.
             # Do not mix image_urls with reference_image_urls.
-            input_payload["image_urls"] = [image_refs[0]]
+            # Local paths get base64-inlined; URLs pass through.
+            input_payload["image_urls"] = [_to_poyo_image_url(image_refs[0])]
             if len(image_refs) > 1:
                 logger.info(
                     "happy-horse: only first image used as first-frame",
