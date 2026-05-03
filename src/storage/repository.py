@@ -150,7 +150,7 @@ class BaseRepository:
     # measure on top of the parameterised queries that asyncpg provides.
     _ALLOWED_FIELDS: dict[str, set[str]] = {
         "threads": {"id", "thread_id", "state", "current_step", "pipeline_complete", "created_at", "updated_at"},
-        "pipeline_states": {"id", "label", "scenario", "config", "steps", "current_step", "mode", "errors", "media_synthesis_errors", "created_at", "updated_at"},
+        "pipeline_states": {"id", "label", "scenario", "config", "steps", "current_step", "mode", "errors", "media_synthesis_errors", "gates", "created_at", "updated_at"},
         "brand_packages": {"id", "name", "brand_guidelines", "assets", "created_at", "updated_at"},
         "influencers": {"id", "name", "platform", "profile", "contact_info", "created_at", "updated_at"},
         "publish_logs": {"id", "platform", "post_id", "content", "status", "url", "error", "created_at"},

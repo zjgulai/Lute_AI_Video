@@ -131,6 +131,7 @@ class PipelineStateManager:
                     "mode": state.get("mode"),
                     "errors": state.get("errors"),
                     "media_synthesis_errors": state.get("media_synthesis_errors"),
+                    "gates": state.get("gates"),
                 }
                 if existing:
                     await repo.update(existing["id"], data)
@@ -164,6 +165,12 @@ class PipelineStateManager:
                 repo = PipelineStateRepository()
                 row = await repo.get_by_label(label)
                 if row:
+                    # gates column was added 2026-05-03; old rows / pre-migration
+                    # PG schemas may not have it. Be defensive on read.
+                    try:
+                        gates_val = row["gates"]
+                    except (KeyError, IndexError):
+                        gates_val = {}
                     pg_state = {
                         "label": row["label"],
                         "scenario": row["scenario"],
@@ -173,6 +180,7 @@ class PipelineStateManager:
                         "mode": row["mode"],
                         "errors": row["errors"],
                         "media_synthesis_errors": row["media_synthesis_errors"],
+                        "gates": gates_val or {},
                     }
             except Exception as e:
                 logger.warning("PG load failed, using filesystem: %s", str(e)[:100])
@@ -199,6 +207,7 @@ class PipelineStateManager:
                     "mode": fs_state.get("mode"),
                     "errors": fs_state.get("errors"),
                     "media_synthesis_errors": fs_state.get("media_synthesis_errors"),
+                    "gates": fs_state.get("gates"),
                 })
             except Exception as e:
                 logger.warning("PG backfill failed for %s: %s", label, str(e)[:100])

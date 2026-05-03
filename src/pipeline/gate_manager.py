@@ -699,7 +699,12 @@ def _build_skill_params(candidate_step: str, state: dict, variant_name: str, var
     target_languages = config.get("target_languages", ["en"])
 
     if candidate_step == "scripts":
-        briefs = strategy_output.get("briefs") or strategy_output.get("strategy_briefs") or []
+        if isinstance(strategy_output, list):
+            briefs = strategy_output
+        elif isinstance(strategy_output, dict):
+            briefs = strategy_output.get("briefs") or strategy_output.get("strategy_briefs") or []
+        else:
+            briefs = []
         if not briefs:
             # Fallback: construct a minimal brief from config
             product_catalog = config.get("product_catalog", {})
@@ -784,15 +789,38 @@ def _build_skill_params(candidate_step: str, state: dict, variant_name: str, var
     }
 
 
-def _extract_usps(strategy_data: dict, config: dict) -> list[str]:
+def _extract_usps(strategy_data, config: dict) -> list[str]:
     """Extract USP list from strategy output or config.
+
+    Strategy output can arrive as:
+      - dict: {"briefs": [...], "usps": [...]} (legacy / aggregated)
+      - list: [Brief, Brief, ...] (current step_runner persists each brief
+              with usp_priority list)
 
     Tries multiple locations where USPs might be stored.
     """
-    # From strategy output
-    usps = strategy_data.get("usps") or strategy_data.get("unique_selling_points") or []
-    if isinstance(usps, list):
-        return [str(u) for u in usps if u]
+    # Aggregate from list-of-briefs form first
+    if isinstance(strategy_data, list):
+        out: list[str] = []
+        for brief in strategy_data:
+            if not isinstance(brief, dict):
+                continue
+            for key in ("usp_priority", "usps", "unique_selling_points"):
+                vals = brief.get(key) or []
+                if isinstance(vals, list):
+                    out.extend(str(u) for u in vals if u)
+                elif isinstance(vals, str) and vals:
+                    out.append(vals)
+        if out:
+            # de-dup preserving order
+            seen: set[str] = set()
+            return [u for u in out if not (u in seen or seen.add(u))]
+        strategy_data = {}
+
+    if isinstance(strategy_data, dict):
+        usps = strategy_data.get("usps") or strategy_data.get("unique_selling_points") or []
+        if isinstance(usps, list):
+            return [str(u) for u in usps if u]
 
     # From config product_catalog
     product_catalog = config.get("product_catalog", {})

@@ -23,9 +23,13 @@ CREATE TABLE IF NOT EXISTS pipeline_states (
     mode VARCHAR(16) DEFAULT 'auto',
     errors JSONB DEFAULT '[]',
     media_synthesis_errors JSONB DEFAULT '[]',
+    gates JSONB DEFAULT '{}',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- gates column (added 2026-05-03 for S1 step-by-step gate persistence)
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS gates JSONB DEFAULT '{}';
 
 -- brand_packages
 CREATE TABLE IF NOT EXISTS brand_packages (
