@@ -149,7 +149,6 @@ class StrategyAgent:
                 for b in briefs:
                     b.target_platforms = platform_objs
 
-            from src.models import WeeklyCalendar
             return WeeklyCalendar(week=week, briefs=briefs)
 
         if self.use_skills:
@@ -164,10 +163,8 @@ class StrategyAgent:
                 "content_scenario": self.content_scenario,
             })
             if result.success and result.data:
-                from src.models import Brief, WeeklyCalendar
                 briefs = [Brief(**b) for b in result.data.get("briefs", [])]
-                from src.models import WeeklyCalendar
-            return WeeklyCalendar(week=week, briefs=briefs)
+                return WeeklyCalendar(week=week, briefs=briefs)
             logger.warning("strategy_agent: skill failed, falling back to LLM", error=result.error)
 
         user_message = STRATEGY_USER_MESSAGE_TEMPLATE.format(
