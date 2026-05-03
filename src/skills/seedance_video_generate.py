@@ -243,16 +243,28 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             failures.append("invalid_mp4_header")
 
         duration = self._measure_duration(local_path)
-        duration_ok = duration >= MIN_DURATION_SECONDS
-        if not duration_ok:
+        # Defensive degradation: when ffprobe is unavailable (returns 0.0)
+        # but the file passes both size and structural header checks, accept
+        # it as valid. Otherwise a missing ffprobe would force every real
+        # generated MP4 into the fallback stub path.
+        if duration >= MIN_DURATION_SECONDS:
+            duration_ok = True
+        elif duration == 0.0 and size_ok and header_ok:
+            duration_ok = True
+            failures.append("duration_unmeasurable_but_structurally_valid")
+        else:
+            duration_ok = False
             failures.append(f"duration_too_short_{duration:.1f}s")
+
+        # all_ok strictly requires size + header. duration is best-effort.
+        all_ok = size_ok and header_ok and duration_ok
 
         return {
             "file_exists": True,
             "size_ok": size_ok,
             "header_ok": header_ok,
             "duration_ok": duration_ok,
-            "all_ok": size_ok and header_ok and duration_ok,
+            "all_ok": all_ok,
             "failures": failures,
             "mode": "real",
         }
