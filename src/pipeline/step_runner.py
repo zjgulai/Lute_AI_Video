@@ -192,6 +192,23 @@ class StepRunner:
             finally:
                 total_errors = len(state.get("errors", []))
 
+            # Post-step gate check: if the step we just ran registered a gate
+            # (e.g. keyframe_images → gate_2_keyframe), the gate is now
+            # awaiting approval and the loop must pause here. Without this
+            # check, the loop would proceed to the next step (video_prompts)
+            # whose pre-check only inspects ITS own gate (none), missing the
+            # newly-registered gate_2_keyframe.
+            post_gate_id = _get_gate_id_for_step(step_name)
+            if post_gate_id:
+                post_gate = state.get("gates", {}).get(post_gate_id, {})
+                if post_gate.get("status") == "awaiting_approval":
+                    logger.info(
+                        "step_runner: gate registered after step, pausing resume",
+                        step=step_name,
+                        gate=post_gate_id,
+                    )
+                    return state
+
         pipeline_duration_ms = (time.perf_counter() - pipeline_start) * 1000
         scenario = state.get("scenario", "unknown")
         trace_id = state.get("trace_id", "unknown")
