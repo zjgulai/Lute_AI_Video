@@ -18,6 +18,7 @@ from src.routers._state import (
     _register_background_task,
     _background_tasks,
     FastModeRequest,
+    S1StartRequest,
 )
 
 
@@ -264,11 +265,11 @@ async def fast_generate(req: FastModeRequest):
 
 
 @router.post("/scenario/s1/start", dependencies=[Depends(verify_api_key)])
-async def start_s1_pipeline(body: dict):
+async def start_s1_pipeline(body: S1StartRequest):
     """Start a new S1 pipeline run in either "auto" or "step_by_step" mode.
 
     Request body:
-        product_catalog: dict
+        product_catalog: dict (required)
         brand_guidelines: dict
         target_platforms: list[str]
         target_languages: list[str]
@@ -286,16 +287,15 @@ async def start_s1_pipeline(body: dict):
 
     try:
         step_runner = StepRunner(PipelineStateManager())
-        mode = body.get("mode", "auto")
-        label = await step_runner.init_state(config=body, mode=mode)
+        config = body.model_dump()
+        label = await step_runner.init_state(config=config, mode=body.mode)
 
-        if mode == "auto":
-            result = await step_runner.resume(label)
-            return result
+        if body.mode == "auto":
+            return await step_runner.resume(label)
 
         return {
             "label": label,
-            "mode": mode,
+            "mode": body.mode,
             "status": "initialized",
             "current_step": None,
         }

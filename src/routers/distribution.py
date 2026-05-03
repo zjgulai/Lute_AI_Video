@@ -75,9 +75,11 @@ async def distribution_platforms():
     Returns:
         Array of platform metadata dicts.
     """
+    from src.connectors.shopify_connector import _is_mock_mode as _shopify_mock
+    from src.connectors.tiktok_connector import _is_mock_mode as _tiktok_mock
     return [
-        {"id": "tiktok", "name": "TikTok", "connected": True},
-        {"id": "shopify", "name": "Shopify", "connected": True},
+        {"id": "tiktok", "name": "TikTok", "connected": not _tiktok_mock()},
+        {"id": "shopify", "name": "Shopify", "connected": not _shopify_mock()},
     ]
 
 

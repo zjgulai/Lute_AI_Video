@@ -52,6 +52,18 @@ class FastModeRequest(BaseModel):
     enable_tts: bool = True
 
 
+class S1StartRequest(BaseModel):
+    product_catalog: dict[str, Any]
+    brand_guidelines: dict[str, Any] = {}
+    target_platforms: list[str] = []
+    target_languages: list[str] = ["en"]
+    week: str = ""
+    video_duration: int = 30
+    mode: str = "auto"
+    brand_mode: bool = False
+    api_keys: dict[str, str] = {}
+
+
 # ── Thread cache helpers ──
 
 def _save_thread_index():

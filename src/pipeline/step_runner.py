@@ -7,6 +7,7 @@ S1ProductDirectPipeline methods, and persists the updated state back to disk.
 from __future__ import annotations
 
 import time
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -97,7 +98,8 @@ class StepRunner:
     ) -> str:
         """Create initial empty pipeline state, save it, and return the label."""
         if label is None:
-            label = f"s1_{int(time.time())}"
+            # uuid suffix prevents same-second concurrent collision (Task H)
+            label = f"s1_{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
         scenario = "brand_campaign" if config.get("brand_mode") else "product_direct"
 
