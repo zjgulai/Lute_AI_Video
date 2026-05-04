@@ -1,4 +1,4 @@
-.PHONY: install test lint coverage clean ci
+.PHONY: install test lint coverage clean ci portfolio
 
 # ── Setup ──
 
@@ -33,3 +33,12 @@ clean:
 
 ci: lint test
 	@echo "=== CI OK ==="
+
+# ── Portfolio index ──
+
+# 扫描 output/ 下所有付费产物,重建 assets/portfolio/index.json
+# 闭环测试结束 LangGraph pipeline.completed 自动触发(见 src/tools/portfolio_hook.py)
+# 这条 target 用于手动重建,例如直接跑 scripts/test_*_e2e.py 后
+
+portfolio:
+	python scripts/portfolio_index.py

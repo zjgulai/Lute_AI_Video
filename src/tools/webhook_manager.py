@@ -11,12 +11,17 @@ import asyncio
 import ipaddress
 import uuid
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 import structlog
+
+# Internal listener signature: receives the raw event payload (not the envelope).
+# Sync callables run inline; coroutines are scheduled as fire-and-forget tasks.
+EventListener = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 logger = structlog.get_logger()
 
@@ -76,6 +81,10 @@ class WebhookManager:
 
     def __init__(self):
         self._webhooks: dict[str, list[str]] = defaultdict(list)
+        # In-process listeners (e.g. portfolio index rebuild on pipeline.completed).
+        # Distinct from HTTP webhooks: not subject to URL validation, never crosses
+        # the network, exception isolation handled per-listener.
+        self._listeners: dict[str, list[EventListener]] = defaultdict(list)
 
     # ── Registration API ──
 
@@ -123,14 +132,61 @@ class WebhookManager:
         for event_type in ALL_EVENTS:
             self.register(event_type, url)
 
+    # ── Internal listeners (in-process callbacks, no HTTP) ──
+
+    def subscribe(self, event_type: str, listener: EventListener) -> None:
+        """Register an in-process callback for an event type.
+
+        Listener receives the raw payload dict (not the HTTP envelope).
+        Coroutine listeners are scheduled fire-and-forget.
+        Exceptions are logged, never raised — keeps pipeline resilient.
+
+        Use case: portfolio rebuild on pipeline.completed without needing a
+        real HTTP webhook URL.
+        """
+        if listener not in self._listeners[event_type]:
+            self._listeners[event_type].append(listener)
+            logger.info(
+                "webhook: listener subscribed",
+                event_type=event_type,
+                listener=getattr(listener, "__qualname__", repr(listener)),
+            )
+
+    def unsubscribe(self, event_type: str, listener: EventListener) -> bool:
+        """Remove an in-process listener. Returns True if found and removed."""
+        existing = self._listeners.get(event_type, [])
+        if listener in existing:
+            existing.remove(listener)
+            return True
+        return False
+
     # ── Dispatch ──
 
     async def dispatch(self, event_type: str, payload: dict[str, Any]) -> None:
         """Send webhook notifications for an event.
 
-        Dispatches to all URLs registered for this event_type.
-        Parallel POST with 5s timeout. Failures are logged, never raised.
+        Fans out to two channels in parallel:
+          1. In-process listeners (subscribe()) — receive raw payload
+          2. HTTP webhooks (register()) — receive envelope-wrapped payload
+
+        Both channels run with timeout/exception isolation; failures are logged,
+        never raised, so pipeline forward progress is preserved.
         """
+        # ── Channel 1: in-process listeners ──
+        for listener in self._listeners.get(event_type, []):
+            try:
+                result = listener(payload)
+                if asyncio.iscoroutine(result):
+                    asyncio.create_task(self._run_listener(event_type, listener, result))
+            except Exception as exc:
+                logger.warning(
+                    "webhook: listener failed",
+                    event_type=event_type,
+                    listener=getattr(listener, "__qualname__", repr(listener)),
+                    error=str(exc)[:200],
+                )
+
+        # ── Channel 2: HTTP webhook URLs ──
         urls = self._webhooks.get(event_type, [])
         if not urls:
             return
@@ -155,6 +211,20 @@ class WebhookManager:
                     url=url,
                     status=result,
                 )
+
+    async def _run_listener(
+        self, event_type: str, listener: EventListener, awaitable: Awaitable[None]
+    ) -> None:
+        """Await an async listener with exception isolation."""
+        try:
+            await awaitable
+        except Exception as exc:
+            logger.warning(
+                "webhook: async listener failed",
+                event_type=event_type,
+                listener=getattr(listener, "__qualname__", repr(listener)),
+                error=str(exc)[:200],
+            )
 
     def dispatch_sync(self, event_type: str, payload: dict[str, Any]) -> None:
         """Synchronous dispatch — for use in synchronous code paths.

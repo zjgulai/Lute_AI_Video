@@ -66,6 +66,14 @@ if HAS_FASTAPI:
         # P1-10: Start background thread cache eviction loop
         from src.routers._state import _periodic_cache_eviction
         asyncio.create_task(_periodic_cache_eviction())
+        # Portfolio: auto-rebuild assets/portfolio/index.json on pipeline.completed
+        try:
+            from src.tools.portfolio_hook import register_portfolio_hook
+            register_portfolio_hook()
+        except Exception as _exc:
+            logging.getLogger("api.startup").warning(
+                "portfolio hook registration failed: %s", _exc
+            )
 
     # CORS: allow comma-separated origins via CORS_ORIGINS env var
     _cors_env = os.getenv("CORS_ORIGINS", "")
