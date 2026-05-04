@@ -3,20 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CandidateSelector, { type Candidate } from "@/components/CandidateSelector";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE, isDemoMode, fetchS1State } from "./api";
+import { isDemoMode, fetchS1State, apiFetch } from "./api";
 
 
-
-function getHeaders(): Record<string, string> {
-  const apiKey =
-    (typeof process !== "undefined" &&
-      (process as any).env?.NEXT_PUBLIC_API_KEY) ||
-    "ai_video_demo_2026";
-  return {
-    "Content-Type": "application/json",
-    "X-API-Key": apiKey,
-  };
-}
+// P1-A: 删除本地 getHeaders + 硬编码 demo key,
+// 全部走 apiFetch() 自动注入 X-API-Key + 自动拼 base URL,
+// SettingsPanel 修改 API key 后立即对所有 Gate 操作生效。
 
 // ── Demo candidate generators ──
 
@@ -146,9 +138,9 @@ export default function GatePanel({
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE}/scenario/${scenario}/gate/${label}/${gateId}/generate`,
-        { method: "POST", headers: getHeaders() }
+      const res = await apiFetch(
+        `/scenario/${scenario}/gate/${label}/${gateId}/generate`,
+        { method: "POST" }
       );
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
@@ -209,18 +201,17 @@ export default function GatePanel({
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE}/scenario/${scenario}/gate/${label}/${gateId}/regenerate/${candidateId}`,
-        { method: "POST", headers: getHeaders() }
+      const res = await apiFetch(
+        `/scenario/${scenario}/gate/${label}/${gateId}/regenerate/${candidateId}`,
+        { method: "POST" }
       );
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody?.detail || `Regenerate failed (${res.status})`);
       }
       // Refresh all candidates after regeneration
-      const stateRes = await fetch(
-        `${API_BASE}/scenario/${scenario}/gate/${label}/${gateId}`,
-        { headers: getHeaders() }
+      const stateRes = await apiFetch(
+        `/scenario/${scenario}/gate/${label}/${gateId}`,
       );
       if (stateRes.ok) {
         const stateData = await stateRes.json();
@@ -258,11 +249,10 @@ export default function GatePanel({
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE}/scenario/${scenario}/gate/${label}/${gateId}/approve`,
+      const res = await apiFetch(
+        `/scenario/${scenario}/gate/${label}/${gateId}/approve`,
         {
           method: "POST",
-          headers: getHeaders(),
           body: JSON.stringify({ selected_ids: selectedIds }),
         }
       );

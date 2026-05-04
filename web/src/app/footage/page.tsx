@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE, getMediaUrl as getApiMediaUrl, isDemoMode } from "@/components/api";
+import { apiFetch, getApiBase, getMediaUrl as getApiMediaUrl, isDemoMode } from "@/components/api";
 import {
   FilmStrip,
   UploadSimple,
@@ -67,7 +67,7 @@ function getMediaUrl(filename: string): string {
     return getApiMediaUrl(filename);
   }
   // Assets stored via api_assets.py use the filename as the media path
-  return API_BASE + "/api/media/" + encodeURIComponent(filename);
+  return getApiBase().replace(/\/$/, "") + "/api/media/" + encodeURIComponent(filename);
 }
 
 function isVideo(mimeType: string): boolean {
@@ -135,9 +135,7 @@ export default function FootagePage() {
       return;
     }
     try {
-      const res = await fetch(API_BASE + "/api/assets/", {
-        headers: { "X-API-Key": "ai_video_demo_2026" },
-      });
+      const res = await apiFetch("/api/assets/");
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
       setAssets(data.assets || []);
@@ -198,9 +196,8 @@ export default function FootagePage() {
         formData.append("tags", "footage");
         formData.append("metadata", JSON.stringify({ source: "footage-upload" }));
 
-        const res = await fetch(API_BASE + "/api/assets/upload", {
+        const res = await apiFetch("/api/assets/upload", {
           method: "POST",
-          headers: { "X-API-Key": "ai_video_demo_2026" },
           body: formData,
         });
         if (!res.ok) throw new Error(`${t("footage.uploadFailed")} (${res.status})`);
@@ -229,14 +226,10 @@ export default function FootagePage() {
       .filter((t) => t.length > 0);
 
     try {
-      const res = await fetch(
-        API_BASE + "/api/assets/" + selectedAsset.asset_id + "/tags",
+      const res = await apiFetch(
+        "/api/assets/" + selectedAsset.asset_id + "/tags",
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": "ai_video_demo_2026",
-          },
           body: JSON.stringify({ tags: newTags }),
         }
       );
@@ -262,9 +255,8 @@ export default function FootagePage() {
   const handleDelete = async (assetId: string) => {
     setDeleting(true);
     try {
-      const res = await fetch(API_BASE + "/api/assets/" + assetId, {
+      const res = await apiFetch("/api/assets/" + assetId, {
         method: "DELETE",
-        headers: { "X-API-Key": "ai_video_demo_2026" },
       });
       if (!res.ok) throw new Error(`${t("common.deleteFailed")} (${res.status})`);
       setDeleteConfirm(null);

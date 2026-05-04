@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import Link from "next/link";
-import { API_BASE, isDemoMode } from "@/components/api";
+import { apiFetch, isDemoMode } from "@/components/api";
 import { Users, Plus, PencilSimple, Trash, X, WarningCircle, Spinner } from "@phosphor-icons/react";
 
 interface InfluencerProfile {
@@ -52,9 +52,7 @@ export default function InfluencersPage() {
       return;
     }
     try {
-      const res = await fetch(API_BASE + "/api/assets/influencers", {
-        headers: { "X-API-Key": "ai_video_demo_2026" },
-      });
+      const res = await apiFetch("/api/assets/influencers");
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
       setInfluencers(data.influencers || []);
@@ -118,16 +116,14 @@ export default function InfluencersPage() {
       };
 
       if (editingId) {
-        const res = await fetch(API_BASE + "/api/assets/influencers/" + editingId, {
+        const res = await apiFetch("/api/assets/influencers/" + editingId, {
           method: "PUT",
-          headers: { "Content-Type": "application/json", "X-API-Key": "ai_video_demo_2026" },
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error(`${t("common.updateFailed")} (${res.status})`);
       } else {
-        const res = await fetch(API_BASE + "/api/assets/influencers", {
+        const res = await apiFetch("/api/assets/influencers", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-API-Key": "ai_video_demo_2026" },
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error(`${t("common.createFailed")} (${res.status})`);
@@ -149,9 +145,8 @@ export default function InfluencersPage() {
       return;
     }
     try {
-      const res = await fetch(API_BASE + "/api/assets/influencers/" + influencerId, {
+      const res = await apiFetch("/api/assets/influencers/" + influencerId, {
         method: "DELETE",
-        headers: { "X-API-Key": "ai_video_demo_2026" },
       });
       if (!res.ok) throw new Error(`${t("common.deleteFailed")} (${res.status})`);
       setDeleteConfirm(null);

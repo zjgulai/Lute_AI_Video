@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useRef } from "react";
 import type { GuidedCard as GuidedCardType } from "./types";
 import { useI18n } from "@/i18n/I18nProvider";
-import { API_BASE } from "./api";
+import { apiFetch } from "./api";
 
 interface Props {
   card: GuidedCardType;
@@ -60,7 +60,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
       try {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch(API_BASE + "/api/upload", {
+        const res = await apiFetch("/api/upload", {
           method: "POST",
           body: formData,
         });
