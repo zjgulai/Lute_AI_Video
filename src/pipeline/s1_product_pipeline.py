@@ -366,7 +366,13 @@ class S1ProductDirectPipeline:
             elif isinstance(assemble_output, dict):
                 final_video = assemble_output.get("video_path", "")
 
-            audio_paths = self._get_step_output(steps, "tts_audio") or []
+            # tts_audio 返回 {"audio_paths": [...], "lyrics_paths": [...]};
+            # 直接传 dict 给 audit 会被 isinstance 检查拒掉 → audio_coverage 误报 FAIL
+            tts_output = self._get_step_output(steps, "tts_audio") or {}
+            if isinstance(tts_output, dict):
+                audio_paths = tts_output.get("audio_paths", [])
+            else:
+                audio_paths = tts_output if isinstance(tts_output, list) else []
             thumb_image_paths = self._get_step_output(steps, "thumbnail_images") or []
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else (seedance_out if isinstance(seedance_out, list) else [])
