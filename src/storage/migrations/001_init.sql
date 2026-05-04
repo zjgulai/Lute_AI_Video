@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- threads: LangGraph pipeline threads
 CREATE TABLE IF NOT EXISTS threads (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    thread_id VARCHAR(16) UNIQUE NOT NULL,
+    thread_id TEXT UNIQUE NOT NULL,
     state JSONB NOT NULL DEFAULT '{}',
     current_step VARCHAR(50),
     pipeline_complete BOOLEAN DEFAULT FALSE,

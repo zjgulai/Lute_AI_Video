@@ -2,7 +2,10 @@
 
 import asyncio
 
+import structlog
 from fastapi import APIRouter, HTTPException, Depends
+
+logger = structlog.get_logger()
 
 try:
     from src.storage import HAS_STORAGE

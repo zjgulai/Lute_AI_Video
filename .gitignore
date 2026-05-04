@@ -71,7 +71,9 @@ rendering/.vite/
 !docs/guide/UI_design_info/*.jpeg
 
 # One-off scripts (not part of the project)
-test_*.py
+# 只忽略 scripts/ 下的一次性 e2e / provider 探查脚本
+# (旧规则 `test_*.py` 是全局,误伤了 tests/ 下的正式测试)
+scripts/test_*.py
 security_self_check.py
 
 # Claude / AI artifacts

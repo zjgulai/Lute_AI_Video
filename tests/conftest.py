@@ -1,7 +1,42 @@
 """Test fixtures shared across all test modules."""
 
+import os
+
+# 测试环境固定 API_KEY,避免每次 import src.routers._deps 时随机生成
+# 导致请求 header 与 verify_api_key 比对失败。设在文件最顶部以保证
+# src.api / src.routers 在测试 import 时拿到稳定的 API_KEY。
+os.environ.setdefault("API_KEY", "test-api-key-for-pytest")
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    """X-API-Key 请求头,所有需要鉴权的测试用这个 fixture。"""
+    return {"X-API-Key": os.environ["API_KEY"]}
+
+
+@pytest.fixture(autouse=True)
+def _reset_asyncpg_pool():
+    """每个 test 前重置 asyncpg pool 单例。
+
+    pytest-asyncio 默认给每个 test 新建 event loop,但 src/storage/db.py
+    的 _pool 是 module-level 全局,会绑定到旧 event loop,在第二个 test 里
+    复用就抛 `RuntimeError: Event loop is closed`。
+
+    用 sync fixture(不要 async),否则会污染所有 sync test 强制要求 event loop。
+    test 结束让 GC + asyncpg 自己处理 cleanup。
+    """
+    try:
+        from src.storage import db as _db_mod
+    except ImportError:
+        yield
+        return
+
+    _db_mod._pool = None
+    yield
+    _db_mod._pool = None
 
 
 @pytest.fixture
