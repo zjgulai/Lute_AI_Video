@@ -271,7 +271,7 @@ The app is created at module level with 5 middleware layers:
 2. **Rate Limiting** (P3-1) — 120 requests per 60s per IP, skips `/health`
 3. **Request Logging** — logs method, path, status, duration for every request
 4. **Response Wrapper** (P-TEST) — injects `_meta` {trace_id, duration_ms, version, timestamp} into all JSON responses, echoes `X-Client-Trace-Id` as `X-Trace-Id`
-5. **API Key Auth** — `verify_api_key` dependency applied to most routers. Demo key (`ai_video_demo_2026`) is read-only.
+5. **API Key Auth** — `verify_api_key` dependency applied to most routers. `API_KEY` 是按用户分发的全权限凭证(每个开通的租户/用户拿一组独立 key),没有"低权限只读 key"的概念。生产 `.env.prod` 当前 `API_KEY=ai_video_demo_2026`,这就是真实 key 字符串、不是 demo 限制标记;以后随着租户开通会变更。模型矩阵(DeepSeek + POYO + SiliconFlow CosyVoice)由后端环境统一管理,不随 key 切换。
 
 Routers are mounted on startup:
 - `/health` — no auth
@@ -443,7 +443,11 @@ Bilingual (zh-CN / en) via `I18nProvider` React context. Translations in `web/sr
 
 ### API Client (`web/src/components/api.ts`)
 
-Backend URL and API key stored via `localStorage` with cookie fallback (privacy/incognito mode). Supports demo mode. Build-time env vars (`NEXT_PUBLIC_API_BASE_URL`) provide defaults.
+Backend URL and API key stored via `localStorage` with cookie fallback (privacy/incognito mode). Build-time env vars (`NEXT_PUBLIC_API_BASE_URL`) provide defaults.
+
+`isDemoMode()`(`web/src/components/api.ts:97`)按 hostname 判定(`github.io` / `.vercel.app`),
+是给"静态前端无后端"演示页用的纯前端降级标志,与后端 `API_KEY` 字符串无关 —— 后端不再
+对任何 key 做权限分级。
 
 ---
 
@@ -572,7 +576,7 @@ Key test areas:
 ### API Design
 - All JSON responses wrapped with `_meta` (trace_id, duration_ms, version, timestamp)
 - API key required for all mutating endpoints
-- Demo key (`ai_video_demo_2026`) is read-only — blocks DELETE/POST/PUT on write paths
+- Per-tenant `API_KEY`:每个开通用户拿一组独立全权限 token,后端不做"低权限只读"分级
 - Rate limiting: 120 req/min per IP
 - Per-request API key injection via contextvars for multi-tenant safety
 
@@ -597,30 +601,20 @@ Key test areas:
 
 ### 1. 已知功能缺陷(Phase D 期间观察到,未阻塞交付)
 
-- **Audit 形态 bug(F1, P1)** D4(S2)/D5(S3)的 auditor 误报
-  `audio_coverage` / `thumbnail_brand_alignment` / `thumbnail_count` FAIL,但磁盘上 audio
-  和 4 张 thumbnail 都真实存在。根因是 audit 函数读 `audio_paths` / `thumbnail_image_paths`
-  时假设 dict 形态,但 TTS / thumbnail skill 输出的是 list(或反之)。功能不受影响,只影响
-  audit 报告准确性。位置:`src/agents/auditor.py` + `src/skills/elevenlabs_tts.py` /
-  `src/skills/thumbnail_prompt.py` 输出形态对齐。
 - **POYO sanitizer 覆盖率非 100%(F3, P2)** `src/tools/poyo_safety.py` 已覆盖常见母婴触发词,
   但 D5 仍有 1 个 thumbnail prompt 被 POYO CM 拒(管线 retry 一次后通过)。后续需在生产
   日志中抓回被拒原始 prompt 文本,补充新规则。
-- **Health.remotion.available 永远 false** Remotion 渲染已迁到独立 `rendering:3001` HTTP 服务
-  (Phase D 多次成功输出 mp4),但 `/health` 端点的 `remotion` 探测仍在 backend 容器内查
-  `npx remotion`,自然查不到。SettingsPanel 因此显示"rendering 不可用,可上线但无法生成
-  视频",误导用户。需要把 health 检测改成对 `rendering:3001/health` 发 HTTP 请求。
 - **yt-dlp / whisper 未装进 backend 容器(F4, P3)** D5 KOL 视频分析 skill 走 mock 路径,
   脚本生成不依赖真实 transcribe,管线下游不受影响。要让 video-analysis 真实工作需
-  `pip install yt-dlp openai-whisper` 进 `Dockerfile.backend`。
+  `pip install yt-dlp openai-whisper` 进 `Dockerfile.backend`(whisper 拉 PyTorch ~2GB,
+  实施前先确认是否值)。
+
+> 已修复(2026-05-04 提交):
+> - F1 audit 形态 bug — `s1_product_pipeline.py` audit 步骤解包 tts_audio dict(b958c08)
+> - Health.remotion.available 误报 — `/health` 改 HTTP 探测 `rendering:3001/health`(d672050 + aa716be)
 
 ### 2. 配置/历史遗留(已知)
 
-- **Configuration divergence:** `DEFAULT_LLM_PROVIDER` value differs across `config.py`
-  fallback (`anthropic`), `render.yaml` (`kimi`), and `deploy/lighthouse/.env.prod`
-  (`deepseek`, the live value). Pick one canonical default and align the rest.
-- **video_metrics in Docker init SQL:** Alembic has the PG table; `src/storage/migrations/001_init.sql`
-  does not. Fresh `docker compose up` falls back to SQLite until `alembic upgrade head` runs.
 - **api_assets.py compat shim:** `/api/assets/*` uses in-memory dicts (`_brand_packages`,
   `_influencers`). Frontend OpenAPI types still reference these paths, so don't remove the
   router; do migrate any new asset features to `src/routers/assets.py` instead.
@@ -632,10 +626,18 @@ Key test areas:
   但 D5 实测 28 min 离上限不远,长链路场景仍可能截客户端连接。
 - **Redis/Celery declared but unused:** Still in `requirements.txt` but no live consumer.
 
+> 已修复(2026-05-04 提交):
+> - `DEFAULT_LLM_PROVIDER` 三处分歧 — `config.py` / `render.yaml` 全部对齐 `deepseek`(d672050)
+> - video_metrics 进 init SQL — `src/storage/migrations/001_init.sql` 内联 Alembic 1efc41794d64,
+>   fresh `docker compose up` 可一次落下完整 schema,不再需要手动 `alembic upgrade head`
+> - Demo key 限制移除 — `verify_api_key` 不再按 key 字符串区分权限,`API_KEY` 是按租户分发的
+>   全权限凭证。原 P0-11 拦截把 publish/upload 路径堵死,与端到端验证目标冲突
+
 ### 3. 未做端到端非 Demo 验证的前后端交互路径
 
 Phase D 通过的是 5 个业务场景的"主路径"(自动 score 高 → 全绿走完)。以下交叉路径在生产
-环境尚未端到端实测,前后端契约和真实外部依赖都没跑过:
+环境尚未端到端实测,前后端契约和真实外部依赖都没跑过。**注:demo key 拦截已移除(2026-05-04),
+原本被 verify_api_key 堵住的 paths C / E 现已可走通**:
 
 - **A. Human Review 4 个 checkpoint 的人工分支** Pipeline `strategy_audit` /
   `script_audit` / `editing_audit` / `thumbnail_audit` 的 score 落在 0.60–0.90 区间会触发

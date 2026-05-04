@@ -17,35 +17,17 @@ if not API_KEY:
     API_KEY = secrets.token_urlsafe(32)
     logging.warning("SECURITY: Temporary API_KEY = %s  (set this in your .env for persistence)", API_KEY)
 
-DEMO_KEY = "ai_video_demo_2026"
-
-
 def verify_api_key(request: Request, x_api_key: str | None = Header(None)):
-    """Verify API key and enforce demo key restrictions."""
+    """Verify API key.
+
+    API_KEY 是按用户分发的全权限凭证(每个开通用户拿一组独立 key)。
+    没有"低权限只读"概念 —— 模型矩阵稳定,key 才是按租户隔离的依据。
+    早期 P0-11 给 `ai_video_demo_2026` 做了 publish/upload 拦截,实际生产
+    `API_KEY` 就是这串字符,拦截把 distribution/publish + 资产上传链路堵死,
+    与"端到端验证"目标冲突,已移除。
+    """
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
-
-    # P0-11: Demo key restrictions — read and generate only
-    if x_api_key == DEMO_KEY:
-        method = request.method
-        path = request.url.path
-
-        # Block all DELETE operations
-        if method == "DELETE":
-            raise HTTPException(status_code=403, detail="Demo key cannot delete resources")
-
-        # Block publish endpoints
-        if path.startswith("/distribution/publish") or path.startswith("/publish/"):
-            raise HTTPException(status_code=403, detail="Demo key cannot publish")
-
-        # Block asset uploads and brand/influencer mutations
-        if path.startswith("/api/upload") or path.startswith("/api/assets/"):
-            if method in ("POST", "PUT"):
-                raise HTTPException(status_code=403, detail="Demo key cannot modify assets")
-        if path.startswith("/brand-packages") or path.startswith("/influencers") or path.startswith("/remix-brief"):
-            if method in ("POST", "PUT", "DELETE"):
-                raise HTTPException(status_code=403, detail="Demo key cannot modify resources")
-
     return True
 
 

@@ -137,7 +137,7 @@ _REQUIRED_TABLES: list[str] = [
     "brand_packages",
     "influencers",
     "publish_logs",
-    # "video_metrics",  # Layer 5 — pending PG migration, currently SQLite-only
+    "video_metrics",
 ]
 
 

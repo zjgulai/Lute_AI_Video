@@ -64,7 +64,27 @@ CREATE TABLE IF NOT EXISTS publish_logs (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- video_metrics: cross-platform performance metrics, mirrors Alembic 1efc41794d64.
+-- Inlined here so a fresh `docker compose up` lands a complete schema without
+-- requiring a separate `alembic upgrade head` step.
+CREATE TABLE IF NOT EXISTS video_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    video_id VARCHAR(128) NOT NULL,
+    scenario VARCHAR(32) NOT NULL,
+    platform VARCHAR(32) NOT NULL,
+    post_id VARCHAR(128),
+    post_url TEXT,
+    metrics JSONB DEFAULT '{}',
+    pulled_at TIMESTAMP DEFAULT NOW(),
+    published_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_threads_thread_id ON threads(thread_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_states_label ON pipeline_states(label);
 CREATE INDEX IF NOT EXISTS idx_publish_logs_platform ON publish_logs(platform);
+CREATE INDEX IF NOT EXISTS idx_vm_video_id ON video_metrics(video_id);
+CREATE INDEX IF NOT EXISTS idx_vm_scenario ON video_metrics(scenario);
+CREATE INDEX IF NOT EXISTS idx_vm_platform ON video_metrics(platform);
+CREATE INDEX IF NOT EXISTS idx_vm_pulled_at ON video_metrics(pulled_at);
