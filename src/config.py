@@ -102,7 +102,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # LLM
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "anthropic")  # anthropic | openai | kimi
+DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "deepseek")  # deepseek | anthropic | openai | kimi
 KIMI_MODEL = os.getenv("KIMI_MODEL", "kimi-k2-0905-preview")
 
 # Supabase

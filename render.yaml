@@ -22,7 +22,7 @@ services:
       - key: VIDEO_OUTPUT_DIR
         value: /app/output
       - key: DEFAULT_LLM_PROVIDER
-        value: kimi
+        value: deepseek
       # PostgreSQL — Render will create a database and inject this automatically
       # if you add a PostgreSQL service to the Blueprint. Otherwise leave empty
       # for in-memory / stub mode.
