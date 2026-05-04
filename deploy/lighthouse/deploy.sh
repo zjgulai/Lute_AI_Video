@@ -41,7 +41,11 @@ if [ ! -d "node_modules" ]; then
   exit 1
 fi
 export NEXT_PUBLIC_API_BASE_URL=/api
-export NEXT_PUBLIC_IS_DEMO=true
+# P0-F: Lighthouse 是 canonical 非 demo 生产部署 — 必须设 false,
+# 否则 web/src/app/page.tsx 会跳过真实 API 调用进 DEMO_RESULT_*,
+# 与已验证的 5 场景非 demo 端到端结果冲突。
+# GitHub Pages demo 部署单独构建脚本里设 true。
+export NEXT_PUBLIC_IS_DEMO=false
 npm run build 2>&1 | tail -5
 echo "  Frontend build complete"
 echo ""

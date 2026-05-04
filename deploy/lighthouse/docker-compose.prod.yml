@@ -67,7 +67,11 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       - HOSTNAME=0.0.0.0
       - NEXT_PUBLIC_API_BASE_URL=/api
-      - NEXT_PUBLIC_IS_DEMO=true
+      # P0-F: Lighthouse 是 canonical 非 demo 生产部署。这里设 false 保持与
+      # build-time(deploy.sh:44)一致 — Next.js NEXT_PUBLIC_* 是构建时内联,
+      # 这里 runtime env 实际不影响已构建前端,但保留避免误导。
+      # GitHub Pages demo 部署单独构建,通过 build-arg 切回 true。
+      - NEXT_PUBLIC_IS_DEMO=false
     volumes:
       # Mount the pre-built standalone output (server.js is at /app/server.js)
       - ../../web/.next/standalone:/app
