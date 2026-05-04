@@ -110,3 +110,30 @@ class TestThreadIdSchema:
             "缺 alembic 迁移把 threads.thread_id 从 VARCHAR(16) 扩到 TEXT。"
             "fresh PG 由 init.sql 建表,但已有 PG 库需要 alembic 迁移升级。"
         )
+
+
+class TestStateModuleUsesPostgresWhenDatabaseUrlSet:
+    """P0-E: _state.py 在有 DATABASE_URL 时必须用 PostgresSaver,而不是 MemorySaver。"""
+
+    def test_state_module_picks_pg_when_db_url_set(self):
+        """_state.py:21 读 DATABASE_URL/SUPABASE_DB_URL 决策 checkpointer 类型。"""
+        import os
+
+        # 本测试依赖 .env 里有真实 DATABASE_URL 指向可用 PG。CI 无 PG 时 skip。
+        db_url = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL")
+        if not db_url or not db_url.startswith("postgresql"):
+            pytest.skip("需要真实 DATABASE_URL 才能验 PostgresSaver 路径")
+
+        # 重新 import 触发模块顶部的 compile_pipeline(db_url=...)
+        import importlib
+
+        from src.routers import _state as state_mod
+
+        importlib.reload(state_mod)
+
+        from langgraph.checkpoint.postgres import PostgresSaver
+
+        assert isinstance(state_mod._pipeline.checkpointer, PostgresSaver), (
+            f"DATABASE_URL 设置时 _state.py 应该用 PostgresSaver,实际用了 "
+            f"{type(state_mod._pipeline.checkpointer).__name__}"
+        )

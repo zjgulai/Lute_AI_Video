@@ -6,6 +6,7 @@ without circular dependencies.
 
 import asyncio
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -17,7 +18,12 @@ from src.config import OUTPUT_DIR
 from src.graph.pipeline import compile_pipeline
 
 # ── Pipeline state ──
-_pipeline = compile_pipeline()
+# P0-E: Pass DATABASE_URL so /pipeline/* uses PostgresSaver in production.
+# 生产 LangGraph checkpoint 跨重启恢复依赖 PostgresSaver;无 DATABASE_URL 时
+# compile_pipeline() 退回 MemorySaver(开发/测试模式)。
+# fail-fast 行为由 src/graph/pipeline.py 内部处理:db_url 设置但连不上 → RuntimeError。
+_DB_URL = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL") or None
+_pipeline = compile_pipeline(db_url=_DB_URL)
 _active_threads: dict[str, dict[str, Any]] = {}
 _THREAD_INDEX_PATH = OUTPUT_DIR / ".thread_index.json"
 _pipeline_semaphore = asyncio.Semaphore(10)  # P3-4: Max 10 concurrent pipelines
