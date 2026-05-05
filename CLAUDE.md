@@ -514,6 +514,14 @@ The project ships three deploy targets, in priority order:
    Note: rsync to bind-mounted nginx.conf needs `--inplace --no-whole-file` or an explicit
    `docker restart ai_video_nginx` afterwards (nginx locks the inode at startup, so a
    default rename-based rsync makes `nginx -s reload` a no-op).
+   Volume 命名:docker compose project = `lighthouse`(因为 compose 文件在
+   `deploy/lighthouse/`),所以 backend output volume 是 `lighthouse_backend_output`,
+   不是 `ai-video_backend_output`(后者是历史残留 volume,backend 不会读到)。任何
+   `docker run -v <volume>:/...` 操作都要用 `lighthouse_backend_output`。
+   2026-05-05 部署事故防御:`Dockerfile.backend` 配阿里云 PyPI mirror、`deploy.sh`
+   Phase 0 比 `requirements.txt` mtime vs image 时间提示 rebuild、backend
+   `restart: on-failure:5` 限制无限重启。完整时间线 + 紧急恢复三步法见
+   `docs/workflows/incident-2026-05-05-postgres-saver-deploy-stable.md`。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
    `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.
@@ -560,6 +568,35 @@ Key test areas:
 
 ---
 
+## Portfolio / Asset Library
+
+闭环测试通过真实外部 API 跑出的 mp4 / mp3 / png / wav / keyframe 都是付费产物,作为
+作品集 + 数据资产保留。
+
+**索引** (`assets/portfolio/index.json`,gitignored):
+- `scripts/portfolio_index.py` 扫 `output/` 下 12 个子目录(renders / seedance /
+  gpt_images / fast_mode / keyframes / character_identity / quality-test / demo /
+  assets / thumbnails / uploads / audio),按 `category / scenario / label /
+  produced_at / size / source` 写出 JSON 索引。
+- 命令:`make portfolio` 重建,`make portfolio-sync` 把本地 output/ 推送到 Lighthouse
+  生产 backend_output volume,`scripts/sync_lighthouse_to_output.sh` 反向把生产产物拉
+  回本地。
+- 排除规则:`*stub*`(本地 fallback 占位)、`*.json`(pipeline_states/ 过程数据)、
+  `*.db`。
+- 触发:`webhook_manager.py` 在 `pipeline.completed` 事件后自动调
+  `portfolio_hook.py` 重建索引,无需人工介入。
+
+**双向 sync 脚本**:
+- `scripts/sync_output_to_lighthouse.sh`:本地 output/ → 生产 `lighthouse_backend_output`
+  volume(用于把本地积累的素材推到生产,让生产 nginx `/api/media/*` 能访问)。
+- `scripts/sync_lighthouse_to_output.sh`:生产 volume → 本地 output/(用于把生产闭环
+  测试产物并入本地作品集)。
+
+两个脚本都用 `ai_video.pem`(优先仓库根,fallback `~/Downloads/`)+ docker run alpine
+作为中转(因为 named volume 不可直接 host-side 读写)。
+
+---
+
 ## Key Patterns and Conventions
 
 ### Error Handling
@@ -592,6 +629,10 @@ Key test areas:
 - Chinese-first i18n with English toggle
 - localStorage + cookie dual storage for settings
 - Background polling for pipeline progress (StepByStepView, StageProgress)
+- ESLint lock on demo key: `web/eslint.config.mjs` `no-restricted-syntax` 规则禁止
+  Literal `'ai_video_demo_2026'` 出现在 fallback / placeholder / i18n 之外的位置;
+  `no-restricted-imports` 禁止 import `API_BASE` 常量(必须用 `getApiBase()` /
+  `apiFetch()`)。新组件直接调 `apiFetch()`,不要 `fetch(\`${API_BASE}/...\`, ...)`。
 
 ---
 
