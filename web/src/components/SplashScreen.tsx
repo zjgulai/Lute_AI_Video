@@ -46,51 +46,38 @@ export default function SplashScreen({ onEnter }: Props) {
 
   const btnBase =
     "px-5 py-2.5 rounded-[24px] text-[14px] font-medium cursor-pointer " +
-    "transition-all duration-300 ease-out bg-white/8 text-white border border-white/12 " +
-    "hover:bg-white/15 hover:border-white/25 active:scale-[0.98]";
+    "transition-all duration-300 ease-out bg-[var(--bg-hover)] text-[var(--text-h2)] border border-[var(--border-default)] " +
+    "hover:bg-[var(--bg-panel)] hover:border-[var(--border-hover-strong)] active:scale-[0.98]";
 
   return (
     <div
       className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-opacity duration-700 ease-in-out ${
         animating ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
-      style={{ background: "radial-gradient(ellipse at 30% 20%, rgba(140,60,75,0.55) 0%, rgba(28,20,21,1) 55%, #100C0D 100%)" }}
+      style={{ background: "radial-gradient(ellipse at 30% 20%, rgba(215,92,112,0.10) 0%, #FDF8F6 55%, #FCF5F2 100%)" }}
     >
-      {/* Film grain */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E\")",
-        backgroundSize: "256px 256px",
-      }} />
 
       {/* Main */}
       <div className="relative z-10 flex flex-col items-center gap-5 md:gap-7 px-6 text-center">
-        <div className="animate-splash-in px-4 py-1.5 rounded-full bg-white/8 border border-white/10 backdrop-blur-sm" style={{ animationDelay: "0ms" }}>
-          <span className="text-[12px] font-medium tracking-wider" style={{ color: "rgba(255,255,255,0.7)" }}>{t("app.title")}</span>
+        <div className="animate-splash-in px-4 py-1.5 rounded-full bg-[rgba(215,92,112,0.12)] border border-[rgba(215,92,112,0.18)]" style={{ animationDelay: "0ms" }}>
+          <span className="text-[12px] font-semibold tracking-wider text-[var(--fortune-red)]">{t("app.title")}</span>
         </div>
-        <div className="animate-splash-in relative flex items-center justify-center" style={{ animationDelay: "80ms" }}>
-          <div className="absolute rounded-full animate-lens-breathe" style={{ width: 220, height: 220, border: "1px solid rgba(255,77,106,0.18)", boxShadow: "0 0 80px rgba(255,77,106,0.18)" }} />
-          <h1 className="relative text-[48px] md:text-[56px] font-medium tracking-[0.03em] text-white leading-none" style={{ fontFamily: "'Montserrat', -apple-system, sans-serif" }}>Momcozy</h1>
+        <div className="animate-splash-in" style={{ animationDelay: "80ms" }}>
+          <h1 className="text-[52px] md:text-[64px] font-medium tracking-[0.02em] text-[var(--text-h1)] leading-none" style={{ fontFamily: "'Montserrat', -apple-system, sans-serif" }}>Momcozy</h1>
         </div>
-        <div className="animate-splash-in flex flex-col items-center gap-1.5" style={{ animationDelay: "160ms" }}>
-          <p className="text-[18px] leading-relaxed" style={{ fontFamily: "'Noto Sans SC', 'PingFang SC', -apple-system, sans-serif", color: "rgba(255,255,255,0.85)" }}>{t("splash.sloganZh")}</p>
-          <p className="text-[14px]" style={{ fontFamily: "'Inter', -apple-system, sans-serif", color: "rgba(255,255,255,0.55)" }}>Evolving for Mom and Cozy</p>
+        <div className="animate-splash-in flex flex-col items-center gap-2" style={{ animationDelay: "160ms" }}>
+          <div className="w-10 h-0.5 rounded-full bg-[var(--fortune-red)] opacity-60" />
+          <p className="text-[18px] leading-relaxed text-[var(--text-body)] pt-1" style={{ fontFamily: "'Noto Sans SC', 'PingFang SC', -apple-system, sans-serif" }}>{t("splash.sloganZh")}</p>
+          <p className="text-[14px] text-[var(--text-muted)]" style={{ fontFamily: "'Inter', -apple-system, sans-serif" }}>Evolving for Mom and Cozy</p>
         </div>
-        <p className="animate-splash-in text-[11px]" style={{ color: "rgba(255,255,255,0.35)", animationDelay: "200ms" }}>{t("splash.departmentCredit")}</p>
+        <p className="animate-splash-in text-[12px] text-[var(--text-placeholder)]" style={{ animationDelay: "200ms" }}>{t("splash.departmentCredit")}</p>
       </div>
 
       {/* CTA */}
       <div className="animate-splash-in absolute bottom-[12%] flex flex-wrap items-center justify-center gap-3 px-4" style={{ animationDelay: "280ms" }}>
         <button className={btnBase} onClick={() => setShowGuide(true)}>{t("splash.creationGuide")}</button>
-        <button onClick={handleEnter} className="px-8 py-3 rounded-[24px] text-[16px] font-medium cursor-pointer transition-all duration-300 ease-out bg-[var(--fortune-red)] text-white border border-[var(--fortune-red)] hover:bg-[var(--neon-red)] hover:border-[var(--neon-red)] hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_24px_rgba(255,77,106,0.35)]">{t("splash.enter")}</button>
+        <button onClick={handleEnter} className="px-8 py-3 rounded-[24px] text-[16px] font-medium cursor-pointer transition-all duration-300 ease-out bg-[var(--fortune-red)] text-white border border-[var(--fortune-red)] hover:bg-[var(--fortune-red-600)] hover:border-[var(--fortune-red-600)] hover:scale-[1.02] active:scale-[0.98] shadow-lg">{t("splash.enter")}</button>
         <button className={btnBase} onClick={() => setShowBlueprint(true)}>{t("splash.blueprint")}</button>
-      </div>
-
-      {/* Timeline */}
-      <div className="animate-splash-in absolute bottom-[4%] flex items-center gap-2" style={{ animationDelay: "350ms" }}>
-        <div className="w-2 h-2 rounded-full animate-timeline-pulse" style={{ background: "rgba(255,77,106,0.45)" }} />
-        <div className="w-[60vw] max-w-[480px] h-px" style={{ background: "rgba(255,255,255,0.1)" }} />
-        <div className="w-2 h-2 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />
-        <span className="text-[10px] ml-1.5" style={{ color: "rgba(255,255,255,0.2)" }}>00:00</span>
       </div>
 
       {/* ═══ GUIDE OVERLAY ═══ */}
@@ -114,7 +101,7 @@ export default function SplashScreen({ onEnter }: Props) {
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-2">
                 {["DeepSeek-V4-Pro 文本", "GPT-4o Image 图像", "Happy Horse 视频", "CosyVoice2 语音"].map(m => (
-                  <span key={m} className="px-3 py-1 rounded-full bg-[rgba(215,92,112,0.10)] text-[11px] font-medium text-[var(--fortune-red)] border border-[rgba(215,92,112,0.18)]">{m}</span>
+                  <span key={m} className="px-3 py-1 rounded-full bg-[rgba(215,92,112,0.10)] text-[12px] font-medium text-[var(--fortune-red)] border border-[rgba(215,92,112,0.18)]">{m}</span>
                 ))}
               </div>
             </div>
@@ -137,13 +124,13 @@ export default function SplashScreen({ onEnter }: Props) {
             <section>
               <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-4">两种操作模式</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-5 rounded-xl bg-gradient-to-br from-[rgba(215,92,112,0.14)] to-[rgba(255,77,106,0.06)] border border-[rgba(215,92,112,0.20)]">
+                <div className="p-5 rounded-xl bg-gradient-to-br from-[rgba(215,92,112,0.14)] to-[rgba(215,92,112,0.06)] border border-[rgba(215,92,112,0.20)]">
                   <div className="text-[15px] font-semibold text-[var(--fortune-red)]">Smart Create 一键模式</div>
                   <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-2">
                     选场景 → 填信息 → 点生成。AI 做全部决策，适合快速验证、批量生产。30s-5min 等待后直接查看完整结果。
                   </div>
                 </div>
-                <div className="p-5 rounded-xl bg-gradient-to-br from-[rgba(220,190,120,0.12)] to-[rgba(255,77,106,0.06)] border border-[rgba(220,190,120,0.20)]">
+                <div className="p-5 rounded-xl bg-gradient-to-br from-[rgba(220,190,120,0.12)] to-[rgba(215,92,112,0.06)] border border-[rgba(220,190,120,0.20)]">
                   <div className="text-[15px] font-semibold text-[var(--gold-foil)]">Expert Studio 逐步模式</div>
                   <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-2">
                     12 个步骤逐步执行，每步可查看、编辑、重做。4 个 Gate 关口自动暂停等待审核。适合需要精细控制和品牌审查的场景。
@@ -157,7 +144,7 @@ export default function SplashScreen({ onEnter }: Props) {
               <h3 className="text-[18px] font-semibold text-[var(--text-h1)] mb-4">设计理念</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {DESIGN_PHILOSOPHY.map((p, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-gradient-to-br from-[var(--film-reel)] to-[rgba(255,77,106,0.04)] border border-[var(--border-default)]">
+                  <div key={i} className="p-4 rounded-xl bg-gradient-to-br from-[var(--film-reel)] to-[rgba(215,92,112,0.04)] border border-[var(--border-default)]">
                     <div className="text-lg mb-1">{p.icon}</div>
                     <div className="text-[14px] font-semibold text-[var(--text-h1)]">{p.title}</div>
                     <div className="text-[12px] text-[var(--text-body)] leading-relaxed mt-1">{p.desc}</div>
@@ -308,7 +295,7 @@ export default function SplashScreen({ onEnter }: Props) {
             {/* ── Footer CTA ── */}
             <div className="text-center pt-4">
               <button onClick={() => { setShowGuide(false); handleEnter(); }}
-                className="px-10 py-3.5 rounded-xl text-[16px] font-semibold text-white bg-[var(--fortune-red)] hover:bg-[var(--neon-red)] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_24px_rgba(255,77,106,0.35)]">
+                className="px-10 py-3.5 rounded-xl text-[16px] font-semibold text-white bg-[var(--fortune-red)] hover:bg-[var(--neon-red)] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_24px_rgba(215,92,112,0.35)]">
                 {t("splash.enter")}
               </button>
             </div>

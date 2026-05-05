@@ -46,7 +46,7 @@ export default function QuickTemplate({ onApply }: Props) {
                 <div className="text-sm font-medium text-[var(--color-text-primary)]">
                   {t(`locale.toggle`) === "中" ? preset.nameEn : preset.name}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5">
+                <div className="text-[12px] text-[var(--color-text-tertiary)] mt-0.5">
                   {preset.scene} · {preset.videoType}
                 </div>
               </button>

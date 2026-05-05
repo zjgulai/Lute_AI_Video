@@ -16,7 +16,7 @@ export default function AuditScoreCard({ report }: Props) {
     <div className="p-3 rounded-xl bg-[var(--bg-card)] border border-[rgba(215,92,112,0.18)] space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
+        <h3 className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
@@ -54,7 +54,7 @@ export default function AuditScoreCard({ report }: Props) {
               : score >= 0.6 ? t("audit.pendingReview")
               : t("audit.rejected")}
           </p>
-          <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{report.summary}</p>
+          <p className="text-[12px] text-[var(--text-muted)] mt-0.5 line-clamp-2">{report.summary}</p>
         </div>
       </div>
 
@@ -63,8 +63,8 @@ export default function AuditScoreCard({ report }: Props) {
         {report.criteria.map((c: AuditCriterion) => (
           <div key={c.name}>
             <div className="flex justify-between items-center mb-0.5">
-              <span className="text-[11px] text-[var(--text-muted)] truncate mr-2">{c.name}</span>
-              <span className="text-[11px] font-medium text-[var(--text-h1)]">{Math.round(c.score * 100)}</span>
+              <span className="text-[12px] text-[var(--text-muted)] truncate mr-2">{c.name}</span>
+              <span className="text-[12px] font-medium text-[var(--text-h1)]">{Math.round(c.score * 100)}</span>
             </div>
             <div className="h-1.5 rounded-full bg-[rgba(215,92,112,0.18)] overflow-hidden">
               <div
@@ -87,11 +87,11 @@ function ScoreBadge({ score, status, t }: { score: number; status: string; t: (k
   const colors: Record<string, string> = {
     PASS: "bg-[rgba(120,175,140,0.10)] text-[var(--jade-accent)] border-[rgba(120,175,140,0.20)]",
     WARN: "bg-[rgba(220,190,120,0.10)] text-[var(--gold-foil)] border-[rgba(220,190,120,0.20)]",
-    FAIL: "bg-[rgba(140,60,75,0.10)] text-[var(--crimson-mist)] border-[rgba(140,60,75,0.20)]",
+    FAIL: "bg-[rgba(208,78,90,0.10)] text-[var(--crimson-mist)] border-[rgba(208,78,90,0.20)]",
   };
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${colors[status] || colors.FAIL}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-semibold border ${colors[status] || colors.FAIL}`}
     >
       <span
         className={`w-1.5 h-1.5 rounded-full ${

@@ -130,22 +130,22 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
         </div>
         <button
           onClick={handleClose}
-          className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-h1)] cursor-pointer"
+          className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] cursor-pointer"
         >
           {t("common.close")}
         </button>
       </div>
 
       {/* Mock mode warning */}
-      <div className="text-[10px] text-[var(--gold-foil)] bg-[rgba(255,159,10,0.05)] px-2 py-1.5 rounded-lg mb-3">
+      <div className="text-[12px] text-[var(--gold-foil)] bg-[rgba(255,159,10,0.05)] px-2 py-1.5 rounded-lg mb-3">
         {t("perf.mockWarning")}
       </div>
 
       {/* Platform selection */}
       <div className="mb-3">
-        <p className="text-[11px] font-medium text-[var(--text-h1)] mb-1.5">{t("perf.publishSelect")}</p>
+        <p className="text-[12px] font-medium text-[var(--text-h1)] mb-1.5">{t("perf.publishSelect")}</p>
         <div className="flex gap-3">
-          <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-h1)] cursor-pointer">
+          <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-h1)] cursor-pointer">
             <input
               type="checkbox"
               checked={platforms.tiktok}
@@ -155,7 +155,7 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
             />
             TikTok
           </label>
-          <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-h1)] cursor-pointer">
+          <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-h1)] cursor-pointer">
             <input
               type="checkbox"
               checked={platforms.shopify}
@@ -170,7 +170,7 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
 
       {/* Title field */}
       <div className="mb-2">
-        <label className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1">
+        <label className="text-[12px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1">
           {t("step.editTitle")}
         </label>
         <input
@@ -185,7 +185,7 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
 
       {/* Description field */}
       <div className="mb-3">
-        <label className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1">
+        <label className="text-[12px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1">
           {t("editors.description")}
         </label>
         <textarea
@@ -212,17 +212,17 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
       {/* Progress per platform */}
       {Object.keys(progress).length > 0 && (
         <div className="space-y-2 mt-3">
-          <p className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider">
+          <p className="text-[12px] font-medium text-[var(--text-muted)] uppercase tracking-wider">
             {t("perf.publishProgress")}
           </p>
           {Object.entries(progress).map(([platform, p]) => (
             <div key={platform} className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-card)] border border-[rgba(215,92,112,0.18)]">
               <div className="flex items-center gap-2">
                 <PlatformStateIcon state={p.state} />
-                <span className="text-[11px] font-medium text-[var(--text-h1)]">
+                <span className="text-[12px] font-medium text-[var(--text-h1)]">
                   {platform === "tiktok" ? "TikTok" : "Shopify"}
                 </span>
-                <span className="text-[10px] text-[var(--text-muted)]">{stateLabel(p.state)}</span>
+                <span className="text-[12px] text-[var(--text-muted)]">{stateLabel(p.state)}</span>
               </div>
               {p.state === "done" && p.result?.post_url && (
                 <div className="flex items-center gap-2">
@@ -230,13 +230,13 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
                     href={p.result.post_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[10px] text-[var(--fortune-red)] hover:underline"
+                    className="text-[12px] text-[var(--fortune-red)] hover:underline"
                   >
                     {t("dist.view")}
                   </a>
                   <button
                     onClick={() => navigator.clipboard.writeText(p.result!.post_url || "")}
-                    className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-h1)] cursor-pointer"
+                    className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] cursor-pointer"
                   >
                     {t("perf.copyLink")}
                   </button>
@@ -245,7 +245,7 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
               {p.state === "error" && (
                 <button
                   onClick={handleRetry}
-                  className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-h1)] underline cursor-pointer"
+                  className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] underline cursor-pointer"
                 >
                   {t("dist.retry")}
                 </button>
@@ -257,14 +257,14 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
 
       {/* Overall error */}
       {overallError && (
-        <div className="mt-2 text-[10px] text-[var(--crimson-mist)] bg-[rgba(196,91,80,0.05)] px-2 py-1.5 rounded-lg">
+        <div className="mt-2 text-[12px] text-[var(--crimson-mist)] bg-[rgba(196,91,80,0.05)] px-2 py-1.5 rounded-lg">
           {overallError}
         </div>
       )}
 
       {/* All done */}
       {isComplete && (
-        <div className="mt-3 text-[11px] text-[var(--fortune-red)] font-medium text-center">
+        <div className="mt-3 text-[12px] text-[var(--fortune-red)] font-medium text-center">
           {t("perf.published")}
         </div>
       )}

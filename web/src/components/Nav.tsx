@@ -47,7 +47,7 @@ export default function Nav() {
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               isActive
                 ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[rgba(78,58,61,0.5)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[rgba(53,20,26,0.06)]"
             }`}
           >
             <Icon size={18} weight="fill" />

@@ -214,12 +214,12 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
         <div className="space-y-3">
           {/* S1: Product Direct */}
           <div className="apple-card p-3 space-y-2">
-            <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
+            <h3 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
               <Package size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[var(--fortune-red)]" />
               {t("scene.product_direct.title")}
             </h3>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("product.nameRequired")}
               </label>
               <input
@@ -231,7 +231,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.brandOptional")}
               </label>
               <input
@@ -243,7 +243,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.keyFeatures")}
               </label>
               <textarea
@@ -253,10 +253,10 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                 className="apple-input resize-none text-sm"
                 rows={3}
               />
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t("sceneForm.keyFeaturesHint")}</p>
+              <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{t("sceneForm.keyFeaturesHint")}</p>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.category")}
               </label>
               <select
@@ -278,18 +278,18 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               <button
                 type="button"
                 onClick={() => setShowProductDetails(!showProductDetails)}
-                className="flex items-center gap-1 text-[11px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
+                className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
               >
                 <span>{showProductDetails ? "▾" : "▸"}</span>
                 {t("product.detailsTitle")}
-                <span className="text-[11px] text-[var(--text-muted)] ml-1">({t("product.detailsHint")})</span>
+                <span className="text-[12px] text-[var(--text-muted)] ml-1">({t("product.detailsHint")})</span>
               </button>
 
               {showProductDetails && (
                 <div className="space-y-2 mt-2">
                   {/* Usage Scenario */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.usageScenario")}
                     </label>
                     <textarea
@@ -303,7 +303,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Pain Points */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.painPoints")} <span className="text-[var(--text-muted)] font-normal">({t("product.painPointsHint")})</span>
                     </label>
                     <textarea
@@ -317,7 +317,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Target Audience */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.targetAudience")}
                     </label>
                     <textarea
@@ -331,7 +331,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Competitor Context */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.competitorContext")}
                     </label>
                     <textarea
@@ -351,7 +351,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               <button
                 type="button"
                 onClick={() => setShowBrandVoice(!showBrandVoice)}
-                className="flex items-center gap-1 text-[11px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
+                className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
               >
                 <span>{showBrandVoice ? "▾" : "▸"}</span>
                 {t("brand.voiceTitle")}
@@ -360,7 +360,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               {showBrandVoice && (
                 <div className="space-y-2 mt-2">
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("brand.voiceDo")}
                     </label>
                     <textarea
@@ -372,7 +372,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("brand.voiceDont")}
                     </label>
                     <textarea
@@ -394,12 +394,12 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
         <div className="space-y-3">
           {/* S2: Brand Campaign */}
           <div className="apple-card p-3 space-y-2">
-            <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
+            <h3 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
               <Megaphone size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[var(--fortune-red)]" />
               {t("scene.brand_campaign.title")}
             </h3>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.brandPackageRequired")}
               </label>
               <div className="flex gap-2">
@@ -417,14 +417,14 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                 </select>
                 <button
                   type="button"
-                  className="text-[11px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.05)] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] hover:bg-[rgba(215,92,112,0.10)] transition-colors cursor-pointer whitespace-nowrap"
+                  className="text-[12px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.05)] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] hover:bg-[rgba(215,92,112,0.10)] transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {t("sceneForm.brandPackageNew")}
                 </button>
               </div>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.campaignTheme")}
               </label>
               <input
@@ -436,7 +436,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.keyMessage")}
               </label>
               <textarea
@@ -448,7 +448,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.targetAudience")}
               </label>
               <input
@@ -465,18 +465,18 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               <button
                 type="button"
                 onClick={() => setShowCampaignDetails(!showCampaignDetails)}
-                className="flex items-center gap-1 text-[11px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
+                className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
               >
                 <span>{showCampaignDetails ? "▾" : "▸"}</span>
                 {t("campaign.detailsTitle")}
-                <span className="text-[11px] text-[var(--text-muted)] ml-1">({t("campaign.detailsHint")})</span>
+                <span className="text-[12px] text-[var(--text-muted)] ml-1">({t("campaign.detailsHint")})</span>
               </button>
 
               {showCampaignDetails && (
                 <div className="space-y-2 mt-2">
                   {/* Campaign Goal */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("campaign.goal")}
                     </label>
                     <textarea
@@ -490,7 +490,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Brand Values */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("campaign.values")}
                     </label>
                     <textarea
@@ -504,7 +504,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Visual Identity */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("campaign.visualIdentity")}
                     </label>
                     <textarea
@@ -518,7 +518,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Competitor Campaigns */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("campaign.competitorCampaigns")}
                     </label>
                     <textarea
@@ -540,12 +540,12 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
         <div className="space-y-3">
           {/* S3: Influencer Remix */}
           <div className="apple-card p-3 space-y-2">
-            <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
+            <h3 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
               <Users size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[var(--fortune-red)]" />
               {t("scene.influencer_remix.title")}
             </h3>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.videoUrl")} *
               </label>
               <div className="flex gap-2">
@@ -558,14 +558,14 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                 />
                 <button
                   type="button"
-                  className="text-[11px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.05)] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] hover:bg-[rgba(215,92,112,0.10)] transition-colors cursor-pointer whitespace-nowrap"
+                  className="text-[12px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.05)] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] hover:bg-[rgba(215,92,112,0.10)] transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {t("sceneForm.orUpload")}
                 </button>
               </div>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.productToFeatureRequired")}
               </label>
               <input
@@ -577,7 +577,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                 {t("sceneForm.influencerName")}
               </label>
               <input
@@ -596,7 +596,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                 onChange={(e) => setKeepOriginalAudio(e.target.checked)}
                 className="w-3.5 h-3.5 accent-[var(--fortune-red)]"
               />
-              <label htmlFor="keep-original-audio" className="text-[11px] font-medium text-[var(--text-body)] cursor-pointer">
+              <label htmlFor="keep-original-audio" className="text-[12px] font-medium text-[var(--text-body)] cursor-pointer">
                 {t("sceneForm.keepOriginalAudio")}
               </label>
             </div>
@@ -606,18 +606,18 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               <button
                 type="button"
                 onClick={() => setShowProductDetails(!showProductDetails)}
-                className="flex items-center gap-1 text-[11px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
+                className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-body)] hover:text-[var(--text-h1)] transition-colors w-full"
               >
                 <span>{showProductDetails ? "▾" : "▸"}</span>
                 {t("product.detailsTitle")}
-                <span className="text-[11px] text-[var(--text-muted)] ml-1">({t("product.detailsHint")})</span>
+                <span className="text-[12px] text-[var(--text-muted)] ml-1">({t("product.detailsHint")})</span>
               </button>
 
               {showProductDetails && (
                 <div className="space-y-2 mt-2">
                   {/* Usage Scenario */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.usageScenario")}
                     </label>
                     <textarea
@@ -631,7 +631,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Pain Points */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.painPoints")} <span className="text-[var(--text-muted)] font-normal">({t("product.painPointsHint")})</span>
                     </label>
                     <textarea
@@ -645,7 +645,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Target Audience */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.targetAudience")}
                     </label>
                     <textarea
@@ -659,7 +659,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
                   {/* Competitor Context */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                    <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                       {t("product.competitorContext")}
                     </label>
                     <textarea
@@ -681,14 +681,14 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
       {scene === "brand_vlog" && (
         <div className="space-y-3">
           <div className="apple-card p-3 space-y-2">
-            <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
+            <h3 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
               <Camera size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[var(--fortune-red)]" />
               品牌VLOG
             </h3>
             {/* Brand + Product SKU */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">品牌规范</label>
+                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">品牌规范</label>
                 <select
                   value={vlogBrandId}
                   onChange={(e) => { setVlogBrandId(e.target.value); const brand = VLOG_BRANDS.find(b => b.id === e.target.value); if (brand?.products?.[0]) setVlogProductId(brand.products[0].id); }}
@@ -698,17 +698,17 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">产品SKU</label>
+                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">产品SKU</label>
                 <select value={vlogProductId} onChange={(e) => setVlogProductId(e.target.value)} className="apple-input text-sm">
                   {(VLOG_BRANDS.find(b => b.id === vlogBrandId)?.products || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">选择产品后自动回填六视图</p>
+                <p className="text-[12px] text-[var(--text-muted)] mt-0.5">选择产品后自动回填六视图</p>
               </div>
             </div>
 
             {/* Scene Selection */}
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-2">场景选择</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">场景选择</label>
               <div className="grid grid-cols-3 gap-2">
                 {VLOG_SCENES.map(s => (
                   <button
@@ -722,7 +722,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                     }`}
                   >
                     <div className="text-xs font-semibold text-[var(--color-text-primary)]">{s.name}</div>
-                    <div className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5">{s.desc}</div>
+                    <div className="text-[12px] text-[var(--color-text-tertiary)] mt-0.5">{s.desc}</div>
                   </button>
                 ))}
               </div>
@@ -730,7 +730,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
             {/* Six-View */}
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-2">产品六视图</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">产品六视图</label>
               {VLOG_BRANDS.find(b => b.id === vlogBrandId)?.products.find(p => p.id === vlogProductId)?.views && (
                 <VlogSixView views={VLOG_BRANDS.find(b => b.id === vlogBrandId)!.products.find(p => p.id === vlogProductId)!.views} />
               )}
@@ -738,7 +738,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
             {/* Model Selection */}
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-2">模特图选择 · 支持多选</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">模特图选择 · 支持多选</label>
               <VlogModelSelector
                 models={VLOG_MODELS}
                 selected={vlogModelIds}
@@ -748,7 +748,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
             {/* Story Description */}
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">故事描述</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">故事描述</label>
               <textarea
                 value={vlogStory}
                 onChange={(e) => setVlogStory(e.target.value.slice(0, 300))}
@@ -758,14 +758,14 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                 maxLength={300}
               />
               <div className="flex justify-between mt-1">
-                <span className="text-[11px] text-[var(--text-muted)]">描述人物动作、情绪、卖点节奏和结尾指令</span>
-                <span className="text-[11px] text-[var(--text-muted)]">{vlogStory.length} / 300</span>
+                <span className="text-[12px] text-[var(--text-muted)]">描述人物动作、情绪、卖点节奏和结尾指令</span>
+                <span className="text-[12px] text-[var(--text-muted)]">{vlogStory.length} / 300</span>
               </div>
             </div>
 
             {/* Duration */}
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-2">视频时长</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">视频时长</label>
               <div className="flex gap-2">
                 {VLOG_DURATION_OPTIONS.map(d => (
                   <button
@@ -779,7 +779,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                     }`}
                   >
                     <div>{d.label}</div>
-                    <div className="text-[11px] opacity-60 mt-0.5">{d.note}</div>
+                    <div className="text-[12px] opacity-60 mt-0.5">{d.note}</div>
                   </button>
                 ))}
               </div>
@@ -797,7 +797,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="flex items-center justify-between w-full cursor-pointer"
           >
-            <span className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
+            <span className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
               {t("sceneForm.advanced")}
             </span>
             <svg
@@ -814,7 +814,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
             <div className="mt-3 space-y-3 pt-3 border-t border-[var(--border-default)]">
               {/* Platform checkboxes */}
               <div>
-                <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1.5 uppercase tracking-wider">
+                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1.5 uppercase tracking-wider">
                   {t("distPlatform")}
                 </label>
                 <div className="flex flex-wrap gap-1.5">
@@ -836,14 +836,14 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
               </div>
               {/* Mode toggle */}
               <div>
-                <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1.5 uppercase tracking-wider">
+                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1.5 uppercase tracking-wider">
                   {t("sceneForm.modeExpert")}/{t("sceneForm.modeSmart")}
                 </label>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setMode("expert")}
-                    className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer ${
+                    className={`text-[12px] px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer ${
                       mode === "expert"
                         ? "bg-[var(--fortune-red)] text-white"
                         : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[var(--border-default)]"
@@ -854,7 +854,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                   <button
                     type="button"
                     onClick={() => setMode("smart")}
-                    className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer ${
+                    className={`text-[12px] px-2.5 py-1 rounded-full font-medium transition-all cursor-pointer ${
                       mode === "smart"
                         ? "bg-[var(--cinema-azure)] text-white"
                         : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[var(--border-default)]"

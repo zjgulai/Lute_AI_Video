@@ -91,7 +91,7 @@ export default function GalleryGrid({ items, onPlay }: Props) {
             <span className="text-sm font-semibold text-[var(--color-text-primary)]">
               {t(`scene.${scene}.title`) || t(scene) || scene}
             </span>
-            <span className="text-[11px] text-[var(--color-text-tertiary)]">({sceneItems.length})</span>
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">({sceneItems.length})</span>
           </div>
 
           {/* 3-column card grid */}
@@ -129,7 +129,7 @@ export default function GalleryGrid({ items, onPlay }: Props) {
                   </div>
                   {/* Duration badge */}
                   {item.duration > 0 && (
-                    <div className="absolute bottom-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px]"
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[12px]"
                     >
                       <Clock size={10} weight="fill" />
                       {item.duration}s
@@ -137,7 +137,7 @@ export default function GalleryGrid({ items, onPlay }: Props) {
                   )}
                   {/* Score badge */}
                   {item.score !== undefined && item.score > 0 && (
-                    <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[rgba(120,175,140,0.90)] text-white text-[10px] font-medium"
+                    <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[rgba(120,175,140,0.90)] text-white text-[12px] font-medium"
                     >
                       <ChartBar size={10} weight="fill" />
                       {Math.round((item.score || 0) * 100)}%
@@ -154,11 +154,11 @@ export default function GalleryGrid({ items, onPlay }: Props) {
                   </h4>
                   <div className="flex items-center justify-between"
                   >
-                    <span className="text-[10px] text-[var(--color-text-tertiary)]"
+                    <span className="text-[12px] text-[var(--color-text-tertiary)]"
                     >
                       {formatDate(item.createdAt)}
                     </span>
-                    <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]"
+                    <div className="flex items-center gap-2 text-[12px] text-[var(--color-text-tertiary)]"
                     >
                       {item.views !== undefined && (
                         <span className="flex items-center gap-0.5"

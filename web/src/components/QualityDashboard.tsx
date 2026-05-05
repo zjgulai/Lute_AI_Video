@@ -43,12 +43,12 @@ function statusColor(status: string) {
       };
     case "FAIL":
       return {
-        bg: "bg-[rgba(140,60,75,0.10)]",
+        bg: "bg-[rgba(208,78,90,0.10)]",
         text: "text-[var(--crimson-mist)]",
-        border: "border-[rgba(140,60,75,0.20)]",
+        border: "border-[rgba(208,78,90,0.20)]",
         bar: "bg-[var(--crimson-mist)]",
         dot: "bg-[var(--crimson-mist)]",
-        ring: "ring-[rgba(140,60,75,0.20)]",
+        ring: "ring-[rgba(208,78,90,0.20)]",
       };
     default:
       return {
@@ -72,7 +72,7 @@ function ScoreBar({ score, color }: { score: number; color: string }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[11px] font-semibold text-[var(--text-h1)] tabular-nums w-8 text-right">
+      <span className="text-[12px] font-semibold text-[var(--text-h1)] tabular-nums w-8 text-right">
         {pct}%
       </span>
     </div>
@@ -108,7 +108,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">
+            <p className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">
               {t("quality.overallStatus")}
             </p>
             <span
@@ -119,7 +119,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
             </span>
           </div>
           <div className="text-right">
-            <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">
+            <p className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">
               {t("quality.overallScore")}
             </p>
             <span className={`text-lg font-bold ${overall.text}`}>
@@ -142,7 +142,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
       {/* Criteria list */}
       {criteria.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-1">
+          <h3 className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-1">
             {t("quality.criteria")}
           </h3>
           {criteria.map((c, i) => {
@@ -160,7 +160,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
                     </span>
                   </div>
                   <span
-                    className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${colors.bg} ${colors.text}`}
+                    className={`inline-flex items-center text-[12px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${colors.bg} ${colors.text}`}
                   >
                     {c.status}
                   </span>
@@ -171,7 +171,7 @@ export default function QualityDashboard({ qualityReport }: Props) {
 
                 {/* Observation / reason */}
                 {c.reason && (
-                  <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                  <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
                     {c.reason}
                   </p>
                 )}

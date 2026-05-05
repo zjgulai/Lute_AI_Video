@@ -187,7 +187,7 @@ export default function InfluencersPage() {
             </div>
             <div>
               <h1 className="text-base font-semibold text-[var(--text-h1)]">{t("inf.title")}</h1>
-              <p className="text-[11px] text-[var(--text-body)] mt-0.5">
+              <p className="text-[12px] text-[var(--text-body)] mt-0.5">
                 {t("inf.manageDesc")}
               </p>
             </div>
@@ -259,13 +259,13 @@ export default function InfluencersPage() {
                           {inf.name}
                         </h3>
                         {!inf.is_active && (
-                          <span className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-panel)] px-1.5 py-0.5 rounded">
+                          <span className="text-[12px] text-[var(--text-muted)] bg-[var(--bg-panel)] px-1.5 py-0.5 rounded">
                             {t("inf.inactive")}
                           </span>
                         )}
                       </div>
                       {inf.handle && (
-                        <p className="text-[11px] text-[var(--fortune-red)] font-medium mt-0.5">
+                        <p className="text-[12px] text-[var(--fortune-red)] font-medium mt-0.5">
                           @{inf.handle}
                         </p>
                       )}
@@ -275,7 +275,7 @@ export default function InfluencersPage() {
                           {inf.platforms.map((platform, i) => (
                             <span
                               key={i}
-                              className="text-[11px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)] px-2 py-0.5 rounded-full font-medium"
+                              className="text-[12px] text-[var(--fortune-red)] bg-[rgba(215,92,112,0.12)] px-2 py-0.5 rounded-full font-medium"
                             >
                               {platform}
                             </span>
@@ -288,7 +288,7 @@ export default function InfluencersPage() {
                           {inf.style_tags.map((tag, i) => (
                             <span
                               key={i}
-                              className="text-[11px] text-[var(--text-body)] bg-[var(--bg-panel)] px-2 py-0.5 rounded-full"
+                              className="text-[12px] text-[var(--text-body)] bg-[var(--bg-panel)] px-2 py-0.5 rounded-full"
                             >
                               {tag}
                             </span>
@@ -296,11 +296,11 @@ export default function InfluencersPage() {
                         </div>
                       )}
                       {inf.notes && (
-                        <p className="text-[11px] text-[var(--text-body)] mt-1.5 line-clamp-1">
+                        <p className="text-[12px] text-[var(--text-body)] mt-1.5 line-clamp-1">
                           {inf.notes}
                         </p>
                       )}
-                      <span className="text-[11px] text-[var(--text-muted)] block mt-1.5">
+                      <span className="text-[12px] text-[var(--text-muted)] block mt-1.5">
                         {t("inf.createdAt")} {formatDate(inf.created_at)}
                       </span>
                     </div>
@@ -346,7 +346,7 @@ export default function InfluencersPage() {
               <div className="space-y-3">
                 {/* Name */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                  <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.nameRequired")}
                   </label>
                   <input
@@ -360,7 +360,7 @@ export default function InfluencersPage() {
 
                 {/* Handle */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                  <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.handle")}
                   </label>
                   <input
@@ -370,14 +370,14 @@ export default function InfluencersPage() {
                     placeholder={t("inf.handlePlaceholder")}
                     className="apple-input text-sm"
                   />
-                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
                     {t("inf.handleHint")}
                   </p>
                 </div>
 
                 {/* Platforms */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                  <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.platforms")}
                   </label>
                   <input
@@ -387,14 +387,14 @@ export default function InfluencersPage() {
                     placeholder={t("inf.platformsPlaceholder")}
                     className="apple-input text-sm"
                   />
-                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
                     {t("inf.platformsHint")}
                   </p>
                 </div>
 
                 {/* Style tags */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                  <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.styleTags")}
                   </label>
                   <input
@@ -404,14 +404,14 @@ export default function InfluencersPage() {
                     placeholder={t("inf.styleTagsPlaceholder")}
                     className="apple-input text-sm"
                   />
-                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
                     {t("inf.styleTagsHint")}
                   </p>
                 </div>
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-1">
+                  <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
                     {t("inf.notes")}
                   </label>
                   <textarea
@@ -434,7 +434,7 @@ export default function InfluencersPage() {
                     />
                     <div className="w-8 h-4.5 bg-[rgba(215,92,112,0.18)] rounded-full peer peer-checked:bg-[var(--fortune-red)] transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3.5 after:h-3.5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-3.5" />
                   </label>
-                  <span className="text-[11px] text-[var(--text-body)] font-medium">
+                  <span className="text-[12px] text-[var(--text-body)] font-medium">
                     {t("inf.active")}
                   </span>
                 </div>
@@ -481,7 +481,7 @@ export default function InfluencersPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-[var(--text-h1)]">{t("inf.deleteConfirm")}</h3>
-                  <p className="text-[11px] text-[var(--text-body)]">
+                  <p className="text-[12px] text-[var(--text-body)]">
                     {t("inf.deleteHint")}
                   </p>
                 </div>

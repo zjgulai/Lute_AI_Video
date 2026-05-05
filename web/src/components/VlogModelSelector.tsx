@@ -51,7 +51,7 @@ export default function VlogModelSelector({
                 <div className="absolute w-14 h-14 rounded-full bg-white/80 left-1/2 top-5 -translate-x-1/2 shadow-md" />
                 <div className="absolute w-20 h-24 rounded-t-full bg-white/75 left-1/2 -bottom-6 -translate-x-1/2 shadow-sm" />
                 {/* Initials badge */}
-                <div className="absolute right-2 top-2 px-1.5 py-0.5 rounded-full bg-white/15 text-white text-[11px] font-bold backdrop-blur-sm">
+                <div className="absolute right-2 top-2 px-1.5 py-0.5 rounded-full bg-white/15 text-white text-[12px] font-bold backdrop-blur-sm">
                   {model.role.slice(0, 2).toUpperCase()}
                 </div>
               </div>
@@ -60,10 +60,10 @@ export default function VlogModelSelector({
                 <div className="text-xs font-semibold text-[var(--color-text-primary)]">
                   {model.name}
                 </div>
-                <div className="inline-block px-1.5 py-0.5 rounded-full bg-[var(--color-bg)] text-[11px] font-medium text-[var(--color-text-secondary)]">
+                <div className="inline-block px-1.5 py-0.5 rounded-full bg-[var(--color-bg)] text-[12px] font-medium text-[var(--color-text-secondary)]">
                   {model.role}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-tertiary)] leading-relaxed">
+                <div className="text-[12px] text-[var(--color-text-tertiary)] leading-relaxed">
                   {model.description}
                 </div>
               </div>
@@ -80,7 +80,7 @@ export default function VlogModelSelector({
             .map((m) => (
               <div
                 key={m.id}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-[var(--color-border-light)] text-[11px]"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-[var(--color-border-light)] text-[12px]"
               >
                 <span className="font-medium text-[var(--color-text-primary)]">
                   {m.name}
@@ -91,7 +91,7 @@ export default function VlogModelSelector({
                     e.stopPropagation();
                     toggleModel(m.id);
                   }}
-                  className="ml-0.5 w-4 h-4 rounded-full bg-[var(--color-border-light)] hover:bg-red-100 flex items-center justify-center text-[11px] text-[var(--color-text-tertiary)] hover:text-red-500 transition-colors cursor-pointer"
+                  className="ml-0.5 w-4 h-4 rounded-full bg-[var(--color-border-light)] hover:bg-red-100 flex items-center justify-center text-[12px] text-[var(--color-text-tertiary)] hover:text-red-500 transition-colors cursor-pointer"
                 >
                   ×
                 </button>

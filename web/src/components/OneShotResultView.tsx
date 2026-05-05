@@ -52,7 +52,7 @@ function DemoPlaceholder({ label }: { label: string }) {
       </div>
       <div>
         <p className="text-xs font-medium text-[var(--text-body)]">Demo Mode</p>
-        <p className="text-[11px] text-[var(--text-muted)]">{label}</p>
+        <p className="text-[12px] text-[var(--text-muted)]">{label}</p>
       </div>
     </div>
   );
@@ -193,7 +193,7 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
               >
                 {t.label}
                 {t.count > 0 && (
-                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[11px] bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[12px] bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
                     {t.count}
                   </span>
                 )}
@@ -216,7 +216,7 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
                           : "text-[var(--text-body)] hover:text-[var(--text-h1)] hover:bg-[var(--bg-panel)]"
                       }`}>
                       {st.label}
-                      {st.count > 0 && <span className="ml-1 text-[11px] opacity-60">{st.count}</span>}
+                      {st.count > 0 && <span className="ml-1 text-[12px] opacity-60">{st.count}</span>}
                     </button>
                   ))}
                 </div>
@@ -246,7 +246,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="text-center">
       <div className="text-lg font-semibold text-[var(--text-h1)]">{value}</div>
-      <div className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
+      <div className="text-[12px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
     </div>
   );
 }
@@ -271,20 +271,20 @@ function BriefCard({ brief, index, onEdit }: { brief: any; index: number; onEdit
     <div className="apple-card p-3 bg-[var(--bg-card)]">
       <div className="flex items-start gap-2 mb-1">
         {brief.platform && (
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] shrink-0">
+          <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] shrink-0">
             {t("platform." + brief.platform)}
           </span>
         )}
         {brief.hook_type && (
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
+          <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
             {brief.hook_type}
           </span>
         )}
-        <span className="text-[11px] text-[var(--text-muted)] ml-auto">{brief.id || `Brief ${index + 1}`}</span>
+        <span className="text-[12px] text-[var(--text-muted)] ml-auto">{brief.id || `Brief ${index + 1}`}</span>
         {onEdit && (
           <button
             onClick={() => setEditing(!editing)}
-            className="text-[11px] text-[var(--fortune-red)] hover:underline cursor-pointer px-1"
+            className="text-[12px] text-[var(--fortune-red)] hover:underline cursor-pointer px-1"
           >
             {editing ? t("step.cancel") : t("step.edit")}
           </button>
@@ -306,7 +306,7 @@ function BriefCard({ brief, index, onEdit }: { brief: any; index: number; onEdit
           {brief.usp_priority && brief.usp_priority.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {brief.usp_priority.map((u: string, j: number) => (
-                <span key={j} className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--bg-panel)] text-[var(--text-body)]">{u}</span>
+                <span key={j} className="text-[12px] px-1.5 py-0.5 rounded bg-[var(--bg-panel)] text-[var(--text-body)]">{u}</span>
               ))}
             </div>
           )}
@@ -335,15 +335,15 @@ function ScriptCard({ script, index, onEdit }: { script: any; index: number; onE
   return (
     <details className="apple-card overflow-hidden">
       <summary className="p-3 cursor-pointer flex items-center gap-2 list-none">
-        <span className="text-[11px] font-mono text-[var(--text-muted)]">{script.id || `S${index + 1}`}</span>
+        <span className="text-[12px] font-mono text-[var(--text-muted)]">{script.id || `S${index + 1}`}</span>
         <span className="text-sm font-medium text-[var(--text-h1)] flex-1">
           {script.product_name || script.brand_name || "Script"}
         </span>
-        <span className="text-[11px] text-[var(--text-muted)]">{(script.segments || []).length}{t("step.segments")}</span>
+        <span className="text-[12px] text-[var(--text-muted)]">{(script.segments || []).length}{t("step.segments")}</span>
         {onEdit && (
           <button
             onClick={(e) => { e.preventDefault(); setEditing(!editing); }}
-            className="text-[11px] text-[var(--fortune-red)] hover:underline cursor-pointer px-1"
+            className="text-[12px] text-[var(--fortune-red)] hover:underline cursor-pointer px-1"
           >
             {editing ? t("step.cancel") : t("step.edit")}
           </button>
@@ -365,14 +365,14 @@ function ScriptCard({ script, index, onEdit }: { script: any; index: number; onE
           (script.segments || []).map((seg: any, j: number) => (
             <div key={j} className="pl-3 border-l-2 border-[rgba(215,92,112,0.18)]">
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[11px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
-                <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
+                <span className="text-[12px] text-[var(--text-muted)] font-mono">
                   {seg.start_time ?? 0}s — {seg.end_time ?? 0}s
                 </span>
               </div>
               <p className="text-xs text-[var(--text-h1)]">{seg.description || seg.voiceover}</p>
               {seg.visual_description && (
-                <p className="text-[11px] text-[var(--text-body)] mt-1 italic">📷 {seg.visual_description}</p>
+                <p className="text-[12px] text-[var(--text-body)] mt-1 italic">📷 {seg.visual_description}</p>
               )}
             </div>
           ))
@@ -392,11 +392,11 @@ function VideoPromptsView({ prompts, onRegenerate }: { prompts: any[]; onRegener
         return (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">{p.script_id || `Prompt ${i + 1}`}</span>
+              <span className="text-[12px] font-mono text-[var(--text-muted)]">{p.script_id || `Prompt ${i + 1}`}</span>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => navigator.clipboard.writeText(txt)}
-                  className="text-[11px] text-[var(--fortune-red)] hover:underline cursor-pointer"
+                  className="text-[12px] text-[var(--fortune-red)] hover:underline cursor-pointer"
                   title={t("result.copyPrompt")}
                 >
                   {t("result.copy")}
@@ -404,7 +404,7 @@ function VideoPromptsView({ prompts, onRegenerate }: { prompts: any[]; onRegener
                 {onRegenerate && (
                   <button
                     onClick={() => onRegenerate(i)}
-                    className="text-[11px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.18)]"
+                    className="text-[12px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.18)]"
                   >
                     {t("step.regenerate")}
                   </button>
@@ -429,7 +429,7 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
       {/* Real generated images */}
       {hasRealImages && (
         <div className="apple-card p-3 bg-[var(--bg-card)]">
-          <p className="text-[11px] font-mono text-[var(--text-muted)] mb-2">{t("result.thumbnails")} ({thumbImages.length})</p>
+          <p className="text-[12px] font-mono text-[var(--text-muted)] mb-2">{t("result.thumbnails")} ({thumbImages.length})</p>
           <div className="grid grid-cols-2 gap-2">
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-lg overflow-hidden aspect-[9/16]">
@@ -442,7 +442,7 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-[var(--bg-panel)]">
-                    <span className="text-[11px] text-[var(--text-muted)]">Thumbnail (Demo)</span>
+                    <span className="text-[12px] text-[var(--text-muted)]">Thumbnail (Demo)</span>
                   </div>
                 )}
               </div>
@@ -459,7 +459,7 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
           const variants = set.variants || (Array.isArray(set) ? set : [set]);
           return (
             <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
-              <p className="text-[11px] font-mono text-[var(--text-muted)] mb-2">{set.script_id || `Set ${i + 1}`}</p>
+              <p className="text-[12px] font-mono text-[var(--text-muted)] mb-2">{set.script_id || `Set ${i + 1}`}</p>
               <div className="grid grid-cols-2 gap-2">
                 {variants.map((v: any, j: number) => (
                   <div key={j} className="apple-card p-3 bg-[var(--bg-card)]">
@@ -471,19 +471,19 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
                       </svg>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-semibold text-[var(--text-h1)]">
+                      <div className="text-[12px] font-semibold text-[var(--text-h1)]">
                         {v.style || v.variant_id || `${t("review.variant")} ${j + 1}`}
                       </div>
                       {onRegenerate && (
                         <button
                           onClick={() => onRegenerate(j)}
-                          className="text-[11px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1"
+                          className="text-[12px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1"
                         >
                           {t("step.regenerate")}
                         </button>
                       )}
                     </div>
-                    <div className="text-[11px] text-[var(--text-body)] line-clamp-2 mt-0.5">
+                    <div className="text-[12px] text-[var(--text-body)] line-clamp-2 mt-0.5">
                       {v.concept || v.prompt || ""}
                     </div>
                   </div>
@@ -539,12 +539,12 @@ function MediaView({
                   <rect x="1" y="5" width="15" height="14" rx="2" />
                 </svg>
               </div>
-              <p className="text-[11px] font-semibold text-[var(--text-h1)]">{t("result.finalVideo")}</p>
+              <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("result.finalVideo")}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowPublish(true)}
-                className="apple-btn apple-btn-primary text-[11px] py-1 px-2 cursor-pointer"
+                className="apple-btn apple-btn-primary text-[12px] py-1 px-2 cursor-pointer"
               >
                 {t("perf.publishTitle")}
               </button>
@@ -552,7 +552,7 @@ function MediaView({
                 <a
                   href={getMediaUrl(finalVideo)}
                   download
-                  className="text-[11px] text-[var(--fortune-red)] hover:underline cursor-pointer"
+                  className="text-[12px] text-[var(--fortune-red)] hover:underline cursor-pointer"
                 >
                   {t("result.download")}
                 </a>
@@ -596,7 +596,7 @@ function MediaView({
                 <rect x="1" y="5" width="15" height="14" rx="2" />
               </svg>
             </div>
-            <p className="text-[11px] font-semibold text-[var(--text-h1)]">{t("result.mediaClips")} ({clipPaths.length})</p>
+            <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("result.mediaClips")} ({clipPaths.length})</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {clipPaths.map((p, i) => (
@@ -612,7 +612,7 @@ function MediaView({
                 ) : (
                   <DemoPlaceholder label={`Clip ${i + 1} (Demo)`} />
                 )}
-                <p className="text-[11px] text-[var(--text-muted)] truncate px-1">{p.split("/").pop()}</p>
+                <p className="text-[12px] text-[var(--text-muted)] truncate px-1">{p.split("/").pop()}</p>
               </div>
             ))}
           </div>
@@ -630,7 +630,7 @@ function MediaView({
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </div>
-            <p className="text-[11px] font-semibold text-[var(--text-h1)]">{t("result.thumbnails")} ({thumbImages.length})</p>
+            <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("result.thumbnails")} ({thumbImages.length})</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {thumbImages.map((p, i) => (
@@ -644,7 +644,7 @@ function MediaView({
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-[var(--bg-panel)]">
-                    <span className="text-[11px] text-[var(--text-muted)]">Thumbnail (Demo)</span>
+                    <span className="text-[12px] text-[var(--text-muted)]">Thumbnail (Demo)</span>
                   </div>
                 )}
                 <a
@@ -675,7 +675,7 @@ function MediaView({
                 <circle cx="18" cy="16" r="3" />
               </svg>
             </div>
-            <p className="text-[11px] font-semibold text-[var(--text-h1)]">{t("result.audioTracks")} ({audioPaths.length})</p>
+            <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("result.audioTracks")} ({audioPaths.length})</p>
           </div>
           <div className="space-y-2">
             {audioPaths.map((p, i) => (
@@ -687,11 +687,11 @@ function MediaView({
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-[var(--text-h1)] truncate">{p.split("/").pop()}</p>
+                  <p className="text-[12px] text-[var(--text-h1)] truncate">{p.split("/").pop()}</p>
                   {getMediaUrl(p) ? (
                     <audio src={getMediaUrl(p)} controls className="w-full h-8" />
                   ) : (
-                    <p className="text-[11px] text-[var(--text-muted)] py-1">Audio preview unavailable (demo mode)</p>
+                    <p className="text-[12px] text-[var(--text-muted)] py-1">Audio preview unavailable (demo mode)</p>
                   )}
                 </div>
               </div>
@@ -711,7 +711,7 @@ function MediaView({
               <path d="M21 13v2a4 4 0 0 1-4 4H3" />
             </svg>
           </div>
-          <p className="text-[11px] font-semibold text-[var(--text-h1)]">{t("result.platformDistribution")}</p>
+          <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("result.platformDistribution")}</p>
         </div>
         <div className="space-y-2">
           {targetPlatforms.map((platform) => (
@@ -731,10 +731,10 @@ function MediaView({
                   <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                 </svg>
               </div>
-              <p className="text-[11px] font-semibold text-[var(--text-h1)]">{t("quality.title")}</p>
+              <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("quality.title")}</p>
             </div>
             <span
-              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+              className={`text-[12px] font-semibold px-2 py-0.5 rounded-full ${
                 audit.overall_status === "PASS"
                   ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
                   : audit.overall_status === "WARN"
@@ -748,7 +748,7 @@ function MediaView({
           <p className="text-xs text-[var(--text-body)] mb-2">{audit.summary}</p>
           <div className="space-y-1">
             {audit.criteria?.map((c, i) => (
-              <div key={i} className="flex items-center gap-2 text-[11px]">
+              <div key={i} className="flex items-center gap-2 text-[12px]">
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
                     c.status === "PASS" ? "bg-[var(--fortune-red)]" : c.status === "WARN" ? "bg-[var(--gold-foil)]" : "bg-[var(--crimson-mist)]"
@@ -769,7 +769,7 @@ function MediaView({
 
 function RawView({ data }: { data: any }) {
   return (
-    <pre className="text-[11px] font-mono text-[var(--text-body)] bg-[var(--bg-card)] p-3 rounded-lg overflow-auto max-h-[400px] whitespace-pre-wrap break-all">
+    <pre className="text-[12px] font-mono text-[var(--text-body)] bg-[var(--bg-card)] p-3 rounded-lg overflow-auto max-h-[400px] whitespace-pre-wrap break-all">
       {JSON.stringify(data, null, 2)}
     </pre>
   );
@@ -811,7 +811,7 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
         <button
           onClick={handlePublish}
           disabled={isPublishing}
-          className="apple-btn apple-btn-primary text-[11px] py-1 px-2"
+          className="apple-btn apple-btn-primary text-[12px] py-1 px-2"
         >
           {isPublishing ? (
             <span className="inline-flex items-center gap-1">
@@ -826,13 +826,13 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
       )}
       {pubResult?.success && (
         <div className="flex items-center gap-2">
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">{t("dist.published")}</span>
+          <span className="text-[12px] px-1.5 py-0.5 rounded bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">{t("dist.published")}</span>
           {pubResult.url && (
             <a
               href={pubResult.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[11px] text-[var(--fortune-red)] hover:underline"
+              className="text-[12px] text-[var(--fortune-red)] hover:underline"
             >
               {t("dist.view")}
             </a>
@@ -841,11 +841,11 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
       )}
       {pubResult && !pubResult.success && (
         <div className="flex items-center gap-2">
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)] font-medium">{t("dist.failed")}</span>
+          <span className="text-[12px] px-1.5 py-0.5 rounded bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)] font-medium">{t("dist.failed")}</span>
           <button
             onClick={handlePublish}
             disabled={isPublishing}
-            className="text-[11px] text-[var(--text-body)] hover:text-[var(--text-h1)] underline cursor-pointer"
+            className="text-[12px] text-[var(--text-body)] hover:text-[var(--text-h1)] underline cursor-pointer"
           >
             {isPublishing ? t("dist.retrying") : t("dist.retry")}
           </button>

@@ -34,7 +34,7 @@ function getScoreColor(score: number): string {
 function getScoreBgColor(score: number): string {
   if (score >= 0.8) return "bg-[rgba(120,175,140,0.10)]";
   if (score >= 0.5) return "bg-[rgba(220,190,120,0.10)]";
-  return "bg-[rgba(140,60,75,0.10)]";
+  return "bg-[rgba(208,78,90,0.10)]";
 }
 
 function getScoreTextColor(score: number): string {
@@ -151,7 +151,7 @@ export default function CandidateSelector({
             {/* AI Recommended badge */}
             {candidate.recommended && (
               <div className="absolute -top-2.5 left-3">
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--fortune-red)] text-white shadow-sm">
+                <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[var(--fortune-red)] text-white shadow-sm">
                   <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
                     <path d="M6 1L7.5 4.5L11 5L8.5 7.5L9 11L6 9L3 11L3.5 7.5L1 5L4.5 4.5L6 1Z" fill="white" />
                   </svg>
@@ -173,7 +173,7 @@ export default function CandidateSelector({
 
             {/* Variant badge */}
             <div className="flex justify-end mb-2">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${getScoreBgColor(score)} ${getScoreTextColor(score)}`}>
+              <span className={`text-[12px] font-semibold px-2 py-0.5 rounded-full ${getScoreBgColor(score)} ${getScoreTextColor(score)}`}>
                 {t(getVariantLabelKey(candidate.variant))}
               </span>
             </div>
@@ -181,10 +181,10 @@ export default function CandidateSelector({
             {/* Score bar */}
             <div className="mb-2">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-[var(--text-muted)] font-medium">
+                <span className="text-[12px] text-[var(--text-muted)] font-medium">
                   {t("gate.score")}
                 </span>
-                <span className={`text-[10px] font-semibold ${getScoreTextColor(score)}`}>
+                <span className={`text-[12px] font-semibold ${getScoreTextColor(score)}`}>
                   {scorePct}%
                 </span>
               </div>
@@ -199,20 +199,20 @@ export default function CandidateSelector({
             {/* Content preview */}
             <div className="mb-3 min-h-[40px]">
               {preview ? (
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed whitespace-pre-wrap break-words">
+                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed whitespace-pre-wrap break-words">
                   {preview}
                   {preview.length >= 100 && (
                     <span className="text-[var(--text-muted)]">...</span>
                   )}
                 </p>
               ) : (
-                <p className="text-[11px] text-[var(--text-muted)] italic">{t("common.empty")}</p>
+                <p className="text-[12px] text-[var(--text-muted)] italic">{t("common.empty")}</p>
               )}
             </div>
 
             {/* Score explanation */}
             {candidate.score?.explanation && (
-              <p className="text-[9px] text-[var(--text-muted)] mb-2 leading-relaxed line-clamp-2">
+              <p className="text-[12px] text-[var(--text-muted)] mb-2 leading-relaxed line-clamp-2">
                 {candidate.score.explanation}
               </p>
             )}
@@ -236,7 +236,7 @@ export default function CandidateSelector({
             <div className="text-center mt-1.5">
               <button
                 onClick={() => onEdit(candidate.id)}
-                className="text-[10px] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
+                className="text-[12px] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
               >
                 {"✎"} {t("step.edit")}
               </button>

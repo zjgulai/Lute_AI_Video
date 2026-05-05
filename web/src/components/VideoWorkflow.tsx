@@ -227,29 +227,29 @@ export default function VideoWorkflow({
             </div>
             <div>
               <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("workflow.title")}</h2>
-              <p className="text-[11px] text-[var(--text-body)]">Label: {label}</p>
+              <p className="text-[12px] text-[var(--text-body)]">Label: {label}</p>
             </div>
           </div>
-          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${allDone ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]" : "bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)]"}`}>
+          <span className={`text-[12px] font-semibold px-2 py-0.5 rounded-full ${allDone ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]" : "bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)]"}`}>
             {allDone ? t("wstatus.allDone") : t("wstatus.running")}
           </span>
         </div>
 
         <div className="grid grid-cols-4 gap-2">
           <div className="bg-[var(--bg-panel)] rounded-lg p-2">
-            <p className="text-[9px] text-[var(--text-body)] uppercase">{t("workflow.product")}</p>
+            <p className="text-[12px] text-[var(--text-body)] uppercase">{t("workflow.product")}</p>
             <p className="text-xs font-medium text-[var(--text-h1)] truncate">{productName}</p>
           </div>
           <div className="bg-[var(--bg-panel)] rounded-lg p-2">
-            <p className="text-[9px] text-[var(--text-body)] uppercase">{t("workflow.brand")}</p>
+            <p className="text-[12px] text-[var(--text-body)] uppercase">{t("workflow.brand")}</p>
             <p className="text-xs font-medium text-[var(--text-h1)]">{brandName || "-"}</p>
           </div>
           <div className="bg-[var(--bg-panel)] rounded-lg p-2">
-            <p className="text-[9px] text-[var(--text-body)] uppercase">{t("workflow.duration")}</p>
+            <p className="text-[12px] text-[var(--text-body)] uppercase">{t("workflow.duration")}</p>
             <p className="text-xs font-medium text-[var(--text-h1)]">{duration}s</p>
           </div>
           <div className="bg-[var(--bg-panel)] rounded-lg p-2">
-            <p className="text-[9px] text-[var(--text-body)] uppercase">{t("workflow.scenario")}</p>
+            <p className="text-[12px] text-[var(--text-body)] uppercase">{t("workflow.scenario")}</p>
             <p className="text-xs font-medium text-[var(--text-h1)]">{scenarioLabel}</p>
           </div>
         </div>
@@ -257,7 +257,7 @@ export default function VideoWorkflow({
         {platforms.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {platforms.map((p: string) => (
-              <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] border border-[rgba(215,92,112,0.15)]">
+              <span key={p} className="text-[12px] px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] border border-[rgba(215,92,112,0.15)]">
                 {t("platform." + p)}
               </span>
             ))}
@@ -269,7 +269,7 @@ export default function VideoWorkflow({
       <div className="apple-card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold text-[var(--text-h1)]">{t("workflow.timeline")}</h3>
-          <span className="text-[11px] text-[var(--text-body)]">
+          <span className="text-[12px] text-[var(--text-body)]">
             {STEP_ORDER.filter((s) => steps[s]?.status === "done").length} / {STEP_ORDER.length} {t("workflow.completed")}
           </span>
         </div>
@@ -299,7 +299,7 @@ export default function VideoWorkflow({
                       : "bg-[var(--bg-card)] border-[var(--border-default)] opacity-50"
                   }`}
                 >
-                  <span className={`text-[11px] font-mono w-5 text-center ${isDone ? "text-[var(--fortune-red)]" : isCurrent ? "text-[var(--gold-foil)]" : "text-[var(--text-muted)]"}`}>
+                  <span className={`text-[12px] font-mono w-5 text-center ${isDone ? "text-[var(--fortune-red)]" : isCurrent ? "text-[var(--gold-foil)]" : "text-[var(--text-muted)]"}`}>
                     {isDone ? (
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                         <path d="M4 8.5L7 11.5L12 5" stroke="var(--fortune-red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -318,12 +318,12 @@ export default function VideoWorkflow({
                   </span>
 
                   {isEdited && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">{t("stepStatus.edited")}</span>
+                    <span className="text-[12px] px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">{t("stepStatus.edited")}</span>
                   )}
 
-                  <span className="text-[9px] text-[var(--text-muted)] hidden sm:inline">{getStepDurationLabel(stepName)}</span>
+                  <span className="text-[12px] text-[var(--text-muted)] hidden sm:inline">{getStepDurationLabel(stepName)}</span>
 
-                  <span className={`text-[11px] font-medium ${hasError ? "text-[var(--crimson-mist)]" : isDone ? "text-[var(--fortune-red)]" : isCurrent ? "text-[var(--gold-foil)]" : "text-[var(--text-muted)]"}`}>
+                  <span className={`text-[12px] font-medium ${hasError ? "text-[var(--crimson-mist)]" : isDone ? "text-[var(--fortune-red)]" : isCurrent ? "text-[var(--gold-foil)]" : "text-[var(--text-muted)]"}`}>
                     {hasError ? t("stepStatus.failed") : isDone ? t("stepStatus.completed") : isCurrent ? t("stepStatus.pending") : t("stepStatus.notStarted")}
                   </span>
 
@@ -334,7 +334,7 @@ export default function VideoWorkflow({
                           setViewingStep(viewingStep === stepName ? null : stepName);
                           setEditingStep(null);
                         }}
-                        className="text-[11px] text-[var(--fortune-red)] hover:underline cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.05)]"
+                        className="text-[12px] text-[var(--fortune-red)] hover:underline cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.05)]"
                       >
                         {viewingStep === stepName ? t("waction.hide") : t("waction.view")}
                       </button>
@@ -343,14 +343,14 @@ export default function VideoWorkflow({
                           setEditingStep(editingStep === stepName ? null : stepName);
                           setViewingStep(stepName);
                         }}
-                        className="text-[11px] text-[var(--gold-foil)] hover:underline cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(255,149,0,0.05)]"
+                        className="text-[12px] text-[var(--gold-foil)] hover:underline cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(255,149,0,0.05)]"
                       >
                         {editingStep === stepName ? t("waction.cancelEdit") : t("waction.edit")}
                       </button>
                       <button
                         onClick={() => handleRegenerate(stepName)}
                         disabled={loading}
-                        className="text-[11px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.18)] disabled:opacity-50"
+                        className="text-[12px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[rgba(215,92,112,0.18)] disabled:opacity-50"
                       >
                         {t("waction.regenerate")}
                       </button>
@@ -361,7 +361,7 @@ export default function VideoWorkflow({
                     <button
                       onClick={() => handleRunStep(stepName)}
                       disabled={loading}
-                      className="apple-btn apple-btn-primary text-[11px] px-2.5 py-1 disabled:opacity-50"
+                      className="apple-btn apple-btn-primary text-[12px] px-2.5 py-1 disabled:opacity-50"
                     >
                       {isRunning ? (
                         <span className="flex items-center gap-1">
@@ -381,7 +381,7 @@ export default function VideoWorkflow({
                     <button
                       onClick={() => handleRunStep(stepName)}
                       disabled={loading}
-                      className="apple-btn text-[11px] px-2.5 py-1 bg-[var(--crimson-mist)] hover:bg-[var(--neon-red)] text-white disabled:opacity-50"
+                      className="apple-btn text-[12px] px-2.5 py-1 bg-[var(--crimson-mist)] hover:bg-[var(--neon-red)] text-white disabled:opacity-50"
                     >
                       {t("waction.retry")}
                     </button>
@@ -406,7 +406,7 @@ export default function VideoWorkflow({
 
                 {hasError && state?.errors?.filter((e: string) => e.includes(stepName)).map((err: string, i: number) => (
                   <div key={i} className="ml-7 p-2 bg-[rgba(196,91,80,0.08)] rounded-lg border border-[rgba(196,91,80,0.20)]">
-                    <p className="text-[11px] text-[var(--crimson-mist)]">{err}</p>
+                    <p className="text-[12px] text-[var(--crimson-mist)]">{err}</p>
                   </div>
                 ))}
               </div>
@@ -464,15 +464,15 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
     const briefs = Array.isArray(draft) ? draft : draft.briefs || [];
     return (
       <div className="space-y-2 p-2">
-        <p className="text-[11px] text-[var(--text-body)] mb-1">{te("editors.briefs")}</p>
+        <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.briefs")}</p>
         {briefs.map((b: any, i: number) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
-              <span className="text-[11px] font-semibold text-[var(--fortune-red)]">{b.id || `BRIEF-${String(i + 1).padStart(3, "0")}`}</span>
+              <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
+              <span className="text-[12px] font-semibold text-[var(--fortune-red)]">{b.id || `BRIEF-${String(i + 1).padStart(3, "0")}`}</span>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.topic")}</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.topic")}</label>
               <input
                 type="text"
                 value={b.topic || ""}
@@ -485,7 +485,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.target_audience")}</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.target_audience")}</label>
               <input
                 type="text"
                 value={b.target_audience || ""}
@@ -498,7 +498,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.key_message")}</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.key_message")}</label>
               <textarea
                 value={b.key_message || ""}
                 onChange={(e) => {
@@ -511,7 +511,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.hook_type")}</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.hook_type")}</label>
               <input
                 type="text"
                 value={b.hook_type || ""}
@@ -537,21 +537,21 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
     const scripts = Array.isArray(draft) ? draft : draft.scripts || [];
     return (
       <div className="space-y-2 p-2">
-        <p className="text-[11px] text-[var(--text-body)] mb-1">{te("editors.scripts")}</p>
+        <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.scripts")}</p>
         {scripts.map((s: any, si: number) => (
           <div key={si} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">{s.id || `S${si + 1}`}</span>
+              <span className="text-[12px] font-mono text-[var(--text-muted)]">{s.id || `S${si + 1}`}</span>
               <span className="text-xs font-semibold text-[var(--text-h1)]">{s.product_name || s.brand_name || "Script"}</span>
             </div>
             {(s.segments || []).map((seg: any, j: number) => (
               <div key={j} className="pl-3 border-l-2 border-[var(--border-default)] space-y-1.5 py-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
-                  <span className="text-[11px] text-[var(--text-muted)] font-mono">{seg.start_time ?? 0}s — {seg.end_time ?? 0}s</span>
+                  <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
+                  <span className="text-[12px] text-[var(--text-muted)] font-mono">{seg.start_time ?? 0}s — {seg.end_time ?? 0}s</span>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.voiceover")}</label>
+                  <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.voiceover")}</label>
                   <textarea
                     value={seg.voiceover || ""}
                     onChange={(e) => {
@@ -566,7 +566,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.visual_desc")}</label>
+                  <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.visual_desc")}</label>
                   <textarea
                     value={seg.visual_description || ""}
                     onChange={(e) => {
@@ -581,7 +581,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                   />
                 </div>
                 <div className="mt-2">
-                  <label className="text-[11px] font-medium text-[var(--text-body)] mb-1 block">{te("editors.text_overlay")}</label>
+                  <label className="text-[12px] font-medium text-[var(--text-body)] mb-1 block">{te("editors.text_overlay")}</label>
                   <input
                     type="text"
                     value={seg.text_overlay || ''}
@@ -612,11 +612,11 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
     const boards = Array.isArray(draft) ? draft : draft.storyboards || [];
     return (
       <div className="space-y-2 p-2">
-        <p className="text-[11px] text-[var(--text-body)] mb-1">{te("editors.storyboards")}</p>
+        <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.storyboards")}</p>
         {boards.map((b: any, i: number) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
+              <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
               <input
                 type="text"
                 value={b.scene_title || ""}
@@ -630,7 +630,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.visual_desc")}</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.visual_desc")}</label>
               <textarea
                 value={b.visual_description || ""}
                 onChange={(e) => {
@@ -643,7 +643,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.shot_type")}</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-0.5">{te("editors.shot_type")}</label>
               <input
                 type="text"
                 value={b.shot_type || ""}
@@ -670,13 +670,13 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
     const prompts = Array.isArray(draft) ? draft : draft.prompts || [];
     return (
       <div className="space-y-2 p-2">
-        <p className="text-[11px] text-[var(--text-body)] mb-1">{te("editors.prompts")}</p>
+        <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.prompts")}</p>
         {prompts.map((p: any, i: number) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
+              <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
               {p.platform && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
+                <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
                   {te("platform." + p.platform)}
                 </span>
               )}
@@ -708,7 +708,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
   // Fallback: generic JSON editor for any other step
   return (
     <div className="space-y-2 p-2">
-      <p className="text-[11px] text-[var(--text-body)] mb-1">{te("editors.json")}</p>
+      <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.json")}</p>
       <textarea
         value={JSON.stringify(draft, null, 2)}
         onChange={(e) => {
@@ -742,18 +742,18 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-start gap-2 mb-1">
               {b.platform && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] shrink-0">
+                <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] shrink-0">
                   {to("platform." + b.platform)}
                 </span>
               )}
               {b.hook_type && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
+                <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
                   {b.hook_type}
                 </span>
               )}
             </div>
             <h4 className="text-sm font-semibold text-[var(--text-h1)] mb-1">{b.topic || b.product_name || b.brand_name || "Brief"}</h4>
-            {b.target_audience && <p className="text-[11px] text-[var(--text-muted)] mb-1">{to("editors.target_audience")}:{b.target_audience}</p>}
+            {b.target_audience && <p className="text-[12px] text-[var(--text-muted)] mb-1">{to("editors.target_audience")}:{b.target_audience}</p>}
             {b.key_message && <p className="text-xs text-[var(--text-body)] leading-relaxed">{b.key_message}</p>}
             {b.description && <p className="text-xs text-[var(--text-body)] leading-relaxed mt-1">{b.description}</p>}
           </div>
@@ -770,23 +770,23 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
         {scripts.map((s: any, i: number) => (
           <details key={i} className="apple-card overflow-hidden">
             <summary className="p-3 cursor-pointer flex items-center gap-2 list-none">
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">{s.id || `S${i + 1}`}</span>
+              <span className="text-[12px] font-mono text-[var(--text-muted)]">{s.id || `S${i + 1}`}</span>
               <span className="text-sm font-medium text-[var(--text-h1)] flex-1">{s.product_name || s.brand_name || "Script"}</span>
-              <span className="text-[11px] text-[var(--text-muted)]">{(s.segments || []).length}{to("step.segments")}</span>
+              <span className="text-[12px] text-[var(--text-muted)]">{(s.segments || []).length}{to("step.segments")}</span>
             </summary>
             <div className="px-3 pb-3 space-y-2 border-t border-[var(--border-default)] pt-2">
               {(s.segments || []).map((seg: any, j: number) => (
                 <div key={j} className="pl-3 border-l-2 border-[var(--border-default)]">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[11px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
-                    <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                    <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
+                    <span className="text-[12px] text-[var(--text-muted)] font-mono">
                       {seg.start_time ?? 0}s — {seg.end_time ?? 0}s
                     </span>
                   </div>
                   <p className="text-xs text-[var(--text-h1)]">{seg.voiceover}</p>
-                  {seg.visual_description && <p className="text-[11px] text-[var(--text-body)] mt-1 italic">{seg.visual_description}</p>}
+                  {seg.visual_description && <p className="text-[12px] text-[var(--text-body)] mt-1 italic">{seg.visual_description}</p>}
                   {seg.text_overlay && (
-                    <p className="text-[11px] text-[var(--fortune-red)] font-medium mt-1 bg-[rgba(110,150,110,0.12)] px-2 py-0.5 rounded-md inline-block">
+                    <p className="text-[12px] text-[var(--fortune-red)] font-medium mt-1 bg-[rgba(110,150,110,0.12)] px-2 py-0.5 rounded-md inline-block">
                       {seg.text_overlay}
                     </p>
                   )}
@@ -807,11 +807,11 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
         {boards.map((b: any, i: number) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
+              <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
               <span className="text-xs font-semibold text-[var(--text-h1)]">{b.scene_title || "Scene"}</span>
             </div>
-            {b.visual_description && <p className="text-[11px] text-[var(--text-body)] italic">{b.visual_description}</p>}
-            {b.shot_type && <p className="text-[11px] text-[var(--text-muted)] mt-1">{to("editors.shot_type")}:{b.shot_type}</p>}
+            {b.visual_description && <p className="text-[12px] text-[var(--text-body)] italic">{b.visual_description}</p>}
+            {b.shot_type && <p className="text-[12px] text-[var(--text-muted)] mt-1">{to("editors.shot_type")}:{b.shot_type}</p>}
           </div>
         ))}
       </div>
@@ -831,7 +831,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
     return (
       <div className="space-y-2 p-2">
         {isNewFormat && targetDur > 0 && (
-          <div className="flex items-center gap-2 text-[11px]">
+          <div className="flex items-center gap-2 text-[12px]">
             <span className="text-[var(--text-body)]">
               {to("step.totalDuration")}: {totalDur.toFixed(1)}s / {targetDur}s
             </span>
@@ -853,32 +853,32 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
                 <video src={url} controls className="w-full h-32 object-cover" />
                 <div className="p-2 space-y-1">
                   <div className="flex items-center gap-1 flex-wrap">
-                    <span className="text-[9px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
+                    <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
                     {meta.duration > 0 && (
-                      <span className="text-[9px] text-[var(--text-body)]">{meta.duration.toFixed(1)}s</span>
+                      <span className="text-[12px] text-[var(--text-body)]">{meta.duration.toFixed(1)}s</span>
                     )}
                     {isStub && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)] font-medium">
+                      <span className="text-[12px] px-1.5 py-0.5 rounded-full bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)] font-medium">
                         {to("step.stub")}
                       </span>
                     )}
                     {isFiller && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(122,150,187,0.10)] text-[var(--cinema-azure)] font-medium">
+                      <span className="text-[12px] px-1.5 py-0.5 rounded-full bg-[rgba(122,150,187,0.10)] text-[var(--cinema-azure)] font-medium">
                         {to("step.filler")}
                       </span>
                     )}
                     {hasContinuity && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">
+                      <span className="text-[12px] px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">
                         {to("step.continuity")}
                       </span>
                     )}
                     {!verOk && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)] font-medium">
+                      <span className="text-[12px] px-1.5 py-0.5 rounded-full bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)] font-medium">
                         {to("step.verifyFail")}
                       </span>
                     )}
                   </div>
-                  <p className="text-[9px] text-[var(--text-muted)] truncate">{url}</p>
+                  <p className="text-[12px] text-[var(--text-muted)] truncate">{url}</p>
                 </div>
               </div>
             );
@@ -897,7 +897,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
         {urls.map((url: string, i: number) => (
           <div key={i} className="apple-card overflow-hidden">
             <img src={url} alt={`Asset ${i + 1}`} className="w-full h-32 object-cover" />
-            <p className="text-[9px] text-[var(--text-muted)] p-2 truncate">{url}</p>
+            <p className="text-[12px] text-[var(--text-muted)] p-2 truncate">{url}</p>
           </div>
         ))}
       </div>
@@ -931,7 +931,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
         <div className="apple-card overflow-hidden">
           <video src={finalUrl} controls className="w-full" />
           <div className="p-2">
-            <a href={finalUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[var(--fortune-red)] hover:underline">
+            <a href={finalUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[var(--fortune-red)] hover:underline">
               {to("result.downloadVideo")}
             </a>
           </div>
@@ -941,7 +941,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   return (
-    <pre className="text-[11px] font-mono text-[var(--text-body)] bg-[var(--bg-card)] p-3 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all">
+    <pre className="text-[12px] font-mono text-[var(--text-body)] bg-[var(--bg-card)] p-3 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all">
       {JSON.stringify(output, null, 2)}
     </pre>
   );

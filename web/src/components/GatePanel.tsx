@@ -387,12 +387,12 @@ export default function GatePanel({
             <h2 className="text-base font-semibold text-[var(--text-h1)]">
               {t(gateLabelKey)}
             </h2>
-            <span className="text-[11px] text-[var(--text-body)] font-mono">
+            <span className="text-[12px] text-[var(--text-body)] font-mono">
               {gateId.replace(/_/g, " ")}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[var(--text-body)] font-medium">
+            <span className="text-[12px] text-[var(--text-body)] font-medium">
               {progressLabel}
             </span>
             {/* Progress dots */}
@@ -489,7 +489,7 @@ export default function GatePanel({
                   key={`regen-${c.id}`}
                   onClick={() => handleRegenerate(c.id)}
                   disabled={loading}
-                  className="text-[11px] text-[var(--text-body)] hover:text-[var(--fortune-red)] transition-colors px-2 py-1 rounded hover:bg-[rgba(215,92,112,0.10)] disabled:opacity-50 cursor-pointer"
+                  className="text-[12px] text-[var(--text-body)] hover:text-[var(--fortune-red)] transition-colors px-2 py-1 rounded hover:bg-[rgba(215,92,112,0.10)] disabled:opacity-50 cursor-pointer"
                 >
                   {t("gate.regenerate")} {t(getVariantLabelKey(c.variant))}
                 </button>
@@ -501,17 +501,17 @@ export default function GatePanel({
           {editCandidateId && (
             <div className="mt-3 p-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border-default)]">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold text-[var(--text-h1)]">
+                <span className="text-[12px] font-semibold text-[var(--text-h1)]">
                   {t("step.editTitle")} {editCandidateId}
                 </span>
                 <button
                   onClick={() => setEditCandidateId(null)}
-                  className="text-[11px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer"
+                  className="text-[12px] text-[var(--text-body)] hover:text-[var(--text-h1)] cursor-pointer"
                 >
                   {t("workflow.cancelEdit")}
                 </button>
               </div>
-              <pre className="text-[11px] font-mono text-[var(--text-body)] bg-[var(--bg-page)] p-2 rounded border border-[var(--border-default)] overflow-auto max-h-[200px] whitespace-pre-wrap break-all">
+              <pre className="text-[12px] font-mono text-[var(--text-body)] bg-[var(--bg-page)] p-2 rounded border border-[var(--border-default)] overflow-auto max-h-[200px] whitespace-pre-wrap break-all">
                 {JSON.stringify(
                   candidates.find((c) => c.id === editCandidateId)?.data ?? {},
                   null,
@@ -523,7 +523,7 @@ export default function GatePanel({
 
           {/* Selection hint */}
           <div className="mt-3 text-center">
-            <p className="text-[11px] text-[var(--text-muted)]">
+            <p className="text-[12px] text-[var(--text-muted)]">
               {selectedIds.length === 0
                 ? t("gate.selectHint")
                 : `${selectedIds.length}/${maxSelections} ${t("review.selected")}`}

@@ -125,7 +125,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
 
         {/* Platform Recommendation */}
         <div className="apple-card p-3 mb-4 bg-[var(--bg-panel)]">
-          <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-2">
+          <h4 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-2">
             {t("recommend.platforms")}
           </h4>
           <div className="flex flex-wrap gap-2">
@@ -153,17 +153,17 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
         {/* Strategy Summary */}
         {summary && (
           <div className="apple-card p-3 mb-4 bg-[var(--bg-panel)]">
-            <h4 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1">
+            <h4 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1">
               {t("recommend.strategy")}
             </h4>
             <p className="text-xs text-[var(--text-h1)] leading-relaxed">{summary}</p>
-            {tone && <p className="text-[11px] text-[var(--text-muted)] mt-1">{t("recommend.tone")}: {tone}</p>}
+            {tone && <p className="text-[12px] text-[var(--text-muted)] mt-1">{t("recommend.tone")}: {tone}</p>}
           </div>
         )}
 
         {/* Mode Selector */}
         <div className="flex items-center gap-4 mb-4">
-          <span className="text-[11px] font-semibold text-[var(--text-body)]">{t("recommend.mode")}:</span>
+          <span className="text-[12px] font-semibold text-[var(--text-body)]">{t("recommend.mode")}:</span>
           <button
             onClick={() => setMode("smart")}
             className={`text-xs px-3 py-1.5 rounded-full transition-all ${

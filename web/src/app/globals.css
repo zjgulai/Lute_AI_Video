@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   Fortune Red Cinema — Dark Mode Token System
+   Fortune Red — Warm Light Professional Theme
    ═══════════════════════════════════════════ */
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Inter:wght@400;500&display=swap');
 @tailwind base;
@@ -13,27 +13,77 @@
   --font-body: 'Inter', -apple-system, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', monospace;
 
-  /* 核心色 */
+  /* ─── Fortune Red 发财红 完整阶梯 ─── */
   --fortune-red: #D75C70;
-  --cinnabar: #D04E5A;
-  --neon-red: #FF4D6A;
-  --misty-pink: #EAAFB7;
-  --coral-orange: #F37969;
-  --ember-glow: #B44658;
-  --crimson-mist: #8C3C4B;
+  --fortune-red-50: #FDF0F2;
+  --fortune-red-100: #F9D0D6;
+  --fortune-red-200: #F4AFB9;
+  --fortune-red-300: #EF8E9C;
+  --fortune-red-400: #EA6D7F;
+  --fortune-red-500: #D75C70;
+  --fortune-red-600: #C44A5E;
+  --fortune-red-700: #A13D4E;
+  --fortune-red-800: #7D2F3C;
+  --fortune-red-900: #592235;
+  --fortune-red-950: #35141A;
 
-  /* 金色系 */
-  --gold-foil: #DCBE78;
+  /* ─── Cinnabar 朱砂红 ─── */
+  --cinnabar: #D04E5A;
+  --cinnabar-50: #FCF0F1;
+  --cinnabar-100: #F7CFD2;
+  --cinnabar-500: #D04E5A;
+  --cinnabar-600: #BC3D48;
+
+  /* ─── Misty Pink 柔雾粉 ─── */
+  --misty-pink: #EAAFB7;
+  --misty-pink-50: #FDF4F5;
+  --misty-pink-100: #F9DDE0;
+  --misty-pink-200: #F5C6CB;
+  --misty-pink-500: #EAAFB7;
+
+  /* ─── Coral Orange 珊瑚橘 ─── */
+  --coral-orange: #F37969;
+  --coral-orange-50: #FEF0EE;
+  --coral-orange-500: #F37969;
+
+  /* ─── Pure White 纯净白 ─── */
+  --pure-white: #FDF8F6;
+  --pure-white-50: #FFFFFF;
+  --pure-white-100: #FEFBFA;
+  --pure-white-200: #FDF8F6;
+  --pure-white-300: #FCF5F2;
+  --pure-white-700: #C1BCBA;
+  --pure-white-800: #9B9795;
+  --pure-white-950: #504E4C;
+
+  /* ─── Elegant Cream 雅致米黄 ─── */
+  --elegant-cream: #F2EBC8;
+  --elegant-cream-100: #F5F0D6;
+  --elegant-cream-500: #F2EBC8;
+
+  /* ─── RMB Gold 人民币金 ─── */
+  --gold-foil: #D8BE78;
+  --rmb-gold: #D8BE78;
+  --rmb-gold-50: #FBF7ED;
+
+  /* ─── Jade Green 翡翠绿 ─── */
+  --jade-accent: #78AF8C;
+  --jade-green: #78AF8C;
+  --jade-green-50: #F0F7F2;
+
+  /* ─── Cerulean 天青蓝（新增） ─── */
+  --cerulean: #5C8DC9;
+  --cerulean-50: #F0F5FB;
+
+  /* 保留旧命名兼容 */
   --antique-gold: #B99B5F;
   --pale-gold: #A58C5A;
-
-  /* 功能色 */
-  --jade-accent: #78AF8C;
-  --cool-steel: #829BAF;
-
-  /* 数据可视化扩展 */
+  --ember-glow: #B44658;
+  --crimson-mist: #8C3C4B;
+  --neon-red: #C44A5E;
   --cinema-violet: #9B7CC4;
   --cinema-azure: #5C8DC9;
+  --cool-steel: #5C8DC9;
 
   /* 圆角 */
   --radius-sm: 6px;
@@ -43,115 +93,115 @@
   --radius-2xl: 18px;
 }
 
-/* ─── 深色模式（唯一使用） ─── */
+/* ─── 浅色暖色主题 ─── */
 :root,
-[data-theme="dark"] {
-  /* 背景层级 */
-  --bg-page: #100C0D;
-  --bg-card: #1C1415;
-  --bg-panel: #2A1E20;
-  --bg-layer3: #3A2A2D;
-  --bg-selected: #2A1E20;
-  --bg-hover: #1C1415;
-  --bg-elevated: #1C1415;
+[data-theme="light"] {
+  /* 背景层级 — 暖白纸张 + 阴影区分 */
+  --bg-page: #FDF8F6;
+  --bg-card: #FFFFFF;
+  --bg-panel: #FCF5F2;
+  --bg-layer3: #FEFBFA;
+  --bg-selected: #FDF0F2;
+  --bg-hover: #FDF4F5;
+  --bg-elevated: #FFFFFF;
 
-  /* Cinema 别名（语义化） */
-  --cinema-black: #100C0D;
-  --film-reel: #1C1415;
-  --dark-slate: #2A1E20;
-  --charcoal-rose: #3A2A2D;
-  --warm-shadow: #4E3A3D;
+  /* Cinema 别名同步（组件中有直接引用） */
+  --cinema-black: #FDF8F6;
+  --film-reel: #FCF5F2;
+  --dark-slate: #FEFBFA;
+  --charcoal-rose: #F5F0EC;
+  --warm-shadow: rgba(53, 20, 26, 0.04);
 
   /* 边框 */
-  --border-default: #4E3A3D;
-  --border-selected: #D75C70;
-  --border-hover-strong: #FF4D6A;
-  --border-error: #8C3C4B;
+  --border-default: rgba(53, 20, 26, 0.10);
+  --border-selected: rgba(215, 92, 112, 0.55);
+  --border-hover-strong: rgba(53, 20, 26, 0.15);
+  --border-error: #D04E5A;
   --border-success: #78AF8C;
-  --border-gold: #DCBE78;
-  --blood-red: #8C3C4B;
+  --border-gold: #D8BE78;
+  --blood-red: #D04E5A;
 
-  /* 文字 */
-  --text-display: #FFF8F5;
-  --text-h1: #FAF0EB;
-  --text-h2: #EBDCD7;
-  --text-body: #D2C3BE;
-  --text-muted: #A0918E;
-  --text-placeholder: #6E6260;
-  --text-disabled: #4E413F;
+  /* 文字 — Fortune Red 950 深暖棕透明度阶梯 */
+  --text-display: rgba(53, 20, 26, 0.95);
+  --text-h1: rgba(53, 20, 26, 0.92);
+  --text-h2: rgba(53, 20, 26, 0.75);
+  --text-body: rgba(53, 20, 26, 0.65);
+  --text-muted: rgba(53, 20, 26, 0.50);
+  --text-placeholder: rgba(53, 20, 26, 0.38);
+  --text-disabled: rgba(53, 20, 26, 0.35);
   --text-link: #D75C70;
-  --text-link-active: #FF4D6A;
+  --text-link-active: #C44A5E;
 
-  /* Ink 别名（语义化） */
-  --ink-primary-dark: #FAF0EB;
-  --ink-secondary-dark: #D2C3BE;
-  --ink-tertiary-dark: #A0918E;
+  /* Ink 别名同步 */
+  --ink-primary-dark: rgba(53, 20, 26, 0.92);
+  --ink-secondary-dark: rgba(53, 20, 26, 0.65);
+  --ink-tertiary-dark: rgba(53, 20, 26, 0.50);
 
   /* 引导线 */
-  --line-primary: rgba(234, 175, 183, 0.6);
-  --line-gold: rgba(220, 190, 120, 0.8);
-  --line-glow: rgba(255, 77, 106, 0.5);
-  --line-complete: rgba(120, 175, 140, 0.7);
-  --line-dashed: rgba(140, 110, 115, 0.4);
+  --line-primary: rgba(234, 175, 183, 0.70);
+  --line-gold: rgba(216, 190, 120, 0.80);
+  --line-glow: rgba(215, 92, 112, 0.45);
+  --line-complete: rgba(120, 175, 140, 0.70);
+  --line-dashed: rgba(234, 175, 183, 0.50);
 
   /* 卡片边框 */
-  --card-border: 1px solid #4E3A3D;
-  --card-border-selected: 2px solid #D75C70;
-  --card-border-hover: 2px solid #FF4D6A;
+  --card-border: 1px solid rgba(53, 20, 26, 0.10);
+  --card-border-selected: 2px solid rgba(215, 92, 112, 0.45);
+  --card-border-hover: 2px solid rgba(53, 20, 26, 0.12);
 
   /* 按钮 */
-  --btn-primary-bg: #FF4D6A;
+  --btn-primary-bg: #D75C70;
   --btn-primary-text: #FFFFFF;
-  --btn-primary-glow: 0 0 8px rgba(255, 77, 106, 0.5);
-  --btn-secondary-bg: #1C1415;
-  --btn-secondary-border: 2px solid #D75C70;
-  --btn-secondary-text: #D75C70;
+  --btn-primary-glow: 0 2px 8px rgba(215, 92, 112, 0.25);
+  --btn-secondary-bg: rgba(53, 20, 26, 0.05);
+  --btn-secondary-border: 1px solid rgba(53, 20, 26, 0.12);
+  --btn-secondary-text: rgba(53, 20, 26, 0.85);
   --btn-ghost-bg: transparent;
-  --btn-ghost-border: 1px solid #4E3A3D;
-  --btn-ghost-text: #A0918E;
+  --btn-ghost-border: 1px solid rgba(53, 20, 26, 0.08);
+  --btn-ghost-text: rgba(53, 20, 26, 0.75);
   --btn-cta-bg: #F37969;
   --btn-cta-text: #FFFFFF;
-  --btn-disabled-bg: #3A2A2D;
-  --btn-disabled-text: #6E6260;
+  --btn-disabled-bg: rgba(53, 20, 26, 0.06);
+  --btn-disabled-text: rgba(53, 20, 26, 0.30);
 
-  /* 输入框 */
-  --input-bg: #1C1415;
-  --input-border: 1px solid #4E3A3D;
-  --input-border-focus: 2px solid #FF4D6A;
-  --input-text: #FAF0EB;
-  --input-placeholder: #6E6260;
-  --input-focus-glow: 0 0 12px rgba(255, 77, 106, 0.2);
+  /* 输入框 — 浮起式白底 + 明确边框 */
+  --input-bg: #F5F3F0;
+  --input-border: 1px solid rgba(53, 20, 26, 0.15);
+  --input-border-focus: 2px solid rgba(215, 92, 112, 0.60);
+  --input-text: rgba(53, 20, 26, 0.88);
+  --input-placeholder: rgba(53, 20, 26, 0.38);
+  --input-focus-glow: 0 0 0 3px rgba(215, 92, 112, 0.10);
 
-  /* 阴影 */
-  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow-red: 0 0 12px rgba(255, 77, 106, 0.25);
-  --shadow-glow-gold: 0 0 12px rgba(220, 190, 120, 0.2);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+  /* 阴影 — 双层 elevation */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(53, 20, 26, 0.06);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.03);
+  --shadow-glow-red: 0 0 8px rgba(215, 92, 112, 0.15);
+  --shadow-glow-gold: 0 0 8px rgba(216, 190, 120, 0.10);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
 
   /* 导航 */
-  --nav-bg: #1C1415;
-  --nav-border: 1px solid #3A2A2D;
-  --nav-link: #A0918E;
-  --nav-link-active: #FF4D6A;
+  --nav-bg: #FFFFFF;
+  --nav-border: 1px solid rgba(53, 20, 26, 0.06);
+  --nav-link: rgba(53, 20, 26, 0.45);
+  --nav-link-active: #D75C70;
 
   /* 分割线 */
-  --divider-light: #4E3A3D;
-  --divider-subtle: #3A2A2D;
-  --divider-strong: #8C3C4B;
-  --divider-gold: #B99B5F;
+  --divider-light: rgba(53, 20, 26, 0.06);
+  --divider-subtle: rgba(53, 20, 26, 0.04);
+  --divider-strong: rgba(208, 78, 90, 0.40);
+  --divider-gold: #D8BE78;
 
-  /* 影视特效 */
-  --vignette-edge: rgba(16, 12, 13, 0.85);
-  --neon-glow: 0 0 24px rgba(255, 77, 106, 0.45);
-  --film-grain-opacity: 0.02;
+  /* 影视特效（全部归零） */
+  --vignette-edge: transparent;
+  --neon-glow: none;
+  --film-grain-opacity: 0;
 }
 
-/* ─── 色系语义入口层(--color-* 系列实际语义稳态,组件直接消费) ─── */
+/* ─── 色系语义入口层 ─── */
 :root,
-[data-theme="dark"] {
+[data-theme="light"] {
   --color-bg: var(--bg-page);
   --color-surface-secondary: var(--bg-panel);
   --color-text-primary: var(--text-h1);
@@ -159,33 +209,37 @@
   --color-text-tertiary: var(--text-muted);
   --color-accent: var(--fortune-red);
   --color-border: var(--border-default);
-  --color-border-light: rgba(215, 92, 112, 0.18);
+  --color-border-light: rgba(215, 92, 112, 0.22);
   --color-warning: var(--gold-foil);
-  --color-error: var(--crimson-mist);
+  --color-error: var(--cinnabar);
 }
 
-/* ─── 旧 Body 兼容(防止个别组件还引用 var(--color-bg)) ─── */
+/* 全局字号基准 + 链接颜色 */
+html { font-size: 18px; }
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+a:hover { color: var(--text-link-active); }
+
+/* ─── Body 基础 ─── */
 body {
   font-family: var(--font-body);
   background-color: var(--color-bg);
   color: var(--color-text-secondary);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  -moz-osx-font-smoothing: auto;
   line-height: 1.55;
 }
 
 h1, h2, .font-display {
   font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--text-h1);
 }
-h2 { font-weight: 500; }
-
-/* 视频/音频原生控件深色化 */
-video, audio {
-  color-scheme: dark;
-}
+h2 { font-weight: 600; }
 
 /* ─── 动画 ─── */
 @keyframes fadeIn {
@@ -239,8 +293,8 @@ video, audio {
   box-shadow: var(--btn-primary-glow);
 }
 .apple-btn-primary:hover:not(:disabled) {
-  background: var(--neon-red);
-  box-shadow: 0 0 6px rgba(255, 77, 106, 0.6), 0 0 18px rgba(255, 77, 106, 0.4), 0 0 36px rgba(255, 77, 106, 0.2);
+  background: var(--fortune-red-600);
+  box-shadow: 0 2px 8px rgba(215, 92, 112, 0.35);
 }
 
 .apple-btn-secondary {
@@ -249,8 +303,8 @@ video, audio {
   border: var(--btn-secondary-border);
 }
 .apple-btn-secondary:hover:not(:disabled) {
-  border-color: var(--neon-red);
-  background: rgba(255, 77, 106, 0.06);
+  border-color: var(--fortune-red);
+  background: rgba(215, 92, 112, 0.06);
   box-shadow: var(--shadow-glow-red);
 }
 
@@ -262,7 +316,7 @@ video, audio {
 
 .apple-btn-warning {
   background: var(--gold-foil);
-  color: var(--cinema-black);
+  color: #35141A;
 }
 .apple-btn-warning:hover:not(:disabled) { background: var(--antique-gold); }
 
@@ -324,7 +378,7 @@ video, audio {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(53, 20, 26, 0.35);
   backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
@@ -347,7 +401,7 @@ video, audio {
   color: white;
 }
 .apple-toast-success { background: rgba(120, 175, 140, 0.95); }
-.apple-toast-error { background: rgba(140, 60, 75, 0.95); }
+.apple-toast-error { background: rgba(208, 78, 90, 0.95); }
 .apple-toast-info { background: rgba(215, 92, 112, 0.95); }
 
 /* 进度步骤 */
@@ -360,8 +414,8 @@ video, audio {
   transition: all 0.3s ease;
 }
 .progress-step.active {
-  background: rgba(255, 77, 106, 0.10);
-  box-shadow: inset 0 0 0 1px rgba(255, 77, 106, 0.30);
+  background: rgba(215, 92, 112, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(215, 92, 112, 0.30);
 }
 .progress-step.done { opacity: 0.7; }
 
@@ -433,47 +487,12 @@ audio {
   background: var(--fortune-red);
 }
 
-/* ─── 影视级修饰层 ─── */
-
-/* 暗角 vignette - 全局四角加深 */
-.vignette-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9998;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 40%,
-    var(--vignette-edge) 100%
-  );
-}
-
-/* 2% 胶片颗粒 - SVG noise overlay */
-.film-grain-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: var(--film-grain-opacity);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  mix-blend-mode: overlay;
-}
-
-/* 霓虹脉冲 - 用于主 CTA */
-@keyframes neonPulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(255, 77, 106, 0.35); }
-  50% { box-shadow: 0 0 28px rgba(255, 77, 106, 0.65); }
-}
-.neon-pulse {
-  animation: neonPulse 2.4s ease-in-out infinite;
-}
-
-/* 5 级引导线工具类 - CardConnector 内部使用 */
+/* 引导线工具类 - CardConnector 内部使用 */
 .connector-primary { background: var(--line-primary); }
 .connector-gold { background: var(--line-gold); }
 .connector-glow {
   background: var(--line-glow);
-  box-shadow: var(--neon-glow);
+  box-shadow: var(--shadow-glow-red);
 }
 .connector-complete { background: var(--line-complete); }
 .connector-dashed {

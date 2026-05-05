@@ -45,7 +45,7 @@ export default function CardConnector({ text, tier = "primary" }: Props) {
       <div className={`w-px h-3 ${lineClass}`} />
       <div className="flex items-center gap-2 my-0.5">
         <div className={`w-8 h-px ${lineClass} opacity-70`} />
-        <span className={`text-[11px] italic whitespace-nowrap ${textClass}`}>
+        <span className={`text-[12px] italic whitespace-nowrap ${textClass}`}>
           {text}
         </span>
         <div className={`w-8 h-px ${lineClass} opacity-70`} />

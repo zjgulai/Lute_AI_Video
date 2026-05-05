@@ -84,7 +84,7 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
           </div>
         </div>
         {asset.duration !== undefined && asset.duration > 0 && (
-          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px]">
+          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/60 text-white text-[12px]">
             {asset.duration}s
           </div>
         )}
@@ -93,10 +93,10 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       <div className="p-3">
         <h4 className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{asset.title}</h4>
         <div className="flex items-center gap-2 mt-1.5">
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
+          <span className={`text-[12px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
             {t(SOURCE_LABELS[asset.source])}
           </span>
-          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+          <span className="text-[12px] text-[var(--color-text-tertiary)]">
             {formatDate(asset.createdAt)}
           </span>
         </div>
@@ -135,10 +135,10 @@ function ImageCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       <div className="p-3">
         <h4 className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{asset.title}</h4>
         <div className="flex items-center gap-2 mt-1.5">
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
+          <span className={`text-[12px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
             {t(SOURCE_LABELS[asset.source])}
           </span>
-          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+          <span className="text-[12px] text-[var(--color-text-tertiary)]">
             {formatDate(asset.createdAt)}
           </span>
         </div>
@@ -160,10 +160,10 @@ function AudioCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
         <div className="flex-1 min-w-0">
           <h4 className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{asset.title}</h4>
           <div className="flex items-center gap-2 mt-1">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
+            <span className={`text-[12px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
               {t(SOURCE_LABELS[asset.source])}
             </span>
-            <span className="text-[10px] text-[var(--color-text-tertiary)]">
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">
               {formatDate(asset.createdAt)}
             </span>
           </div>
@@ -198,14 +198,14 @@ function TextCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => void
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{asset.title}</h4>
-          <p className="text-[11px] text-[var(--color-text-secondary)] line-clamp-2 mt-1">
+          <p className="text-[12px] text-[var(--color-text-secondary)] line-clamp-2 mt-1">
             {asset.textContent || "—"}
           </p>
           <div className="flex items-center gap-2 mt-1.5">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
+            <span className={`text-[12px] px-1.5 py-0.5 rounded-full font-medium ${SOURCE_COLORS[asset.source]}`}>
               {t(SOURCE_LABELS[asset.source])}
             </span>
-            <span className="text-[10px] text-[var(--color-text-tertiary)]">
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">
               {formatDate(asset.createdAt)}
             </span>
           </div>

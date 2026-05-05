@@ -87,7 +87,7 @@ export default function FastModePanel() {
       <div className="apple-card p-4 space-y-4">
         {/* Text input */}
         <div>
-          <label className="block text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5">
+          <label className="block text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5">
             {t("fastMode.title")}
           </label>
           <textarea
@@ -97,12 +97,12 @@ export default function FastModePanel() {
             rows={4}
             className="w-full px-3 py-2 text-sm bg-[var(--bg-panel)] border border-[var(--border-default)] rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-foil)]/30 focus:border-[var(--gold-foil)] transition-all"
           />
-          <p className="text-[11px] text-[var(--text-muted)] mt-1">{t("fastMode.inputHint")}</p>
+          <p className="text-[12px] text-[var(--text-muted)] mt-1">{t("fastMode.inputHint")}</p>
         </div>
 
         {/* Duration selector */}
         <div>
-          <label className="block text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5">
+          <label className="block text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5">
             <Clock size={12} weight="fill" className="inline mr-1" />
             {t("fastMode.duration")}
           </label>
@@ -172,7 +172,7 @@ export default function FastModePanel() {
             <Play size={18} weight="fill" className="text-[var(--fortune-red)]" />
             <h3 className="text-sm font-semibold text-[var(--text-h1)]">{t("fastMode.result.title")}</h3>
             {result.is_stub && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-[rgba(215,168,52,0.10)] text-[var(--gold-foil)]">
+              <span className="text-[12px] px-2 py-0.5 rounded-full bg-[rgba(215,168,52,0.10)] text-[var(--gold-foil)]">
                 STUB
               </span>
             )}
@@ -182,7 +182,7 @@ export default function FastModePanel() {
           {!result.success ? (
             <div className="rounded-xl bg-[rgba(196,91,80,0.05)] border border-[rgba(196,91,80,0.20)] p-4">
               <p className="text-xs text-[var(--crimson-mist)] font-medium">{t("fastMode.result.generationFailed")}</p>
-              <p className="text-[11px] text-[var(--crimson-mist)]/70 mt-1">{result.error || t("fastMode.result.unknownError")}</p>
+              <p className="text-[12px] text-[var(--crimson-mist)]/70 mt-1">{result.error || t("fastMode.result.unknownError")}</p>
             </div>
           ) : result.video_url && (
             <div className="rounded-xl overflow-hidden bg-black">
@@ -199,23 +199,23 @@ export default function FastModePanel() {
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-[var(--bg-panel)] rounded-lg p-2 text-center">
               <Timer size={14} weight="fill" className="mx-auto mb-1 text-[var(--text-body)]" />
-              <p className="text-[11px] text-[var(--text-body)]">{t("fastMode.result.generationTime")}</p>
+              <p className="text-[12px] text-[var(--text-body)]">{t("fastMode.result.generationTime")}</p>
               <p className="text-xs font-semibold text-[var(--text-h1)]">{formatTime(result.generation_time_ms)}</p>
             </div>
             <div className="bg-[var(--bg-panel)] rounded-lg p-2 text-center">
               <HardDrives size={14} weight="fill" className="mx-auto mb-1 text-[var(--text-body)]" />
-              <p className="text-[11px] text-[var(--text-body)]">{t("fastMode.result.videoInfo")}</p>
+              <p className="text-[12px] text-[var(--text-body)]">{t("fastMode.result.videoInfo")}</p>
               <p className="text-xs font-semibold text-[var(--text-h1)]">{formatBytes(result.file_size_bytes)}</p>
             </div>
             <div className="bg-[var(--bg-panel)] rounded-lg p-2 text-center">
               <Cpu size={14} weight="fill" className="mx-auto mb-1 text-[var(--text-body)]" />
-              <p className="text-[11px] text-[var(--text-body)]">{t("fastMode.result.modelInfo")}</p>
+              <p className="text-[12px] text-[var(--text-body)]">{t("fastMode.result.modelInfo")}</p>
               <p className="text-xs font-semibold text-[var(--text-h1)]">{result.model_info.video}</p>
             </div>
           </div>
 
           {/* Timing breakdown */}
-          <div className="text-[11px] text-[var(--text-body)] flex gap-3">
+          <div className="text-[12px] text-[var(--text-body)] flex gap-3">
             <span>LLM: {formatTime(result.timing.llm_ms)}</span>
             <span>Video: {formatTime(result.timing.video_ms)}</span>
             {result.timing.tts_ms > 0 && <span>TTS: {formatTime(result.timing.tts_ms)}</span>}
@@ -238,30 +238,30 @@ export default function FastModePanel() {
                 {/* LLM Prompt */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-medium text-[var(--text-body)]">{t("fastMode.result.llmPrompt")}</span>
+                    <span className="text-[12px] font-medium text-[var(--text-body)]">{t("fastMode.result.llmPrompt")}</span>
                     <button
                       onClick={handleCopyPrompt}
-                      className="text-[11px] flex items-center gap-1 text-[var(--gold-foil)] hover:underline cursor-pointer"
+                      className="text-[12px] flex items-center gap-1 text-[var(--gold-foil)] hover:underline cursor-pointer"
                     >
                       <Copy size={10} />
                       {copied ? "Copied!" : t("fastMode.result.copyPrompt")}
                     </button>
                   </div>
-                  <div className="bg-[var(--bg-panel)] rounded-lg p-2.5 text-[11px] text-[var(--text-h1)] leading-relaxed max-h-40 overflow-y-auto">
+                  <div className="bg-[var(--bg-panel)] rounded-lg p-2.5 text-[12px] text-[var(--text-h1)] leading-relaxed max-h-40 overflow-y-auto">
                     {result.llm_prompt}
                   </div>
                 </div>
 
                 {/* User Prompt */}
                 <div>
-                  <span className="text-[11px] font-medium text-[var(--text-body)] block mb-1">Original Input</span>
-                  <div className="bg-[var(--bg-panel)] rounded-lg p-2.5 text-[11px] text-[var(--text-body)] leading-relaxed">
+                  <span className="text-[12px] font-medium text-[var(--text-body)] block mb-1">Original Input</span>
+                  <div className="bg-[var(--bg-panel)] rounded-lg p-2.5 text-[12px] text-[var(--text-body)] leading-relaxed">
                     {result.user_prompt}
                   </div>
                 </div>
 
                 {/* Models */}
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 gap-2 text-[12px]">
                   <div className="bg-[var(--bg-panel)] rounded-lg p-2">
                     <span className="text-[var(--text-body)]">LLM: </span>
                     <span className="font-medium text-[var(--text-h1)]">{result.model_info.llm}</span>

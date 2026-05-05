@@ -413,7 +413,7 @@ export default function BrandPackagesPage() {
             </div>
             <div>
               <h1 className="text-base font-semibold text-[var(--text-h1)]">{t("nav.brandAssets")}</h1>
-              <p className="text-[11px] text-[var(--text-body)] mt-0.5">{t("brand.searchPlaceholder")}</p>
+              <p className="text-[12px] text-[var(--text-body)] mt-0.5">{t("brand.searchPlaceholder")}</p>
             </div>
           </div>
         </div>
@@ -482,7 +482,7 @@ export default function BrandPackagesPage() {
                   >
                     <Icon size={16} weight="fill" />
                     <span className="flex-1">{t(cat.labelKey)}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                    <span className={`text-[12px] px-1.5 py-0.5 rounded-full ${
                       isActive ? "bg-[rgba(215,92,112,0.20)] text-[var(--fortune-red)]" : "bg-[var(--bg-panel)] text-[var(--text-muted)]"
                     }`}>
                       {count}
@@ -497,7 +497,7 @@ export default function BrandPackagesPage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t(activeLabel)}</h2>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[12px] text-[var(--text-muted)]">
                 {filteredAssets.length} {t("brand.assetCount")}
               </span>
             </div>

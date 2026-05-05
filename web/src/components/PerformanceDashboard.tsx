@@ -127,7 +127,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-[var(--text-h1)]">{t("perf.title")}</h3>
         {onClose && (
-          <button onClick={onClose} className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-h1)] cursor-pointer">
+          <button onClick={onClose} className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] cursor-pointer">
             {t("common.close")}
           </button>
         )}
@@ -139,7 +139,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
           <button
             key={vt.id}
             onClick={() => setViewTab(vt.id)}
-            className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer ${
+            className={`px-3 py-2 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
               viewTab === vt.id
                 ? "border-[var(--fortune-red)] text-[var(--fortune-red)]"
                 : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-h1)]"
@@ -156,7 +156,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
           <select
             value={scenarioFilter}
             onChange={(e) => setScenarioFilter(e.target.value)}
-            className="text-[11px] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] bg-[var(--bg-card)] text-[var(--text-h1)] cursor-pointer"
+            className="text-[12px] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] bg-[var(--bg-card)] text-[var(--text-h1)] cursor-pointer"
           >
             {SCENARIO_OPTIONS.map((s) => (
               <option key={s} value={s}>{s === "All" ? t("perf.filterAll") : s}</option>
@@ -165,7 +165,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
           <select
             value={platformFilter}
             onChange={(e) => setPlatformFilter(e.target.value)}
-            className="text-[11px] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] bg-[var(--bg-card)] text-[var(--text-h1)] cursor-pointer"
+            className="text-[12px] px-2 py-1 rounded-lg border border-[rgba(215,92,112,0.18)] bg-[var(--bg-card)] text-[var(--text-h1)] cursor-pointer"
           >
             <option value="All">{t("perf.filterAll")}</option>
             <option value="tiktok">TikTok</option>
@@ -176,7 +176,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
               <button
                 key={opt.value}
                 onClick={() => setTimeFilter(opt.value)}
-                className={`text-[10px] px-2 py-1 rounded-lg border cursor-pointer ${
+                className={`text-[12px] px-2 py-1 rounded-lg border cursor-pointer ${
                   timeFilter === opt.value
                     ? "bg-[var(--fortune-red)] text-white border-[var(--fortune-red)]"
                     : "bg-[var(--bg-card)] text-[var(--text-muted)] border-[rgba(215,92,112,0.18)] hover:border-[var(--text-muted)]"
@@ -198,7 +198,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
             <path d="M9 21V9" />
           </svg>
           <p className="text-xs text-[var(--text-muted)]">{t("perf.noData")}</p>
-          <p className="text-[10px] text-[var(--text-muted)] mt-1">{t("perf.noDataHint")}</p>
+          <p className="text-[12px] text-[var(--text-muted)] mt-1">{t("perf.noDataHint")}</p>
         </div>
       )}
 
@@ -233,7 +233,7 @@ function VideoListView({ videos }: { videos: VideoRow[] }) {
             onClick={() => setExpandedId(expandedId === v.video_id ? null : v.video_id)}
             className="w-full text-left cursor-pointer"
           >
-            <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex items-center gap-2 text-[12px]">
               <span className="flex-1 font-medium text-[var(--text-h1)] truncate">{v.title}</span>
               <ScenarioBadge scenario={v.scenario} />
               <PlatformBadge platform={v.platform} />
@@ -246,7 +246,7 @@ function VideoListView({ videos }: { videos: VideoRow[] }) {
                 width="10" height="10" viewBox="0 0 10 10" fill="none"
                 className={`transition-transform ${expandedId === v.video_id ? "rotate-180" : ""}`}
               >
-                <path d="M2.5 3.5 L5 6.5 L7.5 3.5" stroke="#A0918E" strokeWidth="1.2" strokeLinecap="round" />
+                <path d="M2.5 3.5 L5 6.5 L7.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
               </svg>
             </div>
           </button>
@@ -271,7 +271,7 @@ function ScenarioBadge({ scenario }: { scenario: string }) {
     S3: "bg-[rgba(155,124,196,0.10)] text-[var(--cinema-violet)]",
   };
   return (
-    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[s] || "bg-[rgba(159,160,160,0.10)] text-[var(--text-muted)]"}`}>
+    <span className={`text-[12px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[s] || "bg-[rgba(159,160,160,0.10)] text-[var(--text-muted)]"}`}>
       {s}
     </span>
   );
@@ -284,7 +284,7 @@ function PlatformBadge({ platform }: { platform: string }) {
     shopify: "bg-[rgba(155,124,196,0.10)] text-[var(--cinema-violet)]",
   };
   return (
-    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[p] || "bg-[rgba(159,160,160,0.10)] text-[var(--text-muted)]"}`}>
+    <span className={`text-[12px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colorMap[p] || "bg-[rgba(159,160,160,0.10)] text-[var(--text-muted)]"}`}>
       {p === "tiktok" ? "TT" : p === "shopify" ? "SP" : p.toUpperCase()}
     </span>
   );
@@ -303,7 +303,7 @@ function MetricCell({ value, format }: { value: number; format: "pct" | "num" })
   else if (isLowCtr) textClass = "text-[var(--crimson-mist)]";
 
   return (
-    <span className={`text-[10px] tabular-nums w-10 text-right shrink-0 ${textClass}`}>
+    <span className={`text-[12px] tabular-nums w-10 text-right shrink-0 ${textClass}`}>
       {display}
     </span>
   );
@@ -330,7 +330,7 @@ function MiniTrendChart({ history }: { history: { pulled_at: string; ctr: number
         <path d={makePath("ctr")} fill="none" stroke="#D75C70" strokeWidth="1.5" />
         <path d={makePath("watch_rate")} fill="none" stroke="#5C8DC9" strokeWidth="1.5" strokeDasharray="3 2" />
       </svg>
-      <div className="text-[9px] text-[var(--text-muted)] space-y-0.5">
+      <div className="text-[12px] text-[var(--text-muted)] space-y-0.5">
         <div className="flex items-center gap-1">
           <span className="w-2 h-0.5 bg-[var(--fortune-red)]" />
           <span>CTR</span>
@@ -372,7 +372,7 @@ function ScenarioView({ scenarios, onScenarioClick }: { scenarios: ScenarioCard[
             }`}
           >
             <p className="text-[13px] font-bold text-[var(--text-h1)] mb-3">{s.scenario}</p>
-            <div className="space-y-2 text-[11px]">
+            <div className="space-y-2 text-[12px]">
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">{t("perf.avgWatchRate")}</span>
                 <span className="font-medium text-[var(--text-h1)]">{(s.avg_watch_rate * 100).toFixed(1)}%</span>
@@ -425,7 +425,7 @@ function PlatformView({ platforms }: { platforms: PlatformComparison[] }) {
           </p>
 
           {/* Overall metrics */}
-          <div className="grid grid-cols-4 gap-2 mb-3 text-[11px]">
+          <div className="grid grid-cols-4 gap-2 mb-3 text-[12px]">
             <div>
               <p className="text-[var(--text-muted)]">{t("perf.ctr")}</p>
               <p className="font-semibold text-[var(--text-h1)]">{(p.avg_ctr * 100).toFixed(1)}%</p>
@@ -447,9 +447,9 @@ function PlatformView({ platforms }: { platforms: PlatformComparison[] }) {
           {/* Scenario breakdown */}
           {p.scenario_breakdown && Object.keys(p.scenario_breakdown).length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{t("perf.scenario")}</p>
+              <p className="text-[12px] text-[var(--text-muted)] uppercase tracking-wider">{t("perf.scenario")}</p>
               {Object.entries(p.scenario_breakdown).map(([scenario, metrics]) => (
-                <div key={scenario} className="grid grid-cols-4 gap-2 text-[10px] pl-2 border-l-2 border-[rgba(215,92,112,0.18)]">
+                <div key={scenario} className="grid grid-cols-4 gap-2 text-[12px] pl-2 border-l-2 border-[rgba(215,92,112,0.18)]">
                   <span className="font-medium text-[var(--text-h1)]">{scenario}</span>
                   <span className="text-[var(--text-muted)]">{(metrics.avg_ctr * 100).toFixed(1)}%</span>
                   <span className="text-[var(--text-muted)]">{(metrics.avg_cvr * 100).toFixed(1)}%</span>

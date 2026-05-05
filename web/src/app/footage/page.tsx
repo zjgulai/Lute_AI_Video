@@ -311,7 +311,7 @@ export default function FootagePage() {
             </div>
             <div>
               <h1 className="text-base font-semibold text-[var(--text-h1)]">{t("gallery.title")}</h1>
-              <p className="text-[11px] text-[var(--text-body)] mt-0.5">
+              <p className="text-[12px] text-[var(--text-body)] mt-0.5">
                 {t("gallery.groupByScene")}
               </p>
             </div>
@@ -436,7 +436,7 @@ export default function FootagePage() {
               {t("footage.clickSelect")}
             </button>
           </p>
-          <p className="text-[11px] text-[var(--text-muted)] mt-1">
+          <p className="text-[12px] text-[var(--text-muted)] mt-1">
             {t("footage.supportedFormats")}
           </p>
         </div>
@@ -551,7 +551,7 @@ export default function FootagePage() {
                           )}
                         </div>
                         {isVideoType && (
-                          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 text-[11px] text-white/80 font-medium">
+                          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 text-[12px] text-white/80 font-medium">
                             {formatFileSize(asset.file_size)}
                           </div>
                         )}
@@ -559,10 +559,10 @@ export default function FootagePage() {
 
                       {/* Info */}
                       <div className="p-2.5">
-                        <p className="text-[11px] font-medium text-[var(--text-h1)] truncate">
+                        <p className="text-[12px] font-medium text-[var(--text-h1)] truncate">
                           {asset.original_name}
                         </p>
-                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                        <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
                           {formatFileSize(asset.file_size)}
                         </p>
                         {asset.tags.length > 0 && (
@@ -570,13 +570,13 @@ export default function FootagePage() {
                             {asset.tags.slice(0, 3).map((tag, i) => (
                               <span
                                 key={i}
-                                className="px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[11px] text-[var(--fortune-red)] font-medium"
+                                className="px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[12px] text-[var(--fortune-red)] font-medium"
                               >
                                 {tag}
                               </span>
                             ))}
                             {asset.tags.length > 3 && (
-                              <span className="text-[11px] text-[var(--text-muted)]">
+                              <span className="text-[12px] text-[var(--text-muted)]">
                                 +{asset.tags.length - 3}
                               </span>
                             )}
@@ -634,8 +634,8 @@ export default function FootagePage() {
                   <div className="flex items-start gap-2">
                     <HardDrives size={16} weight="fill" className="text-[var(--text-muted)] mt-0.5 shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[11px] text-[var(--text-muted)]">{t("footage.filename")}</p>
-                      <p className="text-[11px] text-[var(--text-h1)] break-all">
+                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.filename")}</p>
+                      <p className="text-[12px] text-[var(--text-h1)] break-all">
                         {selectedAsset.original_name}
                       </p>
                     </div>
@@ -643,8 +643,8 @@ export default function FootagePage() {
                   <div className="flex items-center gap-2">
                     <HardDrives size={16} weight="fill" className="text-[var(--text-muted)] shrink-0" />
                     <div>
-                      <p className="text-[11px] text-[var(--text-muted)]">{t("footage.fileSize")}</p>
-                      <p className="text-[11px] text-[var(--text-h1)]">
+                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.fileSize")}</p>
+                      <p className="text-[12px] text-[var(--text-h1)]">
                         {formatFileSize(selectedAsset.file_size)}
                       </p>
                     </div>
@@ -652,8 +652,8 @@ export default function FootagePage() {
                   <div className="flex items-center gap-2">
                     <Calendar size={16} weight="fill" className="text-[var(--text-muted)] shrink-0" />
                     <div>
-                      <p className="text-[11px] text-[var(--text-muted)]">{t("footage.uploadTime")}</p>
-                      <p className="text-[11px] text-[var(--text-h1)]">
+                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.uploadTime")}</p>
+                      <p className="text-[12px] text-[var(--text-h1)]">
                         {formatDate(selectedAsset.metadata?.uploaded_at || selectedAsset.file_path)}
                       </p>
                     </div>
@@ -661,19 +661,19 @@ export default function FootagePage() {
                   <div className="flex items-start gap-2">
                     <Tag size={16} weight="fill" className="text-[var(--text-muted)] mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-[var(--text-muted)]">{t("footage.tags")}</p>
+                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.tags")}</p>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {selectedAsset.tags.length > 0 ? (
                           selectedAsset.tags.map((tag, i) => (
                             <span
                               key={i}
-                              className="px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[11px] text-[var(--fortune-red)] font-medium"
+                              className="px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[12px] text-[var(--fortune-red)] font-medium"
                             >
                               {tag}
                             </span>
                           ))
                         ) : (
-                          <span className="text-[11px] text-[var(--text-muted)]">{t("footage.noTags")}</span>
+                          <span className="text-[12px] text-[var(--text-muted)]">{t("footage.noTags")}</span>
                         )}
                       </div>
                     </div>

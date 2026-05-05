@@ -48,7 +48,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
               }}
               className={`flex-1 flex items-center gap-2.5 px-4 py-3.5 rounded-lg border transition-all cursor-pointer min-h-[56px] ${
                 isActive
-                  ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(255,77,106,0.18)]"
+                  ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.12)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(215,92,112,0.18)]"
                   : "border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.04)]"
               }`}
             >
@@ -68,7 +68,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
                   {t(`scene.${id}.title`)}
                 </span>
                 {count > 0 && (
-                  <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)]">
+                  <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)]">
                     {count}{t("asset.count")}
                   </span>
                 )}
@@ -77,7 +77,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
           );
         })}
       </div>
-      <p className="text-[11px] text-[var(--text-muted)] leading-relaxed px-0.5">
+      <p className="text-[12px] text-[var(--text-muted)] leading-relaxed px-0.5">
         {t(SCENE_DESC_KEYS[activeScene] || SCENE_DESC_KEYS.product_direct)}
       </p>
     </div>

@@ -125,9 +125,9 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
       {/* Thread context bar */}
       {threadId && (
         <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--border-default)]">
-          <span className="text-[11px] text-[var(--text-muted)] font-mono">#{threadId}</span>
+          <span className="text-[12px] text-[var(--text-muted)] font-mono">#{threadId}</span>
           {onReset && !pipelineComplete && (
-            <button onClick={onReset} className="text-[11px] text-[var(--text-muted)] hover:text-[var(--crimson-mist)] transition-colors cursor-pointer">
+            <button onClick={onReset} className="text-[12px] text-[var(--text-muted)] hover:text-[var(--crimson-mist)] transition-colors cursor-pointer">
               {t("pipeline.abandon")}
             </button>
           )}
@@ -135,14 +135,14 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
       )}
 
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider flex items-center gap-1.5">
+        <h3 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider flex items-center gap-1.5">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
             <circle cx="7" cy="7" r="5.5" stroke="var(--text-body)" strokeWidth="1" />
             <path d="M7 4v3.5l2.5 1.5" stroke="var(--text-body)" strokeWidth="1" strokeLinecap="round" />
           </svg>
           {t("pipeline.progress")}
         </h3>
-        <span className="text-[11px] text-[var(--text-muted)] font-mono">
+        <span className="text-[12px] text-[var(--text-muted)] font-mono">
           {STAGES.filter((s) => s.check(state)).length}/{STAGES.length}
         </span>
       </div>
@@ -199,7 +199,7 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
                     {t(stage.label)}
                   </span>
                   {hasAudit && (
-                    <span className="ml-2 text-[11px] text-[var(--gold-foil)] font-semibold bg-[rgba(255,159,10,0.10)] px-1.5 py-0.5 rounded-full">
+                    <span className="ml-2 text-[12px] text-[var(--gold-foil)] font-semibold bg-[rgba(255,159,10,0.10)] px-1.5 py-0.5 rounded-full">
                       {t("pipeline.selfAudited")}
                     </span>
                   )}

@@ -166,13 +166,13 @@ export default function InsightReport({ result, scenario }: Props) {
 
           return (
             <div key={key} className="apple-card p-3 text-center">
-              <div className="text-[10px] text-[var(--color-text-tertiary)] uppercase tracking-wider mb-1">
+              <div className="text-[12px] text-[var(--color-text-tertiary)] uppercase tracking-wider mb-1">
                 {t(`insight.${key}`)}
               </div>
               <div className="text-lg font-bold text-[var(--color-text-primary)]">
                 {formatMetric(key, value)}
               </div>
-              <div className={`flex items-center justify-center gap-0.5 text-[10px] font-medium ${color} mt-0.5`}>
+              <div className={`flex items-center justify-center gap-0.5 text-[12px] font-medium ${color} mt-0.5`}>
                 <Icon size={10} weight="fill" />
                 {direction === "up" ? "+" : direction === "down" ? "" : ""}{delta.toFixed(0)}%
               </div>
@@ -183,7 +183,7 @@ export default function InsightReport({ result, scenario }: Props) {
 
       {/* Secondary Metrics */}
       <div className="apple-card p-3">
-        <div className="text-[10px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider mb-2">
+        <div className="text-[12px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider mb-2">
           {t("insight.comparison")}
         </div>
         <div className="space-y-2">

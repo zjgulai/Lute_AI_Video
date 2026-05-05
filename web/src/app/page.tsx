@@ -130,16 +130,16 @@ function ReviewProgressIndicator({ currentReview, reviewState }: ReviewProgressP
     <div className="flex items-center gap-1.5 mb-3 px-1">
       {nodes.map(({ node, nodeKey, isCurrent, isDone, isRejected, index }) => (
         <div key={node} className="flex items-center gap-1.5 flex-1 last:flex-none">
-          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
-            isCurrent ? "bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)] ring-1 ring-[rgba(255,77,106,0.30)] shadow-[0_0_8px_rgba(255,77,106,0.25)]" :
+          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[12px] font-medium transition-all ${
+            isCurrent ? "bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)] ring-1 ring-[rgba(215,92,112,0.35)] shadow-[0_0_6px_rgba(215,92,112,0.15)]" :
             isDone ? "bg-[rgba(120,175,140,0.12)] text-[var(--jade-accent)]" :
-            isRejected ? "bg-[rgba(140,60,75,0.10)] text-[var(--crimson-mist)]" :
+            isRejected ? "bg-[rgba(208,78,90,0.10)] text-[var(--cinnabar)]" :
             "bg-[var(--bg-panel)] text-[var(--text-muted)]"
           }`}>
             <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold ${
               isDone ? "bg-[var(--jade-accent)] text-white" :
               isRejected ? "bg-[var(--crimson-mist)] text-white" :
-              isCurrent ? "bg-[var(--neon-red)] text-white shadow-[0_0_8px_rgba(255,77,106,0.55)]" :
+              isCurrent ? "bg-[var(--fortune-red-600)] text-white shadow-[0_0_6px_rgba(215,92,112,0.20)]" :
               "bg-[var(--bg-layer3)] text-[var(--text-muted)]"
             }`}>{isDone ? "✓" : isRejected ? "✗" : index + 1}</span>
             {t(`step.${nodeKey}`)}
@@ -756,13 +756,13 @@ export default function Home() {
                 <div className="w-full space-y-2">
                   <div className="h-1.5 w-full bg-[var(--bg-panel)] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[var(--fortune-red)] rounded-full transition-all duration-700 ease-out shadow-[0_0_8px_rgba(255,77,106,0.5)]"
+                      className="h-full bg-[var(--fortune-red)] rounded-full transition-all duration-700 ease-out"
                       style={{
                         width: `${Math.min(((currentStepIdx + 0.5) / S1_STEPS.length) * 100, 100)}%`,
                       }}
                     />
                   </div>
-                  <div className="flex justify-between text-[11px] text-[var(--text-muted)]">
+                  <div className="flex justify-between text-[12px] text-[var(--text-muted)]">
                     <span>{t("app.step")} {Math.min(currentStepIdx + 1, S1_STEPS.length)} / {S1_STEPS.length}</span>
                     <span>{Math.round(Math.min(((currentStepIdx + 0.5) / S1_STEPS.length) * 100, 100))}%</span>
                   </div>
@@ -776,11 +776,11 @@ export default function Home() {
                     return (
                       <span
                         key={i}
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all duration-300 ${
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[12px] font-medium transition-all duration-300 ${
                           done
                             ? "bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)]"
                             : active
-                            ? "bg-[var(--neon-red)] text-white shadow-[0_0_12px_rgba(255,77,106,0.55)] ring-2 ring-[rgba(255,77,106,0.30)]"
+                            ? "bg-[var(--fortune-red-600)] text-white shadow-[0_0_6px_rgba(215,92,112,0.20)] ring-2 ring-[rgba(215,92,112,0.30)]"
                             : "bg-[var(--bg-panel)] text-[var(--text-muted)]"
                         }`}
                       >
@@ -800,7 +800,7 @@ export default function Home() {
               )}
               <button
                 onClick={handleCancel}
-                className="mt-3 px-4 py-2 rounded-xl text-xs font-medium text-[var(--text-muted)] border border-[var(--border-default)] hover:text-[var(--crimson-mist)] hover:border-[var(--crimson-mist)] hover:bg-[rgba(140,60,75,0.10)] transition-colors duration-200 cursor-pointer"
+                className="mt-3 px-4 py-2 rounded-xl text-xs font-medium text-[var(--text-muted)] border border-[var(--border-default)] hover:text-[var(--cinnabar)] hover:border-[var(--cinnabar)] hover:bg-[rgba(208,78,90,0.08)] transition-colors duration-200 cursor-pointer"
               >
                 {t("common.cancel")}
               </button>
@@ -812,7 +812,7 @@ export default function Home() {
         <header className="sticky top-0 z-40 bg-[var(--bg-page)]/85 backdrop-blur-xl border-b border-[var(--divider-subtle)]">
           <div className="max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-[var(--fortune-red)] flex items-center justify-center shadow-[0_0_10px_rgba(255,77,106,0.45)]">
+              <div className="w-7 h-7 rounded-lg bg-[var(--fortune-red)] flex items-center justify-center">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                   <path d="M8 5v14l11-7z" fill="white" />
                 </svg>
@@ -823,7 +823,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowSettings(true)}
-                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[rgba(78,58,61,0.5)] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[rgba(53,20,26,0.06)] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
                 title="Settings"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -834,7 +834,7 @@ export default function Home() {
               {(threadId || oneshotResult) && (
                 <button
                   onClick={resetAll}
-                  className="text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(78,58,61,0.5)] cursor-pointer"
+                  className="text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(53,20,26,0.06)] cursor-pointer"
                 >
                   {t("app.abandon")}
                 </button>
@@ -1079,8 +1079,8 @@ export default function Home() {
               </div>
               <div>
                 {disconnected && (
-                  <div className="apple-card p-4 mb-4 border-l-4 border-[var(--crimson-mist)] bg-[rgba(140,60,75,0.10)]">
-                    <p className="text-sm text-[var(--crimson-mist)] font-medium">{t("app.backendDisconnected")}</p>
+                  <div className="apple-card p-4 mb-4 border-l-4 border-[var(--cinnabar)] bg-[rgba(208,78,90,0.08)]">
+                    <p className="text-sm text-[var(--cinnabar)] font-medium">{t("app.backendDisconnected")}</p>
                   </div>
                 )}
                 {/* P1-2: Review progress indicator */}
@@ -1094,7 +1094,7 @@ export default function Home() {
                   />
                 ) : (
                   <div className="apple-card p-6 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-[rgba(215,92,112,0.12)] flex items-center justify-center mx-auto mb-3 shadow-[0_0_12px_rgba(255,77,106,0.20)]">
+                    <div className="w-12 h-12 rounded-2xl bg-[rgba(215,92,112,0.12)] flex items-center justify-center mx-auto mb-3">
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                         <circle cx="12" cy="12" r="10" stroke="var(--fortune-red)" strokeWidth="2" />
                         <path d="M12 6v6l4 2" stroke="var(--fortune-red)" strokeWidth="2" strokeLinecap="round" />

@@ -11,11 +11,9 @@ export const viewport = "width=device-width, initial-scale=1";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN" data-theme="dark" style={{ colorScheme: "dark" }}>
+    <html lang="zh-CN" data-theme="light">
       <body className="antialiased">
         <I18nProvider>{children}</I18nProvider>
-        <div className="vignette-overlay" aria-hidden="true" />
-        <div className="film-grain-overlay" aria-hidden="true" />
       </body>
     </html>
   );

@@ -203,14 +203,14 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
                 }}
                 className={`text-left px-3 py-2.5 rounded-xl border transition-all ${
                   selectedVideoType === vt.id
-                    ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(255,77,106,0.18)]"
+                    ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.12)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(215,92,112,0.18)]"
                     : "border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.04)]"
                 }`}
               >
                 <div className="text-xs font-semibold text-[var(--color-text-primary)]">
                   {t(`videoType.${vt.id}`) || vt.name}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5">
+                <div className="text-[12px] text-[var(--color-text-tertiary)] mt-0.5">
                   {vt.desc}
                 </div>
               </button>
@@ -218,7 +218,7 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
           </div>
         )}
 
-        <p className="text-[11px] text-[var(--color-text-tertiary)] mt-2">
+        <p className="text-[12px] text-[var(--color-text-tertiary)] mt-2">
           {t("scene.videoTypeHint")}
         </p>
       </div>
@@ -280,7 +280,7 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
                   className="transition-all duration-500"
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-[var(--color-text-primary)]">
+              <span className="absolute inset-0 flex items-center justify-center text-[12px] font-semibold text-[var(--color-text-primary)]">
                 {progress}%
               </span>
             </div>
@@ -288,7 +288,7 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
               <p className="text-xs text-[var(--color-text-secondary)]">
                 {filledCount} / {cards.length} {t("step.fields")}
               </p>
-              <p className="text-[11px] text-[var(--color-text-tertiary)]">
+              <p className="text-[12px] text-[var(--color-text-tertiary)]">
                 {canSubmit
                   ? t("summary.complete")
                   : t("card.priority.required") + t("step.pending")}

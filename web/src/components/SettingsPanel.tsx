@@ -99,7 +99,7 @@ export default function SettingsPanel({ onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--divider-light)]">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[rgba(215,92,112,0.12)] flex items-center justify-center shadow-[0_0_8px_rgba(255,77,106,0.18)]">
+            <div className="w-8 h-8 rounded-xl bg-[rgba(215,92,112,0.12)] flex items-center justify-center shadow-[0_0_8px_rgba(215,92,112,0.18)]">
               <HardDrives size={16} weight="fill" className="text-[var(--fortune-red)]" />
             </div>
             <h2 className="text-base font-semibold text-[var(--text-h1)]">API Configuration</h2>
@@ -116,7 +116,7 @@ export default function SettingsPanel({ onClose }: Props) {
         <div className="p-4 space-y-4">
           {/* Backend URL */}
           <div>
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-body)] mb-1.5">
+            <label className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-body)] mb-1.5">
               <HardDrives size={12} weight="fill" />
               Backend URL
             </label>
@@ -127,14 +127,14 @@ export default function SettingsPanel({ onClose }: Props) {
               placeholder="https://your-backend.onrender.com"
               className="apple-input text-sm"
             />
-            <p className="text-[11px] text-[var(--text-muted)] mt-1">
+            <p className="text-[12px] text-[var(--text-muted)] mt-1">
               e.g. https://lute-ai-video-backend.onrender.com or http://localhost:8001
             </p>
           </div>
 
           {/* API Key */}
           <div>
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-body)] mb-1.5">
+            <label className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-body)] mb-1.5">
               <Key size={12} weight="fill" />
               API Key
             </label>
@@ -145,7 +145,7 @@ export default function SettingsPanel({ onClose }: Props) {
               placeholder="ai_video_demo_2026"
               className="apple-input text-sm"
             />
-            <p className="text-[11px] text-[var(--text-muted)] mt-1">
+            <p className="text-[12px] text-[var(--text-muted)] mt-1">
               Must match the API_KEY environment variable on your backend.
             </p>
           </div>
@@ -156,7 +156,7 @@ export default function SettingsPanel({ onClose }: Props) {
               <Lightning size={16} weight="fill" className="text-[var(--gold-foil)]" />
               <div>
                 <p className="text-xs font-medium text-[var(--text-h1)]">Demo Mode</p>
-                <p className="text-[11px] text-[var(--text-muted)]">Skip API calls, use mock data</p>
+                <p className="text-[12px] text-[var(--text-muted)]">Skip API calls, use mock data</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -166,7 +166,7 @@ export default function SettingsPanel({ onClose }: Props) {
                 onChange={(e) => setDemo(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-10 h-5.5 bg-[var(--bg-layer3)] rounded-full peer peer-checked:bg-[var(--neon-red)] peer-checked:shadow-[0_0_10px_rgba(255,77,106,0.45)] transition-colors after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:w-[18px] after:h-[18px] after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-[18px]" />
+              <div className="w-10 h-5.5 bg-[var(--bg-layer3)] rounded-full peer peer-checked:bg-[var(--neon-red)] peer-checked:shadow-[0_0_10px_rgba(215,92,112,0.45)] transition-colors after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:w-[18px] after:h-[18px] after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-[18px]" />
             </label>
           </div>
 
@@ -195,7 +195,7 @@ export default function SettingsPanel({ onClose }: Props) {
               className={`flex items-center gap-2 p-2.5 rounded-lg text-xs ${
                 testResult.ok
                   ? "bg-[rgba(120,175,140,0.12)] text-[var(--jade-accent)]"
-                  : "bg-[rgba(140,60,75,0.12)] text-[var(--crimson-mist)]"
+                  : "bg-[rgba(208,78,90,0.12)] text-[var(--crimson-mist)]"
               }`}
             >
               {testResult.ok ? (
@@ -212,7 +212,7 @@ export default function SettingsPanel({ onClose }: Props) {
         <div className="flex items-center justify-between p-4 border-t border-[var(--divider-light)]">
           <button
             onClick={handleReset}
-            className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
           >
             <ArrowCounterClockwise size={12} weight="fill" />
             Reset Defaults

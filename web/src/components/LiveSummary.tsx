@@ -51,7 +51,7 @@ export default function LiveSummary({ values, cardLabels }: Props) {
         <div className="space-y-2">
           {entries.map((entry) => (
             <div key={entry.label} className="flex gap-2">
-              <span className="text-[11px] text-[var(--color-text-tertiary)] shrink-0 min-w-[3rem]">
+              <span className="text-[12px] text-[var(--color-text-tertiary)] shrink-0 min-w-[3rem]">
                 {entry.label}
               </span>
               <span className="text-xs text-[var(--color-text-primary)] truncate">

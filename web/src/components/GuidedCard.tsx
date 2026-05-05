@@ -211,7 +211,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
               <button
                 type="button"
                 onClick={() => handleChange("")}
-                className="text-[11px] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors"
+                className="text-[12px] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors"
               >
                 {t("upload.clear") || "清除"}
               </button>
@@ -264,7 +264,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
       {/* 优先级标签 + 步骤名 */}
       <div className="flex items-center gap-2 mb-3">
         <span
-          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${styles.badge} ${styles.badgeText}`}
+          className={`text-[12px] font-semibold px-2 py-0.5 rounded-full ${styles.badge} ${styles.badgeText}`}
         >
           {t(`card.priority.${card.priority}`)}
         </span>
@@ -290,7 +290,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
       {/* 字数提示（textarea 且有 maxLength） */}
       {card.inputType === "textarea" && card.maxLength && (
         <div className="text-right mt-1">
-          <span className="text-[11px] text-[var(--color-text-tertiary)]">
+          <span className="text-[12px] text-[var(--color-text-tertiary)]">
             {value.length} / {card.maxLength}
           </span>
         </div>

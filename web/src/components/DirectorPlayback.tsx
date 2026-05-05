@@ -64,7 +64,7 @@ export default function DirectorPlayback({ result, scenario }: Props) {
                 <div className="space-y-2">
                   {(script.segments || []).map((seg: any, i: number) => (
                     <div key={i} className="text-sm border-l-2 border-[var(--color-border-light)] pl-3">
-                      <span className="text-[10px] uppercase tracking-wider text-[var(--color-accent)] font-medium">
+                      <span className="text-[12px] uppercase tracking-wider text-[var(--color-accent)] font-medium">
                         {t(`segment.${seg.segment_type}`) || seg.segment_type}
                       </span>
                       <p className="text-[var(--color-text-primary)] mt-0.5">{seg.voiceover}</p>
@@ -91,13 +91,13 @@ export default function DirectorPlayback({ result, scenario }: Props) {
           <div className="grid grid-cols-2 gap-3">
             {storyboards.map((sb: any, i: number) => (
               <div key={i} className="apple-card p-3">
-                <div className="text-[11px] font-medium text-[var(--color-text-secondary)] mb-1">
+                <div className="text-[12px] font-medium text-[var(--color-text-secondary)] mb-1">
                   {sb.scene_title}
                 </div>
                 <p className="text-xs text-[var(--color-text-tertiary)] line-clamp-3">
                   {sb.visual_description}
                 </p>
-                <div className="flex gap-2 mt-2 text-[10px] text-[var(--color-text-tertiary)]">
+                <div className="flex gap-2 mt-2 text-[12px] text-[var(--color-text-tertiary)]">
                   <span>{sb.shot_type}</span>
                   <span>·</span>
                   <span>{sb.total_duration}s</span>

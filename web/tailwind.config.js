@@ -8,50 +8,50 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // ── Fortune Red Cinema 核心色 ──
+        // ── Fortune Red 核心色 ──
         'fortune-red': '#D75C70',
         'cinnabar': '#D04E5A',
-        'neon-red': '#FF4D6A',
+        'neon-red': '#C44A5E',
         'misty-pink': '#EAAFB7',
         'coral': '#F37969',
-        'ember': '#B44658',
-        'crimson-mist': '#8C3C4B',
+        'ember': '#C44A5E',
+        'crimson-mist': '#A13D4E',
         // 金色系
-        'gold-foil': '#DCBE78',
+        'gold-foil': '#D8BE78',
         'antique-gold': '#B99B5F',
         'pale-gold': '#A58C5A',
         // 功能色
         'jade': '#78AF8C',
-        'cool-steel': '#829BAF',
+        'cool-steel': '#5C8DC9',
         // 数据可视化扩展
         'cinema-violet': '#9B7CC4',
         'cinema-azure': '#5C8DC9',
-        // 深色基底
-        'cinema-black': '#100C0D',
-        'film-reel': '#1C1415',
-        'dark-slate': '#2A1E20',
-        'charcoal-rose': '#3A2A2D',
-        'warm-shadow': '#4E3A3D',
+        // 浅色基底
+        'cinema-black': '#FDF8F6',
+        'film-reel': '#FCF5F2',
+        'dark-slate': '#FEFBFA',
+        'charcoal-rose': '#F5F0EC',
+        'warm-shadow': '#EDE8E3',
 
         // ── 兼容旧 brand/ink/surface 命名 ──
         brand: {
           primary: '#D75C70',
           'primary-light': 'rgba(215,92,112,0.10)',
           'primary-mid': 'rgba(215,92,112,0.18)',
-          'primary-glow': 'rgba(255,77,106,0.40)',
+          'primary-glow': 'rgba(215,92,112,0.30)',
         },
         ink: {
-          primary: '#FAF0EB',
-          secondary: '#D2C3BE',
-          tertiary: '#A0918E',
+          primary: 'rgba(53, 20, 26, 0.92)',
+          secondary: 'rgba(53, 20, 26, 0.60)',
+          tertiary: 'rgba(53, 20, 26, 0.42)',
         },
         surface: {
-          card: '#1C1415',
-          subtle: '#2A1E20',
-          hover: '#3A2A2D',
+          card: '#FFFFFF',
+          subtle: '#FCF5F2',
+          hover: '#FDF4F5',
         },
         border: {
-          DEFAULT: '#4E3A3D',
+          DEFAULT: 'rgba(53,20,26,0.08)',
           hover: '#D75C70',
         },
       },
@@ -62,11 +62,11 @@ module.exports = {
         input: '10px',
       },
       boxShadow: {
-        cinema: '0 4px 16px rgba(0, 0, 0, 0.4)',
-        'cinema-hover': '0 8px 32px rgba(0, 0, 0, 0.5)',
-        'neon-red': '0 0 12px rgba(255, 77, 106, 0.25)',
-        'neon-red-strong': '0 0 20px rgba(255, 77, 106, 0.4)',
-        gold: '0 0 12px rgba(220, 190, 120, 0.2)',
+        cinema: '0 2px 8px rgba(0, 0, 0, 0.06)',
+        'cinema-hover': '0 4px 16px rgba(0, 0, 0, 0.08)',
+        'neon-red': '0 0 8px rgba(215, 92, 112, 0.15)',
+        'neon-red-strong': '0 0 12px rgba(215, 92, 112, 0.25)',
+        gold: '0 0 8px rgba(216, 190, 120, 0.10)',
       },
       fontFamily: {
         display: ['Montserrat', '-apple-system', 'sans-serif'],

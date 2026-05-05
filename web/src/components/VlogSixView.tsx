@@ -30,7 +30,7 @@ export default function VlogSixView({ views }: Props) {
               background: `linear-gradient(135deg, ${view.color} 0%, ${view.color}88 100%)`,
             }}
           >
-            <div className="absolute top-2.5 left-3 px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-medium backdrop-blur-sm">
+            <div className="absolute top-2.5 left-3 px-2 py-0.5 rounded-full bg-white/20 text-white text-[12px] font-medium backdrop-blur-sm">
               {view.label}
             </div>
             <div className="absolute left-3 bottom-3 right-3">
@@ -41,7 +41,7 @@ export default function VlogSixView({ views }: Props) {
           </div>
           {/* Footer */}
           <div className="p-3">
-            <div className="text-[11px] text-[var(--text-body)] leading-relaxed">
+            <div className="text-[12px] text-[var(--text-body)] leading-relaxed">
               {view.usage_note}
             </div>
           </div>

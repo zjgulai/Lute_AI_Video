@@ -127,7 +127,7 @@ export default function AssetUploader({ onUpload }: Props) {
         <p className="text-sm font-medium text-[var(--text-h1)]">
           {uploading ? t("upload.uploading") : dragActive ? t("upload.dragActive") : t("upload.dragInactive")}
         </p>
-        <p className="text-[11px] text-[var(--text-muted)] mt-1">
+        <p className="text-[12px] text-[var(--text-muted)] mt-1">
           {t("upload.hint")}
         </p>
       </div>
@@ -135,16 +135,16 @@ export default function AssetUploader({ onUpload }: Props) {
       {/* Upload results */}
       {results.length > 0 && (
         <div className="apple-card p-3 bg-[var(--bg-card)]">
-          <p className="text-[10px] font-mono text-[var(--text-muted)] mb-2">{t("upload.uploaded")} ({results.length})</p>
+          <p className="text-[12px] font-mono text-[var(--text-muted)] mb-2">{t("upload.uploaded")} ({results.length})</p>
           <div className="space-y-1.5">
             {results.map((r, i) => (
               <div key={i} className="flex items-center gap-2 bg-[var(--bg-card)] rounded-lg p-2 border border-[var(--border-default)]">
                 <span className="text-base">{getFileIcon(r.filename)}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-[var(--text-h1)] truncate">{r.filename}</p>
-                  <p className="text-[9px] text-[var(--text-muted)]">{formatSize(r.size)}</p>
+                  <p className="text-[12px] text-[var(--text-h1)] truncate">{r.filename}</p>
+                  <p className="text-[12px] text-[var(--text-muted)]">{formatSize(r.size)}</p>
                 </div>
-                <span className="text-[10px] text-[var(--fortune-red)] font-medium">{t("upload.saved")}</span>
+                <span className="text-[12px] text-[var(--fortune-red)] font-medium">{t("upload.saved")}</span>
               </div>
             ))}
           </div>

@@ -163,7 +163,7 @@ export default function CompareView({
                       {v.label}
                     </h3>
                     {isSelected && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
+                      <span className="inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                           <path d="M2 5.5L4 7.5L8 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
@@ -171,7 +171,7 @@ export default function CompareView({
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
+                  <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[rgba(89,88,94,0.10)] text-[var(--text-body)]">
                     {t(getVariantLabelKey(v.scriptVariant))}
                   </span>
                 </div>
@@ -211,7 +211,7 @@ export default function CompareView({
                           <polygon points="8,5 19,12 8,19" />
                         </svg>
                       </div>
-                      <span className="text-[11px] text-white/60 group-hover:text-white/80 transition-colors">
+                      <span className="text-[12px] text-white/60 group-hover:text-white/80 transition-colors">
                         {t("compare.preview")}
                       </span>
                     </div>
@@ -220,7 +220,7 @@ export default function CompareView({
               </div>
 
               {/* Metadata row */}
-              <div className="px-3 pt-3 flex items-center gap-4 text-[11px] text-[var(--text-body)]">
+              <div className="px-3 pt-3 flex items-center gap-4 text-[12px] text-[var(--text-body)]">
                 <span className="flex items-center gap-1">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                     <circle cx="12" cy="12" r="10" />
@@ -241,11 +241,11 @@ export default function CompareView({
               {audit && (
                 <div className="px-3 pt-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
+                    <span className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
                       {t("compare.quality")}
                     </span>
                     <span
-                      className={`text-[11px] font-semibold ${
+                      className={`text-[12px] font-semibold ${
                         audit.overall_status === "PASS"
                           ? "text-[var(--jade-accent)]"
                           : audit.overall_status === "WARN"
@@ -273,7 +273,7 @@ export default function CompareView({
                     {audit.criteria?.slice(0, 4).map((c, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-[var(--bg-panel)]"
+                        className="inline-flex items-center gap-1 text-[12px] px-1.5 py-0.5 rounded-full bg-[var(--bg-panel)]"
                       >
                         <StatusDot status={c.status} />
                         {c.score >= 0 ? `${Math.round(c.score * 100)}%` : ""}
@@ -338,11 +338,11 @@ export default function CompareView({
       {/* Quality comparison table (2+ versions only) */}
       {hasMultipleVersions && allCriteria.length > 0 && (
         <div className="apple-card p-4">
-          <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-3">
+          <h3 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-3">
             {t("compare.qualityComparison")}
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b border-[rgba(215,92,112,0.18)]">
                   <th className="text-left py-2 pr-4 text-[var(--text-body)] font-medium">

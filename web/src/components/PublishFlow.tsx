@@ -99,10 +99,10 @@ export default function PublishFlow({ result }: Props) {
       {/* AI Recommended Platforms */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium text-[var(--color-accent)] uppercase tracking-wider">
+          <span className="text-[12px] font-medium text-[var(--color-accent)] uppercase tracking-wider">
             {t("publish.platformRecommend")}
           </span>
-          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+          <span className="text-[12px] text-[var(--color-text-tertiary)]">
             {t("publish.subtitle")}
           </span>
         </div>
@@ -142,7 +142,7 @@ export default function PublishFlow({ result }: Props) {
       {/* Auto-filled Metadata */}
       <div className="space-y-3">
         <div>
-          <label className="text-[10px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1">
+          <label className="text-[12px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1">
             {t("publish.titleLabel")}
           </label>
           <div className="text-sm text-[var(--color-text-primary)] bg-[var(--color-bg-secondary)] px-3 py-2 rounded-lg border border-[var(--color-border-light)]">
@@ -151,7 +151,7 @@ export default function PublishFlow({ result }: Props) {
         </div>
 
         <div>
-          <label className="text-[10px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1">
+          <label className="text-[12px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1">
             {t("publish.descriptionLabel")}
           </label>
           <div className="text-xs text-[var(--color-text-primary)] bg-[var(--color-bg-secondary)] px-3 py-2 rounded-lg border border-[var(--color-border-light)] line-clamp-3">
@@ -161,12 +161,12 @@ export default function PublishFlow({ result }: Props) {
 
         {metadata.tags.length > 0 && (
           <div>
-            <label className="text-[10px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1">
+            <label className="text-[12px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1">
               {t("publish.tagsLabel")}
             </label>
             <div className="flex flex-wrap gap-1">
               {metadata.tags.map((tag: string, i: number) => (
-                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+                <span key={i} className="text-[12px] px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
                   #{tag}
                 </span>
               ))}
