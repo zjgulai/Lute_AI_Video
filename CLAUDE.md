@@ -6,7 +6,13 @@
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`). CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
+**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`).
+
+**2026-05-06 更新:**
+- UI 主题从暗黑剧场翻转为 **Warm Light Professional Theme** (`#FDF8F6` 暖白底 + `#D75C70` Fortune Red accent)
+- Portfolio 完成性能优化: TOP50 高质量素材 + nginx 静态直送 + poster thumbnail
+- Footage 页面统一弹窗预览 + Materials 分类过滤(视频/图片/音频)
+- CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
 
 ---
 
@@ -573,27 +579,52 @@ Key test areas:
 闭环测试通过真实外部 API 跑出的 mp4 / mp3 / png / wav / keyframe 都是付费产物,作为
 作品集 + 数据资产保留。
 
+### `/api/portfolio/` 端点 (`src/routers/portfolio.py`)
+
+- **扫描范围**: `OUTPUT_DIR` 下 12 个固定子目录,`rglob` 全量递归扫描
+- **过滤**: 扩展名白名单 + 视频/图片 > 1 MiB(过滤 stub) + 音频任意正大小
+- **缓存**: 30s 进程内存缓存(`_CACHE`),单 key `"all"`
+- **排序**: `?sort=quality` — renders(0) > fast_mode(1) > 其他(99),同类按 `produced_at` desc
+- **截断**: `?limit=50` — 前端 footage 页面只展示 TOP50,`by_category` 仍聚合全量
+- **Poster**: `thumbnail_path` 字段指向预生成 jpg(`output/thumbnails/portfolio_posters/`)
+
+### nginx 静态直送 (`deploy/lighthouse/nginx.conf:54-70`)
+
+`/api/media/` 走 `try_files` 先读本地文件,未命中再 fallback backend:
+```nginx
+location /api/media/ {
+    alias /var/www/media/;
+    add_header Cache-Control "public, max-age=86400";
+    try_files $uri @backend_media;
+}
+```
+
+- `backend_output` volume 以 `:ro` 挂载到 nginx 容器 `/var/www/media/`
+- 生产实测: thumbnail 2.6KB → 4.8ms, video 12.6MB → 32ms(均走 nginx,不穿透 FastAPI)
+
+### Thumbnail 生成 (`scripts/generate_portfolio_thumbnails.py`)
+
+- ffmpeg 抽帧: `-ss 00:00:02 -vf scale=480:-2 -q:v 3`
+- 输出: `output/thumbnails/portfolio_posters/<category>__<filename_stem>.jpg`
+- 增量: 已存在且 mtime >= source mtime 则跳过
+- 本地生成后 `rsync` → 生产 `output_uploaded/` → `docker cp` 进 `lighthouse_backend_output`
+
+### Footage 页面 (`web/src/app/footage/page.tsx`)
+
+- **成品(finished)**: `GalleryGrid` 展示 renders 类目视频,点击弹出 `MediaPreviewModal`
+- **素材(materials)**: grid 展示 50 个 item,支持 全部/视频/图片/音频 分类过滤
+- **预览**: 统一弹窗 overlay — 视频 autoPlay + controls,图片居中,音频 controls + 文件名
+- 不再 `window.open(..., "_blank")`,不再有右侧 detail panel
+
+### 索引与 sync(遗留)
+
 **索引** (`assets/portfolio/index.json`,gitignored):
-- `scripts/portfolio_index.py` 扫 `output/` 下 12 个子目录(renders / seedance /
-  gpt_images / fast_mode / keyframes / character_identity / quality-test / demo /
-  assets / thumbnails / uploads / audio),按 `category / scenario / label /
-  produced_at / size / source` 写出 JSON 索引。
-- 命令:`make portfolio` 重建,`make portfolio-sync` 把本地 output/ 推送到 Lighthouse
-  生产 backend_output volume,`scripts/sync_lighthouse_to_output.sh` 反向把生产产物拉
-  回本地。
-- 排除规则:`*stub*`(本地 fallback 占位)、`*.json`(pipeline_states/ 过程数据)、
-  `*.db`。
-- 触发:`webhook_manager.py` 在 `pipeline.completed` 事件后自动调
-  `portfolio_hook.py` 重建索引,无需人工介入。
+- `scripts/portfolio_index.py` 扫 12 子目录输出 JSON(供离线/CI 使用)
+- `/api/portfolio/` 端点**不读此 JSON**,运行时直接扫文件系统
 
 **双向 sync 脚本**:
-- `scripts/sync_output_to_lighthouse.sh`:本地 output/ → 生产 `lighthouse_backend_output`
-  volume(用于把本地积累的素材推到生产,让生产 nginx `/api/media/*` 能访问)。
-- `scripts/sync_lighthouse_to_output.sh`:生产 volume → 本地 output/(用于把生产闭环
-  测试产物并入本地作品集)。
-
-两个脚本都用 `ai_video.pem`(优先仓库根,fallback `~/Downloads/`)+ docker run alpine
-作为中转(因为 named volume 不可直接 host-side 读写)。
+- `scripts/sync_output_to_lighthouse.sh`:本地 output/ → 生产 volume
+- `scripts/sync_lighthouse_to_output.sh`:生产 volume → 本地 output/
 
 ---
 
@@ -624,7 +655,8 @@ Key test areas:
 - Export endpoint strips internal fields (retry_counts, self_verifications, etc.)
 
 ### Frontend Conventions
-- Dark theme by default (`data-theme="dark"`)
+- **Theme:** Warm Light Professional (`data-theme="light"`),2026-05-06 从暗黑剧场翻转。
+  核心色: `#FDF8F6` 暖白底 + `#D75C70` Fortune Red accent + `#FCF5F2` 暖白阴影。
 - Film grain + vignette overlay on all pages
 - Chinese-first i18n with English toggle
 - localStorage + cookie dual storage for settings
@@ -638,10 +670,20 @@ Key test areas:
 
 ## Known Gaps and TODOs
 
-最近一次盘点:2026-05-04(Phase D 5 场景 e2e 通过后)。
+最近一次盘点:2026-05-06(Phase E:portfolio 优化 + footage 弹窗预览 + 主题翻转后)。
 
-### 1. 已知功能缺陷(Phase D 期间观察到,未阻塞交付)
+### 1. 已知功能缺陷(已修复)
 
+> **2026-05-06 修复:**
+> - **Portfolio 加载慢 + 视频无法预览** — 后端 `?limit=50&sort=quality` + nginx `try_files`
+>   静态直送 + 144 个 poster thumbnail + 前端 `<img poster>` 替代 337 个 `<video preload="metadata">`。
+>   实测 thumbnail 4.8ms / video 32ms(02849c9)。
+> - **Footage 页面交互不一致** — 成品/素材统一 `MediaPreviewModal` 弹窗预览,不再
+>   `window.open` 或右侧 detail panel;Materials 新增 全部/视频/图片/音频 分类过滤(c4dd6ed)。
+> - **UI 主题翻转** — `globals.css` + `tailwind.config.js` + 40+ 组件从暗黑剧场翻转为
+>   Warm Light Professional Theme(d3e8bd3)。
+
+仍待处理:
 - **POYO sanitizer 覆盖率非 100%(F3, P2)** `src/tools/poyo_safety.py` 已覆盖常见母婴触发词,
   但 D5 仍有 1 个 thumbnail prompt 被 POYO CM 拒(管线 retry 一次后通过)。后续需在生产
   日志中抓回被拒原始 prompt 文本,补充新规则。
@@ -649,10 +691,6 @@ Key test areas:
   脚本生成不依赖真实 transcribe,管线下游不受影响。要让 video-analysis 真实工作需
   `pip install yt-dlp openai-whisper` 进 `Dockerfile.backend`(whisper 拉 PyTorch ~2GB,
   实施前先确认是否值)。
-
-> 已修复(2026-05-04 提交):
-> - F1 audit 形态 bug — `s1_product_pipeline.py` audit 步骤解包 tts_audio dict(b958c08)
-> - Health.remotion.available 误报 — `/health` 改 HTTP 探测 `rendering:3001/health`(d672050 + aa716be)
 
 ### 2. 配置/历史遗留(已知)
 
@@ -667,18 +705,9 @@ Key test areas:
   但 D5 实测 28 min 离上限不远,长链路场景仍可能截客户端连接。
 - **Redis/Celery declared but unused:** Still in `requirements.txt` but no live consumer.
 
-> 已修复(2026-05-04 提交):
-> - `DEFAULT_LLM_PROVIDER` 三处分歧 — `config.py` / `render.yaml` 全部对齐 `deepseek`(d672050)
-> - video_metrics 进 init SQL — `src/storage/migrations/001_init.sql` 内联 Alembic 1efc41794d64,
->   fresh `docker compose up` 可一次落下完整 schema,不再需要手动 `alembic upgrade head`
-> - Demo key 限制移除 — `verify_api_key` 不再按 key 字符串区分权限,`API_KEY` 是按租户分发的
->   全权限凭证。原 P0-11 拦截把 publish/upload 路径堵死,与端到端验证目标冲突
+### 3. 未做端到端验证的前后端交互路径
 
-### 3. 未做端到端非 Demo 验证的前后端交互路径
-
-Phase D 通过的是 5 个业务场景的"主路径"(自动 score 高 → 全绿走完)。以下交叉路径在生产
-环境尚未端到端实测,前后端契约和真实外部依赖都没跑过。**注:demo key 拦截已移除(2026-05-04),
-原本被 verify_api_key 堵住的 paths C / E 现已可走通**:
+Phase D/E 通过的是 5 场景"主路径" + portfolio 优化。以下路径在生产尚未端到端实测:
 
 - **A. Human Review 4 个 checkpoint 的人工分支** Pipeline `strategy_audit` /
   `script_audit` / `editing_audit` / `thumbnail_audit` 的 score 落在 0.60–0.90 区间会触发
@@ -711,6 +740,15 @@ Phase D 通过的是 5 个业务场景的"主路径"(自动 score 高 → 全绿
 - **J. 备用部署目标** `render.yaml`(海外)与 `deploy/tencent-cloudbase.md`(国内 CloudBase)
   这两条 alternative 路径的现状,自从 Lighthouse 成为 canonical 后没人再验过。`render.yaml`
   里 `DEFAULT_LLM_PROVIDER=kimi` 是否还能正常生成内容,未知。
+
+### 4. 2026-05-06 新增未验证路径
+
+- **K. Footage 弹窗预览在三场景下的素材生成验证** `MediaPreviewModal` 弹窗预览只在现有
+  portfolio 数据上验证过。若 S1/S5/Fast Mode 跑新 pipeline 产生新视频/图片,这些新产物
+  是否能正确出现在 `/footage`、poster 是否正常生成、弹窗内视频是否可播放,未验证。
+- **L. 主题翻转后全页面一致性走查** 40+ 组件从暗黑翻转为暖光亮色后,
+  `/s1` `/s2` `/s3` `/s4` `/s5` `/fast` `/settings` `/brand-packages` `/influencers` 各页面
+  在真实 pipeline 运行状态下的视觉一致性(无残留暗色元素、文字对比度、按钮状态)未走查。
 
 ---
 
