@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getMediaUrl, fetchAssets } from "./api";
+import { getMediaUrl, apiFetch } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
 
 interface Asset {
@@ -35,18 +35,27 @@ export default function AssetLibrary({ onClose }: Props) {
   const loadAssets = useCallback(() => {
     setLoading(true);
     setError(false);
-    fetchAssets()
-      .then((files) => {
-        const mapped: Asset[] = files
-          .filter((f: any) => f.type !== "document")
-          .map((f: any) => ({
+    apiFetch("/portfolio/")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const files = data.files || [];
+        const mapped: Asset[] = files.map((f: any) => {
+          const mime = f.mime_type || "";
+          let type: Asset["type"] = "video";
+          if (mime.startsWith("image/")) type = "image";
+          else if (mime.startsWith("audio/")) type = "audio";
+          return {
             filename: f.filename,
             path: f.path,
-            size: f.size,
-            type: f.type as Asset["type"],
-            created: new Date(f.created * 1000).toLocaleString(locale === "zh" ? "zh-CN" : "en-US"),
-            tags: collectTags(f),
-          }));
+            size: f.size_bytes,
+            type,
+            created: f.produced_at
+              ? new Date(f.produced_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")
+              : "-",
+            tags: f.scenario ? [f.category, f.scenario] : [f.category],
+          };
+        });
         setAssets(mapped);
       })
       .catch(() => setError(true))
