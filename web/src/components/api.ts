@@ -94,16 +94,27 @@ export function setApiKey(key: string) {
   }
 }
 
-/** Demo mode detection (runtime-configurable via localStorage or env/hostname). */
+/** Demo mode detection.
+ *
+ * Priority: build-time env > localStorage override > hostname heuristic.
+ * Production deployments set NEXT_PUBLIC_IS_DEMO=false at build time,
+ * which takes precedence over any stale localStorage value from earlier
+ * demo browsing.
+ */
 export function isDemoMode(): boolean {
+  // 1. Build-time / runtime env is the canonical source of truth.
+  const env = readEnv("NEXT_PUBLIC_IS_DEMO");
+  if (env === "true") return true;
+  if (env === "false") return false;
+
+  // 2. localStorage allows user to manually toggle demo on isolated hosts.
   if (typeof window !== "undefined") {
     const stored = storageGet(STORAGE_KEYS.demoMode);
     if (stored === "true") return true;
     if (stored === "false") return false;
   }
-  const env = readEnv("NEXT_PUBLIC_IS_DEMO");
-  if (env === "true") return true;
-  if (env === "false") return false;
+
+  // 3. Hostname heuristic for static hosting (GitHub Pages / Vercel).
   if (typeof window !== "undefined") {
     return (
       window.location.hostname.includes("github.io") ||

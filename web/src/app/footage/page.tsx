@@ -136,7 +136,7 @@ export default function FootagePage() {
       return;
     }
     try {
-      const res = await apiFetch("/api/portfolio/");
+      const res = await apiFetch("/portfolio/");
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
       // Map PortfolioFile → FootageAsset shape so grid/detail panel render unchanged
