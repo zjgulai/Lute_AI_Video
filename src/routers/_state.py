@@ -56,6 +56,8 @@ class FastModeRequest(BaseModel):
     user_prompt: str
     duration: int = 5
     enable_tts: bool = True
+    # P1-C: 用户填的多供应商 key 通过此字段下发,scenario.py 入口注入 contextvars
+    api_keys: dict[str, str] = {}
 
 
 class S1StartRequest(BaseModel):

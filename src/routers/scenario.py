@@ -12,7 +12,7 @@ try:
 except ImportError:
     HAS_STORAGE = False
 
-from src.routers._deps import _safe_error, verify_api_key
+from src.routers._deps import _inject_api_keys, _safe_error, verify_api_key
 from src.routers._state import (
     _SCENARIO_STEP_ORDER,
     _validate_scenario,
@@ -40,6 +40,9 @@ async def run_s1_product_direct(body: dict):
     Original Chinese values are stored in ``_original_zh`` within
     the product_catalog so the frontend can display them.
     """
+    # P1-C: 把用户填的多供应商 key 注入 contextvars,LLM/POYO/CosyVoice 客户端
+    # 优先读 contextvars,实现按租户隔离,不污染 process-wide os.environ。
+    _inject_api_keys(body.get("api_keys", {}))
     from src.tools.translate import translate_catalog_to_english
     from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
@@ -138,6 +141,7 @@ async def run_s1_product_direct(body: dict):
 @router.post("/scenario/s2", dependencies=[Depends(verify_api_key)])
 async def run_s2_brand_campaign(body: dict):
     """Run S2 Brand Campaign pipeline."""
+    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s2_brand_pipeline import S2BrandCampaignPipeline
     p = S2BrandCampaignPipeline()
     r = await p.run(
@@ -165,6 +169,7 @@ async def run_s3_influencer_remix(body: dict):
         brief_id: str (optional)
         video_duration: int (optional, default 30, valid: 15/30/45/60/90)
     """
+    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
     from src.tools.translate import translate_catalog_to_english
     from src.pipeline.s3_remix_pipeline import S3InfluencerRemixPipeline
 
@@ -187,6 +192,7 @@ async def run_s3_influencer_remix(body: dict):
 @router.post("/scenario/s4", dependencies=[Depends(verify_api_key)])
 async def run_s4_live_shoot(body: dict):
     """Run S4 Live Shoot to Video pipeline."""
+    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
     p = S4LiveShootPipeline()
     r = await p.run(
@@ -210,6 +216,7 @@ async def run_s5_brand_vlog(body: dict):
         story_description: str — user's story direction (max 300 chars)
         video_duration: int — target video seconds (15/30/45/60/90)
     """
+    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
     p = S5BrandVlogPipeline()
     r = await p.run(
@@ -252,6 +259,7 @@ async def fast_generate(req: FastModeRequest):
             tts_path: str | null,
         }
     """
+    _inject_api_keys(req.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.services.fast_mode import get_fast_mode_service
 
     service = get_fast_mode_service()
@@ -285,6 +293,7 @@ async def start_s1_pipeline(body: S1StartRequest):
         Initialized state dict with label, mode, status, and current_step.
         If mode is "auto", runs to completion and returns final state.
     """
+    _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
 
