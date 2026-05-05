@@ -6,7 +6,11 @@ services:
       context: ../..
       dockerfile: Dockerfile.backend
     container_name: ai_video_backend
-    restart: unless-stopped
+    # 2026-05-05 incident: backend import error 触发 unless-stopped 无限重启,
+    # 拖死 docker daemon。改 on-failure:5 让 5 次失败后停止重启,人工介入。
+    # rendering/frontend/nginx 保持 unless-stopped(它们不容易 import error,
+    # 服务器重启后需要自动启动)。
+    restart: on-failure:5
     expose:
       - "8001"
     env_file:
