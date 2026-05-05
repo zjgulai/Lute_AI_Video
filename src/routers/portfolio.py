@@ -39,6 +39,31 @@ CATEGORIES: dict[str, tuple[str, str]] = {
 
 LABEL_RE = re.compile(r"^(s\d)_(\d+)")
 
+# Quality ranking: lower number = higher priority. Categories not listed get 99 (lowest).
+# renders = 成片(remotion 完整组装),fast_mode = Fast Mode 直出。其余是中间产物。
+QUALITY_PRIORITY: dict[str, int] = {
+    "renders": 0,
+    "fast_mode": 1,
+}
+
+# Thumbnail posters live alongside other thumbnails but in a dedicated subfolder so
+# they're easy to identify, regenerate, and rsync. Naming: <category>__<filename>.jpg
+# (slashes in original path replaced by `__` so a single flat directory works).
+THUMBNAIL_DIR = OUTPUT_DIR / "thumbnails" / "portfolio_posters"
+
+
+def _thumbnail_path_for(rel_path: str) -> str | None:
+    """Return relative thumbnail path (under OUTPUT_DIR) if the poster jpg exists.
+
+    Naming convention: rel_path "seedance/s1_001.mp4" → poster
+    "thumbnails/portfolio_posters/seedance__s1_001.jpg".
+    """
+    flat = rel_path.replace("/", "__").rsplit(".", 1)[0] + ".jpg"
+    poster = THUMBNAIL_DIR / flat
+    if poster.is_file():
+        return str(poster.relative_to(OUTPUT_DIR))
+    return None
+
 
 class PortfolioFile(BaseModel):
     id: str
@@ -50,6 +75,7 @@ class PortfolioFile(BaseModel):
     produced_at: str
     size_bytes: int
     mime_type: str
+    thumbnail_path: str | None = None  # relative to OUTPUT_DIR; None for non-video or missing poster
 
 
 class PortfolioResponse(BaseModel):
@@ -102,6 +128,7 @@ def _scan_portfolio() -> list[PortfolioFile]:
             m = LABEL_RE.match(path.stem)
             scenario = m.group(1) if m else None
             label = f"{scenario}_{m.group(2)}" if m else None
+            thumb = _thumbnail_path_for(str(rel)) if mime.startswith("video/") else None
             files.append(
                 PortfolioFile(
                     id=str(rel),
@@ -115,6 +142,7 @@ def _scan_portfolio() -> list[PortfolioFile]:
                     ).isoformat(timespec="seconds"),
                     size_bytes=st.st_size,
                     mime_type=mime,
+                    thumbnail_path=thumb,
                 )
             )
     return files
@@ -138,23 +166,60 @@ def _scan_portfolio_cached() -> list[PortfolioFile]:
 
 
 @router.get("/")
-async def list_portfolio(category: str | None = None) -> PortfolioResponse:
-    """Return all pipeline-generated media files.
+async def list_portfolio(
+    category: str | None = None,
+    limit: int | None = None,
+    sort: str = "recent",
+) -> PortfolioResponse:
+    """Return pipeline-generated media files.
 
-    Query param `category` filters to a single category (renders, seedance, ...).
+    Query params:
+    - `category`: filter to a single category (renders, seedance, ...).
+    - `limit`: cap number of files returned (after sort+filter).
+    - `sort`: `recent` (default, by produced_at desc) or `quality` (renders+fast_mode first,
+              then by produced_at desc — used by frontend footage TOP-N display).
+
+    `by_category` aggregates the *unfiltered* full set so UI can show overall counts
+    even when displaying a TOP-N slice.
     """
     all_files = _scan_portfolio_cached()
-    if category:
-        all_files = [f for f in all_files if f.category == category]
 
+    # by_category aggregates over all files (pre-filter, pre-limit) so totals stay stable
     by_cat: dict[str, dict[str, int]] = {}
     for f in all_files:
         entry = by_cat.setdefault(f.category, {"count": 0, "bytes": 0})
         entry["count"] += 1
         entry["bytes"] += f.size_bytes
 
+    if category:
+        all_files = [f for f in all_files if f.category == category]
+
+    if sort == "quality":
+        all_files = sorted(
+            all_files,
+            key=lambda f: (
+                QUALITY_PRIORITY.get(f.category, 99),
+                # produced_at is ISO-8601 UTC; lex desc == chronological desc
+                _negate_iso(f.produced_at),
+            ),
+        )
+    else:  # recent
+        all_files = sorted(all_files, key=lambda f: f.produced_at, reverse=True)
+
+    if limit is not None and limit > 0:
+        all_files = all_files[:limit]
+
     return PortfolioResponse(
         total=len(all_files),
         by_category=by_cat,
         files=all_files,
     )
+
+
+def _negate_iso(iso: str) -> str:
+    """Return a sort key that yields desc order when paired with ascending sort.
+
+    Python sorts strings lexically; for ISO-8601 dates we want most-recent first,
+    so we map each char to its inverse ordinal. Stable across all valid ISO inputs.
+    """
+    return "".join(chr(0xFFFF - ord(c)) for c in iso)

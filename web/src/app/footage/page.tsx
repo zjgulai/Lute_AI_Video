@@ -32,6 +32,7 @@ interface FootageAsset {
   file_path: string;
   file_size: number;
   mime_type: string;
+  thumbnail_path?: string;
   tags: string[];
   metadata: Record<string, any>;
 }
@@ -106,7 +107,7 @@ export default function FootagePage() {
       title: a.original_name,
       scene: a.metadata?.scenario || a.tags[1] || "other",
       videoType: "mp4",
-      thumbnail: "",
+      thumbnail: a.thumbnail_path || "",
       videoPath: a.file_path,
       duration: 0,
       createdAt: a.metadata?.produced_at || new Date().toISOString(),
@@ -129,7 +130,8 @@ export default function FootagePage() {
       return;
     }
     try {
-      const res = await apiFetch("/portfolio/");
+      // TOP-50 quality sort: renders + fast_mode first, then by produced_at desc
+      const res = await apiFetch("/portfolio/?limit=50&sort=quality");
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
       // Map PortfolioFile → FootageAsset shape so grid/detail panel render unchanged
@@ -140,6 +142,7 @@ export default function FootagePage() {
         file_path: item.path,
         file_size: item.size_bytes,
         mime_type: item.mime_type,
+        thumbnail_path: item.thumbnail_path,
         tags: item.scenario ? [item.category, item.scenario] : [item.category],
         metadata: {
           category: item.category,
@@ -522,14 +525,23 @@ export default function FootagePage() {
                           />
                         ) : isVideoType && mediaUrl && !videoHasError ? (
                           <>
-                            <video
-                              src={mediaUrl}
-                              className="w-full h-full object-cover"
-                              preload="metadata"
-                              muted
-                              playsInline
-                              onError={() => setVideoLoadErrors((prev) => new Set(prev).add(asset.asset_id))}
-                            />
+                            {asset.thumbnail_path ? (
+                              <img
+                                src={getMediaUrl(asset.thumbnail_path)}
+                                alt={asset.original_name}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <video
+                                src={mediaUrl}
+                                className="w-full h-full object-cover"
+                                preload="none"
+                                muted
+                                playsInline
+                                onError={() => setVideoLoadErrors((prev) => new Set(prev).add(asset.asset_id))}
+                              />
+                            )}
                             <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
                               <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-md">
                                 <svg width="12" height="12" viewBox="0 0 24 24" style={{ fill: "var(--text-h1)" }}>
