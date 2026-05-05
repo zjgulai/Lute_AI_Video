@@ -48,6 +48,11 @@ ignore = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--tb=short -v"
+# Custom markers — 跑 e2e 套件:`pytest -m e2e`
+# e2e 测试默认 skip(skipif 检测 env credentials),只有用户配齐外部资源才跑
+markers = [
+    "e2e: 端到端测试,需要真实 API key / platform credentials / webhook URL",
+]
 
 [tool.coverage.run]
 source = ["src"]
