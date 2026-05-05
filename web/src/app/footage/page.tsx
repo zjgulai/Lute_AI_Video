@@ -79,16 +79,8 @@ export default function FootagePage() {
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Detail panel
-  const [selectedAsset, setSelectedAsset] = useState<FootageAsset | null>(null);
-
-  // Tag editing
-  const [editingTags, setEditingTags] = useState(false);
-  const [tagInput, setTagInput] = useState("");
-
-  // Delete confirmation
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  // Unified preview modal (replaces detail panel + window.open)
+  const [previewAsset, setPreviewAsset] = useState<FootageAsset | null>(null);
 
   // Search / filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,8 +88,8 @@ export default function FootagePage() {
   // UI 2.0: Gallery tabs — finished works vs materials
   const [activeTab, setActiveTab] = useState<"finished" | "materials">("finished");
 
-  // Track video thumbnails that failed to load (bad URL / corrupt file)
-  const [videoLoadErrors, setVideoLoadErrors] = useState<Set<string>>(new Set());
+  // Materials category filter
+  const [materialFilter, setMaterialFilter] = useState<"all" | "video" | "image" | "audio">("all");
 
   // Finished works: derived from assets (renders category video files)
   const finishedWorks = assets
@@ -223,66 +215,10 @@ export default function FootagePage() {
     await fetchAssets();
   };
 
-  // ── Tag editing ──
+  // ── Preview helpers ──
 
-  const openTagEditor = (asset: FootageAsset) => {
-    setSelectedAsset(asset);
-    setTagInput(asset.tags.join(", "));
-    setEditingTags(true);
-  };
-
-  const saveTags = async () => {
-    if (!selectedAsset) return;
-    const newTags = tagInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-
-    try {
-      const res = await apiFetch(
-        "/api/assets/" + selectedAsset.asset_id + "/tags",
-        {
-          method: "PUT",
-          body: JSON.stringify({ tags: newTags }),
-        }
-      );
-      if (!res.ok) throw new Error(`${t("common.updateFailed")} (${res.status})`);
-
-      // Optimistically update local state
-      setAssets((prev) =>
-        prev.map((a) =>
-          a.asset_id === selectedAsset.asset_id ? { ...a, tags: newTags } : a
-        )
-      );
-      setSelectedAsset((prev) =>
-        prev ? { ...prev, tags: newTags } : null
-      );
-      setEditingTags(false);
-    } catch (e: any) {
-      setError(e.message || t("common.updateFailed"));
-    }
-  };
-
-  // ── Delete ──
-
-  const handleDelete = async (assetId: string) => {
-    setDeleting(true);
-    try {
-      const res = await apiFetch("/api/assets/" + assetId, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error(`${t("common.deleteFailed")} (${res.status})`);
-      setDeleteConfirm(null);
-      if (selectedAsset?.asset_id === assetId) {
-        setSelectedAsset(null);
-      }
-      await fetchAssets();
-    } catch (e: any) {
-      setError(e.message || t("common.deleteFailed"));
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const openPreview = (asset: FootageAsset) => setPreviewAsset(asset);
+  const closePreview = () => setPreviewAsset(null);
 
   // ── Filtering ──
 
@@ -296,6 +232,14 @@ export default function FootagePage() {
         );
       })
     : assets;
+
+  const materialFilteredAssets = filteredAssets.filter((a) => {
+    if (materialFilter === "all") return true;
+    if (materialFilter === "video") return isVideo(a.mime_type);
+    if (materialFilter === "image") return isImage(a.mime_type);
+    if (materialFilter === "audio") return a.mime_type.startsWith("audio/");
+    return true;
+  });
 
   // ── Render ──
 
@@ -371,9 +315,8 @@ export default function FootagePage() {
             <GalleryGrid
               items={finishedWorks}
               onPlay={(item) => {
-                if (item.videoPath) {
-                  window.open(getMediaUrl(item.videoPath), "_blank");
-                }
+                const asset = assets.find((a) => a.asset_id === item.id);
+                if (asset) openPreview(asset);
               }}
             />
           </div>
@@ -382,16 +325,36 @@ export default function FootagePage() {
         {/* ── Materials Tab ── */}
         {activeTab === "materials" && (
           <div className="space-y-4 animate-fade-in">
-            {/* Search bar */}
-            <div className="relative">
-              <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} weight="fill" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t("footage.searchPlaceholder")}
-                className="apple-input text-sm pl-9 pr-4 w-full"
-              />
+            {/* Search bar + category filter */}
+            <div className="flex gap-3 items-center">
+              <div className="relative flex-1">
+                <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} weight="fill" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t("footage.searchPlaceholder")}
+                  className="apple-input text-sm pl-9 pr-4 w-full"
+                />
+              </div>
+              <div className="flex gap-1 shrink-0">
+                {(["all", "video", "image", "audio"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setMaterialFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                      materialFilter === f
+                        ? "bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)]"
+                        : "text-[var(--text-body)] hover:bg-[var(--bg-panel)]"
+                    }`}
+                  >
+                    {f === "all" && "全部"}
+                    {f === "video" && "视频"}
+                    {f === "image" && "图片"}
+                    {f === "audio" && "音频"}
+                  </button>
+                ))}
+              </div>
             </div>
 
         {/* Error banner */}
@@ -444,10 +407,8 @@ export default function FootagePage() {
           </p>
         </div>
 
-        {/* Content area: Gallery + Detail panel */}
-        <div className="flex gap-4">
-          {/* Gallery */}
-          <div className="flex-1 min-h-[300px]">
+        {/* Content area: Gallery */}
+        <div className="min-h-[300px]">
             {/* Loading skeleton */}
             {loading && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -464,7 +425,7 @@ export default function FootagePage() {
             )}
 
             {/* Empty state */}
-            {!loading && filteredAssets.length === 0 && (
+            {!loading && materialFilteredAssets.length === 0 && (
               <div className="apple-card p-12 text-center">
                 <FilmStrip size={40} weight="fill" className="text-[rgba(215,92,112,0.18)] mx-auto mb-3" />
                 <p className="text-sm font-medium text-[var(--text-body)] mb-1">{t("footage.empty")}</p>
@@ -482,9 +443,9 @@ export default function FootagePage() {
             )}
 
             {/* Asset grid — frontend filter: video/image > 1 MiB, audio any size */}
-            {!loading && filteredAssets.length > 0 && (
+            {!loading && materialFilteredAssets.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {filteredAssets
+                {materialFilteredAssets
                   .filter((a) => {
                     const min = 1024 * 1024;
                     if (isVideo(a.mime_type) || isImage(a.mime_type)) return a.file_size > min;
@@ -494,21 +455,12 @@ export default function FootagePage() {
                   const mediaUrl = getMediaUrl(asset.file_path);
                   const isVideoType = isVideo(asset.mime_type);
                   const isImageType = isImage(asset.mime_type);
-                  const isSelected = selectedAsset?.asset_id === asset.asset_id;
-                  const videoHasError = videoLoadErrors.has(asset.asset_id);
 
                   return (
                     <div
                       key={asset.asset_id}
-                      onClick={() => {
-                        setSelectedAsset(asset);
-                        setEditingTags(false);
-                      }}
-                      className={`apple-card overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md group ${
-                        isSelected
-                          ? "ring-2 ring-[var(--fortune-red)] shadow-md"
-                          : ""
-                      }`}
+                      onClick={() => openPreview(asset)}
+                      className="apple-card overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md group"
                     >
                       {/* Thumbnail */}
                       <div className="aspect-video bg-[var(--cinema-black)] relative flex items-center justify-center overflow-hidden">
@@ -523,7 +475,7 @@ export default function FootagePage() {
                               (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
                             }}
                           />
-                        ) : isVideoType && mediaUrl && !videoHasError ? (
+                        ) : isVideoType && mediaUrl ? (
                           <>
                             {asset.thumbnail_path ? (
                               <img
@@ -533,35 +485,27 @@ export default function FootagePage() {
                                 loading="lazy"
                               />
                             ) : (
-                              <video
-                                src={mediaUrl}
-                                className="w-full h-full object-cover"
-                                preload="none"
-                                muted
-                                playsInline
-                                onError={() => setVideoLoadErrors((prev) => new Set(prev).add(asset.asset_id))}
-                              />
+                              <div className="w-full h-full bg-[var(--bg-panel)] flex items-center justify-center">
+                                <Video size={32} weight="fill" className="text-white/40" />
+                              </div>
                             )}
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-                              <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-md">
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-all">
+                              <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
                                 <svg width="12" height="12" viewBox="0 0 24 24" style={{ fill: "var(--text-h1)" }}>
                                   <polygon points="8,5 19,12 8,19" />
                                 </svg>
                               </div>
                             </div>
                           </>
-                        ) : null}
-                        <div
-                          className={`absolute inset-0 flex items-center justify-center ${
-                            ((isImageType || isVideoType) && mediaUrl && !videoHasError) ? "hidden" : ""
-                          }`}
-                        >
-                          {isVideoType ? (
-                            <Video size={32} weight="fill" className="text-white/60" />
-                          ) : (
-                            <FileImage size={32} weight="fill" className="text-white/60" />
-                          )}
-                        </div>
+                        ) : (
+                          <div className="w-full h-full bg-[var(--bg-panel)] flex items-center justify-center">
+                            {isVideoType ? (
+                              <Video size={32} weight="fill" className="text-white/40" />
+                            ) : (
+                              <FileImage size={32} weight="fill" className="text-white/40" />
+                            )}
+                          </div>
+                        )}
                         {isVideoType && (
                           <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/60 text-[12px] text-white/80 font-medium">
                             {formatFileSize(asset.file_size)}
@@ -602,103 +546,81 @@ export default function FootagePage() {
                 })}
               </div>
             )}
-          </div>
+        </div>
+      </div>
+    )}
 
-          {/* Detail panel */}
-          {selectedAsset && (
-            <div className="w-72 shrink-0">
-              <div className="apple-card p-4 sticky top-6 space-y-3">
-                <div className="flex items-start justify-between">
-                  <h3 className="text-sm font-semibold text-[var(--text-h1)]">{t("footage.detailTitle")}</h3>
-                  <button
-                    onClick={() => {
-                      setSelectedAsset(null);
-                      setEditingTags(false);
-                    }}
-                    className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[var(--bg-panel)] transition-all cursor-pointer"
-                  >
-                    <X size={16} weight="fill" />
-                  </button>
-                </div>
+      {/* ── Unified Media Preview Modal ── */}
+      {previewAsset && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={closePreview}
+        >
+          <div
+            className="relative max-w-[90vw] max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={closePreview}
+              className="absolute -top-10 right-0 p-2 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all cursor-pointer z-10"
+            >
+              <X size={20} weight="fill" />
+            </button>
 
-                {/* Preview */}
-                <div className="aspect-video bg-[var(--cinema-black)] rounded-lg flex items-center justify-center overflow-hidden">
-                  {isImage(selectedAsset.mime_type) ? (
-                    <img
-                      src={getMediaUrl(selectedAsset.file_path)}
-                      alt={selectedAsset.original_name}
-                      className="w-full h-full object-contain"
-                    />
-                  ) : isVideo(selectedAsset.mime_type) ? (
-                    <video
-                      src={getMediaUrl(selectedAsset.file_path)}
-                      controls
-                      className="w-full h-full object-contain"
-                      preload="metadata"
-                    />
-                  ) : (
-                    <Video size={40} weight="fill" className="text-white/40" />
-                  )}
+            {/* Media */}
+            <div className="rounded-xl overflow-hidden bg-black/60">
+              {isVideo(previewAsset.mime_type) ? (
+                <video
+                  src={getMediaUrl(previewAsset.file_path)}
+                  controls
+                  autoPlay
+                  className="max-w-[85vw] max-h-[75vh] object-contain"
+                  preload="metadata"
+                />
+              ) : isImage(previewAsset.mime_type) ? (
+                <img
+                  src={getMediaUrl(previewAsset.file_path)}
+                  alt={previewAsset.original_name}
+                  className="max-w-[85vw] max-h-[75vh] object-contain"
+                />
+              ) : (
+                <div className="px-12 py-16 text-center">
+                  <FileImage size={48} weight="fill" className="text-white/40 mx-auto mb-4" />
+                  <audio
+                    src={getMediaUrl(previewAsset.file_path)}
+                    controls
+                    className="w-64"
+                  />
                 </div>
+              )}
+            </div>
 
-                {/* Metadata */}
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <HardDrives size={16} weight="fill" className="text-[var(--text-muted)] mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.filename")}</p>
-                      <p className="text-[12px] text-[var(--text-h1)] break-all">
-                        {selectedAsset.original_name}
-                      </p>
-                    </div>
+            {/* Info bar */}
+            <div className="mt-3 px-4 py-3 rounded-xl bg-white/5 backdrop-blur">
+              <div className="flex items-center gap-4 flex-wrap">
+                <p className="text-sm text-white/90 font-medium">{previewAsset.original_name}</p>
+                <span className="text-xs text-white/50">{formatFileSize(previewAsset.file_size)}</span>
+                <span className="text-xs text-white/50">{previewAsset.mime_type}</span>
+                {previewAsset.tags.length > 0 && (
+                  <div className="flex gap-1">
+                    {previewAsset.tags.map((tag, i) => (
+                      <span
+                        key={i}
+                        className="px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.20)] text-[11px] text-[var(--misty-pink)] font-medium"
+                      >
+                        {tag}
+                      </span>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <HardDrives size={16} weight="fill" className="text-[var(--text-muted)] shrink-0" />
-                    <div>
-                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.fileSize")}</p>
-                      <p className="text-[12px] text-[var(--text-h1)]">
-                        {formatFileSize(selectedAsset.file_size)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar size={16} weight="fill" className="text-[var(--text-muted)] shrink-0" />
-                    <div>
-                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.uploadTime")}</p>
-                      <p className="text-[12px] text-[var(--text-h1)]">
-                        {formatDate(selectedAsset.metadata?.uploaded_at || selectedAsset.file_path)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Tag size={16} weight="fill" className="text-[var(--text-muted)] mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] text-[var(--text-muted)]">{t("footage.tags")}</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {selectedAsset.tags.length > 0 ? (
-                          selectedAsset.tags.map((tag, i) => (
-                            <span
-                              key={i}
-                              className="px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[12px] text-[var(--fortune-red)] font-medium"
-                            >
-                              {tag}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-[12px] text-[var(--text-muted)]">{t("footage.noTags")}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
-          )}
-        </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
+    </div>
     </div>
   );
 }
