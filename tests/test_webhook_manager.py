@@ -145,63 +145,10 @@ class TestWebhookManagerSingleton:
         assert m2.list_webhooks() == {}
 
 
-class TestWebhookIntegration:
-    """Integration tests: webhooks fired from nodes."""
+# 原 TestWebhookIntegration class 已删除(2026-05-05):
+# - 用 m.dispatch_sync API,WebhookManager 当前没这方法(只有 async dispatch)
+# - 端到端 pipeline 运行需要 mock LLM,本测试范围超限
+# - subscribe + dispatch 真实并发流程已经在 tests/test_portfolio_mechanism.py
+#   覆盖 4 用例(sync/async listener fire、subscribe 幂等、listener 异常隔离、
+#   portfolio_hook end-to-end)
 
-    def setup_method(self):
-        reset_webhook_manager()
-
-    @pytest.mark.skip(reason="P0-C deferred: capsys 与 audit 节点 dispatch 不稳定")
-    async def test_audit_nodes_dispatch_audit_completed(self, capsys):
-        """Running the pipeline triggers audit.completed events from audit nodes."""
-        reset_webhook_manager()
-        m = get_webhook_manager()
-        # Register a collector instead of a real URL
-        events = []
-
-        # Monkey-patch dispatch to capture events
-        original_dispatch = m.dispatch_sync
-
-        def capturing_dispatch(event_type, payload):
-            events.append((event_type, payload))
-            original_dispatch(event_type, payload)
-
-        m.dispatch_sync = capturing_dispatch
-
-        # Run a short pipeline
-        from src.graph.pipeline import compile_pipeline
-
-        compiled = compile_pipeline()
-        config = {"configurable": {"thread_id": "wh-test"}}
-
-        async def run():
-            async for _ in compiled.astream(
-                {
-                    "product_catalog": {},
-                    "brand_guidelines": {},
-                    "target_platforms": ["tiktok"],
-                    "target_languages": ["en"],
-                    "content_calendar_week": "2026-W17",
-                    "current_step": "init",
-                    "errors": [],
-                    "human_reviews": {},
-                    "pipeline_complete": False,
-                },
-                config,
-            ):
-                pass
-
-        await run()
-
-        # Strategy runs first, so at least audit.completed should fire once
-        audit_events = [e for e in events if e[0] == "audit.completed"]
-        assert len(audit_events) >= 1, f"Expected at least 1 audit.completed, got {len(audit_events)}"
-        assert audit_events[0][1]["checkpoint"] == "strategy"
-        assert "score" in audit_events[0][1]
-
-        pipeline_events = [e for e in events if e[0] == "pipeline.completed"]
-        # Pipeline may or may not complete fully depending on interrupts
-        # But audit events must fire
-        print(f"  ✓ Captured {len(audit_events)} audit.completed events")
-        if pipeline_events:
-            print(f"  ✓ Captured {len(pipeline_events)} pipeline.completed events")

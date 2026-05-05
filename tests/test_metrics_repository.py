@@ -1,25 +1,26 @@
 """Tests for MetricsRepository — JSON and SQLite backends."""
 from __future__ import annotations
 
-import pytest
-
-# P0-C deferred: SummaryReport 测试 fixture 没把 mock 数据插进 :memory: SQLite,
-# 17 个 assert 0 == 3 类失败。需要 metrics_repository fixture 同步到当前 async API。
-# 待下一期单独修;先 skip 让 P0-C 批量 add 测试时 CI 不红。
-pytest.skip("P0-C deferred: stale fixtures — sync to async API needed", allow_module_level=True)
-
 import json
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 from src.tools.metrics_repository import MetricsRepository, SummaryReport, HealthStatus
 
 # ── Sample run data ──
+# 用相对当前时间的 timestamp,避免硬编码 "2026-04-25" 落到 48h 窗口外。
+# 所有 sample run 都在过去 1-3 小时内,确保 hours=48 query 能命中。
+def _ts(hours_ago: float) -> str:
+    return (datetime.now() - timedelta(hours=hours_ago)).isoformat()
+
 
 SAMPLE_RUN_OK = {
     "run_id": "run-001",
-    "started_at": "2026-04-25T12:00:00",
-    "completed_at": "2026-04-25T12:00:03",
+    "started_at": _ts(3),
+    "completed_at": _ts(2.99),
     "total_duration_ms": 3220.5,
     "node_count": 16,
     "error_count": 0,
@@ -33,8 +34,8 @@ SAMPLE_RUN_OK = {
 
 SAMPLE_RUN_FAIL = {
     "run_id": "run-002",
-    "started_at": "2026-04-25T13:00:00",
-    "completed_at": "2026-04-25T13:00:05",
+    "started_at": _ts(2),
+    "completed_at": _ts(1.99),
     "total_duration_ms": 5100.0,
     "node_count": 4,
     "error_count": 1,
@@ -47,8 +48,8 @@ SAMPLE_RUN_FAIL = {
 
 SAMPLE_RUN_SLOW = {
     "run_id": "run-003",
-    "started_at": "2026-04-25T14:00:00",
-    "completed_at": "2026-04-25T14:01:00",
+    "started_at": _ts(1),
+    "completed_at": _ts(0.98),
     "total_duration_ms": 62000.0,
     "node_count": 16,
     "error_count": 0,
@@ -316,56 +317,10 @@ class TestClear:
         assert len(repo) == 1
 
 
-# ── Telemetry Integration Test ──
+# 原 TestTelemetryIntegration class 已删除(2026-05-05):
+# - set_metrics_repo / save_run_metrics / get_metrics_repo 已从 src.telemetry 移除
+# - 测试 import 直接 ImportError,无法 collect
+# - 集成路径如有需要,需要找到新 API 重写;当前 src.telemetry 有
+#   pipeline_metrics / error_collector / timed_node 三个 singleton,与旧 set_metrics_repo
+#   设计不同
 
-
-class TestTelemetryIntegration:
-    def test_save_run_metrics_through_telemetry(self, tmp_path: Path):
-        """Verify the telemetry integration path works."""
-        from src.telemetry import set_metrics_repo, save_run_metrics
-
-        r = MetricsRepository(path=str(tmp_path / "test_metrics.json"))
-        r.initialize()
-        set_metrics_repo(r)
-
-        metrics = {
-            "run_id": "integ-test-1",
-            "started_at": "2026-04-25T15:00:00",
-            "total_duration_ms": 1234.5,
-            "node_count": 16,
-            "error_count": 0,
-            "human_review_count": 1,
-            "re_run_count": 0,
-            "node_timings": [{"node_name": "test", "duration_ms": 100, "success": True, "timestamp": "t"}],
-        }
-        rid = save_run_metrics(metrics)
-        assert rid == "integ-test-1"
-        assert len(r) == 1
-
-        loaded = r.get_run("integ-test-1")
-        assert loaded is not None
-        assert loaded["total_duration_ms"] == 1234.5
-
-        set_metrics_repo(None)
-        r.close()
-
-    def test_save_run_metrics_no_repo(self):
-        """save_run_metrics with no repo configured is a no-op."""
-        from src.telemetry import save_run_metrics, get_metrics_repo
-
-        assert get_metrics_repo() is None
-        result = save_run_metrics({"run_id": "test"})
-        assert result is None
-
-    def test_set_get_metrics_repo(self):
-        """set_metrics_repo / get_metrics_repo round-trip."""
-        from src.telemetry import set_metrics_repo, get_metrics_repo
-
-        r = MetricsRepository()
-        r.initialize()
-        assert get_metrics_repo() is None
-        set_metrics_repo(r)
-        assert get_metrics_repo() is r
-        set_metrics_repo(None)
-        assert get_metrics_repo() is None
-        r.close()

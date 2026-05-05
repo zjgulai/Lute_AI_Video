@@ -1,20 +1,13 @@
 """Tests for Skill engine and ProductCatalog.
 
 Verifies:
-1. SkillCallable ABC: can be subclassed, safe_execute cycle
-2. SkillRegistry: register/unregister/execute/list
+1. SkillCallable ABC: can be subclassed, safe_execute cycle (async)
+2. SkillRegistry: register/unregister/execute/list (async execute)
 3. LLMSkill: prompt injection, param validation, fallback
 4. ProductCatalog: CRUD, search, mock mode, dict conversion
 """
 
 from __future__ import annotations
-
-import pytest
-
-# P0-C deferred: skill API 改成 async,但 8 个 test 仍 sync 调用 skill.execute()
-# 直接拿 coroutine.success → AttributeError。需要给所有 execute() 加 await + asyncio.run。
-# 待下一期单独修;先 skip 让 P0-C 批量 add 测试时 CI 不红。
-pytest.skip("P0-C deferred: tests need await for async skill API", allow_module_level=True)
 
 from pathlib import Path
 
@@ -121,33 +114,43 @@ class TestSkillCallable:
 
     def test_execute_returns_result(self, echo):
         """execute should return SkillResult."""
-        result = echo.execute(params={"required_field": "hello"})
+        import asyncio
+
+        result = asyncio.run(echo.execute(params={"required_field": "hello"}))
         assert result.success is True
         assert result.data["required_field"] == "hello"
 
     def test_safe_execute_validates_params(self, echo):
         """safe_execute should fail on invalid params."""
-        result = echo.safe_execute(params={})
+        import asyncio
+
+        result = asyncio.run(echo.safe_execute(params={}))
         assert result.success is False
         assert "missing required_field" in result.error
 
     def test_safe_execute_validates_output(self, echo):
         """safe_execute should validate output."""
-        result = echo.safe_execute(params={"required_field": "ok"})
+        import asyncio
+
+        result = asyncio.run(echo.safe_execute(params={"required_field": "ok"}))
         assert result.success is True
         assert result.data["required_field"] == "ok"
 
     def test_fallback_on_all_retries(self):
         """safe_execute should return fallback when all retries fail."""
+        import asyncio
+
         skill = FailingSkill()
-        result = skill.safe_execute(params={})
+        result = asyncio.run(skill.safe_execute(params={}))
         assert result.success is True
         assert result.data["note"] == "fallback activated"
 
     def test_fallback_has_metadata(self):
         """Fallback result should include retry metadata."""
+        import asyncio
+
         skill = FailingSkill()
-        result = skill.safe_execute(params={})
+        result = asyncio.run(skill.safe_execute(params={}))
         assert "retries" in result.metadata
         assert "fallback_reason" in result.metadata
 
@@ -186,13 +189,17 @@ class TestSkillRegistry:
 
     def test_execute_registered_skill(self):
         """Should execute a registered skill."""
+        import asyncio
+
         SkillRegistry.register(EchoSkill())
-        result = SkillRegistry.execute("echo", {"required_field": "test"})
+        result = asyncio.run(SkillRegistry.execute("echo", {"required_field": "test"}))
         assert result.success is True
 
     def test_execute_unregistered_skill(self):
         """Should fail gracefully for unregistered skill."""
-        result = SkillRegistry.execute("nonexistent", {})
+        import asyncio
+
+        result = asyncio.run(SkillRegistry.execute("nonexistent", {}))
         assert result.success is False
         assert "not found" in result.error
 
@@ -411,8 +418,8 @@ class TestProductCatalogCRUD:
         assert catalog.get("NEW-1") is not None
 
     def test_add_auto_generates_id(self, catalog):
-        """Should generate ID if not provided."""
-        p = Product(name="No ID", brand="B")
+        """Should generate ID if not provided (空字符串触发自动 PROD- 前缀生成)。"""
+        p = Product(product_id="", name="No ID", brand="B")
         added = catalog.add(p)
         assert added.product_id.startswith("PROD-")
 
