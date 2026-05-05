@@ -9,6 +9,7 @@ full set of real pipeline outputs.
 from __future__ import annotations
 
 import re
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -107,13 +108,30 @@ def _scan_portfolio() -> list[PortfolioFile]:
     return files
 
 
+_CACHE: dict[str, tuple[list[PortfolioFile], float]] = {}
+_CACHE_TTL = 30  # seconds
+
+
+def _scan_portfolio_cached() -> list[PortfolioFile]:
+    """Return cached scan result if within TTL, otherwise rescan."""
+    key = "all"
+    now = time.time()
+    if key in _CACHE:
+        files, cached_at = _CACHE[key]
+        if now - cached_at < _CACHE_TTL:
+            return files
+    files = _scan_portfolio()
+    _CACHE[key] = (files, now)
+    return files
+
+
 @router.get("/")
 async def list_portfolio(category: str | None = None) -> PortfolioResponse:
     """Return all pipeline-generated media files.
 
     Query param `category` filters to a single category (renders, seedance, ...).
     """
-    all_files = _scan_portfolio()
+    all_files = _scan_portfolio_cached()
     if category:
         all_files = [f for f in all_files if f.category == category]
 
