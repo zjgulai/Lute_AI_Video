@@ -1,11 +1,12 @@
-"""Test Sora 2 Pro availability via poyo.ai — stdlib only (urllib)."""
+"""Probe Sora 2 Pro availability via poyo.ai — stdlib only (urllib).
 
-import pytest
+ad-hoc API 探查脚本,不是单元测试。需要真实 POYO_API_KEY + 联网。
+原本错误地放在 tests/test_sora2pro.py 里被 pytest 当成测试 collect,
+2026-05-05 迁到 scripts/ 修正定位。
 
-# P0-C deferred: 这是 ad-hoc API 探查脚本,需要真实 POYO_API_KEY + 联网。
-# 不应该作为单元测试常驻 CI。下一期决定:迁到 scripts/ 还是删除。
-# 先 skip 让 P0-C 批量 add 测试时 CI 不红。
-pytest.skip("P0-C deferred: ad-hoc API probe, not a unit test", allow_module_level=True)
+Usage:
+    python scripts/probe_sora2pro.py
+"""
 
 import json
 import os

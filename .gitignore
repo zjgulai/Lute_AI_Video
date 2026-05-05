@@ -85,6 +85,11 @@ security_self_check.py
 tmp/
 drafts/
 archive/
+
+# Portfolio index — 由 portfolio_hook 在 pipeline.completed 时自动 rebuild,
+# 自动重新生成会污染 git diff。定位为本地缓存,不进版本控制。
+# 跨机器看作品集:rsync output/ 后跑 `make portfolio` 重建本地 index。
+assets/portfolio/index.json
 *.log
 
 # Backup files
