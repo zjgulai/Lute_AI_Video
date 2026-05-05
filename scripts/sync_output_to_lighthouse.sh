@@ -29,7 +29,10 @@ else
   exit 2
 fi
 REMOTE_HOST_DIR="/opt/ai-video/output_uploaded"
-DOCKER_VOLUME="ai-video_backend_output"  # docker compose 的 volume 命名规则:<project>_<volume>
+# 实际生产 docker compose project 名 = lighthouse(deploy/lighthouse/),
+# volume 命名 lighthouse_backend_output。早期注释里写 ai-video_backend_output 是
+# 旧 docker-compose project 名残留,backend 容器实际不会读那个 volume。
+DOCKER_VOLUME="lighthouse_backend_output"
 CONTAINER="ai_video_backend"
 
 DRY_RUN=""
