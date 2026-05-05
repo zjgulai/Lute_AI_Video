@@ -240,6 +240,9 @@ if HAS_FASTAPI:
     from src.routers import media
     app.include_router(media.router)
 
+    from src.routers import portfolio
+    app.include_router(portfolio.router, dependencies=[Depends(verify_api_key)])
+
     # Mount legacy asset management endpoints
     try:
         from src import api_assets

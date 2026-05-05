@@ -119,6 +119,7 @@ export default function FootagePage() {
     }
   }, []);
 
+  // Fetch portfolio files from /api/portfolio/ (pipeline-generated media)
   const fetchAssets = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -135,10 +136,26 @@ export default function FootagePage() {
       return;
     }
     try {
-      const res = await apiFetch("/api/assets/");
+      const res = await apiFetch("/api/portfolio/");
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
-      setAssets(data.assets || []);
+      // Map PortfolioFile → FootageAsset shape so grid/detail panel render unchanged
+      const mapped = (data.files || []).map((item: any) => ({
+        asset_id: item.id,
+        filename: item.filename,
+        original_name: item.filename,
+        file_path: item.path,
+        file_size: item.size_bytes,
+        mime_type: item.mime_type,
+        tags: item.scenario ? [item.category, item.scenario] : [item.category],
+        metadata: {
+          category: item.category,
+          scenario: item.scenario,
+          label: item.label,
+          produced_at: item.produced_at,
+        },
+      }));
+      setAssets(mapped);
     } catch (e: any) {
       setError(e.message || t("common.fetchFailed"));
     } finally {
@@ -473,7 +490,7 @@ export default function FootagePage() {
             {!loading && filteredAssets.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {filteredAssets.map((asset) => {
-                  const mediaUrl = getMediaUrl(asset.filename);
+                  const mediaUrl = getMediaUrl(asset.file_path);
                   const isVideoType = isVideo(asset.mime_type);
                   const isImageType = isImage(asset.mime_type);
                   const isSelected = selectedAsset?.asset_id === asset.asset_id;
@@ -566,16 +583,7 @@ export default function FootagePage() {
                         )}
                       </div>
 
-                      {/* Quick delete button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirm(asset.asset_id);
-                        }}
-                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 text-white/70 hover:text-[var(--crimson-mist)] hover:bg-black/60 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                      >
-                        <Trash size={16} weight="fill" />
-                      </button>
+                      {/* Note: delete disabled for portfolio view (files are read-only pipeline outputs) */}
                     </div>
                   );
                 })}
@@ -604,13 +612,13 @@ export default function FootagePage() {
                 <div className="aspect-video bg-[var(--cinema-black)] rounded-lg flex items-center justify-center overflow-hidden">
                   {isImage(selectedAsset.mime_type) ? (
                     <img
-                      src={getMediaUrl(selectedAsset.filename)}
+                      src={getMediaUrl(selectedAsset.file_path)}
                       alt={selectedAsset.original_name}
                       className="w-full h-full object-contain"
                     />
                   ) : isVideo(selectedAsset.mime_type) ? (
                     <video
-                      src={getMediaUrl(selectedAsset.filename)}
+                      src={getMediaUrl(selectedAsset.file_path)}
                       controls
                       className="w-full h-full object-contain"
                       preload="metadata"
@@ -652,79 +660,24 @@ export default function FootagePage() {
                   <div className="flex items-start gap-2">
                     <Tag size={16} weight="fill" className="text-[var(--text-muted)] mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[11px] text-[var(--text-muted)]">{t("footage.tags")}</p>
-                        {!editingTags && (
-                          <button
-                            onClick={() => openTagEditor(selectedAsset)}
-                            className="text-[11px] text-[var(--fortune-red)] hover:underline cursor-pointer"
-                          >
-                            <PencilSimple size={12} weight="fill" className="inline mr-0.5" />
-                            {t("footage.editTags")}
-                          </button>
+                      <p className="text-[11px] text-[var(--text-muted)]">{t("footage.tags")}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {selectedAsset.tags.length > 0 ? (
+                          selectedAsset.tags.map((tag, i) => (
+                            <span
+                              key={i}
+                              className="px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[11px] text-[var(--fortune-red)] font-medium"
+                            >
+                              {tag}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-[var(--text-muted)]">{t("footage.noTags")}</span>
                         )}
                       </div>
-                      {editingTags ? (
-                        <div className="mt-1 space-y-1.5">
-                          <input
-                            type="text"
-                            value={tagInput}
-                            onChange={(e) => setTagInput(e.target.value)}
-                            placeholder={t("footage.tagPlaceholder")}
-                            className="apple-input text-[11px] w-full"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") saveTags();
-                              if (e.key === "Escape") setEditingTags(false);
-                            }}
-                          />
-                          <p className="text-[11px] text-[var(--text-muted)]">
-                            {t("footage.tagHint")}
-                          </p>
-                          <div className="flex gap-1.5">
-                            <button
-                              onClick={saveTags}
-                              className="apple-btn apple-btn-primary text-[11px] py-1 px-2"
-                            >
-                              <Check size={12} weight="fill" />
-                              {t("footage.save")}
-                            </button>
-                            <button
-                              onClick={() => setEditingTags(false)}
-                              className="apple-btn text-[11px] py-1 px-2"
-                            >
-                              {t("common.cancel")}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {selectedAsset.tags.length > 0 ? (
-                            selectedAsset.tags.map((tag, i) => (
-                              <span
-                                key={i}
-                                className="px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[11px] text-[var(--fortune-red)] font-medium"
-                              >
-                                {tag}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-[11px] text-[var(--text-muted)]">{t("footage.noTags")}</span>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
-
-                {/* Delete button */}
-                <button
-                  onClick={() => setDeleteConfirm(selectedAsset.asset_id)}
-                  className="w-full apple-btn text-[11px] py-2 text-[var(--crimson-mist)] hover:bg-[rgba(196,91,80,0.05)] border-[rgba(196,91,80,0.20)]"
-                >
-                  <Trash size={16} weight="fill" />
-                  {t("footage.deleteAsset")}
-                </button>
               </div>
             </div>
           )}
@@ -733,50 +686,6 @@ export default function FootagePage() {
         )}
       </div>
 
-      {/* Delete confirmation dialog */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="apple-card p-5 max-w-sm mx-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-full bg-[rgba(196,91,80,0.10)] flex items-center justify-center">
-                <WarningCircle size={16} weight="fill" className="text-[var(--crimson-mist)]" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-[var(--text-h1)]">{t("footage.deleteConfirm")}</h3>
-                <p className="text-[11px] text-[var(--text-body)]">
-                  {t("footage.deleteHint")}
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="apple-btn text-xs py-2 px-3"
-                disabled={deleting}
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={() => handleDelete(deleteConfirm)}
-                disabled={deleting}
-                className="apple-btn apple-btn-danger text-xs py-2 px-3"
-              >
-                {deleting ? (
-                  <span className="flex items-center gap-1.5">
-                    <Spinner size={12} weight="fill" className="animate-spin" />
-                    {t("footage.deleting")}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    <Trash size={16} weight="fill" />
-                    {t("common.delete")}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
