@@ -106,7 +106,9 @@ if HAS_FASTAPI:
     async def rate_limit_middleware(request, call_next):
         from fastapi.responses import JSONResponse
 
-        if request.url.path == "/health":
+        # Skip rate limit for health checks and static media serving
+        # (portfolio gallery can load 400+ images/videos simultaneously)
+        if request.url.path == "/health" or request.url.path.startswith("/api/media/"):
             return await call_next(request)
 
         forwarded = request.headers.get("x-forwarded-for")
