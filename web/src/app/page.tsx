@@ -31,7 +31,6 @@ import StepByStepView from "@/components/StepByStepView";
 import VideoWorkflow from "@/components/VideoWorkflow";
 import GatePanel from "@/components/GatePanel";
 import StageProgress from "@/components/StageProgress";
-import AssetLibrary from "@/components/AssetLibrary";
 import SplashScreen from "@/components/SplashScreen";
 import RecommendPanel from "@/components/RecommendPanel";
 import FastModePanel from "@/components/FastModePanel";
@@ -168,7 +167,6 @@ export default function Home() {
     pipelineMode, setPipelineMode,
     videoDuration, setVideoDuration,
     disconnected, setDisconnected,
-    showAssetLibrary, setShowAssetLibrary,
   } = useAppStore();
 
   const {
@@ -824,18 +822,6 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowAssetLibrary(true)}
-                className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(78,58,61,0.5)] cursor-pointer"
-                title={t("app.assetLibrary")}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-                {t("app.assetLibrary")}
-              </button>
-              <button
                 onClick={() => setShowSettings(true)}
                 className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[rgba(78,58,61,0.5)] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
                 title="Settings"
@@ -1145,9 +1131,6 @@ export default function Home() {
           />
         )}
 
-        {showAssetLibrary && (
-          <AssetLibrary onClose={() => setShowAssetLibrary(false)} />
-        )}
         {showSettings && (
           <SettingsPanel onClose={() => setShowSettings(false)} />
         )}

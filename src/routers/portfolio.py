@@ -74,8 +74,13 @@ def _guess_mime(ext: str) -> str:
 
 
 def _scan_portfolio() -> list[PortfolioFile]:
-    """Walk OUTPUT_DIR subdirectories and build PortfolioFile list."""
+    """Walk OUTPUT_DIR subdirectories and build PortfolioFile list.
+
+    Video / image: strictly larger than 1 MiB (same threshold as /api/files).
+    Audio: any positive size (no floor).
+    """
     files: list[PortfolioFile] = []
+    min_bytes = 1024 * 1024
     for subdir_name, (category, _source) in CATEGORIES.items():
         subdir = OUTPUT_DIR / subdir_name
         if not subdir.is_dir():
@@ -85,6 +90,13 @@ def _scan_portfolio() -> list[PortfolioFile]:
                 continue
             ext = path.suffix.lower()
             if ext not in MEDIA_EXTS:
+                continue
+            st = path.stat()
+            if st.st_size <= 0:
+                continue
+            mime = _guess_mime(ext)
+            # Skip tiny video/image files — likely generation failures or stubs
+            if not mime.startswith("audio/") and st.st_size <= min_bytes:
                 continue
             rel = path.relative_to(OUTPUT_DIR)
             m = LABEL_RE.match(path.stem)
@@ -99,10 +111,10 @@ def _scan_portfolio() -> list[PortfolioFile]:
                     scenario=scenario,
                     label=label,
                     produced_at=datetime.fromtimestamp(
-                        path.stat().st_mtime, tz=UTC
+                        st.st_mtime, tz=UTC
                     ).isoformat(timespec="seconds"),
-                    size_bytes=path.stat().st_size,
-                    mime_type=_guess_mime(ext),
+                    size_bytes=st.st_size,
+                    mime_type=mime,
                 )
             )
     return files

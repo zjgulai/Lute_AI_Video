@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/I18nProvider";
-import { apiFetch, getApiBase, getMediaUrl as getApiMediaUrl, isDemoMode } from "@/components/api";
+import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import {
   FilmStrip,
   UploadSimple,
@@ -60,16 +60,6 @@ function formatDate(dateStr: string): string {
   }
 }
 
-function getMediaUrl(filename: string): string {
-  if (!filename) return "";
-  // Demo mode: serve from static public folder
-  if (isDemoMode()) {
-    return getApiMediaUrl(filename);
-  }
-  // Assets stored via api_assets.py use the filename as the media path
-  return getApiBase().replace(/\/$/, "") + "/api/media/" + encodeURIComponent(filename);
-}
-
 function isVideo(mimeType: string): boolean {
   return mimeType.startsWith("video/");
 }
@@ -105,19 +95,22 @@ export default function FootagePage() {
   // UI 2.0: Gallery tabs — finished works vs materials
   const [activeTab, setActiveTab] = useState<"finished" | "materials">("finished");
 
-  // Gallery items (loaded from localStorage for demo)
-  const [galleryItems, setGalleryItems] = useState<any[]>([]);
+  // Track video thumbnails that failed to load (bad URL / corrupt file)
+  const [videoLoadErrors, setVideoLoadErrors] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("hermes_gallery_items");
-      if (stored) {
-        setGalleryItems(JSON.parse(stored));
-      }
-    } catch {
-      // ignore parse errors
-    }
-  }, []);
+  // Finished works: derived from assets (renders category video files)
+  const finishedWorks = assets
+    .filter((a) => isVideo(a.mime_type) && a.metadata?.category === "renders" && a.file_size > 1024 * 1024)
+    .map((a) => ({
+      id: a.asset_id,
+      title: a.original_name,
+      scene: a.metadata?.scenario || a.tags[1] || "other",
+      videoType: "mp4",
+      thumbnail: "",
+      videoPath: a.file_path,
+      duration: 0,
+      createdAt: a.metadata?.produced_at || new Date().toISOString(),
+    }));
 
   // Fetch portfolio files from /api/portfolio/ (pipeline-generated media)
   const fetchAssets = useCallback(async () => {
@@ -373,9 +366,8 @@ export default function FootagePage() {
         {activeTab === "finished" && (
           <div className="animate-fade-in">
             <GalleryGrid
-              items={galleryItems}
+              items={finishedWorks}
               onPlay={(item) => {
-                // Open video in new tab or modal
                 if (item.videoPath) {
                   window.open(getMediaUrl(item.videoPath), "_blank");
                 }
@@ -486,14 +478,21 @@ export default function FootagePage() {
               </div>
             )}
 
-            {/* Asset grid */}
+            {/* Asset grid — frontend filter: video/image > 1 MiB, audio any size */}
             {!loading && filteredAssets.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {filteredAssets.map((asset) => {
+                {filteredAssets
+                  .filter((a) => {
+                    const min = 1024 * 1024;
+                    if (isVideo(a.mime_type) || isImage(a.mime_type)) return a.file_size > min;
+                    return true;
+                  })
+                  .map((asset) => {
                   const mediaUrl = getMediaUrl(asset.file_path);
                   const isVideoType = isVideo(asset.mime_type);
                   const isImageType = isImage(asset.mime_type);
                   const isSelected = selectedAsset?.asset_id === asset.asset_id;
+                  const videoHasError = videoLoadErrors.has(asset.asset_id);
 
                   return (
                     <div
@@ -521,13 +520,15 @@ export default function FootagePage() {
                               (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
                             }}
                           />
-                        ) : isVideoType && mediaUrl ? (
+                        ) : isVideoType && mediaUrl && !videoHasError ? (
                           <>
                             <video
                               src={mediaUrl}
                               className="w-full h-full object-cover"
                               preload="metadata"
                               muted
+                              playsInline
+                              onError={() => setVideoLoadErrors((prev) => new Set(prev).add(asset.asset_id))}
                             />
                             <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
                               <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-md">
@@ -540,7 +541,7 @@ export default function FootagePage() {
                         ) : null}
                         <div
                           className={`absolute inset-0 flex items-center justify-center ${
-                            (isImageType || isVideoType) && mediaUrl ? "hidden" : ""
+                            ((isImageType || isVideoType) && mediaUrl && !videoHasError) ? "hidden" : ""
                           }`}
                         >
                           {isVideoType ? (
