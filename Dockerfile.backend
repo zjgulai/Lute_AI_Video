@@ -10,6 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
+# 2026-05-05 incident:从默认 PyPI 拉包在中国大陆访问慢/卡死,docker build
+# 卡 buildkit 22 分钟无产出。改用阿里云镜像加速。
+# 配置成系统级,后续 RUN pip install 都走镜像。
+# 镜像可被 PIP_INDEX_URL build-arg 覆盖,海外环境跑 build 时 reset 到 pypi。
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
+ENV PIP_TRUSTED_HOST=$PIP_TRUSTED_HOST
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir asyncpg>=0.29
