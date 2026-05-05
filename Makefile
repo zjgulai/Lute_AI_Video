@@ -1,4 +1,4 @@
-.PHONY: install test lint coverage clean ci portfolio
+.PHONY: install test lint coverage clean ci portfolio portfolio-sync
 
 # ── Setup ──
 
@@ -42,3 +42,12 @@ ci: lint test
 
 portfolio:
 	python scripts/portfolio_index.py
+
+# rsync 本地 output/ 到 Lighthouse 服务器 backend_output volume。
+# rsync 天然增量:只传改动文件,docker cp -rn no-clobber 不覆盖已上传同名。
+# 第一次跑 ~5 分钟(280MB),后续 pipeline 跑出新文件再跑只传增量。
+# 跑 dry-run 看会传什么:bash scripts/sync_output_to_lighthouse.sh --dry-run
+# 详见:scripts/sync_output_to_lighthouse.sh
+
+portfolio-sync:
+	bash scripts/sync_output_to_lighthouse.sh
