@@ -80,6 +80,17 @@ class PipelineMetrics:
         self._step_metrics[label].append(
             StepMetric(step_name=step_name, duration_ms=duration_ms, success=success)
         )
+        # P4-2: Mirror to Prometheus
+        try:
+            from src.telemetry_prometheus import record_step_run
+            record_step_run(
+                scenario=label.split("_")[0] if "_" in label else "unknown",
+                step=step_name,
+                duration_sec=duration_ms / 1000.0,
+                success=success,
+            )
+        except Exception:
+            pass
 
     def record_pipeline(
         self,
@@ -108,6 +119,17 @@ class PipelineMetrics:
                 error_count=error_count,
             )
         )
+        # P4-2: Mirror to Prometheus
+        try:
+            from src.telemetry_prometheus import record_pipeline_run
+            record_pipeline_run(
+                scenario=scenario,
+                duration_sec=total_duration_ms / 1000.0,
+                success=success,
+                error_count=error_count,
+            )
+        except Exception:
+            pass
 
     def get_summary(self) -> dict[str, Any]:
         """Return aggregated stats for all recorded metrics.

@@ -42,3 +42,12 @@ if HAS_FASTAPI and router is not None:
             "count": len(errors),
             "label_filter": label,
         }
+
+    @router.get("/prometheus")
+    async def get_prometheus() -> Any:
+        """Return Prometheus exposition format metrics for Grafana scraping."""
+        from fastapi import Response
+        from src.telemetry_prometheus import prometheus_content
+
+        body, content_type = prometheus_content()
+        return Response(content=body, media_type=content_type)
