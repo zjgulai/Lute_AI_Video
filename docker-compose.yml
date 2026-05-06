@@ -28,10 +28,11 @@ services:
     restart: unless-stopped
     ports:
       - "8001:8001"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://ai_video:ai_video_dev_2026@postgres:5432/ai_video
-      - LOG_LEVEL=INFO
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://ai_video:ai_video_dev_2026@postgres:5432/ai_video
     working_dir: /app
     volumes:
       - ./src:/app/src

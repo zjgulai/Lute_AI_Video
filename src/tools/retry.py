@@ -31,20 +31,71 @@ DEFAULT_MAX_DELAY = 30.0  # seconds cap
 # HTTP status codes that should trigger a retry
 RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 
+# HTTP status codes that should NEVER trigger a retry (client errors)
+NON_RETRYABLE_STATUSES = {400, 401, 403, 404, 405, 406, 409, 410, 422}
+
+# Connection-related exception types that are always retryable
+_RETRYABLE_EXCEPTION_TYPES = (
+    ConnectionError,
+    TimeoutError,
+    asyncio.TimeoutError,
+    OSError,
+)
+
 
 class MaxRetriesExceededError(Exception):
     """Raised when all retry attempts have been exhausted."""
 
 
+def _extract_status_code(exception: Exception) -> int | None:
+    """Extract HTTP status code from exception via type chain."""
+    # httpx / requests / aiohttp style: exception.response.status_code
+    response = getattr(exception, "response", None)
+    if response is not None:
+        code = getattr(response, "status_code", None)
+        if isinstance(code, int):
+            return code
+
+    # Some clients put status_code directly on the exception
+    code = getattr(exception, "status_code", None)
+    if isinstance(code, int):
+        return code
+
+    # Fallback: grep status code from error message (less reliable)
+    return None
+
+
 def is_retryable(exception: Exception) -> bool:
     """Determine if an exception represents a transient failure.
 
-    Retryable: 429, 5xx, connection/timeout errors.
+    Priority: type-based check → status_code extraction → string fallback.
+    Retryable: connection/timeout errors, 429, 5xx.
     Non-retryable: 4xx (except 429), auth errors, invalid requests.
     """
+    # 1. Type-based check: connection / timeout / OS-level errors are always retryable
+    if isinstance(exception, _RETRYABLE_EXCEPTION_TYPES):
+        return True
+
+    # 2. Status-code extraction from exception attributes (httpx/requests/aiohttp)
+    status_code = _extract_status_code(exception)
+    if status_code is not None:
+        if status_code in RETRYABLE_STATUSES:
+            return True
+        if status_code in NON_RETRYABLE_STATUSES:
+            return False
+        # Unknown status: fall through to string-based heuristics
+
+    # 3. String-based fallback (legacy, less reliable but catches edge cases)
     msg = str(exception).lower()
 
-    # Connection / timeout errors
+    # Blacklist first: explicit non-retryable patterns
+    if any(x in msg for x in [
+        "invalid api key", "authentication", "unauthorized",
+        "forbidden", "not found", "bad request",
+    ]):
+        return False
+
+    # Connection / timeout errors (string fallback)
     if any(x in msg for x in [
         "connection", "timeout", "timed out", "eof", "reset",
         "dns", "unreachable", "refused", "broken pipe",

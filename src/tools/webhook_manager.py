@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import socket
 import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
@@ -48,8 +49,20 @@ ALL_EVENTS = [
 WEBHOOK_TIMEOUT_SECONDS = 5.0
 
 
+# Dangerous ports that should never receive webhooks (internal services)
+_BLOCKED_PORTS = {22, 25, 110, 143, 3306, 3389, 5432, 6379, 27017, 9200}
+
+
 def _is_safe_webhook_url(url: str) -> None:
     """Validate that a webhook URL does not point to private/internal addresses.
+
+    Defense layers:
+    1. Scheme must be http/https.
+    2. Port must not be in the blocked service port list.
+    3. If hostname is an IP: reject private/loopback/link-local/reserved.
+    4. If hostname is a DNS name: resolve it and reject if any resolved IP is private.
+       This prevents DNS rebinding attacks where a domain initially resolves to a
+       public IP but is later flipped to an internal IP.
 
     Raises ValueError if the URL is deemed unsafe.
     """
@@ -59,15 +72,45 @@ def _is_safe_webhook_url(url: str) -> None:
     if not parsed.hostname:
         raise ValueError("URL has no hostname")
 
+    # Layer 1: block dangerous ports
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme == "https" else 80
+    if port in _BLOCKED_PORTS:
+        raise ValueError(f"URL port {port} is blocked")
+
     hostname = parsed.hostname
-    # Check for IP-based URLs
+
+    # Layer 2: direct IP check
     try:
         ip = ipaddress.ip_address(hostname)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
             raise ValueError(f"URL resolves to a private/internal IP: {hostname}")
     except ValueError:
-        # Not an IP address — DNS name is allowed.
+        # Not an IP address — proceed to DNS resolution check.
         pass
+
+    # Layer 3: DNS resolution + rebinding guard
+    # Resolve the hostname and verify no A/AAAA record points to a private IP.
+    try:
+        addrinfos = socket.getaddrinfo(hostname, None)
+        for _, _, _, _, sockaddr in addrinfos:
+            resolved_ip = ipaddress.ip_address(sockaddr[0])
+            if (
+                resolved_ip.is_private
+                or resolved_ip.is_loopback
+                or resolved_ip.is_link_local
+                or resolved_ip.is_reserved
+                or resolved_ip.is_multicast
+            ):
+                raise ValueError(
+                    f"DNS resolution of '{hostname}' returned private IP {resolved_ip}"
+                )
+    except ValueError:
+        raise
+    except Exception as exc:
+        # DNS resolution failure is treated as unsafe (fail-closed)
+        raise ValueError(f"Failed to resolve hostname '{hostname}': {exc}") from exc
 
 
 class WebhookManager:

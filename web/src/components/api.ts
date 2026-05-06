@@ -263,12 +263,27 @@ function isHealthUrl(url: string): boolean {
   return url.endsWith("/health") || url.includes("/health?");
 }
 
+// P3-5: Default fetch timeout — 30s for most requests, 300s for long-running pipelines
+const DEFAULT_FETCH_TIMEOUT = 30000;
+const LONG_RUNNING_TIMEOUT = 300000;
+const API_FETCH_MAX_RETRIES = 1;
+
+/** Determine appropriate timeout for a URL. */
+function _getTimeoutMs(url: string): number {
+  if (url.includes("/scenario/") || url.includes("/pipeline/")) {
+    return LONG_RUNNING_TIMEOUT;
+  }
+  return DEFAULT_FETCH_TIMEOUT;
+}
+
 /** Native fetch reference (avoids recursion in apiFetch wrapper). */
 const _nativeFetch = globalThis.fetch.bind(globalThis);
 
 /**
  * P1-A: 统一 fetch wrapper — 自动注入 X-API-Key + 用 getApiBase() 把相对路径
  * 补全成绝对 URL,P1-B 日志脱敏请求体里的 api_keys / token / secret / password / auth。
+ *
+ * P3-5: 增加默认 timeout(30s/300s) 和 retry(1 次,仅对网络错误和 5xx)。
  *
  * 业务调用方:
  *  - 相对路径(推荐):`apiFetch("/scenario/s1", {...})` → 自动拼 getApiBase()
@@ -302,10 +317,6 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
     mergedHeaders["Content-Type"] = "application/json";
   }
 
-  if (!_apiLogEnabled) {
-    return _nativeFetch(absUrl, { ...init, headers: mergedHeaders });
-  }
-
   const traceId = genTraceId();
   const start = performance.now();
   const method = (init?.method || "GET").toUpperCase();
@@ -314,71 +325,108 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 
   // Merge trace ID
   mergedHeaders["X-Client-Trace-Id"] = traceId;
-  const mergedInit = { ...init, headers: mergedHeaders };
+  let mergedInit: RequestInit = { ...init, headers: mergedHeaders };
+
+  // P3-5: Apply timeout via AbortController (respect caller's signal)
+  const timeoutMs = _getTimeoutMs(absUrl);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const abortController = new AbortController();
+  if (!mergedInit.signal) {
+    mergedInit.signal = abortController.signal;
+    timeoutId = setTimeout(() => abortController.abort(new DOMException("Request timeout", "TimeoutError")), timeoutMs);
+  }
 
   // ── Log request ──
-  if (isHealthUrl(absUrl)) {
-    console.log(`[HERMES:HEALTH] ${method} ${shortUrl} trace_id=${traceId}`);
-  } else {
-    // P1-B: body 用 safeBodyPreview 脱敏
-    const bodyPreview = skipBody ? "" : safeBodyPreview(init?.body);
-    if (bodyPreview) {
-      console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`, bodyPreview);
-    } else {
-      console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`);
-    }
-  }
-
-  try {
-    const res = await _nativeFetch(absUrl, mergedInit);
-    const duration = Math.round(performance.now() - start);
-    const serverTraceId = res.headers.get("X-Trace-Id") || res.headers.get("x-trace-id") || "";
-    const traceChain = serverTraceId ? `${traceId}→${serverTraceId}` : traceId;
-
-    if (!res.ok) {
-      // Error response
-      let errText = "";
-      if (!skipBody) {
-        try {
-          errText = await res.clone().text();
-        } catch {
-          errText = "[unreadable]";
-        }
-      }
-      console.error(
-        `[HERMES:ERR] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`,
-        errText.slice(0, 500) || "[no body]"
-      );
-      return res;
-    }
-
-    // Success response
+  if (_apiLogEnabled) {
     if (isHealthUrl(absUrl)) {
-      console.log(`[HERMES:HEALTH] ${res.status} OK (${duration}ms) trace_id=${traceChain}`);
-    } else if (skipBody) {
-      console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [media/binary]`);
+      console.log(`[HERMES:HEALTH] ${method} ${shortUrl} trace_id=${traceId}`);
     } else {
-      const contentType = res.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        try {
-          const text = await res.clone().text();
-          // P1-B: response body 也走脱敏(后端可能 echo api_keys)
-          const preview = safeBodyPreview(text);
-          console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`, preview);
-        } catch {
-          console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [body unreadable]`);
-        }
+      const bodyPreview = skipBody ? "" : safeBodyPreview(init?.body);
+      if (bodyPreview) {
+        console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`, bodyPreview);
       } else {
-        console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [${contentType || "unknown content-type"}]`);
+        console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`);
       }
     }
-
-    return res;
-  } catch (err: any) {
-    const duration = Math.round(performance.now() - start);
-    console.error(`[HERMES:ERR] NETWORK_ERROR (${duration}ms) trace_id=${traceId}`, err.message || "Unknown error");
-    throw err;
   }
+
+  // P3-5: Inner fetch with retry logic
+  let lastError: any;
+  const maxRetries = isHealthUrl(absUrl) ? 0 : API_FETCH_MAX_RETRIES;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await _nativeFetch(absUrl, mergedInit);
+      if (timeoutId) clearTimeout(timeoutId);
+
+      const duration = Math.round(performance.now() - start);
+      const serverTraceId = res.headers.get("X-Trace-Id") || res.headers.get("x-trace-id") || "";
+      const traceChain = serverTraceId ? `${traceId}→${serverTraceId}` : traceId;
+
+      // P3-5: Retry on 5xx server errors
+      if (!res.ok && res.status >= 500 && attempt < maxRetries) {
+        if (_apiLogEnabled) {
+          console.warn(`[HERMES:RETRY] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} attempt=${attempt + 1}/${maxRetries + 1}`);
+        }
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+
+      if (!res.ok) {
+        let errText = "";
+        if (!skipBody) {
+          try { errText = await res.clone().text(); } catch { errText = "[unreadable]"; }
+        }
+        if (_apiLogEnabled) {
+          console.error(
+            `[HERMES:ERR] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`,
+            errText.slice(0, 500) || "[no body]"
+          );
+        }
+        return res;
+      }
+
+      if (_apiLogEnabled) {
+        if (isHealthUrl(absUrl)) {
+          console.log(`[HERMES:HEALTH] ${res.status} OK (${duration}ms) trace_id=${traceChain}`);
+        } else if (skipBody) {
+          console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [media/binary]`);
+        } else {
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            try {
+              const text = await res.clone().text();
+              const preview = safeBodyPreview(text);
+              console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`, preview);
+            } catch {
+              console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [body unreadable]`);
+            }
+          } else {
+            console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [${contentType || "unknown content-type"}]`);
+          }
+        }
+      }
+      return res;
+    } catch (err: any) {
+      lastError = err;
+      const isRetryable = err.name === "TypeError" || err.name === "TimeoutError" || err.name === "AbortError";
+      if (isRetryable && attempt < maxRetries) {
+        if (_apiLogEnabled) {
+          const duration = Math.round(performance.now() - start);
+          console.warn(`[HERMES:RETRY] NETWORK_ERROR (${duration}ms) trace_id=${traceId} attempt=${attempt + 1}/${maxRetries + 1} ${err.message || ""}`);
+        }
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      if (timeoutId) clearTimeout(timeoutId);
+      break;
+    }
+  }
+
+  const duration = Math.round(performance.now() - start);
+  if (_apiLogEnabled) {
+    console.error(`[HERMES:ERR] NETWORK_ERROR (${duration}ms) trace_id=${traceId}`, lastError?.message || "Unknown error");
+  }
+  throw lastError;
 }
 
 // ── Core pipeline APIs ──

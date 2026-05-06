@@ -182,6 +182,14 @@ async def run_s3_influencer_remix(body: dict):
         product = await translate_catalog_to_english(product)
         body["product"] = product
 
+    # P3-4: Bind pipeline context to all downstream structlog calls
+    structlog.contextvars.bind_contextvars(
+        product_name=product.get("name", "unknown") if isinstance(product, dict) else "unknown",
+        brand_name="",
+        scenario="s3",
+        video_url=body.get("video_url", "")[:50],
+    )
+
     p = S3InfluencerRemixPipeline()
     r = await p.run(
         video_url=body.get("video_url", ""),
@@ -198,10 +206,18 @@ async def run_s4_live_shoot(body: dict):
     """Run S4 Live Shoot to Video pipeline."""
     _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
+    product_info = body.get("product_info", {})
+    # P3-4: Bind pipeline context
+    structlog.contextvars.bind_contextvars(
+        product_name=product_info.get("name", "unknown"),
+        brand_name=product_info.get("brand_name", ""),
+        scenario="s4",
+        topic=body.get("topic", "")[:50],
+    )
     p = S4LiveShootPipeline()
     r = await p.run(
         footage_assets=body.get("footage_assets", []),
-        product_info=body.get("product_info", {}),
+        product_info=product_info,
         topic=body.get("topic", ""),
         target_platforms=body.get("target_platforms", ["tiktok"]),
     )
@@ -221,6 +237,15 @@ async def run_s5_brand_vlog(body: dict):
         video_duration: int — target video seconds (15/30/45/60/90)
     """
     _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
+    product_sku = body.get("product_sku", {})
+    brand_id = body.get("brand_id", "momcozy")
+    # P3-4: Bind pipeline context
+    structlog.contextvars.bind_contextvars(
+        product_name=product_sku.get("name", "unknown") if isinstance(product_sku, dict) else "unknown",
+        brand_name=brand_id,
+        scenario="s5",
+        scene_id=body.get("scene_id", "living-room"),
+    )
     from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
     p = S5BrandVlogPipeline()
     r = await p.run(
@@ -301,6 +326,16 @@ async def start_s1_pipeline(body: S1StartRequest):
     from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
 
+    # P3-4: Bind pipeline context to all downstream structlog calls
+    product = body.product_catalog.get("product_name") or body.product_catalog.get("name", "unknown")
+    brand = body.brand_guidelines.get("brand_name", "") if body.brand_guidelines else ""
+    structlog.contextvars.bind_contextvars(
+        product_name=product,
+        brand_name=brand,
+        scenario="s1",
+        mode=body.mode,
+    )
+
     try:
         step_runner = StepRunner(PipelineStateManager())
         config = body.model_dump()
@@ -316,8 +351,7 @@ async def start_s1_pipeline(body: S1StartRequest):
             "current_step": None,
         }
     except Exception as e:
-        import logging
-        logging.error("s1 pipeline failed: %s", e)
+        logger.error("s1 pipeline failed", error=str(e))
         raise HTTPException(status_code=500, detail=_classified_error(e))
 
 

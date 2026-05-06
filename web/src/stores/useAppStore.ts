@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { logStateChange } from "@/components/api";
 
 export type Stage = "home" | "recommend" | "generate" | "result";
@@ -60,46 +61,17 @@ function loggedSet(set: any, get: any) {
   };
 }
 
-export const useAppStore = create<AppState>((set, get) => {
-  const lset = loggedSet(set, get);
-  return {
-    stage: "home",
-    activeScene: "product_direct",
-    mode: "expert",
-    pipelineMode: "step_by_step",
-    videoDuration: 30,
-
-    loading: false,
-    loadingText: "",
-    toast: null,
-    disconnected: false,
-    showSettings: false,
-    showAssetLibrary: false,
-    showSplash: true,
-
-    setStage: (stage) => lset({ stage }),
-    setActiveScene: (activeScene) => lset({ activeScene }),
-    setMode: (mode) => lset({ mode }),
-    setPipelineMode: (pipelineMode) => lset({ pipelineMode }),
-    setVideoDuration: (videoDuration) => lset({ videoDuration }),
-    setLoading: (loading) => lset({ loading }),
-    setLoadingText: (loadingText) => lset({ loadingText }),
-    showToast: (message, type) => {
-      lset({ toast: { message, type } });
-      setTimeout(() => set({ toast: null }), 4000);
-    },
-    clearToast: () => set({ toast: null }),
-    setDisconnected: (disconnected) => lset({ disconnected }),
-    setShowSettings: (showSettings) => lset({ showSettings }),
-    setShowAssetLibrary: (showAssetLibrary) => set({ showAssetLibrary }),
-    setShowSplash: (showSplash) => set({ showSplash }),
-    resetApp: () =>
-      lset({
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => {
+      const lset = loggedSet(set, get);
+      return {
         stage: "home",
         activeScene: "product_direct",
         mode: "expert",
         pipelineMode: "step_by_step",
         videoDuration: 30,
+
         loading: false,
         loadingText: "",
         toast: null,
@@ -107,6 +79,48 @@ export const useAppStore = create<AppState>((set, get) => {
         showSettings: false,
         showAssetLibrary: false,
         showSplash: true,
+
+        setStage: (stage) => lset({ stage }),
+        setActiveScene: (activeScene) => lset({ activeScene }),
+        setMode: (mode) => lset({ mode }),
+        setPipelineMode: (pipelineMode) => lset({ pipelineMode }),
+        setVideoDuration: (videoDuration) => lset({ videoDuration }),
+        setLoading: (loading) => lset({ loading }),
+        setLoadingText: (loadingText) => lset({ loadingText }),
+        showToast: (message, type) => {
+          lset({ toast: { message, type } });
+          setTimeout(() => set({ toast: null }), 4000);
+        },
+        clearToast: () => set({ toast: null }),
+        setDisconnected: (disconnected) => lset({ disconnected }),
+        setShowSettings: (showSettings) => lset({ showSettings }),
+        setShowAssetLibrary: (showAssetLibrary) => set({ showAssetLibrary }),
+        setShowSplash: (showSplash) => set({ showSplash }),
+        resetApp: () =>
+          lset({
+            stage: "home",
+            activeScene: "product_direct",
+            mode: "expert",
+            pipelineMode: "step_by_step",
+            videoDuration: 30,
+            loading: false,
+            loadingText: "",
+            toast: null,
+            disconnected: false,
+            showSettings: false,
+            showAssetLibrary: false,
+            showSplash: true,
+          }),
+      };
+    },
+    {
+      name: "ai-video-app-store",
+      // P3-5: 只持久化用户偏好设置，不持久化运行时状态
+      partialize: (state) => ({
+        mode: state.mode,
+        pipelineMode: state.pipelineMode,
+        videoDuration: state.videoDuration,
       }),
-  };
-});
+    }
+  )
+);

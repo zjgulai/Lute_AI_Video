@@ -40,6 +40,11 @@ COPY rendering ./rendering
 # Create output directory (used by VIDEO_OUTPUT_DIR)
 RUN mkdir -p /app/output
 
+# P3-3: Run as non-root user for security
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
+    chown -R appuser:appgroup /app
+USER appuser
+
 ENV PYTHONPATH=/app
 EXPOSE 8001
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8001"]
