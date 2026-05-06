@@ -64,14 +64,14 @@ def test_char_id_fallback():
 
 
 def test_char_id_registry():
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
     skill = CharacterIdentitySkill()
     SkillRegistry.register(skill)
     paths = _make_dummy_images(3)
-    result = asyncio.run(SkillRegistry.execute("character-identity", {"frame_paths": paths}))
+    result = asyncio.run(SkillRegistry().execute("character-identity", {"frame_paths": paths}))
     assert result.success
     assert "reference_frames" in result.data
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
     print("PASS: test_char_id_registry")
 
 
@@ -118,7 +118,7 @@ def mock_gpt_image_result(image_path="/tmp/mock_keyframe.png"):
 
 def test_keyframe_adds_path():
     skill = KeyframeImagesSkill()
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
     SkillRegistry.register(skill)
     # Register a mock GPT-Image skill
     class MockGPTImageSkill:
@@ -135,13 +135,13 @@ def test_keyframe_adds_path():
     for i, shot in enumerate(result.data["shots"]):
         assert "keyframe_image_path" in shot, f"shot[{i}] missing keyframe_image_path"
     assert result.data.get("keyframes_generated") == 3
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
     print("PASS: test_keyframe_adds_path")
 
 
 def test_keyframe_fallback():
     skill = KeyframeImagesSkill()
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
     SkillRegistry.register(skill)
     # Register a failing mock
     class FailingMockSkill:
@@ -155,7 +155,7 @@ def test_keyframe_fallback():
     for shot in result.data["shots"]:
         assert "keyframe_image_path" in shot
         assert shot["keyframe_image_path"] != ""
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
     print("PASS: test_keyframe_fallback")
 
 

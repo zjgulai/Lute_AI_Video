@@ -116,7 +116,10 @@ if HAS_FASTAPI:
         allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Client-Trace-Id"],
     )
 
-    # ── P3-1: Rate limiting middleware ──
+    # ── P3-1: Rate limiting middleware (fallback) ──
+    # Primary rate limiting is handled by nginx (limit_req_zone, P2-11).
+    # This in-memory middleware is kept as a fallback for direct backend access
+    # (e.g. local dev without nginx, or health checks from internal tools).
     _rate_window_sec = 60
     _rate_max_requests = 120
     _rate_max_ips = 1000

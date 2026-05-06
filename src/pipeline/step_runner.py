@@ -55,13 +55,62 @@ STEP_METHOD_MAP = {
     "audit": "_step_audit",
 }
 
+# ── Scenario configurations ──
+_SCENARIO_CONFIGS: dict[str, dict[str, Any]] = {
+    "s1": {
+        "step_order": STEP_ORDER,
+        "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
+    },
+    "s4": {
+        "step_order": ["scripts", "video_prompts", "thumbnails"],
+        "pipeline_class": "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
+    },
+    "s3": {
+        "step_order": [
+            "video_analysis",
+            "character_identity",
+            "remix_script",
+            "storyboards",
+            "keyframe_images",
+            "video_prompts",
+            "thumbnail_prompts",
+            "seedance_clips",
+            "tts_audio",
+            "thumbnail_images",
+            "assemble_final",
+            "audit",
+        ],
+        "pipeline_class": "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
+    },
+    "s5": {
+        "step_order": [
+            "vlog_strategy",
+            "video_prompts",
+            "seedance_clips",
+            "tts_audio",
+            "assemble_final",
+            "audit",
+        ],
+        "pipeline_class": "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline",
+    },
+}
 
-def _get_next_step(step_name: str) -> str | None:
+
+def _get_scenario_config(scenario: str) -> dict[str, Any]:
+    """Return scenario config, falling back to s1 for unknown scenarios."""
+    if scenario not in _SCENARIO_CONFIGS:
+        logger.warning("step_runner: unknown scenario, falling back to s1", scenario=scenario)
+        return _SCENARIO_CONFIGS["s1"]
+    return _SCENARIO_CONFIGS[scenario]
+
+
+def _get_next_step(step_name: str, step_order: list[str] | None = None) -> str | None:
     """Return the next step name after the given step, or None if last."""
+    order = step_order or STEP_ORDER
     try:
-        idx = STEP_ORDER.index(step_name)
-        if idx + 1 < len(STEP_ORDER):
-            return STEP_ORDER[idx + 1]
+        idx = order.index(step_name)
+        if idx + 1 < len(order):
+            return order[idx + 1]
     except ValueError:
         pass
     return None
@@ -95,17 +144,19 @@ class StepRunner:
         config: dict,
         mode: str = "auto",
         label: str | None = None,
+        scenario: str = "s1",
     ) -> str:
         """Create initial empty pipeline state, save it, and return the label."""
         if label is None:
             # uuid suffix prevents same-second concurrent collision (Task H)
-            label = f"s1_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+            label = f"{scenario}_{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
-        scenario = "brand_campaign" if config.get("brand_mode") else "product_direct"
+        scenario_cfg = _get_scenario_config(scenario)
+        step_order = scenario_cfg["step_order"]
 
         # Build empty step statuses
         steps = {}
-        for step_name in STEP_ORDER:
+        for step_name in step_order:
             steps[step_name] = {
                 "status": "pending",
                 "output": None,
@@ -122,7 +173,7 @@ class StepRunner:
             "scenario": scenario,
             "config": config,
             "steps": steps,
-            "current_step": STEP_ORDER[0],
+            "current_step": step_order[0],
             "mode": mode,
             "trace_id": trace_id,
             "errors": [],
@@ -139,7 +190,8 @@ class StepRunner:
         if state is None:
             raise ValueError(f"State not found for label: {label}")
 
-        if step_name not in STEP_ORDER:
+        scenario_cfg = _get_scenario_config(state.get("scenario", "s1"))
+        if step_name not in scenario_cfg["step_order"]:
             raise ValueError(f"Unknown step name: {step_name}")
 
         return await self._execute_step(state, step_name, force=False)
@@ -150,7 +202,8 @@ class StepRunner:
         if state is None:
             raise ValueError(f"State not found for label: {label}")
 
-        if step_name not in STEP_ORDER:
+        scenario_cfg = _get_scenario_config(state.get("scenario", "s1"))
+        if step_name not in scenario_cfg["step_order"]:
             raise ValueError(f"Unknown step name: {step_name}")
 
         return await self._execute_step(state, step_name, force=True)
@@ -167,8 +220,10 @@ class StepRunner:
             return state
 
         # Find the index of current_step
+        scenario_cfg = _get_scenario_config(state.get("scenario", "s1"))
+        step_order = scenario_cfg["step_order"]
         try:
-            start_idx = STEP_ORDER.index(current)
+            start_idx = step_order.index(current)
         except ValueError:
             raise ValueError(f"Invalid current_step in state: {current}")
 
@@ -176,7 +231,7 @@ class StepRunner:
         total_errors = len(state.get("errors", []))
         success = True
 
-        for step_name in STEP_ORDER[start_idx:]:
+        for step_name in step_order[start_idx:]:
             # P0: Degraded guard — if any previous step set pipeline_degraded, stop
             if state.get("pipeline_degraded"):
                 logger.error("step_runner: pipeline degraded, halting", step=step_name, reason=state.get("degraded_reason"))
@@ -240,10 +295,14 @@ class StepRunner:
             raise ValueError(f"Step '{step_name}' not found in state steps")
         step_data = steps[step_name]
 
+        # Resolve scenario-specific step order for next-step navigation
+        scenario_cfg = _get_scenario_config(state.get("scenario", "s1"))
+        step_order = scenario_cfg["step_order"]
+
         # Skip if already done and not forcing
         if step_data["status"] == "done" and not force:
             logger.info("step_runner: step already done, skipping", step=step_name)
-            next_step = _get_next_step(step_name)
+            next_step = _get_next_step(step_name, step_order)
             state["current_step"] = next_step
             await self.state_manager.save(state["label"], state)
             return state
@@ -255,7 +314,7 @@ class StepRunner:
             step_data["status"] = "done"
             step_data["output"] = None
             step_data["completed_at"] = datetime.now().isoformat()
-            next_step = _get_next_step(step_name)
+            next_step = _get_next_step(step_name, step_order)
             state["current_step"] = next_step
             await self.state_manager.save(state["label"], state)
             return state
@@ -266,8 +325,10 @@ class StepRunner:
         await self.state_manager.save(state["label"], state)
 
         # Instantiate pipeline and run the step (lazy import to avoid circular dep)
-        from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
-        pipeline = S1ProductDirectPipeline()
+        pipeline_module, pipeline_class_name = scenario_cfg["pipeline_class"].rsplit(".", 1)
+        pipeline_module = __import__(pipeline_module, fromlist=[pipeline_class_name])
+        pipeline_class = getattr(pipeline_module, pipeline_class_name)
+        pipeline = pipeline_class()
         step_start = time.perf_counter()
         trace_id = state.get("trace_id", "unknown")
         try:
@@ -329,7 +390,7 @@ class StepRunner:
             logger.info("step_runner: gate pause", step=step_name, gate=gate_id)
             return state
 
-        next_step = _get_next_step(step_name)
+        next_step = _get_next_step(step_name, step_order)
         state["current_step"] = next_step
 
         await self.state_manager.save(state["label"], state)

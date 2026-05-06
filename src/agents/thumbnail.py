@@ -122,7 +122,7 @@ class ThumbnailAgent:
                 import src.skills.thumbnail_prompt  # noqa: F401
                 from src.config import BRAND_PRIMARY_COLOR, BRAND_SECONDARY_COLOR
 
-                skill_result = await SkillRegistry.execute("gpt-image-thumbnail-prompt", {
+                skill_result = await SkillRegistry().execute("gpt-image-thumbnail-prompt", {
                     "hook_text": hook or "",
                     "product_name": script.brand_name or "Product",
                     "brand_name": script.brand_name or "",

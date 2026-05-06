@@ -3,12 +3,30 @@
 Extracted from api.py to avoid duplication across domain routers.
 """
 
+import contextvars
+import hashlib
 import logging
 import os
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, Header, Request
+
+# Tenant ID context for request-scoped isolation (P2-8)
+_tenant_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "tenant_id", default=None
+)
+
+
+def set_tenant_id(tenant_id: str | None) -> None:
+    """Bind a tenant_id to the current request context."""
+    _tenant_id_var.set(tenant_id)
+
+
+def get_tenant_id() -> str | None:
+    """Return the tenant_id bound to the current request context."""
+    return _tenant_id_var.get()
 
 # ── API Key management ──
 API_KEY = os.getenv("API_KEY", "")
@@ -17,18 +35,56 @@ if not API_KEY:
     API_KEY = secrets.token_urlsafe(32)
     logging.warning("SECURITY: Temporary API_KEY = %s  (set this in your .env for persistence)", API_KEY)
 
-def verify_api_key(request: Request, x_api_key: str | None = Header(None)):
-    """Verify API key.
+async def verify_api_key(request: Request, x_api_key: str | None = Header(None)):
+    """Verify API key and resolve tenant_id (P2-8).
 
-    API_KEY 是按用户分发的全权限凭证(每个开通用户拿一组独立 key)。
-    没有"低权限只读"概念 —— 模型矩阵稳定,key 才是按租户隔离的依据。
-    早期 P0-11 给 `ai_video_demo_2026` 做了 publish/upload 拦截,实际生产
-    `API_KEY` 就是这串字符,拦截把 distribution/publish + 资产上传链路堵死,
-    与"端到端验证"目标冲突,已移除。
+    Resolution order:
+    1. Query api_keys table (PG) by key_hash → tenant_id
+    2. Fallback to env var API_KEY → tenant_id = "default"
+    3. Reject if neither matches
+
+    The resolved tenant_id is stored in a contextvar so downstream code
+    (cost tracking, audit logs) can access it without threading the value
+    through every call signature.
     """
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
-    return True
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
+    tenant_id = None
+    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+
+    # 1. Try database lookup first
+    try:
+        from src.storage.db import is_pg_available
+        if is_pg_available():
+            from src.storage.db import get_pool
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT tenant_id, revoked_at, expires_at FROM api_keys WHERE key_hash = $1",
+                    key_hash,
+                )
+                if row and not row["revoked_at"]:
+                    expires = row["expires_at"]
+                    if expires is None or expires > datetime.now(timezone.utc):
+                        tenant_id = row["tenant_id"]
+                        await conn.execute(
+                            "UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1",
+                            key_hash,
+                        )
+    except Exception:
+        pass  # PG unavailable or query failed — fall through to env fallback
+
+    # 2. Fallback to env var
+    if tenant_id is None and x_api_key == API_KEY:
+        tenant_id = "default"
+
+    # 3. Reject if no match
+    if tenant_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired API key")
+
+    set_tenant_id(tenant_id)
+    return tenant_id
 
 
 def _safe_error(exc: Exception, is_dev: bool = False) -> str:

@@ -5,7 +5,7 @@ module: governance
 topic: audit-fix-roadmap
 status: stable
 created: 2026-05-06
-updated: 2026-05-06
+updated: 2026-05-07
 owner: self
 source: human+ai
 ---
@@ -563,18 +563,55 @@ T1.1 ──→ T2.8 (租户化数据库依赖 contextvars 隔离已就绪)
 
 | 日期 | 任务 ID | 状态 | Commit | 备注 |
 |---|---|---|---|---|
-| 2026-05-06 | T1.1 | 完成(工作区) | 待提交 | POYO/Seedance/CosyVoice contextvars 隔离 |
-| 2026-05-06 | T1.2 | 完成(工作区) | 待提交 | LLMClient.is_configured() + StrategyAgent.use_mock bug |
-| 2026-05-06 | T1.3 | 完成(工作区) | 待提交 | StepRunner pipeline_degraded + resume 终止检查 |
-| 2026-05-06 | T1.4 | 完成(工作区) | 待提交 | error_classifier 接入 pipeline/step_runner/_deps/fast_mode |
-| 2026-05-06 | T1.5 | 完成(工作区) | 待提交 | CostTracker 骨架 + 4 客户端 track 插入 + thread_id contextvar |
-| 2026-05-06 | T1.6 | 完成(工作区) | 待提交 | Gate keyframe/clip/final 多维启发式评分(告别固定 0.75) |
-| 2026-05-06 | T1.7 | 完成(工作区) | 待提交 | 生产 API key fail-fast + mock 路径 guard |
-| 2026-05-06 | T1.8 | 完成(工作区) | 待提交 | 前端 STEP_ORDER 后端化(VideoWorkflow + StepByStepView) |
-| 2026-05-06 | T1.9 | 完成(工作区) | 待提交 | graph/nodes.py 5 处 + api.py 1 处 fire-and-forget 治理 |
-| 2026-05-06 | T1.10 | 完成(工作区) | 待提交 | 多语言代码下线(删除 ES/FR/DE prompt + enum + i18n) |
-| 2026-05-06 | T1.11 | 完成(工作区) | 待提交 | CosyVoice/elevenlabs VOICE_PRESETS 收窄为 en |
-| 2026-05-06 | T1.12 | 完成(工作区) | 待提交 | .github/ISSUE_TEMPLATE/audit-fix.md + config.yml |
+| 2026-05-06 | T1.1 | ✅ | 98f962e | POYO/Seedance/CosyVoice contextvars 隔离 |
+| 2026-05-06 | T1.2 | ✅ | 98f962e | LLMClient.is_configured() + StrategyAgent.use_mock bug |
+| 2026-05-06 | T1.3 | ✅ | 98f962e | StepRunner pipeline_degraded + resume 终止检查 |
+| 2026-05-06 | T1.4 | ✅ | 98f962e | error_classifier 接入 pipeline/step_runner/_deps/fast_mode |
+| 2026-05-06 | T1.5 | ✅ | 98f962e | CostTracker 骨架 + 4 客户端 track 插入 + thread_id contextvar |
+| 2026-05-06 | T1.6 | ✅ | 98f962e | Gate keyframe/clip/final 多维启发式评分(告别固定 0.75) |
+| 2026-05-06 | T1.7 | ✅ | 98f962e | 生产 API key fail-fast + mock 路径 guard |
+| 2026-05-06 | T1.8 | ✅ | 98f962e | 前端 STEP_ORDER 后端化(VideoWorkflow + StepByStepView) |
+| 2026-05-06 | T1.9 | ✅ | 98f962e | graph/nodes.py 5 处 + api.py 1 处 fire-and-forget 治理 |
+| 2026-05-06 | T1.10 | ✅ | 98f962e | 多语言代码下线(删除 ES/FR/DE prompt + enum + i18n) |
+| 2026-05-06 | T1.11 | ✅ | 98f962e | CosyVoice/elevenlabs VOICE_PRESETS 收窄为 en |
+| 2026-05-06 | T1.12 | ✅ | 98f962e | .github/ISSUE_TEMPLATE/audit-fix.md + config.yml |
+
+### Phase 2 执行日志
+
+| 日期 | 任务 ID | 状态 | Commit | 备注 |
+|---|---|---|---|---|
+| 2026-05-07 | T2.1 | ✅ | TBD | S1 已原生支持 StepRunner（无需改动） |
+| 2026-05-07 | T2.2 | ✅ | TBD | S3 重写 run_step() + run() 向后兼容 |
+| 2026-05-07 | T2.3 | ✅ | TBD | S4 重写 run_step() + run() 向后兼容 |
+| 2026-05-07 | T2.4 | ✅ | TBD | S5 重写 run_step() + run() 向后兼容 |
+| 2026-05-07 | T2.5 | ✅ | TBD | _pipeline 全局单例 → get_pipeline() 延迟初始化工厂 |
+| 2026-05-07 | T2.6 | ✅ | TBD | get_pipeline() 用 asyncio.to_thread() 避免阻塞事件循环 |
+| 2026-05-07 | T2.7 | ✅ | TBD | SkillRegistry _skills 类变量 → 实例变量，12 文件调用更新 |
+| 2026-05-07 | T2.8 | ✅ | TBD | api_keys 表 + Alembic 迁移 + tenant_id contextvar + verify_api_key 异步化 |
+| 2026-05-07 | T2.9 | ✅ | TBD | Alembic 迁移链检查：线性无分支，初始 SQL 包含所有表 |
+| 2026-05-07 | T2.10 | ✅ | TBD | 6 文件硬编码 ["en"] → DEFAULT_LANGUAGES |
+| 2026-05-07 | T2.11 | ✅ | TBD | nginx limit_req_zone + limit_req，FastAPI middleware 降级为 fallback |
+| 2026-05-07 | T2.12 | ✅ | TBD | LLMClient cache TTL=300s + max_size=20 + key_hash tenant 维度 |
+
+### Phase 2 风险点记录
+
+| # | 风险 | 触发条件 | 缓解 |
+|---|---|---|---|
+| R6 | S3/S4/S5 的 run() 内部使用 StepRunner，返回 dict/S3Result 与旧格式可能有细微差异 | 外部调用方依赖特定字段 | 向后兼容：保留原 run() 签名，输出格式通过 final_state 转换回 legacy shape |
+| R7 | verify_api_key 改为 async 后，Depends(verify_api_key) 在各 router 中是否有兼容性 issue | FastAPI 版本不支持 async dependency | FastAPI 原生支持 async Depends，已通过 py_compile 验证所有 router |
+| R8 | SkillRegistry 实例化后 skills 副本在 import-time 注册之后创建，新注册的技能对已有实例不可见 | 运行时动态注册 skill | 当前所有 skill 都是 import-time 注册，无运行时注册需求 |
+| R9 | nginx rate limit 配置首次部署到生产，可能误伤合法高并发请求 | portfolio 页面加载 400+ 资源 | /api/media/ 和 /health 已显式豁免 limit_req |
+| R10 | api_keys 表在生产为空时，verify_api_key 仅 fallback 到 env var，tenant_id 始终为 "default" | 多租户上线前 | 当前符合预期：单租户模式下 tenant_id = "default"，多租户上线后需插入 api_keys 记录 |
+
+### Phase 1 风险点记录
+
+| # | 风险 | 触发条件 | 缓解 |
+|---|---|---|---|
+| R1 | `ALLOW_MOCK_MODE` 默认 false，本地开发未设会抛 RuntimeError | 开发者未读 README 直接跑 mock | README 需补充 `ALLOW_MOCK_MODE=true` 说明；CI 中显式设置 |
+| R2 | CostTracker 内存记录（上限 8k），多进程部署不共享 | 多 worker 部署 | Phase 2 接入 PG 持久化，移除此风险 |
+| R3 | `_classified_error` 仅用于 1 个 endpoint，其余仍返回 str | 前端在多数路径看不到 error_code | Phase 2 逐步迁移所有 endpoint |
+| R4 | S2~S5 仍走 LangGraph，StepRunner 的 `pipeline_degraded` 不生效 | S2~S5 场景出错 | Phase 2 将 S2~S5 迁到 StepRunner — 已完成 |
+| R5 | Gate 启发式评分未经过真实数据校准 | 候选排序可能与人工判断不符 | 收集 Gate 使用数据后迭代权重 |
 
 ---
 

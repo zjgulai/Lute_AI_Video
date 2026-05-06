@@ -41,7 +41,7 @@ class StoryboardAgent:
             elif self.use_skills:
                 from src.skills.registry import SkillRegistry
                 import src.skills.storyboard  # noqa: F401
-                skill_result = await SkillRegistry.execute("storyboard-skill", {
+                skill_result = await SkillRegistry().execute("storyboard-skill", {
                     "scripts": [script.model_dump(mode="json")],
                 })
                 if skill_result.success and skill_result.data:

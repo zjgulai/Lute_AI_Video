@@ -53,6 +53,97 @@ class S5BrandVlogPipeline:
         import os
         return all(os.path.basename(str(p)).lower().startswith("stub_") for p in clip_paths)
 
+    # ═══ StepRunner interface ═══
+
+    async def run_step(self, step_name: str, state: dict) -> Any:
+        """Execute a single pipeline step (used by StepRunner)."""
+        config = state["config"]
+        reg = SkillRegistry()
+        steps = state["steps"]
+        errors = state["errors"]
+
+        if step_name == "vlog_strategy":
+            shots = await self._step_vlog_strategy(
+                product_sku=config.get("product_sku", {}),
+                models=config.get("selected_models", []),
+                scene_id=config.get("scene_id", "living-room"),
+                story=config.get("story_description", ""),
+                duration=config.get("video_duration", 30),
+                errors=errors,
+            )
+            scripts = self._vlog_shots_to_scripts(shots)
+            return {"shots": shots, "scripts": scripts}
+
+        if step_name == "video_prompts":
+            strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
+            scripts = strategy_out.get("scripts", [])
+            return await self._step_video_prompts(
+                reg, scripts, config.get("product_name", "Product"), errors,
+            )
+
+        if step_name == "seedance_clips":
+            prompts = self._get_step_output(steps, "video_prompts") or []
+            return await self._step_seedance_clips(
+                reg, prompts, config.get("product_name", "Product"),
+                config.get("output_label", "vlog"), errors,
+                config.get("video_duration", 30), config.get("product_sku"),
+            )
+
+        if step_name == "tts_audio":
+            strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
+            scripts = strategy_out.get("scripts", [])
+            return await self._step_tts_audio(reg, scripts, errors)
+
+        if step_name == "assemble_final":
+            strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
+            scripts = strategy_out.get("scripts", [])
+            tts_out = self._get_step_output(steps, "tts_audio") or []
+            audio_paths = tts_out if isinstance(tts_out, list) else []
+            seedance_out = self._get_step_output(steps, "seedance_clips") or {}
+            clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
+            clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
+            if not clip_paths or self._all_clips_are_stubs(clip_paths, clip_details):
+                errors.append("all_seedance_clips_are_stubs; skipping assembly")
+                return "", ""
+            return await self._step_assemble_final(
+                reg, [], scripts, audio_paths, [], clip_paths, {},
+                config.get("output_label", "vlog"), errors,
+            )
+
+        if step_name == "audit":
+            assemble_out = self._get_step_output(steps, "assemble_final")
+            final_video = ""
+            if isinstance(assemble_out, tuple) and len(assemble_out) > 0:
+                final_video = assemble_out[0]
+            elif isinstance(assemble_out, dict):
+                final_video = assemble_out.get("video_path", "")
+
+            tts_out = self._get_step_output(steps, "tts_audio") or []
+            audio_paths = tts_out if isinstance(tts_out, list) else []
+            seedance_out = self._get_step_output(steps, "seedance_clips") or {}
+            clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
+            clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
+
+            if not clip_paths or self._all_clips_are_stubs(clip_paths, clip_details):
+                errors.append("all_seedance_clips_are_stubs; skipping audit")
+                return {}
+
+            return await self._step_audit(
+                reg, final_video, audio_paths, [], clip_paths, errors,
+            )
+
+        raise ValueError(f"Unknown step name: {step_name}")
+
+    @staticmethod
+    def _get_step_output(steps: dict, step_name: str) -> Any:
+        """Retrieve output from a step, preferring edited_output if edited."""
+        step_data = steps.get(step_name, {})
+        if step_data.get("edited") and step_data.get("edited_output") is not None:
+            return step_data["edited_output"]
+        return step_data.get("output")
+
+    # ═══ Backwards-compatible full pipeline ═══
+
     async def run(
         self,
         brand_id: str = "momcozy",
@@ -62,17 +153,19 @@ class S5BrandVlogPipeline:
         story_description: str = "",
         video_duration: int = 30,
     ) -> dict:
+        """Run the full S5 pipeline end-to-end.
+
+        Backwards-compatible: uses StepRunner internally but returns the same
+        result dict shape as before.
+        """
         product_sku = product_sku or {}
         selected_models = selected_models or []
-        reg = SkillRegistry()
-        errors: list[str] = []
+        product_name = product_sku.get("name", product_sku.get("shortName", "Product"))
         trace_id = generate_trace_id()
         label = f"vlog_{int(time.time())}"
-        product_name = product_sku.get("name", product_sku.get("shortName", "Product"))
 
         logger.info("s5_vlog: starting", trace_id=trace_id, product=product_name, duration=video_duration)
 
-        # P3: Warn when requested duration exceeds API limit per clip
         if video_duration > VIDEO_MAX_DURATION:
             logger.warning(
                 "s5_vlog: requested duration exceeds per-clip API limit",
@@ -81,86 +174,75 @@ class S5BrandVlogPipeline:
                 note="Video will be split into multiple clips",
             )
 
+        config = {
+            "brand_id": brand_id,
+            "product_sku": product_sku,
+            "scene_id": scene_id,
+            "selected_models": selected_models,
+            "story_description": story_description,
+            "video_duration": video_duration,
+            "product_name": product_name,
+            "output_label": label,
+        }
+
+        from src.pipeline.state_manager import PipelineStateManager
+        from src.pipeline.step_runner import StepRunner
+
+        state_manager = PipelineStateManager()
+        runner = StepRunner(state_manager)
+        label = await runner.init_state(config=config, mode="auto", label=label, scenario="s5")
+
         start = time.perf_counter()
         try:
-            # ① vlog_strategy: LLM generates shot list
-            shots = await self._step_vlog_strategy(
-                product_sku, selected_models, scene_id,
-                story_description, video_duration, errors,
-            )
-
-            if not shots:
-                errors.append("vlog_strategy: no shots generated")
-                return {"success": False, "errors": errors, "scripts": []}
-
-            # ② Adapter: shots → scripts format
-            scripts = self._vlog_shots_to_scripts(shots)
-
-            # ③ video_prompts (REUSE narrative_shot architecture)
-            video_prompts = await self._step_video_prompts(
-                reg, scripts, product_name, errors,
-            )
-
-            if not video_prompts:
-                errors.append("video_prompts: no prompts generated")
-                return {"success": False, "errors": errors, "scripts": scripts}
-
-            # ④ seedance_clips (REUSE Happy Horse)
-            seedance_out = await self._step_seedance_clips(
-                reg, video_prompts, product_name, label, errors, video_duration, product_sku,
-            )
-            clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
-            clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
-
-            # ⑤ tts_audio (REUSE CosyVoice)
-            audio_paths = await self._step_tts_audio(reg, scripts, errors)
-
-            # ⑥ assemble (REUSE Remotion)
-            final_video = ""
-            if clip_paths and not self._all_clips_are_stubs(clip_paths, clip_details):
-                final_video, _ = await self._step_assemble_final(
-                    reg, [], scripts, audio_paths, [], clip_paths, {}, label, errors,
-                )
-            else:
-                errors.append("all_seedance_clips_are_stubs; skipping assembly")
-
-            # ⑦ audit (REUSE)
-            audit_report = {}
-            if final_video:
-                audit_report = await self._step_audit(
-                    reg, final_video, audio_paths, [], clip_paths, errors,
-                )
-
-            duration_ms = (time.perf_counter() - start) * 1000
-            pipeline_metrics.record_pipeline(
-                label=label, scenario="brand_vlog",
-                total_duration_ms=duration_ms, success=len(errors) == 0,
-                error_count=len(errors),
-            )
-
-            return {
-                "success": len(errors) == 0,
-                "label": label,
-                "scenario": "brand_vlog",
-                "trace_id": trace_id,
-                "briefs": [],
-                "scripts": scripts,
-                "storyboards": [],
-                "video_prompts": video_prompts,
-                "seedance_output": seedance_out,
-                "clip_paths": clip_paths,
-                "audio_paths": audio_paths,
-                "final_video_path": final_video,
-                "render_json_path": "",
-                "thumbnail_sets": [],
-                "thumbnail_image_paths": [],
-                "audit_report": audit_report,
-                "errors": errors,
-                "steps_completed": 7,
-            }
+            final_state = await runner.resume(label)
         except Exception as e:
             logger.error("s5_vlog: pipeline failed", error=str(e), trace_id=trace_id)
             return {"success": False, "errors": [str(e)], "scripts": []}
+
+        duration_ms = (time.perf_counter() - start) * 1000
+        steps = final_state.get("steps", {})
+        errors = final_state.get("errors", [])
+
+        strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
+        scripts = strategy_out.get("scripts", [])
+        video_prompts = self._get_step_output(steps, "video_prompts") or []
+        seedance_out = self._get_step_output(steps, "seedance_clips") or {}
+        clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
+        audio_paths = self._get_step_output(steps, "tts_audio") or []
+        assemble_out = self._get_step_output(steps, "assemble_final")
+        final_video = ""
+        if isinstance(assemble_out, tuple) and len(assemble_out) > 0:
+            final_video = assemble_out[0]
+        elif isinstance(assemble_out, dict):
+            final_video = assemble_out.get("video_path", "")
+        audit_report = self._get_step_output(steps, "audit") or {}
+
+        pipeline_metrics.record_pipeline(
+            label=label, scenario="brand_vlog",
+            total_duration_ms=duration_ms, success=len(errors) == 0,
+            error_count=len(errors),
+        )
+
+        return {
+            "success": len(errors) == 0 and bool(final_video),
+            "label": label,
+            "scenario": "brand_vlog",
+            "trace_id": trace_id,
+            "briefs": [],
+            "scripts": scripts,
+            "storyboards": [],
+            "video_prompts": video_prompts,
+            "seedance_output": seedance_out,
+            "clip_paths": clip_paths,
+            "audio_paths": audio_paths if isinstance(audio_paths, list) else [],
+            "final_video_path": final_video,
+            "render_json_path": "",
+            "thumbnail_sets": [],
+            "thumbnail_image_paths": [],
+            "audit_report": audit_report,
+            "errors": errors,
+            "steps_completed": 6,
+        }
 
     # ═══ Step ①: VLOG Strategy (LLM) ═══
 

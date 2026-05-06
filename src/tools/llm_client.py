@@ -18,6 +18,7 @@ import contextvars
 import hashlib
 import json
 import os
+import time
 from typing import Any
 
 import structlog
@@ -55,6 +56,14 @@ logger = structlog.get_logger()
 # the fallback-to-raw-prompt path responsive when the upstream API is sluggish.
 LLM_TIMEOUT_SECONDS = 60.0
 
+# Client cache TTL — LangChain client objects hold HTTP connections; refreshing
+# periodically prevents stale connection pools without rebuilding per request.
+CLIENT_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# Max cached clients per LLMClient instance — prevents unbounded memory growth
+# when many unique (provider, model, key_hash) combinations are used.
+CLIENT_CACHE_MAX_SIZE = 20
+
 # Per-request API keys — prevents cross-request contamination via os.environ.
 # Set by api.py _inject_api_keys before pipeline execution.
 _request_api_keys: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
@@ -91,6 +100,8 @@ class LLMClient:
         self.provider = provider or DEFAULT_LLM_PROVIDER
         self.timeout = timeout
         self._clients: dict[str, Any] = {}
+        # TTL tracking: cache_key → created_at timestamp
+        self._clients_ts: dict[str, float] = {}
 
     def _resolve_api_key(self, env_name: str) -> str | None:
         """Resolve API key from request context or global env."""
@@ -114,7 +125,8 @@ class LLMClient:
     def _get_client(self, model: str | None = None):
         # Build a cache key that includes the actual API key hash so that
         # concurrent requests using different keys do not share (or evict)
-        # each other's client instances.
+        # each other's client instances. The key_hash acts as a tenant
+        # dimension — each unique API key gets its own cached client.
         if self.provider == "anthropic":
             key = self._resolve_api_key("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY or ""
         elif self.provider == "kimi":
@@ -126,8 +138,22 @@ class LLMClient:
 
         key_hash = hashlib.sha256(key.encode()).hexdigest()[:16] if key else "default"
         cache_key = f"{self.provider}:{model}:{key_hash}"
+        now = time.time()
+
+        # TTL eviction: stale clients may hold dead HTTP connections
+        if cache_key in self._clients:
+            ts = self._clients_ts.get(cache_key, 0)
+            if now - ts > CLIENT_CACHE_TTL_SECONDS:
+                del self._clients[cache_key]
+                del self._clients_ts[cache_key]
 
         if cache_key not in self._clients:
+            # Size guard: evict oldest entries when cache is full
+            if len(self._clients) >= CLIENT_CACHE_MAX_SIZE:
+                oldest_key = min(self._clients_ts, key=self._clients_ts.get)
+                del self._clients[oldest_key]
+                del self._clients_ts[oldest_key]
+
             if self.provider == "anthropic":
                 self._clients[cache_key] = ChatAnthropic(
                     model=model or "claude-sonnet-4-20250514",
@@ -170,6 +196,7 @@ class LLMClient:
                     "timeout": self.timeout,
                 }
                 self._clients[cache_key] = ChatOpenAI(**kwargs)
+            self._clients_ts[cache_key] = now
         return self._clients[cache_key]
 
     async def ainvoke(

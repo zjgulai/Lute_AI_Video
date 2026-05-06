@@ -40,6 +40,7 @@ from src.models.state import VideoPipelineState
 from src.telemetry import generate_trace_id, error_collector
 
 import structlog
+from src.config import DEFAULT_LANGUAGES
 
 
 def _wrap_node_with_error_handling(node_func, node_name: str):
@@ -351,7 +352,7 @@ if __name__ == "__main__":
         "product_catalog": {"product_name": "Wearable Breast Pump", "category": "baby"},
         "brand_guidelines": {"tone": "warm", "colors": ["pink", "white"]},
         "target_platforms": ["tiktok", "youtube_shorts"],
-        "target_languages": ["en"],
+        "target_languages": DEFAULT_LANGUAGES,
         "content_calendar_week": "2026-W17",
         "current_step": "init",
         "trace_id": generate_trace_id(),

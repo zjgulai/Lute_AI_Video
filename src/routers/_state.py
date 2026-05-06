@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from src.config import OUTPUT_DIR
+from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.graph.pipeline import compile_pipeline
 
 # ── Pipeline state ──
@@ -23,7 +23,20 @@ from src.graph.pipeline import compile_pipeline
 # compile_pipeline() 退回 MemorySaver(开发/测试模式)。
 # fail-fast 行为由 src/graph/pipeline.py 内部处理:db_url 设置但连不上 → RuntimeError。
 _DB_URL = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL") or None
-_pipeline = compile_pipeline(db_url=_DB_URL)
+
+# P2-5: Lazy-initialized pipeline factory — avoids building PostgresSaver connection
+# at import time and makes the dependency explicit in router code.
+_pipeline_instance = None
+
+
+def get_pipeline():
+    """Return the compiled LangGraph pipeline, initializing lazily on first call."""
+    global _pipeline_instance
+    if _pipeline_instance is None:
+        _pipeline_instance = compile_pipeline(db_url=_DB_URL)
+    return _pipeline_instance
+
+
 _active_threads: dict[str, dict[str, Any]] = {}
 _THREAD_INDEX_PATH = OUTPUT_DIR / ".thread_index.json"
 _pipeline_semaphore = asyncio.Semaphore(10)  # P3-4: Max 10 concurrent pipelines
@@ -41,7 +54,7 @@ class PipelineStartRequest(BaseModel):
     product_catalog: dict[str, Any] = {}
     brand_guidelines: dict[str, Any] = {}
     target_platforms: list[str] = ["shopify", "amazon", "tiktok", "reddit"]
-    target_languages: list[str] = ["en"]
+    target_languages: list[str] = DEFAULT_LANGUAGES
     content_calendar_week: str = "2026-W17"
     api_keys: dict[str, str] = {}
     content_scenario: str = "influencer_remix"
@@ -64,7 +77,7 @@ class S1StartRequest(BaseModel):
     product_catalog: dict[str, Any]
     brand_guidelines: dict[str, Any] = {}
     target_platforms: list[str] = []
-    target_languages: list[str] = ["en"]
+    target_languages: list[str] = DEFAULT_LANGUAGES
     week: str = ""
     video_duration: int = 30
     mode: str = "auto"

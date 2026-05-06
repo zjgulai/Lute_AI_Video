@@ -53,7 +53,7 @@ class ScriptWriterAgent:
         if self.use_skills:
             from src.skills.registry import SkillRegistry
             import src.skills.script_writer  # noqa: F401
-            result = await SkillRegistry.execute("script-writer-skill", {
+            result = await SkillRegistry().execute("script-writer-skill", {
                 "briefs": [b.model_dump(mode="json") for b in briefs],
                 "brand_guidelines": brand_guidelines,
                 "target_languages": languages,

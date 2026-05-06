@@ -131,11 +131,11 @@ def test_quality_gate_backward_compatible():
 
 def test_quality_gate_via_registry():
     """Verify the skill is registered and callable via SkillRegistry."""
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
     skill = MediaQualityAuditSkill()
     SkillRegistry.register(skill)
 
-    result = asyncio.run(SkillRegistry.execute("media-quality-audit-skill", {
+    result = asyncio.run(SkillRegistry().execute("media-quality-audit-skill", {
         "video_path": "/tmp/nonexistent.mp4",
         "audio_paths": [],
         "thumbnail_paths": [],
@@ -157,7 +157,7 @@ def test_quality_gate_via_registry():
     criteria_names = [c["name"] for c in result.data["criteria"]]
     assert "face_consistency" in criteria_names
 
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
 
 
 def test_quality_gate_all_optional_checks_together():

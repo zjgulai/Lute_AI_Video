@@ -114,6 +114,144 @@ class S3InfluencerRemixPipeline:
         self._registry = SkillRegistry()
         self._video_duration: int = 30  # default, overridden in run()
 
+    # ═══ StepRunner interface ═══
+
+    async def run_step(self, step_name: str, state: dict) -> Any:
+        """Execute a single pipeline step (used by StepRunner)."""
+        config = state["config"]
+        reg = SkillRegistry()
+        steps = state["steps"]
+        errors = state["errors"]
+        media_errors = state.get("media_synthesis_errors", [])
+        self._video_duration = config.get("video_duration", 30)
+
+        if step_name == "video_analysis":
+            res = await self._step_video_analysis(
+                video_url=config["video_url"],
+                extract_segments=config.get("extract_segments", True),
+            )
+            if not res.success:
+                errors.append(f"video_analysis_failed: {res.error}")
+                return {}
+            return res.data
+
+        if step_name == "character_identity":
+            analysis = self._get_step_output(steps, "video_analysis") or {}
+            return await self._step_character_identity(analysis=analysis)
+
+        if step_name == "remix_script":
+            analysis = self._get_step_output(steps, "video_analysis") or {}
+            res = await self._step_remix_script(
+                analysis=analysis,
+                product=config["product"],
+                influencer_name=config.get("influencer_name", "Influencer"),
+                brief_id=config.get("brief_id", ""),
+            )
+            if not res.success:
+                errors.append(f"remix_script_failed: {res.error}")
+                return {}
+            return res.data
+
+        if step_name == "storyboards":
+            script = self._get_step_output(steps, "remix_script") or {}
+            return await self._step_storyboards(remix_script=script)
+
+        if step_name == "keyframe_images":
+            storyboard = self._get_step_output(steps, "storyboards") or {}
+            identity = self._get_step_output(steps, "character_identity") or {}
+            return await self._step_keyframe_images(storyboard=storyboard, identity_card=identity)
+
+        if step_name == "video_prompts":
+            script = self._get_step_output(steps, "remix_script") or {}
+            return await self._step_video_prompts(remix_script=script, product=config["product"])
+
+        if step_name == "thumbnail_prompts":
+            script = self._get_step_output(steps, "remix_script") or {}
+            return await self._step_thumbnail_prompts(remix_script=script, product=config["product"])
+
+        if step_name == "seedance_clips":
+            prompts = self._get_step_output(steps, "video_prompts") or []
+            keyframes = self._get_step_output(steps, "keyframe_images") or {}
+            return await self._step_seedance_clips(
+                video_prompts=prompts,
+                product=config["product"],
+                label=config.get("output_label", "s3"),
+                errors=media_errors,
+                keyframe_images=keyframes,
+            )
+
+        if step_name == "tts_audio":
+            script = self._get_step_output(steps, "remix_script") or {}
+            return await self._step_tts_audio(
+                remix_script=script,
+                language=config.get("target_language", "en"),
+                errors=media_errors,
+            )
+
+        if step_name == "thumbnail_images":
+            thumbnails = self._get_step_output(steps, "thumbnail_prompts") or []
+            return await self._step_thumbnail_images(
+                thumbnail_prompts=thumbnails,
+                label=config.get("output_label", "s3"),
+                errors=media_errors,
+            )
+
+        if step_name == "assemble_final":
+            script = self._get_step_output(steps, "remix_script") or {}
+            audio = self._get_step_output(steps, "tts_audio") or []
+            audio_paths = audio if isinstance(audio, list) else []
+            clips = self._get_step_output(steps, "seedance_clips") or []
+            clip_paths = clips if isinstance(clips, list) else []
+            res = await self._step_assemble_final(
+                remix_script=script,
+                captions=self._extract_captions(script),
+                audio_paths=audio_paths,
+                clip_paths=clip_paths,
+                label=config.get("output_label", "s3"),
+            )
+            if res.success and res.data:
+                return res.data
+            errors.append(f"assemble_failed: {res.error}")
+            return {}
+
+        if step_name == "audit":
+            script = self._get_step_output(steps, "remix_script") or {}
+            assemble = self._get_step_output(steps, "assemble_final") or {}
+            video_path = assemble.get("video_path", "") if isinstance(assemble, dict) else ""
+            audio = self._get_step_output(steps, "tts_audio") or []
+            audio_paths = audio if isinstance(audio, list) else []
+            thumbnails = self._get_step_output(steps, "thumbnail_images") or []
+            thumb_paths = thumbnails if isinstance(thumbnails, list) else []
+            clips = self._get_step_output(steps, "seedance_clips") or []
+            clip_paths = clips if isinstance(clips, list) else []
+            thumb_prompts = self._get_step_output(steps, "thumbnail_prompts") or []
+            res = await self._step_audit(
+                video_path=video_path,
+                audio_paths=audio_paths,
+                thumbnail_paths=thumb_paths,
+                clip_paths=clip_paths,
+                product=config["product"],
+                remix_script=script,
+                thumbnail_prompts=thumb_prompts,
+                language=config.get("target_language", "en"),
+            )
+            if res.success and res.data:
+                return res.data
+            errors.append(f"audit_failed: {res.error}")
+            return {}
+
+        raise ValueError(f"Unknown step name: {step_name}")
+
+    @staticmethod
+    def _get_step_output(steps: dict, step_name: str) -> Any:
+        """Retrieve output from a step, preferring edited_output if edited."""
+        step_data = steps.get(step_name, {})
+        if step_data.get("edited") and step_data.get("edited_output") is not None:
+            return step_data["edited_output"]
+        return step_data.get("output")
+
+    # ═══ Backwards-compatible full pipeline ═══
+
     async def run(
         self,
         video_url: str,
@@ -126,141 +264,79 @@ class S3InfluencerRemixPipeline:
         output_label: str | None = None,
         video_duration: int = 30,
     ) -> S3Result:
+        """Run the full S3 pipeline end-to-end.
+
+        Backwards-compatible: uses StepRunner internally but returns the same
+        S3Result shape as before.
+        """
         self._video_duration = video_duration if video_duration in {15, 30, 45, 60, 90} else 30
-        result = S3Result()
-        logger.info("s3: starting influencer remix pipeline",
-                     video_url=video_url, product=product.get("name"),
-                     enable_media_synthesis=enable_media_synthesis)
-
-        # === Step 1: Video Analysis ===
-        analysis = await self._step_video_analysis(
-            video_url=video_url,
-            extract_segments=extract_segments,
-        )
-        if not analysis.success:
-            result.errors.append(f"Video analysis failed: {analysis.error}")
-            return result
-        result.video_analysis = analysis.data
-
-        # === Step 2: Character Identity (extract face reference from video) ===
-        identity_card = await self._step_character_identity(
-            analysis=analysis.data,
-        )
-        result.identity_card = identity_card
-
-        # === Step 3: Remix Script ===
-        script = await self._step_remix_script(
-            analysis=analysis.data,
-            product=product,
-            influencer_name=influencer_name,
-            brief_id=brief_id,
-        )
-        if not script.success:
-            result.errors.append(f"Remix script failed: {script.error}")
-            return result
-        result.remix_script = script.data
-
-        # === Step 4: Storyboards (shot-by-shot breakdown from remix script) ===
-        storyboard = await self._step_storyboards(
-            remix_script=script.data,
-        )
-        result.storyboard_with_keyframes = storyboard
-
-        # === Step 5: Keyframe Images (GPT-Image renders guided by storyboard + identity) ===
-        storyboard_with_keyframes = await self._step_keyframe_images(
-            storyboard=storyboard,
-            identity_card=identity_card,
-        )
-        result.storyboard_with_keyframes = storyboard_with_keyframes
-
-        # === Step 6: Seedance Video Prompts (one per segment) ===
-        video_prompts = await self._step_video_prompts(
-            remix_script=script.data,
-            product=product,
-        )
-        result.video_prompts = video_prompts
-
-        # === Step 7: Thumbnail Prompts ===
-        thumbnails = await self._step_thumbnail_prompts(
-            remix_script=script.data,
-            product=product,
-        )
-        result.thumbnail_sets = thumbnails
-
-        # ── Early exit if media synthesis is disabled ──
-        if not enable_media_synthesis:
-            result.success = len(result.errors) == 0
-            logger.info("s3: pipeline complete (no media synthesis)",
-                         success=result.success,
-                         prompts=len(video_prompts),
-                         thumbnails=len(thumbnails),
-                         errors=len(result.errors))
-            return result
-
-        # === Step 8: Generate Real Seedance Clips ===
         label = output_label or f"s3_{int(time.time())}"
-        clip_paths = await self._step_seedance_clips(
-            video_prompts=video_prompts,
-            product=product,
-            label=label,
-            errors=result.media_synthesis_errors,
-            keyframe_images=storyboard_with_keyframes,
-        )
-        result.clip_paths = clip_paths
 
-        # === Step 9: Generate Real TTS Audio ===
-        audio_paths = await self._step_tts_audio(
-            remix_script=script.data,
-            language=target_language,
-            errors=result.media_synthesis_errors,
-        )
-        result.audio_paths = audio_paths
+        logger.info("s3: starting influencer remix pipeline",
+                    video_url=video_url, product=product.get("name"),
+                    enable_media_synthesis=enable_media_synthesis)
 
-        # === Step 10: Generate Real Thumbnail Images ===
-        thumbnail_image_paths = await self._step_thumbnail_images(
-            thumbnail_prompts=thumbnails,
-            label=label,
-            errors=result.media_synthesis_errors,
-        )
-        result.thumbnail_image_paths = thumbnail_image_paths
+        config = {
+            "video_url": video_url,
+            "product": product,
+            "influencer_name": influencer_name,
+            "extract_segments": extract_segments,
+            "brief_id": brief_id,
+            "target_language": target_language,
+            "video_duration": self._video_duration,
+            "output_label": label,
+        }
 
-        # === Step 11: Assemble Final Video via Remotion ===
-        final = await self._step_assemble_final(
-            remix_script=script.data,
-            captions=self._extract_captions(script.data),
-            audio_paths=audio_paths,
-            clip_paths=clip_paths,
-            label=label,
-        )
-        if final.success and final.data:
-            result.final_video_path = final.data.get("video_path", "")
-        else:
-            result.media_synthesis_errors.append(f"assemble_failed: {final.error}")
+        from src.pipeline.state_manager import PipelineStateManager
+        from src.pipeline.step_runner import StepRunner
 
-        # === Step 12: Audit the Final Media Bundle ===
-        audit = await self._step_audit(
-            video_path=result.final_video_path,
-            audio_paths=audio_paths,
-            thumbnail_paths=thumbnail_image_paths,
-            clip_paths=clip_paths,
-            product=product,
-            remix_script=script.data,
-            thumbnail_prompts=thumbnails,
-            language=target_language,
-        )
-        if audit.success and audit.data:
-            result.audit_report = audit.data
+        state_manager = PipelineStateManager()
+        runner = StepRunner(state_manager)
+        label = await runner.init_state(config=config, mode="auto", label=label, scenario="s3")
 
-        result.success = len(result.errors) == 0
+        try:
+            final_state = await runner.resume(label)
+        except Exception as e:
+            logger.error("s3: pipeline failed", error=str(e))
+            result = S3Result()
+            result.errors.append(str(e))
+            return result
+
+        steps = final_state.get("steps", {})
+        errors = final_state.get("errors", [])
+
+        result = S3Result()
+        result.video_analysis = self._get_step_output(steps, "video_analysis")
+        result.identity_card = self._get_step_output(steps, "character_identity")
+        result.remix_script = self._get_step_output(steps, "remix_script")
+        result.storyboard_with_keyframes = self._get_step_output(steps, "keyframe_images")
+        result.video_prompts = self._get_step_output(steps, "video_prompts") or []
+        result.thumbnail_sets = self._get_step_output(steps, "thumbnail_prompts") or []
+
+        if enable_media_synthesis:
+            clips = self._get_step_output(steps, "seedance_clips") or []
+            result.clip_paths = clips if isinstance(clips, list) else []
+            audio = self._get_step_output(steps, "tts_audio") or []
+            result.audio_paths = audio if isinstance(audio, list) else []
+            thumbs = self._get_step_output(steps, "thumbnail_images") or []
+            result.thumbnail_image_paths = thumbs if isinstance(thumbs, list) else []
+            assemble = self._get_step_output(steps, "assemble_final") or {}
+            if isinstance(assemble, dict):
+                result.final_video_path = assemble.get("video_path", "")
+            result.audit_report = self._get_step_output(steps, "audit")
+            result.media_synthesis_errors = final_state.get("media_synthesis_errors", [])
+
+        result.errors = errors
+        result.success = len(errors) == 0
         logger.info("s3: pipeline complete",
-                     success=result.success,
-                     prompts=len(video_prompts),
-                     thumbnails=len(thumbnails),
-                     clips=len(clip_paths),
-                     audio_segments=len(audio_paths),
-                     final_video=bool(result.final_video_path),
-                     audit=result.audit_report and result.audit_report.get("overall_status"),
-                     errors=len(result.errors))
+                    success=result.success,
+                    prompts=len(result.video_prompts),
+                    thumbnails=len(result.thumbnail_sets),
+                    clips=len(result.clip_paths),
+                    audio_segments=len(result.audio_paths),
+                    final_video=bool(result.final_video_path),
+                    audit=result.audit_report and result.audit_report.get("overall_status"),
+                    errors=len(result.errors))
         return result
 
     # ═══ Step 1-4: existing data-producing steps ═══

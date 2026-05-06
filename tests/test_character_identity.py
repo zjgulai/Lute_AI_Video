@@ -76,7 +76,7 @@ def test_character_identity_fallback():
 def test_character_identity_via_registry():
     """Verify the skill is auto-registered and callable via SkillRegistry."""
     # Clean slate
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
 
     # Re-register (as the module __init__ would do)
     skill = CharacterIdentitySkill()
@@ -84,7 +84,7 @@ def test_character_identity_via_registry():
 
     import asyncio
     paths = _make_dummy_images(3)
-    result = asyncio.run(SkillRegistry.execute("character-identity", {
+    result = asyncio.run(SkillRegistry().execute("character-identity", {
         "frame_paths": paths,
     }))
 
@@ -92,7 +92,7 @@ def test_character_identity_via_registry():
     assert "reference_frames" in result.data
     assert "attributes" in result.data
 
-    SkillRegistry.clear()
+    SkillRegistry.clear_global()
 
 
 if __name__ == "__main__":

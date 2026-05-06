@@ -15,6 +15,7 @@ from src.models.state import VideoPipelineState
 from src.telemetry import timed_node
 from src.routers._state import _register_background_task
 from src.tools.webhook_manager import get_webhook_manager
+from src.config import DEFAULT_LANGUAGES
 
 logger = structlog.get_logger()
 
@@ -76,7 +77,7 @@ async def strategy_node(state: VideoPipelineState) -> dict[str, Any]:
         product_catalog=state.get("product_catalog", {}),
         brand_guidelines=state.get("brand_guidelines", {}),
         target_platforms=state.get("target_platforms", ["shopify", "amazon", "tiktok", "reddit"]),
-        target_languages=state.get("target_languages", ["en"]),
+        target_languages=state.get("target_languages", DEFAULT_LANGUAGES),
         week=state.get("content_calendar_week", "2026-W17"),
     )
     logger.info("strategy_node: done", brief_count=len(calendar.briefs))
@@ -109,7 +110,7 @@ async def script_node(state: VideoPipelineState) -> dict[str, Any]:
         briefs=calendar.briefs,
         brand_guidelines=state.get("brand_guidelines", {}),
         strategy_audit=strategy_audit,
-        target_languages=state.get("target_languages", ["en"]),
+        target_languages=state.get("target_languages", DEFAULT_LANGUAGES),
     )
     logger.info("script_node: done", script_count=len(scripts))
     return {"scripts": scripts, "current_step": "script_complete"}

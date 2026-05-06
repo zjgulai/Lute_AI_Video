@@ -23,6 +23,7 @@ import structlog
 from src.pipeline.candidate_scorer import score_candidate
 from src.pipeline.state_manager import PipelineStateManager
 from src.skills.registry import SkillRegistry
+from src.config import DEFAULT_LANGUAGES
 
 logger = structlog.get_logger()
 
@@ -255,7 +256,7 @@ async def generate_candidates(label: str, gate_id: str) -> dict:
             skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
             if skill_name is None:
                 raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
-            skill_result = await SkillRegistry.execute(skill_name, skill_params)
+            skill_result = await SkillRegistry().execute(skill_name, skill_params)
             if skill_result.success and skill_result.data:
                 candidate_data = skill_result.data
                 # Exclude error-only data
@@ -584,7 +585,7 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
         skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
         if skill_name is None:
             raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
-        skill_result = await SkillRegistry.execute(skill_name, skill_params)
+        skill_result = await SkillRegistry().execute(skill_name, skill_params)
         # P0: Guard against success=True but empty data — treat as failure
         if skill_result.success and skill_result.data:
             candidate_data = skill_result.data
@@ -696,7 +697,7 @@ def _build_skill_params(candidate_step: str, state: dict, variant_name: str, var
     steps_data = state.get("steps", {})
     strategy_output = steps_data.get("strategy", {}).get("output") or {}
     brand_guidelines = config.get("brand_guidelines") or {}
-    target_languages = config.get("target_languages", ["en"])
+    target_languages = config.get("target_languages", DEFAULT_LANGUAGES)
 
     if candidate_step == "scripts":
         if isinstance(strategy_output, list):

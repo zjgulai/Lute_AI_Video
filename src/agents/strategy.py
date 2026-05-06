@@ -160,7 +160,7 @@ class StrategyAgent:
         if self.use_skills:
             from src.skills.registry import SkillRegistry
             import src.skills.product_strategy  # noqa: F401
-            result = await SkillRegistry.execute("product-to-video-strategy", {
+            result = await SkillRegistry().execute("product-to-video-strategy", {
                 "product_catalog": product_catalog,
                 "brand_guidelines": brand_guidelines,
                 "target_platforms": target_platforms,

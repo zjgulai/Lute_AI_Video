@@ -164,21 +164,21 @@ class TestSkillRegistry:
     """Registry operations."""
 
     def setup_method(self):
-        SkillRegistry.clear()
+        SkillRegistry.clear_global()
 
     def test_register_skill(self):
         """Should register a skill by name."""
         skill = EchoSkill()
         SkillRegistry.register(skill)
-        assert SkillRegistry.get_skill("echo") is skill
+        assert SkillRegistry().get_skill("echo") is skill
 
     def test_register_duplicate_overwrites(self):
         """Registering same name should overwrite."""
         SkillRegistry.register(EchoSkill())
-        assert SkillRegistry.get_skill("echo") is not None
+        assert SkillRegistry().get_skill("echo") is not None
         skill2 = EchoSkill()
         SkillRegistry.register(skill2)
-        assert SkillRegistry.get_skill("echo") is skill2
+        assert SkillRegistry().get_skill("echo") is skill2
 
     def test_unregister_skill(self):
         """Should unregister a skill."""
@@ -192,21 +192,21 @@ class TestSkillRegistry:
         import asyncio
 
         SkillRegistry.register(EchoSkill())
-        result = asyncio.run(SkillRegistry.execute("echo", {"required_field": "test"}))
+        result = asyncio.run(SkillRegistry().execute("echo", {"required_field": "test"}))
         assert result.success is True
 
     def test_execute_unregistered_skill(self):
         """Should fail gracefully for unregistered skill."""
         import asyncio
 
-        result = asyncio.run(SkillRegistry.execute("nonexistent", {}))
+        result = asyncio.run(SkillRegistry().execute("nonexistent", {}))
         assert result.success is False
         assert "not found" in result.error
 
     def test_list_skills(self):
         """Should list all registered skills."""
         SkillRegistry.register(EchoSkill())
-        skills = SkillRegistry.list_skills()
+        skills = SkillRegistry().list_skills()
         assert len(skills) == 1
         assert skills[0]["name"] == "echo"
 
@@ -214,7 +214,7 @@ class TestSkillRegistry:
         """Should clear all skills."""
         SkillRegistry.register(EchoSkill())
         assert len(SkillRegistry._skills) == 1
-        SkillRegistry.clear()
+        SkillRegistry.clear_global()
         assert len(SkillRegistry._skills) == 0
 
 

@@ -1,5 +1,6 @@
 """pipeline router — extracted from api.py (P1-11)."""
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -10,10 +11,11 @@ try:
 except ImportError:
     HAS_STORAGE = False
 
+from src.config import DEFAULT_LANGUAGES
 from src.models import ApprovalStatus, ContentScenario, HumanReview, REVIEW_NODES
 from src.routers._deps import _serialize, _safe_error, _inject_api_keys, verify_api_key
 from src.routers._state import (
-    _pipeline,
+    get_pipeline,
     _active_threads,
     _pipeline_semaphore,
     _touch_thread_cache,
@@ -29,6 +31,7 @@ router = APIRouter()
 
 @router.post("/pipeline/start", dependencies=[Depends(verify_api_key)])
 async def start_pipeline(req: PipelineStartRequest):
+    pipeline = await asyncio.to_thread(get_pipeline)
     """Start a new pipeline run. Returns thread_id for tracking.
 
     Phase 2+3: Translates Chinese product inputs to English before
@@ -53,7 +56,7 @@ async def start_pipeline(req: PipelineStartRequest):
         "product_catalog": product_catalog,
         "brand_guidelines": req.brand_guidelines,
         "target_platforms": req.target_platforms,
-        "target_languages": ["en"],  # Lock pipeline to English output
+        "target_languages": DEFAULT_LANGUAGES,  # Lock pipeline to English output
         "content_calendar_week": req.content_calendar_week,
         "content_scenario": req.content_scenario,
         "current_step": "init",
@@ -67,7 +70,7 @@ async def start_pipeline(req: PipelineStartRequest):
     events = []
     try:
         async with _pipeline_semaphore:
-            async for event in _pipeline.astream(initial_state, config):
+            async for event in pipeline.astream(initial_state, config):
                 events.append(event)
     except Exception as e:
         import logging
@@ -96,6 +99,7 @@ async def start_pipeline(req: PipelineStartRequest):
 
 @router.get("/pipeline/{thread_id}/state", dependencies=[Depends(verify_api_key)])
 async def get_pipeline_state(thread_id: str):
+    pipeline = await asyncio.to_thread(get_pipeline)
     """Get current pipeline state for a thread."""
     config = _active_threads.get(thread_id)
     if config:
@@ -111,7 +115,7 @@ async def get_pipeline_state(thread_id: str):
         config = {"configurable": {"thread_id": thread_id}}
 
     try:
-        snapshot = _pipeline.get_state(config)
+        snapshot = pipeline.get_state(config)
         if snapshot is None or snapshot.values is None:
             return {"thread_id": thread_id, "status": "not_found"}
 
@@ -146,6 +150,7 @@ async def get_pipeline_state(thread_id: str):
 
 @router.post("/pipeline/{thread_id}/review/{review_node}", dependencies=[Depends(verify_api_key)])
 async def submit_review(thread_id: str, review_node: str, action: ReviewAction):
+    pipeline = await asyncio.to_thread(get_pipeline)
     """Submit human review for a pipeline checkpoint. Resumes execution.
 
     D9: Double-click guard — if the pipeline has already moved past the
@@ -180,7 +185,7 @@ async def submit_review(thread_id: str, review_node: str, action: ReviewAction):
     status = status_map.get(action.action, ApprovalStatus.APPROVED)
 
     # D9: Get snapshot and check double-click guard
-    snapshot = _pipeline.get_state(config)
+    snapshot = pipeline.get_state(config)
 
     # If no snapshot or no human_reviews yet, we're still in the right place
     if snapshot and snapshot.values:
@@ -214,11 +219,11 @@ async def submit_review(thread_id: str, review_node: str, action: ReviewAction):
     current_reviews[review_node] = review_entry
 
     # Update checkpoint with the new review
-    _pipeline.update_state(config, {"human_reviews": current_reviews})
+    pipeline.update_state(config, {"human_reviews": current_reviews})
 
     # Handle reject: terminate pipeline directly, no resume needed
     if action.action == "reject":
-        _pipeline.update_state(config, {"pipeline_complete": True, "current_step": "rejected"})
+        pipeline.update_state(config, {"pipeline_complete": True, "current_step": "rejected"})
         _cleanup_thread_cache(thread_id)
         return {
             "thread_id": thread_id,
@@ -246,7 +251,7 @@ async def submit_review(thread_id: str, review_node: str, action: ReviewAction):
         # The update_state(...) call above already persisted the human review.
         # _set_override (set above) ensures routing reads the decision.
         async with _pipeline_semaphore:
-            async for event in _pipeline.astream(None, config):
+            async for event in pipeline.astream(None, config):
                 events.append(event)
 
     except Exception as e:
@@ -260,7 +265,7 @@ async def submit_review(thread_id: str, review_node: str, action: ReviewAction):
     # NOTE: review_node comes from URL path parameter and matches REVIEW_NODES
     # which are "strategy_review"/"script_review"/"edit_review"/"thumbnail_review"
     if review_node == "thumbnail_review" and action.action == "approve":
-        _pipeline.update_state(config, {"pipeline_complete": True})
+        pipeline.update_state(config, {"pipeline_complete": True})
         _cleanup_thread_cache(thread_id)
 
     return {
@@ -274,9 +279,10 @@ async def submit_review(thread_id: str, review_node: str, action: ReviewAction):
 
 @router.get("/pipeline/{thread_id}/output", dependencies=[Depends(verify_api_key)])
 async def get_pipeline_output(thread_id: str):
+    pipeline = await asyncio.to_thread(get_pipeline)
     """Get final pipeline output as JSON."""
     config = await _get_config_for_thread(thread_id)
-    snapshot = _pipeline.get_state(config)
+    snapshot = pipeline.get_state(config)
     if snapshot is None or snapshot.values is None:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
@@ -285,6 +291,7 @@ async def get_pipeline_output(thread_id: str):
 
 @router.get("/pipeline/{thread_id}/distribution", dependencies=[Depends(verify_api_key)])
 async def get_distribution_plans(thread_id: str):
+    pipeline = await asyncio.to_thread(get_pipeline)
     """Get distribution plans with platform-specific post content.
 
     Returns distribution_plans array, each with brief_id, script_id,
@@ -292,7 +299,7 @@ async def get_distribution_plans(thread_id: str):
     CTA, video_format, product_link_placeholder, and platform-specific body.
     """
     config = await _get_config_for_thread(thread_id)
-    snapshot = _pipeline.get_state(config)
+    snapshot = pipeline.get_state(config)
     if snapshot is None or snapshot.values is None:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
@@ -302,6 +309,7 @@ async def get_distribution_plans(thread_id: str):
 
 @router.get("/pipeline/{thread_id}/export", dependencies=[Depends(verify_api_key)])
 async def export_pipeline_output(thread_id: str):
+    pipeline = await asyncio.to_thread(get_pipeline)
     """Clean export: only user-facing fields, no internal state.
 
     Strips out internal-only fields: retry_counts, self_verifications,
@@ -310,7 +318,7 @@ async def export_pipeline_output(thread_id: str):
     distribution plans, analytics reports, and human review timeline.
     """
     config = await _get_config_for_thread(thread_id)
-    snapshot = _pipeline.get_state(config)
+    snapshot = pipeline.get_state(config)
     if snapshot is None or snapshot.values is None:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 

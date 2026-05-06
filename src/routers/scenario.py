@@ -12,6 +12,7 @@ try:
 except ImportError:
     HAS_STORAGE = False
 
+from src.config import DEFAULT_LANGUAGES
 from src.routers._deps import _inject_api_keys, _safe_error, _classified_error, verify_api_key
 from src.routers._state import (
     _SCENARIO_STEP_ORDER,
@@ -55,7 +56,7 @@ async def run_s1_product_direct(body: dict):
         "product_catalog": product_catalog,
         "brand_guidelines": body.get("brand_guidelines"),
         "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
-        "target_languages": ["en"],
+        "target_languages": DEFAULT_LANGUAGES,
         "week": body.get("week", ""),
         "video_duration": body.get("video_duration", 30),
         "brand_mode": body.get("brand_mode", False),
@@ -81,7 +82,7 @@ async def run_s1_product_direct(body: dict):
             product_catalog=product_catalog,
             brand_guidelines=body.get("brand_guidelines"),
             target_platforms=body.get("target_platforms", ["tiktok", "shopify"]),
-            target_languages=["en"],
+            target_languages=DEFAULT_LANGUAGES,
             week=body.get("week", ""),
             brand_mode=body.get("brand_mode", False),
             enable_media_synthesis=body.get("enable_media_synthesis", True),
@@ -150,7 +151,7 @@ async def run_s2_brand_campaign(body: dict):
     r = await p.run(
         brand_package=body.get("brand_package", {}),
         target_platforms=body.get("target_platforms", ["tiktok", "shopify"]),
-        target_languages=body.get("target_languages", ["en"]),
+        target_languages=body.get("target_languages", DEFAULT_LANGUAGES),
         week=body.get("week", ""),
     )
     return r
