@@ -177,6 +177,11 @@ class StepRunner:
         success = True
 
         for step_name in STEP_ORDER[start_idx:]:
+            # P0: Degraded guard — if any previous step set pipeline_degraded, stop
+            if state.get("pipeline_degraded"):
+                logger.error("step_runner: pipeline degraded, halting", step=step_name, reason=state.get("degraded_reason"))
+                success = False
+                break
             # Gate check: if this step has a gate awaiting approval, pause and return
             gate_id = _get_gate_id_for_step(step_name)
             if gate_id:
@@ -186,13 +191,8 @@ class StepRunner:
                     state["current_step"] = step_name
                     await self.state_manager.save(state["label"], state)
                     return state
-            try:
-                state = await self._execute_step(state, step_name, force=False)
-            except Exception:
-                success = False
-                raise
-            finally:
-                total_errors = len(state.get("errors", []))
+            state = await self._execute_step(state, step_name, force=False)
+            total_errors = len(state.get("errors", []))
 
             # Post-step gate check: if the step we just ran registered a gate
             # (e.g. keyframe_images → gate_2_keyframe), the gate is now
@@ -277,6 +277,12 @@ class StepRunner:
             logger.error("step_runner: step failed", step=step_name, error=str(exc), trace_id=trace_id)
             step_data["status"] = "error"
             state["errors"].append(f"{step_name}_failed: {exc}")
+            state["pipeline_degraded"] = True
+            state["degraded_reason"] = step_name
+            from src.tools.error_classifier import classify_error
+            structured = classify_error(exc, context=step_name, node=step_name)
+            state.setdefault("structured_errors", [])
+            state["structured_errors"].append(structured.model_dump())
             error_collector.collect(
                 label=state["label"],
                 trace_id=trace_id,
@@ -291,7 +297,7 @@ class StepRunner:
                 success=False,
             )
             await self.state_manager.save(state["label"], state)
-            raise
+            return state
 
         step_duration_ms = (time.perf_counter() - step_start) * 1000
         pipeline_metrics.record_step(

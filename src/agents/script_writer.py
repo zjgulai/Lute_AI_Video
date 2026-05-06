@@ -87,6 +87,12 @@ class ScriptWriterAgent:
         lang_code = lang.lower().strip()
 
         if self.use_mock:
+            from src.config import ALLOW_MOCK_MODE
+            if not ALLOW_MOCK_MODE:
+                raise RuntimeError(
+                    "Mock mode is disabled (ALLOW_MOCK_MODE=false). "
+                    "Set use_mock=False and ensure API keys are configured."
+                )
             return self._mock_scripts(briefs, quality_signals=quality_signals, language_code=lang_code)
 
         # Resolve translated prompt & template for this language
@@ -120,6 +126,11 @@ class ScriptWriterAgent:
             return scripts
         except Exception as e:
             logger.error("script_writer: LLM call failed", error=str(e), lang=lang_code)
+            from src.config import ALLOW_MOCK_MODE
+            if not ALLOW_MOCK_MODE:
+                raise RuntimeError(
+                    f"Script generation failed and mock fallback is disabled: {e}"
+                ) from e
             return self._mock_scripts(briefs, quality_signals=quality_signals, language_code=lang_code)
 
     _SCRIPT_TEMPLATES = {
@@ -362,10 +373,4 @@ class ScriptWriterAgent:
     @staticmethod
     def _lang_to_enum(language_code: str) -> Language:
         """Convert language code string to Language enum."""
-        mapping = {
-            "en": Language.EN,
-            "es": Language.ES,
-            "fr": Language.FR,
-            "de": Language.DE,
-        }
-        return mapping.get(language_code, Language.EN)
+        return Language.EN

@@ -12,9 +12,10 @@ try:
 except ImportError:
     HAS_STORAGE = False
 
-from src.routers._deps import _inject_api_keys, _safe_error, verify_api_key
+from src.routers._deps import _inject_api_keys, _safe_error, _classified_error, verify_api_key
 from src.routers._state import (
     _SCENARIO_STEP_ORDER,
+    _STEP_DURATIONS,
     _validate_scenario,
     _get_step_deps,
     _get_step_output,
@@ -66,6 +67,8 @@ async def run_s1_product_direct(body: dict):
 
     # Initialize state (saved immediately so polling can see it) and run to completion
     label = await step_runner.init_state(config=config, mode="auto")
+    from src.tools.cost_tracker import set_thread_id
+    set_thread_id(label)
     try:
         final_state = await step_runner.resume(label)
     except TypeError as te:
@@ -314,7 +317,7 @@ async def start_s1_pipeline(body: S1StartRequest):
     except Exception as e:
         import logging
         logging.error("s1 pipeline failed: %s", e)
-        raise HTTPException(status_code=500, detail=_safe_error(e))
+        raise HTTPException(status_code=500, detail=_classified_error(e))
 
 
 @router.post("/scenario/s1/step/{step_name}", dependencies=[Depends(verify_api_key)])
@@ -407,7 +410,12 @@ async def get_s1_state(label: str):
         state = await state_manager.load(label)
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
-        return state
+        result = dict(state)
+        result["meta"] = {
+            "step_order": _SCENARIO_STEP_ORDER.get("s1", []),
+            "step_durations": _STEP_DURATIONS,
+        }
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -518,6 +526,10 @@ async def list_steps(scenario: str, label: str):
             "scenario": scenario,
             "current_step": state.get("current_step"),
             "steps": result,
+            "meta": {
+                "step_order": _SCENARIO_STEP_ORDER.get(scenario, []),
+                "step_durations": _STEP_DURATIONS,
+            },
         }
     except HTTPException:
         raise

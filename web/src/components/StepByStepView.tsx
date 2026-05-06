@@ -12,11 +12,12 @@ interface Props {
   loading: boolean;
 }
 
-const STEP_ORDER = [
+const _FALLBACK_STEP_ORDER = [
   "strategy",
   "scripts",
   "compliance",
   "storyboards",
+  "keyframe_images",
   "video_prompts",
   "thumbnail_prompts",
   "seedance_clips",
@@ -45,6 +46,7 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   scripts: "stepDesc.scripts",
   compliance: "stepDesc.compliance",
   storyboards: "stepDesc.storyboards",
+  keyframe_images: "stepDesc.keyframe_images",
   video_prompts: "stepDesc.video_prompts",
   thumbnail_prompts: "stepDesc.thumbnail_prompts",
   seedance_clips: "stepDesc.seedance_clips",
@@ -62,9 +64,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
   const [confirmRegen, setConfirmRegen] = useState<string | null>(null);
 
   const steps = state?.steps || {};
+  const stepOrder: string[] = state?.meta?.step_order || _FALLBACK_STEP_ORDER;
 
   const getCurrentStep = (): string | null => {
-    for (const step of STEP_ORDER) {
+    for (const step of stepOrder) {
       if (!steps[step] || steps[step].status !== "done") {
         return step;
       }
@@ -77,9 +80,9 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
   // Determine which steps are dependencies of current step (should be done before current)
   const getDepsFor = (stepName: string): string[] => {
-    const idx = STEP_ORDER.indexOf(stepName);
+    const idx = stepOrder.indexOf(stepName);
     if (idx < 0) return [];
-    return STEP_ORDER.slice(0, idx);
+    return stepOrder.slice(0, idx);
   };
 
   const handleRunStep = async (stepName: string) => {
@@ -191,9 +194,9 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
   };
 
   const getDownstreamSteps = (stepName: string): string[] => {
-    const idx = STEP_ORDER.indexOf(stepName);
-    if (idx < 0 || idx >= STEP_ORDER.length - 1) return [];
-    return STEP_ORDER.slice(idx + 1);
+    const idx = stepOrder.indexOf(stepName);
+    if (idx < 0 || idx >= stepOrder.length - 1) return [];
+    return stepOrder.slice(idx + 1);
   };
 
   return (
@@ -214,7 +217,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
         {/* Step list */}
         <div className="space-y-1 mt-3">
-          {STEP_ORDER.map((stepName, index) => {
+          {stepOrder.map((stepName, index) => {
             const stepData = steps[stepName] || { status: "pending" };
             const isDone = stepData.status === "done";
             const isCurrent = stepName === currentStep && !isDone;
@@ -410,7 +413,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
           {!allDone && (
             <div className="flex items-center justify-center gap-2">
               <span className="text-[12px] text-[var(--text-muted)]">
-                {t("stepbystep.progress")} {STEP_ORDER.filter((s) => (steps[s] || {}).status === "done").length}{t("stepbystep.of")}{STEP_ORDER.length}
+                {t("stepbystep.progress")} {stepOrder.filter((s) => (steps[s] || {}).status === "done").length}{t("stepbystep.of")}{stepOrder.length}
               </span>
             </div>
           )}

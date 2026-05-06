@@ -444,13 +444,6 @@ class MediaQualityAuditSkill(SkillCallable):
             ascii_ratio = sum(1 for c in script_text if c.isascii()) / max(len(script_text), 1)
             if ascii_ratio < 0.85:
                 match_score = 0.5
-        elif lang in ("es", "fr"):
-            # Should contain some accents
-            has_accent = bool(re.search(r"[áéíóúüñçàèìòùâêîôûäëïöü]", script_text.lower()))
-            match_score = 1.0 if has_accent else 0.7
-        elif lang == "de":
-            has_german = bool(re.search(r"[äöüß]", script_text.lower()))
-            match_score = 1.0 if has_german else 0.7
 
         if match_score >= 0.8:
             return _make_criterion(

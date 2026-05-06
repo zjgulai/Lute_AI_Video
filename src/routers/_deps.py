@@ -41,6 +41,24 @@ def _safe_error(exc: Exception, is_dev: bool = False) -> str:
     return f"Internal server error [trace: {_trace}]"
 
 
+def _classified_error(exc: Exception, is_dev: bool = False) -> dict:
+    """Return structured error with code, message, recoverable flag, and trace_id.
+
+    T1.4: Uses error_classifier to map exceptions to structured PipelineError.
+    """
+    from src.tools.error_classifier import classify_error
+    import uuid as _uuid
+    _trace = str(_uuid.uuid4())[:8]
+    logging.getLogger("api.error").error("internal_error trace_id=%s error=%s", _trace, str(exc)[:200])
+    structured = classify_error(exc, context="api")
+    return {
+        "error_code": structured.code.value,
+        "message": str(exc) if is_dev else structured.message,
+        "recoverable": structured.recoverable,
+        "trace": _trace,
+    }
+
+
 def _serialize(obj: Any) -> Any:
     """Recursively serialize Pydantic models to JSON-safe dicts."""
     from pydantic import BaseModel as PydanticBase
@@ -75,6 +93,10 @@ def _inject_api_keys(api_keys: dict[str, str]) -> None:
         "ELEVENLABS_API_KEY": "ELEVENLABS_API_KEY",
         "poyo": "POYO_API_KEY",
         "POYO_API_KEY": "POYO_API_KEY",
+        "seedance": "SEEDANCE_API_KEY",
+        "SEEDANCE_API_KEY": "SEEDANCE_API_KEY",
+        "siliconflow": "SILICONFLOW_API_KEY",
+        "SILICONFLOW_API_KEY": "SILICONFLOW_API_KEY",
         "supabase_url": "SUPABASE_URL",
         "SUPABASE_URL": "SUPABASE_URL",
         "supabase_key": "SUPABASE_SERVICE_KEY",

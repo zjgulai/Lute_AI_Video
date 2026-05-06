@@ -20,6 +20,7 @@ import httpx
 import structlog
 
 from src.config import POYO_API_KEY, POYO_API_BASE_URL
+from src.tools.llm_client import get_request_api_key
 
 logger = structlog.get_logger()
 
@@ -40,7 +41,7 @@ class PoyoClient:
         api_key: str | None = None,
         base_url: str | None = None,
     ):
-        self.api_key = api_key or POYO_API_KEY
+        self.api_key = api_key or get_request_api_key("POYO_API_KEY") or POYO_API_KEY
         self.base_url = (base_url or POYO_API_BASE_URL).rstrip("/")
         if not self.api_key:
             raise RuntimeError("PoyoClient requires POYO_API_KEY")
@@ -186,6 +187,8 @@ class PoyoClient:
         local_path = await self.download(task, output_path)
         files = task.get("files", [])
         file_url = files[0].get("file_url", "") if files else ""
+        from src.tools.cost_tracker import track
+        track(api="poyo_video", units=1)
         return {
             "task_id": task_id,
             "file_url": file_url,

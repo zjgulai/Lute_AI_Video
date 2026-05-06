@@ -80,6 +80,11 @@ def _wrap_node_with_error_handling(node_func, node_name: str):
                 node=node_name,
                 error=str(exc),
             )
+            # T1.4: Structured error classification
+            from src.tools.error_classifier import classify_error
+            structured = classify_error(exc, context=node_name, node=node_name)
+            structured_errors = list(state.get("structured_errors", []))
+            structured_errors.append(structured.model_dump())
             # Collect structured error
             error_collector.collect(
                 label=state.get("content_calendar_week", "unknown"),
@@ -94,6 +99,7 @@ def _wrap_node_with_error_handling(node_func, node_name: str):
             return {
                 "errors": errors,
                 "pipeline_degraded": True,
+                "structured_errors": structured_errors,
             }
 
     return wrapper

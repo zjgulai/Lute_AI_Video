@@ -23,6 +23,7 @@ from src.config import (
     SILICONFLOW_API_BASE,
     SILICONFLOW_API_KEY,
 )
+from src.tools.llm_client import get_request_api_key
 
 logger = structlog.get_logger()
 
@@ -38,9 +39,6 @@ TTS_TIMEOUT_SECONDS = 60.0
 VOICE_PRESETS = {
     "en": DEFAULT_VOICE,                       # English — warm male (alex)
     "zh": "FunAudioLLM/CosyVoice2-0.5B:diana", # Chinese — warm female (diana)
-    "es": DEFAULT_VOICE,
-    "fr": DEFAULT_VOICE,
-    "de": DEFAULT_VOICE,
 }
 
 
@@ -53,7 +51,7 @@ class CosyVoiceClient:
         base_url: str | None = None,
         output_dir: Path | None = None,
     ):
-        self.api_key = api_key or SILICONFLOW_API_KEY
+        self.api_key = api_key or get_request_api_key("SILICONFLOW_API_KEY") or SILICONFLOW_API_KEY
         self.base_url = (base_url or BASE_URL).rstrip("/")
         self.output_dir = output_dir or OUTPUT_DIR / "audio"
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -119,6 +117,8 @@ class CosyVoiceClient:
                     size_bytes=len(resp.content),
                     voice=selected_voice,
                 )
+                from src.tools.cost_tracker import track
+                track(api="cosyvoice", units=1)
                 return filepath
 
         except asyncio.TimeoutError:

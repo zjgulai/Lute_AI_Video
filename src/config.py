@@ -163,3 +163,7 @@ POYO_API_BASE_URL: str = os.environ.get("POYO_API_BASE_URL", "https://api.poyo.a
 POYO_IMAGE_MODEL: str = os.environ.get("POYO_IMAGE_MODEL", "gpt-image-2")
 POYO_VIDEO_MODEL: str = os.environ.get("POYO_VIDEO_MODEL", "happy-horse")
 POYO_TTS_MODEL: str = os.environ.get("POYO_TTS_MODEL", "generate-music")
+
+# ── Runtime mode ──
+ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "development")
+ALLOW_MOCK_MODE: bool = os.environ.get("ALLOW_MOCK_MODE", "").lower() in ("1", "true", "yes")

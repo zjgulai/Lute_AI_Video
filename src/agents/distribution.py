@@ -67,7 +67,7 @@ class DistributionAgent:
     """
 
     def __init__(self, use_mock: bool = False):
-        self.use_mock = use_mock or not llm._clients
+        self.use_mock = use_mock or not llm.is_configured()
 
     async def run(
         self,

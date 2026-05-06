@@ -96,6 +96,21 @@ class LLMClient:
         """Resolve API key from request context or global env."""
         return get_request_api_key(env_name)
 
+    def is_configured(self) -> bool:
+        """Return True if an API key is available for the configured provider.
+
+        Checks the request-scoped key first (contextvars), then falls back
+        to the global environment variable.
+        """
+        if self.provider == "anthropic":
+            return bool(self._resolve_api_key("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY)
+        elif self.provider == "kimi":
+            return bool(self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY)
+        elif self.provider == "deepseek":
+            return bool(self._resolve_api_key("DEEPSEEK_API_KEY") or DEEPSEEK_API_KEY)
+        else:
+            return bool(self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY)
+
     def _get_client(self, model: str | None = None):
         # Build a cache key that includes the actual API key hash so that
         # concurrent requests using different keys do not share (or evict)
@@ -184,7 +199,13 @@ class LLMClient:
             return response.content
 
         try:
-            return await retry_with_backoff(_do_invoke)
+            result = await retry_with_backoff(_do_invoke)
+            from src.tools.cost_tracker import track
+            track(
+                api="deepseek_reasoning" if "reasoning" in str(model).lower() else "deepseek",
+                units=1,
+            )
+            return result
         except TimeoutError:
             logger.error("llm: invoke timed out", timeout=self.timeout)
             raise LLMTimeoutError(

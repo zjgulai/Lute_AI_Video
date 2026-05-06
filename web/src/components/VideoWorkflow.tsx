@@ -16,11 +16,12 @@ interface Props {
   setLoadingText: (v: string) => void;
 }
 
-const STEP_ORDER = [
+const _FALLBACK_STEP_ORDER = [
   "strategy",
   "scripts",
   "compliance",
   "storyboards",
+  "keyframe_images",
   "video_prompts",
   "thumbnail_prompts",
   "seedance_clips",
@@ -30,16 +31,17 @@ const STEP_ORDER = [
   "audit",
 ];
 
-const STEP_DURATIONS: Record<string, string> = {
+const _FALLBACK_STEP_DURATIONS: Record<string, string> = {
   strategy: "~5s",
   scripts: "~5s",
   compliance: "~2s",
   storyboards: "~4s",
+  keyframe_images: "~5-60s",
   video_prompts: "~3s",
   thumbnail_prompts: "~3s",
-  seedance_clips: "~6min",      // 2 clips × ~3min each
-  tts_audio: "~3min",          // merged: 1 call per script
-  thumbnail_images: "~2min",   // 2 images
+  seedance_clips: "~6min",
+  tts_audio: "~3min",
+  thumbnail_images: "~2min",
   assemble_final: "~15s",
   audit: "~5s",
 };
@@ -61,6 +63,8 @@ export default function VideoWorkflow({
   const [runningStep, setRunningStep] = useState<string | null>(null);
 
   const steps = state?.steps || {};
+  const stepOrder: string[] = state?.meta?.step_order || _FALLBACK_STEP_ORDER;
+  const stepDurations: Record<string, string> = state?.meta?.step_durations || _FALLBACK_STEP_DURATIONS;
 
   /** Format a duration from milliseconds to human-readable text.
    *  e.g. 5000 → "~5s", 180000 → "~3min"
@@ -79,11 +83,11 @@ export default function VideoWorkflow({
     if (dur && dur > 0) {
       return formatDuration(dur);
     }
-    return STEP_DURATIONS[stepName] || "";
+    return stepDurations[stepName] || "";
   };
 
   const getCurrentStep = (): string | null => {
-    for (const step of STEP_ORDER) {
+    for (const step of stepOrder) {
       if (!steps[step] || steps[step].status !== "done") {
         return step;
       }
@@ -270,12 +274,12 @@ export default function VideoWorkflow({
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold text-[var(--text-h1)]">{t("workflow.timeline")}</h3>
           <span className="text-[12px] text-[var(--text-body)]">
-            {STEP_ORDER.filter((s) => steps[s]?.status === "done").length} / {STEP_ORDER.length} {t("workflow.completed")}
+            {stepOrder.filter((s) => steps[s]?.status === "done").length} / {stepOrder.length} {t("workflow.completed")}
           </span>
         </div>
 
         <div className="space-y-1">
-          {STEP_ORDER.map((stepName, index) => {
+          {stepOrder.map((stepName, index) => {
             const stepData = steps[stepName] || { status: "pending" };
             const isDone = stepData.status === "done";
             const isCurrent = stepName === currentStep;

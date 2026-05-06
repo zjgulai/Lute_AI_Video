@@ -213,18 +213,111 @@ def _heuristic_score_script(script: dict, usps: list[str]) -> dict:
 
 
 async def _score_keyframe_candidate(data: dict, params: dict | None = None) -> dict:
-    """Score a keyframe image candidate."""
-    return _heuristic_generic(data, default=0.75)
+    """Score a keyframe image candidate with multi-dimensional heuristics.
+
+    Dimensions: composition (30%), lighting (20%), product visibility (25%), style consistency (25%).
+    When LLM is unavailable, scores based on prompt keywords rather than a fixed default.
+    """
+    prompt = str(data.get("prompt", "")).lower()
+    if not prompt:
+        return _heuristic_generic(data, default=0.50)
+
+    composition_score = 1.0 if any(kw in prompt for kw in ["center", "rule of thirds", "close-up", "framed"]) else 0.6
+    lighting_score = 1.0 if any(kw in prompt for kw in ["soft", "natural", "studio", "warm", "bright"]) else 0.6
+    product_score = 1.0 if any(kw in prompt for kw in ["product", "device", "item", "hero shot"]) else 0.5
+    style_score = 0.8  # baseline — LLM scoring would refine this
+
+    overall = composition_score * 0.30 + lighting_score * 0.20 + product_score * 0.25 + style_score * 0.25
+    return {
+        "overall": round(overall, 4),
+        "breakdown": {
+            "composition": round(composition_score, 4),
+            "lighting": round(lighting_score, 4),
+            "product_visibility": round(product_score, 4),
+            "style_consistency": round(style_score, 4),
+        },
+        "explanation": f"Heuristic keyframe scoring based on prompt keywords",
+        "heuristic": True,
+    }
 
 
 async def _score_clip_candidate(data: dict, params: dict | None = None) -> dict:
-    """Score a video clip candidate."""
-    return _heuristic_generic(data, default=0.75)
+    """Score a video clip candidate with multi-dimensional heuristics.
+
+    Dimensions: prompt quality (30%), duration match (25%), file presence (25%), continuity (20%).
+    """
+    prompt = str(data.get("prompt", "")).lower()
+    duration = data.get("duration", 0)
+    target_duration = data.get("target_duration", duration)
+    file_size = data.get("file_size", 0)
+
+    # Prompt quality: presence of motion / action keywords
+    motion_keywords = ["motion", "movement", "tracking", "pan", "zoom", "rotate", "fade"]
+    prompt_score = 1.0 if any(kw in prompt for kw in motion_keywords) else 0.6
+    if not prompt:
+        prompt_score = 0.4
+
+    # Duration match: within 20% of target
+    if target_duration > 0:
+        ratio = min(duration, target_duration) / max(duration, target_duration, 1)
+        duration_score = 0.5 + 0.5 * ratio
+    else:
+        duration_score = 0.6
+
+    # File presence: non-zero file size indicates real generation
+    file_score = 1.0 if file_size > 1024 else 0.3
+
+    # Continuity: presence of continuity frame reference
+    continuity_score = 1.0 if data.get("continuity_frame") else 0.6
+
+    overall = prompt_score * 0.30 + duration_score * 0.25 + file_score * 0.25 + continuity_score * 0.20
+    return {
+        "overall": round(overall, 4),
+        "breakdown": {
+            "prompt_quality": round(prompt_score, 4),
+            "duration_match": round(duration_score, 4),
+            "file_presence": round(file_score, 4),
+            "continuity": round(continuity_score, 4),
+        },
+        "explanation": f"Heuristic clip scoring: prompt={prompt_score:.2f}, duration={duration_score:.2f}, file={file_score:.2f}",
+        "heuristic": True,
+    }
 
 
 async def _score_final_candidate(data: dict, params: dict | None = None) -> dict:
-    """Score a final assembled video candidate."""
-    return _heuristic_generic(data, default=0.80)
+    """Score a final assembled video candidate with multi-dimensional heuristics.
+
+    Dimensions: duration compliance (30%), audio present (25%), thumbnail present (25%), file valid (20%).
+    """
+    duration = data.get("duration", 0)
+    target_duration = data.get("target_duration", 0)
+    has_audio = bool(data.get("audio_path") or data.get("audio_paths"))
+    has_thumbnail = bool(data.get("thumbnail_path") or data.get("thumbnail_paths"))
+    file_size = data.get("file_size", 0)
+
+    # Duration compliance: within 10% of target
+    if target_duration > 0:
+        diff = abs(duration - target_duration) / target_duration
+        duration_score = max(0.0, 1.0 - diff * 5)
+    else:
+        duration_score = 0.6 if duration > 0 else 0.0
+
+    audio_score = 1.0 if has_audio else 0.3
+    thumbnail_score = 1.0 if has_thumbnail else 0.3
+    file_score = 1.0 if file_size > 1024 * 1024 else 0.5  # > 1MB = real video
+
+    overall = duration_score * 0.30 + audio_score * 0.25 + thumbnail_score * 0.25 + file_score * 0.20
+    return {
+        "overall": round(overall, 4),
+        "breakdown": {
+            "duration_compliance": round(duration_score, 4),
+            "audio_present": round(audio_score, 4),
+            "thumbnail_present": round(thumbnail_score, 4),
+            "file_valid": round(file_score, 4),
+        },
+        "explanation": f"Heuristic final scoring: duration={duration_score:.2f}, audio={audio_score:.2f}, thumb={thumbnail_score:.2f}, file={file_score:.2f}",
+        "heuristic": True,
+    }
 
 
 def _heuristic_generic(data: dict, default: float = 0.75) -> dict:

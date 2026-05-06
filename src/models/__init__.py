@@ -56,9 +56,6 @@ class Platform(StrEnum):
 
 class Language(StrEnum):
     EN = "en"
-    ES = "es"
-    FR = "fr"
-    DE = "de"
 
 
 class ApprovalStatus(StrEnum):

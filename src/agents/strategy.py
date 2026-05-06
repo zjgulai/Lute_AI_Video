@@ -93,7 +93,7 @@ class StrategyAgent:
 
     def __init__(self, use_mock: bool = False, quality_level: str | None = None, content_scenario: str = "general", use_skills: bool = False):
         self.use_skills = use_skills
-        self.use_mock = use_mock or (not use_skills and not llm._clients)
+        self.use_mock = use_mock or (not use_skills and not llm.is_configured())
         self.quality_level = quality_level
         self.content_scenario = content_scenario
         # Load scenario configuration from strategy_source/
@@ -117,6 +117,12 @@ class StrategyAgent:
         week: str,
     ) -> WeeklyCalendar:
         if self.use_mock:
+            from src.config import ALLOW_MOCK_MODE, ENVIRONMENT
+            if not ALLOW_MOCK_MODE:
+                raise RuntimeError(
+                    f"Mock mode is disabled (ALLOW_MOCK_MODE=false, ENVIRONMENT={ENVIRONMENT}). "
+                    f"Set use_mock=False and ensure API keys are configured."
+                )
             logger.info("strategy_agent: using mock data", quality_level=self.quality_level)
             # Build platform set once — must use state's target_platforms
             # Frontend sends lowercase strings ('shopify', 'amazon') but Platform enum keys are uppercase ('SHOPIFY')

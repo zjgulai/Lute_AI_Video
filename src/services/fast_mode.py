@@ -169,7 +169,14 @@ class FastModeService:
             try:
                 video_result = await video_future
             except Exception as e:
-                logger.error("fast_mode: video generation failed", error=str(e))
+                from src.tools.error_classifier import classify_error
+                structured = classify_error(e, context="fast_mode.video")
+                logger.error(
+                    "fast_mode: video generation failed",
+                    error=str(e),
+                    error_code=structured.code.value,
+                    recoverable=structured.recoverable,
+                )
                 raise RuntimeError(f"Video generation failed: {e}") from e
             tts_path = None
             tts_time_ms = 0

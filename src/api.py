@@ -64,8 +64,28 @@ if HAS_FASTAPI:
         from src.routers._state import _restore_thread_index
         _restore_thread_index()
         # P1-10: Start background thread cache eviction loop
-        from src.routers._state import _periodic_cache_eviction
-        asyncio.create_task(_periodic_cache_eviction())
+        from src.routers._state import _periodic_cache_eviction, _register_background_task
+        _register_background_task(
+            asyncio.create_task(_periodic_cache_eviction()),
+            label="cache_eviction",
+        )
+        # P0: Production API key sanity check — fail-fast if required keys missing
+        from src.config import ENVIRONMENT
+        if ENVIRONMENT == "production":
+            from src.config import DEEPSEEK_API_KEY, POYO_API_KEY, SILICONFLOW_API_KEY, SEEDANCE_API_KEY
+            missing = []
+            if not DEEPSEEK_API_KEY:
+                missing.append("DEEPSEEK_API_KEY")
+            if not POYO_API_KEY and not SEEDANCE_API_KEY:
+                missing.append("POYO_API_KEY or SEEDANCE_API_KEY (at least one video backend required)")
+            if not SILICONFLOW_API_KEY:
+                missing.append("SILICONFLOW_API_KEY")
+            if missing:
+                raise RuntimeError(
+                    f"Production startup failed: missing required API keys: {', '.join(missing)}. "
+                    f"Set them in environment variables or switch to development mode."
+                )
+
         # Portfolio: auto-rebuild assets/portfolio/index.json on pipeline.completed
         try:
             from src.tools.portfolio_hook import register_portfolio_hook

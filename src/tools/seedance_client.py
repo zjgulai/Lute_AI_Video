@@ -24,6 +24,7 @@ from src.config import (
     POYO_VIDEO_MODEL,
     OUTPUT_DIR,
 )
+from src.tools.llm_client import get_request_api_key
 
 logger = structlog.get_logger()
 
@@ -96,14 +97,18 @@ class SeedanceClient:
         output_dir: Path | None = None,
     ):
         # Unified routing: poyo.ai preferred when POYO_API_KEY is set
-        _seedance_key = api_key or SEEDANCE_API_KEY
+        # P0-1: Read from request context first (contextvars) for multi-tenant isolation
+        req_poyo = get_request_api_key("POYO_API_KEY")
+        req_seedance = get_request_api_key("SEEDANCE_API_KEY")
+
+        _seedance_key = api_key or req_seedance or SEEDANCE_API_KEY
         _seedance_url = base_url or SEEDANCE_API_BASE_URL
         self._is_poyo = False
 
-        if POYO_API_KEY:
+        if req_poyo or POYO_API_KEY:
             self._is_poyo = True
-            _seedance_key = POYO_API_KEY
-            _seedance_url = POYO_API_BASE_URL
+            _seedance_key = api_key or req_poyo or POYO_API_KEY
+            _seedance_url = base_url or POYO_API_BASE_URL
             logger.info("seedance: using poyo.ai backend (unified)")
         elif _seedance_key:
             logger.info("seedance: using native ByteDance API")
@@ -168,7 +173,13 @@ class SeedanceClient:
                     prompt=prompt,
                 )
 
-        return await self._execute_with_retry(_do_generate, "text_to_video", prompt)
+        result = await self._execute_with_retry(_do_generate, "text_to_video", prompt)
+        from src.tools.cost_tracker import track
+        track(
+            api="poyo_video" if self._is_poyo else "seedance_video",
+            units=1,
+        )
+        return result
 
     async def image_to_video(
         self,

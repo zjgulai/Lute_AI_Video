@@ -210,6 +210,21 @@ _SCENARIO_STEP_ORDER: dict[str, list[str]] = {
     ],
 }
 
+_STEP_DURATIONS: dict[str, str] = {
+    "strategy": "~5s",
+    "scripts": "~5s",
+    "compliance": "~2s",
+    "storyboards": "~4s",
+    "keyframe_images": "~5-60s",
+    "video_prompts": "~3s",
+    "thumbnail_prompts": "~3s",
+    "seedance_clips": "~6min",
+    "tts_audio": "~3min",
+    "thumbnail_images": "~2min",
+    "assemble_final": "~15s",
+    "audit": "~5s",
+}
+
 
 def _validate_scenario(scenario: str) -> None:
     from fastapi import HTTPException

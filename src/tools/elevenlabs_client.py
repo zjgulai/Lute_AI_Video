@@ -29,9 +29,6 @@ BASE_URL = "https://api.elevenlabs.io/v1"
 # Voice presets for baby-feeding brand (warm, maternal, professional)
 VOICE_PRESETS = {
     "en": "21m00Tcm4TlvDq8ikWAM",  # Rachel — warm, American female
-    "es": "ErXwobaYiN019PkySvjV",  # Spanish warm female
-    "fr": "jsCqWAovK2LkecY7zXc4",  # French calm female
-    "de": "TxGEqnHWrfWFTfGW9XjX",  # German precise female
 }
 
 # ElevenLabs model

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 优化路线图
+    url: https://github.com/zjgulai/AI_vedio/blob/main/docs/workflows/optimization-plan-mece-audit-2026-05-06-stable.md
+    about: 28 项任务的总览、依赖图与决策记录
+  - name: MECE 审计原文
+    url: https://github.com/zjgulai/AI_vedio/blob/main/docs/analysis/mece_deep_audit_final_20260506.md
+    about: 报告 A — 16 项核心问题 + 8 反直觉洞察
+  - name: 架构审计原文
+    url: https://github.com/zjgulai/AI_vedio/blob/main/eval/architecture-deep-audit-report-20260506.md
+    about: 报告 B — 三轮迭代,42 项问题(14 CRITICAL + 18 WARNING + 10 NOTE)
