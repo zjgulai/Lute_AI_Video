@@ -168,8 +168,14 @@ class S5BrandVlogPipeline:
         self, product_sku: dict, models: list[dict],
         scene_id: str, story: str, duration: int, errors: list[str],
     ) -> list[dict]:
-        """Generate VLOG shot list via DeepSeek-V4-Pro."""
-        from src.tools.llm_client import llm
+        """Generate VLOG shot list via DeepSeek-V4-Pro.
+
+        Uses 120s timeout (vs default 60s) because VLOG strategy prompts
+        are longer and DeepSeek-V4-Pro reasoning can take 60-90s.
+        """
+        from src.tools.llm_client import LLMClient
+
+        llm = LLMClient(timeout=120.0)
 
         views = product_sku.get("views", [])
         views_text = "\n".join(

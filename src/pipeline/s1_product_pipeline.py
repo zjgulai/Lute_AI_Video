@@ -97,7 +97,7 @@ class S1ProductDirectPipeline:
         # Phase 2+3: force English output. Languages param is locked to ["en"]
         # at the API layer; this is a safety net for direct pipeline calls.
         languages = ["en"]
-        product_name = product_catalog.get("name", "Product")
+        product_name = product_catalog.get("product_name") or product_catalog.get("name", "Product")
         brand_name = (brand_guidelines or {}).get("brand_name", "")
         target_language = "en"
         label = output_label or f"s1_{int(time.time())}"
