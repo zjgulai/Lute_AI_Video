@@ -11,6 +11,7 @@ from typing import Any
 
 import structlog
 
+from src.config import DEFAULT_LANGUAGES
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -218,7 +219,7 @@ class ScriptWriterSkill(SkillCallable):
         from src.tools.llm_client import llm
 
         briefs = params["briefs"]
-        languages = params.get("target_languages", ["en"])
+        languages = params.get("target_languages", DEFAULT_LANGUAGES)
         brand_guidelines = params.get("brand_guidelines", {})
         variant = params.get("variant", "standard")
         logger.info("script-writer: generating", count=len(briefs), langs=languages, variant=variant)
@@ -394,7 +395,7 @@ class ScriptWriterSkill(SkillCallable):
 
     def fallback(self, params: dict) -> SkillResult:
         briefs = params.get("briefs", [{"id": "fb", "topic": "Product"}])
-        languages = params.get("target_languages", ["en"])
+        languages = params.get("target_languages", DEFAULT_LANGUAGES)
         scripts = []
         for brief in briefs[:2]:
             for lang in languages[:1]:

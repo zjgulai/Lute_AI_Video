@@ -28,6 +28,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src.config import DEFAULT_LANGUAGES
+
 import structlog
 
 from src.config import OUTPUT_DIR
@@ -94,9 +96,10 @@ class S1ProductDirectPipeline:
         video_duration = video_duration if video_duration in valid else 30
 
         platforms = target_platforms or ["tiktok", "shopify"]
-        # Phase 2+3: force English output. Languages param is locked to ["en"]
-        # at the API layer; this is a safety net for direct pipeline calls.
-        languages = ["en"]
+        # Phase 2+3: force English output. Languages param is locked to
+        # DEFAULT_LANGUAGES at the API layer; this is a safety net for direct
+        # pipeline calls.
+        languages = DEFAULT_LANGUAGES
         product_name = product_catalog.get("product_name") or product_catalog.get("name", "Product")
         brand_name = (brand_guidelines or {}).get("brand_name", "")
         target_language = "en"

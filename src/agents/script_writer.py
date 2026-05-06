@@ -10,6 +10,7 @@ import json
 
 import structlog
 
+from src.config import DEFAULT_LANGUAGES
 from src.agents.i18n import I18nService
 from src.models import AuditCriterionStatus, AuditReport, Brief, Language, Script, ScriptSegment
 from src.tools.llm_client import llm
@@ -39,12 +40,12 @@ class ScriptWriterAgent:
             briefs: Content briefs to write scripts for.
             brand_guidelines: Brand tone/voice/colors.
             strategy_audit: Optional audit report for quality signal injection.
-            target_languages: List of language codes (en/es/fr/de). Defaults to ["en"].
+            target_languages: List of language codes. Defaults to DEFAULT_LANGUAGES.
 
         Returns:
             List of scripts — one per brief per platform per language.
         """
-        languages = target_languages or ["en"]
+        languages = target_languages or DEFAULT_LANGUAGES
         quality_signals = self._extract_quality_signals(strategy_audit)
         briefs_json = json.dumps(
             [b.model_dump(mode="json") for b in briefs], indent=2, default=str

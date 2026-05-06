@@ -50,6 +50,15 @@ async def run_s1_product_direct(body: dict):
     from src.pipeline.state_manager import PipelineStateManager
 
     product_catalog = body.get("product_catalog", {})
+    product_name = product_catalog.get("product_name", product_catalog.get("name", "unknown"))
+
+    # P3-4: Bind pipeline context to all downstream structlog calls
+    structlog.contextvars.bind_contextvars(
+        product_name=product_name,
+        brand_name=product_catalog.get("brand_name", ""),
+        scenario="s1",
+        mode="auto",
+    )
     product_catalog = await translate_catalog_to_english(product_catalog)
 
     config = {
@@ -146,6 +155,16 @@ async def run_s1_product_direct(body: dict):
 async def run_s2_brand_campaign(body: dict):
     """Run S2 Brand Campaign pipeline."""
     _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
+
+    brand_package = body.get("brand_package", {})
+    # P3-4: Bind pipeline context to all downstream structlog calls
+    structlog.contextvars.bind_contextvars(
+        product_name=brand_package.get("brand_name", "unknown"),
+        brand_name=brand_package.get("brand_name", ""),
+        scenario="s2",
+        mode="auto",
+    )
+
     from src.pipeline.s2_brand_pipeline import S2BrandCampaignPipeline
     p = S2BrandCampaignPipeline()
     r = await p.run(

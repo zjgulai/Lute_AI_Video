@@ -37,8 +37,7 @@ TTS_TIMEOUT_SECONDS = 60.0
 # Preset voices for different languages / use cases.
 # These are SiliconFlow CosyVoice2 built-in speaker IDs.
 VOICE_PRESETS = {
-    "en": DEFAULT_VOICE,                       # English — warm male (alex)
-    "zh": "FunAudioLLM/CosyVoice2-0.5B:diana", # Chinese — warm female (diana)
+    "en": DEFAULT_VOICE,  # English — warm male (alex)
 }
 
 
