@@ -21,6 +21,22 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
   (`text-white/40` → `text-[var(--text-muted)]`)
 - CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
 
+**2026-05-07 更新 (Phase 2 架构归一化完成):**
+- **双运行时架构统一**: S3/S4/S5 全部接入 `StepRunner` + `run_step()` 接口，与 S1 统一为
+  StepRunner 主运行时 + LangGraph 兼容运行时。`step_runner.py` 的 `_SCENARIO_CONFIGS`
+  集中管理 s1/s3/s4/s5 的 step_order 与 pipeline_class 映射。
+- **`_pipeline` 延迟初始化**: `compile_pipeline()` 从模块导入时执行改为 `get_pipeline()`
+  工厂函数首次调用时延迟初始化，避免启动时即建立 PostgresSaver 连接。
+- **SkillRegistry 实例隔离**: `_skills` 从类变量改为实例变量，每个 `SkillRegistry()` 实例
+  拥有独立的 skill 副本，并发/测试场景互不干扰。
+- **API key 租户化 (P2-8)**: 新增 `api_keys` 表 + Alembic 迁移，`verify_api_key` 改为 async
+  函数，支持 PG 查询验证 + 环境变量 fallback。新增 `tenant_id` contextvar。
+- **nginx rate limit**: 生产限流从 FastAPI middleware 内存实现迁移到 nginx
+  `limit_req_zone` + `limit_req`，`/health` 与 `/api/media/` 豁免。
+- **LLMClient 缓存 TTL**: `_clients` 增加 300s TTL + 20 上限 + `key_hash` 租户维度，防止
+  死连接池堆积和无界内存增长。
+- **target_languages 收口**: 6 处硬编码 `["en"]` 统一改为 `config.DEFAULT_LANGUAGES`。
+
 ---
 
 ## Architecture at a Glance
@@ -44,11 +60,18 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
           ┌──────────────┼──────────────┐
           ▼              ▼              ▼
 ┌──────────────┐ ┌─────────────┐ ┌──────────────────┐
-│ LangGraph    │ │ PostgreSQL  │ │ External APIs     │
-│ Pipeline     │ │ (primary)   │ │ DeepSeek V4-Pro   │
-│ 16 nodes     │ │ SQLite      │ │ poyo.ai (img/vid) │
-│ 4 checkpoints│ │ (fallback)  │ │ CosyVoice (TTS)   │
+│ LangGraph    │ │ StepRunner  │ │ External APIs     │
+│ Pipeline     │ │ (S1-S5)     │ │ DeepSeek V4-Pro   │
+│ 16 nodes     │ │ run_step()  │ │ poyo.ai (img/vid) │
+│ 4 checkpoints│ │ per-scenario│ │ CosyVoice (TTS)   │
 └──────────────┘ └─────────────┘ └──────────────────┘
+          │              │
+          └──────────────┴──────────────┐
+                         ▼              ▼
+               ┌─────────────┐  ┌──────────────┐
+               │ PostgreSQL  │  │ SQLite       │
+               │ (primary)   │  │ (fallback)   │
+               └─────────────┘  └──────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -362,7 +385,16 @@ Gate approval triggers background task resume to avoid HTTP 504 on long-running 
 
 ### S2-S5: Other Scenarios
 
-S2-S5 have simpler pipeline implementations without step-by-step mode or gates. Each has its own pipeline class in `src/pipeline/`.
+**Phase 2 (2026-05-07) 已全部接入 StepRunner:**
+- S3/S4/S5 实现 `run_step(step_name, state)` 接口，`run()` 内部委托给 StepRunner 以保持向后兼容
+- `step_runner.py:_SCENARIO_CONFIGS` 集中定义各场景的 step_order：
+  - s1: 12 steps (strategy → audit)
+  - s3: 12 steps (video_analysis → audit)
+  - s4: 3 steps (scripts → video_prompts → thumbnails)
+  - s5: 6 steps (vlog_strategy → audit)
+- S2 是 S1 的 wrapper (`brand_mode=True`)，无需单独迁移
+
+Gate 系统目前仅在 S1 启用，S3-S5 的 gate 接入是后续迭代方向。
 
 ---
 
@@ -403,9 +435,12 @@ Configured via `.env`:
 - `brand_packages` — brand guidelines + assets
 - `influencers` — influencer profiles
 - `publish_logs` — multi-platform publish history
+- `api_keys` — per-tenant API key management (P2-8); tenant_id, key_hash(SHA-256),
+  permissions JSONB, expires_at, revoked_at. Added via Alembic migration `1ffe98505ace`.
+  `verify_api_key` queries this table first, falls back to env `API_KEY`.
 - `video_metrics` — performance metrics; Alembic migration `1efc41794d64` (2026-05-01) adds the
-  PG table. `src/storage/migrations/001_init.sql` does NOT include it, so a fresh Docker
-  Compose stack still runs SQLite-only until `alembic upgrade head` runs against the PG.
+  PG table. `src/storage/migrations/001_init.sql` now includes it inline so a fresh Docker
+  Compose stack gets a complete schema without requiring a separate `alembic upgrade head` step.
   Repository (`metrics_repository.py`) is PG-first with SQLite fallback — both paths are
   exercised in tests.
 
@@ -652,8 +687,12 @@ location /api/media/ {
 - All JSON responses wrapped with `_meta` (trace_id, duration_ms, version, timestamp)
 - API key required for all mutating endpoints
 - Per-tenant `API_KEY`:每个开通用户拿一组独立全权限 token,后端不做"低权限只读"分级
-- Rate limiting: 120 req/min per IP
+- Rate limiting: **nginx** `limit_req_zone` 120r/m per IP (P2-11), burst=20.
+  FastAPI middleware 内存限流降级为 fallback（直接访问 backend 不走 nginx 时生效）。
+  `/health` 与 `/api/media/` 豁免限流。
 - Per-request API key injection via contextvars for multi-tenant safety
+- Tenant ID: `verify_api_key` 解析 API key 后通过 `set_tenant_id()` 写入 contextvar，
+  下游 cost tracking / audit log 可读取（P2-8）
 
 ### Pipeline State
 - Single `VideoPipelineState` TypedDict with 30+ fields
@@ -704,8 +743,8 @@ location /api/media/ {
 - **api_assets.py compat shim:** `/api/assets/*` uses in-memory dicts (`_brand_packages`,
   `_influencers`). Frontend OpenAPI types still reference these paths, so don't remove the
   router; do migrate any new asset features to `src/routers/assets.py` instead.
-- **S2-S5 lack step-by-step / gate system:** S1 only. Adding gates to S2-S5 is a planned
-  follow-up.
+- **S2-S5 step-by-step / gate system:** S3/S4/S5 已完成 StepRunner 迁移 (P2)，
+  `run_step()` 接口已统一，但 gate 系统仅在 S1 启用。S3-S5 的 gate 接入是后续迭代方向。
 - **Long pipeline UX:** S2/S3/S5 can take 10-30 min. curl/HTTP clients commonly time out
   before the pipeline finishes (backend keeps running). Consider async submit + GET
   /status/{thread_id} polling for the long scenarios. Phase D nginx timeout 已加到 1500s,
