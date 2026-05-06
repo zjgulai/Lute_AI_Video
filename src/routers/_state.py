@@ -48,6 +48,10 @@ _background_tasks: dict[str, dict[str, Any]] = {}
 _THREAD_CACHE_TTL_SEC = 24 * 3600  # 24 hours
 _thread_cache_meta: dict[str, float] = {}  # thread_id → last_accessed timestamp
 
+# P4-4: Thread → StepRunner label mapping for LangGraph proxy layer
+_thread_label_map: dict[str, str] = {}
+_label_thread_map: dict[str, str] = {}
+
 
 # ── Pydantic models ──
 class PipelineStartRequest(BaseModel):
