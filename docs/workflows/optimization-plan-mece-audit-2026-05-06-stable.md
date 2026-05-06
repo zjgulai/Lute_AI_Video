@@ -632,6 +632,34 @@ T1.1 ──→ T2.8 (租户化数据库依赖 contextvars 隔离已就绪)
 | R4 | S2~S5 仍走 LangGraph，StepRunner 的 `pipeline_degraded` 不生效 | S2~S5 场景出错 | Phase 2 将 S2~S5 迁到 StepRunner — 已完成 |
 | R5 | Gate 启发式评分未经过真实数据校准 | 候选排序可能与人工判断不符 | 收集 Gate 使用数据后迭代权重 |
 
+### Phase 1-3 补充修复日志（深度检查发现）
+
+| 日期 | 任务 ID | 状态 | Commit | 备注 |
+|---|---|---|---|---|
+| 2026-05-07 | T3.4 | ✅ | 1e2b73c | S1 auto + S2 structlog bind_contextvars 补全（之前仅 S3/S4/S5/S1-step 有） |
+| 2026-05-07 | T1.11 | ✅ | 1e2b73c | CosyVoice VOICE_PRESETS 删除残留 zh 键 |
+| 2026-05-07 | T2.10 | ✅ | 1e2b73c | skills/agents 内部 5 处硬编码 ["en"] → DEFAULT_LANGUAGES |
+| 2026-05-07 | T1.8 | ✅ | 1e2b73c | 新建 scripts/check_step_order_consistency.py，前后端 12 步一致 |
+| 2026-05-07 | T2.6 | ✅ | — | 深度检查确认 asyncio.to_thread(get_pipeline) 已覆盖全部 6 处调用点，T2.6 实际已完成 |
+
+### Phase 4 执行日志
+
+| 日期 | 任务 ID | 状态 | Commit | 备注 |
+|---|---|---|---|---|
+| 2026-05-07 | T4.3 | ✅ | 7fa5932 | 死代码批次 1-3：_try_save_metrics 静默 ImportError / test_i18n.py ES/FR/DE 死测试 / scenario.py 未使用 import / telemetry.py 死函数 / cost_tracker.py 死函数 |
+| 2026-05-07 | T4.2 | ✅ | 9170ae3 | Prometheus MVP：6 个指标(pipeline/step/runtime) + /telemetry/prometheus 端点 + telemetry.py 自动镜像 |
+| 2026-05-07 | T4.4 | ✅ | 0fd6467 | LangGraph 代理层：pipeline.py 重写为 StepRunner 代理，_thread_label_map 映射，状态转换兼容 |
+| 2026-05-07 | T4.4 | ✅ | 14c2925 | 前端死函数标记 @deprecated：startPipeline / fetchState / submitReview / fetchDistribution / fetchOutput / runS2BrandCampaign / runS3InfluencerRemix |
+| 2026-05-07 | T4.4 | ✅ | 6a7fede | test_api.py 适配代理层 review 响应（"resumed" → ("resumed", "idempotent_skip")） |
+
+### Phase 4 风险点记录
+
+| # | 风险 | 触发条件 | 缓解 |
+|---|---|---|---|
+| R14 | 代理层 state 转换是 best-effort，某些 legacy 字段可能缺失 | 外部调用方依赖特定 legacy 字段 | 保留原始 LangGraph 代码，代理层转换函数可迭代补全 |
+| R15 | /pipeline/start 启动后台 resume，调用方需轮询 /state 获取进度 | 调用方假设同步完成 | 返回 status: "started" 明确提示异步；label 字段可供 /scenario/{s}/state/{label} 直接查询 |
+| R16 | Prometheus 进程内计数器，多 worker 部署时各进程独立 | 多 worker / 多容器 | 如需聚合，后续接入 Prometheus pushgateway 或共享存储 |
+
 ---
 
 ## 8. 看板与文档链接
