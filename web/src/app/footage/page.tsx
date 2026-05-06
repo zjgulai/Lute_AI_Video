@@ -486,7 +486,7 @@ export default function FootagePage() {
                               />
                             ) : (
                               <div className="w-full h-full bg-[var(--bg-panel)] flex items-center justify-center">
-                                <Video size={32} weight="fill" className="text-white/40" />
+                                <Video size={32} weight="fill" className="text-[var(--text-muted)]" />
                               </div>
                             )}
                             <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-all">
@@ -500,9 +500,9 @@ export default function FootagePage() {
                         ) : (
                           <div className="w-full h-full bg-[var(--bg-panel)] flex items-center justify-center">
                             {isVideoType ? (
-                              <Video size={32} weight="fill" className="text-white/40" />
+                              <Video size={32} weight="fill" className="text-[var(--text-muted)]" />
                             ) : (
-                              <FileImage size={32} weight="fill" className="text-white/40" />
+                              <FileImage size={32} weight="fill" className="text-[var(--text-muted)]" />
                             )}
                           </div>
                         )}
