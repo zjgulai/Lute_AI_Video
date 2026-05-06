@@ -593,6 +593,25 @@ T1.1 ──→ T2.8 (租户化数据库依赖 contextvars 隔离已就绪)
 | 2026-05-07 | T2.11 | ✅ | 4d22ded | nginx limit_req_zone + limit_req，FastAPI middleware 降级为 fallback |
 | 2026-05-07 | T2.12 | ✅ | 4d22ded | LLMClient cache TTL=300s + max_size=20 + key_hash tenant 维度 |
 
+### Phase 3 执行日志
+
+| 日期 | 任务 ID | 状态 | Commit | 备注 |
+|---|---|---|---|---|
+| 2026-05-07 | T3.1 | ✅ | b0e2a13 | retry.py 改异常类型链(status_code 提取) + 字符串黑名单 |
+| 2026-05-07 | T3.2 | ✅ | b0e2a13 | webhook_manager.py 端口黑名单 + DNS 解析后二次检查防 rebinding |
+| 2026-05-07 | T3.3 | ✅ | b0e2a13 | docker-compose.yml 引用 .env + Dockerfile.backend 非 root USER |
+| 2026-05-07 | T3.4 | ✅ | b0e2a13 | scenario.py 入口 structlog.contextvars.bind_contextvars(product, brand, scenario) |
+| 2026-05-07 | T3.5 | ✅ | b0e2a13 | 前端 apiFetch timeout(30s/300s) + retry(1次) + useAppStore persist |
+| 2026-05-07 | T3.6 | ✅ | b0e2a13 | 新增 tests/test_s4_e2e.py + tests/test_s5_e2e.py |
+
+### Phase 3 风险点记录
+
+| # | 风险 | 触发条件 | 缓解 |
+|---|---|---|---|
+| R11 | apiFetch timeout 对长运行 pipeline 请求设 300s，但 S5 实测 28min 仍可能超时 | S5 真实 API 调用 | 已在调用方保留 signal 参数，需要更长时可由调用方显式传入 AbortController |
+| R12 | useAppStore persist 引入后，旧版本 localStorage 数据与新 schema 不兼容 | 用户已有旧版本 localStorage | zustand persist 默认会忽略未知字段，但建议版本升级时考虑 migration |
+| R13 | Docker USER appuser 可能对挂载卷(/app/output)无写权限 | volume 权限与容器用户 UID 不匹配 | docker-compose.yml 中已用 volumes 挂载，生产部署时需确认 host 目录权限 |
+
 ### Phase 2 风险点记录
 
 | # | 风险 | 触发条件 | 缓解 |
