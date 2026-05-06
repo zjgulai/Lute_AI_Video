@@ -16,7 +16,6 @@ from __future__ import annotations
 import time
 import uuid
 from collections import deque
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -30,55 +29,6 @@ import structlog
 def generate_trace_id() -> str:
     """Generate a UUID4 short string (8 chars)."""
     return uuid.uuid4().hex[:8]
-
-
-# ── TraceContext dataclass ──
-
-
-@dataclass
-class TraceContext:
-    """Request-level trace context."""
-
-    trace_id: str
-    request_path: str
-    started_at: datetime
-
-
-# ── Async context manager for tracing ──
-
-
-@asynccontextmanager
-async def with_trace(trace_id: str | None = None, request_path: str = "") -> TraceContext:
-    """Async context manager that yields a TraceContext.
-
-    Usage:
-        async with with_trace(request_path="/pipeline/start") as ctx:
-            ...
-    """
-    ctx = TraceContext(
-        trace_id=trace_id or generate_trace_id(),
-        request_path=request_path,
-        started_at=datetime.now(timezone.utc),
-    )
-    try:
-        yield ctx
-    finally:
-        pass
-
-
-# ── Log with trace_id ──
-
-
-def log_with_trace(logger, trace_id: str, event: str, **kwargs) -> None:
-    """Wrapper that adds trace_id to every log call.
-
-    Args:
-        logger: structlog logger instance
-        trace_id: trace ID to bind
-        event: log event name
-        **kwargs: additional log fields
-    """
-    logger.bind(trace_id=trace_id).info(event, **kwargs)
 
 
 # ── PipelineMetrics ──
@@ -212,6 +162,67 @@ class PipelineMetrics:
         }
 
 
+# ── Error Persistence (Admin Panel Phase 1) ──
+
+
+def _persist_error_to_db(
+    label: str,
+    step: str,
+    error: str,
+    context: dict[str, Any],
+) -> None:
+    """Fire-and-forget persistence to error_logs table.
+
+    Called from ErrorCollector.collect() — never raises, never blocks.
+    If the admin error_logs table doesn't exist yet (migration not run),
+    this silently skips.
+    """
+    try:
+        import asyncio
+
+        asyncio.ensure_future(
+            _persist_error_async(label, step, error, context)
+        )
+    except Exception:
+        pass  # Never let log persistence break the pipeline
+
+
+async def _persist_error_async(
+    label: str,
+    step: str,
+    error: str,
+    context: dict[str, Any],
+) -> None:
+    """Async DB insert for error log persistence."""
+    try:
+        from src.storage.db import get_pool, is_pg_available
+
+        if not is_pg_available():
+            return
+
+        tenant_id = context.get("tenant_id")
+        scenario = context.get("scenario")
+        error_code = context.get("error_code", "UNKNOWN")
+        traceback_text = context.get("traceback")
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO error_logs
+                    (tenant_id, scenario, error_code, message, traceback)
+                VALUES ($1, $2, $3, $4, $5)
+                """,
+                tenant_id,
+                scenario,
+                error_code,
+                error[:2000],  # Truncate very long messages
+                traceback_text[:5000] if traceback_text else None,
+            )
+    except Exception:
+        pass  # Silent — never let log persistence break anything
+
+
 # ── ErrorCollector ──
 
 
@@ -243,6 +254,7 @@ class ErrorCollector:
             error: error message
             context: additional context dict
         """
+        timestamp = datetime.now(timezone.utc)
         self._errors.append(
             {
                 "label": label,
@@ -250,9 +262,11 @@ class ErrorCollector:
                 "step": step,
                 "error": error,
                 "context": dict(context),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": timestamp.isoformat(),
             }
         )
+        # Persist to admin error_logs table (fire-and-forget, never blocks)
+        _persist_error_to_db(label, step, error, dict(context))
 
     def get_errors(self, label: str | None = None) -> list[dict[str, Any]]:
         """Return filtered errors.

@@ -348,34 +348,11 @@ async def analytics_node(state: VideoPipelineState) -> dict[str, Any]:
         label="pipeline.completed",
     )
 
-    # GAP-19: Persist metrics for cross-run analysis
-    _try_save_metrics(state)
     return {
         "analytics_reports": reports,
         "current_step": "analytics_complete",
         "pipeline_complete": True,
     }
-
-
-def _try_save_metrics(state: VideoPipelineState) -> None:
-    """Attempt to persist pipeline metrics via configured repository.
-
-    P2-3: Logs failures as warnings instead of silently swallowing.
-    Callers rely on metrics for cross-run analysis; silent failure
-    means we never know when telemetry is broken.
-    """
-    try:
-        from src.telemetry import save_run_metrics
-
-        metrics = state.get("pipeline_metrics", {})
-        if metrics:
-            save_run_metrics(metrics)
-    except Exception as exc:
-        logger.warning(
-            "telemetry: save_run_metrics failed",
-            error=str(exc)[:200],
-            trace_id=state.get("trace_id", "unknown"),
-        )
 
 
 # ═══════════════════════════════════════════

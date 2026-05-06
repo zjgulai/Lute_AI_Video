@@ -21,7 +21,6 @@ from src.routers._state import (
     _get_step_deps,
     _get_step_output,
     _register_background_task,
-    _background_tasks,
     FastModeRequest,
     S1StartRequest,
 )

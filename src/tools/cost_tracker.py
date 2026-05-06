@@ -94,19 +94,3 @@ def get_pipeline_cost(thread_id: str | None) -> float:
     if not thread_id:
         return 0.0
     return sum(r["cost_usd"] for r in _records if r.get("thread_id") == thread_id)
-
-
-def reset(thread_id: str | None = None) -> None:
-    """Clear records.  If thread_id is given, only remove that run's records."""
-    global _records
-    if thread_id:
-        _records = [r for r in _records if r.get("thread_id") != thread_id]
-    else:
-        _records = []
-
-
-def get_all_records(thread_id: str | None = None) -> list[dict]:
-    """Return a copy of records, optionally filtered by thread_id."""
-    if thread_id:
-        return [r.copy() for r in _records if r.get("thread_id") == thread_id]
-    return [r.copy() for r in _records]
