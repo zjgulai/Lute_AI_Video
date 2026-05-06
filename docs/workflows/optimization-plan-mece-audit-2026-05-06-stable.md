@@ -580,18 +580,18 @@ T1.1 ──→ T2.8 (租户化数据库依赖 contextvars 隔离已就绪)
 
 | 日期 | 任务 ID | 状态 | Commit | 备注 |
 |---|---|---|---|---|
-| 2026-05-07 | T2.1 | ✅ | TBD | S1 已原生支持 StepRunner（无需改动） |
-| 2026-05-07 | T2.2 | ✅ | TBD | S3 重写 run_step() + run() 向后兼容 |
-| 2026-05-07 | T2.3 | ✅ | TBD | S4 重写 run_step() + run() 向后兼容 |
-| 2026-05-07 | T2.4 | ✅ | TBD | S5 重写 run_step() + run() 向后兼容 |
-| 2026-05-07 | T2.5 | ✅ | TBD | _pipeline 全局单例 → get_pipeline() 延迟初始化工厂 |
-| 2026-05-07 | T2.6 | ✅ | TBD | get_pipeline() 用 asyncio.to_thread() 避免阻塞事件循环 |
-| 2026-05-07 | T2.7 | ✅ | TBD | SkillRegistry _skills 类变量 → 实例变量，12 文件调用更新 |
-| 2026-05-07 | T2.8 | ✅ | TBD | api_keys 表 + Alembic 迁移 + tenant_id contextvar + verify_api_key 异步化 |
-| 2026-05-07 | T2.9 | ✅ | TBD | Alembic 迁移链检查：线性无分支，初始 SQL 包含所有表 |
-| 2026-05-07 | T2.10 | ✅ | TBD | 6 文件硬编码 ["en"] → DEFAULT_LANGUAGES |
-| 2026-05-07 | T2.11 | ✅ | TBD | nginx limit_req_zone + limit_req，FastAPI middleware 降级为 fallback |
-| 2026-05-07 | T2.12 | ✅ | TBD | LLMClient cache TTL=300s + max_size=20 + key_hash tenant 维度 |
+| 2026-05-07 | T2.1 | ✅ | 4d22ded | S1 已原生支持 StepRunner（无需改动） |
+| 2026-05-07 | T2.2 | ✅ | 4d22ded | S3 重写 run_step() + run() 向后兼容 |
+| 2026-05-07 | T2.3 | ✅ | 4d22ded | S4 重写 run_step() + run() 向后兼容 |
+| 2026-05-07 | T2.4 | ✅ | 4d22ded | S5 重写 run_step() + run() 向后兼容 |
+| 2026-05-07 | T2.5 | ✅ | 4d22ded | _pipeline 全局单例 → get_pipeline() 延迟初始化工厂 |
+| 2026-05-07 | T2.6 | ✅ | 4d22ded | get_pipeline() 用 asyncio.to_thread() 避免阻塞事件循环 |
+| 2026-05-07 | T2.7 | ✅ | 4d22ded | SkillRegistry _skills 类变量 → 实例变量，12 文件调用更新 |
+| 2026-05-07 | T2.8 | ✅ | 4d22ded | api_keys 表 + Alembic 迁移 + tenant_id contextvar + verify_api_key 异步化 |
+| 2026-05-07 | T2.9 | ✅ | 4d22ded | Alembic 迁移链检查：线性无分支，初始 SQL 包含所有表 |
+| 2026-05-07 | T2.10 | ✅ | 4d22ded | 6 文件硬编码 ["en"] → DEFAULT_LANGUAGES |
+| 2026-05-07 | T2.11 | ✅ | 4d22ded | nginx limit_req_zone + limit_req，FastAPI middleware 降级为 fallback |
+| 2026-05-07 | T2.12 | ✅ | 4d22ded | LLMClient cache TTL=300s + max_size=20 + key_hash tenant 维度 |
 
 ### Phase 2 风险点记录
 
