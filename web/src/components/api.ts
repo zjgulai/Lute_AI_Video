@@ -431,6 +431,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 
 // ── Core pipeline APIs ──
 
+/** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
 export async function startPipeline(body: any, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch(getApiBase() + "/pipeline/start", {
     method: "POST",
@@ -442,6 +443,7 @@ export async function startPipeline(body: any, options?: { signal?: AbortSignal 
   return res.json();
 }
 
+/** @deprecated StepRunner pipelines do not use LangGraph checkpoint state. */
 export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/state", {
     headers: getHeaders(false),
@@ -451,6 +453,7 @@ export async function fetchState(threadId: string, options?: { signal?: AbortSig
   return res.json();
 }
 
+/** @deprecated Use /scenario/{s}/gate/{label}/{gate_id}/approve instead. */
 export async function submitReview(
   threadId: string,
   reviewNode: string,
@@ -468,6 +471,7 @@ export async function submitReview(
   return res.json();
 }
 
+/** @deprecated Use /scenario/{s}/state/{label} instead. */
 export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/distribution", {
     headers: getHeaders(false),
@@ -477,6 +481,7 @@ export async function fetchDistribution(threadId: string, options?: { signal?: A
   return res.json();
 }
 
+/** @deprecated Use /scenario/{s}/state/{label} instead. */
 export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/output", {
     headers: getHeaders(false),
@@ -499,6 +504,7 @@ export async function runS1ProductDirect(config: any, options?: { signal?: Abort
   return res.json();
 }
 
+/** @deprecated S2 is a thin wrapper around S1. Use runS1ProductDirect with brand_mode=true. */
 export async function runS2BrandCampaign(body: {
   brand_package: any;
   target_platforms?: string[];
@@ -515,6 +521,7 @@ export async function runS2BrandCampaign(body: {
   return res.json();
 }
 
+/** @deprecated Use /scenario/s3 (StepRunner) instead. */
 export async function runS3InfluencerRemix(body: {
   video_url: string;
   product: any;
@@ -697,6 +704,67 @@ export async function getSignedMediaUrl(filePath: string): Promise<string> {
     /* fallback to unsigned */
   }
   return getMediaUrl(filePath);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Admin Panel API (session-cookie auth, no X-API-Key)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Admin API fetch — uses session cookie authentication.
+ * Does NOT send X-API-Key header. Uses credentials: 'include' for HttpOnly cookie.
+ * On 401, redirects to /admin/login.
+ */
+export async function adminFetch(
+  path: string,
+  init?: RequestInit
+): Promise<Response> {
+  const base = getApiBase().replace(/\/$/, "");
+  const url = base + (path.startsWith("/") ? path : "/" + path);
+
+  const mergedInit: RequestInit = {
+    ...init,
+    credentials: "include",
+    headers: {
+      ...(init?.headers as Record<string, string> || {}),
+    },
+  };
+
+  // Admin API does NOT send X-API-Key
+  if (mergedInit.headers) {
+    delete (mergedInit.headers as Record<string, string>)["X-API-Key"];
+  }
+
+  try {
+    const res = await fetch(url, mergedInit);
+
+    if (res.status === 401 && typeof window !== "undefined") {
+      // Session expired — redirect to login
+      const currentPath = window.location.pathname;
+      if (!currentPath.startsWith("/admin/login")) {
+        window.location.href = "/admin/login";
+      }
+    }
+
+    return res;
+  } catch {
+    throw new Error("Admin API unreachable");
+  }
+}
+
+/**
+ * Fetch JSON from admin API. Returns parsed data or throws on error.
+ */
+export async function adminFetchJson<T = any>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
+  const res = await adminFetch(path, init);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "Unknown error");
+    throw new Error(errText || `Admin API error (${res.status})`);
+  }
+  return res.json();
 }
 
 // ── Connection test ──
