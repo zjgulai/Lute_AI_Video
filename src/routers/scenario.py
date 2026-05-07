@@ -922,3 +922,164 @@ async def regenerate_gate_candidate(scenario: str, label: str, gate_id: str, can
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
+# ── Unified Async Execution (Phase 1A) ──
+
+
+@router.post("/scenario/{scenario}/submit", dependencies=[Depends(verify_api_key)])
+async def submit_scenario(scenario: str, body: dict[str, Any]):
+    """Submit a scenario for async execution.
+
+    Initializes pipeline state and immediately returns a label.
+    The pipeline runs in the background — use GET /status/{label} to poll.
+
+    Args:
+        scenario: "s1", "s2", "s3", "s4", or "s5"
+        body: Scenario-specific config dict (same as /scenario/{s} endpoints)
+
+    Returns:
+        { label, status: "queued", trace_id }
+    """
+    _validate_scenario(scenario)
+    _inject_api_keys(body.get("api_keys", {}))
+
+    from src.pipeline.step_runner import StepRunner
+    from src.pipeline.state_manager import PipelineStateManager
+    from src.tools.cost_tracker import set_thread_id
+
+    step_runner = StepRunner(PipelineStateManager())
+
+    # Build config per-scenario (same logic as blocking endpoints)
+    if scenario == "s1":
+        from src.tools.translate import translate_catalog_to_english
+        product_catalog = body.get("product_catalog", {})
+        product_catalog = await translate_catalog_to_english(product_catalog)
+        config = {
+            "product_catalog": product_catalog,
+            "brand_guidelines": body.get("brand_guidelines"),
+            "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
+            "target_languages": DEFAULT_LANGUAGES,
+            "week": body.get("week", ""),
+            "video_duration": body.get("video_duration", 30),
+            "brand_mode": body.get("brand_mode", False),
+            "enable_media_synthesis": body.get("enable_media_synthesis", True),
+        }
+    elif scenario == "s2":
+        config = {
+            "brand_package": body.get("brand_package", {}),
+            "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
+            "target_languages": body.get("target_languages", DEFAULT_LANGUAGES),
+            "week": body.get("week", ""),
+        }
+    elif scenario == "s3":
+        from src.tools.translate import translate_catalog_to_english
+        product = body.get("product", {})
+        if isinstance(product, dict):
+            product = await translate_catalog_to_english(product)
+        config = {
+            "video_url": body.get("video_url", ""),
+            "product": product,
+            "influencer_name": body.get("influencer_name", "Influencer"),
+            "brief_id": body.get("brief_id", ""),
+            "video_duration": body.get("video_duration", 30),
+        }
+    elif scenario == "s4":
+        config = {
+            "footage_assets": body.get("footage_assets", []),
+            "product_info": body.get("product_info", {}),
+            "topic": body.get("topic", ""),
+            "target_platforms": body.get("target_platforms", ["tiktok"]),
+        }
+    elif scenario == "s5":
+        config = {
+            "brand_id": body.get("brand_id", "momcozy"),
+            "product_sku": body.get("product_sku", {}),
+            "scene_id": body.get("scene_id", "living-room"),
+            "selected_models": body.get("selected_models", []),
+            "story_description": body.get("story_description", ""),
+            "video_duration": body.get("video_duration", 30),
+        }
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
+
+    label = await step_runner.init_state(config=config, mode="auto", scenario=scenario)
+    set_thread_id(label)
+
+    # Start pipeline in background so HTTP returns immediately
+    async def _background_run() -> None:
+        try:
+            await step_runner.resume(label)
+        except Exception as e:
+            logger.error("background_run_failed", label=label, scenario=scenario, error=str(e)[:200])
+
+    task = asyncio.create_task(_background_run())
+    _register_background_task(task, label)
+
+    return {
+        "label": label,
+        "status": "queued",
+        "trace_id": label.split("_")[-1] if "_" in label else "",
+    }
+
+
+@router.get("/scenario/{scenario}/status/{label}", dependencies=[Depends(verify_api_key)])
+async def get_scenario_status(scenario: str, label: str):
+    """Get current execution status for a pipeline run.
+
+    Args:
+        scenario: Scenario identifier (e.g., "s1").
+        label: Pipeline run label from /submit.
+
+    Returns:
+        {
+            label, status, current_step, progress, pipeline_degraded,
+            gate_status, result, errors
+        }
+    """
+    from src.pipeline.state_manager import PipelineStateManager
+
+    _validate_scenario(scenario)
+    try:
+        state_manager = PipelineStateManager()
+        state = await state_manager.load(label)
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+
+        step_order = _SCENARIO_STEP_ORDER.get(scenario, [])
+        current_step = state.get("current_step", "")
+        steps = state.get("steps", {})
+
+        # Calculate progress: done steps / total steps
+        done_count = sum(1 for s in steps.values() if s.get("status") == "done")
+        total = len(step_order)
+        progress = round(done_count / total, 2) if total > 0 else 0.0
+
+        # Determine overall status
+        if state.get("pipeline_degraded"):
+            status = "error"
+        elif current_step is None or current_step == "":
+            status = "completed"
+        elif steps.get(current_step, {}).get("status") == "error":
+            status = "error"
+        else:
+            gate_status = state.get("gate_status")
+            if gate_status == "awaiting_approval":
+                status = "paused"
+            else:
+                status = "running"
+
+        return {
+            "label": label,
+            "scenario": scenario,
+            "status": status,
+            "current_step": current_step,
+            "progress": progress,
+            "pipeline_degraded": state.get("pipeline_degraded", False),
+            "gate_status": state.get("gate_status"),
+            "errors": state.get("errors", []),
+            "result": state.get("result"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("get_scenario_status failed", label=label, error=str(e)[:200])
+        raise HTTPException(status_code=500, detail=_safe_error(e))
