@@ -37,6 +37,18 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
   死连接池堆积和无界内存增长。
 - **target_languages 收口**: 6 处硬编码 `["en"]` 统一改为 `config.DEFAULT_LANGUAGES`。
 
+**2026-05-07 更新 (Phase 4 完成):**
+- **pyright 类型检查**: `pyproject.toml` 配置 `[tool.pyright]`，启用
+  `reportMissingTypeArgument` + `reportPossiblyUnboundVariable`，`src` + `tests` 0 错误。
+  发现并修复 2 个真实运行时缺陷（test_s1_e2e.py / test_media_clients.py 的 async 调用缺少 await）。
+- **Prometheus exporter (T4.2)**: 新增 `src/telemetry_prometheus.py`，暴露 6 个指标
+  （pipeline_runs_total、pipeline_duration_seconds、step_duration_seconds 等），
+  `/telemetry/prometheus` 端点返回 Prom exposition 格式。
+- **LangGraph 代理层 (T4.4)**: `/pipeline/*` 6 个端点保留 API 契约，内部代理到 StepRunner。
+  前端 7 个死函数标记 `@deprecated`，指引调用方迁移到 `/scenario/*` 端点。
+- **死代码清理 (T4.3)**: 删除 `_try_save_metrics` 静默 ImportError、test_i18n.py ES/FR/DE
+  死测试、telemetry/cost_tracker 死函数，共 273 行清理。
+
 ---
 
 ## Architecture at a Glance
@@ -96,7 +108,7 @@ AI_vedio/
 │   ├── telemetry_endpoint.py   # Telemetry HTTP endpoints
 │   ├── agents/                 # 12 worker + 4 audit agent implementations
 │   │   ├── strategy.py         # Content calendar generation
-│   │   ├── script_writer.py    # Multi-language script writer (EN/ES/FR/DE)
+│   │   ├── script_writer.py    # English-only script writer (ES/FR/DE removed)
 │   │   ├── auditor.py          # Self-audit scoring (4 checkpoints)
 │   │   ├── compliance.py       # Brand compliance pre-check
 │   │   ├── storyboard.py       # Visual shot planning
@@ -318,7 +330,7 @@ Routers are mounted on startup:
 - `/assets/*` — API key required
 - `/media/*` — no auth (file serving)
 - `/api/assets/*` — API key required (legacy)
-- `/telemetry/*` — API key required
+- `/telemetry/*` — API key required (metrics / errors / prometheus)
 
 On startup, the app also restores active threads from disk and starts periodic cache eviction.
 
@@ -612,7 +624,7 @@ Key test areas:
 
 **Frontend:** Vitest with jsdom. Component tests in `web/src/components/*.test.tsx`.
 
-**CI:** GitHub Actions on push/PR to main — ruff lint + pytest (Python 3.11 + 3.12) + coverage.
+**CI:** GitHub Actions on push/PR to main — ruff lint + pyright type check + pytest (Python 3.11 + 3.12) + coverage.
 
 ---
 
@@ -683,6 +695,12 @@ location /api/media/ {
 - Sensitive values (API keys, tokens) automatically redacted by `_SanitizeProcessor`
 - Request logging middleware captures method/path/status/duration
 
+### Type Checking
+- `pyproject.toml` 配置 `[tool.pyright]`，`make typecheck` 可运行（`pyright src tests`）
+- 已启用规则：`reportMissingTypeArgument` + `reportPossiblyUnboundVariable` → 0 错误
+- 未启用规则：`reportUnknownMemberType` / `reportUnknownVariableType` — 在 `dict[str, Any]`
+  为主的代码库中噪音远大于价值，暂不启用（详见 `docs/workflows/pyright-strict-technical-debt-plan-20260507-stable.md`）
+
 ### API Design
 - All JSON responses wrapped with `_meta` (trace_id, duration_ms, version, timestamp)
 - API key required for all mutating endpoints
@@ -750,6 +768,11 @@ location /api/media/ {
   /status/{thread_id} polling for the long scenarios. Phase D nginx timeout 已加到 1500s,
   但 D5 实测 28 min 离上限不远,长链路场景仍可能截客户端连接。
 - **Redis/Celery declared but unused:** Still in `requirements.txt` but no live consumer.
+- **LangGraph 代理层 (P4-4):** `/pipeline/*` 端点已代理到 StepRunner，但代理层 state 转换是
+  best-effort，某些 legacy 字段可能缺失。保留原始 LangGraph 代码作为兼容层，代理函数可迭代补全。
+- **pyright strict 剩余规则:** `reportUnknownMemberType` / `reportUnknownVariableType` 未启用。
+  在 `dict[str, Any]` 为主的代码库中，这两项规则噪音远大于价值。如需进一步收紧类型，需先
+  将 `dict[str, Any]` 替换为数百个具体类型（ProductCatalog、PipelineConfig 等），ROI 待评估。
 
 ### 3. 未做端到端验证的前后端交互路径
 
@@ -834,6 +857,7 @@ cd web && npm test
 ### Lint + type check
 ```bash
 make lint                # Backend (ruff)
+make typecheck           # Backend (pyright)
 cd web && npm run lint   # Frontend (eslint)
 ```
 
