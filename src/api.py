@@ -100,6 +100,56 @@ if HAS_FASTAPI:
                 "portfolio hook registration failed: %s", _exc
             )
 
+        # Admin Panel: background tasks (health checks + cleanup)
+        try:
+            from src.routers.admin import (
+                cleanup_expired_sessions,
+                cleanup_old_logs,
+                run_health_checks,
+            )
+
+            async def _admin_health_loop():
+                while True:
+                    await asyncio.sleep(300)  # 5 minutes
+                    try:
+                        await run_health_checks()
+                    except Exception:
+                        pass
+
+            async def _admin_session_cleanup_loop():
+                while True:
+                    await asyncio.sleep(3600)  # 1 hour
+                    try:
+                        await cleanup_expired_sessions()
+                    except Exception:
+                        pass
+
+            async def _admin_log_cleanup_loop():
+                while True:
+                    await asyncio.sleep(3600)  # 1 hour
+                    try:
+                        await cleanup_old_logs()
+                    except Exception:
+                        pass
+
+            _register_background_task(
+                asyncio.create_task(_admin_health_loop()),
+                label="admin_health",
+            )
+            _register_background_task(
+                asyncio.create_task(_admin_session_cleanup_loop()),
+                label="admin_session_cleanup",
+            )
+            _register_background_task(
+                asyncio.create_task(_admin_log_cleanup_loop()),
+                label="admin_log_cleanup",
+            )
+            logging.getLogger("api.startup").info("admin background tasks registered")
+        except Exception as _exc:
+            logging.getLogger("api.startup").warning(
+                "admin background tasks registration failed: %s", _exc
+            )
+
     # CORS: allow comma-separated origins via CORS_ORIGINS env var
     _cors_env = os.getenv("CORS_ORIGINS", "")
     _default_origins = [
@@ -119,6 +169,7 @@ if HAS_FASTAPI:
         allow_origins=allow_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Client-Trace-Id"],
+        allow_credentials=True,  # Admin Panel: HttpOnly cookie auth
     )
 
     # ── P3-1: Rate limiting middleware (fallback) ──
@@ -240,11 +291,16 @@ if HAS_FASTAPI:
 
         # Strip content-length so JSONResponse recalculates for the wrapped body
         wrapped_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
-        return JSONResponse(
+        new_response = JSONResponse(
             content=data,
             status_code=response.status_code,
             headers=wrapped_headers,
         )
+        # Preserve Set-Cookie headers (e.g. admin_session from login)
+        for name, value in response.raw_headers:
+            if name.lower() == b"set-cookie":
+                new_response.raw_headers.append((name, value))
+        return new_response
 
     # ── Mount domain routers (P1-11) ──
     from src.routers._deps import verify_api_key
@@ -290,3 +346,12 @@ if HAS_FASTAPI:
             )
     except (ImportError, RuntimeError) as _e:
         logging.warning("telemetry router skipped: %s", _e)
+
+    # Mount admin panel router (session-cookie auth, independent of API key)
+    try:
+        from src.routers.admin import router as admin_router
+        # No prefix — admin.py endpoints already use /api/admin/* full paths
+        app.include_router(admin_router)
+        logging.getLogger("api.startup").info("admin router mounted at /api/admin/*")
+    except (ImportError, RuntimeError) as _e:
+        logging.warning("admin router skipped: %s", _e)
