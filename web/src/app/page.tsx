@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import type { ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import {
-  startPipeline,
   fetchState,
   submitReview,
   runS1ProductDirect,
-  runS4LiveShoot,
   runS5BrandVlog,
   startS1StepByStep,
   resumeS1,
@@ -21,7 +19,6 @@ import {
 } from "@/components/api";
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
-import SceneSelector from "@/components/SceneSelector";
 import PipelineMonitor from "@/components/PipelineMonitor";
 import ReviewPanel from "@/components/ReviewPanel";
 import DistributionView from "@/components/DistributionView";
@@ -34,7 +31,6 @@ import StageProgress from "@/components/StageProgress";
 import SplashScreen from "@/components/SplashScreen";
 import RecommendPanel from "@/components/RecommendPanel";
 import FastModePanel from "@/components/FastModePanel";
-import QualityDashboard from "@/components/QualityDashboard";
 import Nav from "@/components/Nav";
 import SettingsPanel from "@/components/SettingsPanel";
 import ExecutionBar from "@/components/ExecutionBar";
@@ -48,15 +44,12 @@ import { useExecutionBar } from "@/hooks/useExecutionBar";
 
 const STORAGE_KEY = "ai_video_thread_id";
 
-const LANGGRAPH_SCENARIOS = new Set(["influencer_remix", "brand_campaign"]);
-
 function extractVersions(state: any): Version[] {
   const versions: Version[] = [];
   const steps = state?.steps || {};
   const assembleOutput = steps.assemble_final?.output;
   const auditOutput = steps.audit?.output;
   const scripts = steps.scripts?.output || [];
-  const seedanceOutput = steps.seedance_clips?.output || [];
 
   // Extract video path from assemble_final output (string, or object with video_path, or array)
   const videoPath =
@@ -164,8 +157,8 @@ export default function Home() {
     stage, setStage,
     activeScene, setActiveScene,
     mode, setMode,
-    pipelineMode, setPipelineMode,
-    videoDuration, setVideoDuration,
+    pipelineMode,
+    videoDuration,
     disconnected, setDisconnected,
   } = useAppStore();
 
@@ -174,7 +167,7 @@ export default function Home() {
     reviewState, setReviewState,
     oneshotResult, setOneshotResult,
     oneshotScenario, setOneshotScenario,
-    stepByStepLabel, setStepByStepLabel,
+    stepByStepLabel,
     stepByStepState, setStepByStepState,
     showStepByStep, setShowStepByStep,
     smartCreateLabel, setSmartCreateLabel,
@@ -182,14 +175,11 @@ export default function Home() {
     workflowLabel, setWorkflowLabel,
     workflowState, setWorkflowState,
     showWorkflow, setShowWorkflow,
-    workflowRerenderKey, setWorkflowRerenderKey,
   } = usePipelineStore();
 
   const {
     currentGate, setCurrentGate,
-    currentStepIdx, setCurrentStepIdx,
-    showSteps, setShowSteps,
-    showStageProgress, setShowStageProgress,
+    showSteps,
     compareVersions, setCompareVersions,
     showCompare, setShowCompare,
   } = useExpertStore();
@@ -236,8 +226,6 @@ export default function Home() {
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // One-shot step progress
-  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   /** Cancel current async operation, recover partial state if possible. */
@@ -662,29 +650,7 @@ export default function Home() {
     setLoading(false);
   };
 
-  const clearStepTimer = () => {
-    if (stepTimerRef.current) {
-      clearTimeout(stepTimerRef.current);
-      stepTimerRef.current = null;
-    }
-    setShowSteps(false);
-  };
 
-  const startStepProgress = (steps: { label: string; duration: number }[]) => {
-    setShowSteps(true);
-    setCurrentStepIdx(0);
-    clearStepTimer();
-
-    const advance = (idx: number) => {
-      if (idx >= steps.length) return;
-      setCurrentStepIdx(idx);
-      stepTimerRef.current = setTimeout(() => {
-        advance(idx + 1);
-      }, steps[idx].duration);
-    };
-
-    advance(0);
-  };
 
   const resetAll = () => {
     localStorage.removeItem(STORAGE_KEY);
@@ -892,7 +858,7 @@ export default function Home() {
               <CompareView
                 versions={compareVersions}
                 selectedVersion={null}
-                onSelect={(label) => {
+                onSelect={() => {
                   // Track which version the user selected
                 }}
                 onDownload={(label) => {
@@ -909,7 +875,7 @@ export default function Home() {
                   setShowCompare(false);
                   setCurrentGate(4);
                 }}
-                onPublish={(label) => {
+                onPublish={() => {
                   // Placeholder for future publish flow
                 }}
               />
@@ -924,7 +890,7 @@ export default function Home() {
                   currentStep={currentGate}
                   totalSteps={GATE_SEQUENCE.length}
                   gateSequence={GATE_SEQUENCE}
-                  onApprove={async (selectedIds) => {
+                  onApprove={async () => {
                     if (currentGate === GATE_SEQUENCE.length) {
                       // Gate 4 (final) approved — fetch final state and show CompareView
                       if (!workflowLabel) {
