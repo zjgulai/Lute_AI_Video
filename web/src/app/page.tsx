@@ -16,6 +16,7 @@ import {
   fetchS1State,
   getMediaUrl,
   isDemoMode,
+  submitScenario,
 } from "@/components/api";
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
@@ -378,11 +379,25 @@ export default function Home() {
     setStage("recommend");
   }, []);
 
+  // Map frontend content_scenario to backend scenario ID
+  const scenarioToId = (scenario: string): string => {
+    const map: Record<string, string> = {
+      product_direct: "s1",
+      brand_campaign: "s2",
+      influencer_remix: "s3",
+      live_shoot: "s4",
+      brand_vlog: "s5",
+    };
+    return map[scenario] || "s1";
+  };
+
   const startSmartCreate = async (config: any) => {
     if (loading) return;
+    const scenario = config.content_scenario || "product_direct";
+    const scenarioId = scenarioToId(scenario);
+
     // Demo mode: skip API calls, serve mock data instantly
     if (isDemoMode()) {
-      const scenario = config.content_scenario || "product_direct";
       const isBrand = scenario === "brand_campaign";
       const isVlog = scenario === "brand_vlog";
       const demoResult = isVlog ? DEMO_RESULT_VLOG : isBrand ? DEMO_RESULT_2 : DEMO_RESULT_1;
@@ -398,37 +413,43 @@ export default function Home() {
     setShowStageProgress(true);
     startGenerating(t("exec.narrative.analyzing"));
     try {
-      // Use existing auto pipeline endpoint
-      const result = await runS1ProductDirect({
-        product_catalog: config.product_catalog,
-        brand_guidelines: config.brand_guidelines,
-        target_platforms: config.target_platforms,
-        target_languages: config.target_languages || ["en"],
-        week: config.content_calendar_week || "",
-        video_duration: config.video_duration || 30,
-      }, { signal: abortRef.current?.signal });
-
-      // Store the label from the result for StageProgress polling
-      // The auto endpoint returns the full result directly
-      // But StageProgress needs a label to poll. Extract from result or use a generated one.
-      const label = result?.label || `s1_${Date.now()}`;
-      setSmartCreateLabel(label);
+      // Phase 1B: Unified async submit — returns label immediately, pipeline runs in background
+      const submitResult = await submitScenario(
+        scenarioId,
+        {
+          product_catalog: config.product_catalog,
+          brand_guidelines: config.brand_guidelines,
+          target_platforms: config.target_platforms,
+          target_languages: config.target_languages || ["en"],
+          week: config.content_calendar_week || "",
+          video_duration: config.video_duration || 30,
+        },
+        { signal: abortRef.current?.signal }
+      );
+      setSmartCreateLabel(submitResult.label);
     } catch (e: any) {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-      // If auto-endpoint fails, fall back to step-by-step init + auto resume
-      // Initialize pipeline in step-by-step mode, then resume in auto
-      try {
-        const initResult = await startS1StepByStep({ ...config, mode: "step_by_step" }, { signal: abortRef.current?.signal });
-        const label = initResult.label;
-        setSmartCreateLabel(label);
-        // Resume will auto-execute all remaining steps
-        await resumeS1(label);
-      } catch (fallbackErr: any) {
-          if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") {
-            stopGenerating();
-            return;
-          }
-        showToast(t("toast.execFailed") + `: ${fallbackErr?.message || String(fallbackErr)}`, "error");
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      // Fallback: legacy blocking endpoint for s1 only
+      if (scenarioId === "s1") {
+        try {
+          const result = await runS1ProductDirect({
+            product_catalog: config.product_catalog,
+            brand_guidelines: config.brand_guidelines,
+            target_platforms: config.target_platforms,
+            target_languages: config.target_languages || ["en"],
+            week: config.content_calendar_week || "",
+            video_duration: config.video_duration || 30,
+          }, { signal: abortRef.current?.signal });
+          const label = result?.label || `s1_${Date.now()}`;
+          setSmartCreateLabel(label);
+        } catch (fallbackErr: any) {
+          if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") return;
+          showToast(t("toast.execFailed") + `: ${fallbackErr?.message || String(fallbackErr)}`, "error");
+          setShowStageProgress(false);
+          stopGenerating();
+        }
+      } else {
+        showToast(t("toast.execFailed") + `: ${e?.message || String(e)}`, "error");
         setShowStageProgress(false);
         stopGenerating();
       }
@@ -955,11 +976,11 @@ export default function Home() {
           {stage === "generate" && mode === "smart" && smartCreateLabel && (
             <StageProgress
               label={smartCreateLabel}
+              scenario={scenarioToId(activeScene || "product_direct")}
               onComplete={(result) => {
-                const sc = activeScene === "brand_campaign" ? "brand_campaign" : "product_direct";
                 setOneshotResult(result);
-                setOneshotScenario(sc);
-                saveToGallery(result, sc);
+                setOneshotScenario(activeScene || "product_direct");
+                saveToGallery(result, activeScene || "product_direct");
                 setStage("result");
                 setShowStageProgress(false);
               }}

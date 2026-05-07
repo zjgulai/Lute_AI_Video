@@ -1077,6 +1077,7 @@ async def get_scenario_status(scenario: str, label: str):
             "gate_status": state.get("gate_status"),
             "errors": state.get("errors", []),
             "result": state.get("result"),
+            "steps": steps,
         }
     except HTTPException:
         raise

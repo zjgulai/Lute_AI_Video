@@ -13,13 +13,25 @@ from typing import Any
 
 import structlog
 
-from src.pipeline.gate_manager import GATE_DEFINITIONS
+from src.pipeline.gate_manager import SCENARIO_GATE_DEFINITIONS
 from src.pipeline.state_manager import PipelineStateManager
 from src.skills.registry import SkillRegistry
 from src.telemetry import generate_trace_id, pipeline_metrics, error_collector
 
-# After these steps complete, pause for gate approval in expert mode
-GATE_AFTER_STEPS = {g["after_step"] for g in GATE_DEFINITIONS.values()}
+
+def _get_gate_after_steps(scenario: str = "s1") -> set[str]:
+    """Return the set of step names that trigger a gate pause for a scenario."""
+    gate_defs = SCENARIO_GATE_DEFINITIONS.get(scenario, SCENARIO_GATE_DEFINITIONS["s1"])
+    return {g["after_step"] for g in gate_defs.values()}
+
+
+def _get_gate_id_for_step(step_name: str, scenario: str = "s1") -> str:
+    """Return the gate_id whose after_step matches the given step_name, or ''."""
+    gate_defs = SCENARIO_GATE_DEFINITIONS.get(scenario, SCENARIO_GATE_DEFINITIONS["s1"])
+    for gate_id, gate_def in gate_defs.items():
+        if gate_def["after_step"] == step_name:
+            return gate_id
+    return ""
 
 logger = structlog.get_logger()
 
@@ -123,14 +135,6 @@ def _get_step_input(state: dict[str, Any], step_name: str, input_key: str) -> An
     if step_data.get("edited") and step_data.get("edited_output") is not None:
         return step_data["edited_output"]
     return step_data.get("output")
-
-
-def _get_gate_id_for_step(step_name: str) -> str:
-    """Return the gate_id whose after_step matches the given step_name, or ''."""
-    for gate_id, gate_def in GATE_DEFINITIONS.items():
-        if gate_def["after_step"] == step_name:
-            return gate_id
-    return ""
 
 
 class StepRunner:
@@ -238,7 +242,7 @@ class StepRunner:
                 success = False
                 break
             # Gate check: if this step has a gate awaiting approval, pause and return
-            gate_id = _get_gate_id_for_step(step_name)
+            gate_id = _get_gate_id_for_step(step_name, state.get("scenario", "s1"))
             if gate_id:
                 gate_state = state.get("gates", {}).get(gate_id, {})
                 if gate_state.get("status") == "awaiting_approval":
@@ -255,7 +259,7 @@ class StepRunner:
             # check, the loop would proceed to the next step (video_prompts)
             # whose pre-check only inspects ITS own gate (none), missing the
             # newly-registered gate_2_keyframe.
-            post_gate_id = _get_gate_id_for_step(step_name)
+            post_gate_id = _get_gate_id_for_step(step_name, state.get("scenario", "s1"))
             if post_gate_id:
                 post_gate = state.get("gates", {}).get(post_gate_id, {})
                 if post_gate.get("status") == "awaiting_approval":
@@ -375,8 +379,9 @@ class StepRunner:
         step_data["duration_ms"] = round(step_duration_ms)
 
         # Gate pause: if this step is a gate trigger and NOT auto mode, pause here
-        if step_name in GATE_AFTER_STEPS and state.get("mode") != "auto":
-            gate_id = _get_gate_id_for_step(step_name)
+        scenario = state.get("scenario", "s1")
+        if step_name in _get_gate_after_steps(scenario) and state.get("mode") != "auto":
+            gate_id = _get_gate_id_for_step(step_name, scenario)
             state.setdefault("gates", {})
             state["gates"][gate_id] = {
                 "status": "awaiting_approval",

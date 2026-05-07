@@ -41,8 +41,12 @@ async def score_candidate(
         params = {}
 
     # Route by step type
-    if step_name == "scripts":
+    if step_name in ("scripts", "remix_script"):
         return await _score_script_candidate(candidate_data, params)
+    elif step_name == "character_identity":
+        return await _score_character_identity_candidate(candidate_data, params)
+    elif step_name == "vlog_strategy":
+        return await _score_vlog_strategy_candidate(candidate_data, params)
     elif step_name == "keyframe_images":
         return await _score_keyframe_candidate(candidate_data, params)
     elif step_name == "seedance_clips":
@@ -281,6 +285,106 @@ async def _score_clip_candidate(data: dict[str, Any], params: dict[str, Any] | N
             "continuity": round(continuity_score, 4),
         },
         "explanation": f"Heuristic clip scoring: prompt={prompt_score:.2f}, duration={duration_score:.2f}, file={file_score:.2f}",
+        "heuristic": True,
+    }
+
+
+async def _score_character_identity_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Score a character identity candidate for S3 Influencer Remix.
+
+    Dimensions: completeness (40%), consistency (30%), influence fit (30%).
+    """
+    name = str(data.get("name", "")).strip()
+    bio = str(data.get("bio", "")).strip()
+    style = str(data.get("presentation_style", "")).strip()
+    visuals = data.get("visual_identity", {})
+
+    completeness = 0.0
+    if name:
+        completeness += 0.3
+    if bio and len(bio) > 20:
+        completeness += 0.3
+    if style:
+        completeness += 0.2
+    if visuals and isinstance(visuals, dict) and any(visuals.values()):
+        completeness += 0.2
+
+    consistency = 0.75
+    if bio and name.lower() in bio.lower():
+        consistency = 0.9
+
+    influence_fit = 0.75
+    influencer_keywords = ["authentic", "relatable", "trust", "experience", "mom", "parent"]
+    if bio:
+        bio_lower = bio.lower()
+        matched = sum(1 for kw in influencer_keywords if kw in bio_lower)
+        influence_fit = min(1.0, 0.5 + matched * 0.1)
+
+    overall = completeness * 0.40 + consistency * 0.30 + influence_fit * 0.30
+    return {
+        "overall": round(overall, 4),
+        "breakdown": {
+            "completeness": round(completeness, 4),
+            "consistency": round(consistency, 4),
+            "influence_fit": round(influence_fit, 4),
+        },
+        "explanation": f"Character identity: completeness={completeness:.2f}, consistency={consistency:.2f}, influence_fit={influence_fit:.2f}",
+        "heuristic": True,
+    }
+
+
+async def _score_vlog_strategy_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Score a VLOG strategy candidate for S5 Brand VLOG.
+
+    Dimensions: structure (35%), hook quality (30%), brand alignment (20%), platform fit (15%).
+    """
+    title = str(data.get("title", "")).strip()
+    hook = str(data.get("hook", "")).strip()
+    segments = data.get("segments", [])
+    if isinstance(segments, list):
+        segment_count = len(segments)
+    else:
+        segment_count = 0
+
+    structure = 0.0
+    if title:
+        structure += 0.2
+    if hook:
+        structure += 0.2
+    structure += min(0.4, segment_count * 0.1)
+
+    hook_quality = 0.5
+    hook_keywords = ["why", "how", "secret", "truth", "behind", "day", "life", "journey"]
+    if hook:
+        hook_lower = hook.lower()
+        matched = sum(1 for kw in hook_keywords if kw in hook_lower)
+        hook_quality = min(1.0, 0.4 + matched * 0.15)
+        if len(hook) > 50:
+            hook_quality = min(1.0, hook_quality + 0.1)
+
+    brand_alignment = 0.7
+    if params and "brand_guidelines" in params:
+        brand_guidelines = str(params["brand_guidelines"]).lower()
+        if title.lower() in brand_guidelines or any(kw in title.lower() for kw in brand_guidelines.split()[:5]):
+            brand_alignment = 0.85
+
+    platform_fit = 0.75
+    platform_keywords = ["youtube", "tiktok", "instagram", "reels", "shorts"]
+    content_str = f"{title} {hook}".lower()
+    matched = sum(1 for kw in platform_keywords if kw in content_str)
+    if matched > 0:
+        platform_fit = min(1.0, 0.6 + matched * 0.1)
+
+    overall = structure * 0.35 + hook_quality * 0.30 + brand_alignment * 0.20 + platform_fit * 0.15
+    return {
+        "overall": round(overall, 4),
+        "breakdown": {
+            "structure": round(structure, 4),
+            "hook_quality": round(hook_quality, 4),
+            "brand_alignment": round(brand_alignment, 4),
+            "platform_fit": round(platform_fit, 4),
+        },
+        "explanation": f"VLOG strategy: structure={structure:.2f}, hook={hook_quality:.2f}, brand={brand_alignment:.2f}, platform={platform_fit:.2f}",
         "heuristic": True,
     }
 

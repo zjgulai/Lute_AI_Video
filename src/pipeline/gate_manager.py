@@ -27,11 +27,12 @@ from src.config import DEFAULT_LANGUAGES
 
 logger = structlog.get_logger()
 
-# ── Gate Definitions ──
+# ── Gate Definitions (per-scenario) ──
 
 VariantType = Literal["standard", "creative", "conservative"]
 
-GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
+# S1 / S2 share the same gate definitions
+_S1_GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "gate_1_script": {
         "after_step": "scripts",
         "label": "Select Script",
@@ -58,37 +59,151 @@ GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
 }
 
+# S3: Influencer Remix — remix_script replaces scripts
+_S3_GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "gate_1_script": {
+        "after_step": "remix_script",
+        "label": "Select Remix Script",
+        "candidate_step": "remix_script",
+        "max_selections": 2,
+    },
+    "gate_2_keyframe": {
+        "after_step": "keyframe_images",
+        "label": "Review Keyframes",
+        "candidate_step": "keyframe_images",
+        "max_selections": 1,
+    },
+    "gate_3_clips": {
+        "after_step": "seedance_clips",
+        "label": "Select Clips",
+        "candidate_step": "seedance_clips",
+        "max_selections": 1,
+    },
+    "gate_4_final": {
+        "after_step": "assemble_final",
+        "label": "Final Review",
+        "candidate_step": None,
+        "max_selections": 1,
+    },
+}
+
+# S4: Live Shoot — scripts, video_prompts, thumbnails
+_S4_GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "gate_1_script": {
+        "after_step": "scripts",
+        "label": "Select Script",
+        "candidate_step": "scripts",
+        "max_selections": 2,
+    },
+    "gate_2_prompts": {
+        "after_step": "video_prompts",
+        "label": "Review Video Prompts",
+        "candidate_step": "video_prompts",
+        "max_selections": 1,
+    },
+    "gate_3_thumbnails": {
+        "after_step": "thumbnails",
+        "label": "Review Thumbnails",
+        "candidate_step": None,
+        "max_selections": 1,
+    },
+}
+
+# S5: Brand VLOG — vlog_strategy, seedance_clips, assemble_final
+_S5_GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "gate_1_strategy": {
+        "after_step": "vlog_strategy",
+        "label": "Select Strategy",
+        "candidate_step": "vlog_strategy",
+        "max_selections": 2,
+    },
+    "gate_2_clips": {
+        "after_step": "seedance_clips",
+        "label": "Select Clips",
+        "candidate_step": "seedance_clips",
+        "max_selections": 1,
+    },
+    "gate_3_final": {
+        "after_step": "assemble_final",
+        "label": "Final Review",
+        "candidate_step": None,
+        "max_selections": 1,
+    },
+}
+
+SCENARIO_GATE_DEFINITIONS: dict[str, dict[str, dict[str, Any]]] = {
+    "s1": _S1_GATE_DEFINITIONS,
+    "s2": _S1_GATE_DEFINITIONS,  # S2 is S1 with brand_mode=True
+    "s3": _S3_GATE_DEFINITIONS,
+    "s4": _S4_GATE_DEFINITIONS,
+    "s5": _S5_GATE_DEFINITIONS,
+}
+
+# Backward-compatible alias — used by step_runner.py
+GATE_DEFINITIONS = _S1_GATE_DEFINITIONS
+
 # Step name -> SkillRegistry skill name mapping
 STEP_TO_SKILL_NAME: dict[str, str | None] = {
     "scripts": "script-writer-skill",
     "keyframe_images": "keyframe-images",
     "seedance_clips": "seedance-video-generate-skill",
     "assemble_final": None,
+    "remix_script": "remix-script-skill",
+    "vlog_strategy": "product-strategy-skill",
+    "video_prompts": None,
+    "thumbnails": None,
 }
 
-# STEP_ORDER constant — must match step_runner.py
-STEP_ORDER = [
-    "strategy",
-    "scripts",
-    "compliance",
-    "storyboards",
-    "keyframe_images",
-    "video_prompts",
-    "thumbnail_prompts",
-    "seedance_clips",
-    "tts_audio",
-    "thumbnail_images",
-    "assemble_final",
-    "audit",
-]
+# Per-scenario step orders — must match step_runner.py _SCENARIO_CONFIGS
+SCENARIO_STEP_ORDERS: dict[str, list[str]] = {
+    "s1": [
+        "strategy", "scripts", "compliance", "storyboards", "keyframe_images",
+        "video_prompts", "thumbnail_prompts", "seedance_clips", "tts_audio",
+        "thumbnail_images", "assemble_final", "audit",
+    ],
+    "s2": [
+        "strategy", "scripts", "compliance", "storyboards", "keyframe_images",
+        "video_prompts", "thumbnail_prompts", "seedance_clips", "tts_audio",
+        "thumbnail_images", "assemble_final", "audit",
+    ],
+    "s3": [
+        "video_analysis", "character_identity", "remix_script", "storyboards",
+        "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
+        "tts_audio", "thumbnail_images", "assemble_final", "audit",
+    ],
+    "s4": ["scripts", "video_prompts", "thumbnails"],
+    "s5": [
+        "vlog_strategy", "video_prompts", "seedance_clips", "tts_audio",
+        "assemble_final", "audit",
+    ],
+}
+
+# Backward-compatible alias
+STEP_ORDER = SCENARIO_STEP_ORDERS["s1"]
 
 
-def _get_next_step(step_name: str) -> str | None:
+def _get_scenario_from_state(state: dict[str, Any]) -> str:
+    """Extract scenario from pipeline state, defaulting to s1."""
+    return state.get("scenario", "s1")
+
+
+def _get_gate_defs(scenario: str) -> dict[str, dict[str, Any]]:
+    """Return gate definitions for a scenario, falling back to s1."""
+    return SCENARIO_GATE_DEFINITIONS.get(scenario, _S1_GATE_DEFINITIONS)
+
+
+def _get_step_order(scenario: str) -> list[str]:
+    """Return step order for a scenario, falling back to s1."""
+    return SCENARIO_STEP_ORDERS.get(scenario, SCENARIO_STEP_ORDERS["s1"])
+
+
+def _get_next_step(step_name: str, scenario: str = "s1") -> str | None:
     """Return the next step name after the given step, or None if last."""
+    order = _get_step_order(scenario)
     try:
-        idx = STEP_ORDER.index(step_name)
-        if idx + 1 < len(STEP_ORDER):
-            return STEP_ORDER[idx + 1]
+        idx = order.index(step_name)
+        if idx + 1 < len(order):
+            return order[idx + 1]
     except ValueError:
         pass
     return None
@@ -104,9 +219,16 @@ async def get_gate_state(label: str, gate_id: str) -> dict[str, Any]:
     Returns:
         dict with gate state information, or a 404-like error dict.
     """
-    definition = GATE_DEFINITIONS.get(gate_id)
+    state_manager = PipelineStateManager()
+    state = await state_manager.load(label)
+    if state is None:
+        return {"error": f"State not found for label: {label}", "gate_id": gate_id, "label": label}
+
+    scenario = _get_scenario_from_state(state)
+    gate_defs = _get_gate_defs(scenario)
+    definition = gate_defs.get(gate_id)
     if definition is None:
-        return {"error": f"Unknown gate: {gate_id}", "gate_id": gate_id}
+        return {"error": f"Unknown gate: {gate_id} for scenario {scenario}", "gate_id": gate_id, "scenario": scenario}
 
     state_manager = PipelineStateManager()
     state = await state_manager.load(label)
@@ -145,16 +267,18 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
             gate_id: str
             label: str
     """
-    definition = GATE_DEFINITIONS.get(gate_id)
-    if definition is None:
-        return {"error": f"Unknown gate: {gate_id}", "gate_id": gate_id}
-
-    candidate_step = definition.get("candidate_step")
-
     state_manager = PipelineStateManager()
     state = await state_manager.load(label)
     if state is None:
         return {"error": f"State not found for label: {label}", "gate_id": gate_id, "label": label}
+
+    scenario = _get_scenario_from_state(state)
+    gate_defs = _get_gate_defs(scenario)
+    definition = gate_defs.get(gate_id)
+    if definition is None:
+        return {"error": f"Unknown gate: {gate_id} for scenario {scenario}", "gate_id": gate_id, "scenario": scenario}
+
+    candidate_step = definition.get("candidate_step")
 
     # ── Gate 4: Final Review — no skill generation, assemble from state ──
     if gate_id == "gate_4_final":
@@ -370,14 +494,16 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
     Returns:
         dict with approval result and updated state info.
     """
-    definition = GATE_DEFINITIONS.get(gate_id)
-    if definition is None:
-        return {"error": f"Unknown gate: {gate_id}", "gate_id": gate_id}
-
     state_manager = PipelineStateManager()
     state = await state_manager.load(label)
     if state is None:
         return {"error": f"State not found for label: {label}", "gate_id": gate_id, "label": label}
+
+    scenario = _get_scenario_from_state(state)
+    gate_defs = _get_gate_defs(scenario)
+    definition = gate_defs.get(gate_id)
+    if definition is None:
+        return {"error": f"Unknown gate: {gate_id} for scenario {scenario}", "gate_id": gate_id, "scenario": scenario}
 
     gates_state = dict(state.get("gates", {}))
     gate_state = gates_state.get(gate_id, {})
@@ -437,8 +563,9 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
 
     # Set the selected candidate's data as the step output for downstream consumption
     # Use the first selected candidate's data as the "edited" output
+    step_order = _get_step_order(scenario)
     candidate_step = definition.get("candidate_step")
-    if candidate_step and candidate_step in STEP_ORDER:
+    if candidate_step and candidate_step in step_order:
         primary_candidate = selected_candidates[0]
         raw_data = primary_candidate.get("data", {})
 
@@ -478,12 +605,12 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
 
     # Advance current_step past the gate's after_step
     after_step = definition["after_step"]
-    if after_step in STEP_ORDER:
-        next_step = _get_next_step(after_step)
+    if after_step in step_order:
+        next_step = _get_next_step(after_step, scenario)
         if next_step:
             # Only advance if current_step is at or before after_step
             current_step = state.get("current_step")
-            if current_step is None or _step_index(current_step) <= _step_index(after_step):
+            if current_step is None or _step_index(current_step, scenario) <= _step_index(after_step, scenario):
                 state["current_step"] = next_step
     else:
         # If no after_step defined, just advance the current_step
@@ -523,14 +650,16 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
     Returns:
         dict with the updated candidate data.
     """
-    definition = GATE_DEFINITIONS.get(gate_id)
-    if definition is None:
-        return {"error": f"Unknown gate: {gate_id}", "gate_id": gate_id}
-
     state_manager = PipelineStateManager()
     state = await state_manager.load(label)
     if state is None:
         return {"error": f"State not found for label: {label}", "gate_id": gate_id, "label": label}
+
+    scenario = _get_scenario_from_state(state)
+    gate_defs = _get_gate_defs(scenario)
+    definition = gate_defs.get(gate_id)
+    if definition is None:
+        return {"error": f"Unknown gate: {gate_id} for scenario {scenario}", "gate_id": gate_id, "scenario": scenario}
 
     gates_state = dict(state.get("gates", {}))
     gate_state = gates_state.get(gate_id, {})
@@ -672,12 +801,13 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
 # ── Internal helpers ──
 
 
-def _step_index(step_name: str | None) -> int:
-    """Return the index of a step name in STEP_ORDER, or -1 if not found."""
+def _step_index(step_name: str | None, scenario: str = "s1") -> int:
+    """Return the index of a step name in the scenario's step order, or -1 if not found."""
     if step_name is None:
         return -1
+    order = _get_step_order(scenario)
     try:
-        return STEP_ORDER.index(step_name)
+        return order.index(step_name)
     except ValueError:
         return -1
 

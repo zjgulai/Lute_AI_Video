@@ -1,0 +1,85 @@
+# Prometheus alert rules for AI Video Pipeline
+# Place this file alongside prometheus.yml and reference it in rule_files.
+
+groups:
+  - name: ai_video_pipeline
+    interval: 30s
+    rules:
+      # ── Pipeline error rate ──
+      - alert: PipelineErrorRateHigh
+        expr: |
+          (
+            sum(rate(pipeline_runs_total{status="error"}[5m]))
+            /
+            sum(rate(pipeline_runs_total[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pipeline error rate exceeds 5%"
+          description: "Pipeline error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # ── Step duration p99 ──
+      - alert: StepDurationP99High
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(step_duration_seconds_bucket[10m])) by (le, step_name)
+          ) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Step {{ $labels.step_name }} p99 duration > 300s"
+          description: "p99 step duration for {{ $labels.step_name }} is {{ $value }}s over the last 10 minutes."
+
+      # ── API 5xx rate ──
+      - alert: API5xxRateHigh
+        expr: |
+          (
+            sum(rate(api_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(api_requests_total[5m]))
+          ) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx rate exceeds 1%"
+          description: "API 5xx error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # ── API latency p95 ──
+      - alert: APILatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(api_request_duration_seconds_bucket[5m])) by (le, endpoint)
+          ) > 5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API endpoint {{ $labels.endpoint }} p95 latency > 5s"
+          description: "p95 API latency for {{ $labels.endpoint }} is {{ $value }}s."
+
+      # ── Active background tasks spike ──
+      - alert: BackgroundTasksSpike
+        expr: active_background_tasks > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Background tasks spike detected"
+          description: "{{ $value }} background tasks active for more than 5 minutes."
+
+      # ── Pipeline completely stalled ──
+      - alert: PipelineStalled
+        expr: |
+          sum(rate(pipeline_runs_total[10m])) == 0
+          and
+          sum(active_background_tasks) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pipeline appears stalled"
+          description: "No pipeline runs in 10 minutes but background tasks are still active."

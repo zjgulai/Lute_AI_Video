@@ -57,6 +57,8 @@ class PoyoClient:
             },
             timeout=90.0,
         )
+        # Track recent inputs for CM rejection logging
+        self._task_inputs: dict[str, dict[str, Any]] = {}
 
     async def submit(
         self,
@@ -105,6 +107,12 @@ class PoyoClient:
             raise RuntimeError(f"poyo submit missing task_id: {data}")
 
         logger.info("poyo: submitted", task_id=task_id, model=model)
+        # Store input for CM rejection logging — bounded to prevent unbounded growth
+        self._task_inputs[task_id] = input_payload
+        if len(self._task_inputs) > 100:
+            # Evict oldest entries (arbitrary — just need a bound)
+            oldest = next(iter(self._task_inputs))
+            del self._task_inputs[oldest]
         return task_id
 
     async def poll(
@@ -135,6 +143,16 @@ class PoyoClient:
                 return task
             if status == "failed":
                 err_msg = task.get("error_message", "unknown")
+                # Phase 2: Structured logging for CM rejections — captures original prompt for rule expansion
+                input_payload = self._task_inputs.get(task_id, {})
+                if input_payload and "content" in err_msg.lower():
+                    logger.error(
+                        "poyo_cm_rejection",
+                        original_prompt=input_payload.get("prompt", ""),
+                        error_msg=err_msg,
+                        task_id=task_id,
+                        model=model,
+                    )
                 raise RuntimeError(f"poyo task failed: {err_msg}")
 
         raise RuntimeError(f"poyo polling timed out after {max_polls * poll_interval}s")

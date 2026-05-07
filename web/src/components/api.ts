@@ -805,6 +805,56 @@ export async function runS5BrandVlog(body: {
   return res.json();
 }
 
+// ── Unified Async Execution (Phase 1A) ──
+
+/**
+ * Submit a scenario for async background execution.
+ * Returns immediately with { label, status, trace_id }.
+ * Use getScenarioStatus() to poll for progress.
+ */
+export async function submitScenario(
+  scenario: string,
+  body: any,
+  options?: { signal?: AbortSignal }
+): Promise<{ label: string; status: string; trace_id: string }> {
+  const res = await apiFetch(getApiBase() + "/scenario/" + scenario + "/submit", {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new Error(`Submit ${scenario} failed (${res.status})`);
+  return res.json();
+}
+
+/**
+ * Poll execution status for a pipeline run.
+ * Returns { label, status, current_step, progress, gate_status, errors }.
+ */
+export async function getScenarioStatus(
+  scenario: string,
+  label: string,
+  options?: { signal?: AbortSignal }
+): Promise<{
+  label: string;
+  scenario: string;
+  status: string;
+  current_step: string | null;
+  progress: number;
+  pipeline_degraded: boolean;
+  gate_status: string | null;
+  errors: string[];
+  steps?: Record<string, any>;
+  result?: any;
+}> {
+  const res = await apiFetch(getApiBase() + `/scenario/${scenario}/status/${encodeURIComponent(label)}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new Error(`Status check failed (${res.status})`);
+  return res.json();
+}
+
 // ── Distribution publishing APIs ──
 
 export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promise<any[]> {

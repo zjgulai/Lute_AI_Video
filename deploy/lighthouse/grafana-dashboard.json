@@ -1,0 +1,180 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "AI Video Pipeline",
+    "tags": ["ai-video", "pipeline"],
+    "timezone": "Asia/Shanghai",
+    "schemaVersion": 36,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Pipeline Runs / min",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(pipeline_runs_total[1m])) by (scenario, status)",
+            "legendFormat": "{{scenario}} — {{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": {"lineWidth": 2, "fillOpacity": 20}
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Error Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(pipeline_runs_total{status=\"error\"}[5m])) / sum(rate(pipeline_runs_total[5m]))",
+            "legendFormat": "error rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "max": 1,
+            "custom": {"lineWidth": 2, "fillOpacity": 20}
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Step Duration (p50 / p95 / p99)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(step_duration_seconds_bucket[5m])) by (le, step_name))",
+            "legendFormat": "p50 {{step_name}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(step_duration_seconds_bucket[5m])) by (le, step_name))",
+            "legendFormat": "p95 {{step_name}}"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(step_duration_seconds_bucket[5m])) by (le, step_name))",
+            "legendFormat": "p99 {{step_name}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {"lineWidth": 2}
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "API Request Rate + Latency",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(api_requests_total[1m])) by (endpoint)",
+            "legendFormat": "rate {{endpoint}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(api_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+            "legendFormat": "p95 {{endpoint}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": {"lineWidth": 2}
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Active Background Tasks",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "active_background_tasks",
+            "legendFormat": "tasks"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 20}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Pipeline Runs Today",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(increase(pipeline_runs_total[24h]))",
+            "legendFormat": "runs"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Avg Pipeline Duration",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(pipeline_duration_seconds_bucket[1h])) by (le))",
+            "legendFormat": "median"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "API 5xx Count (1h)",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(increase(api_requests_total{status=~\"5..\"}[1h]))",
+            "legendFormat": "5xx"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 20}
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

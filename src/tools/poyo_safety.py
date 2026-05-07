@@ -34,12 +34,28 @@ _SUBSTITUTIONS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(start|begin|continue|finish)\s+pumping\b", re.IGNORECASE), r"\1 wellness routine"),
     (re.compile(r"\bpumping\s+(session|routine|time)\b", re.IGNORECASE), r"wellness \1"),
 
+    # Baby bottles / feeding (Phase 2 expansion)
+    (re.compile(r"\bbaby\s+bottle(s)?\b", re.IGNORECASE), "infant feeding container"),
+    (re.compile(r"\bbottle\s+feed(ing)?\b", re.IGNORECASE), "container feeding"),
+    (re.compile(r"\bnipple(s)?\b", re.IGNORECASE), "feeding tip"),
+    (re.compile(r"\bareola\b", re.IGNORECASE), "surface area"),
+    (re.compile(r"\bformula\s+(milk|feed(ing)?)\b", re.IGNORECASE), "prepared nutrition"),
+    (re.compile(r"\bbaby\s+food\b", re.IGNORECASE), "infant nutrition"),
+    (re.compile(r"\bpostpartum\b", re.IGNORECASE), "new parent"),
+
     # Chinese — single chars and common compounds
     (re.compile(r"吸奶器"), "可穿戴设备"),
     (re.compile(r"母乳喂养"), "亲子喂养"),
     (re.compile(r"哺乳"), "亲子"),
     (re.compile(r"挤奶"), "保养"),
     (re.compile(r"乳汁"), "营养"),
+
+    # Chinese — Phase 2 expansion
+    (re.compile(r"奶瓶"), "婴儿容器"),
+    (re.compile(r"奶嘴"), "喂养配件"),
+    (re.compile(r"辅食"), "婴儿食品"),
+    (re.compile(r"婴儿食品"), "婴儿营养"),
+    (re.compile(r"产后"), "恢复期"),
 ]
 
 
