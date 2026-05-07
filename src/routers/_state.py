@@ -179,42 +179,9 @@ async def _get_config_for_thread(thread_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": thread_id}}
 
 
-# ── Background task registry ──
-
-def _register_background_task(task: asyncio.Task[Any], label: str) -> str:
-    """Register a background task and attach completion callback."""
-    import structlog
-    log = structlog.get_logger()
-    task_id = f"{label}_{id(task)}"
-    started_at = time.time()
-    _background_tasks[task_id] = {"task": task, "label": label, "started_at": started_at}
-
-    def _on_done(t: asyncio.Task[Any]) -> None:
-        duration_sec = time.time() - started_at
-        try:
-            exc = t.exception()
-            if exc:
-                log.error(
-                    "background_task_failed",
-                    task_id=task_id,
-                    label=label,
-                    duration_sec=round(duration_sec, 2),
-                    error=str(exc)[:200],
-                )
-            else:
-                log.info(
-                    "background_task_completed",
-                    task_id=task_id,
-                    label=label,
-                    duration_sec=round(duration_sec, 2),
-                )
-        except (asyncio.CancelledError, Exception):
-            pass
-        finally:
-            _background_tasks.pop(task_id, None)
-
-    task.add_done_callback(_on_done)
-    return task_id
+# Background task registry moved to src.tasks.bg_registry to break circular import.
+# Re-export for backward compatibility.
+from src.tasks.bg_registry import register_background_task as _register_background_task
 
 
 # ── Scenario helpers ──

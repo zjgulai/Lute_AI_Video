@@ -69,7 +69,8 @@ if HAS_FASTAPI:
         from src.routers._state import _restore_thread_index
         _restore_thread_index()
         # P1-10: Start background thread cache eviction loop
-        from src.routers._state import _periodic_cache_eviction, _register_background_task
+        from src.routers._state import _periodic_cache_eviction
+        from src.tasks.bg_registry import register_background_task as _register_background_task
         _register_background_task(
             asyncio.create_task(_periodic_cache_eviction()),
             label="cache_eviction",

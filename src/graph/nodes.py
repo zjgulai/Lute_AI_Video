@@ -20,9 +20,12 @@ logger = structlog.get_logger()
 
 
 def _register_bg(task: asyncio.Task[Any], label: str) -> str:
-    """Lazy import wrapper to break circular dependency with routers._state."""
-    from src.routers._state import _register_background_task
-    return _register_background_task(task, label)
+    """Register a background task via the isolated bg_registry module.
+
+    This avoids circular imports: nodes.py no longer depends on routers._state.
+    """
+    from src.tasks.bg_registry import register_background_task
+    return register_background_task(task, label)
 
 
 # ── L4.4 / L5.x helpers ──
