@@ -16,6 +16,7 @@ from src.agents.prompts.strategy_en import (
 )
 from src.models import Brief, Language, Platform, VideoType, WeeklyCalendar
 from src.tools.llm_client import llm
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -99,7 +100,7 @@ class StrategyAgent:
         # Load scenario configuration from strategy_source/
         self.scenario_config = self._load_scenario_config()
 
-    def _load_scenario_config(self) -> dict:
+    def _load_scenario_config(self) -> dict[str, Any]:
         """Load scenario config, fallback to empty dict."""
         try:
             from strategy_source import load_scenario
@@ -110,8 +111,8 @@ class StrategyAgent:
 
     async def run(
         self,
-        product_catalog: dict,
-        brand_guidelines: dict,
+        product_catalog: dict[str, Any],
+        brand_guidelines: dict[str, Any],
         target_platforms: list[str],
         target_languages: list[str],
         week: str,

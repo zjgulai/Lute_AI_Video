@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+from typing import Any
 
 
 # ── Scanner: synthetic output/ tree ──
@@ -91,7 +92,7 @@ async def test_subscribe_listener_fires_on_dispatch():
     )
 
     wm = WebhookManager()
-    received: list[dict] = []
+    received: list[dict[str, Any]] = []
 
     def sync_listener(payload):
         received.append({"sync": True, "payload": payload})

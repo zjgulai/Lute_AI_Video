@@ -34,7 +34,7 @@ class PublishEngine:
         self._shopify = ShopifyConnector()
 
     async def publish(
-        self, video_path: str, metadata: dict, platforms: list[str]
+        self, video_path: str, metadata: dict[str, Any], platforms: list[str]
     ) -> list[PublishResult]:
         """Publish a video to the given platforms.
 
@@ -66,7 +66,7 @@ class PublishEngine:
         return results
 
     async def publish_to_tiktok(
-        self, video_path: str, metadata: dict
+        self, video_path: str, metadata: dict[str, Any]
     ) -> PublishResult:
         """Publish a video to TikTok.
 
@@ -113,7 +113,7 @@ class PublishEngine:
             )
 
     async def publish_to_shopify(
-        self, video_path: str, metadata: dict
+        self, video_path: str, metadata: dict[str, Any]
     ) -> PublishResult:
         """Publish a video to Shopify.
 

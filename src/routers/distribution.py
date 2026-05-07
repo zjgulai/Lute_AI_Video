@@ -15,12 +15,13 @@ if TYPE_CHECKING:
     from src.storage.repository import PublishLogRepository as _PublishLogRepositoryType
 
 from src.routers._deps import _safe_error, verify_api_key
+from typing import Any
 
 
 router = APIRouter()
 
 @router.post("/distribution/publish", dependencies=[Depends(verify_api_key)])
-async def distribution_publish(body: dict):
+async def distribution_publish(body: dict[str, Any]):
     """Publish content to a platform (TikTok or Shopify).
 
     Request body:
@@ -90,7 +91,7 @@ async def distribution_platforms():
 
 
 @router.post("/publish/{video_id}", dependencies=[Depends(verify_api_key)])
-async def publish_video(video_id: str, body: dict):
+async def publish_video(video_id: str, body: dict[str, Any]):
     """Publish a video to selected platforms.
 
     Request body:

@@ -10,15 +10,16 @@ from __future__ import annotations
 import structlog
 
 from src.tools.llm_client import llm
+from typing import Any
 
 logger = structlog.get_logger()
 
 
 async def score_candidate(
     step_name: str,
-    candidate_data: dict,
-    params: dict | None = None,
-) -> dict:
+    candidate_data: dict[str, Any],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Score a candidate using LLM evaluation or heuristics.
 
     Routes to the appropriate scoring function based on the step name.
@@ -53,7 +54,7 @@ async def score_candidate(
     return _heuristic_generic(candidate_data)
 
 
-async def _score_script_candidate(script: dict, params: dict | None = None) -> dict:
+async def _score_script_candidate(script: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a script candidate with LLM if available, else heuristics.
 
     Scoring dimensions:
@@ -81,7 +82,7 @@ async def _score_script_candidate(script: dict, params: dict | None = None) -> d
         return _heuristic_score_script(script, usps)
 
 
-async def _llm_score_script(script: dict, usps: list[str], brand_guidelines: str) -> dict:
+async def _llm_score_script(script: dict[str, Any], usps: list[str], brand_guidelines: str) -> dict[str, Any]:
     """Score a script candidate using the LLM."""
     script_text = _extract_script_text(script)
     usp_text = "\n".join(f"- {u}" for u in usps) if usps else "None provided"
@@ -125,7 +126,7 @@ async def _llm_score_script(script: dict, usps: list[str], brand_guidelines: str
     }
 
 
-def _heuristic_score_script(script: dict, usps: list[str]) -> dict:
+def _heuristic_score_script(script: dict[str, Any], usps: list[str]) -> dict[str, Any]:
     """Score a script candidate using deterministic heuristics.
 
     Uses USP mention count, segment structure, word count, and hook presence.
@@ -212,7 +213,7 @@ def _heuristic_score_script(script: dict, usps: list[str]) -> dict:
     }
 
 
-async def _score_keyframe_candidate(data: dict, params: dict | None = None) -> dict:
+async def _score_keyframe_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a keyframe image candidate with multi-dimensional heuristics.
 
     Dimensions: composition (30%), lighting (20%), product visibility (25%), style consistency (25%).
@@ -241,7 +242,7 @@ async def _score_keyframe_candidate(data: dict, params: dict | None = None) -> d
     }
 
 
-async def _score_clip_candidate(data: dict, params: dict | None = None) -> dict:
+async def _score_clip_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a video clip candidate with multi-dimensional heuristics.
 
     Dimensions: prompt quality (30%), duration match (25%), file presence (25%), continuity (20%).
@@ -284,7 +285,7 @@ async def _score_clip_candidate(data: dict, params: dict | None = None) -> dict:
     }
 
 
-async def _score_final_candidate(data: dict, params: dict | None = None) -> dict:
+async def _score_final_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a final assembled video candidate with multi-dimensional heuristics.
 
     Dimensions: duration compliance (30%), audio present (25%), thumbnail present (25%), file valid (20%).
@@ -320,7 +321,7 @@ async def _score_final_candidate(data: dict, params: dict | None = None) -> dict
     }
 
 
-def _heuristic_generic(data: dict, default: float = 0.75) -> dict:
+def _heuristic_generic(data: dict[str, Any], default: float = 0.75) -> dict[str, Any]:
     """Generic heuristic scoring for non-text candidates.
 
     Returns a default score with a heuristic flag. Used when no specific
@@ -347,7 +348,7 @@ def _heuristic_generic(data: dict, default: float = 0.75) -> dict:
     }
 
 
-def _extract_script_text(script: dict) -> str:
+def _extract_script_text(script: dict[str, Any]) -> str:
     """Extract human-readable text from a script dict.
 
     Handles various script output formats returned by the pipeline.

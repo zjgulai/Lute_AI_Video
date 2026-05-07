@@ -94,7 +94,7 @@ def _get_next_step(step_name: str) -> str | None:
     return None
 
 
-async def get_gate_state(label: str, gate_id: str) -> dict:
+async def get_gate_state(label: str, gate_id: str) -> dict[str, Any]:
     """Get the current state of a specific gate.
 
     Args:
@@ -128,7 +128,7 @@ async def get_gate_state(label: str, gate_id: str) -> dict:
     }
 
 
-async def generate_candidates(label: str, gate_id: str) -> dict:
+async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
     """Generate 3 candidate outputs for a gate's candidate_step.
 
     For each variant (standard, creative, conservative), calls the
@@ -228,14 +228,14 @@ async def generate_candidates(label: str, gate_id: str) -> dict:
     }
 
     # Variant configurations
-    variants: list[tuple[str, dict]] = [
+    variants: list[tuple[str, dict[str, Any]]] = [
         ("standard", {"temperature": 0.7, "variant": "standard"}),
         ("creative", {"temperature": 0.9, "variant": "creative"}),
         ("conservative", {"temperature": 0.5, "variant": "conservative"}),
     ]
 
     wanted_count = 3
-    valid_candidates: list[dict] = []
+    valid_candidates: list[dict[str, Any]] = []
     CANDIDATE_VARIANTS = [
         {"variant": "standard", "params": {"temperature": 0.7}},
         {"variant": "creative", "params": {"temperature": 0.9}},
@@ -354,7 +354,7 @@ async def generate_candidates(label: str, gate_id: str) -> dict:
     }
 
 
-async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dict:
+async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dict[str, Any]:
     """Record gate approval and continue pipeline execution.
 
     Validates the selection, records the approved candidate IDs, marks the
@@ -509,7 +509,7 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
     }
 
 
-async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> dict:
+async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> dict[str, Any]:
     """Regenerate a single candidate for a gate.
 
     Re-executes the skill for the variant associated with the given
@@ -682,7 +682,7 @@ def _step_index(step_name: str | None) -> int:
         return -1
 
 
-def _extract_step_input(state: dict, step_name: str) -> Any:
+def _extract_step_input(state: dict[str, Any], step_name: str) -> Any:
     """Retrieve input from a previous step's output or edited_output."""
     steps = state.get("steps", {})
     step_data = steps.get(step_name, {})
@@ -691,7 +691,7 @@ def _extract_step_input(state: dict, step_name: str) -> Any:
     return step_data.get("output")
 
 
-def _build_skill_params(candidate_step: str, state: dict, variant_name: str, variant_params: dict) -> dict:
+def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name: str, variant_params: dict[str, Any]) -> dict[str, Any]:
     """Build skill-specific parameters for candidate generation.
 
     Each skill expects a different parameter set. This function maps
@@ -794,7 +794,7 @@ def _build_skill_params(candidate_step: str, state: dict, variant_name: str, var
     }
 
 
-def _extract_usps(strategy_data, config: dict) -> list[str]:
+def _extract_usps(strategy_data, config: dict[str, Any]) -> list[str]:
     """Extract USP list from strategy output or config.
 
     Strategy output can arrive as:
@@ -846,7 +846,7 @@ def _extract_usps(strategy_data, config: dict) -> list[str]:
     return []
 
 
-def _extract_brand_guidelines(config: dict) -> str:
+def _extract_brand_guidelines(config: dict[str, Any]) -> str:
     """Extract brand guidelines text from config."""
     guidelines = config.get("brand_guidelines", {})
     if isinstance(guidelines, str):

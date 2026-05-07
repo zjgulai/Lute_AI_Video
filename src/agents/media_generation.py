@@ -7,6 +7,7 @@ Phase 2+: Flux, Runway Gen-3, Kling integration.
 import structlog
 
 from src.models import AssetPlan
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -14,7 +15,7 @@ logger = structlog.get_logger()
 class MediaGenerationAgent:
     """Generates AI assets for gaps in the asset plan."""
 
-    async def run(self, asset_plans: list[AssetPlan]) -> list[dict]:
+    async def run(self, asset_plans: list[AssetPlan]) -> list[dict[str, Any]]:
         generated = []
         for plan in asset_plans:
             for gap_desc in plan.gaps:

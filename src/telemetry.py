@@ -320,7 +320,7 @@ def timed_node(func):
     import functools
 
     @functools.wraps(func)
-    def wrapper(state: dict, *args, **kwargs) -> dict:
+    def wrapper(state: dict[str, Any], *args, **kwargs) -> dict[str, Any]:
         node_name = func.__name__
         trace_id = state.get("trace_id", generate_trace_id())
         start = time.time()

@@ -10,6 +10,7 @@ even when audio files actually exist on disk.
 from __future__ import annotations
 
 import pytest
+from typing import Any
 
 
 @pytest.mark.asyncio
@@ -26,9 +27,9 @@ async def test_s1_audit_unwraps_tts_audio_dict(monkeypatch, tmp_path):
         p.write_bytes(b"\x00" * 1024)
         audio_files.append(str(p))
 
-    captured: dict = {}
+    captured: dict[str, Any] = {}
 
-    async def fake_execute(self, skill_name: str, params: dict):
+    async def fake_execute(self, skill_name: str, params: dict[str, Any]):
         captured["skill"] = skill_name
         captured["params"] = params
         return SkillResult(success=True, data={"overall_status": "PASS", "criteria": []})

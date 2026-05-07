@@ -15,6 +15,8 @@ from pathlib import Path
 import httpx
 import structlog
 
+from typing import Any
+
 from src.config import (
     ELEVENLABS_API_KEY,
     OUTPUT_DIR,
@@ -135,7 +137,7 @@ class ElevenLabsClient:
             logger.warning("tts: text too short after truncation, returning stub")
             return self._build_silent_mp3(output_label=f"tts_{language}_{text_hash}")
 
-        input_payload: dict = {
+        input_payload: dict[str, Any] = {
             "prompt": truncated,
             "title": f"Voiceover_{text_hash}",
             "style": "Soft, Warm, Gentle",
@@ -273,9 +275,9 @@ class ElevenLabsClient:
 
     async def synthesize_script(
         self,
-        segments: list[dict],
+        segments: list[dict[str, Any]],
         language: str = "en",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Synthesize all segments of a script."""
         results = []
         for seg in segments:
@@ -336,7 +338,7 @@ class ElevenLabsClient:
             return False
 
     @property
-    def cost_estimate(self) -> dict:
+    def cost_estimate(self) -> dict[str, Any]:
         """Cost info: $0.015/1k chars for multilingual v2."""
         return {
             "model": TTS_MODEL,

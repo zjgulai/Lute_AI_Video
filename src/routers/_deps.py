@@ -98,7 +98,7 @@ def _safe_error(exc: Exception, is_dev: bool = False) -> str:
     return f"Internal server error [trace: {_trace}]"
 
 
-def _classified_error(exc: Exception, is_dev: bool = False) -> dict:
+def _classified_error(exc: Exception, is_dev: bool = False) -> dict[str, Any]:
     """Return structured error with code, message, recoverable flag, and trace_id.
 
     T1.4: Uses error_classifier to map exceptions to structured PipelineError.

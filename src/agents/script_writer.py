@@ -14,6 +14,7 @@ from src.config import DEFAULT_LANGUAGES
 from src.agents.i18n import I18nService
 from src.models import AuditCriterionStatus, AuditReport, Brief, Language, Script, ScriptSegment
 from src.tools.llm_client import llm
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -30,7 +31,7 @@ class ScriptWriterAgent:
     async def run(
         self,
         briefs: list[Brief],
-        brand_guidelines: dict,
+        brand_guidelines: dict[str, Any],
         strategy_audit: AuditReport | None = None,
         target_languages: list[str] | None = None,
     ) -> list[Script]:
@@ -79,8 +80,8 @@ class ScriptWriterAgent:
         self,
         briefs: list[Brief],
         briefs_json: str,
-        brand_guidelines: dict,
-        quality_signals: dict,
+        brand_guidelines: dict[str, Any],
+        quality_signals: dict[str, Any],
         lang: str,
     ) -> list[Script]:
         """Run script generation for a single language."""
@@ -238,7 +239,7 @@ class ScriptWriterAgent:
     }
 
     @staticmethod
-    def _extract_quality_signals(audit: AuditReport | None) -> dict:
+    def _extract_quality_signals(audit: AuditReport | None) -> dict[str, Any]:
         """Extract actionable quality signals from a strategy audit report."""
         if not audit:
             return {}
@@ -259,7 +260,7 @@ class ScriptWriterAgent:
         }
 
     @staticmethod
-    def _adapt_template(template: dict, platform, quality_signals: dict | None = None) -> dict:
+    def _adapt_template(template: dict[str, Any], platform, quality_signals: dict[str, Any] | None = None) -> dict[str, Any]:
         """Apply quality signal adaptations to a base script template."""
         adapted = dict(template)
 
@@ -292,7 +293,7 @@ class ScriptWriterAgent:
     def _mock_scripts(
         self,
         briefs: list[Brief],
-        quality_signals: dict | None = None,
+        quality_signals: dict[str, Any] | None = None,
         language_code: str = "en",
     ) -> list[Script]:
         """Generate natural-language mock scripts, one per brief per platform.

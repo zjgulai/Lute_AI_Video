@@ -63,8 +63,10 @@ exclude = [
     "**/migrations",
     "**/__pycache__",
 ]
-# Phase A: basic mode (default — no strict rules yet)
-# Phase B: reportMissingTypeArgument = true
+# Phase A: basic mode (default — no strict rules yet) ✅ 已完成
+# Phase B: 泛型参数 + 边界变量
+reportMissingTypeArgument = true
+reportPossiblyUnboundVariable = true
 # Phase C: reportUnknownMemberType = true, reportUnknownVariableType = true
 # Phase D: full strict
 

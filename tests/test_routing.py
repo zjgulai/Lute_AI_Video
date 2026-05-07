@@ -31,6 +31,7 @@ from src.models import (
     ComplianceReport, ComplianceStatus, AssetPlan, AuditCheckpoint,
 )
 from src.models.state import VideoPipelineState
+from typing import Any
 
 
 # ── Audit report fixtures ──
@@ -59,7 +60,7 @@ def make_audit_report(score: float, checkpoint: str = "strategy", artifact_id: s
     )
 
 
-def audit_as_dict(score: float, checkpoint: str = "strategy") -> dict:
+def audit_as_dict(score: float, checkpoint: str = "strategy") -> dict[str, Any]:
     status = "PASS" if score >= 0.85 else "WARN" if score >= 0.50 else "FAIL"
     return {
         "audit_id": f"AUDIT-{checkpoint.upper()}-001",
@@ -74,7 +75,7 @@ def audit_as_dict(score: float, checkpoint: str = "strategy") -> dict:
     }
 
 
-def audit_as_dict_no_score() -> dict:
+def audit_as_dict_no_score() -> dict[str, Any]:
     return {
         "audit_id": "AUDIT-TEST-001",
         "checkpoint": "strategy",

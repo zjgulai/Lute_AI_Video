@@ -202,7 +202,7 @@ class ScriptWriterSkill(SkillCallable):
     name = "script-writer-skill"
     description = "Generates structured video scripts from content briefs."
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
         if not params.get("briefs"):
             errors.append("'briefs' is required")
@@ -214,7 +214,7 @@ class ScriptWriterSkill(SkillCallable):
             errors.append("output is None")
         return errors
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         import asyncio
         from src.tools.llm_client import llm
 
@@ -225,7 +225,7 @@ class ScriptWriterSkill(SkillCallable):
         logger.info("script-writer: generating", count=len(briefs), langs=languages, variant=variant)
 
         # Parallel LLM calls: each brief × language combination runs concurrently
-        async def _gen_one(brief: dict, lang: str) -> dict:
+        async def _gen_one(brief: dict[str, Any], lang: str) -> dict[str, Any]:
             try:
                 script = await self._call_llm(brief, brand_guidelines, lang, llm, variant=variant)
                 if script is None:
@@ -242,12 +242,12 @@ class ScriptWriterSkill(SkillCallable):
 
     async def _call_llm(
         self,
-        brief: dict,
-        brand_guidelines: dict,
+        brief: dict[str, Any],
+        brand_guidelines: dict[str, Any],
         language: str,
         llm: Any,
         variant: str = "standard",
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Call the LLM to generate a script for one brief
 
         Accepts a variant parameter ("standard", "creative", "conservative") to
@@ -332,7 +332,7 @@ class ScriptWriterSkill(SkillCallable):
         }
         return enriched
 
-    def _gen_fallback(self, brief: dict, lang: str) -> dict:
+    def _gen_fallback(self, brief: dict[str, Any], lang: str) -> dict[str, Any]:
         """Generate a structured script dict from template strings.
 
         Used when the LLM call fails or returns an invalid result.
@@ -393,7 +393,7 @@ class ScriptWriterSkill(SkillCallable):
             "video_type": video_type,
         }
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         briefs = params.get("briefs", [{"id": "fb", "topic": "Product"}])
         languages = params.get("target_languages", DEFAULT_LANGUAGES)
         scripts = []

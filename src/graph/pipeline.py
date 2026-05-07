@@ -45,6 +45,7 @@ from src.telemetry import generate_trace_id, error_collector
 
 import structlog
 from src.config import DEFAULT_LANGUAGES
+from typing import Any
 
 
 def _wrap_node_with_error_handling(node_func, node_name: str):
@@ -61,7 +62,7 @@ def _wrap_node_with_error_handling(node_func, node_name: str):
     import functools
 
     @functools.wraps(node_func)
-    async def wrapper(state: VideoPipelineState) -> dict:
+    async def wrapper(state: VideoPipelineState) -> dict[str, Any]:
         logger = structlog.get_logger()
         trace_id = state.get("trace_id", "unknown")
 
@@ -110,7 +111,7 @@ def _wrap_node_with_error_handling(node_func, node_name: str):
     return wrapper
 
 
-def build_pipeline() -> StateGraph:
+def build_pipeline() -> StateGraph:  # type: ignore[reportMissingTypeArgument]
     """Construct the 16-node video creation pipeline with self-audit.
 
     Returns a compiled StateGraph ready for invocation.
@@ -209,7 +210,7 @@ def build_pipeline() -> StateGraph:
     return graph
 
 
-def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledStateGraph:
+def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledStateGraph:  # type: ignore[reportMissingTypeArgument]
     """Build and compile the pipeline with optional checkpointer or PostgresSaver.
 
     Supports three modes:
@@ -312,7 +313,7 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
     graph = build_pipeline()
 
     # Set interrupt points on AUDIT nodes -- human sees artifact + audit report
-    compiled: CompiledStateGraph = graph.compile(
+    compiled: CompiledStateGraph = graph.compile(  # type: ignore[reportMissingTypeArgument]
         checkpointer=checkpointer,
         interrupt_after=[
             "strategy_audit_node",  # Human Review #1: calendar + strategy audit
@@ -324,7 +325,7 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
     return compiled
 
 
-def get_pipeline_history(compiled_graph, thread_id: str) -> dict:
+def get_pipeline_history(compiled_graph, thread_id: str) -> dict[str, Any]:
     """Get checkpoint history for a pipeline run.
 
     Args:

@@ -47,7 +47,7 @@ class ViralExtractorSkill(SkillCallable):
     name = "viral-extractor-skill"
     description = "Extracts reusable viral patterns (hook, pacing, emotion) from video analysis."
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
         if not params.get("analysis"):
             errors.append("'analysis' is required")
@@ -59,7 +59,7 @@ class ViralExtractorSkill(SkillCallable):
             errors.append("output is None")
         return errors
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         analysis = params["analysis"]
         segments = params.get("segments", [])
 
@@ -79,14 +79,14 @@ class ViralExtractorSkill(SkillCallable):
             "pattern_signature": signature,
         })
 
-    def _extract_hook_formula(self, hook_type: str) -> dict:
+    def _extract_hook_formula(self, hook_type: str) -> dict[str, Any]:
         return {
             "hook_type": hook_type,
             "formula": HOOK_FORMULAS.get(hook_type, "Generic → Detail → Action"),
             "reusable": True,
         }
 
-    def _extract_pacing(self, segments: list) -> list[dict]:
+    def _extract_pacing(self, segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not segments:
             return [{"position": "open", "duration_pct": 15, "purpose": "hook"},
                     {"position": "body", "duration_pct": 60, "purpose": "value"},
@@ -101,7 +101,7 @@ class ViralExtractorSkill(SkillCallable):
             })
         return output
 
-    def _extract_emotions(self, curve: list) -> list[dict]:
+    def _extract_emotions(self, curve: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not curve:
             return [{"emotion": "curiosity", "peak": True, "frequency": "open"},
                     {"emotion": "urgency", "peak": True, "frequency": "close"}]
@@ -114,11 +114,11 @@ class ViralExtractorSkill(SkillCallable):
                 emotions.append({"emotion": e, "intensity": point.get("intensity", 0.5)})
         return emotions
 
-    def _compute_signature(self, analysis: dict, hook_type: str) -> str:
+    def _compute_signature(self, analysis: dict[str, Any], hook_type: str) -> str:
         raw = f"{hook_type}:{analysis.get('speech_style','')}:{len(analysis.get('segments',[]))}"
         return hashlib.md5(raw.encode()).hexdigest()[:12]
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         analysis = params.get("analysis", {})
         hook_type = analysis.get("hook_type", "question")
         return SkillResult(success=True, data={

@@ -24,6 +24,7 @@ from src.config import (
     SILICONFLOW_API_KEY,
 )
 from src.tools.llm_client import get_request_api_key
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -137,9 +138,9 @@ class CosyVoiceClient:
 
     async def synthesize_script(
         self,
-        segments: list[dict],
+        segments: list[dict[str, Any]],
         language: str = "en",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Synthesize all segments of a script."""
         results = []
         for seg in segments:

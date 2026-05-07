@@ -9,6 +9,7 @@ All unit costs are rough averages and will be refined with real billing data.
 import contextvars
 import structlog
 from datetime import datetime, timezone
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -30,7 +31,7 @@ _UNIT_COSTS: dict[str, float] = {
 
 SOFT_BUDGET_PER_PIPELINE = 5.0  # USD
 
-_records: list[dict] = []
+_records: list[dict[str, Any]] = []
 
 
 def set_thread_id(thread_id: str | None) -> None:

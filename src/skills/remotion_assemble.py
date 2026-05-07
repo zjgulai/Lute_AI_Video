@@ -269,9 +269,9 @@ class RemotionAssembleSkill(SkillCallable):
         rendering_url: str,
         clip_paths: list[str],
         audio_paths: list[str],
-        render_payload: dict,
+        render_payload: dict[str, Any],
         output_label: str,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         try:
             import httpx
         except ImportError:
@@ -313,14 +313,14 @@ class RemotionAssembleSkill(SkillCallable):
 
     def _build_render_payload(
         self,
-        shots: list[dict],
-        captions: list[dict],
+        shots: list[dict[str, Any]],
+        captions: list[dict[str, Any]],
         audio_paths: list[str],
         lyrics_text: str,
-        brand_guidelines: dict,
+        brand_guidelines: dict[str, Any],
         total_duration: float,
         label: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Produce JSON that matches buildRenderProps() in rendering/src/render.ts."""
         # Convert shots into the Storyboard.shots schema render.ts expects
         normalized_shots = []
@@ -388,7 +388,7 @@ class RemotionAssembleSkill(SkillCallable):
         }
 
     @staticmethod
-    def _compute_total_duration(shots: list[dict]) -> float:
+    def _compute_total_duration(shots: list[dict[str, Any]]) -> float:
         if not shots:
             return 30.0
         max_end = max((float(s.get("end_time", 0)) for s in shots), default=30.0)

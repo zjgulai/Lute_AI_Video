@@ -163,7 +163,7 @@ async def list_influencers():
 @router.put("/influencers/{influencer_id}/product-links", tags=["influencer"])
 async def update_influencer_product_links(
     influencer_id: str,
-    links: list[dict],
+    links: list[dict[str, Any]],
 ):
     """Update an influencer's product links.
 
@@ -237,7 +237,7 @@ async def list_assets(tags: str = "", limit: int = 100):
 
 
 @router.put("/{asset_id}/tags")
-async def update_asset_tags(asset_id: str, body: dict):
+async def update_asset_tags(asset_id: str, body: dict[str, Any]):
     """Update tags for an asset.
 
     Args:

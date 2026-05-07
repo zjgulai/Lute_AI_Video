@@ -79,7 +79,7 @@ async def health():
         renderer = RemotionRenderer()
         remotion_env = renderer.validate_environment()
 
-    persistence_status: dict = {"backend": "filesystem", "pg_available": False}
+    persistence_status: dict[str, Any] = {"backend": "filesystem", "pg_available": False}
     if HAS_STORAGE:
         try:
             from src.storage.db import check_pg_health, is_pg_available

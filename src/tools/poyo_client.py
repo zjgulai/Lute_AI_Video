@@ -196,7 +196,7 @@ class PoyoClient:
             "task": task,
         }
 
-    async def test_connectivity(self) -> dict:
+    async def test_connectivity(self) -> dict[str, Any]:
         """Quick health check — verify poyo.ai API is reachable.
 
         Sends a lightweight HEAD to the base URL. Does not submit a job.

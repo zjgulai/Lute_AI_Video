@@ -66,7 +66,7 @@ class BaseRepository:
 
         return await asyncio.to_thread(_sync_fetchrow)  # type: ignore[return-type]
 
-    async def _fetch(self, query: str, *args) -> list:
+    async def _fetch(self, query: str, *args) -> list[Any]:
         pool = await get_pool()
         if pool is not None:
             async with pool.acquire() as conn:
@@ -99,7 +99,7 @@ class BaseRepository:
 
             await asyncio.to_thread(_sync_execute)
 
-    async def create(self, data: dict) -> dict:
+    async def create(self, data: dict[str, Any]) -> dict[str, Any]:
         record_id = self._generate_id()
         data["id"] = record_id
         columns = list(data.keys())
@@ -134,7 +134,7 @@ class BaseRepository:
             return await asyncio.to_thread(_sync_create)
         return data
 
-    async def get_by_id(self, id: str) -> Optional[dict]:
+    async def get_by_id(self, id: str) -> Optional[dict[str, Any]]:
         query = f"SELECT * FROM {self.table_name} WHERE id = $1"
         row = await self._fetchrow(query, id)
         if row is None:
@@ -156,7 +156,7 @@ class BaseRepository:
         "publish_logs": {"id", "platform", "post_id", "content", "status", "url", "error", "created_at"},
     }
 
-    async def get_by_field(self, field: str, value: Any) -> Optional[dict]:
+    async def get_by_field(self, field: str, value: Any) -> Optional[dict[str, Any]]:
         allowed = self._ALLOWED_FIELDS.get(self.table_name, set())
         if field not in allowed:
             raise ValueError(f"Invalid field name: {field!r}")
@@ -169,7 +169,7 @@ class BaseRepository:
             result[key] = self._from_json(result[key])
         return result
 
-    async def update(self, id: str, data: dict) -> Optional[dict]:
+    async def update(self, id: str, data: dict[str, Any]) -> Optional[dict[str, Any]]:
         if not data:
             return await self.get_by_id(id)
         columns = list(data.keys())
@@ -219,7 +219,7 @@ class BaseRepository:
             return await asyncio.to_thread(_sync_delete)
         return False
 
-    async def list_all(self, limit: int = 100) -> list[dict]:
+    async def list_all(self, limit: int = 100) -> list[dict[str, Any]]:
         query = f"SELECT * FROM {self.table_name} ORDER BY created_at DESC LIMIT $1"
         rows = await self._fetch(query, limit)
         results = []
@@ -235,7 +235,7 @@ class ThreadRepository(BaseRepository):
     def __init__(self):
         super().__init__("threads")
 
-    async def get_by_thread_id(self, thread_id: str) -> Optional[dict]:
+    async def get_by_thread_id(self, thread_id: str) -> Optional[dict[str, Any]]:
         return await self.get_by_field("thread_id", thread_id)
 
 
@@ -243,7 +243,7 @@ class PipelineStateRepository(BaseRepository):
     def __init__(self):
         super().__init__("pipeline_states")
 
-    async def get_by_label(self, label: str) -> Optional[dict]:
+    async def get_by_label(self, label: str) -> Optional[dict[str, Any]]:
         return await self.get_by_field("label", label)
 
 

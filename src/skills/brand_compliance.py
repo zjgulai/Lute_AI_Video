@@ -21,11 +21,11 @@ from src.skills.registry import SkillRegistry
 logger = structlog.get_logger()
 
 
-def _extract_brand_name(guidelines: dict) -> str:
+def _extract_brand_name(guidelines: dict[str, Any]) -> str:
     return guidelines.get("brand_name", guidelines.get("brand", ""))
 
 
-def _extract_tone(guidelines: dict) -> str:
+def _extract_tone(guidelines: dict[str, Any]) -> str:
     return guidelines.get("tone", guidelines.get("tone_of_voice", "professional"))
 
 
@@ -43,7 +43,7 @@ class BrandComplianceSkill(SkillCallable):
     name = "brand-compliance-skill"
     description = "Audits scripts for brand compliance — tone, forbidden content, brand assets."
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
         if not params.get("scripts"):
             errors.append("'scripts' is required")
@@ -55,7 +55,7 @@ class BrandComplianceSkill(SkillCallable):
             errors.append("output is None")
         return errors
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         scripts = params["scripts"]
         guidelines = params.get("brand_guidelines", {})
         logger.info("brand-compliance: auditing", script_count=len(scripts))
@@ -84,7 +84,7 @@ class BrandComplianceSkill(SkillCallable):
 
         return SkillResult(success=True, data={"reports": reports, "count": len(reports)})
 
-    def _check_script(self, script: dict, brand_name: str, tone: str, forbidden: list) -> list[dict]:
+    def _check_script(self, script: dict[str, Any], brand_name: str, tone: str, forbidden: list[str]) -> list[dict[str, Any]]:
         flags = []
         text = self._script_text(script).lower()
 
@@ -118,14 +118,14 @@ class BrandComplianceSkill(SkillCallable):
 
         return flags
 
-    def _script_text(self, script: dict) -> str:
+    def _script_text(self, script: dict[str, Any]) -> str:
         segs = script.get("segments", [])
         texts = [s.get("voiceover", "") for s in segs]
         texts.append(script.get("hook", ""))
         texts.append(script.get("thumbnail_description", ""))
         return "\n".join(texts)
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         scripts = params.get("scripts", [])
         reports = [{
             "script_id": s.get("id", ""),

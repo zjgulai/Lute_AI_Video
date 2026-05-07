@@ -44,7 +44,7 @@ class CharacterIdentitySkill(SkillCallable):
         # Attempt to use OpenCV for face detection
         has_cv2, _cv2, _cascade = self._try_load_cv2()
 
-        scored_frames: list[tuple[float, str, dict]] = []
+        scored_frames: list[tuple[float, str, dict[str, Any]]] = []
 
         for fp in frame_paths:
             path = Path(fp)

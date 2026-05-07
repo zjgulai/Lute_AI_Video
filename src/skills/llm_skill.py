@@ -41,7 +41,7 @@ class LLMSkill(SkillCallable):
         description: str,
         system_prompt: str,
         user_message_template: str,
-        output_schema: dict | None = None,
+        output_schema: dict[str, Any] | None = None,
         fallback_data: Any = None,
         max_retries: int = 3,
     ):

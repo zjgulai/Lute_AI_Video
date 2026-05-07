@@ -116,7 +116,7 @@ def _get_next_step(step_name: str, step_order: list[str] | None = None) -> str |
     return None
 
 
-def _get_step_input(state: dict, step_name: str, input_key: str) -> Any:
+def _get_step_input(state: dict[str, Any], step_name: str, input_key: str) -> Any:
     """Retrieve input from a previous step's output or edited_output."""
     steps = state.get("steps", {})
     step_data = steps.get(input_key, {})
@@ -141,7 +141,7 @@ class StepRunner:
 
     async def init_state(
         self,
-        config: dict,
+        config: dict[str, Any],
         mode: str = "auto",
         label: str | None = None,
         scenario: str = "s1",
@@ -184,7 +184,7 @@ class StepRunner:
         logger.info("step_runner: state initialized", label=label, mode=mode, trace_id=trace_id)
         return label
 
-    async def run_step(self, label: str, step_name: str) -> dict:
+    async def run_step(self, label: str, step_name: str) -> dict[str, Any]:
         """Load state, execute the specified step, save state back, and return state."""
         state = await self.state_manager.load(label)
         if state is None:
@@ -196,7 +196,7 @@ class StepRunner:
 
         return await self._execute_step(state, step_name, force=False)
 
-    async def regenerate_step(self, label: str, step_name: str) -> dict:
+    async def regenerate_step(self, label: str, step_name: str) -> dict[str, Any]:
         """Force re-execution of a step even if it is already done."""
         state = await self.state_manager.load(label)
         if state is None:
@@ -208,7 +208,7 @@ class StepRunner:
 
         return await self._execute_step(state, step_name, force=True)
 
-    async def resume(self, label: str) -> dict:
+    async def resume(self, label: str) -> dict[str, Any]:
         """Run from current_step until completion, returning the final state."""
         state = await self.state_manager.load(label)
         if state is None:
@@ -288,7 +288,7 @@ class StepRunner:
         )
         return state
 
-    async def _execute_step(self, state: dict, step_name: str, force: bool = False) -> dict:
+    async def _execute_step(self, state: dict[str, Any], step_name: str, force: bool = False) -> dict[str, Any]:
         """Execute a single step and update state."""
         steps = state.get("steps", {})
         if step_name not in steps:

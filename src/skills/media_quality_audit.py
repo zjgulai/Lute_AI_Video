@@ -66,7 +66,7 @@ def _score_to_status(score: float) -> str:
     return "FAIL"
 
 
-def _aggregate_status(criteria: list[dict]) -> str:
+def _aggregate_status(criteria: list[dict[str, Any]]) -> str:
     if not criteria:
         return "WARN"
     has_fail = any(c["status"] == "FAIL" for c in criteria)
@@ -78,7 +78,7 @@ def _aggregate_status(criteria: list[dict]) -> str:
     return "PASS"
 
 
-def _make_criterion(name: str, score: float, observation: str, recommendation: str = "") -> dict:
+def _make_criterion(name: str, score: float, observation: str, recommendation: str = "") -> dict[str, Any]:
     return {
         "name": name,
         "status": _score_to_status(score),
@@ -111,7 +111,7 @@ class MediaQualityAuditSkill(SkillCallable):
         product_reference_image = params.get("product_reference_image")
         clip_video_paths = params.get("clip_video_paths") or []
 
-        criteria: list[dict] = []
+        criteria: list[dict[str, Any]] = []
 
         # ── 1. Final video presence + duration ──
         criteria.append(self._audit_final_video(video_path, expected_duration))
@@ -189,7 +189,7 @@ class MediaQualityAuditSkill(SkillCallable):
 
     # === Individual audit checks ===
 
-    def _audit_final_video(self, video_path: str, expected_duration: float) -> dict:
+    def _audit_final_video(self, video_path: str, expected_duration: float) -> dict[str, Any]:
         path = Path(video_path) if video_path else None
         if not path or not path.exists():
             return _make_criterion(
@@ -223,7 +223,7 @@ class MediaQualityAuditSkill(SkillCallable):
             "" if duration_score >= 0.8 else "Re-render with corrected total_duration",
         )
 
-    def _audit_audio_coverage(self, audio_paths: Any, expected_duration: float) -> dict:
+    def _audit_audio_coverage(self, audio_paths: Any, expected_duration: float) -> dict[str, Any]:
         if not isinstance(audio_paths, (list, tuple)):
             return _make_criterion(
                 "audio_coverage",
@@ -262,7 +262,7 @@ class MediaQualityAuditSkill(SkillCallable):
             "Check ELEVENLABS_API_KEY and retry",
         )
 
-    def _audit_thumbnails(self, thumbnail_paths: Any) -> dict:
+    def _audit_thumbnails(self, thumbnail_paths: Any) -> dict[str, Any]:
         if not isinstance(thumbnail_paths, (list, tuple)):
             return _make_criterion(
                 "thumbnail_count",
@@ -300,7 +300,7 @@ class MediaQualityAuditSkill(SkillCallable):
             "Run gpt-image-generate-skill before audit",
         )
 
-    def _audit_clips(self, clip_paths: Any) -> dict:
+    def _audit_clips(self, clip_paths: Any) -> dict[str, Any]:
         if not isinstance(clip_paths, (list, tuple)):
             return _make_criterion(
                 "clip_availability",
@@ -330,7 +330,7 @@ class MediaQualityAuditSkill(SkillCallable):
             "Generate clips via seedance-video-generate-skill before assembly",
         )
 
-    def _audit_product_mention(self, script_text: str, expected_product: str) -> dict:
+    def _audit_product_mention(self, script_text: str, expected_product: str) -> dict[str, Any]:
         if not expected_product:
             return _make_criterion(
                 "product_mention",
@@ -380,7 +380,7 @@ class MediaQualityAuditSkill(SkillCallable):
             "Script appears to omit the product — re-run script generation",
         )
 
-    def _audit_thumbnail_prompts(self, prompts: Any, expected_product: str) -> dict:
+    def _audit_thumbnail_prompts(self, prompts: Any, expected_product: str) -> dict[str, Any]:
         if not isinstance(prompts, (list, tuple)):
             return _make_criterion(
                 "thumbnail_brand_alignment",
@@ -427,7 +427,7 @@ class MediaQualityAuditSkill(SkillCallable):
             "Thumbnails may not be brand-aligned — re-run thumbnail prompts",
         )
 
-    def _audit_language(self, script_text: str, expected_language: str) -> dict:
+    def _audit_language(self, script_text: str, expected_language: str) -> dict[str, Any]:
         # Heuristic: rough character-set checks for top languages
         if not script_text:
             return _make_criterion(
@@ -461,7 +461,7 @@ class MediaQualityAuditSkill(SkillCallable):
 
     # ═══ New optional content-level checks (Deliverable 4) ═══
 
-    def _audit_face_consistency(self, video_path: str, identity_card: dict | None) -> dict:
+    def _audit_face_consistency(self, video_path: str, identity_card: dict[str, Any] | None) -> dict[str, Any]:
         """Compare a frame from the final video with the identity_card reference.
 
         Uses histogram comparison as fallback when CLIP isn't available.
@@ -547,7 +547,7 @@ class MediaQualityAuditSkill(SkillCallable):
                 "PIL/numpy unavailable — face consistency check skipped",
             )
 
-    def _audit_product_shape(self, video_path: str, product_reference_image: str) -> dict:
+    def _audit_product_shape(self, video_path: str, product_reference_image: str) -> dict[str, Any]:
         """Detect if the product shape in the final video appears warped.
 
         Uses edge detection (Canny) comparison between a video frame and the
@@ -647,7 +647,7 @@ class MediaQualityAuditSkill(SkillCallable):
                 f"Product shape check failed: {e}",
             )
 
-    def _audit_motion_smoothness(self, clip_video_paths: list[str]) -> dict:
+    def _audit_motion_smoothness(self, clip_video_paths: list[str]) -> dict[str, Any]:
         """Compute optical flow variation across consecutive frames.
 
         Flags if the standard deviation of flow magnitude exceeds the threshold,

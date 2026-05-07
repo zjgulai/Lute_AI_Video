@@ -12,6 +12,8 @@ try:
 except ImportError:
     HAS_STORAGE = False
 
+from typing import Any
+
 from src.config import DEFAULT_LANGUAGES
 from src.routers._deps import _inject_api_keys, _safe_error, _classified_error, verify_api_key
 from src.routers._state import (
@@ -29,7 +31,7 @@ from src.routers._state import (
 router = APIRouter()
 
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
-async def run_s1_product_direct(body: dict):
+async def run_s1_product_direct(body: dict[str, Any]):
     """Run S1 Product Direct pipeline (auto mode via StepRunner for progress visibility).
 
     Uses StepRunner.init_state() + StepRunner.resume() directly so that
@@ -151,7 +153,7 @@ async def run_s1_product_direct(body: dict):
 
 
 @router.post("/scenario/s2", dependencies=[Depends(verify_api_key)])
-async def run_s2_brand_campaign(body: dict):
+async def run_s2_brand_campaign(body: dict[str, Any]):
     """Run S2 Brand Campaign pipeline."""
     _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
 
@@ -176,7 +178,7 @@ async def run_s2_brand_campaign(body: dict):
 
 
 @router.post("/scenario/s3", dependencies=[Depends(verify_api_key)])
-async def run_s3_influencer_remix(body: dict):
+async def run_s3_influencer_remix(body: dict[str, Any]):
     """Run S3 Influencer Remix pipeline.
 
     Phase 2+3: Translates Chinese product inputs to English before
@@ -220,7 +222,7 @@ async def run_s3_influencer_remix(body: dict):
 
 
 @router.post("/scenario/s4", dependencies=[Depends(verify_api_key)])
-async def run_s4_live_shoot(body: dict):
+async def run_s4_live_shoot(body: dict[str, Any]):
     """Run S4 Live Shoot to Video pipeline."""
     _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
@@ -243,7 +245,7 @@ async def run_s4_live_shoot(body: dict):
 
 
 @router.post("/scenario/s5", dependencies=[Depends(verify_api_key)])
-async def run_s5_brand_vlog(body: dict):
+async def run_s5_brand_vlog(body: dict[str, Any]):
     """Run S5 Brand VLOG pipeline.
 
     Request body:
@@ -374,7 +376,7 @@ async def start_s1_pipeline(body: S1StartRequest):
 
 
 @router.post("/scenario/s1/step/{step_name}", dependencies=[Depends(verify_api_key)])
-async def run_s1_step(step_name: str, body: dict):
+async def run_s1_step(step_name: str, body: dict[str, Any]):
     """Execute a single step of the S1 pipeline.
 
     Args:
@@ -398,7 +400,7 @@ async def run_s1_step(step_name: str, body: dict):
 
 
 @router.post("/scenario/s1/regenerate", dependencies=[Depends(verify_api_key)])
-async def regenerate_s1_step(body: dict):
+async def regenerate_s1_step(body: dict[str, Any]):
     """Force re-execution of a specific step and invalidate all downstream.
 
     Request body:
@@ -427,7 +429,7 @@ async def regenerate_s1_step(body: dict):
 
 
 @router.post("/scenario/s1/resume", dependencies=[Depends(verify_api_key)])
-async def resume_s1_pipeline(body: dict):
+async def resume_s1_pipeline(body: dict[str, Any]):
     """Resume execution from current_step to completion.
 
     Request body:
@@ -478,7 +480,7 @@ async def get_s1_state(label: str):
 
 
 @router.put("/scenario/s1/state/{label}", dependencies=[Depends(verify_api_key)])
-async def update_s1_state(label: str, body: dict):
+async def update_s1_state(label: str, body: dict[str, Any]):
     """Update the pipeline state (used after user edits a step output).
 
     Request body:
@@ -493,7 +495,7 @@ async def update_s1_state(label: str, body: dict):
     """
     from src.pipeline.state_manager import PipelineStateManager
 
-    def deep_merge(base: dict, updates: dict) -> dict:
+    def deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
         for key, value in updates.items():
             if isinstance(value, dict) and key in base and isinstance(base[key], dict):
                 deep_merge(base[key], value)
@@ -593,7 +595,7 @@ async def list_steps(scenario: str, label: str):
 
 
 @router.post("/scenario/{scenario}/step/{step_name}", dependencies=[Depends(verify_api_key)])
-async def execute_step(scenario: str, step_name: str, body: dict):
+async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
     """Execute a SINGLE step of the pipeline.
 
     If the step has already completed, returns cached result.
@@ -621,7 +623,7 @@ async def execute_step(scenario: str, step_name: str, body: dict):
 
         steps_data = state.get("steps", {})
         deps = _get_step_deps(scenario, step_name)
-        missing_deps: list[dict] = []
+        missing_deps: list[dict[str, Any]] = []
         for dep in deps:
             sd = steps_data.get(dep, {})
             if sd.get("status") != "done":
@@ -671,7 +673,7 @@ async def execute_step(scenario: str, step_name: str, body: dict):
 
 
 @router.put("/scenario/{scenario}/state/{label}", dependencies=[Depends(verify_api_key)])
-async def edit_step_output(scenario: str, label: str, body: dict):
+async def edit_step_output(scenario: str, label: str, body: dict[str, Any]):
     """Update the state for a step's output (allows user editing).
 
     Request body:
@@ -813,7 +815,7 @@ async def generate_gate_candidates(scenario: str, label: str, gate_id: str):
 
 
 @router.post("/scenario/{scenario}/gate/{label}/{gate_id}/approve", dependencies=[Depends(verify_api_key)])
-async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: dict):
+async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: dict[str, Any]):
     """Approve a gate with selected candidate IDs.
 
     Request body:

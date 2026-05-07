@@ -52,27 +52,27 @@ class S3Result:
 
     def __init__(self):
         self.success: bool = False
-        self.video_analysis: dict | None = None
-        self.identity_card: dict | None = None
-        self.remix_script: dict | None = None
-        self.storyboard_with_keyframes: dict | None = None
-        self.video_prompts: list[dict] = []
-        self.thumbnail_sets: list[dict] = []
+        self.video_analysis: dict[str, Any] | None = None
+        self.identity_card: dict[str, Any] | None = None
+        self.remix_script: dict[str, Any] | None = None
+        self.storyboard_with_keyframes: dict[str, Any] | None = None
+        self.video_prompts: list[dict[str, Any]] = []
+        self.thumbnail_sets: list[dict[str, Any]] = []
         # NEW: real media artifacts
         self.clip_paths: list[str] = []
         self.audio_paths: list[str] = []
         self.thumbnail_image_paths: list[str] = []
         self.final_video_path: str = ""
-        self.audit_report: dict | None = None
+        self.audit_report: dict[str, Any] | None = None
         self.media_synthesis_errors: list[str] = []
         self.errors: list[str] = []
 
     # Back-compat alias used by some tests
     @property
-    def thumbnail_prompts(self) -> list[dict]:
+    def thumbnail_prompts(self) -> list[dict[str, Any]]:
         return self.thumbnail_sets
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         segments = []
         if self.remix_script and "segments" in self.remix_script:
             segments = self.remix_script["segments"]
@@ -116,7 +116,7 @@ class S3InfluencerRemixPipeline:
 
     # ═══ StepRunner interface ═══
 
-    async def run_step(self, step_name: str, state: dict) -> Any:
+    async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step (used by StepRunner)."""
         config = state["config"]
         reg = SkillRegistry()
@@ -243,7 +243,7 @@ class S3InfluencerRemixPipeline:
         raise ValueError(f"Unknown step name: {step_name}")
 
     @staticmethod
-    def _get_step_output(steps: dict, step_name: str) -> Any:
+    def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
         """Retrieve output from a step, preferring edited_output if edited."""
         step_data = steps.get(step_name, {})
         if step_data.get("edited") and step_data.get("edited_output") is not None:
@@ -255,7 +255,7 @@ class S3InfluencerRemixPipeline:
     async def run(
         self,
         video_url: str,
-        product: dict,
+        product: dict[str, Any],
         influencer_name: str = "Influencer",
         extract_segments: bool = True,
         brief_id: str = "",
@@ -355,8 +355,8 @@ class S3InfluencerRemixPipeline:
 
     async def _step_remix_script(
         self,
-        analysis: dict,
-        product: dict,
+        analysis: dict[str, Any],
+        product: dict[str, Any],
         influencer_name: str,
         brief_id: str,
     ) -> SkillResult:
@@ -377,9 +377,9 @@ class S3InfluencerRemixPipeline:
 
     async def _step_video_prompts(
         self,
-        remix_script: dict,
-        product: dict,
-    ) -> list[dict]:
+        remix_script: dict[str, Any],
+        product: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         """Generate Seedance video prompts from remix segments."""
         logger.info("s3: step 3 — video prompts")
         segments = remix_script.get("segments", [])
@@ -433,9 +433,9 @@ class S3InfluencerRemixPipeline:
 
     async def _step_thumbnail_prompts(
         self,
-        remix_script: dict,
-        product: dict,
-    ) -> list[dict]:
+        remix_script: dict[str, Any],
+        product: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         """Generate thumbnail image prompts from remix script."""
         logger.info("s3: step 4 — thumbnail prompts")
         result = await self._registry.execute("gpt-image-thumbnail-prompt", {
@@ -464,8 +464,8 @@ class S3InfluencerRemixPipeline:
 
     async def _step_character_identity(
         self,
-        analysis: dict,
-    ) -> dict:
+        analysis: dict[str, Any],
+    ) -> dict[str, Any]:
         """Extract character identity (face reference frames) from video analysis.
 
         Uses the video-analysis result to locate downloaded video frames, then
@@ -518,8 +518,8 @@ class S3InfluencerRemixPipeline:
 
     async def _step_storyboards(
         self,
-        remix_script: dict,
-    ) -> dict:
+        remix_script: dict[str, Any],
+    ) -> dict[str, Any]:
         """Build a storyboard dict from the remix script segments.
 
         Converts each segment into a shot with visual description, shot type,
@@ -539,9 +539,9 @@ class S3InfluencerRemixPipeline:
 
     async def _step_keyframe_images(
         self,
-        storyboard: dict,
-        identity_card: dict,
-    ) -> dict:
+        storyboard: dict[str, Any],
+        identity_card: dict[str, Any],
+    ) -> dict[str, Any]:
         """Generate keyframe images for each storyboard shot using GPT-Image.
 
         Calls the keyframe-images skill which enriches shot visual + camera +
@@ -619,11 +619,11 @@ class S3InfluencerRemixPipeline:
 
     async def _step_seedance_clips(
         self,
-        video_prompts: list[dict],
-        product: dict,
+        video_prompts: list[dict[str, Any]],
+        product: dict[str, Any],
         label: str,
         errors: list[str],
-        keyframe_images: dict | None = None,
+        keyframe_images: dict[str, Any] | None = None,
     ) -> list[str]:
         """Step 8: invoke seedance-video-generate-skill once per prompt (capped).
 
@@ -706,7 +706,7 @@ class S3InfluencerRemixPipeline:
 
     async def _step_tts_audio(
         self,
-        remix_script: dict,
+        remix_script: dict[str, Any],
         language: str,
         errors: list[str],
     ) -> list[str]:
@@ -745,7 +745,7 @@ class S3InfluencerRemixPipeline:
 
     async def _step_thumbnail_images(
         self,
-        thumbnail_prompts: list[dict],
+        thumbnail_prompts: list[dict[str, Any]],
         label: str,
         errors: list[str],
     ) -> list[str]:
@@ -782,8 +782,8 @@ class S3InfluencerRemixPipeline:
 
     async def _step_assemble_final(
         self,
-        remix_script: dict,
-        captions: list[dict],
+        remix_script: dict[str, Any],
+        captions: list[dict[str, Any]],
         audio_paths: list[str],
         clip_paths: list[str],
         label: str,
@@ -807,9 +807,9 @@ class S3InfluencerRemixPipeline:
         audio_paths: list[str],
         thumbnail_paths: list[str],
         clip_paths: list[str],
-        product: dict,
-        remix_script: dict,
-        thumbnail_prompts: list[dict],
+        product: dict[str, Any],
+        remix_script: dict[str, Any],
+        thumbnail_prompts: list[dict[str, Any]],
         language: str,
     ) -> SkillResult:
         """Step 9: invoke media-quality-audit-skill."""
@@ -836,7 +836,7 @@ class S3InfluencerRemixPipeline:
     # ═══ Helpers ═══
 
     @staticmethod
-    def _extract_shots(remix_script: dict) -> list[dict]:
+    def _extract_shots(remix_script: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert remix_script segments into Storyboard.shots schema."""
         segments = remix_script.get("segments", [])
         shots = []
@@ -854,7 +854,7 @@ class S3InfluencerRemixPipeline:
         return shots
 
     @staticmethod
-    def _extract_captions(remix_script: dict) -> list[dict]:
+    def _extract_captions(remix_script: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert remix_script segments into caption entries."""
         segments = remix_script.get("segments", [])
         captions = []
@@ -893,7 +893,7 @@ class S3InfluencerRemixPipeline:
         return chunks or [text]
 
     @staticmethod
-    def _compute_total_duration(shots: list[dict]) -> float:
+    def _compute_total_duration(shots: list[dict[str, Any]]) -> float:
         if not shots:
             return 30.0
         return max((float(s.get("end_time", 0)) for s in shots), default=30.0)
@@ -915,7 +915,7 @@ class S3InfluencerRemixPipeline:
 
     # ═══ Frame extraction ═══
 
-    async def _extract_video_frames(self, analysis: dict) -> list[str]:
+    async def _extract_video_frames(self, analysis: dict[str, Any]) -> list[str]:
         """Extract key frames from the downloaded video for character identity.
 
         Tries to locate the downloaded video from the analysis result, then uses

@@ -37,11 +37,11 @@ class InfluencerStyleProfile(BaseModel):
     speech_style: str = ""  # casual, energetic, professional, storytelling
     catchphrases: list[str] = Field(default_factory=list)
     common_hooks: list[str] = Field(default_factory=list)
-    emotion_curve: list[dict] = Field(
+    emotion_curve: list[dict[str, Any]] = Field(
         default_factory=list,
         description="List of {time: float, emotion: str, intensity: float}",
     )
-    structure_segments: list[dict] = Field(
+    structure_segments: list[dict[str, Any]] = Field(
         default_factory=list,
         description="List of {type: str, start: float, end: float, description: str}",
     )
@@ -78,7 +78,7 @@ class InfluencerProfile(BaseModel):
         return self.model_dump()
 
     @classmethod
-    def from_dict(cls, data: dict) -> InfluencerProfile:
+    def from_dict(cls, data: dict[str, Any]) -> InfluencerProfile:
         return cls(**data)
 
 

@@ -11,13 +11,14 @@ from src.models import (
     CaptionPlan, CaptionEntry,
 )
 from src.agents.thumbnail import _propagate_caption_signals
+from typing import Any
 
 
 # ── Unit: _propagate_caption_signals ──
 
 def _make_caption_plan(
     script_id: str = "SCRIPT-TEST-001",
-    entries: list | None = None,
+    entries: list[Any] | None = None,
 ) -> CaptionPlan:
     if entries is None:
         entries = [

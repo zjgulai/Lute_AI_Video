@@ -87,7 +87,7 @@ class PipelineStateManager:
         _validate_label(label)
         return self._state_dir() / f"{label}.json"
 
-    def _save_to_fs(self, label: str, state: dict) -> None:
+    def _save_to_fs(self, label: str, state: dict[str, Any]) -> None:
         """Serialize state to JSON file (crash-safe, always-on).
 
         P1-3: Writes to a temporary file first, then performs an atomic
@@ -103,7 +103,7 @@ class PipelineStateManager:
         # Atomic replace: readers always see a complete file
         os.replace(tmp_path, state_path)
 
-    def _load_from_fs(self, label: str) -> dict | None:
+    def _load_from_fs(self, label: str) -> dict[str, Any] | None:
         """Deserialize state from JSON file.
 
         Returns None if the state file does not exist.
@@ -114,7 +114,7 @@ class PipelineStateManager:
         with open(state_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    async def save(self, label: str, state: dict) -> None:
+    async def save(self, label: str, state: dict[str, Any]) -> None:
         """Save state — PG first (primary), then FS (fallback/cache).
 
         P1-4: Reverses the old "FS first, PG second" order. PG is the single
@@ -153,7 +153,7 @@ class PipelineStateManager:
                 "Next load will sync from FS to PG when PG recovers."
             )
 
-    async def load(self, label: str) -> dict | None:
+    async def load(self, label: str) -> dict[str, Any] | None:
         """Load state — PG primary, with FS-backfill on PG miss.
 
         P1-4: If PG is healthy but has no data for this label while FS does,

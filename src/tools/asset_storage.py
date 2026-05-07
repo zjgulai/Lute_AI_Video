@@ -62,7 +62,7 @@ class AssetRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> AssetRecord:
+    def from_dict(cls, data: dict[str, Any]) -> AssetRecord:
         return cls(
             asset_id=data["asset_id"],
             filename=data["filename"],

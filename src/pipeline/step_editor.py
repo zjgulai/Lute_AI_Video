@@ -53,7 +53,7 @@ async def invalidate_downstream(
     label: str,
     step_name: str,
     state_manager: PipelineStateManager | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Mark all steps after step_name as 'pending' (invalidates downstream).
 
     This is called when a step is regenerated — downstream steps need to be
@@ -130,7 +130,7 @@ async def update_step_output(
     step_name: str,
     updates: Any,
     state_manager: PipelineStateManager | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Deep-merge updates into a step's output data.
 
     Sets `edited=True` and stores the merged result in `edited_output`.
@@ -195,7 +195,7 @@ async def update_step_output(
     return state
 
 
-def _deep_merge(base: dict, updates: dict) -> None:
+def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> None:
     """Recursively merge updates into base dict (in-place)."""
     for key, value in updates.items():
         if isinstance(value, dict) and key in base and isinstance(base[key], dict):

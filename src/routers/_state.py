@@ -154,7 +154,7 @@ async def _periodic_cache_eviction() -> None:
         _evict_stale_threads()
 
 
-async def _get_config_for_thread(thread_id: str) -> dict:
+async def _get_config_for_thread(thread_id: str) -> dict[str, Any]:
     """Get config for thread from memory cache or DB."""
     try:
         from src.storage import HAS_STORAGE
@@ -181,7 +181,7 @@ async def _get_config_for_thread(thread_id: str) -> dict:
 
 # ── Background task registry ──
 
-def _register_background_task(task: asyncio.Task, label: str) -> str:
+def _register_background_task(task: asyncio.Task[Any], label: str) -> str:
     """Register a background task and attach completion callback."""
     import structlog
     log = structlog.get_logger()
@@ -189,7 +189,7 @@ def _register_background_task(task: asyncio.Task, label: str) -> str:
     started_at = time.time()
     _background_tasks[task_id] = {"task": task, "label": label, "started_at": started_at}
 
-    def _on_done(t: asyncio.Task) -> None:
+    def _on_done(t: asyncio.Task[Any]) -> None:
         duration_sec = time.time() - started_at
         try:
             exc = t.exception()
@@ -263,7 +263,7 @@ def _get_step_deps(scenario: str, step_name: str) -> list[str]:
         raise HTTPException(status_code=400, detail=f"Unknown step: {step_name}")
 
 
-def _get_step_output(state: dict, step_name: str) -> Any:
+def _get_step_output(state: dict[str, Any], step_name: str) -> Any:
     """Extract step output from pipeline state (prefers edited over original)."""
     edited = state.get("edited_outputs", {})
     if step_name in edited:

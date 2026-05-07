@@ -67,7 +67,7 @@ class MetricsPoller:
             skipped,
         )
 
-    async def pull_single(self, post: dict) -> bool:
+    async def pull_single(self, post: dict[str, Any]) -> bool:
         """Fetch and store metrics for a single post row.
 
         Returns True if a new metrics snapshot was saved, False if skipped.
@@ -142,7 +142,7 @@ class MetricsPoller:
     # Platform-specific fetchers (mock stubs — replace with real API calls)
     # ------------------------------------------------------------------
 
-    async def _fetch_from_platform(self, platform: str, post_id: str) -> dict:
+    async def _fetch_from_platform(self, platform: str, post_id: str) -> dict[str, Any]:
         """Route to the correct platform fetcher based on *platform* name."""
         platform_lower = platform.strip().lower()
         if platform_lower == "tiktok":
@@ -152,7 +152,7 @@ class MetricsPoller:
         logger.warning("metrics_poller: unknown platform %r — returning empty", platform)
         return {}
 
-    async def _fetch_from_tiktok(self, post_id: str) -> dict:
+    async def _fetch_from_tiktok(self, post_id: str) -> dict[str, Any]:
         """Fetch metrics from TikTok Insights API.
 
         Returns a dict of metrics or empty dict on failure.
@@ -164,7 +164,7 @@ class MetricsPoller:
         logger.debug("metrics_poller: _fetch_from_tiktok(%s) — stub returning empty", post_id)
         return {}
 
-    async def _fetch_from_shopify(self, post_id: str) -> dict:
+    async def _fetch_from_shopify(self, post_id: str) -> dict[str, Any]:
         """Fetch metrics from Shopify Analytics API.
 
         Returns a dict of metrics or empty dict on failure.

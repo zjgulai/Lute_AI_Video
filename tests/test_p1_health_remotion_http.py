@@ -14,21 +14,22 @@ real node/remotion/ffmpeg status.
 from __future__ import annotations
 
 import pytest
+from typing import Any
 
 
 class _FakeResponse:
-    def __init__(self, payload: dict, status_code: int = 200) -> None:
+    def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
         self.status_code = status_code
         self._payload = payload
 
-    def json(self) -> dict:
+    def json(self) -> dict[str, Any]:
         return self._payload
 
 
 class _FakeAsyncClient:
     """Stub httpx.AsyncClient that returns a canned response on .get()."""
 
-    def __init__(self, payload: dict, status_code: int = 200, **_: object) -> None:
+    def __init__(self, payload: dict[str, Any], status_code: int = 200, **_: object) -> None:
         self._payload = payload
         self._status_code = status_code
 

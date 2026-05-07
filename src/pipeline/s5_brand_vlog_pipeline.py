@@ -40,7 +40,7 @@ class S5BrandVlogPipeline:
     """品牌VLOG — 素材装配驱动的叙事视频生成管道 (auto mode)."""
 
     @staticmethod
-    def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict] | None = None) -> bool:
+    def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict[str, Any]] | None = None) -> bool:
         """Detect whether every clip is a stub file.
 
         Uses explicit is_stub metadata from clip_details when available,
@@ -55,7 +55,7 @@ class S5BrandVlogPipeline:
 
     # ═══ StepRunner interface ═══
 
-    async def run_step(self, step_name: str, state: dict) -> Any:
+    async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step (used by StepRunner)."""
         config = state["config"]
         reg = SkillRegistry()
@@ -135,7 +135,7 @@ class S5BrandVlogPipeline:
         raise ValueError(f"Unknown step name: {step_name}")
 
     @staticmethod
-    def _get_step_output(steps: dict, step_name: str) -> Any:
+    def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
         """Retrieve output from a step, preferring edited_output if edited."""
         step_data = steps.get(step_name, {})
         if step_data.get("edited") and step_data.get("edited_output") is not None:
@@ -147,12 +147,12 @@ class S5BrandVlogPipeline:
     async def run(
         self,
         brand_id: str = "momcozy",
-        product_sku: dict | None = None,
+        product_sku: dict[str, Any] | None = None,
         scene_id: str = "living-room",
-        selected_models: list[dict] | None = None,
+        selected_models: list[dict[str, Any]] | None = None,
         story_description: str = "",
         video_duration: int = 30,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Run the full S5 pipeline end-to-end.
 
         Backwards-compatible: uses StepRunner internally but returns the same
@@ -247,9 +247,9 @@ class S5BrandVlogPipeline:
     # ═══ Step ①: VLOG Strategy (LLM) ═══
 
     async def _step_vlog_strategy(
-        self, product_sku: dict, models: list[dict],
+        self, product_sku: dict[str, Any], models: list[dict[str, Any]],
         scene_id: str, story: str, duration: int, errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate VLOG shot list via DeepSeek-V4-Pro.
 
         Uses 120s timeout (vs default 60s) because VLOG strategy prompts
@@ -320,7 +320,7 @@ class S5BrandVlogPipeline:
 
         return self._build_fallback_shots(product_sku, duration)
 
-    def _build_fallback_shots(self, product_sku: dict, duration: int) -> list[dict]:
+    def _build_fallback_shots(self, product_sku: dict[str, Any], duration: int) -> list[dict[str, Any]]:
         """Fallback shot list with structured narrative — not generic rotation."""
         name = product_sku.get("name", "Product")
         short = product_sku.get("shortName", name)
@@ -349,7 +349,7 @@ class S5BrandVlogPipeline:
 
     # ═══ Step ②: Shots → Scripts Adapter ═══
 
-    def _vlog_shots_to_scripts(self, shots: list[dict]) -> list[dict]:
+    def _vlog_shots_to_scripts(self, shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert VLOG shot JSON to scripts format consumable by video_prompts step."""
         if not shots:
             return []
@@ -409,7 +409,7 @@ class S5BrandVlogPipeline:
 
     async def _step_seedance_clips(
         self, reg, video_prompts, product_name, label, errors, video_duration,
-        product_sku: dict | None = None,
+        product_sku: dict[str, Any] | None = None,
     ):
         """Generate video clips per segment via Happy Horse (REUSE pattern).
 

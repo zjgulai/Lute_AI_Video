@@ -9,6 +9,7 @@ import re
 
 import structlog
 from src.tools.llm_client import llm
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -68,7 +69,7 @@ async def translate_to_english(text: str) -> str:
         return text
 
 
-async def translate_catalog_to_english(catalog: dict) -> dict:
+async def translate_catalog_to_english(catalog: dict[str, Any]) -> dict[str, Any]:
     """Translate a product_catalog dict's name and USPs to English.
 
     Returns a new dict with translated fields. The original Chinese values

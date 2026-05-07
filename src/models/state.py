@@ -68,7 +68,7 @@ class VideoPipelineState(TypedDict, total=False):
     current_step: str  # Which pipeline step we're at
     errors: list[str]  # Accumulated errors (legacy string format)
     structured_errors: list[dict[str, Any]]  # Structured PipelineError dicts (GAP-20)
-    messages: Annotated[list, add_messages]  # Human-in-the-loop communication
+    messages: Annotated[list[Any], add_messages]  # Human-in-the-loop communication
     pipeline_complete: bool
 
     # ── Resilience ──

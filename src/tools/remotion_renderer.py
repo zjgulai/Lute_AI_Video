@@ -147,7 +147,7 @@ class RemotionRenderer:
 
     # ── Pipeline Export ──
 
-    def export_pipeline_json(self, pipeline_state: dict, filename: str = "render_input.json") -> Path:
+    def export_pipeline_json(self, pipeline_state: dict[str, Any], filename: str = "render_input.json") -> Path:
         """Export pipeline state as JSON for Remotion to consume.
 
         Validates environment before export — logs warning if Remotion

@@ -43,7 +43,7 @@ router = APIRouter()
 # ── State conversion helpers ──
 
 
-def _steprunner_state_to_legacy(label: str, state: dict | None) -> dict[str, Any]:
+def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dict[str, Any]:
     """Convert StepRunner state dict to legacy LangGraph-compatible format.
 
     This is a best-effort conversion — fields that don't exist in StepRunner
@@ -108,7 +108,7 @@ def _steprunner_state_to_legacy(label: str, state: dict | None) -> dict[str, Any
     return legacy_state
 
 
-def _get_state_status(legacy_state: dict) -> str:
+def _get_state_status(legacy_state: dict[str, Any]) -> str:
     """Derive status string from legacy state."""
     if legacy_state.get("pipeline_complete"):
         return "complete"
@@ -117,7 +117,7 @@ def _get_state_status(legacy_state: dict) -> str:
     return "interrupted"
 
 
-async def _load_steprunner_state(label: str) -> dict | None:
+async def _load_steprunner_state(label: str) -> dict[str, Any] | None:
     """Load state from PipelineStateManager by label."""
     from src.pipeline.state_manager import PipelineStateManager
     manager = PipelineStateManager()

@@ -71,7 +71,7 @@ class BrandAssetPackage(BaseModel):
         return self.model_dump()
 
     @classmethod
-    def from_dict(cls, data: dict) -> BrandAssetPackage:
+    def from_dict(cls, data: dict[str, Any]) -> BrandAssetPackage:
         return cls(**data)
 
 

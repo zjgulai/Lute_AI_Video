@@ -22,6 +22,7 @@ from pydantic import BaseModel
 import structlog
 
 from src.config import OUTPUT_DIR
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -122,7 +123,7 @@ class VideoDownloader:
             logger.error("video_downloader: transcribe failed", path=video_path, error=str(e))
             return self._mock_transcription()
 
-    async def download_and_transcribe(self, url: str) -> dict:
+    async def download_and_transcribe(self, url: str) -> dict[str, Any]:
         """Convenience: download then transcribe in one call.
 
         Returns:

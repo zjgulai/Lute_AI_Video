@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 import asyncpg
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ async def _verify_pg_tables(conn: asyncpg.Connection | asyncpg.pool.PoolConnecti
     return True
 
 
-async def check_pg_health() -> dict:
+async def check_pg_health() -> dict[str, Any]:
     """Return a health-check dict describing the PG (or fallback) status.
 
     This is safe to call from /health — no side effects, no table creation.

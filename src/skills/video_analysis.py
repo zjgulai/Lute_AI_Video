@@ -69,12 +69,12 @@ class VideoAnalysisResult:
         self.avg_speech_wpm: float = 150.0
         self.catchphrases: list[str] = []
         self.common_phrases: list[str] = []
-        self.emotion_curve: list[dict] = []  # [{time, emotion, intensity}]
-        self.segments: list[dict] = []       # [{type, start, end, description}]
+        self.emotion_curve: list[dict[str, Any]] = []  # [{time, emotion, intensity}]
+        self.segments: list[dict[str, Any]] = []       # [{type, start, end, description}]
         self.notes: str = ""
-        self.visual_context: dict | None = None
+        self.visual_context: dict[str, Any] | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "video_url": self.video_url,
             "duration_seconds": self.duration_seconds,
@@ -91,7 +91,7 @@ class VideoAnalysisResult:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> VideoAnalysisResult:
+    def from_dict(cls, data: dict[str, Any]) -> VideoAnalysisResult:
         obj = cls()
         for k, v in data.items():
             if hasattr(obj, k):
@@ -120,7 +120,7 @@ class VideoAnalysisSkill(SkillCallable):
 
     _downloader = VideoDownloader()
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
         if not params.get("video_url"):
             errors.append("'video_url' is required")
@@ -132,7 +132,7 @@ class VideoAnalysisSkill(SkillCallable):
             errors.append("'hook_type' missing from output")
         return errors
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         video_url = params["video_url"]
         extract_segments = params.get("extract_segments", True)
         extract_emotions = params.get("extract_emotions", True)
@@ -184,7 +184,7 @@ class VideoAnalysisSkill(SkillCallable):
         video_url: str,
         extract_segments: bool = True,
         extract_emotions: bool = True,
-        visual_context: dict | None = None,
+        visual_context: dict[str, Any] | None = None,
     ) -> VideoAnalysisResult:
         """Analyze transcription to extract style and structure.
 
@@ -381,7 +381,7 @@ class VideoAnalysisSkill(SkillCallable):
 
     def _build_emotion_curve(
         self, transcription: Any, total_duration: float
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Build emotion curve from transcription segments."""
         emotions = []
 
@@ -431,7 +431,7 @@ class VideoAnalysisSkill(SkillCallable):
 
     def _detect_segments(
         self, full_text: str, duration: float
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Detect structural segments from transcription."""
         import re
 
@@ -536,7 +536,7 @@ class VideoAnalysisSkill(SkillCallable):
                            video_path=str(video_path), error=str(e)[:200])
             return []
 
-    async def _analyze_frames_visual(self, frame_paths: list[str], transcript_text: str) -> dict | None:
+    async def _analyze_frames_visual(self, frame_paths: list[str], transcript_text: str) -> dict[str, Any] | None:
         """Analyze video frames using vision-capable LLM.
 
         Sends frames + transcript snippet to understand:
@@ -578,7 +578,7 @@ and visual style elements."""
 
         return None
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         """Return a reasonable stub analysis when everything fails."""
         result = VideoAnalysisResult()
         result.video_url = params.get("video_url", "")

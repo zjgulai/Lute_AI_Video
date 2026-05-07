@@ -45,7 +45,7 @@ def _from_json(value: Any) -> Any:
     return value
 
 
-def _deserialize_row(row: dict) -> dict:
+def _deserialize_row(row: dict[str, Any]) -> dict[str, Any]:
     """Deserialize JSONB columns in a row returned from the database."""
     result = dict(row)
     for key in ("metrics",):
@@ -63,7 +63,7 @@ class VideoMetricsRepository:
     # Internal helpers (PG-first, SQLite fallback)
     # ------------------------------------------------------------------
 
-    async def _fetchrow(self, query: str, *args) -> Optional[dict]:
+    async def _fetchrow(self, query: str, *args) -> Optional[dict[str, Any]]:
         pool = await get_pool()
         if pool is not None:
             async with pool.acquire() as conn:
@@ -76,7 +76,7 @@ class VideoMetricsRepository:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-    async def _fetch(self, query: str, *args) -> list[dict]:
+    async def _fetch(self, query: str, *args) -> list[dict[str, Any]]:
         pool = await get_pool()
         if pool is not None:
             async with pool.acquire() as conn:
@@ -110,8 +110,8 @@ class VideoMetricsRepository:
         platform: str,
         post_id: Optional[str] = None,
         post_url: Optional[str] = None,
-        metrics_dict: Optional[dict] = None,
-    ) -> dict:
+        metrics_dict: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """Insert a new metrics snapshot row."""
         record_id = _generate_id()
         now_ts = _now()
@@ -175,7 +175,7 @@ class VideoMetricsRepository:
         self,
         video_id: str,
         platform: Optional[str] = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Get all metrics snapshots for a video, optionally filtered by platform.
 
         Results are ordered by pulled_at descending (newest first).
@@ -201,7 +201,7 @@ class VideoMetricsRepository:
         scenario: Optional[str] = None,
         platform: Optional[str] = None,
         days: int = 7,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Get aggregated dashboard data: latest metrics per video.
 
         For each video returns the single most recent metrics snapshot,
@@ -209,7 +209,7 @@ class VideoMetricsRepository:
         """
         cutoff = _now() - timedelta(days=days)
         conditions = ["vm.pulled_at >= $1"]
-        params: list = [cutoff]
+        params: list[Any] = [cutoff]
         idx = 2
 
         if scenario:
@@ -241,7 +241,7 @@ class VideoMetricsRepository:
         rows = await self._fetch(query, *params)
         return [_deserialize_row(r) for r in rows]
 
-    async def get_active_posts(self) -> list[dict]:
+    async def get_active_posts(self) -> list[dict[str, Any]]:
         """Get all posts that need polling (published within 30 days).
 
         Returns the latest snapshot row per (video_id, platform) so that
@@ -266,7 +266,7 @@ class VideoMetricsRepository:
         rows = await self._fetch(query, cutoff)
         return [_deserialize_row(r) for r in rows]
 
-    async def get_scenario_aggregates(self, days: int = 7) -> list[dict]:
+    async def get_scenario_aggregates(self, days: int = 7) -> list[dict[str, Any]]:
         """Average metrics grouped by scenario over the given time window.
 
         Returns rows like:
@@ -340,7 +340,7 @@ class VideoMetricsRepository:
         self,
         scenario: Optional[str] = None,
         days: int = 7,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Metrics grouped by platform, optionally filtered by scenario.
 
         Returns rows like:
@@ -351,7 +351,7 @@ class VideoMetricsRepository:
         pool = await get_pool()
 
         scenario_filter = ""
-        params: list = [cutoff]
+        params: list[Any] = [cutoff]
         if scenario:
             scenario_filter = " AND vm.scenario = $2"
             params.append(scenario)

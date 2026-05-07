@@ -25,6 +25,7 @@ from src.config import (
     OUTPUT_DIR,
 )
 from src.tools.llm_client import get_request_api_key
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -138,7 +139,7 @@ class SeedanceClient:
         image_refs: list[str] | None = None,
         duration: int = 10,
         resolution: str = "720p",
-    ) -> dict:
+    ) -> dict[str, Any]:
         if not self.api_key:
             logger.warning("seedance: no API key — returning stub")
             return self._stub_result(prompt=prompt, mode="text_to_video")
@@ -187,7 +188,7 @@ class SeedanceClient:
         prompt: str = "",
         duration: int = 10,
         style_preserve: bool = True,
-    ) -> dict:
+    ) -> dict[str, Any]:
         if not self.api_key:
             return self._stub_result(prompt=prompt, mode="image_to_video")
 
@@ -230,7 +231,7 @@ class SeedanceClient:
         image_refs: list[str] | None = None,
         duration: int = 10,
         resolution: str = "720p",
-    ) -> dict:
+    ) -> dict[str, Any]:
         """poyo.ai flow: submit → poll → download with retry + backoff.
 
         Retries up to 3 times on submit failure or task failure to handle
@@ -286,7 +287,7 @@ class SeedanceClient:
         duration: int,
         resolution: str,
         attempt: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Single attempt: submit → poll → download.
 
         Uses Happy Horse model on poyo.ai.
@@ -324,7 +325,7 @@ class SeedanceClient:
         # Happy Horse input schema:
         #   prompt, image_urls (single first-frame), reference_image_urls,
         #   aspect_ratio, resolution, duration, seed, enable_safety_checker
-        input_payload: dict = {
+        input_payload: dict[str, Any] = {
             "prompt": prompt,
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
@@ -413,7 +414,7 @@ class SeedanceClient:
         logger.error("poyo: polling timed out", task_id=task_id)
         return self._stub_result(prompt=prompt, mode="poyo_poll_timeout")
 
-    async def _download_video(self, video_url: str, task_id: str, prompt: str) -> dict:
+    async def _download_video(self, video_url: str, task_id: str, prompt: str) -> dict[str, Any]:
         """Download video from URL and save locally."""
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as dl_client:
             dl_resp = await dl_client.get(video_url)
@@ -432,7 +433,7 @@ class SeedanceClient:
 
     # ═══ Native Seedance polling ═══
 
-    async def _poll_and_download(self, task_id: str, prompt: str) -> dict:
+    async def _poll_and_download(self, task_id: str, prompt: str) -> dict[str, Any]:
         """Native Seedance: poll until complete, then download."""
         poll_interval = 2.0
         max_polls = 30  # 60s max
@@ -454,7 +455,7 @@ class SeedanceClient:
 
     # ═══ Retry + fallback ═══
 
-    async def _execute_with_retry(self, fn, mode: str, prompt: str) -> dict:
+    async def _execute_with_retry(self, fn, mode: str, prompt: str) -> dict[str, Any]:
         last_error = None
         for attempt in range(MAX_RETRIES):
             try:
@@ -477,7 +478,7 @@ class SeedanceClient:
         logger.warning("seedance: all retries exhausted, returning stub", mode=mode, error=last_error)
         return self._stub_result(prompt=prompt, mode=mode)
 
-    def _stub_result(self, prompt: str, mode: str = "unknown") -> dict:
+    def _stub_result(self, prompt: str, mode: str = "unknown") -> dict[str, Any]:
         return {
             "video_url": f"[SEEDANCE_STUB — add API key]",
             "local_path": str(self.output_dir / f"stub_{mode}_{hash(prompt) & 0xFFFF:04x}.mp4"),

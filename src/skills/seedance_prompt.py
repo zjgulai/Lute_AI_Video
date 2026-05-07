@@ -43,14 +43,14 @@ NARRATIVE_SHOT_TEMPLATE = (
 
 
 def _build_single_prompt(
-    segment: dict,
+    segment: dict[str, Any],
     shot_type: str,
     action_desc: str,
     lighting: str,
     camera: str,
     pacing: str,
     duration: float,
-) -> dict:
+) -> dict[str, Any]:
     """Build a single structured prompt dict for one segment."""
     visual = (segment.get("visual_description", "") or
               segment.get("description", "") or
@@ -142,7 +142,7 @@ class SeedancePromptSkill(SkillCallable):
         if not segments:
             return SkillResult(success=True, data=[self._build_single_fallback(product_name)])
 
-        prompts: list[dict] = []
+        prompts: list[dict[str, Any]] = []
         total = len(segments)
 
         for i, seg in enumerate(segments):
@@ -173,7 +173,7 @@ class SeedancePromptSkill(SkillCallable):
 
         return SkillResult(success=True, data=prompts)
 
-    def _build_single_fallback(self, product_name: str) -> dict:
+    def _build_single_fallback(self, product_name: str) -> dict[str, Any]:
         """Safe fallback: structured prompt without rotation keywords."""
         return {
             "segment_prompt": (

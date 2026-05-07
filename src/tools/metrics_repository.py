@@ -359,7 +359,7 @@ class MetricsRepository:
         )
         self._conn.commit()
 
-    def _query_sqlite(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+    def _query_sqlite(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         if not self._conn or not self._initialized:
             return []
         return self._rows_to_dicts(

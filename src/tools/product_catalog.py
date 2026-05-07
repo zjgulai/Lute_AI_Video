@@ -57,7 +57,7 @@ class Product:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> Product:
+    def from_dict(cls, data: dict[str, Any]) -> Product:
         return cls(
             product_id=data.get("product_id", ""),
             name=data.get("name", ""),

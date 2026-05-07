@@ -15,6 +15,8 @@ from pathlib import Path
 import httpx
 import structlog
 
+from typing import Any
+
 from src.config import (
     OPENAI_API_KEY,
     OUTPUT_DIR,
@@ -81,7 +83,7 @@ class GPTImageClient:
         quality: str = "high",
         size: str = "1024x1792",
         image_id: str = "img_001",
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Generate an image.
 
         Wrapped in asyncio.timeout() with retry and graceful fallback.
@@ -116,11 +118,11 @@ class GPTImageClient:
         quality: str,
         size: str,
         image_id: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         # poyo.ai GPT Image 2 format: size uses ratio like "1:1", "9:16", etc.
         # Remove "n" (not in poyo docs) and map pixel size to ratio
         ratio = self._size_to_ratio(size)
-        input_payload: dict = {
+        input_payload: dict[str, Any] = {
             "prompt": prompt,
             "size": ratio,
             "quality": quality,
@@ -160,7 +162,7 @@ class GPTImageClient:
         quality: str,
         size: str,
         image_id: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         from src.tools.retry import retry_with_backoff
 
         payload = {
@@ -218,10 +220,10 @@ class GPTImageClient:
 
     async def generate_thumbnail_set(
         self,
-        prompts: list[dict],
+        prompts: list[dict[str, Any]],
         size: str = "1024x1792",
         style_ref: str | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate a set of thumbnail variants."""
         results = []
         quality = "high"
@@ -249,7 +251,7 @@ class GPTImageClient:
         }
         return mapping.get(size, size)  # fallback to raw if already a ratio
 
-    def _stub_result(self, image_id: str, prompt: str, quality: str) -> dict:
+    def _stub_result(self, image_id: str, prompt: str, quality: str) -> dict[str, Any]:
         return {
             "image_id": image_id,
             "prompt": prompt,

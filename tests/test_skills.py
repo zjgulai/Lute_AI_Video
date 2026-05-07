@@ -17,6 +17,7 @@ from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 from src.skills.llm_skill import LLMSkill
 from src.tools.product_catalog import Product, ProductCatalog
+from typing import Any
 
 
 # ==============================================================================
@@ -30,10 +31,10 @@ class EchoSkill(SkillCallable):
     name = "echo"
     description = "Echoes input params for testing"
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         return SkillResult(success=True, data=params)
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         if "required_field" not in params:
             return ["missing required_field"]
         return []
@@ -43,7 +44,7 @@ class EchoSkill(SkillCallable):
             return ["output must be dict"]
         return []
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         return SkillResult(success=True, data={"fallback": True})
 
 
@@ -55,16 +56,16 @@ class FailingSkill(SkillCallable):
 
     max_retries = 1
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         raise RuntimeError("Intentional failure")
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         return []
 
     def validate_output(self, data) -> list[str]:
         return []
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         return SkillResult(success=True, data={"note": "fallback activated"})
 
 

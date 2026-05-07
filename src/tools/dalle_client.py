@@ -17,6 +17,7 @@ import httpx
 import structlog
 
 from src.config import OPENAI_API_KEY, OUTPUT_DIR
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -49,7 +50,7 @@ class DalleClient:
         variant_id: str = "A",
         size: str = "1024x1792",  # Vertical 9:16 for TikTok/Shorts
         quality: str = "standard",
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Generate a single thumbnail image.
 
         Wrapped in asyncio.timeout() to prevent pipeline hangs.
@@ -116,9 +117,9 @@ class DalleClient:
 
     async def generate_variants(
         self,
-        variants: list[dict],
+        variants: list[dict[str, Any]],
         size: str = "1024x1792",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate all thumbnail variants for a video.
 
         Args:
@@ -138,7 +139,7 @@ class DalleClient:
             results.append(result)
         return results
 
-    def _stub_result(self, variant_id: str, prompt: str) -> dict:
+    def _stub_result(self, variant_id: str, prompt: str) -> dict[str, Any]:
         return {
             "variant_id": variant_id,
             "prompt": prompt,
@@ -147,7 +148,7 @@ class DalleClient:
         }
 
     @property
-    def cost_estimate(self) -> dict:
+    def cost_estimate(self) -> dict[str, Any]:
         return {
             "model": "dall-e-3",
             "price_per_image_standard": "$0.04",

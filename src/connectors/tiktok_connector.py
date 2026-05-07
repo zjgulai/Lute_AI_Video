@@ -14,6 +14,7 @@ from uuid import uuid4
 import httpx
 
 from src.connectors.base import PlatformConnector
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def _is_mock_mode() -> bool:
 
 
 class TikTokConnector(PlatformConnector):
-    async def publish(self, content: dict) -> dict:
+    async def publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Publish content to TikTok.
 
         Accepts content with fields:
@@ -108,7 +109,7 @@ class TikTokConnector(PlatformConnector):
 
     async def _upload_video(
         self, token: str, video_path: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Upload a video file to TikTok's Content Posting API.
 
         Returns dict with keys: success, publish_id, error.
@@ -154,7 +155,7 @@ class TikTokConnector(PlatformConnector):
 
     async def _publish_video(
         self, token: str, publish_id: str, description: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Publish an uploaded video with the given description.
 
         Returns dict with keys: success, post_id, url, error.
@@ -203,7 +204,7 @@ class TikTokConnector(PlatformConnector):
             logger.exception("TikTok publish exception")
             return {"success": False, "error": str(exc)}
 
-    async def get_status(self, post_id: str) -> dict:
+    async def get_status(self, post_id: str) -> dict[str, Any]:
         """Get publish status for a TikTok post.
 
         Calls the TikTok Video Query API when credentials are available,
@@ -251,7 +252,7 @@ class TikTokConnector(PlatformConnector):
     # Mock fallback
     # ------------------------------------------------------------------
 
-    async def _mock_publish(self, content: dict) -> dict:
+    async def _mock_publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Simulate a TikTok publish (used when credentials are absent)."""
         await asyncio.sleep(1.5)
 
@@ -273,7 +274,7 @@ class TikTokConnector(PlatformConnector):
             "published_at": datetime.now().isoformat(),
         }
 
-    def _mock_status(self, post_id: str) -> dict:
+    def _mock_status(self, post_id: str) -> dict[str, Any]:
         """Return mock publish status."""
         return {
             "post_id": post_id,

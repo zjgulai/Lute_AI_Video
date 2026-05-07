@@ -7,6 +7,7 @@ import structlog
 
 from src.models import AssetPlan, EditComposition, EditTimelineEvent, Storyboard
 from src.tools.remotion_renderer import RemotionRenderer
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -57,7 +58,7 @@ class EditingAgent:
         logger.info("editing: compositions built", count=len(compositions))
         return compositions
 
-    async def render_video(self, pipeline_state: dict, output_name: str = "output.mp4") -> str:
+    async def render_video(self, pipeline_state: dict[str, Any], output_name: str = "output.mp4") -> str:
         """Export pipeline state and trigger Remotion render.
 
         Args:

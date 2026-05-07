@@ -28,11 +28,11 @@ class S2BrandCampaignPipeline:
 
     async def run(
         self,
-        brand_package: dict,
+        brand_package: dict[str, Any],
         target_platforms: list[str] | None = None,
         target_languages: list[str] | None = None,
         week: str = "",
-    ) -> dict:
+    ) -> dict[str, Any]:
         from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 
         brand_name = brand_package.get("brand_name", "Brand")

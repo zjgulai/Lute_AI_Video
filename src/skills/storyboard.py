@@ -19,7 +19,7 @@ class StoryboardSkill(SkillCallable):
     name = "storyboard-skill"
     description = "Generates shot-by-shot visual storyboards from scripts."
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
         if not params.get("scripts"):
             errors.append("'scripts' is required")
@@ -31,12 +31,12 @@ class StoryboardSkill(SkillCallable):
             errors.append("output is None")
         return errors
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         scripts = params["scripts"]
         storyboards = [self._gen(s) for s in scripts]
         return SkillResult(success=True, data={"storyboards": storyboards, "count": len(storyboards)})
 
-    def _gen(self, script: dict) -> dict:
+    def _gen(self, script: dict[str, Any]) -> dict[str, Any]:
         segs = script.get("segments", [])
         shots = []
         for i, seg in enumerate(segs):
@@ -53,7 +53,7 @@ class StoryboardSkill(SkillCallable):
             })
         return {"script_id": script.get("id",""), "total_duration": script.get("total_duration",30), "shots": shots}
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         scripts = params.get("scripts", [{}])
         sbs = [self._gen(s) for s in scripts[:2]]
         return SkillResult(success=True, data={"storyboards": sbs, "count": len(sbs)})

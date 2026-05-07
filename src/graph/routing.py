@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextvars
 
 from src.models.state import VideoPipelineState
+from typing import Any
 
 MAX_RETRIES = 3
 
@@ -25,18 +26,18 @@ MAX_RETRIES = 3
 # Using contextvars.ContextVar instead of a plain module-level dict ensures
 # that concurrent pipeline runs (multiple asyncio tasks) are isolated from
 # each other — each task gets its own copy of the override map.
-_HUMAN_REVIEW_OVERRIDE: contextvars.ContextVar[dict] = contextvars.ContextVar(
+_HUMAN_REVIEW_OVERRIDE: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "human_review_override", default={}
 )
 # ^ Keyed by checkpoint key ("strategy"/"script"/"edit"/"thumbnail"), value = {"node_key": ..., "status": ...}
 
 
-def _get_override(checkpoint_key: str) -> dict | None:
+def _get_override(checkpoint_key: str) -> dict[str, Any] | None:
     """Read the D10 routing override for a checkpoint (thread-safe)."""
     return _HUMAN_REVIEW_OVERRIDE.get().get(checkpoint_key)
 
 
-def _set_override(checkpoint_key: str, value: dict) -> None:
+def _set_override(checkpoint_key: str, value: dict[str, Any]) -> None:
     """Set the D10 routing override for a checkpoint (thread-safe)."""
     current = dict(_HUMAN_REVIEW_OVERRIDE.get())
     current[checkpoint_key] = value

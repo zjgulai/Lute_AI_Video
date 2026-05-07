@@ -22,7 +22,7 @@ import re
 
 # Order matters: longer phrases first so e.g. "wearable breast pump" is
 # matched before "breast pump".
-_SUBSTITUTIONS: list[tuple[re.Pattern, str]] = [
+_SUBSTITUTIONS: list[tuple[re.Pattern[str], str]] = [
     # English — multi-word phrases first
     (re.compile(r"\bwearable\s+breast[\s-]*pump(s|ing)?\b", re.IGNORECASE), "wearable wellness device"),
     (re.compile(r"\bbreast[\s-]*pump(s|ing)?\b", re.IGNORECASE), "wearable wellness device"),

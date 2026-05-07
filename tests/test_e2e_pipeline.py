@@ -8,6 +8,8 @@ import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.graph.pipeline import compile_pipeline
+from typing import Any
+
 from src.models import (
     WeeklyCalendar, Script, ComplianceReport, ComplianceStatus,
     Storyboard, AssetPlan, EditComposition, AudioPlan,
@@ -20,7 +22,7 @@ REVIEW_NODES = ["strategy_review", "script_review", "edit_review", "thumbnail_re
 AUDIT_CHECKPOINTS = ["strategy", "script", "edit", "thumbnail"]
 
 
-def simulate_approval(pipeline, config: dict, review_node: str, status=ApprovalStatus.APPROVED):
+def simulate_approval(pipeline, config: dict[str, Any], review_node: str, status=ApprovalStatus.APPROVED):
     """Simulate a human clicking 'approve' on a review checkpoint."""
     snapshot = pipeline.get_state(config)
     current_reviews = dict(snapshot.values.get("human_reviews", {}) if snapshot.values else {})

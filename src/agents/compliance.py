@@ -175,7 +175,7 @@ class ComplianceAgent:
         return flags
 
 
-async def llm_compliance_review(scripts: list[Script]) -> list[dict]:
+async def llm_compliance_review(scripts: list[Script]) -> list[dict[str, Any]]:
     """Layer 2: LLM semantic review (optional, cost-aware)."""
     import json
 

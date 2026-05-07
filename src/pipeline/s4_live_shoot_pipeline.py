@@ -37,7 +37,7 @@ class S4LiveShootPipeline:
 
     # ═══ StepRunner interface ═══
 
-    async def run_step(self, step_name: str, state: dict) -> Any:
+    async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step given the current state dict.
 
         Entry point used by StepRunner. Reads inputs from state, calls the
@@ -62,10 +62,10 @@ class S4LiveShootPipeline:
     async def _step_scripts(
         self,
         reg: SkillRegistry,
-        config: dict,
-        steps: dict,
+        config: dict[str, Any],
+        steps: dict[str, Any],
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate scripts from footage descriptions + product info."""
         footage_assets = config.get("footage_assets", [])
         product_info = config.get("product_info", {})
@@ -101,15 +101,15 @@ class S4LiveShootPipeline:
     async def _step_video_prompts(
         self,
         reg: SkillRegistry,
-        config: dict,
-        steps: dict,
+        config: dict[str, Any],
+        steps: dict[str, Any],
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate Seedance video prompts referencing footage assets."""
         scripts_dict = self._get_step_output(steps, "scripts") or []
         footage_assets = config.get("footage_assets", [])
 
-        prompts: list[dict] = []
+        prompts: list[dict[str, Any]] = []
         for script in scripts_dict[:MAX_SCRIPTS_PER_RUN]:
             segs = script.get("segments", [])
             script_segs = []
@@ -140,16 +140,16 @@ class S4LiveShootPipeline:
     async def _step_thumbnails(
         self,
         reg: SkillRegistry,
-        config: dict,
-        steps: dict,
+        config: dict[str, Any],
+        steps: dict[str, Any],
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate thumbnail prompt variants per script."""
         scripts_dict = self._get_step_output(steps, "scripts") or []
         product_info = config.get("product_info", {})
         brand_name = config.get("brand_name") or product_info.get("brand_name", "")
 
-        thumbnails: list[dict] = []
+        thumbnails: list[dict[str, Any]] = []
         for script in scripts_dict[:MAX_SCRIPTS_PER_RUN]:
             tp = await reg.execute("gpt-image-thumbnail-prompt", {
                 "product_name": script.get("product_name", "Product"),
@@ -169,7 +169,7 @@ class S4LiveShootPipeline:
         return thumbnails
 
     @staticmethod
-    def _get_step_output(steps: dict, step_name: str) -> Any:
+    def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
         """Retrieve output from a step, preferring edited_output if edited."""
         step_data = steps.get(step_name, {})
         if step_data.get("edited") and step_data.get("edited_output") is not None:
@@ -180,11 +180,11 @@ class S4LiveShootPipeline:
 
     async def run(
         self,
-        footage_assets: list[dict],
-        product_info: dict,
+        footage_assets: list[dict[str, Any]],
+        product_info: dict[str, Any],
         topic: str = "",
         target_platforms: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Run the full S4 pipeline end-to-end.
 
         Backwards-compatible: uses StepRunner internally but returns the same

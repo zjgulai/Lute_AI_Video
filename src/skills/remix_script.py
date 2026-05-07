@@ -78,7 +78,7 @@ class RemixScriptSegment:
         self.replace_notes = replace_notes
         self.remix_description = remix_description
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "segment_type": self.segment_type,
             "keep_notes": self.keep_notes,
@@ -99,7 +99,7 @@ class RemixScriptResult:
         self.full_remix_script: str = ""
         self.production_notes: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "brief_id": self.brief_id,
             "influencer_name": self.influencer_name,
@@ -131,7 +131,7 @@ class RemixScriptSkill(SkillCallable):
         "Used in the influencer remix pipeline (S3)."
     )
 
-    def validate_params(self, params: dict) -> list[str]:
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
         if not params.get("analysis"):
             errors.append("'analysis' is required")
@@ -145,7 +145,7 @@ class RemixScriptSkill(SkillCallable):
             errors.append("'segments' missing from output")
         return errors
 
-    async def execute(self, params: dict) -> SkillResult:
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
         analysis = params["analysis"]
         product = params["product"]
         brief_id = params.get("brief_id", "")
@@ -240,7 +240,7 @@ class RemixScriptSkill(SkillCallable):
 
     def _build_remix_segments(
         self,
-        original_segments: list[dict],
+        original_segments: list[dict[str, Any]],
         hook_type: str,
         product_name: str,
         usps: list[str],
@@ -285,11 +285,11 @@ class RemixScriptSkill(SkillCallable):
 
     async def _build_remix_segments_llm(
         self,
-        segments: list[dict],
+        segments: list[dict[str, Any]],
         product_name: str,
         usps: list[str],
         brand_name: str,
-        product_context: dict,
+        product_context: dict[str, Any],
         speech_style: str = "",
         hook_type: str = "",
     ) -> list[RemixScriptSegment]:
@@ -506,7 +506,7 @@ Remix {len(segments)} segments for the new product."""
 
     def _generate_production_notes(
         self,
-        analysis: dict,
+        analysis: dict[str, Any],
         product_name: str,
         hook_type: str,
         speech_style: str,
@@ -520,7 +520,7 @@ Remix {len(segments)} segments for the new product."""
             f"Keep same aspect ratio and editing rhythm as original."
         )
 
-    def fallback(self, params: dict) -> SkillResult:
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
         """Fallback remix script."""
         product = params.get("product", {})
         product_name = product.get("name", "Product Name")

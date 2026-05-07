@@ -37,9 +37,9 @@ class KeyframeImagesSkill(SkillCallable):
     MAX_SHOTS_PER_STORYBOARD = 10
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
-        storyboard: dict = params["storyboard"]
-        shots: list[dict] = storyboard.get("shots", [])
-        identity_card: dict | None = params.get("identity_card")
+        storyboard: dict[str, Any] = params["storyboard"]
+        shots: list[dict[str, Any]] = storyboard.get("shots", [])
+        identity_card: dict[str, Any] | None = params.get("identity_card")
 
         # Build identity enrichment string
         identity_text = self._format_identity(identity_card)
@@ -115,7 +115,7 @@ class KeyframeImagesSkill(SkillCallable):
         return ", ".join(parts)
 
     @staticmethod
-    def _format_identity(identity_card: dict | None) -> str:
+    def _format_identity(identity_card: dict[str, Any] | None) -> str:
         """Format character identity attributes as a prompt suffix."""
         if not identity_card:
             return ""
@@ -133,9 +133,9 @@ class KeyframeImagesSkill(SkillCallable):
 
     @staticmethod
     def _write_placeholder_frame(
-        shot: dict,
+        shot: dict[str, Any],
         image_id: str,
-        params: dict,
+        params: dict[str, Any],
     ) -> str:
         """Write a placeholder PNG when GPT-Image call fails."""
         from src.config import OUTPUT_DIR
@@ -192,8 +192,8 @@ class KeyframeImagesSkill(SkillCallable):
 
     def fallback(self, params: dict[str, Any]) -> SkillResult:
         """Return storyboard with placeholder image paths."""
-        storyboard: dict = params.get("storyboard") or {"shots": []}
-        shots: list[dict] = storyboard.get("shots", [])
+        storyboard: dict[str, Any] = params.get("storyboard") or {"shots": []}
+        shots: list[dict[str, Any]] = storyboard.get("shots", [])
         from src.config import OUTPUT_DIR
 
         # Safety cap to prevent excessive fallback file writes

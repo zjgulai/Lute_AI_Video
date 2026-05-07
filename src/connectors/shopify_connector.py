@@ -14,6 +14,7 @@ from uuid import uuid4
 import httpx
 
 from src.connectors.base import PlatformConnector
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def _admin_url() -> str:
     return f"https://{store}/admin"
 
 
-def _headers() -> dict:
+def _headers() -> dict[str, Any]:
     """Build headers for Shopify Admin API requests."""
     api_key = os.environ.get("SHOPIFY_API_KEY", "")
     password = os.environ.get("SHOPIFY_API_PASSWORD", "")
@@ -52,7 +53,7 @@ def _headers() -> dict:
 
 
 class ShopifyConnector(PlatformConnector):
-    async def publish(self, content: dict) -> dict:
+    async def publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Publish content to Shopify.
 
         Accepts content with fields:
@@ -135,7 +136,7 @@ class ShopifyConnector(PlatformConnector):
 
     async def _upload_video(
         self, store_url: str, video_path: str, title: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Upload a video file to Shopify using the GraphQL fileCreate mutation.
 
         Returns dict with keys: success, media_id, error.
@@ -322,7 +323,7 @@ class ShopifyConnector(PlatformConnector):
 
     async def _associate_with_product(
         self, store_url: str, media_id: str, product_name: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Search for a product by name and associate the media with it.
 
         Uses the productCreateMedia mutation to attach the uploaded video.
@@ -443,7 +444,7 @@ class ShopifyConnector(PlatformConnector):
             logger.exception("Shopify product association exception")
             return {"success": False, "error": str(exc)}
 
-    async def get_status(self, post_id: str) -> dict:
+    async def get_status(self, post_id: str) -> dict[str, Any]:
         """Get publish status for a Shopify media item.
 
         Falls back to mock when credentials are absent.
@@ -504,7 +505,7 @@ class ShopifyConnector(PlatformConnector):
     # Mock fallback
     # ------------------------------------------------------------------
 
-    async def _mock_publish(self, content: dict) -> dict:
+    async def _mock_publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Simulate a Shopify publish (used when credentials are absent)."""
         await asyncio.sleep(1.5)
 
@@ -526,7 +527,7 @@ class ShopifyConnector(PlatformConnector):
             "published_at": datetime.now().isoformat(),
         }
 
-    def _mock_status(self, post_id: str) -> dict:
+    def _mock_status(self, post_id: str) -> dict[str, Any]:
         """Return mock publish status."""
         return {
             "post_id": post_id,

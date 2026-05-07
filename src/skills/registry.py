@@ -5,6 +5,7 @@ from __future__ import annotations
 import structlog
 
 from src.skills.base import SkillCallable, SkillResult
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -55,7 +56,7 @@ class SkillRegistry:
             del cls._global_skills[name]
             logger.info("skill_registry: unregistered", name=name)
 
-    async def execute(self, name: str, params: dict) -> SkillResult:
+    async def execute(self, name: str, params: dict[str, Any]) -> SkillResult:
         """Execute a skill by name with safe_execute.
 
         Args:
@@ -79,7 +80,7 @@ class SkillRegistry:
         """Get a registered skill by name."""
         return self._skills.get(name)
 
-    def list_skills(self) -> list[dict]:
+    def list_skills(self) -> list[dict[str, Any]]:
         """List all registered skills with metadata."""
         return [
             {

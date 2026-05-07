@@ -15,6 +15,7 @@ import structlog
 
 from src.models import DistributionPlan, Platform, PlatformPost, Script, ThumbnailSet
 from src.tools.llm_client import llm
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -73,7 +74,7 @@ class DistributionAgent:
         self,
         scripts: list[Script],
         thumbnail_sets: list[ThumbnailSet],
-        product_catalog: dict | None = None,
+        product_catalog: dict[str, Any] | None = None,
         target_platforms: list[str] | None = None,
     ) -> list[DistributionPlan]:
         """Generate distribution plans — one per brief, each with per-platform posts.

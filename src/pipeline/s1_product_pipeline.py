@@ -76,8 +76,8 @@ class S1ProductDirectPipeline:
 
     async def run(
         self,
-        product_catalog: dict,
-        brand_guidelines: dict | None = None,
+        product_catalog: dict[str, Any],
+        brand_guidelines: dict[str, Any] | None = None,
         target_platforms: list[str] | None = None,
         target_languages: list[str] | None = None,
         week: str = "",
@@ -85,7 +85,7 @@ class S1ProductDirectPipeline:
         enable_media_synthesis: bool = True,
         output_label: str | None = None,
         video_duration: int = 30,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Run the full S1 pipeline end-to-end.
 
         Backwards-compatible: uses StepRunner internally but returns the same
@@ -197,7 +197,7 @@ class S1ProductDirectPipeline:
         return result
 
     @staticmethod
-    def _get_step_output(steps: dict, step_name: str) -> Any:
+    def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
         """Retrieve output from a step, preferring edited_output if edited."""
         step_data = steps.get(step_name, {})
         if step_data.get("edited") and step_data.get("edited_output") is not None:
@@ -205,7 +205,7 @@ class S1ProductDirectPipeline:
         return step_data.get("output")
 
     @staticmethod
-    def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict] | None = None) -> bool:
+    def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict[str, Any]] | None = None) -> bool:
         """Detect whether every clip is a stub file.
 
         Uses explicit is_stub metadata from clip_details when available,
@@ -222,7 +222,7 @@ class S1ProductDirectPipeline:
         import os
         return all(os.path.basename(str(p)).lower().startswith("stub_") for p in clip_paths)
 
-    async def run_step(self, step_name: str, state: dict) -> Any:
+    async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step given the current state dict.
 
         This is the entry point used by StepRunner. It reads inputs from
@@ -407,14 +407,14 @@ class S1ProductDirectPipeline:
     async def _step_strategy(
         self,
         reg: SkillRegistry,
-        product_catalog: dict,
-        brand_guidelines: dict,
+        product_catalog: dict[str, Any],
+        brand_guidelines: dict[str, Any],
         platforms: list[str],
         languages: list[str],
         week: str,
         brand_mode: bool,
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         scenario = "brand_campaign" if brand_mode else "product_direct"
         # In brand_mode, push the brand_name through product_catalog so the strategy skill
         # treats the brand as the campaign subject (parallels original S2 behavior).
@@ -444,11 +444,11 @@ class S1ProductDirectPipeline:
     async def _step_scripts(
         self,
         reg: SkillRegistry,
-        briefs: list[dict],
-        brand_guidelines: dict | None,
+        briefs: list[dict[str, Any]],
+        brand_guidelines: dict[str, Any] | None,
         languages: list[str],
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         res = await reg.execute("script-writer-skill", {
             "briefs": briefs,
             "brand_guidelines": brand_guidelines or {},
@@ -462,10 +462,10 @@ class S1ProductDirectPipeline:
     async def _step_compliance(
         self,
         reg: SkillRegistry,
-        scripts: list[dict],
-        brand_guidelines: dict,
+        scripts: list[dict[str, Any]],
+        brand_guidelines: dict[str, Any],
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         res = await reg.execute("brand-compliance-skill", {
             "scripts": scripts,
             "brand_guidelines": brand_guidelines,
@@ -478,10 +478,10 @@ class S1ProductDirectPipeline:
     async def _step_storyboards(
         self,
         reg: SkillRegistry,
-        scripts: list[dict],
+        scripts: list[dict[str, Any]],
         errors: list[str],
-    ) -> list[dict]:
-        storyboards: list[dict] = []
+    ) -> list[dict[str, Any]]:
+        storyboards: list[dict[str, Any]] = []
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
             res = await reg.execute("storyboard-skill", {"scripts": [script]})
             if res.success and res.data:
@@ -501,15 +501,15 @@ class S1ProductDirectPipeline:
     async def _step_keyframe_images(
         self,
         reg: SkillRegistry,
-        storyboards: list[dict],
+        storyboards: list[dict[str, Any]],
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate keyframe images for each storyboard's shots.
 
         Serial generation: poyo.ai has strict concurrency limits on
         image generation tasks. Parallel requests cause queue rejects.
         """
-        keyframe_results: list[dict] = []
+        keyframe_results: list[dict[str, Any]] = []
         for sb in storyboards[:MAX_CLIPS_PER_DEMO]:
             res = await reg.execute("keyframe-images", {
                 "storyboard": sb,
@@ -531,10 +531,10 @@ class S1ProductDirectPipeline:
         reg: SkillRegistry,
         video_path: str,
         clip_paths: list[str],
-        storyboards: list[dict],
+        storyboards: list[dict[str, Any]],
         product_name: str,
         errors: list[str],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Run quality gate on generated clips AFTER seedance step.
 
         Quality gate NEVER blocks the pipeline — it produces a report
@@ -569,16 +569,16 @@ class S1ProductDirectPipeline:
     async def _step_video_prompts(
         self,
         reg: SkillRegistry,
-        scripts: list[dict],
+        scripts: list[dict[str, Any]],
         product_name: str,
         errors: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Generate per-segment structured video prompts (narrative shot architecture).
 
         Each script segment produces one prompt dict with shot_type, camera,
         action, lighting, and full visual_description — never a concatenated string.
         """
-        all_prompts: list[dict] = []
+        all_prompts: list[dict[str, Any]] = []
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
             segments = script.get("segments", [])
             if not segments:
@@ -611,12 +611,12 @@ class S1ProductDirectPipeline:
     async def _step_thumbnail_prompts(
         self,
         reg: SkillRegistry,
-        scripts: list[dict],
+        scripts: list[dict[str, Any]],
         product_name: str,
         brand_name: str,
         errors: list[str],
-    ) -> list[dict]:
-        thumbnails: list[dict] = []
+    ) -> list[dict[str, Any]]:
+        thumbnails: list[dict[str, Any]] = []
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
             res = await reg.execute("gpt-image-thumbnail-prompt", {
                 "product_name": script.get("product_name", product_name),
@@ -678,13 +678,13 @@ class S1ProductDirectPipeline:
     async def _step_seedance_clips(
         self,
         reg: SkillRegistry,
-        video_prompts: list[dict],
+        video_prompts: list[dict[str, Any]],
         product_name: str,
         label: str,
         errors: list[str],
         video_duration: int = 30,
-        keyframe_images: list[dict] | None = None,
-    ) -> dict:
+        keyframe_images: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Generate video clips per segment using Sora 2 Pro (25s cap).
 
         Each prompt dict from seedance-video-prompt is sent as a separate
@@ -711,7 +711,7 @@ class S1ProductDirectPipeline:
         per_clip_duration = min(VIDEO_MAX_DURATION, video_duration)
 
         clip_durations: list[float] = []
-        clip_details: list[dict] = []
+        clip_details: list[dict[str, Any]] = []
 
         # P1-16: Bounded concurrent clip generation (poyo.ai limit = 2).
         # Previously: serial for-loop with 3s sleep between clips = ~5 min for 5 clips.
@@ -722,7 +722,7 @@ class S1ProductDirectPipeline:
         # extraction — all clips generate in parallel, then we extract frames in order.
         _seedance_sem = asyncio.Semaphore(2)
 
-        async def _gen_single_clip(i: int, vp: dict, kf_path: str | None) -> tuple[int, Any]:
+        async def _gen_single_clip(i: int, vp: dict[str, Any], kf_path: str | None) -> tuple[int, Any]:
             """Generate one clip with bounded concurrency."""
             async with _seedance_sem:
                 prompt_text = vp.get("segment_prompt", "") or vp.get("prompt", "")
@@ -875,10 +875,10 @@ class S1ProductDirectPipeline:
     async def _step_tts_audio(
         self,
         reg: SkillRegistry,
-        scripts: list[dict],
+        scripts: list[dict[str, Any]],
         language: str,
         errors: list[str],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Generate one background audio track per script.
 
         Merges all segment voiceovers into a single prompt per script,
@@ -940,7 +940,7 @@ class S1ProductDirectPipeline:
     async def _step_thumbnail_images(
         self,
         reg: SkillRegistry,
-        thumbnail_sets: list[dict],
+        thumbnail_sets: list[dict[str, Any]],
         label: str,
         errors: list[str],
     ) -> list[str]:
@@ -973,12 +973,12 @@ class S1ProductDirectPipeline:
     async def _step_assemble_final(
         self,
         reg: SkillRegistry,
-        storyboards: list[dict],
-        scripts: list[dict],
+        storyboards: list[dict[str, Any]],
+        scripts: list[dict[str, Any]],
         audio_paths: list[str],
         lyrics_paths: list[str],
         clip_paths: list[str],
-        brand_guidelines: dict,
+        brand_guidelines: dict[str, Any],
         label: str,
         errors: list[str],
     ) -> tuple[str, str]:
@@ -1013,11 +1013,11 @@ class S1ProductDirectPipeline:
         thumbnail_paths: list[str],
         clip_paths: list[str],
         product_name: str,
-        scripts: list[dict],
-        thumbnail_sets: list[dict],
+        scripts: list[dict[str, Any]],
+        thumbnail_sets: list[dict[str, Any]],
         language: str,
         errors: list[str],
-    ) -> dict:
+    ) -> dict[str, Any]:
         # Compose a flat script_text for content checks
         script_text = " ".join([
             (seg.get("voiceover", "") or seg.get("description", "") or seg.get("visual_description", ""))
@@ -1025,7 +1025,7 @@ class S1ProductDirectPipeline:
             for seg in s.get("segments", [])
         ])
         # Flatten thumbnail prompts for the audit
-        flat_thumb_prompts: list[dict] = []
+        flat_thumb_prompts: list[dict[str, Any]] = []
         for ts in thumbnail_sets:
             for v in ts.get("variants", []):
                 if isinstance(v, dict):
@@ -1052,9 +1052,9 @@ class S1ProductDirectPipeline:
     # ═══ Helpers ═══
 
     @staticmethod
-    def _collect_shots(storyboards: list[dict], scripts: list[dict]) -> list[dict]:
+    def _collect_shots(storyboards: list[dict[str, Any]], scripts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Flatten storyboards into a single shot list with absolute timing."""
-        shots: list[dict] = []
+        shots: list[dict[str, Any]] = []
         cursor = 0.0
 
         if storyboards:
@@ -1087,8 +1087,8 @@ class S1ProductDirectPipeline:
         return shots
 
     @staticmethod
-    def _collect_captions(scripts: list[dict]) -> list[dict]:
-        captions: list[dict] = []
+    def _collect_captions(scripts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        captions: list[dict[str, Any]] = []
         cursor = 0.0
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
             for seg in script.get("segments", []):
@@ -1104,7 +1104,7 @@ class S1ProductDirectPipeline:
         return captions
 
     @staticmethod
-    def _compute_expected_duration(scripts: list[dict]) -> float:
+    def _compute_expected_duration(scripts: list[dict[str, Any]]) -> float:
         total = 0.0
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
             for seg in script.get("segments", []):
@@ -1113,7 +1113,7 @@ class S1ProductDirectPipeline:
         return total or 30.0
 
     @staticmethod
-    def _fallback_briefs(product_name: str, brand_name: str, platform: str) -> list[dict]:
+    def _fallback_briefs(product_name: str, brand_name: str, platform: str) -> list[dict[str, Any]]:
         return [{
             "product_name": product_name,
             "brand_name": brand_name,
@@ -1123,7 +1123,7 @@ class S1ProductDirectPipeline:
         }]
 
     @staticmethod
-    def _fallback_scripts(product_name: str, brand_name: str) -> list[dict]:
+    def _fallback_scripts(product_name: str, brand_name: str) -> list[dict[str, Any]]:
         return [{
             "id": "S1-001",
             "product_name": product_name,
