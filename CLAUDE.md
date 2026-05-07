@@ -83,7 +83,7 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 ┌─────────────────────────────────────────────────────────┐
 │  src/api.py  (FastAPI, Python 3.11+, Port 8001)          │
 │  Routers: pipeline, scenario, distribution, metrics,     │
-│           assets, media, health, telemetry               │
+│           assets, media, health, telemetry, admin        │
 │  Middleware: CORS, rate-limit, response-wrapper, logging │
 └────────────────────────┬────────────────────────────────┘
                          │
@@ -522,6 +522,12 @@ Configured via `.env`:
   Compose stack gets a complete schema without requiring a separate `alembic upgrade head` step.
   Repository (`metrics_repository.py`) is PG-first with SQLite fallback — both paths are
   exercised in tests.
+- `admin_accounts` — admin operator credentials (email, bcrypt password_hash); no registration UI in Phase 1
+- `admin_sessions` — session token hashes (SHA-256 of 64 random bytes), 24h expiry, hourly cleanup
+- `tenants` — tenant registry (tenant_id regex validated, display_name, contact_email, status active/disabled)
+- `error_logs` — persistent error storage from `ErrorCollector`; 30-day retention (configurable via `ADMIN_LOG_RETENTION_DAYS`)
+
+Admin Panel tables added via Alembic migration `2d6b8e9c0f1a` (2026-05-07).
 
 **Migrations:** Alembic in `migrations/`. Docker Compose auto-loads SQL from `src/storage/migrations/`.
 
