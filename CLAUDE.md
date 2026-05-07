@@ -32,7 +32,7 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 - **API key 租户化 (P2-8)**: 新增 `api_keys` 表 + Alembic 迁移，`verify_api_key` 改为 async
   函数，支持 PG 查询验证 + 环境变量 fallback。新增 `tenant_id` contextvar。
 - **nginx rate limit**: 生产限流从 FastAPI middleware 内存实现迁移到 nginx
-  `limit_req_zone` + `limit_req`，`/health` 与 `/api/media/` 豁免。
+  `limit_req_zone` + 各 API location 内显式 `limit_req`，前端 / 与 /_next/ 不限流。
 - **LLMClient 缓存 TTL**: `_clients` 增加 300s TTL + 20 上限 + `key_hash` 租户维度，防止
   死连接池堆积和无界内存增长。
 - **target_languages 收口**: 6 处硬编码 `["en"]` 统一改为 `config.DEFAULT_LANGUAGES`。
@@ -59,6 +59,11 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
   循环。改为 `nodes.py` 内 `_register_bg()` helper 函数延迟导入。
 - **nginx 语法修复**: `limit_req off;` 不是有效 nginx 语法，`location /health` 与
   `/api/media/` 改为 `limit_req zone=api_limit burst=100/1000 nodelay;`。
+- **nginx 限流误伤前端 (429 风暴) 修复**: `server` 块顶层 `limit_req zone=api_limit
+  burst=20 nodelay` 会被未显式覆盖的 `location` 默认继承，前端 `/` 和 `/_next/` 也跟着
+  限流。Next.js 首页冷启动 1s 内 30+ 并发请求秒爆 burst=20，浏览器看到 429 风暴。
+  修复：删除顶层声明，改为 7 个 API location 内部各自显式 `limit_req`，前端 location
+  不限流。验证：50 并发 `/api/*` → 21×404 + 29×429（限流正常），30 并发 `/` → 全 200。
 
 **2026-05-07 更新 (Admin Panel Phase 1):**
 - **Admin Panel 全链路接线**: 新增 `/api/admin/*` 端点群 + `/admin` 前端页面，完成 Phase 1
@@ -805,11 +810,16 @@ location /api/media/ {
 - All JSON responses wrapped with `_meta` (trace_id, duration_ms, version, timestamp)
 - API key required for all mutating endpoints
 - Per-tenant `API_KEY`:每个开通用户拿一组独立全权限 token,后端不做"低权限只读"分级
-- Rate limiting: **nginx** `limit_req_zone` 120r/m per IP (P2-11), burst=20.
+- Rate limiting: **nginx** `limit_req_zone` 120r/m per IP (P2-11)。**location-only**：
+  限流 `limit_req` 只写在 7 个 API location 内（`/api/`、`/api/scenario/`、`/api/fast/`、
+  `/api/pipeline/`、`/api/assets/`、`/api/files`、`/api/upload`），各自 burst=20。
+  `/health` burst=100、`/api/media/` burst=1000 高 burst 兜住高频健康检查与画廊批量加载。
+  前端 `/` 和 `/_next/` **不限流**（Next.js 冷启动会 30+ 并发拉取 chunks/RSC/favicon）。
   FastAPI middleware 内存限流降级为 fallback（直接访问 backend 不走 nginx 时生效）。
-  `/health` (burst=100) 与 `/api/media/` (burst=1000) 高 burst 豁免限流。
-  ⚠ nginx 不支持 `limit_req off`，旧配置中的 `off` 参数在容器重启时会触发 `[emerg]`
+  ⚠ 历史教训 1：nginx 不支持 `limit_req off`，旧配置中的 `off` 参数会触发 `[emerg]`
   导致 nginx 无法启动。
+  ⚠ 历史教训 2：`server` 块顶层 `limit_req` 会被未显式覆盖的 `location` 继承，
+  前端会被误伤；新增 location 必须明确判断是否需要限流，不能依赖顶层兜底（已废除）。
 - Per-request API key injection via contextvars for multi-tenant safety
 - Tenant ID: `verify_api_key` 解析 API key 后通过 `set_tenant_id()` 写入 contextvar，
   下游 cost tracking / audit log 可读取（P2-8）
@@ -848,6 +858,10 @@ location /api/media/ {
 >   形成 `_state.py` → `pipeline.py` → `nodes.py` → `_state.py` 循环。改为延迟导入 helper。
 > - **nginx `limit_req off` 语法错误** — 原配置使用无效语法，`location /health` 和
 >   `/api/media/` 改为高 burst 值实现等效豁免。
+> - **nginx 顶层 `limit_req` 误伤前端导致首页 429** — `server` 块顶层 `limit_req
+>   zone=api_limit burst=20 nodelay` 被前端 `/` 和 `/_next/` 默认继承，Next.js 冷启动
+>   30+ 并发请求秒爆 burst=20。修复：删除顶层声明，改为 7 个 API location 内部
+>   显式 `limit_req`。生产 rsync `--inplace --no-whole-file` + `nginx -s reload` 落地。
 
 > **2026-05-06 修复:**
 > - **Portfolio 加载慢 + 视频无法预览** — 后端 `?limit=50&sort=quality` + nginx `try_files`
