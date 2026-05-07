@@ -228,6 +228,7 @@ async def _persist_error_async(
         traceback_text = context.get("traceback")
 
         pool = await get_pool()
+        assert pool is not None
         async with pool.acquire() as conn:
             await conn.execute(
                 """

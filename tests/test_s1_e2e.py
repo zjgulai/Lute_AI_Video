@@ -11,6 +11,7 @@ Uses fallback/mock mode — no real LLM calls.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -75,7 +76,7 @@ class TestS1E2EProductStrategy:
 
     def test_strategy_generates_briefs(self):
         """Should generate weekly briefs from product info."""
-        result = SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE)
+        result = asyncio.run(SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE))
         assert result.success is True
         data = result.data
         assert "briefs" in data
@@ -89,7 +90,7 @@ class TestS1E2EProductStrategy:
 
     def test_strategy_respects_product_catalog(self):
         """Strategy should reference the product's USPs."""
-        result = SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE)
+        result = asyncio.run(SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE))
         briefs = result.data["briefs"]
 
         # Check that USPs are referenced in briefs
@@ -103,7 +104,7 @@ class TestS1E2EProductStrategy:
 
     def test_strategy_covers_video_types(self):
         """Briefs should cover different video types."""
-        result = SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE)
+        result = asyncio.run(SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE))
         briefs = result.data["briefs"]
         types = set(b.get("video_type", "") for b in briefs)
 
@@ -112,7 +113,7 @@ class TestS1E2EProductStrategy:
 
     def test_strategy_targets_correct_platforms(self):
         """Each brief should target valid platforms."""
-        result = SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE)
+        result = asyncio.run(SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE))
         briefs = result.data["briefs"]
         valid_platforms = {"tiktok", "shopify", "amazon", "youtube_shorts", "facebook", "reddit"}
 
@@ -151,11 +152,11 @@ class TestS1E2EVideoPrompt:
             },
         ]
 
-        result = SkillRegistry().execute("seedance-video-prompt", {
+        result = asyncio.run(SkillRegistry().execute("seedance-video-prompt", {
             "script_segments": script_segments,
             "product_name": sample_brief.get("product_name", "X1"),
             "style_ref_images": ["https://cdn.lactfit.com/x1_hero.jpg"],
-        })
+        }))
 
         assert result.success is True
         data = result.data
@@ -177,13 +178,13 @@ class TestS1E2EThumbnailPrompt:
 
     def test_thumbnail_prompts_from_script(self):
         """Should generate 4 thumbnail variants from a script hook."""
-        result = SkillRegistry().execute("gpt-image-thumbnail-prompt", {
+        result = asyncio.run(SkillRegistry().execute("gpt-image-thumbnail-prompt", {
             "hook_text": "Pump during Zoom calls? Yes, it's that quiet.",
             "product_name": "LactFit X1",
             "brand_color": "#6B8E8E",
             "price": 299.99,
             "platform": "tiktok",
-        })
+        }))
 
         assert result.success is True
         data = result.data
@@ -208,11 +209,11 @@ class TestS1E2EThumbnailPrompt:
         ]
 
         for platform, expected_size in platform_cases:
-            result = SkillRegistry().execute("gpt-image-thumbnail-prompt", {
+            result = asyncio.run(SkillRegistry().execute("gpt-image-thumbnail-prompt", {
                 "hook_text": "Test hook",
                 "product_name": "Product",
                 "platform": platform,
-            })
+            }))
             for variant in result.data["variants"]:
                 assert variant["size"] == expected_size,                     f"Platform {platform} expected {expected_size}, got {variant['size']}"
 
@@ -223,7 +224,7 @@ class TestS1E2EIntegration:
     def test_full_s1_pipeline(self):
         """Complete S1 flow should produce all outputs."""
         # Step 1: Strategy
-        strategy_result = SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE)
+        strategy_result = asyncio.run(SkillRegistry().execute("product-to-video-strategy", PRODUCT_FIXTURE))
         assert strategy_result.success is True
         briefs = strategy_result.data["briefs"]
         assert len(briefs) > 0
@@ -237,21 +238,21 @@ class TestS1E2EIntegration:
             {"voiceover": topic[:100], "duration_seconds": 4},
             {"voiceover": f"Featuring {usp}", "duration_seconds": 5},
         ]
-        video_result = SkillRegistry().execute("seedance-video-prompt", {
+        video_result = asyncio.run(SkillRegistry().execute("seedance-video-prompt", {
             "script_segments": sample_segments,
             "product_name": PRODUCT_FIXTURE["product_catalog"]["product_name"],
-        })
+        }))
         assert video_result.success is True
         assert video_result.data["total_duration_seconds"] == 9
 
         # Step 3: Thumbnail from topic
-        thumb_result = SkillRegistry().execute("gpt-image-thumbnail-prompt", {
+        thumb_result = asyncio.run(SkillRegistry().execute("gpt-image-thumbnail-prompt", {
             "hook_text": topic[:60],
             "product_name": PRODUCT_FIXTURE["product_catalog"]["product_name"],
             "brand_color": PRODUCT_FIXTURE["brand_guidelines"]["primary_color"],
             "price": PRODUCT_FIXTURE["product_catalog"]["price"],
             "platform": "tiktok",
-        })
+        }))
         assert thumb_result.success is True
         assert len(thumb_result.data["variants"]) == 4
 
@@ -271,13 +272,14 @@ class TestS1E2EIntegration:
         }
 
         # Strategy should fallback gracefully
-        result = SkillRegistry().execute("product-to-video-strategy", minimal_input)
+        result = asyncio.run(SkillRegistry().execute("product-to-video-strategy", minimal_input))
         assert result.success is True
         assert result.data is not None
 
     def test_s1_error_handling(self):
         """S1 should handle missing input gracefully."""
         # Completely empty input
-        result = SkillRegistry().execute("product-to-video-strategy", {})
+        result = asyncio.run(SkillRegistry().execute("product-to-video-strategy", {}))
         assert result.success is False
-        assert "Parameter validation" in result.error
+        error_msg = result.error or ""
+        assert "Parameter validation" in error_msg

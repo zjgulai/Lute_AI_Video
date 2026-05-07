@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models import Brief, ContentScenario, VideoType, WeeklyCalendar
+from src.models import Brief, Language, Platform, VideoType, WeeklyCalendar
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -241,21 +241,21 @@ IMPORTANT: Return ONLY the raw JSON object. Do not wrap it in markdown code bloc
 FALLBACK_BRIEFS = [
     Brief(
         id="FALLBACK-001",
-        video_type="tutorial",
+        video_type=VideoType.TUTORIAL,
         topic="How to use [product] in under 60 seconds",
         target_audience="New users who just purchased",
-        target_platforms=["tiktok"],
-        target_languages=["en"],
+        target_platforms=[Platform.TIKTOK],
+        target_languages=[Language.EN],
         key_message="[product] is easy to set up and use immediately",
         usp_priority=["ease-of-use"],
     ),
     Brief(
         id="FALLBACK-002",
-        video_type="product_usage",
+        video_type=VideoType.PRODUCT_USAGE,
         topic="The [usp1] feature that makes [product] different",
         target_audience="Shoppers comparing options",
-        target_platforms=["shopify", "amazon"],
-        target_languages=["en"],
+        target_platforms=[Platform.SHOPIFY, Platform.AMAZON],
+        target_languages=[Language.EN],
         key_message="[usp1] is the key differentiator from competitors",
         usp_priority=["usp1"],
     ),

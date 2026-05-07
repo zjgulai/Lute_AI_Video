@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -66,7 +67,7 @@ SAMPLE_RUN_SLOW = {
 
 
 @pytest.fixture(params=["json", "sqlite"])
-def repo(request, tmp_path: Path) -> MetricsRepository:
+def repo(request, tmp_path: Path) -> Iterator[MetricsRepository]:
     """Parametrized fixture: tests run against both backends."""
     if request.param == "json":
         r = MetricsRepository(path=str(tmp_path / "metrics.json"), backend="json")

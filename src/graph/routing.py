@@ -281,7 +281,7 @@ def route_after_asset_sourcing(state: VideoPipelineState) -> str:
     asset_plans = state.get("asset_plans", [])
     has_gaps = False
     for plan in asset_plans:
-        gaps = plan.gaps if hasattr(plan, "gaps") else plan.get("gaps", [])
+        gaps = plan.gaps if hasattr(plan, "gaps") else plan.get("gaps", [])  # type: ignore[attr-defined]
         if gaps:
             has_gaps = True
             break

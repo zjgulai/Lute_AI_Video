@@ -139,7 +139,7 @@ class RemixScriptSkill(SkillCallable):
             errors.append("'product' is required")
         return errors
 
-    def validate_output(self, output: dict) -> list[str]:
+    def validate_output(self, output: dict) -> list[str]:  # type: ignore[override]
         errors = []
         if not output.get("segments"):
             errors.append("'segments' missing from output")

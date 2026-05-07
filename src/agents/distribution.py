@@ -182,7 +182,7 @@ class DistributionAgent:
             post_body = ""
 
         return PlatformPost(
-            platform=platform_str,
+            platform=platform_str,  # type: ignore[arg-type]
             title=title,
             description=description,
             hashtags=_hashtags_for_platform(platform_str),

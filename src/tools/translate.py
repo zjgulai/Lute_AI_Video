@@ -96,7 +96,7 @@ async def translate_catalog_to_english(catalog: dict) -> dict:
         translated_usps: list[str] = []
         for usp in usps:
             if isinstance(usp, str) and has_chinese(usp):
-                original_zh.setdefault("usps", [])
+                original_zh.setdefault("usps", "")
                 original_zh["usps"].append(usp)  # type: ignore[union-attr]
                 translated_usps.append(await translate_to_english(usp))
             else:

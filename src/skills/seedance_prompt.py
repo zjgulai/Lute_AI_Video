@@ -70,9 +70,9 @@ def _build_single_prompt(
     hits = [w for w in FORBIDDEN_PATTERNS if w in prompt_lower]
     if hits:
         logger.warning(
-            "seedance_prompt: forbidden pattern detected in prompt",
-            hits=hits,
-            segment_type=segment.get("segment_type", "?"),
+            "seedance_prompt: forbidden pattern detected in prompt — hits=%s segment_type=%s",
+            hits,
+            segment.get("segment_type", "?"),
         )
 
     return {

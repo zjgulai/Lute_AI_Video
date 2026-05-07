@@ -99,44 +99,44 @@ def make_human_review(status: ApprovalStatus, node_name: str = "test_review") ->
 class TestAuditGuard:
     def test_high_score_auto_approve(self):
         state = {"audit_reports": {"strategy": make_audit_report(0.95)}}
-        assert _audit_guard(state, "strategy") == "approved"
+        assert _audit_guard(state, "strategy") == "approved"  # type: ignore[arg-type]
 
     def test_low_score_auto_reject(self):
         state = {"audit_reports": {"strategy": make_audit_report(0.30)}}
-        assert _audit_guard(state, "strategy") == "rejected"
+        assert _audit_guard(state, "strategy") == "rejected"  # type: ignore[arg-type]
 
     def test_mid_score_returns_none(self):
         state = {"audit_reports": {"strategy": make_audit_report(0.75)}}
-        assert _audit_guard(state, "strategy") is None
+        assert _audit_guard(state, "strategy") is None  # type: ignore[arg-type]
 
     def test_exact_boundary_high_side(self):
         state = {"audit_reports": {"strategy": make_audit_report(AUTO_APPROVE_THRESHOLD + 0.001)}}
-        assert _audit_guard(state, "strategy") == "approved"
+        assert _audit_guard(state, "strategy") == "approved"  # type: ignore[arg-type]
 
     def test_exact_boundary_low_side(self):
         state = {"audit_reports": {"strategy": make_audit_report(AUTO_REJECT_THRESHOLD - 0.001)}}
-        assert _audit_guard(state, "strategy") == "rejected"
+        assert _audit_guard(state, "strategy") == "rejected"  # type: ignore[arg-type]
 
     def test_no_report_returns_none(self):
         state = {"audit_reports": {}}
-        assert _audit_guard(state, "strategy") is None
+        assert _audit_guard(state, "strategy") is None  # type: ignore[arg-type]
 
     def test_missing_key_returns_none(self):
         state = {"audit_reports": {"script": make_audit_report(0.5)}}
-        assert _audit_guard(state, "strategy") is None
+        assert _audit_guard(state, "strategy") is None  # type: ignore[arg-type]
 
     def test_dict_report_high_score(self):
         state = {"audit_reports": {"script": audit_as_dict(0.95)}}
-        assert _audit_guard(state, "script") == "approved"
+        assert _audit_guard(state, "script") == "approved"  # type: ignore[arg-type]
 
     def test_dict_report_low_score(self):
         state = {"audit_reports": {"script": audit_as_dict(0.40)}}
-        assert _audit_guard(state, "script") == "rejected"
+        assert _audit_guard(state, "script") == "rejected"  # type: ignore[arg-type]
 
     def test_dict_report_missing_score(self):
         state = {"audit_reports": {"script": audit_as_dict_no_score()}}
         # overall_score defaults to 0.5 from dict.get, which is < 0.60 → auto-reject
-        assert _audit_guard(state, "script") == "rejected"
+        assert _audit_guard(state, "script") == "rejected"  # type: ignore[arg-type]
 
 
 # ── _retry_guard ──
@@ -144,27 +144,27 @@ class TestAuditGuard:
 class TestRetryGuard:
     def test_below_limit_returns_none(self):
         state = {"retry_counts": {"strategy": MAX_RETRIES - 1}}
-        assert _retry_guard(state, "strategy") is None
+        assert _retry_guard(state, "strategy") is None  # type: ignore[arg-type]
 
     def test_at_limit_returns_approved(self):
         state = {"retry_counts": {"strategy": MAX_RETRIES}}
-        assert _retry_guard(state, "strategy") == "approved"
+        assert _retry_guard(state, "strategy") == "approved"  # type: ignore[arg-type]
 
     def test_exceeds_limit_returns_approved(self):
         state = {"retry_counts": {"strategy": MAX_RETRIES + 5}}
-        assert _retry_guard(state, "strategy") == "approved"
+        assert _retry_guard(state, "strategy") == "approved"  # type: ignore[arg-type]
 
     def test_no_retry_count_returns_none(self):
         state = {}
-        assert _retry_guard(state, "strategy") is None
+        assert _retry_guard(state, "strategy") is None  # type: ignore[arg-type]
 
     def test_empty_retry_counts_returns_none(self):
         state = {"retry_counts": {}}
-        assert _retry_guard(state, "strategy") is None
+        assert _retry_guard(state, "strategy") is None  # type: ignore[arg-type]
 
     def test_different_node_does_not_interfere(self):
         state = {"retry_counts": {"script": MAX_RETRIES}}
-        assert _retry_guard(state, "strategy") is None
+        assert _retry_guard(state, "strategy") is None  # type: ignore[arg-type]
 
 
 # ── _get_approval_status ──
@@ -215,36 +215,36 @@ class TestGetComplianceStatus:
 class TestRouteAfterStrategy:
     def test_audit_auto_approve_goes_to_script(self):
         state = {"audit_reports": {"strategy": make_audit_report(0.95)}}
-        assert route_after_strategy(state) == "script_node"
+        assert route_after_strategy(state) == "script_node"  # type: ignore[arg-type]
 
     def test_audit_auto_reject_goes_to_end(self):
         state = {"audit_reports": {"strategy": make_audit_report(0.30)}}
-        assert route_after_strategy(state) == "__end__"
+        assert route_after_strategy(state) == "__end__"  # type: ignore[arg-type]
 
     def test_human_approval_goes_to_script(self):
         state = {
             "audit_reports": {"strategy": make_audit_report(0.75)},
             "human_reviews": {"strategy_review": make_human_review(ApprovalStatus.APPROVED, "strategy_review")},
         }
-        assert route_after_strategy(state) == "script_node"
+        assert route_after_strategy(state) == "script_node"  # type: ignore[arg-type]
 
     def test_human_rejected_stays_at_strategy(self):
         state = {
             "audit_reports": {"strategy": make_audit_report(0.75)},
             "human_reviews": {"strategy_review": {"status": "changes_requested"}},
         }
-        assert route_after_strategy(state) == "strategy_node"
+        assert route_after_strategy(state) == "strategy_node"  # type: ignore[arg-type]
 
     def test_retry_guard_force_approves(self):
         state = {
             "retry_counts": {"strategy": MAX_RETRIES},
             "human_reviews": {"strategy_review": {"status": "changes_requested"}},
         }
-        assert route_after_strategy(state) == "script_node"
+        assert route_after_strategy(state) == "script_node"  # type: ignore[arg-type]
 
     def test_no_review_falls_to_strategy(self):
         state = {"audit_reports": {"strategy": make_audit_report(0.75)}}
-        assert route_after_strategy(state) == "strategy_node"
+        assert route_after_strategy(state) == "strategy_node"  # type: ignore[arg-type]
 
 
 # ── route_after_script ──
@@ -252,29 +252,29 @@ class TestRouteAfterStrategy:
 class TestRouteAfterScript:
     def test_audit_auto_approve_goes_to_compliance(self):
         state = {"audit_reports": {"script": make_audit_report(0.95)}}
-        assert route_after_script(state) == "compliance_node"
+        assert route_after_script(state) == "compliance_node"  # type: ignore[arg-type]
 
     def test_audit_auto_reject_goes_to_end(self):
         state = {"audit_reports": {"script": make_audit_report(0.30)}}
-        assert route_after_script(state) == "__end__"
+        assert route_after_script(state) == "__end__"  # type: ignore[arg-type]
 
     def test_human_approval_goes_to_compliance(self):
         state = {
             "audit_reports": {"script": make_audit_report(0.75)},
             "human_reviews": {"script_review": make_human_review(ApprovalStatus.APPROVED, "script_review")},
         }
-        assert route_after_script(state) == "compliance_node"
+        assert route_after_script(state) == "compliance_node"  # type: ignore[arg-type]
 
     def test_human_changes_requested_stays_at_script(self):
         state = {
             "audit_reports": {"script": make_audit_report(0.75)},
             "human_reviews": {"script_review": {"status": "changes_requested"}},
         }
-        assert route_after_script(state) == "script_node"
+        assert route_after_script(state) == "script_node"  # type: ignore[arg-type]
 
     def test_no_review_falls_to_script(self):
         state = {"audit_reports": {"script": make_audit_report(0.75)}}
-        assert route_after_script(state) == "script_node"
+        assert route_after_script(state) == "script_node"  # type: ignore[arg-type]
 
 
 # ── route_after_compliance ──
@@ -282,29 +282,29 @@ class TestRouteAfterScript:
 class TestRouteAfterCompliance:
     def test_no_reports_goes_to_storyboard(self):
         state = {}
-        assert route_after_compliance(state) == "storyboard_node"
+        assert route_after_compliance(state) == "storyboard_node"  # type: ignore[arg-type]
 
     def test_empty_reports_goes_to_storyboard(self):
         state = {"compliance_reports": []}
-        assert route_after_compliance(state) == "storyboard_node"
+        assert route_after_compliance(state) == "storyboard_node"  # type: ignore[arg-type]
 
     def test_blocked_report_goes_to_end(self):
         state = {"compliance_reports": [
             ComplianceReport(script_id="S-001", status=ComplianceStatus.PASS),
             ComplianceReport(script_id="S-002", status=ComplianceStatus.BLOCKED),
         ]}
-        assert route_after_compliance(state) == "__end__"
+        assert route_after_compliance(state) == "__end__"  # type: ignore[arg-type]
 
     def test_all_pass_goes_to_storyboard(self):
         state = {"compliance_reports": [
             {"status": "PASS"},
             {"status": "PASS"},
         ]}
-        assert route_after_compliance(state) == "storyboard_node"
+        assert route_after_compliance(state) == "storyboard_node"  # type: ignore[arg-type]
 
     def test_single_blocked_dict_goes_to_end(self):
         state = {"compliance_reports": [{"status": "BLOCKED"}]}
-        assert route_after_compliance(state) == "__end__"
+        assert route_after_compliance(state) == "__end__"  # type: ignore[arg-type]
 
 
 # ── route_after_asset_sourcing ──
@@ -312,31 +312,31 @@ class TestRouteAfterCompliance:
 class TestRouteAfterAssetSourcing:
     def test_no_plans_goes_to_editing(self):
         state = {}
-        assert route_after_asset_sourcing(state) == "editing_node"
+        assert route_after_asset_sourcing(state) == "editing_node"  # type: ignore[arg-type]
 
     def test_empty_plans_goes_to_editing(self):
         state = {"asset_plans": []}
-        assert route_after_asset_sourcing(state) == "editing_node"
+        assert route_after_asset_sourcing(state) == "editing_node"  # type: ignore[arg-type]
 
     def test_plan_with_gaps_goes_to_media_gen(self):
         plan = AssetPlan(storyboard_id="SB-001", shot_plans=[], gaps=["missing asset"])
         state = {"asset_plans": [plan]}
-        assert route_after_asset_sourcing(state) == "media_generation_node"
+        assert route_after_asset_sourcing(state) == "media_generation_node"  # type: ignore[arg-type]
 
     def test_plan_without_gaps_goes_to_editing(self):
         plan = AssetPlan(storyboard_id="SB-001", shot_plans=[], gaps=[])
         state = {"asset_plans": [plan]}
-        assert route_after_asset_sourcing(state) == "editing_node"
+        assert route_after_asset_sourcing(state) == "editing_node"  # type: ignore[arg-type]
 
     def test_plan_as_dict_with_gaps(self):
         plan = {"storyboard_id": "SB-001", "shot_plans": [], "gaps": ["missing video"]}
         state = {"asset_plans": [plan]}
-        assert route_after_asset_sourcing(state) == "media_generation_node"
+        assert route_after_asset_sourcing(state) == "media_generation_node"  # type: ignore[arg-type]
 
     def test_plan_as_dict_without_gaps(self):
         plan = {"storyboard_id": "SB-001", "shot_plans": [], "gaps": []}
         state = {"asset_plans": [plan]}
-        assert route_after_asset_sourcing(state) == "editing_node"
+        assert route_after_asset_sourcing(state) == "editing_node"  # type: ignore[arg-type]
 
 
 # ── route_after_editing ──
@@ -344,25 +344,25 @@ class TestRouteAfterAssetSourcing:
 class TestRouteAfterEditing:
     def test_audit_auto_approve_goes_to_audio(self):
         state = {"audit_reports": {"edit": make_audit_report(0.95)}}
-        assert route_after_editing(state) == "audio_node"
+        assert route_after_editing(state) == "audio_node"  # type: ignore[arg-type]
 
     def test_audit_auto_reject_goes_to_end(self):
         state = {"audit_reports": {"edit": make_audit_report(0.30)}}
-        assert route_after_editing(state) == "__end__"
+        assert route_after_editing(state) == "__end__"  # type: ignore[arg-type]
 
     def test_human_approval_goes_to_audio(self):
         state = {
             "audit_reports": {"edit": make_audit_report(0.75)},
             "human_reviews": {"edit_review": make_human_review(ApprovalStatus.APPROVED, "edit_review")},
         }
-        assert route_after_editing(state) == "audio_node"
+        assert route_after_editing(state) == "audio_node"  # type: ignore[arg-type]
 
     def test_human_changes_requested_stays_at_editing(self):
         state = {
             "audit_reports": {"edit": make_audit_report(0.75)},
             "human_reviews": {"edit_review": {"status": "changes_requested"}},
         }
-        assert route_after_editing(state) == "editing_node"
+        assert route_after_editing(state) == "editing_node"  # type: ignore[arg-type]
 
 
 # ── route_after_thumbnail ──
@@ -370,22 +370,22 @@ class TestRouteAfterEditing:
 class TestRouteAfterThumbnail:
     def test_audit_auto_approve_goes_to_distribution(self):
         state = {"audit_reports": {"thumbnail": make_audit_report(0.95)}}
-        assert route_after_thumbnail(state) == "distribution_node"
+        assert route_after_thumbnail(state) == "distribution_node"  # type: ignore[arg-type]
 
     def test_audit_auto_reject_goes_to_end(self):
         state = {"audit_reports": {"thumbnail": make_audit_report(0.30)}}
-        assert route_after_thumbnail(state) == "__end__"
+        assert route_after_thumbnail(state) == "__end__"  # type: ignore[arg-type]
 
     def test_human_approval_goes_to_distribution(self):
         state = {
             "audit_reports": {"thumbnail": make_audit_report(0.75)},
             "human_reviews": {"thumbnail_review": make_human_review(ApprovalStatus.APPROVED, "thumbnail_review")},
         }
-        assert route_after_thumbnail(state) == "distribution_node"
+        assert route_after_thumbnail(state) == "distribution_node"  # type: ignore[arg-type]
 
     def test_human_changes_requested_stays_at_thumbnail(self):
         state = {
             "audit_reports": {"thumbnail": make_audit_report(0.75)},
             "human_reviews": {"thumbnail_review": {"status": "changes_requested"}},
         }
-        assert route_after_thumbnail(state) == "thumbnail_node"
+        assert route_after_thumbnail(state) == "thumbnail_node"  # type: ignore[arg-type]

@@ -297,10 +297,11 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         Returns 0.0 if ffprobe is unavailable or file is too small —
         caller should fall back to API value.
         """
+        import subprocess
+
         if not path or not path.exists() or path.stat().st_size < 100:
             return 0.0
         try:
-            import subprocess
             result = subprocess.run(
                 [
                     "ffprobe", "-v", "error",
@@ -364,10 +365,11 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         The ffmpeg-generated file is a real 3-second 720x1280 video with a
         text overlay so it's visually obvious it's a stub.
         """
+        import subprocess
+
         path.parent.mkdir(parents=True, exist_ok=True)
         text = label or "Stub Video"
         try:
-            import subprocess
             cmd = [
                 "ffmpeg", "-y",
                 "-f", "lavfi", "-i", "color=c=#f5f5f7:s=720x1280:d=3",

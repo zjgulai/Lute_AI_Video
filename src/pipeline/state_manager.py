@@ -20,9 +20,12 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from src.config import OUTPUT_DIR as _CONFIG_OUTPUT_DIR
 
+PipelineStateRepository: Any = None  # type: ignore
+is_pg_available: Any = lambda: False  # type: ignore
 try:
     from src.storage import get_pool, init_db
     from src.storage.repository import PipelineStateRepository

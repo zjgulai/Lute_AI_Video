@@ -223,6 +223,7 @@ class AuditorAgent:
 
         # 1. Hook Strength
         hook_segments = [s for s in segments if s.segment_type == "hook"]
+        hook_duration = 0.0
         if hook_segments:
             longest_hook = max(hook_segments, key=lambda s: s.end_time - s.start_time)
             hook_duration = longest_hook.end_time - longest_hook.start_time
@@ -276,6 +277,7 @@ class AuditorAgent:
 
         # 4. Voiceover Clarity
         voiceovers = [s.voiceover for s in segments if s.voiceover]
+        avg_words = 0.0
         if voiceovers:
             avg_words = sum(len(v.split()) for v in voiceovers) / len(voiceovers)
             voice_score = min(1.0, avg_words / 15.0)
@@ -431,6 +433,7 @@ class AuditorAgent:
         )
 
         # 6. Pace Variation
+        variance = 0.0
         if len(timeline) >= 2:
             durations = [e.end_time - e.start_time for e in timeline]
             avg_dur = sum(durations) / len(durations)

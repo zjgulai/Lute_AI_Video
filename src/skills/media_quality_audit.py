@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -841,7 +842,6 @@ class MediaQualityAuditSkill(SkillCallable):
         if not path or not path.exists() or path.stat().st_size < 100:
             return 0.0
         try:
-            import subprocess
             result = subprocess.run(
                 [
                     "ffprobe", "-v", "error",

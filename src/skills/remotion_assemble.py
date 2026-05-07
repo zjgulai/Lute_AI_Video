@@ -403,8 +403,9 @@ class RemotionAssembleSkill(SkillCallable):
         the same codec parameters (true for Seedance-generated clips).
         Falls back to re-encode if copy fails.
         """
+        import subprocess
+
         try:
-            import subprocess
 
             # Build concat list file
             concat_list_path = output_path.parent / f"{output_path.stem}_concat.txt"
@@ -457,8 +458,10 @@ class RemotionAssembleSkill(SkillCallable):
         Extracts the first few meaningful lines (skipping [Verse], [Chorus]
         markers) and overlays them at the bottom of the video.
         """
+        import subprocess
+        import re
+
         try:
-            import subprocess, re
 
             lines = [l.strip() for l in lyrics_text.split("\n")
                      if l.strip() and not l.strip().startswith("[")]
@@ -506,8 +509,9 @@ class RemotionAssembleSkill(SkillCallable):
         output_label: str,
     ) -> Path | None:
         """Concat audio paths and mux into the video. Returns new path or None on failure."""
+        import subprocess
+
         try:
-            import subprocess
 
             # Filter out non-existent or stub audio
             valid_audios = [Path(p) for p in audio_paths if Path(p).exists() and Path(p).stat().st_size > 200]
@@ -611,8 +615,9 @@ class RemotionAssembleSkill(SkillCallable):
 
     @staticmethod
     def _measure_duration(path: Path) -> float:
+        import subprocess
+
         try:
-            import subprocess
             result = subprocess.run(
                 [
                     "ffprobe", "-v", "error",
@@ -635,10 +640,11 @@ class RemotionAssembleSkill(SkillCallable):
         The ffmpeg-generated file is a real 5-second 1080x1920 video with a
         text overlay so it's visually obvious it's a stub.
         """
+        import subprocess
+
         path.parent.mkdir(parents=True, exist_ok=True)
         text = label or "Stub Video"
         try:
-            import subprocess
             cmd = [
                 "ffmpeg", "-y",
                 "-f", "lavfi", "-i", "color=c=#f5f5f7:s=1080x1920:d=5",

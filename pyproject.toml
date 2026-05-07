@@ -54,6 +54,20 @@ markers = [
     "e2e: 端到端测试,需要真实 API key / platform credentials / webhook URL",
 ]
 
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "All"
+include = ["src", "tests"]
+exclude = [
+    "**/node_modules",
+    "**/migrations",
+    "**/__pycache__",
+]
+# Phase A: basic mode (default — no strict rules yet)
+# Phase B: reportMissingTypeArgument = true
+# Phase C: reportUnknownMemberType = true, reportUnknownVariableType = true
+# Phase D: full strict
+
 [tool.coverage.run]
 source = ["src"]
 omit = [

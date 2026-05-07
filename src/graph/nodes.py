@@ -481,7 +481,7 @@ async def script_audit_node(state: VideoPipelineState) -> dict[str, Any]:
     # Store per-script audit reports — use the first one as primary for checkpoint
     # (human reviews all scripts together at this checkpoint)
     audit_reports = state.get("audit_reports", {})
-    audit_reports["script"] = reports[0] if reports else None
+    audit_reports["script"] = reports[0] if reports else None  # type: ignore[assignment]
     logger.info(
         "script_audit_node: done",
         report_count=len(reports),
@@ -551,7 +551,7 @@ async def editing_audit_node(state: VideoPipelineState) -> dict[str, Any]:
 
     reports = await agent.run_edit_audit(compositions)
     audit_reports = state.get("audit_reports", {})
-    audit_reports["edit"] = reports[0] if reports else None
+    audit_reports["edit"] = reports[0] if reports else None  # type: ignore[assignment]
     logger.info(
         "editing_audit_node: done",
         report_count=len(reports),
@@ -623,7 +623,7 @@ async def thumbnail_audit_node(state: VideoPipelineState) -> dict[str, Any]:
         brand_guidelines=state.get("brand_guidelines"),
     )
     audit_reports = state.get("audit_reports", {})
-    audit_reports["thumbnail"] = reports[0] if reports else None
+    audit_reports["thumbnail"] = reports[0] if reports else None  # type: ignore[assignment]
     logger.info(
         "thumbnail_audit_node: done",
         report_count=len(reports),

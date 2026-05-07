@@ -377,6 +377,7 @@ class MetricsRepository:
     def _filter_runs(self, cutoff: str) -> list[dict[str, Any]]:
         """Filter runs newer than cutoff timestamp."""
         if self._backend == "sqlite":
+            assert self._conn is not None
             rows = self._conn.execute(
                 "SELECT data FROM pipeline_runs WHERE json_extract(data, '$.started_at') >= ? ORDER BY rowid DESC",
                 (cutoff,),

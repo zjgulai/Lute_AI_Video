@@ -117,13 +117,18 @@ class ScriptWriterAgent:
         )
 
         try:
-            data = await llm.invoke_json(system_prompt, user_message)
+            raw_data = await llm.invoke_json(system_prompt, user_message)
             lang_suffix = lang_code.upper()
-            scripts = []
-            for s in data:
-                s["id"] = s.get("id", "").rsplit("-", 1)[0] + f"-{lang_suffix}"
-                s["language"] = lang_code
-                scripts.append(Script(**s))
+            scripts: list[Script] = []
+            if isinstance(raw_data, list):
+                for raw_script in raw_data:
+                    if isinstance(raw_script, dict):
+                        raw_script["id"] = raw_script.get("id", "").rsplit("-", 1)[0] + f"-{lang_suffix}"
+                        raw_script["language"] = lang_code
+                        try:
+                            scripts.append(Script(**raw_script))  # type: ignore[arg-type]
+                        except Exception:
+                            logger.warning("script_writer: failed to parse script", raw=raw_script)
             return scripts
         except Exception as e:
             logger.error("script_writer: LLM call failed", error=str(e), lang=lang_code)

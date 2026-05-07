@@ -53,9 +53,9 @@ class ViralExtractorSkill(SkillCallable):
             errors.append("'analysis' is required")
         return errors
 
-    def validate_output(self, output: dict) -> list[str]:
+    def validate_output(self, data: Any) -> list[str]:
         errors = []
-        if not output:
+        if not data:
             errors.append("output is None")
         return errors
 
@@ -119,7 +119,14 @@ class ViralExtractorSkill(SkillCallable):
         return hashlib.md5(raw.encode()).hexdigest()[:12]
 
     def fallback(self, params: dict) -> SkillResult:
-        return self.execute(params)
+        analysis = params.get("analysis", {})
+        hook_type = analysis.get("hook_type", "question")
+        return SkillResult(success=True, data={
+            "hook_formula": self._extract_hook_formula(hook_type),
+            "engagement_pacing": self._extract_pacing([]),
+            "emotional_triggers": self._extract_emotions([]),
+            "pattern_signature": self._compute_signature(analysis, hook_type),
+        })
 
 
 SkillRegistry().register(ViralExtractorSkill())

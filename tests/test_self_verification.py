@@ -43,17 +43,17 @@ class TestMakeSelfVerification:
 
 class TestInjectRejectionFeedback:
     def test_no_review_returns_empty(self):
-        result = _inject_rejection_feedback({"human_reviews": {}}, "strategy_review", "strategy")
+        result = _inject_rejection_feedback({"human_reviews": {}}, "strategy_review", "strategy")  # type: ignore[arg-type]
         assert result == {}
 
     def test_review_without_notes_does_not_inject(self):
         state = {"human_reviews": {"strategy_review": {"status": "changes_requested", "reviewer_notes": ""}}}
-        result = _inject_rejection_feedback(state, "strategy_review", "strategy")
+        result = _inject_rejection_feedback(state, "strategy_review", "strategy")  # type: ignore[arg-type]
         assert result == {}
 
     def test_review_with_notes_injects(self):
         state = {"human_reviews": {"strategy_review": {"status": "changes_requested", "reviewer_notes": "Too vague"}}}
-        result = _inject_rejection_feedback(state, "strategy_review", "strategy")
+        result = _inject_rejection_feedback(state, "strategy_review", "strategy")  # type: ignore[arg-type]
         assert result == {"strategy": "Too vague"}
 
     def test_already_injected_does_not_overwrite(self):
@@ -61,7 +61,7 @@ class TestInjectRejectionFeedback:
             "rejection_feedback": {"strategy": "Previous feedback"},
             "human_reviews": {"strategy_review": {"reviewer_notes": "New feedback"}},
         }
-        result = _inject_rejection_feedback(state, "strategy_review", "strategy")
+        result = _inject_rejection_feedback(state, "strategy_review", "strategy")  # type: ignore[arg-type]
         assert result == {"strategy": "Previous feedback"}
 
     def test_review_as_pydantic_model(self):
@@ -71,12 +71,12 @@ class TestInjectRejectionFeedback:
             status=ApprovalStatus.CHANGES_REQUESTED,
             reviewer_notes="Missing CTA",
         )}}
-        result = _inject_rejection_feedback(state, "script_review", "script")
+        result = _inject_rejection_feedback(state, "script_review", "script")  # type: ignore[arg-type]
         assert result == {"script": "Missing CTA"}
 
     def test_diff_review_key_does_not_inject(self):
         state = {"human_reviews": {"strategy_review": {"reviewer_notes": "Bad strategy"}}}
-        result = _inject_rejection_feedback(state, "script_review", "script")
+        result = _inject_rejection_feedback(state, "script_review", "script")  # type: ignore[arg-type]
         assert result == {}
 
 
@@ -156,7 +156,7 @@ class TestStrategyAuditSelfVerification:
             "target_platforms": ["tiktok"],
             "current_step": "strategy_complete",
         }
-        result = await strategy_audit_node(state)
+        result = await strategy_audit_node(state)  # type: ignore[arg-type]
         assert "self_verifications" in result
         sv = result["self_verifications"].get("strategy_node")
         assert sv is not None
@@ -168,7 +168,7 @@ class TestStrategyAuditSelfVerification:
     @pytest.mark.asyncio
     async def test_empty_calendar_returns_error(self):
         state = {"current_step": "strategy_complete"}
-        result = await strategy_audit_node(state)
+        result = await strategy_audit_node(state)  # type: ignore[arg-type]
         assert "errors" in result
 
 
@@ -179,7 +179,7 @@ class TestScriptAuditSelfVerification:
             "scripts": _make_scripts(),
             "current_step": "script_complete",
         }
-        result = await script_audit_node(state)
+        result = await script_audit_node(state)  # type: ignore[arg-type]
         assert "self_verifications" in result
         sv = result["self_verifications"].get("script_node")
         assert sv is not None
@@ -189,7 +189,7 @@ class TestScriptAuditSelfVerification:
     @pytest.mark.asyncio
     async def test_empty_scripts_returns_error(self):
         state = {"current_step": "script_complete"}
-        result = await script_audit_node(state)
+        result = await script_audit_node(state)  # type: ignore[arg-type]
         assert "errors" in result
 
 
@@ -200,7 +200,7 @@ class TestEditAuditSelfVerification:
             "edit_compositions": _make_compositions(),
             "current_step": "editing_complete",
         }
-        result = await editing_audit_node(state)
+        result = await editing_audit_node(state)  # type: ignore[arg-type]
         assert "self_verifications" in result
         sv = result["self_verifications"].get("editing_node")
         assert sv is not None
@@ -210,7 +210,7 @@ class TestEditAuditSelfVerification:
     @pytest.mark.asyncio
     async def test_empty_compositions_returns_error(self):
         state = {"current_step": "editing_complete"}
-        result = await editing_audit_node(state)
+        result = await editing_audit_node(state)  # type: ignore[arg-type]
         assert "errors" in result
 
 
@@ -221,7 +221,7 @@ class TestThumbnailAuditSelfVerification:
             "thumbnail_sets": _make_thumbnail_sets(),
             "current_step": "thumbnail_complete",
         }
-        result = await thumbnail_audit_node(state)
+        result = await thumbnail_audit_node(state)  # type: ignore[arg-type]
         assert "self_verifications" in result
         sv = result["self_verifications"].get("thumbnail_node")
         assert sv is not None
@@ -231,7 +231,7 @@ class TestThumbnailAuditSelfVerification:
     @pytest.mark.asyncio
     async def test_empty_thumbnail_sets_returns_error(self):
         state = {"current_step": "thumbnail_complete"}
-        result = await thumbnail_audit_node(state)
+        result = await thumbnail_audit_node(state)  # type: ignore[arg-type]
         assert "errors" in result
 
 
@@ -250,7 +250,7 @@ class TestStrategyAuditRejectionInjection:
                 "reviewer_notes": "Needs more platforms",
             }},
         }
-        result = await strategy_audit_node(state)
+        result = await strategy_audit_node(state)  # type: ignore[arg-type]
         assert result["rejection_feedback"].get("strategy") == "Needs more platforms"
 
     @pytest.mark.asyncio
@@ -264,7 +264,7 @@ class TestStrategyAuditRejectionInjection:
                 "reviewer_notes": "",
             }},
         }
-        result = await strategy_audit_node(state)
+        result = await strategy_audit_node(state)  # type: ignore[arg-type]
         assert "strategy" not in result["rejection_feedback"]
 
 
@@ -278,7 +278,7 @@ class TestScriptAuditRejectionInjection:
                 "reviewer_notes": "Weak hook",
             }},
         }
-        result = await script_audit_node(state)
+        result = await script_audit_node(state)  # type: ignore[arg-type]
         assert result["rejection_feedback"].get("script") == "Weak hook"
 
 
@@ -292,7 +292,7 @@ class TestEditAuditRejectionInjection:
                 "reviewer_notes": "Transitions too slow",
             }},
         }
-        result = await editing_audit_node(state)
+        result = await editing_audit_node(state)  # type: ignore[arg-type]
         assert result["rejection_feedback"].get("edit") == "Transitions too slow"
 
 
@@ -306,5 +306,5 @@ class TestThumbnailAuditRejectionInjection:
                 "reviewer_notes": "Add more variants",
             }},
         }
-        result = await thumbnail_audit_node(state)
+        result = await thumbnail_audit_node(state)  # type: ignore[arg-type]
         assert result["rejection_feedback"].get("thumbnail") == "Add more variants"

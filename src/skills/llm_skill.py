@@ -69,16 +69,17 @@ class LLMSkill(SkillCallable):
 
         try:
             if self._output_schema:
-                raw_result = await llm.invoke_json(messages)
+                raw_result = await llm.invoke_json(system, user)
             else:
                 raw_result = await llm.invoke(messages)
                 return SkillResult(success=True, data=raw_result)
 
             # If output_schema is a Pydantic model class
-            if isinstance(self._output_schema, type) and hasattr(self._output_schema, "model_validate"):
-                validated = self._output_schema.model_validate(raw_result)
+            _schema = self._output_schema
+            if isinstance(_schema, type) and hasattr(_schema, "model_validate"):
+                validated = _schema.model_validate(raw_result)  # type: ignore[union-attr]
                 return SkillResult(success=True, data=validated.model_dump())
-            
+
             # Plain dict schema — return as-is
             return SkillResult(success=True, data=raw_result)
 
@@ -107,9 +108,10 @@ class LLMSkill(SkillCallable):
         if data is None:
             return ["output is None"]
 
-        if isinstance(self._output_schema, type) and hasattr(self._output_schema, "model_validate"):
+        _schema = self._output_schema
+        if isinstance(_schema, type) and hasattr(_schema, "model_validate"):
             try:
-                self._output_schema.model_validate(data)
+                _schema.model_validate(data)  # type: ignore[union-attr]
             except Exception as e:
                 errors.append(str(e))
 

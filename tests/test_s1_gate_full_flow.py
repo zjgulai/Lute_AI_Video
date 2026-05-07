@@ -243,6 +243,7 @@ class TestGate4FinalAssembly:
 
         # Reload 看 gates 字段是否被写入
         reloaded = await sm.load("final-test-3")
+        assert reloaded is not None
         assert "gate_4_final" in reloaded["gates"]
         gate_state = reloaded["gates"]["gate_4_final"]
         assert gate_state["status"] == "awaiting_approval"

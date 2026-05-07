@@ -260,7 +260,7 @@ def _mock_segment(
     end: float = 9.0,
 ) -> ScriptSegment:
     return ScriptSegment(
-        segment_type=seg_type,
+        segment_type=seg_type,  # type: ignore[arg-type]
         start_time=start,
         end_time=end,
         voiceover=voiceover,

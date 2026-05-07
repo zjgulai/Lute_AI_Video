@@ -183,9 +183,9 @@ class TestSkillRegistry:
     def test_unregister_skill(self):
         """Should unregister a skill."""
         SkillRegistry.register(EchoSkill())
-        assert len(SkillRegistry._skills) == 1
+        assert len(SkillRegistry._global_skills) == 1
         SkillRegistry.unregister("echo")
-        assert "echo" not in SkillRegistry._skills
+        assert "echo" not in SkillRegistry._global_skills
 
     def test_execute_registered_skill(self):
         """Should execute a registered skill."""
@@ -201,7 +201,8 @@ class TestSkillRegistry:
 
         result = asyncio.run(SkillRegistry().execute("nonexistent", {}))
         assert result.success is False
-        assert "not found" in result.error
+        error_msg = result.error or ""
+        assert "not found" in error_msg
 
     def test_list_skills(self):
         """Should list all registered skills."""
@@ -213,9 +214,9 @@ class TestSkillRegistry:
     def test_clear_skills(self):
         """Should clear all skills."""
         SkillRegistry.register(EchoSkill())
-        assert len(SkillRegistry._skills) == 1
+        assert len(SkillRegistry._global_skills) == 1
         SkillRegistry.clear_global()
-        assert len(SkillRegistry._skills) == 0
+        assert len(SkillRegistry._global_skills) == 0
 
 
 # ==============================================================================
@@ -459,8 +460,9 @@ class TestProductCatalogCRUD:
         del cat1
 
         cat2 = ProductCatalog(storage_path=db_path)
-        assert cat2.get("PERSIST-1") is not None
-        assert cat2.get("PERSIST-1").name == "Persist Me"
+        persist_product = cat2.get("PERSIST-1")
+        assert persist_product is not None
+        assert persist_product.name == "Persist Me"
 
     def test_empty_catalog(self, catalog):
         """New catalog should be empty."""

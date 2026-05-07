@@ -1,5 +1,7 @@
 """distribution router — extracted from api.py (P1-11)."""
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, HTTPException, Depends
 
 try:
@@ -7,6 +9,10 @@ try:
     from src.storage.repository import PublishLogRepository
 except ImportError:
     HAS_STORAGE = False
+    PublishLogRepository = None  # type: ignore[misc,assignment]
+
+if TYPE_CHECKING:
+    from src.storage.repository import PublishLogRepository as _PublishLogRepositoryType
 
 from src.routers._deps import _safe_error, verify_api_key
 
@@ -28,8 +34,8 @@ async def distribution_publish(body: dict):
 
     try:
         result = await publish_to_platform(body["platform"], body["content"])
-        if HAS_STORAGE:
-            repo = PublishLogRepository()
+        if HAS_STORAGE and PublishLogRepository is not None:
+            repo = PublishLogRepository()  # type: ignore[misc]
             await repo.create({
                 "platform": body["platform"],
                 "post_id": result.get("post_id"),
@@ -120,9 +126,9 @@ async def publish_video(video_id: str, body: dict):
     engine = PublishEngine()
     results = await engine.publish(video_path, metadata, platforms)
 
-    if HAS_STORAGE:
+    if HAS_STORAGE and PublishLogRepository is not None:
         try:
-            repo = PublishLogRepository()
+            repo = PublishLogRepository()  # type: ignore[misc]
             for r in results:
                 await repo.create({
                     "platform": r.platform,

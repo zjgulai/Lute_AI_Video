@@ -19,7 +19,7 @@ class TestPipelineCompilation:
     def test_pipeline_initial_state(self):
         """Verify pipeline accepts initial state without errors."""
         compiled = compile_pipeline()
-        config = {"configurable": {"thread_id": "test-001"}}
+        config = {"configurable": {"thread_id": "test-001"}}  # type: ignore[arg-type]
 
         initial: VideoPipelineState = {
             "product_catalog": {"products": []},
@@ -34,7 +34,7 @@ class TestPipelineCompilation:
         }
 
         # Just verify we can start the pipeline
-        state = compiled.get_state(config)
+        state = compiled.get_state(config)  # type: ignore[arg-type]
         assert state is not None
 
 
@@ -52,7 +52,7 @@ class TestRouting:
                 )
             ]
         }
-        result = route_after_compliance(state)
+        result = route_after_compliance(state)  # type: ignore[arg-type]
         assert result == "__end__"
 
     def test_route_after_compliance_pass(self):
@@ -68,7 +68,7 @@ class TestRouting:
                 )
             ]
         }
-        result = route_after_compliance(state)
+        result = route_after_compliance(state)  # type: ignore[arg-type]
         assert result == "storyboard_node"
 
     def test_route_asset_gaps(self):
@@ -88,7 +88,7 @@ class TestRouting:
             ],
             gaps=["missing asset"],
         )
-        result = route_after_asset_sourcing({"asset_plans": [plan_with_gaps]})
+        result = route_after_asset_sourcing({"asset_plans": [plan_with_gaps]})  # type: ignore[arg-type]
         assert result == "media_generation_node"
 
         # No gaps → skip to editing
@@ -113,7 +113,7 @@ class TestRouting:
             ],
             gaps=[],
         )
-        result = route_after_asset_sourcing({"asset_plans": [plan_no_gaps]})
+        result = route_after_asset_sourcing({"asset_plans": [plan_no_gaps]})  # type: ignore[arg-type]
         assert result == "editing_node"
 
 
@@ -135,7 +135,7 @@ class TestRoutingHumanReview:
             },
             "weekly_calendar": {},
         }
-        assert route_after_strategy(state) == "script_node"
+        assert route_after_strategy(state) == "script_node"  # type: ignore[arg-type]
 
     def test_route_after_strategy_changes_requested(self):
         from src.graph.routing import route_after_strategy
@@ -151,7 +151,7 @@ class TestRoutingHumanReview:
                 ).model_dump(),
             },
         }
-        assert route_after_strategy(state) == "strategy_node"
+        assert route_after_strategy(state) == "strategy_node"  # type: ignore[arg-type]
 
     def test_route_after_script_approved(self):
         from src.graph.routing import route_after_script
@@ -168,7 +168,7 @@ class TestRoutingHumanReview:
             "weekly_calendar": {},
             "scripts": [],
         }
-        assert route_after_script(state) == "compliance_node"
+        assert route_after_script(state) == "compliance_node"  # type: ignore[arg-type]
 
     def test_route_after_script_changes_requested(self):
         from src.graph.routing import route_after_script
@@ -183,7 +183,7 @@ class TestRoutingHumanReview:
                 ).model_dump(),
             },
         }
-        assert route_after_script(state) == "script_node"
+        assert route_after_script(state) == "script_node"  # type: ignore[arg-type]
 
     def test_route_after_editing_approved(self):
         from src.graph.routing import route_after_editing
@@ -199,7 +199,7 @@ class TestRoutingHumanReview:
             },
             "scripts": [],
         }
-        assert route_after_editing(state) == "audio_node"
+        assert route_after_editing(state) == "audio_node"  # type: ignore[arg-type]
 
     def test_route_after_editing_changes_requested(self):
         from src.graph.routing import route_after_editing
@@ -214,7 +214,7 @@ class TestRoutingHumanReview:
                 ).model_dump(),
             },
         }
-        assert route_after_editing(state) == "editing_node"
+        assert route_after_editing(state) == "editing_node"  # type: ignore[arg-type]
 
     def test_route_after_thumbnail_approved(self):
         from src.graph.routing import route_after_thumbnail
@@ -230,7 +230,7 @@ class TestRoutingHumanReview:
             },
             "scripts": [],
         }
-        assert route_after_thumbnail(state) == "distribution_node"
+        assert route_after_thumbnail(state) == "distribution_node"  # type: ignore[arg-type]
 
     def test_route_after_thumbnail_changes_requested(self):
         from src.graph.routing import route_after_thumbnail
@@ -245,7 +245,7 @@ class TestRoutingHumanReview:
                 ).model_dump(),
             },
         }
-        assert route_after_thumbnail(state) == "thumbnail_node"
+        assert route_after_thumbnail(state) == "thumbnail_node"  # type: ignore[arg-type]
 
     def test_retry_exhausted_thumbnail_changes_requested_overrides_to_approved(self):
         from src.graph.routing import route_after_thumbnail
@@ -260,7 +260,7 @@ class TestRoutingHumanReview:
             },
             "retry_counts": {"thumbnail": 3},
         }
-        result = route_after_thumbnail(state)
+        result = route_after_thumbnail(state)  # type: ignore[arg-type]
         assert result == "distribution_node"
 
     # ── L4.1: Audit-driven routing ──
@@ -283,7 +283,7 @@ class TestRoutingHumanReview:
                 )
             },
         }
-        result = route_after_strategy(state)
+        result = route_after_strategy(state)  # type: ignore[arg-type]
         assert result == "script_node", f"Expected script_node, got {result}"
 
     def test_audit_high_score_auto_approves_script(self):
@@ -303,7 +303,7 @@ class TestRoutingHumanReview:
                 )
             },
         }
-        result = route_after_script(state)
+        result = route_after_script(state)  # type: ignore[arg-type]
         assert result == "compliance_node"
 
     def test_audit_low_score_auto_rejects_strategy(self):
@@ -324,7 +324,7 @@ class TestRoutingHumanReview:
                 )
             },
         }
-        result = route_after_strategy(state)
+        result = route_after_strategy(state)  # type: ignore[arg-type]
         assert result == "__end__", f"Expected __end__, got {result}"
 
     def test_audit_low_score_auto_rejects_thumbnail(self):
@@ -344,7 +344,7 @@ class TestRoutingHumanReview:
                 )
             },
         }
-        result = route_after_thumbnail(state)
+        result = route_after_thumbnail(state)  # type: ignore[arg-type]
         assert result == "__end__"
 
     def test_audit_mid_score_falls_through_to_human_review(self):
@@ -371,7 +371,7 @@ class TestRoutingHumanReview:
                 )
             },
         }
-        result = route_after_strategy(state)
+        result = route_after_strategy(state)  # type: ignore[arg-type]
         assert result == "script_node"
 
     def test_audit_mid_score_changes_requested_returns_to_node(self):
@@ -398,7 +398,7 @@ class TestRoutingHumanReview:
                 )
             },
         }
-        result = route_after_editing(state)
+        result = route_after_editing(state)  # type: ignore[arg-type]
         assert result == "editing_node"
 
     def test_no_audit_report_falls_through_gracefully(self):
@@ -414,7 +414,7 @@ class TestRoutingHumanReview:
                 )
             },
         }
-        result = route_after_editing(state)
+        result = route_after_editing(state)  # type: ignore[arg-type]
         assert result == "audio_node"
 
     def test_no_audit_no_human_review_falls_to_content_node(self):
@@ -422,7 +422,7 @@ class TestRoutingHumanReview:
         from src.graph.routing import route_after_script
 
         state = {}
-        result = route_after_script(state)
+        result = route_after_script(state)  # type: ignore[arg-type]
         assert result == "script_node"
 
 class TestRetryGuard:
@@ -449,7 +449,7 @@ class TestRetryGuard:
             },
             "retry_counts": {"strategy": 3},
         }
-        result = route_after_strategy(state)
+        result = route_after_strategy(state)  # type: ignore[arg-type]
         assert result == "script_node", (
             f"Expected 'script_node' (retry guard override), got '{result}'"
         )
@@ -468,7 +468,7 @@ class TestRetryGuard:
             },
             "retry_counts": {"script": 3},
         }
-        result = route_after_script(state)
+        result = route_after_script(state)  # type: ignore[arg-type]
         assert result == "compliance_node"
 
     def test_edit_retries_exhausted_forces_approval(self):
@@ -485,7 +485,7 @@ class TestRetryGuard:
             },
             "retry_counts": {"edit": 3},
         }
-        result = route_after_editing(state)
+        result = route_after_editing(state)  # type: ignore[arg-type]
         assert result == "audio_node"
 
     def test_thumbnail_retries_exhausted_forces_approval(self):
@@ -502,7 +502,7 @@ class TestRetryGuard:
             },
             "retry_counts": {"thumbnail": 3},
         }
-        result = route_after_thumbnail(state)
+        result = route_after_thumbnail(state)  # type: ignore[arg-type]
         assert result == "distribution_node"
 
     def test_retry_below_limit_still_loops_back(self):
@@ -520,5 +520,5 @@ class TestRetryGuard:
             },
             "retry_counts": {"script": 2},
         }
-        result = route_after_script(state)
+        result = route_after_script(state)  # type: ignore[arg-type]
         assert result == "script_node"

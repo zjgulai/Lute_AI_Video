@@ -25,7 +25,7 @@ class StoryboardSkill(SkillCallable):
             errors.append("'scripts' is required")
         return errors
 
-    def validate_output(self, output: dict) -> list[str]:
+    def validate_output(self, output: dict) -> list[str]:  # type: ignore[override]
         errors = []
         if not output:
             errors.append("output is None")

@@ -6,9 +6,13 @@ Builds a StateGraph with 12 worker nodes + 4 self-audit nodes
 
 from __future__ import annotations
 
+from typing import cast
+
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langchain_core.runnables import RunnableConfig
 
 from src.graph.nodes import (
     analytics_node,
@@ -249,19 +253,26 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
             _model_classes.append(obj)
         elif issubclass(obj, Enum):
             _model_classes.append(obj)
-    serializer = JsonPlusSerializer(allowed_msgpack_modules=_model_classes)
+    serializer = JsonPlusSerializer(allowed_msgpack_modules=_model_classes)  # type: ignore[call-arg]
 
     # -- Determine checkpointer (priority: explicit > db_url > MemorySaver) --
     if checkpointer is None:
         if db_url:
             try:
-                import psycopg
-                from langgraph.checkpoint.postgres import PostgresSaver
+                import psycopg  # type: ignore[import-not-found]
+                from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore[import-not-found]
 
-                conn = psycopg.connect(
-                    db_url,
-                    autocommit=True,
-                    prepare_threshold=0,
+                from psycopg import Connection  # type: ignore[import-not-found]
+                from psycopg.rows import DictRow, dict_row  # type: ignore[import-not-found]
+
+                conn = cast(
+                    Connection[DictRow],
+                    psycopg.connect(
+                        db_url,
+                        autocommit=True,
+                        prepare_threshold=0,
+                        row_factory=dict_row,  # type: ignore[arg-type]
+                    ),
                 )
                 checkpointer = PostgresSaver(conn)
                 checkpointer.serde = serializer
@@ -269,7 +280,7 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
                     "pipeline: using PostgresSaver",
                     db_url=db_url.split("@")[-1] if "@" in db_url else "local",
                 )
-            except Exception as e:
+            except Exception as e:  # type: ignore[misc]
                 # P1-2: When db_url is explicitly provided, do NOT silently fall back
                 # to MemorySaver. Production relies on persistence; a failed connection
                 # means the deployment is misconfigured and should fail fast.
@@ -290,12 +301,13 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
 
     # -- Apply serializer to user-provided checkpointer that lacks our registration --
     if checkpointer is not None and hasattr(checkpointer, "serde"):
-        if checkpointer.serde is None or not getattr(checkpointer.serde, "_allowed_msgpack_modules", None):
-            try:
-                if hasattr(checkpointer.serde, "with_msgpack_allowlist"):
-                    checkpointer.serde = checkpointer.serde.with_msgpack_allowlist(_model_classes)
-            except Exception:
-                pass
+        _serde = checkpointer.serde
+        if _serde is not None and not getattr(_serde, "_allowed_msgpack_modules", None):
+            if isinstance(_serde, JsonPlusSerializer):
+                try:
+                    checkpointer.serde = _serde.with_msgpack_allowlist(_model_classes)  # type: ignore[union-attr]
+                except Exception:
+                    pass
 
     graph = build_pipeline()
 
@@ -322,9 +334,9 @@ def get_pipeline_history(compiled_graph, thread_id: str) -> dict:
     Returns:
         Dict with thread_id, snapshots list, and status.
     """
-    config = {"configurable": {"thread_id": thread_id}}
+    _history_config = cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})
     try:
-        state = compiled_graph.get_state(config)
+        state = compiled_graph.get_state(_history_config)
         if state is None or state.values is None:
             return {"thread_id": thread_id, "snapshots": [], "status": "not_found"}
         return {
@@ -362,9 +374,10 @@ if __name__ == "__main__":
     }
 
     print("Running pipeline...")
-    for event in compiled.stream(initial, config):
+    _run_config = cast(RunnableConfig, config)
+    for event in compiled.stream(initial, _run_config):
         print(json.dumps({k: str(v)[:80] for k, v in event.items()}, default=str))
-        if compiled.get_state(config).next:
-            print(f"Interrupted at: {compiled.get_state(config).next}")
+        if compiled.get_state(_run_config).next:
+            print(f"Interrupted at: {compiled.get_state(_run_config).next}")
             break
     print("Done.")

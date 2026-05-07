@@ -335,12 +335,16 @@ async def generate_candidates(label: str, gate_id: str) -> dict:
     state["gates"] = gates_state
     await state_manager.save(label, state)
 
+    best = None
+    if candidates:
+        best = max(candidates, key=lambda c: c.get("score", 0))
+
     logger.info(
         "gate_manager: candidates generated",
         gate_id=gate_id,
         label=label,
         candidate_count=len(candidates),
-        recommended_id=best["id"] if candidates else None,
+        recommended_id=best["id"] if best else None,
     )
 
     return {

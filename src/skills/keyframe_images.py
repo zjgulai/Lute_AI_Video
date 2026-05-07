@@ -147,7 +147,7 @@ class KeyframeImagesSkill(SkillCallable):
         try:
             from PIL import Image
 
-            img = Image.new("RGB", (1024, 1792), color=(60, 60, 80))
+            img = Image.new("RGB", (1024, 1792), color=(60, 60, 80))  # type: ignore[arg-type]
             # Simple text indicator isn't possible with PIL alone in a
             # cross-platform way, but the placeholder is visually distinct.
             path.parent.mkdir(parents=True, exist_ok=True)

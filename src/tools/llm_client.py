@@ -150,16 +150,18 @@ class LLMClient:
         if cache_key not in self._clients:
             # Size guard: evict oldest entries when cache is full
             if len(self._clients) >= CLIENT_CACHE_MAX_SIZE:
-                oldest_key = min(self._clients_ts, key=self._clients_ts.get)
+                oldest_key = min(self._clients_ts, key=lambda k: self._clients_ts[k])
                 del self._clients[oldest_key]
                 del self._clients_ts[oldest_key]
 
             if self.provider == "anthropic":
-                self._clients[cache_key] = ChatAnthropic(
-                    model=model or "claude-sonnet-4-20250514",
+                if ChatAnthropic is None:
+                    raise ImportError("langchain-anthropic is not installed")
+                self._clients[cache_key] = ChatAnthropic(  # type: ignore[reportCallIssue]
+                    model_name=model or "claude-sonnet-4-20250514",
                     api_key=self._resolve_api_key("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY,
                     temperature=0.7,
-                    max_tokens=4096,
+                    max_tokens_to_sample=4096,
                     timeout=self.timeout,
                 )
             elif self.provider == "kimi":
@@ -167,10 +169,10 @@ class LLMClient:
                 from langchain_openai import ChatOpenAI
                 self._clients[cache_key] = ChatOpenAI(
                     model=model or KIMI_MODEL,
-                    api_key=self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY,
+                    api_key=self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY,  # type: ignore[reportArgumentType]
                     base_url="https://api.moonshot.cn/v1",
                     temperature=0.7,
-                    max_tokens=4096,
+                    max_completion_tokens=4096,
                     timeout=self.timeout,
                 )
             elif self.provider == "deepseek":
@@ -179,10 +181,10 @@ class LLMClient:
                 from langchain_openai import ChatOpenAI
                 self._clients[cache_key] = ChatOpenAI(
                     model=model or DEEPSEEK_MODEL,
-                    api_key=self._resolve_api_key("DEEPSEEK_API_KEY") or DEEPSEEK_API_KEY,
+                    api_key=self._resolve_api_key("DEEPSEEK_API_KEY") or DEEPSEEK_API_KEY,  # type: ignore[reportArgumentType]
                     base_url=DEEPSEEK_API_BASE,
                     temperature=0.7,
-                    max_tokens=4096,
+                    max_completion_tokens=4096,
                     timeout=self.timeout,
                 )
             else:
@@ -192,7 +194,7 @@ class LLMClient:
                     "model": model or "gpt-4o",
                     "api_key": self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY,
                     "temperature": 0.7,
-                    "max_tokens": 4096,
+                    "max_completion_tokens": 4096,
                     "timeout": self.timeout,
                 }
                 self._clients[cache_key] = ChatOpenAI(**kwargs)

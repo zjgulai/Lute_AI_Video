@@ -9,31 +9,32 @@ This router is designed to be mounted by another agent in src/api.py.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 try:
-    from fastapi import APIRouter, Query
+    from fastapi import APIRouter as _APIRouter, Query as _Query
 
     HAS_FASTAPI = True
 except ImportError:
-    APIRouter = None  # type: ignore
-    Query = None  # type: ignore
+    _APIRouter = None  # type: ignore[misc,assignment]
+    _Query = None  # type: ignore[misc,assignment]
     HAS_FASTAPI = False
 
 from src.telemetry import error_collector, pipeline_metrics
 
-router = APIRouter(prefix="/telemetry", tags=["telemetry"]) if HAS_FASTAPI else None
+router = cast("APIRouter", _APIRouter(prefix="/telemetry", tags=["telemetry"])) if HAS_FASTAPI else None  # type: ignore[valid-type]
 
 if HAS_FASTAPI and router is not None:
+    _router = router
 
-    @router.get("/metrics")
+    @_router.get("/metrics")
     async def get_metrics() -> dict[str, Any]:
         """Return PipelineMetrics summary."""
         return pipeline_metrics.get_summary()
 
-    @router.get("/errors")
+    @_router.get("/errors")
     async def get_errors(
-        label: str | None = Query(None, description="Filter errors by pipeline label"),
+        label: str | None = cast("Any", _Query)(None, description="Filter errors by pipeline label"),  # type: ignore[operator]
     ) -> dict[str, Any]:
         """Return ErrorCollector errors, optionally filtered by label."""
         errors = error_collector.get_errors(label=label)
@@ -43,7 +44,7 @@ if HAS_FASTAPI and router is not None:
             "label_filter": label,
         }
 
-    @router.get("/prometheus")
+    @_router.get("/prometheus")
     async def get_prometheus() -> Any:
         """Return Prometheus exposition format metrics for Grafana scraping."""
         from fastapi import Response

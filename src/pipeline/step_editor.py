@@ -117,10 +117,10 @@ async def invalidate_downstream(
     state["steps"] = steps
     await state_manager.save(label, state)
     logger.info(
-        "step_editor: invalidated downstream",
-        label=label,
-        step_name=step_name,
-        downstream=downstream,
+        "step_editor: invalidated downstream %s %s: %s",
+        label,
+        step_name,
+        downstream,
     )
     return state
 
@@ -188,9 +188,9 @@ async def update_step_output(
     await state_manager.save(label, state)
 
     logger.info(
-        "step_editor: updated step output",
-        label=label,
-        step_name=step_name,
+        "step_editor: updated step output %s %s",
+        label,
+        step_name,
     )
     return state
 

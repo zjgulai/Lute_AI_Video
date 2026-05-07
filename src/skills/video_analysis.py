@@ -126,9 +126,9 @@ class VideoAnalysisSkill(SkillCallable):
             errors.append("'video_url' is required")
         return errors
 
-    def validate_output(self, output: dict) -> list[str]:
+    def validate_output(self, data: dict) -> list[str]:  # type: ignore[reportIncompatibleMethodOverride]
         errors = []
-        if not output.get("hook_type"):
+        if not data.get("hook_type"):
             errors.append("'hook_type' missing from output")
         return errors
 
@@ -296,7 +296,7 @@ class VideoAnalysisSkill(SkillCallable):
         for hook_type, signals in hook_signals.items():
             scores[hook_type] = sum(1 for s in signals if s in first_words)
 
-        best = max(scores, key=scores.get)
+        best = max(scores, key=lambda k: scores[k])
         return best if scores[best] > 0 else "question"
 
     def _detect_speech_style(self, text: str) -> str:
@@ -336,7 +336,7 @@ class VideoAnalysisSkill(SkillCallable):
         # Count exclamation marks as energetic boost
         scores["energetic"] += text.count("!") * 2
 
-        best = max(scores, key=scores.get)
+        best = max(scores, key=lambda k: scores[k])
         return best if scores[best] > 0 else "casual"
 
     def _extract_catchphrases(self, text: str) -> list[str]:

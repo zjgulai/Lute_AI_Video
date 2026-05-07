@@ -41,7 +41,7 @@ class TestE2EPipeline:
 
     @pytest.fixture
     def config(self):
-        return {"configurable": {"thread_id": "e2e-test-001"}}
+        return {"configurable": {"thread_id": "e2e-test-001"}}  # type: ignore[return-value]
 
     @pytest.fixture
     def initial_state(self):
@@ -340,7 +340,7 @@ class TestE2EComplianceBlock:
 
     @pytest.fixture
     def config(self):
-        return {"configurable": {"thread_id": "e2e-blocked-001"}}
+        return {"configurable": {"thread_id": "e2e-blocked-001"}}  # type: ignore[return-value]
 
     @pytest.fixture
     def initial_state(self):
@@ -505,7 +505,7 @@ class TestE2EComplianceShortcut:
 
     @pytest.fixture
     def config(self):
-        return {"configurable": {"thread_id": "e2e-compliance-shortcut-001"}}
+        return {"configurable": {"thread_id": "e2e-compliance-shortcut-001"}}  # type: ignore[return-value]
 
     @pytest.fixture
     def initial_state(self):
@@ -544,13 +544,13 @@ class TestE2EComplianceShortcut:
             criteria=[
                 AuditCriterion(
                     name="Hook Strength",
-                    status=pass_status,
+                    status=pass_status,  # type: ignore[arg-type]
                     score=1.0,
                     observation="Hook present",
                 ),
                 AuditCriterion(
                     name="Compliance Pre-check",
-                    status=status,
+                    status=status,  # type: ignore[arg-type]
                     score=precheck_score,
                     observation="Injected test pre-check",
                     recommendation="",
@@ -689,7 +689,7 @@ class TestE2EAssetSourcingShortcut:
 
     @pytest.fixture
     def config(self):
-        return {"configurable": {"thread_id": "e2e-asset-gap-001"}}
+        return {"configurable": {"thread_id": "e2e-asset-gap-001"}}  # type: ignore[return-value]
 
     @pytest.fixture
     def initial_state(self):
@@ -874,7 +874,7 @@ class TestE2ESelfVerification:
     async def test_pipeline_has_self_verifications(self):
         pipeline = compile_pipeline()
         thread_id = "e2e-self-verify"
-        config = {"configurable": {"thread_id": thread_id}}
+        config: dict = {"configurable": {"thread_id": thread_id}}  # type: ignore[assignment]
 
         initial_state = {
             "target_platforms": ["tiktok"],
@@ -886,13 +886,13 @@ class TestE2ESelfVerification:
         }
 
         events = []
-        async for event in pipeline.astream(initial_state, config):
+        async for event in pipeline.astream(initial_state, config):  # type: ignore[arg-type]
             events.append(event)
 
         checkpoint_keys = ["strategy_review", "script_review", "edit_review", "thumbnail_review"]
         for review_key in checkpoint_keys:
             pipeline.update_state(
-                config,
+                config,  # type: ignore[arg-type]
                 {
                     "human_reviews": {
                         review_key: HumanReview(
@@ -902,10 +902,10 @@ class TestE2ESelfVerification:
                     }
                 },
             )
-            async for event in pipeline.astream(None, config):
+            async for event in pipeline.astream(None, config):  # type: ignore[arg-type]
                 events.append(event)
 
-        state = pipeline.get_state(config).values
+        state = pipeline.get_state(config).values  # type: ignore[arg-type]
 
         sv = state.get("self_verifications", {})
         assert len(sv) >= 4, f"Expected at least 4 self-verifications, got {len(sv)}: {list(sv.keys())}"

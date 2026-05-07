@@ -154,6 +154,7 @@ class ProductCatalog:
 
     def _load(self):
         try:
+            assert self.storage_path is not None
             data = json.loads(self.storage_path.read_text())
             for item in data:
                 product = Product.from_dict(item)

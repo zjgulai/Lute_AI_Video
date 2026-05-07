@@ -116,7 +116,7 @@ class TestSeedancePromptSkillInit:
 
     def test_skill_has_templates(self):
         """Should have templates for all shot types."""
-        from src.skills.seedance_prompt import SHOT_TEMPLATES
+        from src.skills.seedance_prompt import SHOT_TEMPLATES  # type: ignore[attr-defined]
         assert len(SHOT_TEMPLATES) >= 8
 
 

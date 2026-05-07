@@ -64,7 +64,7 @@ class BaseRepository:
                 return None
             return dict(row)
 
-        return await asyncio.to_thread(_sync_fetchrow)
+        return await asyncio.to_thread(_sync_fetchrow)  # type: ignore[return-type]
 
     async def _fetch(self, query: str, *args) -> list:
         pool = await get_pool()

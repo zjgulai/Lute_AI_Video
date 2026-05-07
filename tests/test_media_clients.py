@@ -130,7 +130,7 @@ class TestSeedanceClientEdgeCases:
     def test_cost_estimate_returns_dict(self):
         """cost_estimate property should return a dict."""
         client = SeedanceClient(api_key="")
-        estimate = client.cost_estimate
+        estimate = client.cost_estimate  # type: ignore[attr-defined]
         assert isinstance(estimate, dict)
         assert "model" in estimate
         assert estimate["model"] == "seedance-2.0"
@@ -184,32 +184,35 @@ class TestGPTImageClientStubMode:
 
     def test_generate_returns_stub(self, client):
         """Without API key, generate should return stub."""
-        result = client.generate(
+        import asyncio
+        result = asyncio.run(client.generate(
             prompt="a product on white background",
             quality="high",
             image_id="test_001",
-        )
+        ))
         assert result["image_url"].startswith("[GPT_IMAGE_STUB")
         assert result["image_id"] == "test_001"
 
     def test_generate_with_style_ref(self, client):
         """Should accept style_ref even in stub mode."""
-        result = client.generate(
+        import asyncio
+        result = asyncio.run(client.generate(
             prompt="product shot",
             style_ref="https://example.com/style.jpg",
             image_id="test_002",
-        )
+        ))
         assert result["image_id"] == "test_002"
 
     def test_generate_thumbnail_set(self, client):
         """generate_thumbnail_set should return list of stubs."""
+        import asyncio
         prompts = [
             {"image_id": "A", "prompt": "product centered"},
             {"image_id": "B", "prompt": "lifestyle scene"},
             {"image_id": "C", "prompt": "close-up emotion"},
             {"image_id": "D", "prompt": "minimal product"},
         ]
-        results = client.generate_thumbnail_set(prompts=prompts)
+        results = asyncio.run(client.generate_thumbnail_set(prompts=prompts))
         assert len(results) == 4
         for r in results:
             assert r["image_url"].startswith("[GPT_IMAGE_STUB")
@@ -221,26 +224,29 @@ class TestGPTImageClientQuality:
 
     def test_generate_low_quality(self):
         """Should accept 'low' quality."""
+        import asyncio
         client = GPTImageClient(api_key="")
-        result = client.generate(
+        result = asyncio.run(client.generate(
             prompt="test", quality="low", image_id="low_q"
-        )
+        ))
         assert result["quality"] == "low"
 
     def test_generate_medium_quality(self):
         """Should accept 'medium' quality."""
+        import asyncio
         client = GPTImageClient(api_key="")
-        result = client.generate(
+        result = asyncio.run(client.generate(
             prompt="test", quality="medium", image_id="med_q"
-        )
+        ))
         assert result["quality"] == "medium"
 
     def test_generate_high_quality(self):
         """Should accept 'high' quality."""
+        import asyncio
         client = GPTImageClient(api_key="")
-        result = client.generate(
+        result = asyncio.run(client.generate(
             prompt="test", quality="high", image_id="high_q"
-        )
+        ))
         assert result["quality"] == "high"
 
 
@@ -249,8 +255,9 @@ class TestGPTImageClientEdgeCases:
 
     def test_stub_with_empty_prompt(self):
         """Should handle empty prompt."""
+        import asyncio
         client = GPTImageClient(api_key="")
-        result = client.generate(prompt="", image_id="empty_prompt")
+        result = asyncio.run(client.generate(prompt="", image_id="empty_prompt"))
         assert result is not None
 
     def test_stub_custom_output_dir(self, tmp_path):
@@ -261,6 +268,7 @@ class TestGPTImageClientEdgeCases:
 
     def test_close_method(self):
         """close() should be callable."""
+        import asyncio
         client = GPTImageClient(api_key="")
-        client.close()
+        asyncio.run(client.close())
         assert True

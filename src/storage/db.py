@@ -16,7 +16,7 @@ _sqlite_conn: Optional[sqlite3.Connection] = None
 _pg_available: bool = False  # Set to True after successful PG connection + table verification
 
 
-async def get_pool() -> asyncpg.Pool:
+async def get_pool() -> asyncpg.Pool | None:
     """Return asyncpg pool singleton, initializing if needed."""
     global _pool
     if _pool is None:
@@ -141,7 +141,7 @@ _REQUIRED_TABLES: list[str] = [
 ]
 
 
-async def _verify_pg_tables(conn: asyncpg.Connection) -> bool:
+async def _verify_pg_tables(conn: asyncpg.Connection | asyncpg.pool.PoolConnectionProxy) -> bool:
     """Verify all required tables exist in PG. Returns True if all present."""
     for table in _REQUIRED_TABLES:
         exists = await conn.fetchval(

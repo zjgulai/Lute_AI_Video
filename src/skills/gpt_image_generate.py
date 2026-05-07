@@ -154,8 +154,8 @@ class GPTImageGenerateSkill(SkillCallable):
         so it's visually obvious it's a stub.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
+        import subprocess
         try:
-            import subprocess
             cmd = [
                 "ffmpeg", "-y",
                 "-f", "lavfi", "-i", "color=c=#f5f5f7:s=1024x1792:d=1",

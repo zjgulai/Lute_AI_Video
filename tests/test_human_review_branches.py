@@ -59,7 +59,9 @@ class TestD10HelpersDoNotRaise:
     def test_set_override_for_each_checkpoint(self):
         for key in ROUTING_MATRIX:
             _set_override(key, {"node_key": f"{key}_review", "status": "approved"})
-            assert _get_override(key) == {"node_key": f"{key}_review", "status": "approved"}
+            override = _get_override(key)
+            assert override is not None
+            assert override == {"node_key": f"{key}_review", "status": "approved"}
 
     def test_pop_override_clears_value(self):
         _set_override("strategy", {"node_key": "strategy_review", "status": "approved"})
@@ -75,14 +77,20 @@ class TestD10HelpersDoNotRaise:
         _set_override("strategy", {"node_key": "strategy_review", "status": "approved"})
         _set_override("strategy", {"node_key": "strategy_review", "status": "rejected"})
         # 后写覆盖前写
-        assert _get_override("strategy")["status"] == "rejected"
+        override = _get_override("strategy")
+        assert override is not None
+        assert override["status"] == "rejected"
 
     def test_set_does_not_leak_across_keys(self):
         _set_override("strategy", {"node_key": "strategy_review", "status": "approved"})
         _set_override("script", {"node_key": "script_review", "status": "rejected"})
         # 两个 key 各自独立
-        assert _get_override("strategy")["status"] == "approved"
-        assert _get_override("script")["status"] == "rejected"
+        override_strategy = _get_override("strategy")
+        override_script = _get_override("script")
+        assert override_strategy is not None
+        assert override_script is not None
+        assert override_strategy["status"] == "approved"
+        assert override_script["status"] == "rejected"
 
 
 # ── 12 用例:4 checkpoint × 3 status ──
@@ -94,7 +102,7 @@ class TestRoutingThreeBranches:
     def test_approved_routes_to_next_node(self, checkpoint_key):
         route_fn, approved_target, _ = ROUTING_MATRIX[checkpoint_key]
         _set_override(checkpoint_key, {"node_key": f"{checkpoint_key}_review", "status": "approved"})
-        result = route_fn({})
+        result = route_fn({})  # type: ignore[arg-type]
         assert result == approved_target, (
             f"{checkpoint_key} approved 应该路由到 {approved_target},实际 {result}"
         )
@@ -102,7 +110,7 @@ class TestRoutingThreeBranches:
     def test_rejected_terminates_pipeline(self, checkpoint_key):
         route_fn, _, _ = ROUTING_MATRIX[checkpoint_key]
         _set_override(checkpoint_key, {"node_key": f"{checkpoint_key}_review", "status": "rejected"})
-        result = route_fn({})
+        result = route_fn({})  # type: ignore[arg-type]
         assert result == "__end__", (
             f"{checkpoint_key} rejected 应该终止管线,实际 {result}"
         )
@@ -110,7 +118,7 @@ class TestRoutingThreeBranches:
     def test_changes_requested_loops_back(self, checkpoint_key):
         route_fn, _, changes_target = ROUTING_MATRIX[checkpoint_key]
         _set_override(checkpoint_key, {"node_key": f"{checkpoint_key}_review", "status": "changes_requested"})
-        result = route_fn({})
+        result = route_fn({})  # type: ignore[arg-type]
         assert result == changes_target, (
             f"{checkpoint_key} changes_requested 应该重跑 {changes_target},实际 {result}"
         )
@@ -118,7 +126,8 @@ class TestRoutingThreeBranches:
 
 class TestOverrideAutoCleared:
     """审计 routing.py 设计:routing 函数命中 D10 override 后自动 _pop_override,
-    避免下次路由继续使用旧值。"""
+    避免下次路由继续使用旧值。
+    """
 
     @pytest.mark.parametrize("checkpoint_key,expected_target", [
         ("strategy", "script_node"),
@@ -130,10 +139,10 @@ class TestOverrideAutoCleared:
         route_fn = ROUTING_MATRIX[checkpoint_key][0]
         _set_override(checkpoint_key, {"node_key": f"{checkpoint_key}_review", "status": "approved"})
         # 第一次路由消费 override
-        first = route_fn({})
+        first = route_fn({})  # type: ignore[arg-type]
         assert first == expected_target
         # 第二次路由 override 已被消费,fall through 到默认路径
-        second = route_fn({})
+        second = route_fn({})  # type: ignore[arg-type]
         # 没有 audit_reports 也没 human_reviews,走 audit_guard 返回 None,
         # 最终 default fall-through 回当前 node 重跑
         assert second != expected_target, (
@@ -156,12 +165,15 @@ class TestContextvarsIsolation:
         async def task_a():
             _set_override("strategy", {"node_key": "strategy_review", "status": "approved"})
             await asyncio.sleep(0.01)  # 让 task_b 有机会插入
-            results["a"] = _get_override("strategy")["status"]
+            override = _get_override("strategy")
+            assert override is not None
+            results["a"] = override["status"]
 
         async def task_b():
             await asyncio.sleep(0.005)  # 等 task_a 先 set
             # task_b 不应该看到 task_a 的 override
-            results["b"] = _get_override("strategy") or "no_override"
+            override = _get_override("strategy")
+            results["b"] = override["status"] if override else "no_override"
 
         await asyncio.gather(task_a(), task_b())
         assert results["a"] == "approved"
@@ -175,7 +187,8 @@ class TestContextvarsIsolation:
 
 class TestAuditAutoDecision:
     """0.60-0.90 区间触发 HITL,> 0.90 自动 approve,< 0.60 自动 reject。
-    本测试构造每个区间的 audit_report 验证路由结果。"""
+    本测试构造每个区间的 audit_report 验证路由结果。
+    """
 
     @pytest.mark.parametrize("checkpoint_key,expected_target", [
         ("strategy", "script_node"),
@@ -186,7 +199,7 @@ class TestAuditAutoDecision:
     def test_high_score_auto_approves(self, checkpoint_key, expected_target):
         route_fn = ROUTING_MATRIX[checkpoint_key][0]
         state = {"audit_reports": {checkpoint_key: {"overall_score": 0.95}}}
-        result = route_fn(state)
+        result = route_fn(state)  # type: ignore[arg-type]
         assert result == expected_target, (
             f"{checkpoint_key} score=0.95 应该 auto-approve 到 {expected_target},实际 {result}"
         )
@@ -195,7 +208,7 @@ class TestAuditAutoDecision:
     def test_low_score_auto_rejects(self, checkpoint_key):
         route_fn = ROUTING_MATRIX[checkpoint_key][0]
         state = {"audit_reports": {checkpoint_key: {"overall_score": 0.40}}}
-        result = route_fn(state)
+        result = route_fn(state)  # type: ignore[arg-type]
         assert result == "__end__", (
             f"{checkpoint_key} score=0.40 应该 auto-reject 终止,实际 {result}"
         )
@@ -205,7 +218,7 @@ class TestAuditAutoDecision:
         """0.60-0.90 区间不自动决策,fall through 到 default(回 current node 重跑)。"""
         route_fn, _, current_node = ROUTING_MATRIX[checkpoint_key]
         state = {"audit_reports": {checkpoint_key: {"overall_score": 0.75}}}
-        result = route_fn(state)
+        result = route_fn(state)  # type: ignore[arg-type]
         assert result == current_node, (
             f"{checkpoint_key} score=0.75 中间区间应该回 {current_node} 重跑,实际 {result}"
         )
@@ -224,7 +237,7 @@ class TestDegradedGuardShortCircuits:
         # 即使设了 D10 approved override,degraded 也应该短路
         _set_override(checkpoint_key, {"node_key": f"{checkpoint_key}_review", "status": "approved"})
         state = {"pipeline_degraded": True}
-        result = route_fn(state)
+        result = route_fn(state)  # type: ignore[arg-type]
         assert result == "__end__", (
             f"{checkpoint_key} degraded 必须立即 __end__,实际 {result}"
         )

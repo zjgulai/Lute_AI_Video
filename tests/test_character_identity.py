@@ -17,7 +17,7 @@ def _make_dummy_images(count: int = 3, tmp_path: Path | None = None) -> list[str
     paths = []
     for i in range(count):
         size = (640, 480) if i % 2 == 0 else (1280, 720)
-        img = PIL.Image.new("RGB", size, color=(200 + i * 10, 150, 100))
+        img = PIL.Image.new("RGB", size, color=(200 + i * 10, 150, 100))  # type: ignore[arg-type]
         fp = tmp_path / f"frame_{i:04d}.png"
         img.save(fp)
         paths.append(str(fp))

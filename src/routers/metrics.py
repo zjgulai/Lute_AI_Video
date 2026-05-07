@@ -14,12 +14,13 @@ from src.routers._deps import _safe_error, verify_api_key
 router = APIRouter()
 
 @router.get("/metrics/{video_id}", dependencies=[Depends(verify_api_key)])
-async def get_video_metrics(video_id: str, platform: str = None):
+async def get_video_metrics(video_id: str, platform: str | None = None):
     """Get metrics snapshots for a video. Optional platform filter."""
     if not HAS_STORAGE:
         raise HTTPException(status_code=503, detail="Metrics storage not available")
 
     try:
+        from src.storage.metrics_repository import VideoMetricsRepository
         repo = VideoMetricsRepository()
         rows = await repo.get_metrics(video_id, platform=platform)
         return {"video_id": video_id, "metrics": rows}
@@ -30,7 +31,7 @@ async def get_video_metrics(video_id: str, platform: str = None):
 
 
 @router.get("/dashboard/overview", dependencies=[Depends(verify_api_key)])
-async def get_dashboard_overview(scenario: str = None, platform: str = None, days: int = 7):
+async def get_dashboard_overview(scenario: str | None = None, platform: str | None = None, days: int = 7):
     """Get aggregated dashboard data.
 
     Query params:
@@ -42,6 +43,7 @@ async def get_dashboard_overview(scenario: str = None, platform: str = None, day
         raise HTTPException(status_code=503, detail="Metrics storage not available")
 
     try:
+        from src.storage.metrics_repository import VideoMetricsRepository
         repo = VideoMetricsRepository()
         rows = await repo.get_dashboard_overview(
             scenario=scenario, platform=platform, days=days

@@ -185,7 +185,7 @@ class CharacterIdentitySkill(SkillCallable):
             # Downsample if image is very large to prevent OOM
             max_dim = 2048
             if max(img.size) > max_dim:
-                img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+                img.thumbnail((max_dim, max_dim), Image.LANCZOS)  # type: ignore[attr-defined]
             # Laplacian-like edge detection: max-min in 3x3 neighborhood
             edges = img.filter(ImageFilter.Kernel((3, 3), [
                 -1, -1, -1,

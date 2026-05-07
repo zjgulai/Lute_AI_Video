@@ -267,9 +267,9 @@ class TestAssetStorageDelete:
         storage = AssetStorage(storage_dir=tmp_path)
         record = storage.store(file_data=b"test", original_name="vid.mp4")
         file_path = storage.get_file_path(record.asset_id)
-        assert Path(file_path).exists()
+        assert Path(file_path).exists()  # type: ignore[arg-type]
         storage.delete(record.asset_id)
-        assert not Path(file_path).exists()
+        assert not Path(file_path).exists()  # type: ignore[arg-type]
 
     def test_delete_nonexistent_returns_false(self, tmp_path):
         """Delete on nonexistent ID should return False."""

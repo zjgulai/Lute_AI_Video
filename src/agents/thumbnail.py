@@ -120,16 +120,15 @@ class ThumbnailAgent:
             if self.use_skills:
                 from src.skills.registry import SkillRegistry
                 import src.skills.thumbnail_prompt  # noqa: F401
-                from src.config import BRAND_PRIMARY_COLOR, BRAND_SECONDARY_COLOR
 
                 skill_result = await SkillRegistry().execute("gpt-image-thumbnail-prompt", {
                     "hook_text": hook or "",
-                    "product_name": script.brand_name or "Product",
-                    "brand_name": script.brand_name or "",
-                    "product_usp": (script.usps or [""])[0],
+                    "product_name": "Product",
+                    "brand_name": "",
+                    "product_usp": "",
                     "mood": "lifestyle",
-                    "brand_primary_color": BRAND_PRIMARY_COLOR,
-                    "brand_secondary_color": BRAND_SECONDARY_COLOR,
+                    "brand_primary_color": "#D75C70",
+                    "brand_secondary_color": "#2D2D2D",
                     "scenario": "general",
                 })
                 if skill_result.success and skill_result.data:

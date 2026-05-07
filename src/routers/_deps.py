@@ -59,6 +59,7 @@ async def verify_api_key(request: Request, x_api_key: str | None = Header(None))
         if is_pg_available():
             from src.storage.db import get_pool
             pool = await get_pool()
+            assert pool is not None
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT tenant_id, revoked_at, expires_at FROM api_keys WHERE key_hash = $1",

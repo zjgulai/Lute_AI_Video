@@ -184,13 +184,13 @@ class FastModeService:
         video_time_ms = int((time.perf_counter() - video_start) * 1000)
 
         # Video failure is fatal
-        if isinstance(video_result, Exception):
+        if isinstance(video_result, BaseException):
             logger.error("fast_mode: video generation failed", error=str(video_result))
             raise RuntimeError(f"Video generation failed: {video_result}") from video_result
 
-        local_path = video_result.get("local_path", "")
-        video_url = video_result.get("video_url", "")
-        is_stub = bool(video_result.get("_stub_mode"))
+        local_path = video_result.get("local_path", "")  # type: ignore[union-attr]
+        video_url = video_result.get("video_url", "")  # type: ignore[union-attr]
+        is_stub = bool(video_result.get("_stub_mode"))  # type: ignore[union-attr]
 
         # Get file info
         file_size = 0
@@ -220,14 +220,15 @@ class FastModeService:
         # If stub mode (video generation failed), mark as failure and do not
         # return a non-existent filename that would cause a 404 on media fetch.
         if is_stub:
+            stub_mode = video_result.get("_stub_mode", "unknown")  # type: ignore[union-attr]
             logger.warning(
                 "fast_mode: video generation failed (stub mode)",
-                mode=video_result.get("_stub_mode", "unknown"),
+                mode=stub_mode,
                 total_time_ms=total_time_ms,
             )
             return {
                 "success": False,
-                "error": f"Video generation failed: {video_result.get('_stub_mode', 'unknown')}",
+                "error": f"Video generation failed: {stub_mode}",
                 "video_path": "",
                 "video_url": "",
                 "filename": "",

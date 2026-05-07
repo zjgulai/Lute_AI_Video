@@ -26,27 +26,32 @@ try:
     from fastapi.middleware.cors import CORSMiddleware
     HAS_FASTAPI = True
 except ImportError:
-    FastAPI = None  # type: ignore
-    Depends = None  # type: ignore
-    CORSMiddleware = None  # type: ignore
+    FastAPI = None  # type: ignore[assignment]
+    Depends = None  # type: ignore[assignment]
+    CORSMiddleware = None  # type: ignore[assignment]
     HAS_FASTAPI = False
 
 try:
     from src.storage import init_db
     HAS_STORAGE = True
 except ImportError:
+    init_db = None  # type: ignore[assignment]
     HAS_STORAGE = False
 
 
 # ── FastAPI app ──
 
 if HAS_FASTAPI:
+    assert FastAPI is not None
+    assert Depends is not None
+    assert CORSMiddleware is not None
 
     app = FastAPI(title="Short Video Agent API", version="0.2.0")
 
     @app.on_event("startup")
     async def startup():
         if HAS_STORAGE:
+            assert init_db is not None
             await init_db()
             try:
                 from src.storage.db import check_pg_health, is_pg_available

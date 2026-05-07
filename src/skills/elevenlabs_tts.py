@@ -205,8 +205,8 @@ class ElevenLabsTTSSkill(SkillCallable):
 
     @staticmethod
     def _measure_duration(path: Path) -> float:
+        import subprocess
         try:
-            import subprocess
             result = subprocess.run(
                 [
                     "ffprobe", "-v", "error",
@@ -229,8 +229,8 @@ class ElevenLabsTTSSkill(SkillCallable):
         The ffmpeg-generated file is a real 2-second silent mono MP3.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
+        import subprocess
         try:
-            import subprocess
             cmd = [
                 "ffmpeg", "-y",
                 "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",

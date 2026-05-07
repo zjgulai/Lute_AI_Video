@@ -60,7 +60,8 @@ class TestPipelineHistory:
     def test_history_after_stream(self):
         """After a pipeline run, history returns at least one snapshot."""
         compiled = compile_pipeline()
-        config = {"configurable": {"thread_id": "history-test"}}
+        from langchain_core.runnables import RunnableConfig
+        config: RunnableConfig = {"configurable": {"thread_id": "history-test"}}  # type: ignore[typeddict-item]
 
         async def _run():
             return [ev async for ev in compiled.astream(
@@ -131,9 +132,13 @@ class TestStateModuleUsesPostgresWhenDatabaseUrlSet:
 
         importlib.reload(state_mod)
 
-        from langgraph.checkpoint.postgres import PostgresSaver
+        try:
+            from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore[import-not-found]
+        except ImportError:
+            pytest.skip("langgraph-postgres 未安装")
 
-        assert isinstance(state_mod._pipeline.checkpointer, PostgresSaver), (
+        pipeline = state_mod.get_pipeline()
+        assert isinstance(pipeline.checkpointer, PostgresSaver), (
             f"DATABASE_URL 设置时 _state.py 应该用 PostgresSaver,实际用了 "
-            f"{type(state_mod._pipeline.checkpointer).__name__}"
+            f"{type(pipeline.checkpointer).__name__}"
         )

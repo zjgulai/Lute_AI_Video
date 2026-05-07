@@ -26,7 +26,7 @@ def _make_dummy_images(count: int = 3, tmp_path: Path | None = None) -> list[str
     paths = []
     for i in range(count):
         size = (640, 480) if i % 2 == 0 else (1280, 720)
-        img = PIL.Image.new("RGB", size, color=(200 + i * 10, 150, 100))
+        img = PIL.Image.new("RGB", size, color=(200 + i * 10, 150, 100))  # type: ignore[arg-type]
         fp = tmp_path / f"frame_{i:04d}.png"
         img.save(fp)
         paths.append(str(fp))
@@ -121,9 +121,18 @@ def test_keyframe_adds_path():
     SkillRegistry.clear_global()
     SkillRegistry.register(skill)
     # Register a mock GPT-Image skill
-    class MockGPTImageSkill:
+    from src.skills.base import SkillCallable
+    class MockGPTImageSkill(SkillCallable):
         name = "gpt-image-generate-skill"
-        async def safe_execute(self, params):
+        description = "Mock GPT image skill for testing"
+        max_retries = 1
+        async def execute(self, params):
+            return mock_gpt_image_result()
+        def validate_params(self, params):
+            return []
+        def validate_output(self, data):
+            return []
+        def fallback(self, params):
             return mock_gpt_image_result()
     mock_skill = MockGPTImageSkill()
     SkillRegistry.register(mock_skill)
@@ -144,10 +153,19 @@ def test_keyframe_fallback():
     SkillRegistry.clear_global()
     SkillRegistry.register(skill)
     # Register a failing mock
-    class FailingMockSkill:
+    from src.skills.base import SkillCallable
+    class FailingMockSkill(SkillCallable):
         name = "gpt-image-generate-skill"
-        async def safe_execute(self, params):
+        description = "Mock failing skill for testing"
+        max_retries = 1
+        async def execute(self, params):
             return SkillResult(success=False, error="API key missing")
+        def validate_params(self, params):
+            return []
+        def validate_output(self, data):
+            return []
+        def fallback(self, params):
+            return SkillResult(success=True, data={"image_path": "/tmp/fallback.png"})
     SkillRegistry.register(FailingMockSkill())
 
     result = asyncio.run(skill.execute({"storyboard": SAMPLE_STORYBOARD}))

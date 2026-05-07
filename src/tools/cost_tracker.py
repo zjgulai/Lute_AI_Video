@@ -75,7 +75,7 @@ def track(
     _records.append(record)
     # P0: Prevent unbounded memory growth — cap at 10k records
     if len(_records) > 10_000:
-        _records = _records[-8_000:]
+        del _records[:-8_000]
 
     total = get_pipeline_cost(effective_thread_id)
     if total > SOFT_BUDGET_PER_PIPELINE:
