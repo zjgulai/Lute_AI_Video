@@ -83,6 +83,25 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
   (`admin_accounts`, `admin_sessions`, `tenants`, `error_logs`)。
 - **初始管理员脚本**: `scripts/create_admin.py <email> <password>` 创建首个 admin 账号。
 
+**2026-05-08 更新 (4-Option Plan 全面落地):**
+- **统一异步执行框架 (A+B 合并)**: 所有场景(S1-S5)统一走 `POST /scenario/{s}/submit`
+  → 返回 `{label, status: "queued"}` → 前端指数退避轮询 `GET /scenario/{s}/status/{label}`。
+  `StageProgress` 组件从 S1 独占泛化为全场景通用，按 scenario 映射到 3 阶段进度条
+  (writing → visuals → export)。Gate approve 后的后台续跑复用同一框架。
+- **S3-S5 Gate 系统配置 (Phase 1C)**: `gate_manager.py` 从 S1-hardcoded 重构为
+  per-scenario 配置：`SCENARIO_GATE_DEFINITIONS` 定义 s1/s2/s3/s4/s5 各自的 gate 集合
+  与 after_step 映射；`candidate_scorer.py` 新增 `remix_script`、`character_identity`、
+  `vlog_strategy` 评分维度。`step_runner.py` 的 gate 触发逻辑也改为按 scenario 读取。
+- **POYO Sanitizer Phase 2 (C)**: 新增 7 条英文规则（baby bottle / nipple / areola /
+  formula milk / baby food / postpartum / bottle feeding）+ 4 条中文规则（奶瓶 / 奶嘴 /
+  辅食 / 产后）。`poyo_client.py` 在 submit 时存储原始 input，failed 任务中检测
+  "content" 字样即触发 `poyo_cm_rejection` 结构化日志，保留原始 prompt 用于规则扩展。
+  新增 `tests/test_poyo_safety.py` 15 个单元测试。
+- **监控告警基础设施 (D)**: 新增 `deploy/lighthouse/prometheus-alerts.yml`（6 条规则：
+  pipeline 错误率 / step p99 / API 5xx / API 延迟 / 后台任务激增 / pipeline 停滞）。
+  新增 `deploy/lighthouse/grafana-dashboard.json`（8 panel：runs/min、error rate、
+  step duration p50/p95/p99、API rate+latency、active tasks、runs today、avg duration、5xx count）。
+
 ---
 
 ## Architecture at a Glance
@@ -872,10 +891,17 @@ location /api/media/ {
 > - **UI 主题翻转** — `globals.css` + `tailwind.config.js` + 40+ 组件从暗黑剧场翻转为
 >   Warm Light Professional Theme(d3e8bd3)。
 
+> **2026-05-08 4-Option Plan 修复/扩展:**
+> - **POYO sanitizer Phase 2** — 新增 11 条替换规则(英 7 + 中 4)，覆盖 baby bottle / nipple /
+>   areola / formula milk / baby food / postpartum / 奶瓶 / 奶嘴 / 辅食 / 产后。
+>   新增结构化 CM 拒绝日志，生产可通过 `poyo_cm_rejection` 事件抓回原始 prompt 持续补充规则。
+> - **S3-S5 Gate 配置** — `gate_manager.py` per-scenario 重构完成，S3/S4/S5 各场景 gate
+>   定义与候选评分已就位，但 gate 全链路端到端验证仍待 Phase 1D。
+> - **Long pipeline UX** — 统一异步框架已落地，S2/S3/S5 的长链路不再受 HTTP 超时截断。
+
 仍待处理:
-- **POYO sanitizer 覆盖率非 100%(F3, P2)** `src/tools/poyo_safety.py` 已覆盖常见母婴触发词,
-  但 D5 仍有 1 个 thumbnail prompt 被 POYO CM 拒(管线 retry 一次后通过)。后续需在生产
-  日志中抓回被拒原始 prompt 文本,补充新规则。
+- **POYO sanitizer 覆盖率持续提升(F3, P2)** Phase 2 新增 11 条规则后覆盖率大幅提升，
+  但仍需在生产日志中持续抓回 `poyo_cm_rejection` 事件中的原始 prompt 文本补充新规则。
 - **yt-dlp / whisper 未装进 backend 容器(F4, P3)** D5 KOL 视频分析 skill 走 mock 路径,
   脚本生成不依赖真实 transcribe,管线下游不受影响。要让 video-analysis 真实工作需
   `pip install yt-dlp openai-whisper` 进 `Dockerfile.backend`(whisper 拉 PyTorch ~2GB,
@@ -886,12 +912,11 @@ location /api/media/ {
 - **api_assets.py compat shim:** `/api/assets/*` uses in-memory dicts (`_brand_packages`,
   `_influencers`). Frontend OpenAPI types still reference these paths, so don't remove the
   router; do migrate any new asset features to `src/routers/assets.py` instead.
-- **S2-S5 step-by-step / gate system:** S3/S4/S5 已完成 StepRunner 迁移 (P2)，
-  `run_step()` 接口已统一，但 gate 系统仅在 S1 启用。S3-S5 的 gate 接入是后续迭代方向。
-- **Long pipeline UX:** S2/S3/S5 can take 10-30 min. curl/HTTP clients commonly time out
-  before the pipeline finishes (backend keeps running). Consider async submit + GET
-  /status/{thread_id} polling for the long scenarios. Phase D nginx timeout 已加到 1500s,
-  但 D5 实测 28 min 离上限不远,长链路场景仍可能截客户端连接。
+- **S2-S5 step-by-step / gate system:** S3/S4/S5 已完成 StepRunner 迁移 (P2) 与 gate
+  配置 (2026-05-08)。`run_step()` 接口已统一，gate 定义与候选评分已 per-scenario 配置。
+  gate 全链路端到端验证仍待 Phase 1D。
+- **Long pipeline UX:** ✅ 已解决(2026-05-08) — 统一异步执行框架落地，所有场景走
+  `POST /submit` → 轮询 `/status`，HTTP 超时不再截断长链路。nginx 1500s 退居兜底。
 - **Redis/Celery declared but unused:** Still in `requirements.txt` but no live consumer.
 - **LangGraph 代理层 (P4-4):** `/pipeline/*` 端点已代理到 StepRunner，但代理层 state 转换是
   best-effort，某些 legacy 字段可能缺失。保留原始 LangGraph 代码作为兼容层，代理函数可迭代补全。
