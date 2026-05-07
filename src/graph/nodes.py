@@ -13,11 +13,16 @@ import structlog
 
 from src.models.state import VideoPipelineState
 from src.telemetry import timed_node
-from src.routers._state import _register_background_task
 from src.tools.webhook_manager import get_webhook_manager
 from src.config import DEFAULT_LANGUAGES
 
 logger = structlog.get_logger()
+
+
+def _register_bg(task: asyncio.Task[Any], label: str) -> str:
+    """Lazy import wrapper to break circular dependency with routers._state."""
+    from src.routers._state import _register_background_task
+    return _register_background_task(task, label)
 
 
 # ── L4.4 / L5.x helpers ──
@@ -338,7 +343,7 @@ async def analytics_node(state: VideoPipelineState) -> dict[str, Any]:
     # P2-4: Use async dispatch instead of sync — prevents blocking the event loop
     wh = get_webhook_manager()
     metrics = state.get("pipeline_metrics", {})
-    _register_background_task(
+    _register_bg(
         asyncio.create_task(wh.dispatch("pipeline.completed", {
             "thread_id": state.get("content_calendar_week", ""),
             "total_duration_ms": metrics.get("total_duration_ms", 0),
@@ -414,7 +419,7 @@ async def strategy_audit_node(state: VideoPipelineState) -> dict[str, Any]:
     )
     # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    _register_background_task(
+    _register_bg(
         asyncio.create_task(wh.dispatch("audit.completed", {
             "checkpoint": "strategy",
             "score": report.overall_score,
@@ -490,7 +495,7 @@ async def script_audit_node(state: VideoPipelineState) -> dict[str, Any]:
     )
     # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    _register_background_task(
+    _register_bg(
         asyncio.create_task(wh.dispatch("audit.completed", {
             "checkpoint": "script",
             "score": sum(r.overall_score for r in reports) / len(reports) if reports else 0,
@@ -559,7 +564,7 @@ async def editing_audit_node(state: VideoPipelineState) -> dict[str, Any]:
     )
     # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    _register_background_task(
+    _register_bg(
         asyncio.create_task(wh.dispatch("audit.completed", {
             "checkpoint": "edit",
             "score": reports[0].overall_score if reports else 0,
@@ -631,7 +636,7 @@ async def thumbnail_audit_node(state: VideoPipelineState) -> dict[str, Any]:
     )
     # GAP-17: Dispatch webhook (fire-and-forget, don't block checkpoint)
     wh = get_webhook_manager()
-    _register_background_task(
+    _register_bg(
         asyncio.create_task(wh.dispatch("audit.completed", {
             "checkpoint": "thumbnail",
             "score": reports[0].overall_score if reports else 0,

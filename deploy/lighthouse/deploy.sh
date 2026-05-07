@@ -67,6 +67,14 @@ if [ ! -d "node_modules" ]; then
   echo "  ERROR: node_modules not found. Run 'npm ci' first."
   exit 1
 fi
+
+# Clean old build outputs to prevent stale chunk references.
+# Turbopack content-hash filenames change on every build; leftover
+# files from previous builds can confuse the deploy and lead to
+# ChunkLoadError if an old HTML cached in a browser references them.
+echo "  Cleaning old build artifacts..."
+rm -rf .next/standalone/ .next/static/ .next/server/ .next/*.json
+
 export NEXT_PUBLIC_API_BASE_URL=/api
 # P0-F: Lighthouse 是 canonical 非 demo 生产部署 — 必须设 false,
 # 否则 web/src/app/page.tsx 会跳过真实 API 调用进 DEMO_RESULT_*,
@@ -74,6 +82,18 @@ export NEXT_PUBLIC_API_BASE_URL=/api
 # GitHub Pages demo 部署单独构建脚本里设 true。
 export NEXT_PUBLIC_IS_DEMO=false
 npm run build 2>&1 | tail -5
+
+# Verify build succeeded — critical files must exist
+if [ ! -f ".next/standalone/server.js" ]; then
+  echo "  ERROR: Build failed — .next/standalone/server.js not found"
+  exit 1
+fi
+if [ ! -d ".next/static/chunks" ]; then
+  echo "  ERROR: Build failed — .next/static/chunks/ not found"
+  exit 1
+fi
+CHUNK_COUNT=$(ls .next/static/chunks/*.js 2>/dev/null | wc -l)
+echo "  Build OK: $CHUNK_COUNT JS chunks generated"
 echo "  Frontend build complete"
 echo ""
 
@@ -82,6 +102,9 @@ echo "[2/5] Restarting containers..."
 cd ../deploy/lighthouse
 $COMPOSE restart backend 2>&1 | tail -3
 $COMPOSE up -d --force-recreate frontend 2>&1 | tail -3
+# Restart nginx to pick up nginx.conf changes (nginx locks inode at startup,
+# so a file edit alone is not enough — need container restart).
+$COMPOSE restart nginx 2>&1 | tail -3
 echo "  Containers restarted"
 echo ""
 

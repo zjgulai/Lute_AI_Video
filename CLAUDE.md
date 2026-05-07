@@ -49,6 +49,17 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 - **死代码清理 (T4.3)**: 删除 `_try_save_metrics` 静默 ImportError、test_i18n.py ES/FR/DE
   死测试、telemetry/cost_tracker 死函数，共 273 行清理。
 
+**2026-05-07 更新 (生产部署修复):**
+- **ChunkLoadError 修复**: `/footage` 页面 `Failed to load chunk 12k1vegccjm7k.js`。
+  根因：浏览器缓存旧 HTML + Turbopack content-hash 变化。修复：nginx `location /`
+  添加 `Cache-Control: no-store`，`location /_next/` 添加 `max-age=31536000, immutable`；
+  `deploy.sh` 构建前清理 `.next/standalone/` / `.next/static/` 旧产物。
+- **循环导入修复**: `src/graph/nodes.py` 顶层 `from src.routers._state import
+  _register_background_task` 导致 `_state.py` → `pipeline.py` → `nodes.py` → `_state.py`
+  循环。改为 `nodes.py` 内 `_register_bg()` helper 函数延迟导入。
+- **nginx 语法修复**: `limit_req off;` 不是有效 nginx 语法，`location /health` 与
+  `/api/media/` 改为 `limit_req zone=api_limit burst=100/1000 nodelay;`。
+
 **2026-05-07 更新 (Admin Panel Phase 1):**
 - **Admin Panel 全链路接线**: 新增 `/api/admin/*` 端点群 + `/admin` 前端页面，完成 Phase 1
   后台管理系统。包含：Dashboard 概览、Tenant 管理(CRUD + API Key 生命周期)、
@@ -668,6 +679,9 @@ The project ships three deploy targets, in priority order:
    Phase 0 比 `requirements.txt` mtime vs image 时间提示 rebuild、backend
    `restart: on-failure:5` 限制无限重启。完整时间线 + 紧急恢复三步法见
    `docs/workflows/incident-2026-05-05-postgres-saver-deploy-stable.md`。
+   **2026-05-07 deploy.sh 更新**: 构建前清理 `.next/standalone/` `.next/static/`
+   `.next/server/` 防止 Turbopack 旧 chunk 残留；构建后验证 `standalone/server.js`
+   和 `static/chunks/` 存在；新增 `restart nginx` 确保配置变更生效。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
    `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.
@@ -793,7 +807,9 @@ location /api/media/ {
 - Per-tenant `API_KEY`:每个开通用户拿一组独立全权限 token,后端不做"低权限只读"分级
 - Rate limiting: **nginx** `limit_req_zone` 120r/m per IP (P2-11), burst=20.
   FastAPI middleware 内存限流降级为 fallback（直接访问 backend 不走 nginx 时生效）。
-  `/health` 与 `/api/media/` 豁免限流。
+  `/health` (burst=100) 与 `/api/media/` (burst=1000) 高 burst 豁免限流。
+  ⚠ nginx 不支持 `limit_req off`，旧配置中的 `off` 参数在容器重启时会触发 `[emerg]`
+  导致 nginx 无法启动。
 - Per-request API key injection via contextvars for multi-tenant safety
 - Tenant ID: `verify_api_key` 解析 API key 后通过 `set_tenant_id()` 写入 contextvar，
   下游 cost tracking / audit log 可读取（P2-8）
@@ -820,9 +836,18 @@ location /api/media/ {
 
 ## Known Gaps and TODOs
 
-最近一次盘点:2026-05-06(Phase E:portfolio 优化 + footage 弹窗预览 + 主题翻转后)。
+最近一次盘点:2026-05-07(生产部署修复 + ChunkLoadError 诊断后)。
 
 ### 1. 已知功能缺陷(已修复)
+
+> **2026-05-07 修复:**
+> - **ChunkLoadError /footage 页面崩溃** — Turbopack content-hash 变化导致旧 chunk 引用失效。
+>   nginx `location /` 添加 `Cache-Control: no-store` 禁止 HTML 缓存，`location /_next/`
+>   静态资源长期缓存。`deploy.sh` 构建前清理旧产物避免残留。
+> - **循环导入导致 backend 启动失败** — `src/graph/nodes.py` 顶层导入 `_register_background_task`
+>   形成 `_state.py` → `pipeline.py` → `nodes.py` → `_state.py` 循环。改为延迟导入 helper。
+> - **nginx `limit_req off` 语法错误** — 原配置使用无效语法，`location /health` 和
+>   `/api/media/` 改为高 burst 值实现等效豁免。
 
 > **2026-05-06 修复:**
 > - **Portfolio 加载慢 + 视频无法预览** — 后端 `?limit=50&sort=quality` + nginx `try_files`
