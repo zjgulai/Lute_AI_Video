@@ -348,10 +348,10 @@ export default function FootagePage() {
                         : "text-[var(--text-body)] hover:bg-[var(--bg-panel)]"
                     }`}
                   >
-                    {f === "all" && "全部"}
-                    {f === "video" && "视频"}
-                    {f === "image" && "图片"}
-                    {f === "audio" && "音频"}
+                    {f === "all" && t("gallery.all")}
+                    {f === "video" && t("gallery.video")}
+                    {f === "image" && t("gallery.image")}
+                    {f === "audio" && t("gallery.audio")}
                   </button>
                 ))}
               </div>
