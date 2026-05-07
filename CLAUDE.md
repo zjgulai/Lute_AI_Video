@@ -49,6 +49,24 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 - **死代码清理 (T4.3)**: 删除 `_try_save_metrics` 静默 ImportError、test_i18n.py ES/FR/DE
   死测试、telemetry/cost_tracker 死函数，共 273 行清理。
 
+**2026-05-07 更新 (Admin Panel Phase 1):**
+- **Admin Panel 全链路接线**: 新增 `/api/admin/*` 端点群 + `/admin` 前端页面，完成 Phase 1
+  后台管理系统。包含：Dashboard 概览、Tenant 管理(CRUD + API Key 生命周期)、
+  System Logs 查看、System Health 状态监控。
+- **双层认证架构**: Admin session-cookie 认证(邮箱+密码)与租户 API key 认证完全独立，
+  零交叉。`verify_admin_session` 依赖注入模式与 `verify_api_key` 对称。
+- **CORS credentials 支持**: `allow_credentials=True` 启用，Admin cookie (HttpOnly)
+  跨域可正常发送。
+- **Response wrapper cookie 保留**: 修复中间件重建 JSONResponse 时丢失 Set-Cookie
+  header 的缺陷（admin login 设置的 session cookie 会被正确传递）。
+- **后台任务**: startup 注册 3 个周期性任务 — health check(5min)、session cleanup(1h)、
+  log cleanup(1h)。
+- **error_logs 持久化**: `ErrorCollector.collect()` 自动写入 `error_logs` 表，
+  Admin Logs 页面可查询。保留 30 天(可配置 `ADMIN_LOG_RETENTION_DAYS`)。
+- **Alembic 迁移**: `2d6b8e9c0f1a_admin_panel_phase1.py` 创建 4 张新表
+  (`admin_accounts`, `admin_sessions`, `tenants`, `error_logs`)。
+- **初始管理员脚本**: `scripts/create_admin.py <email> <password>` 创建首个 admin 账号。
+
 ---
 
 ## Architecture at a Glance
@@ -145,7 +163,9 @@ AI_vedio/
 │   │   ├── assets.py           # /assets/* — brand assets, uploads
 │   │   ├── media.py            # /media/* — media file serving
 │   │   ├── health.py           # /health — health check + persistence status + Remotion env
+│   │   ├── admin.py            # /api/admin/* — Dashboard/Tenants/Logs/Health/Auth
 │   │   ├── _deps.py            # Shared: verify_api_key, _safe_error, _serialize, _inject_api_keys
+│   │   ├── _admin_deps.py      # Shared: verify_admin_session, login rate limit, admin contextvar
 │   │   └── _state.py           # Shared: pipeline instances, thread cache, request models
 │   ├── models/                 # Pydantic models + TypedDict state
 │   │   ├── state.py            # VideoPipelineState (30+ fields)
@@ -221,7 +241,16 @@ AI_vedio/
 │   │   │   ├── settings/page.tsx# Settings panel
 │   │   │   ├── brand-packages/page.tsx
 │   │   │   ├── influencers/page.tsx
-│   │   │   └── footage/page.tsx
+│   │   │   ├── footage/page.tsx
+│   │   │   └── admin/              # Admin Panel (Phase 1)
+│   │   │       ├── layout.tsx      # AdminLayout + auth guard + sidebar
+│   │   │       ├── page.tsx        # Redirect to /admin/dashboard
+│   │   │       ├── login/page.tsx  # Admin login (email + password)
+│   │   │       ├── dashboard/page.tsx  # System overview metrics
+│   │   │       ├── tenants/page.tsx    # Tenant list + create modal
+│   │   │       ├── tenants/[tenantId]/page.tsx  # Tenant detail + API keys
+│   │   │       ├── logs/page.tsx       # Error log viewer + filters
+│   │   │       └── health/page.tsx     # Service health status cards
 │   │   ├── components/         # 40+ React components
 │   │   │   ├── api.ts          # Backend HTTP client (localStorage + cookie fallback)
 │   │   │   ├── types.ts        # Frontend type definitions
@@ -246,7 +275,9 @@ AI_vedio/
 │   │   │   ├── InsighReport.tsx # Analytics insights
 │   │   │   ├── CompareView.tsx  # Comparison view
 │   │   │   ├── OneShotResultView.tsx # Fast mode result
-│   │   │   └── ...              # and more
+│   │   │   └── admin/
+│   │   │       └── AdminSidebar.tsx  # Admin nav sidebar (Dashboard/Tenants/Logs/Health)
+│   │   ├── stores/             # Zustand stores
 │   │   ├── stores/             # Zustand stores
 │   │   │   ├── useAppStore.ts  # Navigation, UI state, toast
 │   │   │   ├── usePipelineStore.ts # Pipeline execution state
@@ -331,8 +362,44 @@ Routers are mounted on startup:
 - `/media/*` — no auth (file serving)
 - `/api/assets/*` — API key required (legacy)
 - `/telemetry/*` — API key required (metrics / errors / prometheus)
+- `/api/admin/*` — session-cookie auth (admin panel, independent of API key)
 
 On startup, the app also restores active threads from disk and starts periodic cache eviction.
+
+### Admin Panel (`/api/admin/*`)
+
+Phase 1 operational control plane for the platform operator. Completely separate auth layer
+from the creative API.
+
+**Auth model:**
+- Login: `POST /api/admin/auth/login` → bcrypt verify → session cookie (`admin_session`, HttpOnly, Secure, SameSite=Lax, 24h)
+- Session validation: `verify_admin_session` dependency reads cookie → SHA-256 → query `admin_sessions` table
+- Rate limit: 5 login attempts per minute per IP (in-memory, separate from general 120r/m)
+
+**Modules:**
+| Module | Endpoints | Description |
+|--------|-----------|-------------|
+| Auth | `/auth/login`, `/auth/logout`, `/auth/session` | Login, logout, session check |
+| Dashboard | `/dashboard/summary` | Tenant count, pipeline runs today, error rate, recent errors |
+| Tenants | `/tenants`, `/tenants/{id}`, `/tenants/{id}/keys`, `/tenants/{id}/keys/{kid}/revoke` | CRUD + API key lifecycle |
+| Logs | `/logs`, `/logs/{id}` | Error log viewer with filters |
+| Health | `/health/status`, `/health/history` | Service connectivity checks |
+
+**Data model:** 4 new tables via Alembic migration `2d6b8e9c0f1a`:
+- `admin_accounts` — email + bcrypt password_hash
+- `admin_sessions` — token_hash (SHA-256 of 64 random bytes) + expires_at
+- `tenants` — tenant_id (regex validated), display_name, status (active/disabled)
+- `error_logs` — tenant_id, scenario, error_code, message, traceback
+
+**Background tasks (registered in `api.py` startup):**
+1. Health check loop — every 5 min, checks postgres/deepseek/poyo/siliconflow/remotion
+2. Session cleanup — every 1h, `DELETE FROM admin_sessions WHERE expires_at < NOW()`
+3. Log cleanup — every 1h, batch-delete `error_logs` older than `ADMIN_LOG_RETENTION_DAYS` (default 30)
+
+**Initial setup:**
+```bash
+python scripts/create_admin.py <email> <password>
+```
 
 ### LangGraph Pipeline (`src/graph/`)
 
@@ -488,6 +555,13 @@ Configured via `.env`:
 | `/brand-packages` | `brand-packages/page.tsx` | Brand asset management |
 | `/influencers` | `influencers/page.tsx` | Influencer management |
 | `/footage` | `footage/page.tsx` | Portfolio/footage gallery |
+| `/admin` | `admin/page.tsx` | Redirect to `/admin/dashboard` |
+| `/admin/login` | `admin/login/page.tsx` | Admin login (email + password) |
+| `/admin/dashboard` | `admin/dashboard/page.tsx` | System overview (tenants, pipelines, errors) |
+| `/admin/tenants` | `admin/tenants/page.tsx` | Tenant list + create modal |
+| `/admin/tenants/[id]` | `admin/tenants/[tenantId]/page.tsx` | Tenant detail + API key management |
+| `/admin/logs` | `admin/logs/page.tsx` | Error log viewer with filters |
+| `/admin/health` | `admin/health/page.tsx` | Service health status cards |
 
 ### State Management (Zustand)
 
@@ -504,6 +578,12 @@ Bilingual (zh-CN / en) via `I18nProvider` React context. Translations in `web/sr
 ### API Client (`web/src/components/api.ts`)
 
 Backend URL and API key stored via `localStorage` with cookie fallback (privacy/incognito mode). Build-time env vars (`NEXT_PUBLIC_API_BASE_URL`) provide defaults.
+
+**Admin API client** (`adminFetch` / `adminFetchJson`):
+- Session-cookie auth (no `X-API-Key` header)
+- `credentials: 'include'` for HttpOnly cookie
+- On 401 → auto-redirect to `/admin/login`
+- Used exclusively by `/admin/*` pages
 
 `isDemoMode()`(`web/src/components/api.ts:97`)按 hostname 判定(`github.io` / `.vercel.app`),
 是给"静态前端无后端"演示页用的纯前端降级标志,与后端 `API_KEY` 字符串无关 —— 后端不再
