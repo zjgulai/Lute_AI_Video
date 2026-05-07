@@ -652,6 +652,7 @@ T1.1 ──→ T2.8 (租户化数据库依赖 contextvars 隔离已就绪)
 | 2026-05-07 | T4.4 | ✅ | 14c2925 | 前端死函数标记 @deprecated：startPipeline / fetchState / submitReview / fetchDistribution / fetchOutput / runS2BrandCampaign / runS3InfluencerRemix |
 | 2026-05-07 | T4.4 | ✅ | 6a7fede | test_api.py 适配代理层 review 响应（"resumed" → ("resumed", "idempotent_skip")） |
 | 2026-05-07 | **T4.1 Phase A** | ✅ | ba42853 | pyright basic 模式 287→0 错误，58 文件修复。关键发现：test_s1_e2e.py + test_media_clients.py 的 async 调用缺少 await，是真实运行时缺陷 |
+| 2026-05-07 | **T4.1 Phase B** | ✅ | 8d4d706 | pyright reportMissingTypeArgument 434→0 错误，73 文件修复。dict→dict[str,Any] ~350 处，list→list[Any] ~50 处，Task/Pattern/StateGraph 等泛型补齐 |
 
 ### Phase 4 风险点记录
 
