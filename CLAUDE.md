@@ -102,6 +102,29 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
   新增 `deploy/lighthouse/grafana-dashboard.json`（8 panel：runs/min、error rate、
   step duration p50/p95/p99、API rate+latency、active tasks、runs today、avg duration、5xx count）。
 
+**2026-05-08 更新 (生产部署修复):**
+- **page.tsx TypeScript 构建错误** — `useExpertStore` 解构缺少 `setShowStageProgress` /
+  `currentStepIdx` / `setCurrentStepIdx`，Next.js `npm run build` 失败。补充解构后本地构建通过。
+- **nginx `/telemetry/` 路由缺失** — `/telemetry/prometheus` 请求被路由到前端 404。
+  新增 `/telemetry/` location 转发到 backend。
+- **nginx `/api/admin/` 路由前缀被 strip** — `/api/` catch-all `proxy_pass http://backend/`
+  去掉 `/api` 前缀，backend 收到 `/admin/auth/login` 不匹配 router 注册的 `/api/admin/auth/login`。
+  新增 `/api/admin/` location 保留完整前缀转发。
+- **SSL 证书被 rsync 误删为空目录** — `server.crt` / `server.key` 不在本地 `deploy/lighthouse/`
+  中，`rsync --delete` 删除远程证书文件后 docker 创建空目录占位，nginx 挂载失败。
+  修复：重新生成自签名证书；**防御措施**：deploy.sh 前手动备份 SSL 文件，或改用 `rsync --exclude`。
+- **prometheus-client 未装进容器** — `requirements.txt` 中有 `prometheus-client>=0.20`，
+  但 backend image 未 rebuild（deploy.sh Phase 0 条件 `IMG_BUILT_TS != 0` 在首次构建时
+  不触发警告）。`docker exec pip install` + `docker commit` 临时修复。
+- **bcrypt 未装进容器** — Admin router 因 `No module named 'bcrypt'` 被跳过，login 500。
+  同上方式修复。需将 `prometheus-client` / `bcrypt` 的容器内安装固化到 Dockerfile 或
+  requirements.txt 变更时强制 rebuild。
+- **Alembic 不在 requirements.txt 中** — `alembic` 用于本地开发迁移，但生产部署也依赖它
+  执行 `alembic upgrade head`。当前生产表通过手动 SQL 创建。**建议**：将 alembic 加入
+  `requirements.txt`，deploy 流程中增加 `docker compose build` + `alembic upgrade head` 步骤。
+- **admin_accounts 表未创建** — Admin Panel 表通过 Alembic 迁移 `2d6b8e9c0f1a` 创建，
+  但生产从未运行过该迁移。直接用 asyncpg 执行 SQL 建表 + 插入初始 admin 账号。
+
 ---
 
 ## Architecture at a Glance
@@ -899,6 +922,16 @@ location /api/media/ {
 >   定义与候选评分已就位，但 gate 全链路端到端验证仍待 Phase 1D。
 > - **Long pipeline UX** — 统一异步框架已落地，S2/S3/S5 的长链路不再受 HTTP 超时截断。
 
+> **2026-05-08 修复:**
+> - **Admin Panel 登录不可用** — `bcrypt` 未安装导致 admin router 启动跳过；nginx `/api/`
+>   catch-all strip `/api` 前缀导致 admin 端点 404；`admin_accounts` 表未创建（Alembic
+>   迁移未执行）。修复：`pip install bcrypt` + `docker commit`；新增 `/api/admin/` nginx
+>   location 保留前缀；手动 SQL 建表并插入初始 admin 账号。登录验证通过。
+> - **page.tsx 构建失败** — `useExpertStore` 解构缺少 `setShowStageProgress` /
+>   `currentStepIdx` / `setCurrentStepIdx`。补充解构后 `npm run build` 通过。
+> - **nginx `/telemetry/` 404** — 缺少 `/telemetry/` location，请求被路由到前端。
+>   新增 location 转发到 backend，`/telemetry/prometheus` 返回 Prometheus 格式指标。
+
 仍待处理:
 - **POYO sanitizer 覆盖率持续提升(F3, P2)** Phase 2 新增 11 条规则后覆盖率大幅提升，
   但仍需在生产日志中持续抓回 `poyo_cm_rejection` 事件中的原始 prompt 文本补充新规则。
@@ -923,6 +956,15 @@ location /api/media/ {
 - **pyright strict 剩余规则:** `reportUnknownMemberType` / `reportUnknownVariableType` 未启用。
   在 `dict[str, Any]` 为主的代码库中，这两项规则噪音远大于价值。如需进一步收紧类型，需先
   将 `dict[str, Any]` 替换为数百个具体类型（ProductCatalog、PipelineConfig 等），ROI 待评估。
+- **deploy.sh Phase 0 逻辑缺陷:** 当 `IMG_BUILT_TS=0`（首次部署或无法获取 image 时间）时，
+  `requirements.txt` 修改时间 > image 时间的条件不触发 rebuild 警告。`prometheus-client`
+  和 `bcrypt` 后来加入 requirements.txt 但 image 未更新，导致容器启动后缺少依赖。
+  **建议**: requirements.txt 变更时无条件 rebuild，或单独维护一个 `requirements.txt 哈希`
+  文件做更可靠的变更检测。
+- **alembic 不在 requirements.txt 中:** `alembic` 用于本地开发数据库迁移，但生产部署也
+  需要它执行 `alembic upgrade head`。当前生产表通过手动 SQL 创建，存在遗漏风险。
+  **建议**: 将 `alembic` 加入 `requirements.txt`，部署流程中固化 `docker compose build` +
+  `alembic upgrade head` 步骤。
 
 ### 3. 未做端到端验证的前后端交互路径
 
