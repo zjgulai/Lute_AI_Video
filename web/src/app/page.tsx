@@ -180,7 +180,9 @@ export default function Home() {
 
   const {
     currentGate, setCurrentGate,
+    currentStepIdx, setCurrentStepIdx,
     showSteps,
+    showStageProgress, setShowStageProgress,
     compareVersions, setCompareVersions,
     showCompare, setShowCompare,
   } = useExpertStore();
