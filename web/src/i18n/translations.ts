@@ -358,6 +358,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "upload.hint": "支持视频、图片、音频、文档",
     "upload.saved": "已保存",
     "upload.uploaded": "已上传",
+    "upload.clear": "清除",
+    "upload.count": "个",
 
     // Platform labels
     "platform.shopify": "Shopify 独立站",
@@ -548,6 +550,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "fastMode.result.videoInfo": "视频信息",
     "fastMode.result.regenerate": "重新生成",
     "fastMode.result.copyPrompt": "复制提示词",
+    "fastMode.result.generationFailed": "生成失败",
+    "fastMode.result.unknownError": "未知错误",
 
     // Toast messages
     "toast.autoDone": "自动执行完成",
@@ -772,6 +776,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gallery.total": "共",
     "gallery.items": "个作品",
     "gallery.viewAll": "查看全部",
+    "gallery.untitled": "未命名",
 
     // Scene form fields
     "sceneForm.category": "商品分类",
@@ -1476,6 +1481,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "upload.hint": "Supports video, image, audio, document",
     "upload.saved": "Saved",
     "upload.uploaded": "Uploaded",
+    "upload.clear": "Clear",
+    "upload.count": "",
 
     // Platform labels
     "platform.shopify": "Shopify",
@@ -1724,6 +1731,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "fastMode.result.videoInfo": "Video Info",
     "fastMode.result.regenerate": "Regenerate",
     "fastMode.result.copyPrompt": "Copy Prompt",
+    "fastMode.result.generationFailed": "Generation Failed",
+    "fastMode.result.unknownError": "Unknown Error",
 
     // Toast messages
     "toast.autoDone": "Auto execution complete",
@@ -1888,6 +1897,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gallery.total": "Total",
     "gallery.items": " items",
     "gallery.viewAll": "View All",
+    "gallery.untitled": "Untitled",
 
     // Campaign Details (S2 expandable section)
     "campaign.detailsTitle": "Campaign Details",
