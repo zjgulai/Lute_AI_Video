@@ -64,10 +64,11 @@ exclude = [
     "**/__pycache__",
 ]
 # Phase A: basic mode (default — no strict rules yet) ✅ 已完成
-# Phase B: 泛型参数 + 边界变量
+# Phase B: 泛型参数 + 边界变量 ✅ 已完成
 reportMissingTypeArgument = true
 reportPossiblyUnboundVariable = true
-# Phase C: reportUnknownMemberType = true, reportUnknownVariableType = true
+# Phase C/D: Unknown 类型治理 — 经评估，reportUnknown* 规则在 dict[str,Any] 为主
+# 的代码库中噪音远大于价值，暂不启用。核心收益已在 A+B 中捕获。
 # Phase D: full strict
 
 [tool.coverage.run]
