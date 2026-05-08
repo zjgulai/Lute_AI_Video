@@ -312,44 +312,59 @@ class ErrorCollector:
 def timed_node(func):
     """Decorator that records execution time and errors for pipeline nodes.
 
-    Usage:
+    Supports both sync and async functions. Usage:
         @timed_node
         def strategy_node(state):
             ...
+
+        @timed_node
+        async def async_node(state):
+            ...
     """
+    import asyncio
     import functools
 
     @functools.wraps(func)
-    def wrapper(state: dict[str, Any], *args, **kwargs) -> dict[str, Any]:
+    def wrapper(state: dict[str, Any], *args, **kwargs) -> Any:
         node_name = func.__name__
         trace_id = state.get("trace_id", generate_trace_id())
         start = time.time()
-        try:
-            result = func(state, *args, **kwargs)
+
+        def _record(success: bool, exc: Exception | None = None) -> None:
             duration_ms = (time.time() - start) * 1000
             pipeline_metrics.record_step(
                 label=trace_id,
                 step_name=node_name,
                 duration_ms=duration_ms,
-                success=True,
+                success=success,
             )
-            return result
-        except Exception as exc:
-            duration_ms = (time.time() - start) * 1000
-            pipeline_metrics.record_step(
-                label=trace_id,
-                step_name=node_name,
-                duration_ms=duration_ms,
-                success=False,
-            )
-            error_collector.collect(
-                label=trace_id,
-                trace_id=trace_id,
-                step=node_name,
-                error=str(exc),
-                context={"node": node_name},
-            )
-            raise
+            if exc is not None:
+                error_collector.collect(
+                    label=trace_id,
+                    trace_id=trace_id,
+                    step=node_name,
+                    error=str(exc),
+                    context={"node": node_name},
+                )
+
+        if asyncio.iscoroutinefunction(func):
+            async def async_wrapper(*a, **kw):
+                try:
+                    result = await func(*a, **kw)
+                    _record(success=True)
+                    return result
+                except Exception as exc:
+                    _record(success=False, exc=exc)
+                    raise
+            return async_wrapper(state, *args, **kwargs)
+        else:
+            try:
+                result = func(state, *args, **kwargs)
+                _record(success=True)
+                return result
+            except Exception as exc:
+                _record(success=False, exc=exc)
+                raise
 
     return wrapper
 

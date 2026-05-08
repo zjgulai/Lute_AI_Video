@@ -232,7 +232,7 @@ def _get_step_deps(scenario: str, step_name: str) -> list[str]:
 
 def _get_step_output(state: dict[str, Any], step_name: str) -> Any:
     """Extract step output from pipeline state (prefers edited over original)."""
-    edited = state.get("edited_outputs", {})
+    edited = state.get("edited_output", {})
     if step_name in edited:
         return edited[step_name]
     return state.get(step_name)
