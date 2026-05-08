@@ -157,8 +157,9 @@ class SeedancePromptSkill(SkillCallable):
 
             shot_type = _shot_type_from_segment(seg_type, visual, i, total)
 
-            # Action description: use voiceover as the "what happens" anchor
-            action = voice[:200] if voice else visual[:200]
+            # Action description: derive from visual_description, not voiceover.
+            # Voiceover is what is *said*; action is what *visually happens*.
+            action = visual[:300] if visual else voice[:200]
 
             prompt_dict = _build_single_prompt(
                 segment=seg,

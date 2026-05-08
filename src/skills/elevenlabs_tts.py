@@ -58,14 +58,20 @@ class ElevenLabsTTSSkill(SkillCallable):
             from src.tools.cosyvoice_client import CosyVoiceClient, VOICE_PRESETS as COSY_PRESETS
 
             cosy_client = CosyVoiceClient()
+            path: Path | None = None
             try:
-                # Map ElevenLabs voice_id to CosyVoice voice if possible,
-                # otherwise let CosyVoiceClient pick by language.
+                # Map ElevenLabs voice_id to CosyVoice voice if possible.
+                # Support voice_gender param for category-based selection (default female for maternal/baby).
+                voice_gender = params.get("voice_gender", "female")
                 cosy_voice = None
                 if voice_id and voice_id in COSY_PRESETS:
                     cosy_voice = COSY_PRESETS[voice_id]
+                elif voice_gender == "female" and "female_en" in COSY_PRESETS:
+                    cosy_voice = COSY_PRESETS["female_en"]
+                elif language in COSY_PRESETS:
+                    cosy_voice = COSY_PRESETS[language]
 
-                path: Path = await cosy_client.synthesize(
+                path = await cosy_client.synthesize(
                     text=text,
                     voice=cosy_voice,
                     language=language,

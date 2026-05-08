@@ -52,38 +52,43 @@ class KeyframeImagesSkill(SkillCallable):
             logger.warning("keyframe: capping shots",
                            total=len(shots), cap=self.MAX_SHOTS_PER_STORYBOARD)
 
-        for i, shot in enumerate(capped_shots):
+        import asyncio
+
+        async def _gen_one(i: int, shot: dict[str, Any]) -> tuple[int, str, str]:
             comp_prompt = self._build_composition_prompt(
                 visual=shot.get("visual", ""),
                 camera=shot.get("camera", ""),
                 shot_type=shot.get("shot_type", ""),
                 identity_text=identity_text,
             )
-
             image_id = f"keyframe_{storyboard.get('script_id', 'sb')}_{i:03d}"
-
             result = await reg.execute("gpt-image-generate-skill", {
                 "prompt": comp_prompt,
                 "size": params.get("size", "1024x1792"),
                 "quality": params.get("quality", "high"),
                 "image_id": image_id,
             })
-
             if result.success and result.data:
                 image_path = result.data.get("image_path", "")
-                shot["keyframe_image_path"] = image_path
-                shot["keyframe_prompt"] = comp_prompt
-                logger.info("keyframe: generated",
-                            shot=i, image_path=image_path)
-            else:
-                # Fallback: use stitch frame placeholder
-                fallback_path = self._write_placeholder_frame(
-                    shot, image_id, params,
-                )
-                shot["keyframe_image_path"] = fallback_path
-                shot["keyframe_prompt"] = comp_prompt
-                logger.warning("keyframe: fallback for shot",
-                               shot=i, error=result.error)
+                logger.info("keyframe: generated", shot=i, image_path=image_path)
+                return i, image_path, comp_prompt
+            # Fallback
+            fallback_path = self._write_placeholder_frame(shot, image_id, params)
+            logger.warning("keyframe: fallback for shot", shot=i, error=result.error)
+            return i, fallback_path, comp_prompt
+
+        tasks = [_gen_one(i, shot) for i, shot in enumerate(capped_shots)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for raw in results:
+            if isinstance(raw, Exception):
+                logger.error("keyframe: generation exception", error=str(raw))
+                continue
+            if not isinstance(raw, tuple):
+                continue
+            i, image_path, comp_prompt = raw
+            capped_shots[i]["keyframe_image_path"] = image_path
+            capped_shots[i]["keyframe_prompt"] = comp_prompt
 
         storyboard["keyframes_generated"] = len(capped_shots)
         return SkillResult(success=True, data=storyboard)

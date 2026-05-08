@@ -405,6 +405,28 @@ class RemotionAssembleSkill(SkillCallable):
         max_end = max((float(s.get("end_time", 0)) for s in shots), default=30.0)
         return max(max_end, 5.0)
 
+    # === Font path resolution (cross-platform) ===
+
+    @staticmethod
+    def _get_font_path() -> str:
+        """Return a system font path usable by ffmpeg drawtext.
+
+        Tries common paths across macOS, Linux (Alpine/Debian), and
+        falls back to a no-fontfile default (drawtext will use built-in).
+        """
+        candidates = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",          # Debian/Ubuntu
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  # Alpine
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",                      # Arch
+            "/System/Library/Fonts/Helvetica.ttc",                      # macOS
+            "/System/Library/Fonts/HelveticaNeue.ttc",                  # macOS fallback
+        ]
+        for p in candidates:
+            if Path(p).exists():
+                return p
+        # fallback: drawtext without fontfile uses default bitmap font
+        return ""
+
     # === ffmpeg clip concat + audio mux ===
 
     @staticmethod
@@ -536,7 +558,7 @@ class RemotionAssembleSkill(SkillCallable):
                     "-i", str(video_path),
                     "-vf",
                     (
-                        f"drawtext=fontfile=/System/Library/Fonts/Helvetica.ttc:"
+                        f"drawtext=fontfile={self._get_font_path()}:"
                         f"text='{display_text}':"
                         f"fontcolor=white:fontsize=24:"
                         f"box=1:boxcolor=black@0.5:boxborderw=10:"

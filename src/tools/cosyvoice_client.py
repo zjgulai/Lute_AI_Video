@@ -19,6 +19,7 @@ import structlog
 from src.config import (
     COSYVOICE_MODEL,
     COSYVOICE_VOICE,
+    COSYVOICE_VOICE_FEMALE,
     OUTPUT_DIR,
     SILICONFLOW_API_BASE,
     SILICONFLOW_API_KEY,
@@ -31,6 +32,7 @@ logger = structlog.get_logger()
 BASE_URL = SILICONFLOW_API_BASE or "https://api.siliconflow.cn/v1"
 DEFAULT_MODEL = COSYVOICE_MODEL or "FunAudioLLM/CosyVoice2-0.5B"
 DEFAULT_VOICE = COSYVOICE_VOICE or "FunAudioLLM/CosyVoice2-0.5B:alex"
+DEFAULT_VOICE_FEMALE = COSYVOICE_VOICE_FEMALE or "FunAudioLLM/CosyVoice2-0.5B:anna"
 
 # Timeout per TTS call in seconds
 TTS_TIMEOUT_SECONDS = 60.0
@@ -38,7 +40,8 @@ TTS_TIMEOUT_SECONDS = 60.0
 # Preset voices for different languages / use cases.
 # These are SiliconFlow CosyVoice2 built-in speaker IDs.
 VOICE_PRESETS = {
-    "en": DEFAULT_VOICE,  # English — warm male (alex)
+    "en": DEFAULT_VOICE,           # English — warm male (alex)
+    "female_en": DEFAULT_VOICE_FEMALE,  # English — warm female
 }
 
 

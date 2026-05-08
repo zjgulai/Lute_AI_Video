@@ -156,6 +156,7 @@ SILICONFLOW_API_KEY: str = os.environ.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_API_BASE: str = os.environ.get("SILICONFLOW_API_BASE", "https://api.siliconflow.cn/v1")
 COSYVOICE_MODEL: str = os.environ.get("COSYVOICE_MODEL", "FunAudioLLM/CosyVoice2-0.5B")
 COSYVOICE_VOICE: str = os.environ.get("COSYVOICE_VOICE", "FunAudioLLM/CosyVoice2-0.5B:alex")
+COSYVOICE_VOICE_FEMALE: str = os.environ.get("COSYVOICE_VOICE_FEMALE", "FunAudioLLM/CosyVoice2-0.5B:anna")
 
 # ── Seedance 2.0 Video Generation ──
 # Supports: native Seedance API, or poyo.ai proxy
