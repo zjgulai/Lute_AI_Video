@@ -298,7 +298,7 @@ class TestScriptAudit:
         report = auditor.audit_script(sample_good_script)
         assert isinstance(report, AuditReport)
         assert report.checkpoint == AuditCheckpoint.SCRIPT
-        assert len(report.criteria) == 7
+        assert len(report.criteria) == 9
         # Good script should have decent score
         assert report.overall_score >= 0.6
 
@@ -355,6 +355,8 @@ class TestScriptAudit:
             "Brand Voice",
             "CTA Clarity",
             "Compliance Pre-check",
+            "Information Density",
+            "Emotional Arc",
         }
         assert criterion_names == expected
 

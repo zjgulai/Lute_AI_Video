@@ -15,6 +15,7 @@ Thresholds used by routing (in routing.py):
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from src.models import (
@@ -221,22 +222,49 @@ class AuditorAgent:
         criteria: list[AuditCriterion] = []
         segments = script.segments
 
-        # 1. Hook Strength
+        # 1. Hook Strength (duration + text quality)
         hook_segments = [s for s in segments if s.segment_type == "hook"]
         hook_duration = 0.0
+        hook_text = ""
         if hook_segments:
             longest_hook = max(hook_segments, key=lambda s: s.end_time - s.start_time)
             hook_duration = longest_hook.end_time - longest_hook.start_time
-            hook_score = 1.0 if hook_duration <= 3.0 else 0.0
+            hook_text = (longest_hook.voiceover or "").strip()
+            # Duration sub-score: ≤3s = full points, ≤5s = partial, >5s = fail
+            dur_score = 1.0 if hook_duration <= 3.0 else (0.5 if hook_duration <= 5.0 else 0.0)
         else:
-            hook_score = 0.0
+            dur_score = 0.0
+
+        # Text quality sub-score: curiosity gap + pattern interrupt
+        text_score = self._score_hook_text(hook_text) if hook_text else 0.0
+
+        # Combined: duration 40% weight, text quality 60% weight
+        hook_score = dur_score * 0.4 + text_score * 0.6
+
+        obs_parts: list[str] = []
+        if hook_segments:
+            obs_parts.append(f"duration {hook_duration:.1f}s")
+        else:
+            obs_parts.append("no hook segment")
+        if hook_text:
+            obs_parts.append(f"text: '{hook_text[:50]}...'" if len(hook_text) > 50 else f"text: '{hook_text}'")
+        else:
+            obs_parts.append("no hook text")
+
+        rec = ""
+        if not hook_segments:
+            rec = "Add an attention-grabbing hook in the first 3 seconds"
+        elif hook_duration > 3:
+            rec = "Hook should be ≤ 3 seconds for short-form video"
+        elif text_score < 0.6 and hook_text:
+            rec = "Strengthen hook with curiosity gap (question/number/contrast) or pattern interrupt (stop/wait/mistake)"
+
         criteria.append(
             _make_criterion(
                 "Hook Strength",
                 hook_score,
-                f"Longest hook segment: {hook_duration:.1f}s" if hook_segments else "No hook segment",
-                "Hook should be ≤ 3 seconds for short-form video" if hook_segments and hook_duration > 3 else
-                "Add an attention-grabbing hook in the first 3 seconds" if not hook_segments else "",
+                "; ".join(obs_parts),
+                rec,
             )
         )
 
@@ -339,6 +367,47 @@ class AuditorAgent:
                 "Remove or soften: guaranteed, 100%, cure — these trigger platform filters"
                 if found_terms
                 else "",
+            )
+        )
+
+        # 8. Information Density (words-per-second)
+        total_words = sum(len((s.voiceover or "").split()) for s in segments)
+        total_duration = max(script.total_duration, 1.0)
+        wps = total_words / total_duration
+        # Target: 2.5-3.5 wps for short-form video
+        if 2.5 <= wps <= 3.5:
+            density_score = 1.0
+            density_obs = f"Information density {wps:.1f} words/s — optimal for short-form"
+            density_rec = ""
+        elif 2.0 <= wps < 2.5 or 3.5 < wps <= 4.0:
+            density_score = 0.7
+            density_obs = f"Information density {wps:.1f} words/s — slightly off optimal (2.5-3.5)"
+            density_rec = "Adjust script length or segment timing" if wps > 3.5 else "Add more detail or extend duration"
+        elif 1.5 <= wps < 2.0 or 4.0 < wps <= 5.0:
+            density_score = 0.4
+            density_obs = f"Information density {wps:.1f} words/s — outside ideal range"
+            density_rec = "Shorten script or increase duration" if wps > 4.0 else "Add more content or reduce duration"
+        else:
+            density_score = 0.1
+            density_obs = f"Information density {wps:.1f} words/s — severely off"
+            density_rec = "Significantly adjust script length or segment timing"
+        criteria.append(
+            _make_criterion(
+                "Information Density",
+                density_score,
+                density_obs,
+                density_rec,
+            )
+        )
+
+        # 9. Emotional Arc — check negative→positive progression + urgency at CTA
+        emotion_score = self._score_emotional_arc(segments)
+        criteria.append(
+            _make_criterion(
+                "Emotional Arc",
+                emotion_score["score"],
+                emotion_score["observation"],
+                emotion_score["recommendation"],
             )
         )
 
@@ -570,3 +639,206 @@ class AuditorAgent:
             criteria=criteria,
             summary=f"Thumbnail '{thumbnail_set.script_id}' audit: {overall_score:.0%} overall.",
         )
+
+    @staticmethod
+    def _score_hook_text(text: str) -> float:
+        """Score hook text quality based on curiosity gap + pattern interrupt signals.
+
+        Returns a 0-1 score. Tuned for English short-form video hooks.
+
+        Curiosity gap signals (question/number/contrast/negation):
+        - Question words: what, how, why, did you know, ever wondered
+        - Numbers: any digit (creates specificity)
+        - Contrast: but, however, yet, surprisingly
+        - Negation: never, stop, don't, avoid, mistake
+
+        Pattern interrupt signals (breaks viewer autopilot):
+        - Direct address: you, your
+        - Command: stop, wait, listen, look, watch
+        - Shock: wrong, lie, myth, truth, secret
+        - Urgency: now, today, immediately
+
+        Scoring:
+        - 0 signals = 0.2 (weak hook)
+        - 1-2 signals = 0.5 (average hook)
+        - 3-4 signals = 0.8 (strong hook)
+        - 5+ signals = 1.0 (excellent hook)
+        """
+        if not text or len(text.strip()) < 3:
+            return 0.0
+
+        t = text.lower()
+        signals = 0
+
+        # Curiosity gap
+        curiosity_patterns = [
+            r"\bwhat\b", r"\bhow\b", r"\bwhy\b", r"\bwho\b",
+            r"\bdid you know\b", r"\bever wondered\b", r"\bhere's why\b",
+            r"\bthe reason\b", r"\bthe truth about\b", r"\bsecret\b",
+        ]
+        for pat in curiosity_patterns:
+            if re.search(pat, t):
+                signals += 1
+                break  # only count once per category
+
+        # Number specificity
+        if re.search(r"\d", t):
+            signals += 1
+
+        # Contrast / surprise
+        contrast_patterns = [r"\bbut\b", r"\bhowever\b", r"\byet\b", r"\bsurprisingly\b", r"\bunexpected\b"]
+        for pat in contrast_patterns:
+            if re.search(pat, t):
+                signals += 1
+                break
+
+        # Pattern interrupt — direct command
+        command_patterns = [r"\bstop\b", r"\bwait\b", r"\blisten\b", r"\blook\b", r"\bwatch\b"]
+        for pat in command_patterns:
+            if re.search(pat, t):
+                signals += 1
+                break
+
+        # Pattern interrupt — shock / revelation
+        shock_patterns = [r"\bwrong\b", r"\blie\b", r"\bmyth\b", r"\bmistake\b", r"\bnever\b", r"\bdon't\b"]
+        for pat in shock_patterns:
+            if re.search(pat, t):
+                signals += 1
+                break
+
+        # Urgency
+        if re.search(r"\bnow\b|\btoday\b|\bimmediately\b", t):
+            signals += 1
+
+        # Direct address (second person)
+        if re.search(r"\byou\b|\byour\b", t):
+            signals += 1
+
+        if signals >= 5:
+            return 1.0
+        if signals >= 3:
+            return 0.8
+        if signals >= 1:
+            return 0.5
+        return 0.2
+
+    @staticmethod
+    def _score_emotional_arc(segments: list[Any]) -> dict[str, Any]:
+        """Evaluate emotional progression through the script.
+
+        Target arc for short-form video (AIDA-inspired):
+        attention/grab → problem/negative → solution/positive → trust/reinforce → urgency/CTA
+
+        Checks:
+        1. Has a pain_point followed by solution (negative → positive transition)
+        2. CTA segment contains urgency signals (now, today, click, get, buy)
+        3. Hook segment has attention-grabbing signals (question, command)
+
+        Returns dict with score, observation, recommendation.
+        """
+        import re
+
+        # Map segment types to expected emotional valence
+        VALENCE_MAP = {
+            "hook": "attention",
+            "problem": "negative",
+            "pain_point": "negative",
+            "frustration": "negative",
+            "agitation": "negative",
+            "solution": "positive",
+            "benefit": "positive",
+            "proof": "positive",
+            "trust_building": "positive",
+            "social_proof": "positive",
+            "testimonial": "positive",
+            "usp": "positive",
+            "guarantee": "positive",
+            "authority": "positive",
+            "scarcity": "urgent",
+            "cta": "urgent",
+            "urgency": "urgent",
+            "final_hook": "urgent",
+            "transition": "neutral",
+        }
+
+        # Build observed valence sequence
+        observed: list[str] = []
+        for seg in segments:
+            st = getattr(seg, "segment_type", "")
+            val = VALENCE_MAP.get(st, "neutral")
+            if val != "neutral":
+                observed.append(val)
+
+        if not observed:
+            return {
+                "score": 0.3,
+                "observation": "No recognizable emotional segments found",
+                "recommendation": "Include segments with clear emotional purpose (problem → solution → CTA)",
+            }
+
+        checks_passed = 0
+        checks_total = 3
+        observations: list[str] = []
+
+        # Check 1: negative → positive transition (problem/solution arc)
+        has_negative = any(v == "negative" for v in observed)
+        has_positive = any(v == "positive" for v in observed)
+        # Look for negative before positive in sequence
+        neg_before_pos = False
+        for i, v in enumerate(observed):
+            if v == "negative":
+                if any(observed[j] == "positive" for j in range(i + 1, len(observed))):
+                    neg_before_pos = True
+                    break
+        if neg_before_pos:
+            checks_passed += 1
+            observations.append("negative→positive arc present")
+        elif has_negative and has_positive:
+            checks_passed += 0.5
+            observations.append("both negative and positive present but not in sequence")
+        else:
+            observations.append("missing negative→positive arc")
+
+        # Check 2: urgency at CTA
+        cta_segments = [seg for seg in segments if getattr(seg, "segment_type", "") == "cta"]
+        urgency_words = ["now", "today", "immediately", "click", "get", "buy", "order", "limited", "hurry"]
+        has_urgency = False
+        for cta in cta_segments:
+            text = (getattr(cta, "voiceover", "") or "").lower()
+            if any(w in text for w in urgency_words):
+                has_urgency = True
+                break
+        if has_urgency:
+            checks_passed += 1
+            observations.append("CTA contains urgency signals")
+        else:
+            observations.append("CTA lacks urgency — add 'now', 'today', or 'click'")
+
+        # Check 3: hook attention signal
+        hook_segments = [seg for seg in segments if getattr(seg, "segment_type", "") == "hook"]
+        attention_words = ["what", "how", "why", "stop", "wait", "mistake", "never", "secret", "truth"]
+        has_attention = False
+        for h in hook_segments:
+            text = (getattr(h, "voiceover", "") or "").lower()
+            if any(w in text for w in attention_words):
+                has_attention = True
+                break
+        if has_attention:
+            checks_passed += 1
+            observations.append("hook has attention-grabbing signals")
+        else:
+            observations.append("hook lacks attention signals — use question or command")
+
+        score = checks_passed / checks_total
+        if score >= 0.8:
+            recommendation = ""
+        elif score >= 0.5:
+            recommendation = "Strengthen emotional arc: ensure clear problem→solution sequence"
+        else:
+            recommendation = "Restructure script with attention hook, problem/solution contrast, and urgent CTA"
+
+        return {
+            "score": round(score, 2),
+            "observation": "; ".join(observations),
+            "recommendation": recommendation,
+        }

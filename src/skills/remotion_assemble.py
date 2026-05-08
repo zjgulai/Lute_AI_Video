@@ -669,12 +669,20 @@ class RemotionAssembleSkill(SkillCallable):
         elif duration == 0:
             duration_ok = True  # ffprobe missing — don't block
 
+        # Audio-Video sync check — detect mismatched durations after mux
+        av_sync = self._check_av_sync(video_path)
+        av_sync_ok = av_sync["sync_ok"]
+        if not av_sync_ok:
+            failures.append(av_sync["failure"])
+
         return {
             "file_exists": True,
             "size_ok": size_ok,
             "header_ok": header_ok,
             "duration_ok": duration_ok,
-            "all_ok": size_ok and header_ok and duration_ok,
+            "av_sync_ok": av_sync_ok,
+            "av_sync_details": av_sync,
+            "all_ok": size_ok and header_ok and duration_ok and av_sync_ok,
             "failures": failures,
             "mode": "real",
         }
@@ -709,6 +717,89 @@ class RemotionAssembleSkill(SkillCallable):
         except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception):
             pass
         return 0.0
+
+    @staticmethod
+    def _check_av_sync(path: Path) -> dict[str, Any]:
+        """Check audio-video sync by comparing stream durations.
+
+        Uses ffprobe to get video stream duration and audio stream duration
+        separately. A significant mismatch indicates desync (e.g. audio truncated
+        or video shorter than audio after mux).
+
+        Thresholds:
+        - absolute diff > 0.5s  → fail
+        - relative diff > 5%    → fail (for short clips)
+
+        Returns:
+            {"sync_ok": bool, "video_dur": float, "audio_dur": float,
+             "diff": float, "failure": str}
+        """
+        import subprocess
+
+        def _stream_duration(stream_spec: str) -> float:
+            try:
+                result = subprocess.run(
+                    [
+                        "ffprobe", "-v", "error",
+                        "-select_streams", stream_spec,
+                        "-show_entries", "stream=duration",
+                        "-of", "default=noprint_wrappers=1:nokey=1",
+                        str(path),
+                    ],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    return float(result.stdout.strip() or "0.0")
+            except Exception:
+                pass
+            return 0.0
+
+        video_dur = _stream_duration("v:0")
+        audio_dur = _stream_duration("a:0")
+
+        # No audio stream — sync not applicable (return ok)
+        if audio_dur == 0.0:
+            return {
+                "sync_ok": True,
+                "video_dur": video_dur,
+                "audio_dur": 0.0,
+                "diff": 0.0,
+                "failure": "",
+            }
+
+        # No video stream — this is an audio-only file, not our target
+        if video_dur == 0.0:
+            return {
+                "sync_ok": False,
+                "video_dur": 0.0,
+                "audio_dur": audio_dur,
+                "diff": audio_dur,
+                "failure": "no_video_stream",
+            }
+
+        diff = abs(video_dur - audio_dur)
+        max_dur = max(video_dur, audio_dur, 0.001)
+        rel_diff = diff / max_dur
+
+        MAX_ABS_DIFF = 0.5   # seconds
+        MAX_REL_DIFF = 0.05  # 5%
+
+        if diff > MAX_ABS_DIFF or rel_diff > MAX_REL_DIFF:
+            return {
+                "sync_ok": False,
+                "video_dur": round(video_dur, 2),
+                "audio_dur": round(audio_dur, 2),
+                "diff": round(diff, 2),
+                "failure": f"av_desync_v{video_dur:.1f}_a{audio_dur:.1f}",
+            }
+
+        return {
+            "sync_ok": True,
+            "video_dur": round(video_dur, 2),
+            "audio_dur": round(audio_dur, 2),
+            "diff": round(diff, 2),
+            "failure": "",
+        }
 
     @staticmethod
     def _write_stub_mp4(path: Path, label: str) -> None:

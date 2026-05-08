@@ -40,6 +40,7 @@ Output schema:
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -216,11 +217,58 @@ class MediaQualityAuditSkill(SkillCallable):
             duration_score = 0.7
             obs = f"Final video exists ({size_mb:.1f}MB) but duration could not be measured"
 
+        # Technical specs check: resolution, bitrate, fps
+        specs = self._get_video_specs(path)
+        spec_score = 1.0
+        spec_issues: list[str] = []
+        spec_recs: list[str] = []
+
+        if specs:
+            w, h = specs["width"], specs["height"]
+            ratio = w / h if h > 0 else 0
+            # Target: 1080x1920 (9:16 = 0.5625)
+            if not (0.53 <= ratio <= 0.60):
+                spec_score *= 0.5
+                spec_issues.append(f"aspect ratio {w}x{h} not 9:16")
+                spec_recs.append("Force output to 1080x1920 in remotion_assemble")
+            elif not (w >= 1000 and h >= 1800):
+                spec_score *= 0.8
+                spec_issues.append(f"resolution {w}x{h} below 1080x1920 target")
+
+            # FPS: target 30fps, minimum 25fps
+            fps = specs["fps"]
+            if fps > 0:
+                if fps < 20:
+                    spec_score *= 0.5
+                    spec_issues.append(f"fps {fps:.1f} too low (<20)")
+                    spec_recs.append("Re-encode with -r 30")
+                elif fps < 25:
+                    spec_score *= 0.8
+                    spec_issues.append(f"fps {fps:.1f} below target 30")
+
+            # Bitrate: target >2Mbps, minimum >1Mbps
+            bitrate_kbps = specs["bitrate_kbps"]
+            if bitrate_kbps > 0:
+                if bitrate_kbps < 1000:
+                    spec_score *= 0.5
+                    spec_issues.append(f"bitrate {bitrate_kbps:.0f}kbps too low (<1Mbps)")
+                    spec_recs.append("Increase CRF quality or use -b:v 2M")
+                elif bitrate_kbps < 1500:
+                    spec_score *= 0.8
+                    spec_issues.append(f"bitrate {bitrate_kbps:.0f}kbps below target 2Mbps")
+
+            if spec_issues:
+                obs += f" | Spec issues: {', '.join(spec_issues)}"
+        else:
+            spec_score = 0.8  # ffprobe unavailable — mild penalty
+
+        combined_score = duration_score * spec_score
+
         return _make_criterion(
             "final_video_present",
-            duration_score,
+            combined_score,
             obs,
-            "" if duration_score >= 0.8 else "Re-render with corrected total_duration",
+            "; ".join(spec_recs) if spec_recs else ("" if combined_score >= 0.8 else "Re-render with corrected total_duration"),
         )
 
     def _audit_audio_coverage(self, audio_paths: Any, expected_duration: float) -> dict[str, Any]:
@@ -779,7 +827,9 @@ class MediaQualityAuditSkill(SkillCallable):
                 else:
                     time_sec = 1.0  # fallback
 
-            frame_path = Path(tempfile.mktemp(suffix=".jpg"))
+            fd, frame_path_str = tempfile.mkstemp(suffix=".jpg")
+            os.close(fd)
+            frame_path = Path(frame_path_str)
             subprocess.run(
                 ["ffmpeg", "-y", "-ss", str(time_sec),
                  "-i", str(video_path), "-vframes", "1",
@@ -836,6 +886,43 @@ class MediaQualityAuditSkill(SkillCallable):
             sims.append(float(np.minimum(hist_a, hist_b).sum()))
 
         return sum(sims) / len(sims) if sims else 0.0
+
+    @staticmethod
+    def _get_video_specs(path: Path) -> dict[str, Any] | None:
+        """Extract video technical specs via ffprobe: width, height, fps, bitrate."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height,r_frame_rate,bit_rate",
+                    "-of", "json",
+                    str(path),
+                ],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            import json
+            data = json.loads(result.stdout)
+            stream = data.get("streams", [{}])[0]
+            w = int(stream.get("width", 0))
+            h = int(stream.get("height", 0))
+            # FPS from rational string "30000/1001"
+            fps_str = stream.get("r_frame_rate", "0/1")
+            if "/" in fps_str:
+                num, den = fps_str.split("/")
+                fps = float(num) / float(den) if float(den) != 0 else 0.0
+            else:
+                fps = float(fps_str)
+            bitrate = int(stream.get("bit_rate", 0))  # bits per second
+            return {
+                "width": w,
+                "height": h,
+                "fps": fps,
+                "bitrate_kbps": bitrate / 1000,
+            }
+        except Exception:
+            return None
 
     @staticmethod
     def _measure_duration(path: Path) -> float:

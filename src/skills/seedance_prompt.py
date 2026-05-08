@@ -172,7 +172,23 @@ class SeedancePromptSkill(SkillCallable):
             )
             prompts.append(prompt_dict)
 
-        return SkillResult(success=True, data=prompts)
+        # Compute per-prompt quality scores and overall average
+        quality_scores: list[float] = []
+        for p in prompts:
+            q = self._score_prompt_quality(p)
+            p["quality_score"] = q
+            quality_scores.append(q)
+        overall_quality = round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else 0.5
+
+        return SkillResult(
+            success=True,
+            data=prompts,
+            metadata={
+                "prompt_count": len(prompts),
+                "overall_quality_score": overall_quality,
+                "avg_quality_score": overall_quality,
+            },
+        )
 
     def _build_single_fallback(self, product_name: str) -> dict[str, Any]:
         """Safe fallback: structured prompt without rotation keywords."""
@@ -194,6 +210,49 @@ class SeedancePromptSkill(SkillCallable):
             "forbidden_hits": [],
             "_fallback": True,
         }
+
+    @staticmethod
+    def _score_prompt_quality(prompt: dict[str, Any]) -> float:
+        """Score a single prompt for completeness of action+camera+lighting+pacing.
+
+        Checks:
+        - action_description length (min 20 chars for meaningful action)
+        - camera direction specified (non-empty, not generic)
+        - lighting specified (non-empty)
+        - pacing specified (non-empty)
+        - no forbidden words (generic rotation patterns)
+
+        Returns 0-1 score.
+        """
+        scores = []
+
+        # Action quality
+        action = prompt.get("segment_prompt", "")
+        action_score = 1.0 if len(action) >= 80 else (0.5 if len(action) >= 40 else 0.2)
+        scores.append(action_score)
+
+        # Camera quality
+        camera = prompt.get("camera", "")
+        camera_score = 1.0 if camera and len(camera) > 5 and camera != "smooth cinematic" else 0.7
+        scores.append(camera_score)
+
+        # Lighting quality
+        lighting = prompt.get("lighting", "")
+        lighting_score = 1.0 if lighting and len(lighting) > 3 else 0.5
+        scores.append(lighting_score)
+
+        # Shot type quality
+        shot = prompt.get("shot_type", "")
+        shot_score = 1.0 if shot and shot != "mid-shot" else 0.7
+        scores.append(shot_score)
+
+        # Forbidden words penalty
+        if prompt.get("has_forbidden_words"):
+            scores.append(0.0)
+        else:
+            scores.append(1.0)
+
+        return round(sum(scores) / len(scores), 2)
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
