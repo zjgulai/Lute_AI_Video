@@ -113,15 +113,14 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 - **SSL 证书被 rsync 误删为空目录** — `server.crt` / `server.key` 不在本地 `deploy/lighthouse/`
   中，`rsync --delete` 删除远程证书文件后 docker 创建空目录占位，nginx 挂载失败。
   修复：重新生成自签名证书；**防御措施**：deploy.sh 前手动备份 SSL 文件，或改用 `rsync --exclude`。
-- **prometheus-client 未装进容器** — `requirements.txt` 中有 `prometheus-client>=0.20`，
-  但 backend image 未 rebuild（deploy.sh Phase 0 条件 `IMG_BUILT_TS != 0` 在首次构建时
-  不触发警告）。`docker exec pip install` + `docker commit` 临时修复。
+- **prometheus-client 未装进容器** — `requirements.txt` 中已有 `prometheus-client>=0.20`，
+  但 backend image 未 rebuild（deploy.sh Phase 0 旧逻辑 `mtime` 比较在 `IMG_BUILT_TS=0`
+  时不触发警告）。已通过 `docker compose build backend` rebuild image 固化。
 - **bcrypt 未装进容器** — Admin router 因 `No module named 'bcrypt'` 被跳过，login 500。
-  同上方式修复。需将 `prometheus-client` / `bcrypt` 的容器内安装固化到 Dockerfile 或
-  requirements.txt 变更时强制 rebuild。
+  已通过 image rebuild 固化，`requirements.txt` 已包含 `bcrypt>=4.2`。
 - **Alembic 不在 requirements.txt 中** — `alembic` 用于本地开发迁移，但生产部署也依赖它
-  执行 `alembic upgrade head`。当前生产表通过手动 SQL 创建。**建议**：将 alembic 加入
-  `requirements.txt`，deploy 流程中增加 `docker compose build` + `alembic upgrade head` 步骤。
+  执行 `alembic upgrade head`。当前生产表通过手动 SQL 创建。**已修复**：`alembic>=1.13`
+  已加入 `requirements.txt`，image rebuild 后容器内可直接执行 `alembic upgrade head`。
 - **admin_accounts 表未创建** — Admin Panel 表通过 Alembic 迁移 `2d6b8e9c0f1a` 创建，
   但生产从未运行过该迁移。直接用 asyncpg 执行 SQL 建表 + 插入初始 admin 账号。
 
@@ -160,6 +159,23 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
   和 `test_gate_scenario_configs.py` 各复制一份，现提取到 `tests/conftest.py` 全局复用。
 - **测试验证** — `test_gate_scenario_configs.py`(52) + `test_s1_gate_full_flow.py`(41)
   + `test_upload_e2e.py`(10) 共 103 测试全部通过。
+
+**2026-05-08 更新 (部署流程加固):**
+- **`bcrypt` / `prometheus-client` / `alembic` 固化到 backend image** — 之前用
+  `docker exec pip install` + `docker commit` 临时修复，image rebuild 后丢失。
+  现 `requirements.txt` 已包含三项依赖，`Dockerfile.backend` rebuild 后全部固化。
+  Admin router 正常加载（`/api/admin/` 返回 401 而非 404），`alembic upgrade head`
+  可在容器内直接执行。
+- **`Dockerfile.backend` 删除多余 `asyncpg` 安装** — 第 24 行 `pip install asyncpg>=0.29`
+  与 `requirements.txt` 重复，已删除。节省一层 layer，build 时间减少 ~1s。
+- **deploy.sh Phase 0 hash 检测替代 mtime** — 原 `git log mtime` vs `docker inspect Created`
+  比较在 `IMG_BUILT_TS=0`（首次部署/无法获取 image 时间）时不触发警告。
+  改为 `sha256sum requirements.txt` 本地 hash vs image 内记录的 hash 比较，
+  不受 mtime 影响，首次部署也会正确提示 rebuild。
+- **nginx `restart` → `--force-recreate`** — `docker-compose restart nginx` 只重启进程，
+  不重新挂载 volume。新增 `proxy_params.conf` 时 volume 变更不生效，导致 nginx
+  `[emerg] open() "/etc/nginx/proxy_params.conf" failed`。改为 `--force-recreate`
+  确保 volume 挂载始终与 `docker-compose.prod.yml` 一致。
 
 ---
 
@@ -751,20 +767,21 @@ The project ships three deploy targets, in priority order:
    rendering), `nginx.conf` (with 1500s `proxy_read_timeout` for long-running pipelines),
    and `.env.prod` (live secrets — gitignored). Deploy via `rsync -e "ssh -i ai_video.pem"`
    to `ubuntu@101.34.52.232:/opt/ai-video/` then `docker compose up -d --force-recreate`.
-   Note: rsync to bind-mounted nginx.conf needs `--inplace --no-whole-file` or an explicit
-   `docker restart ai_video_nginx` afterwards (nginx locks the inode at startup, so a
-   default rename-based rsync makes `nginx -s reload` a no-op).
+   Note: rsync to bind-mounted nginx.conf needs `--inplace --no-whole-file`. **Do not use**
+   `docker restart ai_video_nginx` for volume mount changes (e.g. adding `proxy_params.conf`);
+   `restart` reuses the existing container and ignores new volume declarations in
+   `docker-compose.prod.yml`. Always use `--force-recreate` for nginx when volumes change.
    Volume 命名:docker compose project = `lighthouse`(因为 compose 文件在
    `deploy/lighthouse/`),所以 backend output volume 是 `lighthouse_backend_output`,
    不是 `ai-video_backend_output`(后者是历史残留 volume,backend 不会读到)。任何
    `docker run -v <volume>:/...` 操作都要用 `lighthouse_backend_output`。
    2026-05-05 部署事故防御:`Dockerfile.backend` 配阿里云 PyPI mirror、`deploy.sh`
-   Phase 0 比 `requirements.txt` mtime vs image 时间提示 rebuild、backend
-   `restart: on-failure:5` 限制无限重启。完整时间线 + 紧急恢复三步法见
+   Phase 0 hash 检测（`sha256sum requirements.txt` 本地 hash vs image 内记录 hash）、
+   backend `restart: on-failure:5` 限制无限重启。完整时间线 + 紧急恢复三步法见
    `docs/workflows/incident-2026-05-05-postgres-saver-deploy-stable.md`。
    **2026-05-07 deploy.sh 更新**: 构建前清理 `.next/standalone/` `.next/static/`
    `.next/server/` 防止 Turbopack 旧 chunk 残留；构建后验证 `standalone/server.js`
-   和 `static/chunks/` 存在；新增 `restart nginx` 确保配置变更生效。
+   和 `static/chunks/` 存在；nginx 用 `--force-recreate` 确保 volume 挂载变更生效。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
    `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.
@@ -932,7 +949,7 @@ location /api/media/ {
 
 ## Known Gaps and TODOs
 
-最近一次盘点:2026-05-08(结构简化 + Gate 测试扩展 + 上传链路验证 + /simplify 审查修复后)。
+最近一次盘点:2026-05-08(部署流程加固: bcrypt/alembic 固化 + hash 检测 + nginx recreate 修复后)。
 
 ### 1. 已知功能缺陷(已修复)
 
@@ -1005,15 +1022,11 @@ location /api/media/ {
 - **pyright strict 剩余规则:** `reportUnknownMemberType` / `reportUnknownVariableType` 未启用。
   在 `dict[str, Any]` 为主的代码库中，这两项规则噪音远大于价值。如需进一步收紧类型，需先
   将 `dict[str, Any]` 替换为数百个具体类型（ProductCatalog、PipelineConfig 等），ROI 待评估。
-- **deploy.sh Phase 0 逻辑缺陷:** 当 `IMG_BUILT_TS=0`（首次部署或无法获取 image 时间）时，
-  `requirements.txt` 修改时间 > image 时间的条件不触发 rebuild 警告。`prometheus-client`
-  和 `bcrypt` 后来加入 requirements.txt 但 image 未更新，导致容器启动后缺少依赖。
-  **建议**: requirements.txt 变更时无条件 rebuild，或单独维护一个 `requirements.txt 哈希`
-  文件做更可靠的变更检测。
-- **alembic 不在 requirements.txt 中:** `alembic` 用于本地开发数据库迁移，但生产部署也
-  需要它执行 `alembic upgrade head`。当前生产表通过手动 SQL 创建，存在遗漏风险。
-  **建议**: 将 `alembic` 加入 `requirements.txt`，部署流程中固化 `docker compose build` +
-  `alembic upgrade head` 步骤。
+- **deploy.sh Phase 0 逻辑缺陷:** ✅ 已修复。`mtime` 比较 → `sha256sum` hash 比较，
+  Dockerfile 构建时记录 `sha256sum requirements.txt > /app/.requirements_sha256`，
+  deploy.sh 直接对比本地 hash 与镜像内 hash。不受 `IMG_BUILT_TS=0` 影响，首次部署也正确提示。
+- **alembic 不在 requirements.txt 中:** ✅ 已修复。`alembic>=1.13` 已加入 `requirements.txt`，
+  backend image 已 rebuild 固化，容器内可直接执行 `alembic upgrade head`。
 
 ### 3. 未做端到端验证的前后端交互路径
 
