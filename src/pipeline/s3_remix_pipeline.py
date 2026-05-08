@@ -200,8 +200,8 @@ class S3InfluencerRemixPipeline:
             script = self._get_step_output(steps, "remix_script") or {}
             audio = self._get_step_output(steps, "tts_audio") or []
             audio_paths = audio if isinstance(audio, list) else []
-            clips = self._get_step_output(steps, "seedance_clips") or []
-            clip_paths = clips if isinstance(clips, list) else []
+            clips = self._get_step_output(steps, "seedance_clips") or {}
+            clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
             res = await self._step_assemble_final(
                 remix_script=script,
                 captions=self._extract_captions(script),
@@ -222,8 +222,8 @@ class S3InfluencerRemixPipeline:
             audio_paths = audio if isinstance(audio, list) else []
             thumbnails = self._get_step_output(steps, "thumbnail_images") or []
             thumb_paths = thumbnails if isinstance(thumbnails, list) else []
-            clips = self._get_step_output(steps, "seedance_clips") or []
-            clip_paths = clips if isinstance(clips, list) else []
+            clips = self._get_step_output(steps, "seedance_clips") or {}
+            clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
             thumb_prompts = self._get_step_output(steps, "thumbnail_prompts") or []
             res = await self._step_audit(
                 video_path=video_path,
@@ -314,8 +314,8 @@ class S3InfluencerRemixPipeline:
         result.thumbnail_sets = self._get_step_output(steps, "thumbnail_prompts") or []
 
         if enable_media_synthesis:
-            clips = self._get_step_output(steps, "seedance_clips") or []
-            result.clip_paths = clips if isinstance(clips, list) else []
+            clips = self._get_step_output(steps, "seedance_clips") or {}
+            result.clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
             audio = self._get_step_output(steps, "tts_audio") or []
             result.audio_paths = audio if isinstance(audio, list) else []
             thumbs = self._get_step_output(steps, "thumbnail_images") or []
@@ -624,21 +624,23 @@ class S3InfluencerRemixPipeline:
         label: str,
         errors: list[str],
         keyframe_images: dict[str, Any] | None = None,
-    ) -> list[str]:
-        """Step 8: invoke seedance-video-generate-skill once per prompt (capped).
+    ) -> dict[str, Any]:
+        """Step 8: invoke seedance-video-generate-skill with bounded concurrency.
 
-        When keyframe_images is provided (storyboard dict with keyframe_image_path
-        on each shot), passes image_refs to enable image_to_video mode.
+        Uses asyncio.Semaphore(2) to cap concurrent API calls to poyo.ai limits.
+        Returns a unified dict {clip_paths, clip_details, total_duration} matching S1 format.
 
-        Implements cross-shot continuity: the last frame of clip N becomes the
-        continuity_frame_path for clip N+1, ensuring visual consistency across
-        the generated sequence.
+        Continuity chain: the last frame of clip N becomes the
+        continuity_frame_path for clip N+1, ensuring visual consistency.
         """
+        import asyncio
+
         logger.info("s3: step 8 — seedance clips", count=len(video_prompts))
         if not video_prompts:
-            return []
+            return {"clip_paths": [], "clip_details": [], "total_duration": 0}
 
         clip_paths: list[str] = []
+        clip_details: list[dict[str, Any]] = []
         product_name = product.get("name", "Product")
 
         # Collect keyframe image paths for image_to_video mode
@@ -650,59 +652,70 @@ class S3InfluencerRemixPipeline:
                 if path:
                     kf_image_paths.append(path)
 
-        # Cap to MAX_CLIPS_PER_DEMO to keep total time bounded
         capped = video_prompts[:MAX_CLIPS_PER_DEMO]
-        # Sora 2 Pro via PoYo: 25s cap
-        VIDEO_MAX_DURATION = 15  # Happy Horse API limit
+        VIDEO_MAX_DURATION = 15
         clip_duration = min(VIDEO_MAX_DURATION, max(4, self._video_duration // max(len(capped), 1)))
 
-        # ── Continuity chain: last frame of clip N feeds clip N+1 ──
+        _sem = asyncio.Semaphore(2)
+
+        async def _gen_single(i: int, vp: dict[str, Any], last_frame: str | None) -> tuple[int, Any, str | None]:
+            async with _sem:
+                prompt = vp.get("segment_prompt", "") or vp.get("prompt", "") or f"{product_name} in natural usage scene, authentic real-world context"
+                gen_params: dict[str, Any] = {
+                    "prompt": prompt,
+                    "duration": clip_duration,
+                    "resolution": "720p",
+                    "output_label": f"{label}_clip_{i}",
+                }
+                if last_frame:
+                    gen_params["continuity_frame_path"] = last_frame
+                elif i < len(kf_image_paths) and kf_image_paths[i]:
+                    gen_params["image_refs"] = [kf_image_paths[i]]
+
+                res = await self._registry.execute("seedance-video-generate-skill", gen_params)
+
+                # Extract last frame for next clip continuity
+                next_frame: str | None = None
+                if res.success and res.data:
+                    path = res.data.get("video_path", "")
+                    if path:
+                        frame = self._extract_clip_last_frame(
+                            video_path=path,
+                            output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
+                        )
+                        next_frame = frame
+                return i, res, next_frame
+
+        # ── Serial execution with continuity chain (N+1 depends on N's last frame) ──
+        # NOTE: Clips cannot be fully parallel because clip N+1 needs clip N's last frame.
+        # Semaphore(2) is kept for consistency with S1; here it acts as a no-op
+        # since only one clip generates at a time.
         last_frame_path: str | None = None
-
         for i, vp in enumerate(capped):
-            # Use new segment_prompt if available (narrative_shot architecture), fallback to prompt key
-            prompt = vp.get("segment_prompt", "") or vp.get("prompt", "") or f"{product_name} in natural usage scene, authentic real-world context"
-            gen_params: dict[str, Any] = {
-                "prompt": prompt,
-                "duration": clip_duration,
-                "resolution": "720p",
-                "output_label": f"{label}_clip_{i}",
-            }
+            i, res, next_frame = await _gen_single(i, vp, last_frame_path)
 
-            # Priority chain: continuity_frame_path > keyframe image > image_refs[0]
-            if last_frame_path:
-                gen_params["continuity_frame_path"] = last_frame_path
-            elif i < len(kf_image_paths) and kf_image_paths[i]:
-                gen_params["image_refs"] = [kf_image_paths[i]]
-
-            res = await self._registry.execute("seedance-video-generate-skill", gen_params)
             if res.success and res.data:
                 path = res.data.get("video_path", "")
                 if path:
                     clip_paths.append(path)
-
-                    # ── Extract last frame from clip i for clip i+1 continuity ──
-                    frame = self._extract_clip_last_frame(
-                        video_path=path,
-                        output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
-                    )
-                    if frame:
-                        last_frame_path = frame
-                    else:
-                        # Graceful fallback: clear chain so next clip doesn't
-                        # receive a stale / broken frame path
-                        last_frame_path = None
+                    clip_details.append({
+                        "path": path,
+                        "duration": res.data.get("duration_seconds", clip_duration),
+                        "is_stub": res.data.get("is_stub", False),
+                        "verification": res.data.get("verification", {}),
+                        "prompt_used": res.data.get("prompt_used", ""),
+                    })
+                    last_frame_path = next_frame
 
                 if not res.data.get("verification", {}).get("all_ok", True):
                     errors.append(f"clip_{i}_verification_failed: {res.data['verification']}")
             else:
                 errors.append(f"clip_{i}_failed: {res.error}")
-                # Clip failed — do NOT chain a broken frame. Next clip starts fresh
-                # (with keyframe if available).
                 last_frame_path = None
 
+        total_duration = sum(d.get("duration", clip_duration) for d in clip_details)
         logger.info("s3: step 8 done", produced=len(clip_paths), capped_to=MAX_CLIPS_PER_DEMO)
-        return clip_paths
+        return {"clip_paths": clip_paths, "clip_details": clip_details, "total_duration": total_duration}
 
     async def _step_tts_audio(
         self,

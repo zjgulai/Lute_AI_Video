@@ -192,6 +192,25 @@ _SCENARIO_STEP_ORDER: dict[str, list[str]] = {
         "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
         "tts_audio", "thumbnail_images", "assemble_final", "audit",
     ],
+    "s2": [  # S2 is S1 with brand_mode=True
+        "strategy", "scripts", "compliance", "storyboards",
+        "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
+        "tts_audio", "thumbnail_images", "assemble_final", "audit",
+    ],
+    "s3": [
+        "video_analysis", "character_identity", "remix_script",
+        "storyboards", "keyframe_images", "video_prompts",
+        "thumbnail_prompts", "seedance_clips", "tts_audio",
+        "thumbnail_images", "assemble_final", "audit",
+    ],
+    "s4": [
+        "scripts", "video_prompts", "thumbnails",
+        "seedance_clips", "tts_audio", "assemble_final", "audit",
+    ],
+    "s5": [
+        "vlog_strategy", "video_prompts", "seedance_clips",
+        "tts_audio", "assemble_final", "audit",
+    ],
 }
 
 _STEP_DURATIONS: dict[str, str] = {
