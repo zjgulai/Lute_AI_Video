@@ -74,7 +74,15 @@ _SCENARIO_CONFIGS: dict[str, dict[str, Any]] = {
         "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
     },
     "s4": {
-        "step_order": ["scripts", "video_prompts", "thumbnails"],
+        "step_order": [
+            "scripts",
+            "video_prompts",
+            "thumbnails",
+            "seedance_clips",
+            "tts_audio",
+            "assemble_final",
+            "audit",
+        ],
         "pipeline_class": "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
     },
     "s3": {
