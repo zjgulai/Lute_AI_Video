@@ -114,7 +114,12 @@ class WeeklyCalendar(BaseModel):
 class ScriptSegment(BaseModel):
     """A single segment of the video script."""
 
-    segment_type: Literal["hook", "pain_point", "solution", "trust_building", "cta"]
+    segment_type: Literal[
+        "hook", "pain_point", "solution", "trust_building", "cta",
+        "body", "pitch", "intro", "conclusion", "scene_drop",
+        "comparison", "data_drop", "question", "story_hook",
+        "counter_narrative", "reaction", "emotional", "testimonial", "tutorial",
+    ]
     start_time: float  # seconds
     end_time: float
     voiceover: str

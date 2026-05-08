@@ -98,7 +98,8 @@ Return a JSON array of scripts, one per brief:
 ]
 ```
 
-Segment types: hook, pain_point, solution, trust_building, cta
+Segment types (standard 5): hook, pain_point, solution, trust_building, cta.
+Extended types available when the scene calls for them: body, pitch, intro, conclusion, scene_drop, comparison, data_drop, question, story_hook, counter_narrative, reaction, emotional, testimonial, tutorial.
 
 Generate scripts now. Make them authentic. Make them scroll-stopping. A real mom should watch this and say "finally, someone gets it."
 """

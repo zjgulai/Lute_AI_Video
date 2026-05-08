@@ -20,19 +20,19 @@ export interface AuditReport {
   criteria: AuditCriterion[];
 }
 
-// Must match backend REVIEW_NODES in src/models/__init__.py
+// Gate system nodes (StepRunner era). Legacy LangGraph nodes deprecated.
 export const REVIEW_NODES = [
-  "strategy_review",
-  "script_review",
-  "edit_review",
-  "thumbnail_review",
+  "gate_1_script",
+  "gate_2_keyframe",
+  "gate_3_clips",
+  "gate_4_final",
 ];
 
 export const AUDIT_CHECKPOINT: Record<string, string> = {
-  strategy_review: "strategy",
-  script_review: "script",
-  edit_review: "edit",
-  thumbnail_review: "thumbnail",
+  gate_1_script: "script",
+  gate_2_keyframe: "keyframe",
+  gate_3_clips: "clips",
+  gate_4_final: "final",
 };
 
 export const SEGMENT_LABELS: Record<string, string> = {

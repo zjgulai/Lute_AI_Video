@@ -461,7 +461,7 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
 
     best = None
     if candidates:
-        best = max(candidates, key=lambda c: c.get("score", 0))
+        best = max(candidates, key=lambda c: c.get("score", {}).get("overall", 0))
 
     logger.info(
         "gate_manager: candidates generated",

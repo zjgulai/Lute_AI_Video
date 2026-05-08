@@ -231,8 +231,13 @@ def _get_step_deps(scenario: str, step_name: str) -> list[str]:
 
 
 def _get_step_output(state: dict[str, Any], step_name: str) -> Any:
-    """Extract step output from pipeline state (prefers edited over original)."""
-    edited = state.get("edited_output", {})
-    if step_name in edited:
-        return edited[step_name]
-    return state.get(step_name)
+    """Extract step output from pipeline state (prefers edited over original).
+
+    Reads from the StepRunner-native structure ``state.steps[step_name].edited_output``
+    so that user edits made through the gate approval flow are correctly picked up.
+    """
+    steps = state.get("steps", {})
+    step_data = steps.get(step_name, {})
+    if step_data.get("edited") and step_data.get("edited_output") is not None:
+        return step_data["edited_output"]
+    return step_data.get("output")
