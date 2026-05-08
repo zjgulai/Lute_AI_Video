@@ -35,18 +35,16 @@ echo ""
 
 # -- Phase 0: requirements.txt rebuild check (2026-05-05 incident 教训) --
 # requirements.txt 改了但 image 没 rebuild → backend 启动 ImportError → restart loop。
-# 比较 git 上 requirements.txt 最后修改时间 vs image build 时间。
+# 用 sha256 hash 比较本地 requirements.txt 与 image 中记录的 hash，比 mtime 更可靠。
 echo "[0/5] requirements.txt rebuild check..."
 cd ../..
-LAST_REQ_MOD=$(git log -1 --format=%ct -- requirements.txt 2>/dev/null || echo "0")
-IMG_BUILT_AT=$(sudo docker inspect lighthouse-backend:latest --format='{{.Created}}' 2>/dev/null || echo "")
-IMG_BUILT_TS=0
-if [ -n "$IMG_BUILT_AT" ]; then
-  IMG_BUILT_TS=$(date -d "$IMG_BUILT_AT" +%s 2>/dev/null || echo "0")
-fi
+LOCAL_REQ_SHA=$(sha256sum requirements.txt 2>/dev/null | awk '{print $1}')
+IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest cat /app/.requirements_sha256 2>/dev/null | awk '{print $1}')
 cd deploy/lighthouse
-if [ "$LAST_REQ_MOD" -gt "$IMG_BUILT_TS" ] && [ "$IMG_BUILT_TS" != "0" ]; then
-  echo "  ⚠ requirements.txt 上次修改时间 > backend image build 时间"
+if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
+  echo "  ⚠ requirements.txt 与当前 backend image 不一致"
+  echo "  ⚠ 本地 hash: ${LOCAL_REQ_SHA:-(无法计算)}"
+  echo "  ⚠ 镜像 hash: ${IMG_REQ_SHA:-(首次部署或镜像不存在)}"
   echo "  ⚠ 强烈建议先 rebuild image,否则可能进 restart loop:"
   echo "      sudo docker compose -f docker-compose.prod.yml build backend"
   echo ""
@@ -56,7 +54,7 @@ if [ "$LAST_REQ_MOD" -gt "$IMG_BUILT_TS" ] && [ "$IMG_BUILT_TS" != "0" ]; then
     exit 1
   fi
 else
-  echo "  ✓ requirements.txt 未变化或 image 已包含最新依赖"
+  echo "  ✓ requirements.txt 与 backend image 一致"
 fi
 echo ""
 
@@ -102,9 +100,11 @@ echo "[2/5] Restarting containers..."
 cd ../deploy/lighthouse
 $COMPOSE restart backend 2>&1 | tail -3
 $COMPOSE up -d --force-recreate frontend 2>&1 | tail -3
-# Restart nginx to pick up nginx.conf changes (nginx locks inode at startup,
-# so a file edit alone is not enough — need container restart).
-$COMPOSE restart nginx 2>&1 | tail -3
+# Recreate nginx to pick up nginx.conf changes AND volume mount changes.
+# nginx locks inode at startup, so a file edit alone is not enough.
+# --force-recreate is required when new volumes (e.g. proxy_params.conf)
+# are added to docker-compose.prod.yml.
+$COMPOSE up -d --force-recreate nginx 2>&1 | tail -3
 echo "  Containers restarted"
 echo ""
 

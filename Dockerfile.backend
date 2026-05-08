@@ -21,7 +21,8 @@ ENV PIP_TRUSTED_HOST=$PIP_TRUSTED_HOST
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir asyncpg>=0.29
+# Record requirements hash for deploy.sh change detection (replaces unreliable mtime comparison)
+RUN sha256sum requirements.txt > /app/.requirements_sha256
 
 # Copy all backend source code
 COPY src ./src
