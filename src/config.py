@@ -99,6 +99,16 @@ PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_DIR = Path(os.getenv("VIDEO_OUTPUT_DIR", PROJECT_ROOT / "output"))
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# Video target resolution — single source of truth for the entire pipeline
+TARGET_VIDEO_WIDTH = 1080
+TARGET_VIDEO_HEIGHT = 1920
+TARGET_VIDEO_RESOLUTION = f"{TARGET_VIDEO_WIDTH}x{TARGET_VIDEO_HEIGHT}"
+TARGET_ASPECT_RATIO = "9:16"
+
+# Mock theme configuration — parametrize mock data instead of hard-coding breast pump
+MOCK_PRODUCT_NAME = os.getenv("MOCK_PRODUCT_NAME", "X1")
+MOCK_PRODUCT_CATEGORY = os.getenv("MOCK_PRODUCT_CATEGORY", "wearable breast pump")
+
 # LLM
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

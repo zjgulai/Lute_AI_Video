@@ -1697,6 +1697,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "app.waitingReview": "Pipeline in progress, waiting for next review point...",
     "app.backendDisconnected": "Backend server disconnected, please check if the service is running",
     "app.backendDisconnectShort": "Backend server disconnected",
+    "app.videoDuration": "Video Duration (max)",
 
     // Recommend panel
     "recommend.title": "AI Recommendation",

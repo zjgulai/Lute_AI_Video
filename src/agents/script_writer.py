@@ -7,14 +7,12 @@ Falls back to mock data when API key unavailable.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import structlog
 
-from src.config import DEFAULT_LANGUAGES
-from src.agents.i18n import I18nService
 from src.models import AuditCriterionStatus, AuditReport, Brief, Language, Script, ScriptSegment
 from src.tools.llm_client import llm
-from typing import Any
 
 logger = structlog.get_logger()
 
@@ -46,19 +44,21 @@ class ScriptWriterAgent:
         Returns:
             List of scripts — one per brief per platform per language.
         """
-        languages = target_languages or DEFAULT_LANGUAGES
+        # Multi-language backend support removed (v0.3); locked to English.
+        # target_languages argument is kept for API compatibility.
+        lang_code = "en"
         quality_signals = self._extract_quality_signals(strategy_audit)
         briefs_json = json.dumps(
             [b.model_dump(mode="json") for b in briefs], indent=2, default=str
         )
 
         if self.use_skills:
-            from src.skills.registry import SkillRegistry
             import src.skills.script_writer  # noqa: F401
+            from src.skills.registry import SkillRegistry
             result = await SkillRegistry().execute("script-writer-skill", {
                 "briefs": [b.model_dump(mode="json") for b in briefs],
                 "brand_guidelines": brand_guidelines,
-                "target_languages": languages,
+                "target_languages": [lang_code],
                 "quality_signals": quality_signals,
             })
             if result.success and result.data:
@@ -67,14 +67,9 @@ class ScriptWriterAgent:
                 return [Script(**s) for s in raw_scripts]
             logger.warning("script-writer: skill failed, falling back to LLM", error=result.error)
 
-        all_scripts: list[Script] = []
-        for lang in languages:
-            lang_scripts = await self._run_for_language(
-                briefs, briefs_json, brand_guidelines, quality_signals, lang
-            )
-            all_scripts.extend(lang_scripts)
-
-        return all_scripts
+        return await self._run_for_language(
+            briefs, briefs_json, brand_guidelines, quality_signals, lang_code
+        )
 
     async def _run_for_language(
         self,
@@ -82,12 +77,9 @@ class ScriptWriterAgent:
         briefs_json: str,
         brand_guidelines: dict[str, Any],
         quality_signals: dict[str, Any],
-        lang: str,
+        lang_code: str,
     ) -> list[Script]:
-        """Run script generation for a single language."""
-        i18n = I18nService()
-        lang_code = lang.lower().strip()
-
+        """Run script generation for a single language (locked to EN)."""
         if self.use_mock:
             from src.config import ALLOW_MOCK_MODE
             if not ALLOW_MOCK_MODE:
@@ -97,34 +89,23 @@ class ScriptWriterAgent:
                 )
             return self._mock_scripts(briefs, quality_signals=quality_signals, language_code=lang_code)
 
-        # Resolve translated prompt & template for this language
-        prompt_mod = i18n.get_prompt("script_writer", lang_code)
-        user_template = getattr(prompt_mod, "SCRIPT_WRITER_USER_MESSAGE_TEMPLATE", None)
-        system_prompt = getattr(prompt_mod, "SCRIPT_WRITER_SYSTEM_PROMPT", None)
-
-        # Fallback to English if translations not found
-        if not user_template or not system_prompt:
-            from src.agents.prompts.script_writer_en import (
-                SCRIPT_WRITER_SYSTEM_PROMPT_EN,
-                SCRIPT_WRITER_USER_MESSAGE_TEMPLATE,
-            )
-            user_template = SCRIPT_WRITER_USER_MESSAGE_TEMPLATE
-            system_prompt = SCRIPT_WRITER_SYSTEM_PROMPT_EN
-
-        user_message = user_template.format(
+        from src.agents.prompts.script_writer_en import (
+            SCRIPT_WRITER_SYSTEM_PROMPT_EN,
+            SCRIPT_WRITER_USER_MESSAGE_TEMPLATE,
+        )
+        user_message = SCRIPT_WRITER_USER_MESSAGE_TEMPLATE.format(
             brand_guidelines_json=json.dumps(brand_guidelines, indent=2),
             briefs_json=briefs_json,
             quality_signals_json=json.dumps(quality_signals, indent=2) if quality_signals else "{}",
         )
 
         try:
-            raw_data = await llm.invoke_json(system_prompt, user_message)
-            lang_suffix = lang_code.upper()
+            raw_data = await llm.invoke_json(SCRIPT_WRITER_SYSTEM_PROMPT_EN, user_message)
             scripts: list[Script] = []
             if isinstance(raw_data, list):
                 for raw_script in raw_data:
                     if isinstance(raw_script, dict):
-                        raw_script["id"] = raw_script.get("id", "").rsplit("-", 1)[0] + f"-{lang_suffix}"
+                        raw_script["id"] = raw_script.get("id", "")
                         raw_script["language"] = lang_code
                         try:
                             scripts.append(Script(**raw_script))  # type: ignore[arg-type]
@@ -298,23 +279,13 @@ class ScriptWriterAgent:
     ) -> list[Script]:
         """Generate natural-language mock scripts, one per brief per platform.
 
-        Supports multi-language via I18nService translation templates.
-        Falls back to English if translations not available for the language.
+        Multi-language support removed (v0.3); locked to English.
         """
         lang_suffix = language_code.upper()
-        lang_enum = self._lang_to_enum(language_code)
-
-        # Resolve templates — use translated templates if available
-        i18n = I18nService()
-        translated = i18n.get_translated_templates(language_code)
 
         scripts = []
         for brief in briefs:
-            # Pick template: translated > English built-in > empty
-            if translated and brief.id in translated:
-                template = dict(translated[brief.id])
-            else:
-                template = dict(self._SCRIPT_TEMPLATES.get(brief.id, {}))
+            template = dict(self._SCRIPT_TEMPLATES.get(brief.id, {}))
             if not template:
                 logger.warning("script_writer: no template for brief", brief_id=brief.id)
                 continue
@@ -326,7 +297,7 @@ class ScriptWriterAgent:
                     id=script_id,
                     brief_id=brief.id,
                     platform=platform,
-                    language=lang_enum,
+                    language=Language.EN,
                     total_duration=45.0,
                     segments=[
                         ScriptSegment(
@@ -376,8 +347,3 @@ class ScriptWriterAgent:
             lang=language_code,
         )
         return scripts
-
-    @staticmethod
-    def _lang_to_enum(language_code: str) -> Language:
-        """Convert language code string to Language enum."""
-        return Language.EN
