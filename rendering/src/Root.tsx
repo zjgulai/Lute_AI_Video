@@ -77,7 +77,7 @@ export const RemotionRoot: React.FC = () => {
         width={1080}
         height={1920}
         defaultProps={{
-          data: sampleData,
+          data: { ...sampleData, brand_name: "@BrandName" },
           audioSrc: null,
           backgroundColor: "#FFF5F7",
           primaryColor: "#FF6B9D",

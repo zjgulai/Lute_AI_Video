@@ -6,6 +6,7 @@ import {
   spring,
   Sequence,
   Audio,
+  Video,
 } from "remotion";
 
 interface Shot {
@@ -15,6 +16,7 @@ interface Shot {
   text_overlay?: string;
   voiceover?: string;
   visual?: string;
+  videoSrc?: string;
 }
 
 interface Caption {
@@ -29,6 +31,7 @@ interface VideoCompositionProps {
     total_duration: number;
     shots: Shot[];
     captions?: Caption[];
+    brand_name?: string;
   };
   audioSrc: string | null;
   backgroundColor: string;
@@ -75,31 +78,43 @@ const ShotSegment: React.FC<{
         alignItems: "center",
       }}
     >
-      {/* Placeholder visual — replaced with actual assets in production */}
-      <div
-        style={{
-          width: "80%",
-          height: "60%",
-          backgroundColor: "#FFE4EC",
-          borderRadius: 20,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          opacity: entrance,
-        }}
-      >
-        <p
+      {/* Video asset — if available, render the actual clip */}
+      {shot.videoSrc ? (
+        <Video
+          src={shot.videoSrc}
           style={{
-            color: "#FF6B9D",
-            fontSize: 24,
-            fontWeight: 500,
-            textAlign: "center",
-            padding: 20,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+      ) : (
+        /* Placeholder visual — when no video asset is available */
+        <div
+          style={{
+            width: "80%",
+            height: "60%",
+            backgroundColor: "#FFE4EC",
+            borderRadius: 20,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            opacity: entrance,
           }}
         >
-          {shot.visual || `Shot ${shot.id}`}
-        </p>
-      </div>
+          <p
+            style={{
+              color: "#FF6B9D",
+              fontSize: 24,
+              fontWeight: 500,
+              textAlign: "center",
+              padding: 20,
+            }}
+          >
+            {shot.visual || `Shot ${shot.id}`}
+          </p>
+        </div>
+      )}
 
       {/* Text overlay */}
       {shot.text_overlay && (
@@ -229,18 +244,20 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
       {audioSrc && <Audio src={audioSrc} />}
 
       {/* Brand watermark */}
-      <div
-        style={{
-          position: "absolute",
-          top: 30,
-          right: 30,
-          color: "rgba(255,255,255,0.6)",
-          fontSize: 20,
-          fontWeight: 600,
-        }}
-      >
-        @BrandName
-      </div>
+      {data.brand_name && (
+        <div
+          style={{
+            position: "absolute",
+            top: 30,
+            right: 30,
+            color: "rgba(255,255,255,0.6)",
+            fontSize: 20,
+            fontWeight: 600,
+          }}
+        >
+          {data.brand_name}
+        </div>
+      )}
     </AbsoluteFill>
   );
 };

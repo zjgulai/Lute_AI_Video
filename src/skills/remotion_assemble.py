@@ -94,6 +94,7 @@ class RemotionAssembleSkill(SkillCallable):
             brand_guidelines=brand_guidelines,
             total_duration=total_duration,
             label=output_label,
+            clip_paths=clip_paths,
         )
 
         # Write JSON to disk (for debugging / future Remotion use)
@@ -155,8 +156,6 @@ class RemotionAssembleSkill(SkillCallable):
             logger.warning("remotion_assemble: rendering service unavailable, falling back to local path", url=rendering_url)
 
         output_path = renders_dir / output_filename
-
-        # === PRIORITY 1: Concatenate multiple Seedance clips if available ===
         valid_clips = [
             Path(p) for p in clip_paths
             if p and Path(p).exists() and Path(p).stat().st_size > 1000
@@ -164,48 +163,57 @@ class RemotionAssembleSkill(SkillCallable):
 
         is_stub = False
         render_mode = "remotion"
-        clip_concat_done = False
+        remotion_done = False
 
-        if len(valid_clips) >= 2:
-            logger.info("remotion_assemble: concatenating Seedance clips", count=len(valid_clips), clips=[str(c) for c in valid_clips])
+        # === PRIORITY 1: Remotion unified render (embeds clips via <Video> component) ===
+        renderer = RemotionRenderer()
+        env = renderer.validate_environment()
+        is_remotion_available = env.get("available", False)
+
+        if is_remotion_available:
+            try:
+                output_path = renderer.render(
+                    input_json=render_json_path,
+                    output_filename=output_filename,
+                    blocking=True,
+                )
+                remotion_done = True
+                logger.info(
+                    "remotion_assemble: Remotion render complete",
+                    path=str(output_path),
+                    clips_embedded=len(valid_clips),
+                )
+            except Exception as e:
+                logger.error("remotion_assemble: Remotion render failed", error=str(e))
+                # Fall through to ffmpeg concat fallback below
+        else:
+            logger.warning(
+                "remotion_assemble: Remotion not available",
+                issues=env.get("issues", []),
+            )
+
+        # === PRIORITY 2: ffmpeg clip concat fallback (when Remotion unavailable or failed) ===
+        if not remotion_done and len(valid_clips) >= 2:
+            logger.info(
+                "remotion_assemble: falling back to ffmpeg clip concat",
+                count=len(valid_clips),
+            )
             concat_result = self._concat_clips(valid_clips, output_path)
             if concat_result and concat_result.exists() and concat_result.stat().st_size > 10000:
                 output_path = concat_result
                 render_mode = "clip_concat"
-                clip_concat_done = True
                 logger.info("remotion_assemble: clip concat success", path=str(output_path))
             else:
-                logger.warning("remotion_assemble: clip concat failed, falling back to Remotion")
-
-        # === PRIORITY 2: Remotion render (fallback when no clips or concat failed) ===
-        if not clip_concat_done:
-            renderer = RemotionRenderer()
-            env = renderer.validate_environment()
-            is_remotion_available = env.get("available", False)
-
-            output_path = renderer.output_dir / output_filename
-
-            if is_remotion_available:
-                try:
-                    output_path = renderer.render(
-                        input_json=render_json_path,
-                        output_filename=output_filename,
-                        blocking=True,
-                    )
-                except Exception as e:
-                    logger.error("remotion_assemble: render failed", error=str(e))
-                    is_stub = True
-                    self._write_stub_mp4(output_path, output_label)
-            else:
-                logger.warning(
-                    "remotion_assemble: Remotion not available, writing stub mp4",
-                    issues=env.get("issues", []),
-                )
+                logger.warning("remotion_assemble: clip concat failed, writing stub")
                 is_stub = True
                 self._write_stub_mp4(output_path, output_label)
+        elif not remotion_done:
+            # No clips and Remotion unavailable — write stub
+            is_stub = True
+            self._write_stub_mp4(output_path, output_label)
 
-        # === (Optional) Burn lyrics subtitles into the video ===
-        if not is_stub and lyrics_text and clip_concat_done:
+        # === (Optional) Burn lyrics subtitles into the video (ffmpeg fallback only) ===
+        if not is_stub and not remotion_done and lyrics_text:
             subtitled = self._try_burn_lyrics(
                 video_path=output_path,
                 lyrics_text=lyrics_text,
@@ -320,8 +328,10 @@ class RemotionAssembleSkill(SkillCallable):
         brand_guidelines: dict[str, Any],
         total_duration: float,
         label: str,
+        clip_paths: list[str] | None = None,
     ) -> dict[str, Any]:
         """Produce JSON that matches buildRenderProps() in rendering/src/render.ts."""
+        clip_paths = clip_paths or []
         # Convert shots into the Storyboard.shots schema render.ts expects
         normalized_shots = []
         for i, shot in enumerate(shots):
@@ -385,6 +395,7 @@ class RemotionAssembleSkill(SkillCallable):
             }],
             "audio_plans": [{"segments": audio_segments}] if audio_segments else [],
             "brand_guidelines": brand_guidelines,
+            "clip_paths": clip_paths,
         }
 
     @staticmethod
@@ -396,22 +407,46 @@ class RemotionAssembleSkill(SkillCallable):
 
     # === ffmpeg clip concat + audio mux ===
 
+    @staticmethod
+    def _get_video_dimensions(path: Path) -> tuple[int, int] | None:
+        """Return (width, height) of a video file via ffprobe."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height",
+                    "-of", "csv=s=x:p=0",
+                    str(path),
+                ],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            w, h = result.stdout.strip().split("x")
+            return int(w), int(h)
+        except Exception:
+            return None
+
     def _concat_clips(self, clip_paths: list[Path], output_path: Path) -> Path | None:
         """Concatenate multiple MP4 clips via ffmpeg concat demuxer.
 
-        Uses -c copy for speed (no re-encode). Requires all clips to share
-        the same codec parameters (true for Seedance-generated clips).
-        Falls back to re-encode if copy fails.
+        Uses -c copy for speed when all clips share the same codec and
+        resolution. Falls back to re-encode with forced scale-to-target
+        when copy fails or output dimensions differ from target.
         """
         import subprocess
 
-        try:
+        tw, th = DEFAULT_RESOLUTION
+        target_str = f"{tw}x{th}"
 
+        try:
             # Build concat list file
             concat_list_path = output_path.parent / f"{output_path.stem}_concat.txt"
             with open(concat_list_path, "w") as f:
                 for cp in clip_paths:
                     f.write(f"file '{cp.resolve()}'\n")
+
+            used_reencode = False
 
             # Try stream-copy first (fast, no quality loss)
             try:
@@ -426,13 +461,33 @@ class RemotionAssembleSkill(SkillCallable):
                     capture_output=True, timeout=120, check=True,
                 )
             except subprocess.CalledProcessError:
-                # Stream-copy failed (codec mismatch) — fall back to re-encode
                 logger.warning("remotion_assemble: concat -c copy failed, falling back to re-encode")
+                used_reencode = True
+
+            # If copy succeeded, verify dimensions match target
+            if not used_reencode and output_path.exists():
+                dims = self._get_video_dimensions(output_path)
+                if dims is None or f"{dims[0]}x{dims[1]}" != target_str:
+                    logger.warning(
+                        "remotion_assemble: copy output dimensions %s != target %s, re-encoding",
+                        dims, target_str,
+                    )
+                    used_reencode = True
+                    # Remove the bad copy output before re-encoding
+                    output_path.unlink(missing_ok=True)
+
+            if used_reencode:
+                # Force统一分辨率: scale to fit within target, then pad with black
+                scale_filter = (
+                    f"scale={tw}:{th}:force_original_aspect_ratio=decrease,"
+                    f"pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:black"
+                )
                 subprocess.run(
                     [
                         "ffmpeg", "-y", "-f", "concat", "-safe", "0",
                         "-i", str(concat_list_path),
                         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                        "-vf", scale_filter,
                         "-c:a", "aac", "-b:a", "128k",
                         "-movflags", "+faststart",
                         str(output_path),

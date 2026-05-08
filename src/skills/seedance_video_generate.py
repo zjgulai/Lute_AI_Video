@@ -256,14 +256,30 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             duration_ok = False
             failures.append(f"duration_too_short_{duration:.1f}s")
 
-        # all_ok strictly requires size + header. duration is best-effort.
-        all_ok = size_ok and header_ok and duration_ok
+        # Resolution / aspect-ratio check — reject non-9:16 clips at the source
+        dims = self._get_video_dimensions(local_path)
+        resolution_ok = True
+        if dims:
+            w, h = dims
+            ratio = w / h if h > 0 else 0
+            # Target 9:16 = 0.5625; allow ±5% tolerance
+            if not (0.53 <= ratio <= 0.60):
+                resolution_ok = False
+                failures.append(f"wrong_aspect_ratio_{w}x{h}")
+        else:
+            # ffprobe unavailable — skip resolution check (best-effort)
+            pass
+
+        # all_ok strictly requires size + header + resolution. duration is best-effort.
+        all_ok = size_ok and header_ok and resolution_ok and duration_ok
 
         return {
             "file_exists": True,
             "size_ok": size_ok,
             "header_ok": header_ok,
             "duration_ok": duration_ok,
+            "resolution_ok": resolution_ok,
+            "dimensions": dims,
             "all_ok": all_ok,
             "failures": failures,
             "mode": "real",
@@ -316,6 +332,26 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception):
             pass
         return 0.0
+
+    @staticmethod
+    def _get_video_dimensions(path: Path) -> tuple[int, int] | None:
+        """Return (width, height) of a video file via ffprobe."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height",
+                    "-of", "csv=s=x:p=0",
+                    str(path),
+                ],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            w, h = result.stdout.strip().split("x")
+            return int(w), int(h)
+        except Exception:
+            return None
 
     @staticmethod
     def _extract_last_frame(video_path: str) -> str:

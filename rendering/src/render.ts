@@ -58,13 +58,17 @@ function buildRenderProps(pipelineState: any): any {
   const firstAudio = pipelineState.audio_plans?.[0];
   const brandGuidelines = pipelineState.brand_guidelines || {};
 
-  const shots = (firstStoryboard?.shots || []).map((shot: any) => ({
+  // Map video clips to shots if available
+  const clipPaths: string[] = pipelineState.clip_paths || [];
+
+  const shots = (firstStoryboard?.shots || []).map((shot: any, idx: number) => ({
     id: shot.id,
     start_time: shot.start_time,
     end_time: shot.end_time,
     text_overlay: shot.text_overlay || "",
     voiceover: "",
     visual: shot.visual || `Shot ${shot.id}`,
+    videoSrc: clipPaths[idx] || null,
   }));
 
   // Inject voiceover text from audio plan segments
@@ -96,6 +100,7 @@ function buildRenderProps(pipelineState: any): any {
       total_duration: totalDuration,
       shots,
       captions,
+      brand_name: brandGuidelines.brand_name || "",
     },
     audioSrc: null, // Set to actual audio file path
     backgroundColor: "#FFF5F7",

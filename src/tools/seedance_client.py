@@ -320,7 +320,7 @@ class SeedanceClient:
                 substitutions=_safety_subs,
             )
 
-        aspect_ratio = "16:9"
+        aspect_ratio = "9:16"
 
         # Happy Horse input schema:
         #   prompt, image_urls (single first-frame), reference_image_urls,
