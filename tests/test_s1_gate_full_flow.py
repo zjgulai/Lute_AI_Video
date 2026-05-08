@@ -105,20 +105,13 @@ class TestStepOrderInvariants:
 
 # ── get_gate_state 错误路径 ──
 
-@pytest.fixture
-def isolated_state_dir(tmp_path, monkeypatch):
-    """每个 test 给 PipelineStateManager 一个独立 tmp 目录,避免污染 output/。"""
-    monkeypatch.setattr(PipelineStateManager, "OUTPUT_DIR", tmp_path)
-    # 同时强制不走 PG(测试隔离)
-    monkeypatch.setattr(PipelineStateManager, "__init__", lambda self, use_pg=False: None)
-    monkeypatch.setattr(PipelineStateManager, "use_pg", False, raising=False)
-    yield tmp_path
-
-
 class TestGetGateStateErrors:
     @pytest.mark.asyncio
     async def test_unknown_gate_id_returns_error(self, isolated_state_dir):
-        result = await get_gate_state("any-label", "gate_99_unknown")
+        # 先创建有效 state,再用无效 gate_id 测试 "Unknown gate" 路径
+        sm = PipelineStateManager()
+        await sm.save("valid-label", {"label": "valid-label", "steps": {}})
+        result = await get_gate_state("valid-label", "gate_99_unknown")
         assert "error" in result
         assert "Unknown gate" in result["error"]
         assert result["gate_id"] == "gate_99_unknown"
@@ -255,7 +248,10 @@ class TestGate4FinalAssembly:
 class TestApproveGateErrors:
     @pytest.mark.asyncio
     async def test_unknown_gate_id_returns_error(self, isolated_state_dir):
-        result = await approve_gate("any-label", "gate_99_unknown", ["c1"])
+        # 先创建有效 state,再用无效 gate_id 测试 "Unknown gate" 路径
+        sm = PipelineStateManager()
+        await sm.save("valid-label-2", {"label": "valid-label-2", "steps": {}})
+        result = await approve_gate("valid-label-2", "gate_99_unknown", ["c1"])
         assert "error" in result
         assert "Unknown gate" in result["error"]
 
@@ -291,3 +287,351 @@ class TestRegenerateCandidateErrors:
         })
         result = await regenerate_candidate("regen-test-1", "gate_1_script", "fake-candidate-id")
         assert "error" in result
+
+
+# ── approve_gate 成功路径 ──
+
+class TestApproveGateSuccess:
+    """approve_gate 成功路径：选 candidate → 写入 edited_output → 推进 current_step。"""
+
+    @pytest.mark.asyncio
+    async def test_approve_selects_candidate_and_advances(self, isolated_state_dir):
+        sm = PipelineStateManager()
+        state = {
+            "label": "approve-test-1",
+            "scenario": "s1",
+            "config": {
+                "product_catalog": {"product_name": "Test Product", "usps": ["usp1"]},
+                "brand_guidelines": {},
+            },
+            "steps": {
+                "strategy": {
+                    "output": {
+                        "briefs": [{"topic": "test", "usp_priority": ["usp1"]}]
+                    },
+                    "status": "done",
+                },
+                "scripts": {
+                    "output": [{"text": "original script"}],
+                    "status": "done",
+                },
+            },
+            "current_step": "scripts",
+            "gates": {
+                "gate_1_script": {
+                    "status": "awaiting_approval",
+                    "candidates": [
+                        {
+                            "id": "gate_1_c0",
+                            "variant": "standard",
+                            "data": {"scripts": [{"text": "standard script"}]},
+                            "score": {"overall": 0.8},
+                        },
+                        {
+                            "id": "gate_1_c1",
+                            "variant": "creative",
+                            "data": {"scripts": [{"text": "creative script"}]},
+                            "score": {"overall": 0.9},
+                        },
+                        {
+                            "id": "gate_1_c2",
+                            "variant": "conservative",
+                            "data": {"scripts": [{"text": "conservative script"}]},
+                            "score": {"overall": 0.7},
+                        },
+                    ],
+                    "selected_ids": [],
+                    "approved": False,
+                }
+            },
+        }
+        await sm.save("approve-test-1", state)
+
+        result = await approve_gate("approve-test-1", "gate_1_script", ["gate_1_c1"])
+
+        assert "error" not in result, f"unexpected error: {result.get('error')}"
+        assert result["approved"] is True
+        assert result["selected_ids"] == ["gate_1_c1"]
+        assert result["selected_variants"] == ["creative"]
+        # scripts 的 next step 是 compliance
+        assert result["next_step"] == "compliance"
+
+        # Reload 验证 state 持久化更新
+        reloaded = await sm.load("approve-test-1")
+        assert reloaded is not None
+        gate_state = reloaded["gates"]["gate_1_script"]
+        assert gate_state["approved"] is True
+        assert gate_state["status"] == "approved"
+        assert gate_state["selected_ids"] == ["gate_1_c1"]
+        assert "approved_at" in gate_state
+
+        # 验证 edited_output 被写入 scripts step
+        scripts_step = reloaded["steps"]["scripts"]
+        assert scripts_step["edited"] is True
+        assert scripts_step["gate_selected"] is True
+        assert scripts_step["selected_variants"] == ["creative"]
+        # edited_output 是 candidate.data.scripts 列表
+        assert scripts_step["edited_output"] == [{"text": "creative script"}]
+
+        # 验证 current_step 推进
+        assert reloaded["current_step"] == "compliance"
+
+    @pytest.mark.asyncio
+    async def test_approve_multi_selection_within_limit(self, isolated_state_dir):
+        """gate_1_script 允许 max_selections=2,选 2 个应成功。"""
+        sm = PipelineStateManager()
+        state = {
+            "label": "approve-test-2",
+            "scenario": "s1",
+            "config": {"product_catalog": {"product_name": "Test"}, "brand_guidelines": {}},
+            "steps": {"strategy": {"output": {}, "status": "done"}, "scripts": {"output": [], "status": "done"}},
+            "current_step": "scripts",
+            "gates": {
+                "gate_1_script": {
+                    "status": "awaiting_approval",
+                    "candidates": [
+                        {"id": "c0", "variant": "standard", "data": {"scripts": [{"text": "s"}]}, "score": {"overall": 0.8}},
+                        {"id": "c1", "variant": "creative", "data": {"scripts": [{"text": "c"}]}, "score": {"overall": 0.9}},
+                    ],
+                    "selected_ids": [],
+                    "approved": False,
+                }
+            },
+        }
+        await sm.save("approve-test-2", state)
+
+        result = await approve_gate("approve-test-2", "gate_1_script", ["c0", "c1"])
+        assert "error" not in result
+        assert result["approved"] is True
+        assert result["selected_ids"] == ["c0", "c1"]
+        assert result["selected_variants"] == ["standard", "creative"]
+
+    @pytest.mark.asyncio
+    async def test_approve_exceeds_max_selections_returns_error(self, isolated_state_dir):
+        """gate_1 max_selections=2,选 3 个应返回错误。"""
+        sm = PipelineStateManager()
+        state = {
+            "label": "approve-test-3",
+            "scenario": "s1",
+            "config": {"product_catalog": {"product_name": "Test"}, "brand_guidelines": {}},
+            "steps": {"strategy": {"output": {}, "status": "done"}, "scripts": {"output": [], "status": "done"}},
+            "current_step": "scripts",
+            "gates": {
+                "gate_1_script": {
+                    "status": "awaiting_approval",
+                    "candidates": [
+                        {"id": "c0", "variant": "standard", "data": {}, "score": {"overall": 0.8}},
+                        {"id": "c1", "variant": "creative", "data": {}, "score": {"overall": 0.9}},
+                        {"id": "c2", "variant": "conservative", "data": {}, "score": {"overall": 0.7}},
+                    ],
+                    "selected_ids": [],
+                    "approved": False,
+                }
+            },
+        }
+        await sm.save("approve-test-3", state)
+
+        result = await approve_gate("approve-test-3", "gate_1_script", ["c0", "c1", "c2"])
+        assert "error" in result
+        assert "Maximum 2" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_approve_gate_already_approved_returns_error(self, isolated_state_dir):
+        """重复 approve 已 approved 的 gate 应返回错误。"""
+        sm = PipelineStateManager()
+        state = {
+            "label": "approve-test-4",
+            "scenario": "s1",
+            "config": {"product_catalog": {"product_name": "Test"}, "brand_guidelines": {}},
+            "steps": {},
+            "gates": {
+                "gate_1_script": {
+                    "status": "approved",
+                    "candidates": [],
+                    "selected_ids": ["c0"],
+                    "approved": True,
+                }
+            },
+        }
+        await sm.save("approve-test-4", state)
+
+        result = await approve_gate("approve-test-4", "gate_1_script", ["c0"])
+        assert "error" in result
+        assert "already approved" in result["error"]
+
+
+# ── step_runner gate 暂停/恢复 ──
+
+class TestStepRunnerGatePause:
+    """StepRunner 在 step_by_step 模式下遇到 gate after_step 时正确暂停。"""
+
+    @pytest.mark.asyncio
+    async def test_step_by_step_pauses_at_gate_after_scripts(self, isolated_state_dir):
+        """mode=step_by_step 时,scripts step 完成后应触发 gate_1 暂停。"""
+        from unittest.mock import AsyncMock, patch
+        from src.pipeline.step_runner import StepRunner
+
+        sm = PipelineStateManager()
+        config = {
+            "product_catalog": {"product_name": "Test Product", "usps": ["usp1"]},
+            "target_platforms": ["tiktok"],
+        }
+        step_runner = StepRunner(sm)
+        label = await step_runner.init_state(config=config, mode="step_by_step", scenario="s1")
+
+        # Mock pipeline.run_step 让它返回模拟结果(不触发真实 LLM)
+        mock_result = {
+            "scripts": [
+                {"text": "Mock hook", "segment_type": "hook"},
+                {"text": "Mock CTA", "segment_type": "cta"},
+            ],
+            "count": 2,
+        }
+
+        with patch("src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
+            state = await step_runner.run_step(label, "scripts")
+
+        # 验证 step output 被记录
+        assert state["steps"]["scripts"]["status"] == "done"
+        assert state["steps"]["scripts"]["output"] == mock_result
+
+        # 验证 gate 被触发
+        assert "gates" in state
+        assert "gate_1_script" in state["gates"]
+        gate = state["gates"]["gate_1_script"]
+        assert gate["status"] == "awaiting_approval"
+        assert gate["candidates"] == []
+        assert gate["selections"] == []
+
+        # 验证 current_step 停在 scripts(不推进到下一个)
+        assert state["current_step"] == "scripts"
+        assert state.get("gate_status") == "awaiting_approval"
+
+    @pytest.mark.asyncio
+    async def test_auto_mode_skips_gate_pause(self, isolated_state_dir):
+        """mode=auto 时,scripts step 完成后不应触发 gate 暂停。"""
+        from unittest.mock import AsyncMock, patch
+        from src.pipeline.step_runner import StepRunner
+
+        sm = PipelineStateManager()
+        config = {
+            "product_catalog": {"product_name": "Test Product", "usps": ["usp1"]},
+            "target_platforms": ["tiktok"],
+        }
+        step_runner = StepRunner(sm)
+        label = await step_runner.init_state(config=config, mode="auto", scenario="s1")
+
+        mock_result = {"scripts": [{"text": "auto mode script"}]}
+
+        with patch("src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = mock_result
+            state = await step_runner.run_step(label, "scripts")
+
+        # auto 模式不触发 gate
+        assert "gates" not in state or "gate_1_script" not in state.get("gates", {})
+        # current_step 推进到 compliance
+        assert state["current_step"] == "compliance"
+
+    @pytest.mark.asyncio
+    async def test_resume_pauses_at_pre_step_gate(self, isolated_state_dir):
+        """resume 遇到 awaiting_approval 的 gate 时在 pre-step 检查点暂停。"""
+        from unittest.mock import AsyncMock, patch
+        from src.pipeline.step_runner import StepRunner
+
+        sm = PipelineStateManager()
+        step_runner = StepRunner(sm)
+
+        # 构造一个 state:storyboards 已完成,gate_2_keyframe 处于 awaiting_approval
+        # current_step = keyframe_images,resume 应该检测到 gate_2 暂停
+        state = {
+            "label": "resume-gate-test",
+            "scenario": "s1",
+            "config": {
+                "product_catalog": {"product_name": "Test"},
+                "target_platforms": ["tiktok"],
+                "brand_mode": True,
+            },
+            "steps": {
+                "strategy": {"status": "done", "output": {}},
+                "scripts": {"status": "done", "output": {}},
+                "compliance": {"status": "done", "output": {}},
+                "storyboards": {"status": "done", "output": {}},
+            },
+            "current_step": "keyframe_images",
+            "trace_id": "test-trace",
+            "gates": {
+                "gate_2_keyframe": {
+                    "status": "awaiting_approval",
+                    "candidates": [
+                        {"id": "c0", "variant": "standard", "data": {}, "score": {"overall": 0.8}},
+                    ],
+                    "selected_ids": [],
+                    "approved": False,
+                }
+            },
+        }
+        await sm.save("resume-gate-test", state)
+
+        # resume 应该检测到 gate_2 是 awaiting_approval,在 pre-step 暂停
+        # 不需要 mock pipeline.run_step(因为不会执行到)
+        final_state = await step_runner.resume("resume-gate-test")
+
+        # 验证 resume 在 keyframe_images 处暂停(没有执行 pipeline.run_step)
+        assert final_state["current_step"] == "keyframe_images"
+        # gate 状态保持 awaiting_approval
+        assert final_state["gates"]["gate_2_keyframe"]["status"] == "awaiting_approval"
+
+    @pytest.mark.asyncio
+    async def test_resume_pauses_at_post_step_gate(self, isolated_state_dir):
+        """resume 执行完 step 后,如果 step 触发了 gate,在 post-step 检查点暂停。"""
+        from unittest.mock import AsyncMock, patch
+        from src.pipeline.step_runner import StepRunner
+
+        sm = PipelineStateManager()
+        step_runner = StepRunner(sm)
+
+        # 用 init_state 创建完整 state(包含所有 steps),再修改需要覆盖的部分
+        config = {
+            "product_catalog": {"product_name": "Test"},
+            "target_platforms": ["tiktok"],
+            "brand_mode": True,
+        }
+        label = await step_runner.init_state(config=config, mode="step_by_step", scenario="s1")
+
+        # 修改 state:strategy/scripts/compliance 已完成,gate_1 已 approved
+        state = await sm.load(label)
+        state["steps"]["strategy"]["status"] = "done"
+        state["steps"]["strategy"]["output"] = {}
+        state["steps"]["scripts"]["status"] = "done"
+        state["steps"]["scripts"]["output"] = {}
+        state["steps"]["scripts"]["edited"] = True
+        state["steps"]["scripts"]["edited_output"] = []
+        state["steps"]["compliance"]["status"] = "done"
+        state["steps"]["compliance"]["output"] = {}
+        state["current_step"] = "storyboards"
+        state["gates"] = {
+            "gate_1_script": {
+                "status": "approved",
+                "candidates": [],
+                "selected_ids": ["c0"],
+                "approved": True,
+            }
+        }
+        await sm.save(label, state)
+
+        # 用 step_by_step 模式 resume(从 storyboards 开始)
+        # storyboards → keyframe_images(gate_2) → 暂停
+        with patch("src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"storyboards": "mock"}
+            final_state = await step_runner.resume(label)
+
+        # 验证 storyboards 和 keyframe_images 都被执行了
+        assert mock_run.call_count == 2
+        assert mock_run.call_args_list[0][0][0] == "storyboards"
+        assert mock_run.call_args_list[1][0][0] == "keyframe_images"
+
+        # 验证在 keyframe_images 处暂停(gate_2 触发)
+        assert final_state["current_step"] == "keyframe_images"
+        assert "gate_2_keyframe" in final_state.get("gates", {})
+        assert final_state["gates"]["gate_2_keyframe"]["status"] == "awaiting_approval"

@@ -40,6 +40,17 @@ def _reset_asyncpg_pool():
 
 
 @pytest.fixture
+def isolated_state_dir(tmp_path, monkeypatch):
+    """每个 test 给 PipelineStateManager 一个独立 tmp 目录,避免污染 output/。"""
+    from src.pipeline.state_manager import PipelineStateManager
+
+    monkeypatch.setattr(PipelineStateManager, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(PipelineStateManager, "__init__", lambda self, use_pg=False: None)
+    monkeypatch.setattr(PipelineStateManager, "use_pg", False, raising=False)
+    yield tmp_path
+
+
+@pytest.fixture
 def mock_llm():
     """Mock LLM client that returns controlled JSON responses."""
     mock = MagicMock()

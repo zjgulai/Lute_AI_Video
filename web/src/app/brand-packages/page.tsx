@@ -22,6 +22,7 @@ import {
   CheckCircle,
 } from "@phosphor-icons/react";
 import AssetCard, { AssetItem, AssetType, AssetSource } from "@/components/AssetCard";
+import AssetUploader from "@/components/AssetUploader";
 
 // ── Category Tree ──
 
@@ -271,6 +272,7 @@ export default function BrandPackagesPage() {
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showUploader, setShowUploader] = useState(false);
 
   const fetchAllAssets = useCallback(async () => {
     setLoading(true);
@@ -416,7 +418,34 @@ export default function BrandPackagesPage() {
               <p className="text-[12px] text-[var(--text-body)] mt-0.5">{t("brand.searchPlaceholder")}</p>
             </div>
           </div>
+
+          {/* Upload toggle */}
+          {!isDemoMode() && (
+            <button
+              onClick={() => setShowUploader((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
+                showUploader
+                  ? "bg-[rgba(215,92,112,0.10)] border-[var(--fortune-red)] text-[var(--fortune-red)]"
+                  : "bg-[var(--bg-card)] border-[rgba(215,92,112,0.18)] text-[var(--text-body)] hover:border-[var(--border-default)]"
+              }`}
+            >
+              <UploadSimple size={14} weight="fill" />
+              {showUploader ? t("common.close") || "关闭" : t("upload.title") || "上传"}
+            </button>
+          )}
         </div>
+
+        {/* Upload panel */}
+        {showUploader && !isDemoMode() && (
+          <div className="mb-6">
+            <AssetUploader
+              onUpload={() => {
+                fetchAllAssets();
+                setShowUploader(false);
+              }}
+            />
+          </div>
+        )}
 
         {/* Search + Source Filter */}
         <div className="flex gap-3 mb-6">

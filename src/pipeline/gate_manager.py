@@ -908,6 +908,34 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
             **variant_params,
         }
 
+    if candidate_step == "remix_script":
+        video_analysis = _extract_step_input(state, "video_analysis") or {}
+        product = config.get("product", config.get("product_catalog", {}))
+        return {
+            "analysis": video_analysis,
+            "product": product,
+            "brief_id": config.get("brief_id", ""),
+            "influencer_name": config.get("influencer_name", "Influencer"),
+            "product_context": {
+                "target_platforms": config.get("target_platforms", ["tiktok"]),
+                "target_languages": target_languages,
+            },
+            "variant": variant_name,
+            **variant_params,
+        }
+
+    if candidate_step == "vlog_strategy":
+        product_catalog = config.get("product_catalog", config.get("product_sku", {}))
+        return {
+            "product_catalog": product_catalog,
+            "brand_guidelines": brand_guidelines,
+            "content_scenario": "brand_vlog",
+            "target_platforms": config.get("target_platforms", ["tiktok", "shopify"]),
+            "target_languages": target_languages,
+            "variant": variant_name,
+            **variant_params,
+        }
+
     if candidate_step == "assemble_final":
         return {
             "input_data": _extract_step_input(state, "assemble_final") or {},

@@ -176,12 +176,12 @@ export default function Home() {
     workflowLabel, setWorkflowLabel,
     workflowState, setWorkflowState,
     showWorkflow, setShowWorkflow,
+    currentStepIdx, setCurrentStepIdx,
+    showSteps, setShowSteps,
   } = usePipelineStore();
 
   const {
     currentGate, setCurrentGate,
-    currentStepIdx, setCurrentStepIdx,
-    showSteps,
     showStageProgress, setShowStageProgress,
     compareVersions, setCompareVersions,
     showCompare, setShowCompare,
@@ -226,6 +226,7 @@ export default function Home() {
     { gateId: "gate_3_clips", gateLabel: t("gate.selectClips"), maxSelections: 1 },
     { gateId: "gate_4_final", gateLabel: t("gate.finalReview"), maxSelections: 1 },
   ];
+  const currentGateDef = currentGate >= 1 ? GATE_SEQUENCE[currentGate - 1] : null;
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -907,9 +908,9 @@ export default function Home() {
                 <GatePanel
                   key={`gate-${currentGate}`}
                   label={workflowLabel}
-                  gateId={GATE_SEQUENCE[currentGate - 1]?.gateId || "gate_1_script"}
-                  gateLabel={GATE_SEQUENCE[currentGate - 1]?.gateLabel || ""}
-                  maxSelections={GATE_SEQUENCE[currentGate - 1]?.maxSelections || 1}
+                  gateId={currentGateDef?.gateId || "gate_1_script"}
+                  gateLabel={currentGateDef?.gateLabel || ""}
+                  maxSelections={currentGateDef?.maxSelections || 1}
                   currentStep={currentGate}
                   totalSteps={GATE_SEQUENCE.length}
                   gateSequence={GATE_SEQUENCE}

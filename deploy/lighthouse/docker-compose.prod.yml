@@ -102,6 +102,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./proxy_params.conf:/etc/nginx/proxy_params.conf:ro
       - ./server.crt:/etc/nginx/ssl/server.crt:ro
       - ./server.key:/etc/nginx/ssl/server.key:ro
       - backend_output:/var/www/media:ro
