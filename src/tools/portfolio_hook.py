@@ -11,9 +11,94 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
+import subprocess
+from pathlib import Path
 from typing import Any
 
+from src.config import OUTPUT_DIR
+
 logger = logging.getLogger(__name__)
+
+_MEDIA_EXTS = {".mp4", ".mov", ".webm"}
+_THUMB_CATEGORIES = [
+    "renders",
+    "seedance",
+    "fast_mode",
+    "keyframes",
+    "demo",
+    "quality-test",
+]
+_POSTER_DIR = OUTPUT_DIR / "thumbnails" / "portfolio_posters"
+
+
+def _poster_path(rel: str) -> Path:
+    flat = rel.replace("/", "__").rsplit(".", 1)[0] + ".jpg"
+    return _POSTER_DIR / flat
+
+
+def _extract_poster(source: Path, dest: Path) -> bool:
+    """Use ffmpeg to grab a single frame at 2 s, scale to 480 px wide."""
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss", "00:00:02",
+                "-i", str(source),
+                "-vframes", "1",
+                "-vf", "scale=480:-2",
+                "-q:v", "3",
+                str(dest),
+            ],
+            capture_output=True,
+            timeout=30,
+            check=True,
+        )
+        return dest.is_file()
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError):
+        return False
+
+
+def _ensure_thumbnails() -> dict[str, int]:
+    """Generate missing poster JPEGs for video files in OUTPUT_DIR.
+
+    Called automatically after portfolio index rebuild so new pipeline outputs
+    always have a visible poster in gallery UIs.
+    """
+    stats = {"created": 0, "skipped": 0, "failed": 0}
+    if not shutil.which("ffmpeg"):
+        logger.warning("thumbnail: ffmpeg not found, skipping poster generation")
+        return stats
+
+    _POSTER_DIR.mkdir(parents=True, exist_ok=True)
+
+    for cat in _THUMB_CATEGORIES:
+        subdir = OUTPUT_DIR / cat
+        if not subdir.is_dir():
+            continue
+        for path in subdir.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in _MEDIA_EXTS:
+                continue
+            rel = path.relative_to(OUTPUT_DIR)
+            poster = _poster_path(str(rel))
+            src_mtime = path.stat().st_mtime
+            if poster.is_file() and poster.stat().st_mtime >= src_mtime:
+                stats["skipped"] += 1
+                continue
+            if _extract_poster(path, poster):
+                stats["created"] += 1
+            else:
+                stats["failed"] += 1
+
+    if stats["created"] or stats["failed"]:
+        logger.info(
+            "thumbnail: created=%d skipped=%d failed=%d",
+            stats["created"],
+            stats["skipped"],
+            stats["failed"],
+        )
+    return stats
 
 
 async def rebuild_portfolio_listener(payload: dict[str, Any]) -> None:
@@ -36,6 +121,12 @@ async def rebuild_portfolio_listener(payload: dict[str, Any]) -> None:
     except Exception as exc:
         # 决不让 portfolio 失败拖累管线 —— 仅记录,不抛出
         logger.warning("portfolio: auto-rebuild failed: %s", exc)
+
+    # Generate posters for any new videos so gallery UIs never show black screen.
+    try:
+        await asyncio.to_thread(_ensure_thumbnails)
+    except Exception as exc:
+        logger.warning("thumbnail: auto-generation failed: %s", exc)
 
 
 def register_portfolio_hook() -> None:

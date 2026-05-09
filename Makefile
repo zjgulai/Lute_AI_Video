@@ -42,6 +42,7 @@ ci: lint test
 
 portfolio:
 	python scripts/portfolio_index.py
+	python scripts/generate_portfolio_thumbnails.py
 
 # rsync 本地 output/ 到 Lighthouse 服务器 backend_output volume。
 # rsync 天然增量:只传改动文件,docker cp -rn no-clobber 不覆盖已上传同名。
