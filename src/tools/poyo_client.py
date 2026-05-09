@@ -108,7 +108,8 @@ class PoyoClient:
 
         logger.info("poyo: submitted", task_id=task_id, model=model)
         # Store input for CM rejection logging — bounded to prevent unbounded growth
-        self._task_inputs[task_id] = input_payload
+        # Include model alongside input_payload so poll() can surface it on failure.
+        self._task_inputs[task_id] = {**input_payload, "_model": model}
         if len(self._task_inputs) > 100:
             # Evict oldest entries (arbitrary — just need a bound)
             oldest = next(iter(self._task_inputs))
@@ -151,7 +152,7 @@ class PoyoClient:
                         original_prompt=input_payload.get("prompt", ""),
                         error_msg=err_msg,
                         task_id=task_id,
-                        model=model,
+                        model=input_payload.get("_model", "unknown"),
                     )
                 raise RuntimeError(f"poyo task failed: {err_msg}")
 

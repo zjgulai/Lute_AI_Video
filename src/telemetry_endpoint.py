@@ -22,7 +22,7 @@ except ImportError:
 
 from src.telemetry import error_collector, pipeline_metrics
 
-router = cast("APIRouter", _APIRouter(prefix="/telemetry", tags=["telemetry"])) if HAS_FASTAPI else None  # type: ignore[valid-type]
+router = cast(Any, _APIRouter(prefix="/telemetry", tags=["telemetry"])) if HAS_FASTAPI else None
 
 if HAS_FASTAPI and router is not None:
     _router = router
