@@ -411,7 +411,15 @@ class AuditorAgent:
             )
         )
 
-        overall_score = round(sum(c.score for c in criteria) / len(criteria), 2)
+        # P1: New criteria (Information Density, Emotional Arc) are observation-only
+        # for backward compatibility — included in criteria list for visibility,
+        # but not in overall_score calculation until PR-2 calibration.
+        _core_names = {
+            "Hook Strength", "Segment Completeness", "Duration Fit",
+            "Voiceover Clarity", "Brand Voice", "CTA Clarity", "Compliance Pre-check",
+        }
+        core_criteria = [c for c in criteria if c.name in _core_names]
+        overall_score = round(sum(c.score for c in core_criteria) / len(core_criteria), 2) if core_criteria else 0.5
         return AuditReport(
             audit_id=f"AUDIT-SCRIPT-{script.id}",
             checkpoint=AuditCheckpoint.SCRIPT,
@@ -736,8 +744,6 @@ class AuditorAgent:
 
         Returns dict with score, observation, recommendation.
         """
-        import re
-
         # Map segment types to expected emotional valence
         VALENCE_MAP = {
             "hook": "attention",
@@ -761,10 +767,15 @@ class AuditorAgent:
             "transition": "neutral",
         }
 
+        def _get_field(seg: Any, key: str) -> str:
+            if isinstance(seg, dict):
+                return seg.get(key, "")
+            return getattr(seg, key, "") or ""
+
         # Build observed valence sequence
         observed: list[str] = []
         for seg in segments:
-            st = getattr(seg, "segment_type", "")
+            st = _get_field(seg, "segment_type")
             val = VALENCE_MAP.get(st, "neutral")
             if val != "neutral":
                 observed.append(val)
@@ -800,11 +811,11 @@ class AuditorAgent:
             observations.append("missing negative→positive arc")
 
         # Check 2: urgency at CTA
-        cta_segments = [seg for seg in segments if getattr(seg, "segment_type", "") == "cta"]
+        cta_segments = [seg for seg in segments if _get_field(seg, "segment_type") == "cta"]
         urgency_words = ["now", "today", "immediately", "click", "get", "buy", "order", "limited", "hurry"]
         has_urgency = False
         for cta in cta_segments:
-            text = (getattr(cta, "voiceover", "") or "").lower()
+            text = _get_field(cta, "voiceover").lower()
             if any(w in text for w in urgency_words):
                 has_urgency = True
                 break
@@ -815,11 +826,11 @@ class AuditorAgent:
             observations.append("CTA lacks urgency — add 'now', 'today', or 'click'")
 
         # Check 3: hook attention signal
-        hook_segments = [seg for seg in segments if getattr(seg, "segment_type", "") == "hook"]
+        hook_segments = [seg for seg in segments if _get_field(seg, "segment_type") == "hook"]
         attention_words = ["what", "how", "why", "stop", "wait", "mistake", "never", "secret", "truth"]
         has_attention = False
         for h in hook_segments:
-            text = (getattr(h, "voiceover", "") or "").lower()
+            text = _get_field(h, "voiceover").lower()
             if any(w in text for w in attention_words):
                 has_attention = True
                 break

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,8 @@ class SkillMonitor:
     def __init__(self, output_dir: Path | None = None):
         self.output_dir = output_dir or OUTPUT_DIR / "skill_monitoring"
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._log_path = self.output_dir / "executions.jsonl"
+        # Per-process file to avoid multi-worker write contention
+        self._log_path = self.output_dir / f"executions_{os.getpid()}.jsonl"
         # In-memory counters for current session
         self._session_counts: dict[str, dict[str, int]] = {}
 
@@ -107,11 +109,11 @@ class SkillMonitor:
         fallback = session.get("fallback", 0)
         errors = session.get("errors", 0)
 
-        # Read from disk for latency stats
+        # Read from disk for latency stats (all per-process files)
         durations: list[float] = []
         try:
-            if self._log_path.exists():
-                with open(self._log_path) as f:
+            for log_file in self.output_dir.glob("executions_*.jsonl"):
+                with open(log_file) as f:
                     for line in f:
                         line = line.strip()
                         if not line:

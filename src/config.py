@@ -175,3 +175,30 @@ POYO_TTS_MODEL: str = os.environ.get("POYO_TTS_MODEL", "generate-music")
 # ── Runtime mode ──
 ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "development")
 ALLOW_MOCK_MODE: bool = os.environ.get("ALLOW_MOCK_MODE", "").lower() in ("1", "true", "yes")
+
+# ── Quality checks mode ──
+# off: disable all new quality checks (backward compatible)
+# observe: run checks and record results in metadata, but do not block pipeline
+# enforce: run checks and block pipeline on failure
+_quality_mode = os.environ.get("QUALITY_MODE", "observe").lower()
+QUALITY_MODE: str = _quality_mode if _quality_mode in ("off", "observe", "enforce") else "observe"
+
+# ═══════════════════════════════════════════════════════════
+# Quality check thresholds (all configurable via env vars)
+# ═══════════════════════════════════════════════════════════
+
+# Frame variance (seedance_video_generate._check_frame_variance)
+FRAME_VARIANCE_MSE_THRESHOLD = float(os.environ.get("FRAME_VARIANCE_MSE_THRESHOLD", "50.0"))
+FRAME_VARIANCE_BRIGHTNESS_THRESHOLD = float(os.environ.get("FRAME_VARIANCE_BRIGHTNESS_THRESHOLD", "20.0"))
+
+# AV sync (remotion_assemble._check_av_sync)
+AV_SYNC_MAX_ABS_DIFF = float(os.environ.get("AV_SYNC_MAX_ABS_DIFF", "0.5"))
+AV_SYNC_MAX_REL_DIFF = float(os.environ.get("AV_SYNC_MAX_REL_DIFF", "0.05"))
+
+# Video specs (media_quality_audit._audit_final_video)
+VIDEO_MIN_FPS = float(os.environ.get("VIDEO_MIN_FPS", "25.0"))
+VIDEO_CRITICAL_FPS = float(os.environ.get("VIDEO_CRITICAL_FPS", "20.0"))
+VIDEO_MIN_BITRATE_KBPS = float(os.environ.get("VIDEO_MIN_BITRATE_KBPS", "1500.0"))
+VIDEO_CRITICAL_BITRATE_KBPS = float(os.environ.get("VIDEO_CRITICAL_BITRATE_KBPS", "1000.0"))
+VIDEO_ASPECT_RATIO_MIN = float(os.environ.get("VIDEO_ASPECT_RATIO_MIN", "0.53"))
+VIDEO_ASPECT_RATIO_MAX = float(os.environ.get("VIDEO_ASPECT_RATIO_MAX", "0.60"))

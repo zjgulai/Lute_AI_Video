@@ -34,6 +34,11 @@ from typing import Any
 
 import structlog
 
+from src.config import (
+    FRAME_VARIANCE_BRIGHTNESS_THRESHOLD,
+    FRAME_VARIANCE_MSE_THRESHOLD,
+    QUALITY_MODE,
+)
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -273,11 +278,14 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         # Frame variance check — detect static images and black screens
         variance_result = self._check_frame_variance(local_path)
         variance_ok = variance_result["variance_ok"]
-        if not variance_ok:
+        if not variance_ok and QUALITY_MODE == "enforce":
             failures.extend(variance_result["failures"])
 
-        # all_ok strictly requires size + header + resolution + variance. duration is best-effort.
-        all_ok = size_ok and header_ok and resolution_ok and duration_ok and variance_ok
+        # all_ok: enforce mode requires variance_ok; observe/off mode keeps original logic
+        if QUALITY_MODE == "enforce":
+            all_ok = size_ok and header_ok and resolution_ok and duration_ok and variance_ok
+        else:
+            all_ok = size_ok and header_ok and resolution_ok and duration_ok
 
         return {
             "file_exists": True,
@@ -369,9 +377,9 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         then computes MSE between pairs. Low MSE across all pairs indicates
         a static image; very low average brightness indicates a black screen.
 
-        Thresholds tuned for 32x32 grayscale (0-255 range):
-        - MSE < 50  → frames are nearly identical (static image)
-        - mean brightness < 20 → black screen
+        Thresholds (from config, overridable via env var):
+        - MSE < FRAME_VARIANCE_MSE_THRESHOLD → static image
+        - mean brightness < FRAME_VARIANCE_BRIGHTNESS_THRESHOLD → black screen
 
         Returns:
             {"variance_ok": bool, "mse_start_mid": float, "mse_mid_end": float,
@@ -380,6 +388,9 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         import subprocess
         import tempfile
         import struct
+        import time
+
+        t0 = time.perf_counter()
 
         if not path.exists() or path.stat().st_size < 1000:
             return {"variance_ok": True, "failures": []}  # skip for tiny files
@@ -432,16 +443,22 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         variance_ok = True
 
         # Static image detection: all pairwise MSE below threshold
-        STATIC_MSE_THRESHOLD = 50.0
-        if mse_start_mid < STATIC_MSE_THRESHOLD and mse_mid_end < STATIC_MSE_THRESHOLD:
+        if mse_start_mid < FRAME_VARIANCE_MSE_THRESHOLD and mse_mid_end < FRAME_VARIANCE_MSE_THRESHOLD:
             variance_ok = False
             failures.append(f"static_image_mse_{mse_start_mid:.1f}_{mse_mid_end:.1f}")
 
         # Black screen detection: very low average brightness
-        BLACK_BRIGHTNESS_THRESHOLD = 20.0
-        if mean_brightness < BLACK_BRIGHTNESS_THRESHOLD:
+        if mean_brightness < FRAME_VARIANCE_BRIGHTNESS_THRESHOLD:
             variance_ok = False
             failures.append(f"black_screen_brightness_{mean_brightness:.1f}")
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        logger.debug(
+            "frame_variance_check",
+            duration_ms=round(elapsed_ms, 1),
+            path=str(path),
+            variance_ok=variance_ok,
+        )
 
         return {
             "variance_ok": variance_ok,

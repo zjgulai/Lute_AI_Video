@@ -17,6 +17,12 @@ def auth_headers() -> dict[str, str]:
     return {"X-API-Key": os.environ["API_KEY"]}
 
 
+@pytest.fixture
+def auditor():
+    from src.agents.auditor import AuditorAgent
+    return AuditorAgent()
+
+
 @pytest.fixture(autouse=True)
 def _reset_asyncpg_pool():
     """每个 test 前重置 asyncpg pool 单例。
@@ -182,3 +188,57 @@ def sample_script(sample_brief):
         hashtags=["#breastpumping", "#workingmom", "#wearablepump"],
         cta_text="Shop the link in bio",
     )
+
+
+@pytest.fixture
+def sample_good_script(sample_script):
+    """Alias for sample_script — same structure, used by auditor quality tests."""
+    return sample_script
+
+
+@pytest.fixture(scope="session")
+def sample_videos(tmp_path_factory):
+    """Generate sample videos for quality-check tests via ffmpeg."""
+    out = tmp_path_factory.mktemp("videos")
+    import subprocess
+
+    videos = {}
+
+    # Black screen video (3s, 720x1280)
+    black = out / "black.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=720x1280:d=3",
+         "-pix_fmt", "yuv420p", "-an", str(black)],
+        capture_output=True, check=True,
+    )
+    videos["black"] = black
+
+    # Truly static video (3s, all frames identical pure-red)
+    static = out / "static.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=red:s=720x1280:d=3",
+         "-pix_fmt", "yuv420p", "-an", str(static)],
+        capture_output=True, check=True,
+    )
+    videos["static"] = static
+
+    # Normal motion video (3s, 30fps)
+    normal = out / "normal.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=duration=3:size=720x1280:rate=30",
+         "-pix_fmt", "yuv420p", "-an", str(normal)],
+        capture_output=True, check=True,
+    )
+    videos["normal"] = normal
+
+    # Video with audio track (for av_sync test)
+    with_audio = out / "with_audio.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=duration=3:size=720x1280:rate=30",
+         "-f", "lavfi", "-i", "sine=frequency=1000:duration=3",
+         "-pix_fmt", "yuv420p", "-shortest", str(with_audio)],
+        capture_output=True, check=True,
+    )
+    videos["with_audio"] = with_audio
+
+    return videos

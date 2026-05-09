@@ -48,6 +48,14 @@ from typing import Any
 
 import structlog
 
+from src.config import (
+    VIDEO_ASPECT_RATIO_MAX,
+    VIDEO_ASPECT_RATIO_MIN,
+    VIDEO_CRITICAL_BITRATE_KBPS,
+    VIDEO_CRITICAL_FPS,
+    VIDEO_MIN_BITRATE_KBPS,
+    VIDEO_MIN_FPS,
+)
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -227,7 +235,7 @@ class MediaQualityAuditSkill(SkillCallable):
             w, h = specs["width"], specs["height"]
             ratio = w / h if h > 0 else 0
             # Target: 1080x1920 (9:16 = 0.5625)
-            if not (0.53 <= ratio <= 0.60):
+            if not (VIDEO_ASPECT_RATIO_MIN <= ratio <= VIDEO_ASPECT_RATIO_MAX):
                 spec_score *= 0.5
                 spec_issues.append(f"aspect ratio {w}x{h} not 9:16")
                 spec_recs.append("Force output to 1080x1920 in remotion_assemble")
@@ -235,25 +243,25 @@ class MediaQualityAuditSkill(SkillCallable):
                 spec_score *= 0.8
                 spec_issues.append(f"resolution {w}x{h} below 1080x1920 target")
 
-            # FPS: target 30fps, minimum 25fps
+            # FPS
             fps = specs["fps"]
             if fps > 0:
-                if fps < 20:
+                if fps < VIDEO_CRITICAL_FPS:
                     spec_score *= 0.5
-                    spec_issues.append(f"fps {fps:.1f} too low (<20)")
+                    spec_issues.append(f"fps {fps:.1f} too low (<{VIDEO_CRITICAL_FPS:.0f})")
                     spec_recs.append("Re-encode with -r 30")
-                elif fps < 25:
+                elif fps < VIDEO_MIN_FPS:
                     spec_score *= 0.8
                     spec_issues.append(f"fps {fps:.1f} below target 30")
 
-            # Bitrate: target >2Mbps, minimum >1Mbps
+            # Bitrate
             bitrate_kbps = specs["bitrate_kbps"]
             if bitrate_kbps > 0:
-                if bitrate_kbps < 1000:
+                if bitrate_kbps < VIDEO_CRITICAL_BITRATE_KBPS:
                     spec_score *= 0.5
-                    spec_issues.append(f"bitrate {bitrate_kbps:.0f}kbps too low (<1Mbps)")
+                    spec_issues.append(f"bitrate {bitrate_kbps:.0f}kbps too low (<{VIDEO_CRITICAL_BITRATE_KBPS:.0f}kbps)")
                     spec_recs.append("Increase CRF quality or use -b:v 2M")
-                elif bitrate_kbps < 1500:
+                elif bitrate_kbps < VIDEO_MIN_BITRATE_KBPS:
                     spec_score *= 0.8
                     spec_issues.append(f"bitrate {bitrate_kbps:.0f}kbps below target 2Mbps")
 

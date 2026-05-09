@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,8 @@ class ABTracker:
     def __init__(self, output_dir: Path | None = None):
         self.output_dir = output_dir or OUTPUT_DIR / "ab_tracking"
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._log_path = self.output_dir / "gate_choices.jsonl"
+        # Per-process file to avoid multi-worker write contention
+        self._log_path = self.output_dir / f"gate_choices_{os.getpid()}.jsonl"
 
     def record_gate_choice(
         self,
@@ -124,21 +126,21 @@ class ABTracker:
 
     def get_records(self, pipeline_label: str | None = None) -> list[dict[str, Any]]:
         """Read all tracking records, optionally filtered by pipeline label."""
-        if not self._log_path.exists():
-            return []
         records = []
         try:
-            with open(self._log_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                        if pipeline_label is None or rec.get("pipeline_label") == pipeline_label:
-                            records.append(rec)
-                    except json.JSONDecodeError:
-                        continue
+            # Read from all per-process files
+            for log_file in self.output_dir.glob("gate_choices_*.jsonl"):
+                with open(log_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                            if pipeline_label is None or rec.get("pipeline_label") == pipeline_label:
+                                records.append(rec)
+                        except json.JSONDecodeError:
+                            continue
         except Exception as e:
             logger.warning("ab_tracker: failed to read records", error=str(e))
         return records

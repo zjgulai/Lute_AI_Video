@@ -626,7 +626,14 @@ strategy → strategy_audit → [Human Review #1] → script → script_audit �
 
 **Lazy import policy:** All `src/quality/` modules import heavy libraries (transformers, torch, opencv, mediapipe, deepface, pyiqa, scenedetect) inside try/except at call time. If unavailable, the check returns `None` or a skipped result with a warning log. This keeps the Docker image small while allowing production operators to opt-in to advanced checks.
 
-**Thresholds:** All quality thresholds are module-level constants (e.g. `CLIP_ALIGN_STRONG = 0.28`, `BLUR_THRESHOLD = 100.0`). The `dynamic_thresholds.py` module can suggest adjustments based on A/B test data from `ab_tracker.py`.
+**Thresholds:** P0 technical-check thresholds (frame variance, AV sync, video specs) are configurable via environment variables with sensible defaults:
+- `FRAME_VARIANCE_MSE_THRESHOLD` (default 50.0) / `FRAME_VARIANCE_BRIGHTNESS_THRESHOLD` (default 20.0)
+- `AV_SYNC_MAX_ABS_DIFF` (default 0.5s) / `AV_SYNC_MAX_REL_DIFF` (default 5%)
+- `VIDEO_MIN_FPS` (default 25.0) / `VIDEO_CRITICAL_FPS` (default 20.0)
+- `VIDEO_MIN_BITRATE_KBPS` (default 1500) / `VIDEO_CRITICAL_BITRATE_KBPS` (default 1000)
+- `VIDEO_ASPECT_RATIO_MIN` (default 0.53) / `VIDEO_ASPECT_RATIO_MAX` (default 0.60)
+
+ML-module thresholds (e.g. `CLIP_ALIGN_STRONG = 0.28`, `BLUR_THRESHOLD = 100.0`) remain module-level constants. The `dynamic_thresholds.py` module can suggest adjustments based on A/B test data from `ab_tracker.py`.
 
 ### API Key Isolation
 
