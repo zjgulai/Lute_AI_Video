@@ -54,7 +54,7 @@ MIN_FINAL_DURATION = 5.0              # < 5s = unusable
 DEFAULT_FPS = 30
 DEFAULT_RESOLUTION = (1080, 1920)
 
-MP4_FTYP_BRANDS = [b"isom", b"iso2", b"avc1", b"mp41", b"mp42", b"M4V "]
+MP4_FTYP_BRANDS = [b"isom", b"iso2", b"avc1", b"mp41", b"mp42", b"M4V ", b"M4A "]
 
 
 class RemotionAssembleSkill(SkillCallable):

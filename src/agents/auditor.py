@@ -68,6 +68,29 @@ class AuditorAgent:
     Future: optional LLM-powered semantic audit for nuanced checks.
     """
 
+    # Segment type → emotional valence mapping for _score_emotional_arc
+    _VALENCE_MAP: dict[str, str] = {
+        "hook": "attention",
+        "problem": "negative",
+        "pain_point": "negative",
+        "frustration": "negative",
+        "agitation": "negative",
+        "solution": "positive",
+        "benefit": "positive",
+        "proof": "positive",
+        "trust_building": "positive",
+        "social_proof": "positive",
+        "testimonial": "positive",
+        "usp": "positive",
+        "guarantee": "positive",
+        "authority": "positive",
+        "scarcity": "urgent",
+        "cta": "urgent",
+        "urgency": "urgent",
+        "final_hook": "urgent",
+        "transition": "neutral",
+    }
+
     # ═══ Async API (called by pipeline nodes) ═══
 
     async def run_strategy_audit(self, calendar, target_platforms, brand_guidelines=None):
@@ -744,28 +767,6 @@ class AuditorAgent:
 
         Returns dict with score, observation, recommendation.
         """
-        # Map segment types to expected emotional valence
-        VALENCE_MAP = {
-            "hook": "attention",
-            "problem": "negative",
-            "pain_point": "negative",
-            "frustration": "negative",
-            "agitation": "negative",
-            "solution": "positive",
-            "benefit": "positive",
-            "proof": "positive",
-            "trust_building": "positive",
-            "social_proof": "positive",
-            "testimonial": "positive",
-            "usp": "positive",
-            "guarantee": "positive",
-            "authority": "positive",
-            "scarcity": "urgent",
-            "cta": "urgent",
-            "urgency": "urgent",
-            "final_hook": "urgent",
-            "transition": "neutral",
-        }
 
         def _get_field(seg: Any, key: str) -> str:
             if isinstance(seg, dict):
@@ -776,7 +777,7 @@ class AuditorAgent:
         observed: list[str] = []
         for seg in segments:
             st = _get_field(seg, "segment_type")
-            val = VALENCE_MAP.get(st, "neutral")
+            val = AuditorAgent._VALENCE_MAP.get(st, "neutral")
             if val != "neutral":
                 observed.append(val)
 
@@ -787,14 +788,11 @@ class AuditorAgent:
                 "recommendation": "Include segments with clear emotional purpose (problem → solution → CTA)",
             }
 
-        checks_passed = 0
+        checks_passed = 0.0
         checks_total = 3
         observations: list[str] = []
 
         # Check 1: negative → positive transition (problem/solution arc)
-        has_negative = any(v == "negative" for v in observed)
-        has_positive = any(v == "positive" for v in observed)
-        # Look for negative before positive in sequence
         neg_before_pos = False
         for i, v in enumerate(observed):
             if v == "negative":
@@ -804,7 +802,7 @@ class AuditorAgent:
         if neg_before_pos:
             checks_passed += 1
             observations.append("negative→positive arc present")
-        elif has_negative and has_positive:
+        elif any(v == "negative" for v in observed) and any(v == "positive" for v in observed):
             checks_passed += 0.5
             observations.append("both negative and positive present but not in sequence")
         else:

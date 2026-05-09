@@ -63,24 +63,20 @@ class TestEnforceModeBehavior:
     """Verify enforce mode affects all_ok correctly."""
 
     @staticmethod
-    def _reload_modules(mode: str):
-        """Set QUALITY_MODE and reload all modules that import it."""
-        import importlib
-        import os
-
-        os.environ["QUALITY_MODE"] = mode
+    def _patch_mode(monkeypatch, mode: str):
+        """Patch QUALITY_MODE on imported modules without full reload."""
         import src.config as config_mod
         import src.skills.seedance_video_generate as sdg_mod
         import src.skills.remotion_assemble as ra_mod
 
-        importlib.reload(config_mod)
-        importlib.reload(sdg_mod)
-        importlib.reload(ra_mod)
+        monkeypatch.setattr(config_mod, "QUALITY_MODE", mode)
+        monkeypatch.setattr(sdg_mod, "QUALITY_MODE", mode)
+        monkeypatch.setattr(ra_mod, "QUALITY_MODE", mode)
         return config_mod, sdg_mod, ra_mod
 
     def test_enforce_mode_blocks_on_frame_variance(self, sample_videos, monkeypatch):
         """In enforce mode, black screen video should fail all_ok."""
-        _, sdg_mod, _ = self._reload_modules("enforce")
+        _, sdg_mod, _ = self._patch_mode(monkeypatch, "enforce")
         skill = sdg_mod.SeedanceVideoGenerateSkill()
         verification = skill._self_verify(sample_videos["black"], is_stub=False)
         assert verification["all_ok"] is False
@@ -89,7 +85,7 @@ class TestEnforceModeBehavior:
 
     def test_enforce_mode_blocks_on_static_image(self, sample_videos, monkeypatch):
         """In enforce mode, static video should fail all_ok."""
-        _, sdg_mod, _ = self._reload_modules("enforce")
+        _, sdg_mod, _ = self._patch_mode(monkeypatch, "enforce")
         skill = sdg_mod.SeedanceVideoGenerateSkill()
         verification = skill._self_verify(sample_videos["static"], is_stub=False)
         assert verification["all_ok"] is False
@@ -98,7 +94,7 @@ class TestEnforceModeBehavior:
 
     def test_enforce_mode_allows_normal_video(self, sample_videos, monkeypatch):
         """In enforce mode, normal video should pass all_ok."""
-        _, sdg_mod, _ = self._reload_modules("enforce")
+        _, sdg_mod, _ = self._patch_mode(monkeypatch, "enforce")
         skill = sdg_mod.SeedanceVideoGenerateSkill()
         verification = skill._self_verify(sample_videos["normal"], is_stub=False)
         assert verification["all_ok"] is True
@@ -106,14 +102,14 @@ class TestEnforceModeBehavior:
 
     def test_enforce_mode_allows_no_audio_video(self, sample_videos, monkeypatch):
         """In enforce mode, video without audio should still pass av_sync."""
-        _, _, ra_mod = self._reload_modules("enforce")
+        _, _, ra_mod = self._patch_mode(monkeypatch, "enforce")
         result = ra_mod.RemotionAssembleSkill._check_av_sync(sample_videos["normal"])
         assert result["sync_ok"] is True
         assert result["audio_dur"] == 0.0
 
     def test_observe_mode_does_not_block_variance(self, sample_videos, monkeypatch):
         """In observe mode, black screen video should still pass all_ok."""
-        _, sdg_mod, _ = self._reload_modules("observe")
+        _, sdg_mod, _ = self._patch_mode(monkeypatch, "observe")
         skill = sdg_mod.SeedanceVideoGenerateSkill()
         verification = skill._self_verify(sample_videos["black"], is_stub=False)
         # In observe mode all_ok ignores variance; verify by checking the 4 base flags
