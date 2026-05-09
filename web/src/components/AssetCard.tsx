@@ -58,6 +58,7 @@ export default function AssetCard({ asset, onClick }: Props) {
 }
 
 function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => void; t: (k: string) => string }) {
+  const [posterFailed, setPosterFailed] = React.useState(false);
   return (
     <div
       onClick={onClick}
@@ -65,9 +66,17 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
     >
       {/* Thumbnail — 3:2 ratio */}
       <div className="relative aspect-[3/2] bg-black overflow-hidden">
-        {asset.thumbnail ? (
-          <video
+        {asset.thumbnail && !posterFailed ? (
+          <img
             src={getMediaUrl(asset.thumbnail)}
+            alt={asset.title}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+            onError={() => setPosterFailed(true)}
+          />
+        ) : asset.filePath ? (
+          <video
+            src={getMediaUrl(asset.filePath)}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             preload="metadata"
             muted
