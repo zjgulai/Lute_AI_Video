@@ -34,7 +34,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
 
   return (
     <div className="space-y-3">
-      <div className="flex items-stretch gap-3">
+      <div className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
         {SCENE_IDS.map((id) => {
           const isActive = activeScene === id;
           const count = videoCounts[id] ?? 0;
@@ -46,7 +46,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
                 logUI("SELECT", "SceneTabs", { scene: id, from: activeScene });
                 onChange(id);
               }}
-              className={`flex-1 flex items-center gap-2.5 px-4 py-3.5 rounded-lg border transition-all cursor-pointer min-h-[56px] ${
+              className={`shrink-0 sm:flex-1 flex items-center gap-2.5 px-3 sm:px-4 py-3.5 rounded-lg border transition-all cursor-pointer min-h-[56px] ${
                 isActive
                   ? "border-[var(--fortune-red)] bg-[rgba(215,92,112,0.12)] ring-1 ring-[rgba(215,92,112,0.25)] shadow-[0_0_12px_rgba(215,92,112,0.18)]"
                   : "border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.04)]"

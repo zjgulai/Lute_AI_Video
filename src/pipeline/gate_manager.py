@@ -561,6 +561,29 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
     gates_state[gate_id] = gate_state
     state["gates"] = gates_state
 
+    # ── A/B test tracking: record which variant was chosen ──
+    try:
+        from src.quality.ab_tracker import ABTracker
+        tracker = ABTracker()
+        # Extract scores for all candidates
+        all_scores = {
+            c.get("variant", c.get("id", "unknown")): c.get("score", {}).get("overall", 0)
+            for c in candidates
+        }
+        primary = selected_candidates[0]
+        tracker.record_gate_choice(
+            pipeline_label=label,
+            gate_id=gate_id,
+            chosen_variant=primary.get("variant", "unknown"),
+            candidate_scores=all_scores,
+            script_features={
+                "candidate_count": len(candidates),
+                "selected_count": len(selected_ids),
+            },
+        )
+    except Exception as e:
+        logger.warning("ab_tracker: failed to record gate choice", error=str(e))
+
     # Set the selected candidate's data as the step output for downstream consumption
     # Use the first selected candidate's data as the "edited" output
     step_order = _get_step_order(scenario)

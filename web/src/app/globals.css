@@ -91,6 +91,24 @@
   --radius-lg: 12px;
   --radius-xl: 14px;
   --radius-2xl: 18px;
+
+  /* Phase 4 — Type scale (1.25 modular). 6 档收敛，新组件优先用这些 token */
+  --ts-display: 32px;
+  --ts-h1: 24px;
+  --ts-h2: 18px;
+  --ts-h3: 14px;
+  --ts-body: 13px;
+  --ts-caption: 12px;
+
+  /* Phase 4 — Spacing scale (4pt grid). 8 档收敛 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+  --sp-16: 64px;
 }
 
 /* ─── 浅色暖色主题 ─── */
@@ -429,6 +447,14 @@ h2 { font-weight: 600; }
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-sm);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* 卡片 hover 抬升 */

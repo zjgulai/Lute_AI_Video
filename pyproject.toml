@@ -68,6 +68,7 @@ exclude = [
     "**/node_modules",
     "**/migrations",
     "**/__pycache__",
+    "src/quality/**",
 ]
 # Phase A: basic mode (default — no strict rules yet) ✅ 已完成
 # Phase B: 泛型参数 + 边界变量 ✅ 已完成

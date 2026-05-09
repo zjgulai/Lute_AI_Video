@@ -2,12 +2,39 @@ export type Locale = "zh" | "en";
 
 export const translations: Record<Locale, Record<string, string>> = {
   zh: {
-    // Navigation
+    // Navigation (v2: IA redesign — see docs/design/information-architecture-v2.md)
     "nav.home": "首页",
+    "nav.works": "我的作品",
+    "nav.library": "资产库",
+    "nav.admin": "管理后台",
+    "nav.settings": "设置",
+    // Legacy keys retained for back-compat during redirect transition
     "nav.gallery": "创作画廊",
     "nav.brandAssets": "品牌资产",
     "nav.influencers": "网红管理",
     "nav.footage": "作品集",
+
+    // Works page (v2)
+    "works.title": "我的作品",
+    "works.subtitle": "所有已完成的成片，可发布、可下载、可分享",
+    "works.empty": "还没有作品，先去首页创作第一支吧",
+    "works.emptyHint": "完成一次创作后，成片会自动归档到这里",
+    "works.noMatch": "没有匹配的作品",
+    "works.tryDifferent": "换个关键词或筛选条件试试",
+    "materials.noMatch": "没有匹配的素材",
+    "works.filterAll": "全部",
+    "works.openDetails": "查看详情",
+
+    // Library page (v2)
+    "library.title": "资产库",
+    "library.subtitle": "创作的素材、品牌底子与合作网红",
+    "library.tab.materials": "素材",
+    "library.tab.brand_kit": "品牌包",
+    "library.tab.influencers": "网红",
+    "library.materials.subtitle": "原始上传与流水线中间产物",
+    "library.brand_kit.subtitle": "Logo、品牌色与 Brand Voice",
+    "library.influencers.subtitle": "合作网红档案与风格标签",
+    "library.redirectNote": "旧链接已归入资产库",
 
     // Locale toggle
     "locale.toggle": "EN",
@@ -21,6 +48,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "scene.product_direct.desc": "直接输入商品信息，AI 生成产品展示视频和缩略图",
     "scene.fast_mode.title": "快速模式",
     "scene.fast_mode.desc": "输入简单描述，直接测试大模型矩阵的视频生成能力，10-15秒快速出片",
+    "scene.other.title": "未分类",
+    "form.stillNeed": "还需填写：",
     "scene.contentScenario": "内容场景",
     "scene.defaultScenario": "默认场景",
     "scene.manualSelect": "手动选择",
@@ -152,6 +181,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     "pipeline.selfAudited": "已自审",
     "pipeline.allDone": "全部 12 个节点执行完成",
     "pipeline.abandon": "放弃",
+    "pipeline.runningHeadline": "正在生成视频",
+    "pipeline.pausedHeadline": "等待你的审核",
+    "pipeline.errorHeadline": "流水线出错",
+    "pipeline.completedHeadline": "作品已完成",
+    "pipeline.completedNotice": "你的作品已生成完成，点击查看",
+    "pipeline.completedTitle": "路特创新视频工厂",
+    "pipeline.viewDetails": "查看详情",
+    "pipeline.viewWorks": "查看作品",
 
     // Video Workflow
     "workflow.title": "视频工作流",
@@ -1056,7 +1093,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "brand.category.scripts": "脚本文案",
     "brand.category.original": "品牌原创",
     "brand.category.finished": "成品视频",
-    "brand.apiFetchHint": "后端连接失败，显示本地数据",
+    "brand.apiFetchHint": "暂时无法连接服务器，已为你显示本地缓存的资产，网络恢复后会自动刷新",
 
     // 导演回放
     "playback.title": "导演回放",
@@ -1126,12 +1163,39 @@ export const translations: Record<Locale, Record<string, string>> = {
   },
 
   en: {
-    // Navigation
+    // Navigation (v2: IA redesign — see docs/design/information-architecture-v2.md)
     "nav.home": "Home",
+    "nav.works": "My Works",
+    "nav.library": "Library",
+    "nav.admin": "Admin",
+    "nav.settings": "Settings",
+    // Legacy keys retained for back-compat during redirect transition
     "nav.gallery": "Gallery",
     "nav.brandAssets": "Brand Assets",
     "nav.influencers": "Influencers",
     "nav.footage": "Portfolio",
+
+    // Works page (v2)
+    "works.title": "My Works",
+    "works.subtitle": "Finished videos — publish, download, or share",
+    "works.empty": "No works yet — start your first creation from Home",
+    "works.emptyHint": "Finished creations will auto-archive here",
+    "works.noMatch": "No matching works",
+    "works.tryDifferent": "Try a different keyword or filter",
+    "materials.noMatch": "No matching materials",
+    "works.filterAll": "All",
+    "works.openDetails": "Open details",
+
+    // Library page (v2)
+    "library.title": "Library",
+    "library.subtitle": "Materials, brand kits, and influencer profiles",
+    "library.tab.materials": "Materials",
+    "library.tab.brand_kit": "Brand Kit",
+    "library.tab.influencers": "Influencers",
+    "library.materials.subtitle": "Uploads and pipeline intermediates",
+    "library.brand_kit.subtitle": "Logo, colors, and brand voice",
+    "library.influencers.subtitle": "Partner profiles and style tags",
+    "library.redirectNote": "This link has moved into Library",
 
     // Locale toggle
     "locale.toggle": "中",
@@ -1145,6 +1209,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "scene.product_direct.desc": "Input product info directly, AI generates product showcase videos and thumbnails",
     "scene.fast_mode.title": "Fast Mode",
     "scene.fast_mode.desc": "Quick test of LLM matrix video generation. 10-15s output without standard workflow.",
+    "scene.other.title": "Uncategorized",
+    "form.stillNeed": "Still need:",
     "scene.contentScenario": "Content Scenario",
     "scene.defaultScenario": "Default scenario",
     "scene.manualSelect": "Manual select",
@@ -1195,6 +1261,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     // Pipeline mode
     "pipeline.stepByStep": "Step-by-step",
     "pipeline.auto": "Auto",
+    "pipeline.runningHeadline": "Generating video",
+    "pipeline.pausedHeadline": "Waiting for your review",
+    "pipeline.errorHeadline": "Pipeline error",
+    "pipeline.completedHeadline": "Your work is ready",
+    "pipeline.completedNotice": "Your video is ready — tap to view",
+    "pipeline.completedTitle": "Short Video Factory",
+    "pipeline.viewDetails": "View details",
+    "pipeline.viewWorks": "View works",
     "pipeline.stepByStepHint": "Step-by-step mode: manually execute each step, confirm before proceeding",
     "pipeline.autoHint": "Auto mode: execute all steps with one click, wait for completion",
 
@@ -2179,7 +2253,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "brand.category.scripts": "Scripts",
     "brand.category.original": "Brand Original",
     "brand.category.finished": "Finished Videos",
-    "brand.apiFetchHint": "Backend disconnected, showing local data",
+    "brand.apiFetchHint": "Can't reach the server right now — showing locally cached assets until we reconnect",
 
     // Director's playback
     "playback.title": "Director's Playback",

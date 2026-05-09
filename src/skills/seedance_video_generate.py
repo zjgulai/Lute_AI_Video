@@ -34,6 +34,11 @@ from typing import Any
 
 import structlog
 
+from src.config import (
+    FRAME_VARIANCE_BRIGHTNESS_THRESHOLD,
+    FRAME_VARIANCE_MSE_THRESHOLD,
+    QUALITY_MODE,
+)
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -270,8 +275,17 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             # ffprobe unavailable — skip resolution check (best-effort)
             pass
 
-        # all_ok strictly requires size + header + resolution. duration is best-effort.
-        all_ok = size_ok and header_ok and resolution_ok and duration_ok
+        # Frame variance check — detect static images and black screens
+        variance_result = self._check_frame_variance(local_path)
+        variance_ok = variance_result["variance_ok"]
+        if not variance_ok and QUALITY_MODE == "enforce":
+            failures.extend(variance_result["failures"])
+
+        # all_ok: enforce mode requires variance_ok; observe/off mode keeps original logic
+        if QUALITY_MODE == "enforce":
+            all_ok = size_ok and header_ok and resolution_ok and duration_ok and variance_ok
+        else:
+            all_ok = size_ok and header_ok and resolution_ok and duration_ok
 
         return {
             "file_exists": True,
@@ -279,6 +293,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             "header_ok": header_ok,
             "duration_ok": duration_ok,
             "resolution_ok": resolution_ok,
+            "variance_ok": variance_ok,
+            "variance_details": variance_result,
             "dimensions": dims,
             "all_ok": all_ok,
             "failures": failures,
@@ -354,6 +370,105 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             return None
 
     @staticmethod
+    def _check_frame_variance(path: Path) -> dict[str, Any]:
+        """Detect static images and black screens by sampling frames.
+
+        Extracts 3 frames (start, middle, end) scaled to 32x32 grayscale,
+        then computes MSE between pairs. Low MSE across all pairs indicates
+        a static image; very low average brightness indicates a black screen.
+
+        Thresholds (from config, overridable via env var):
+        - MSE < FRAME_VARIANCE_MSE_THRESHOLD → static image
+        - mean brightness < FRAME_VARIANCE_BRIGHTNESS_THRESHOLD → black screen
+
+        Returns:
+            {"variance_ok": bool, "mse_start_mid": float, "mse_mid_end": float,
+             "mean_brightness": float, "failures": list[str]}
+        """
+        import subprocess
+        import tempfile
+        import struct
+        import time
+
+        t0 = time.perf_counter()
+
+        if not path.exists() or path.stat().st_size < 1000:
+            return {"variance_ok": True, "failures": []}  # skip for tiny files
+
+        # Get duration to pick middle frame timestamp
+        duration = SeedanceVideoGenerateSkill._measure_duration(path)
+        if duration < 0.5:
+            return {"variance_ok": True, "failures": []}
+
+        timestamps = [0.0, duration / 2, max(0.0, duration - 0.5)]
+        frames: list[list[int]] = []
+
+        for ts in timestamps:
+            try:
+                fd, frame_file_str = tempfile.mkstemp(suffix=".gray")
+                os.close(fd)
+                frame_file = Path(frame_file_str)
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", str(ts),
+                    "-i", str(path),
+                    "-vframes", "1",
+                    "-vf", "scale=32:32,format=gray",
+                    "-f", "rawvideo", "-pix_fmt", "gray",
+                    str(frame_file),
+                ]
+                subprocess.run(cmd, capture_output=True, timeout=10, check=True)
+                raw = frame_file.read_bytes()
+                frame_file.unlink(missing_ok=True)
+                expected = 32 * 32
+                if len(raw) < expected:
+                    continue
+                pixels = list(struct.unpack(f"{expected}B", raw[:expected]))
+                frames.append(pixels)
+            except Exception:
+                continue
+
+        if len(frames) < 3:
+            return {"variance_ok": True, "failures": []}  # best-effort skip
+
+        def _mse(a: list[int], b: list[int]) -> float:
+            n = len(a)
+            return sum((x - y) ** 2 for x, y in zip(a, b)) / n
+
+        mse_start_mid = _mse(frames[0], frames[1])
+        mse_mid_end = _mse(frames[1], frames[2])
+        mean_brightness = sum(frames[1]) / len(frames[1])  # middle frame
+
+        failures: list[str] = []
+        variance_ok = True
+
+        # Static image detection: all pairwise MSE below threshold
+        if mse_start_mid < FRAME_VARIANCE_MSE_THRESHOLD and mse_mid_end < FRAME_VARIANCE_MSE_THRESHOLD:
+            variance_ok = False
+            failures.append(f"static_image_mse_{mse_start_mid:.1f}_{mse_mid_end:.1f}")
+
+        # Black screen detection: very low average brightness
+        if mean_brightness < FRAME_VARIANCE_BRIGHTNESS_THRESHOLD:
+            variance_ok = False
+            failures.append(f"black_screen_brightness_{mean_brightness:.1f}")
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        logger.debug(
+            "frame_variance_check",
+            duration_ms=round(elapsed_ms, 1),
+            path=str(path),
+            variance_ok=variance_ok,
+        )
+
+        return {
+            "variance_ok": variance_ok,
+            "mse_start_mid": round(mse_start_mid, 2),
+            "mse_mid_end": round(mse_mid_end, 2),
+            "mean_brightness": round(mean_brightness, 2),
+            "failures": failures,
+        }
+
+    @staticmethod
     def _extract_last_frame(video_path: str) -> str:
         """Extract the last frame of a video as a JPEG image using ffmpeg.
 
@@ -376,7 +491,9 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             return ""
 
         try:
-            frame_path = Path(tempfile.mktemp(suffix=".jpg"))
+            fd, frame_path_str = tempfile.mkstemp(suffix=".jpg")
+            os.close(fd)
+            frame_path = Path(frame_path_str)
             # ffmpeg -sseof -1 seeks to 1 second before end, then -vframes 1 captures last frame
             cmd = [
                 "ffmpeg", "-y",

@@ -238,7 +238,21 @@ class ScriptWriterSkill(SkillCallable):
         tasks = [_gen_one(brief, lang) for brief in briefs for lang in languages]
         scripts = await asyncio.gather(*tasks)
 
-        return SkillResult(success=True, data={"scripts": list(scripts), "count": len(scripts)})
+        # Self-check each script: hook strength, USP coverage, duration compliance
+        checked_scripts = []
+        for script in scripts:
+            if isinstance(script, dict):
+                script["_self_check"] = self._self_check_script(script, brand_guidelines)
+            checked_scripts.append(script)
+
+        return SkillResult(
+            success=True,
+            data={"scripts": checked_scripts, "count": len(checked_scripts)},
+            metadata={
+                "count": len(checked_scripts),
+                "self_check_enabled": True,
+            },
+        )
 
     async def _call_llm(
         self,
@@ -392,6 +406,78 @@ class ScriptWriterSkill(SkillCallable):
             "hook_type": hook_type,
             "video_type": video_type,
         }
+
+    @staticmethod
+    def _self_check_script(script: dict[str, Any], brand_guidelines: dict[str, Any]) -> dict[str, Any]:
+        """Self-check a generated script for hook strength, USP coverage, duration compliance.
+
+        Returns a dict with check results that can be consumed by downstream skills
+        or displayed in the audit report.
+        """
+        import re
+
+        segments = script.get("segments", [])
+        total_duration = float(script.get("total_duration", 30))
+        all_text = " ".join(
+            (seg.get("voiceover", "") or "") for seg in segments
+        ).lower()
+
+        checks: dict[str, Any] = {}
+
+        # 1. Hook strength check
+        hook_segments = [s for s in segments if s.get("segment_type") == "hook"]
+        hook_ok = False
+        hook_obs = ""
+        if hook_segments:
+            longest = max(hook_segments, key=lambda s: float(s.get("end_time", 0)) - float(s.get("start_time", 0)))
+            hook_dur = float(longest.get("end_time", 0)) - float(longest.get("start_time", 0))
+            hook_text = (longest.get("voiceover", "") or "").lower()
+            attention_signals = ["what", "how", "why", "stop", "wait", "mistake", "never", "secret", "truth", "wrong"]
+            has_attention = any(sig in hook_text for sig in attention_signals)
+            hook_ok = hook_dur <= 3.0 and has_attention
+            hook_obs = f"hook {hook_dur:.1f}s, attention_signal={has_attention}"
+        else:
+            hook_obs = "no hook segment found"
+        checks["hook_strength"] = {"ok": hook_ok, "observation": hook_obs}
+
+        # 2. USP coverage check
+        usps = brand_guidelines.get("usps", []) if brand_guidelines else []
+        if usps:
+            usp_terms = [str(u).lower() for u in usps]
+            covered = sum(1 for u in usp_terms if u in all_text)
+            usp_ok = covered >= min(2, len(usp_terms))
+            checks["usp_coverage"] = {
+                "ok": usp_ok,
+                "observation": f"{covered}/{len(usp_terms)} USPs mentioned in script",
+                "covered": covered,
+                "total": len(usp_terms),
+            }
+        else:
+            checks["usp_coverage"] = {"ok": True, "observation": "no USPs defined in brand guidelines"}
+
+        # 3. Duration compliance check
+        duration_ok = 20 <= total_duration <= 90
+        checks["duration_compliance"] = {
+            "ok": duration_ok,
+            "observation": f"total duration {total_duration:.1f}s (target 20-90s)",
+        }
+
+        # 4. Segment type completeness check
+        required = {"hook", "pain_point", "solution", "trust_building", "cta"}
+        present = {s.get("segment_type", "") for s in segments}
+        missing = required - present
+        completeness_ok = len(missing) <= 1  # allow 1 missing
+        checks["segment_completeness"] = {
+            "ok": completeness_ok,
+            "observation": f"missing segments: {', '.join(sorted(missing))}" if missing else "all required segments present",
+        }
+
+        # Overall self-check score
+        all_ok = all(c["ok"] for c in checks.values())
+        checks["overall_ok"] = all_ok
+        checks["overall_score"] = sum(1 for c in checks.values() if c["ok"]) / len([c for c in checks.values() if isinstance(c, dict) and "ok" in c])
+
+        return checks
 
     def fallback(self, params: dict[str, Any]) -> SkillResult:
         briefs = params.get("briefs", [{"id": "fb", "topic": "Product"}])

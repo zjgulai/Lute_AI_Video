@@ -21,6 +21,7 @@ import {
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
 import PipelineMonitor from "@/components/PipelineMonitor";
+import PipelineStatusBar from "@/components/PipelineStatusBar";
 import ReviewPanel from "@/components/ReviewPanel";
 import DistributionView from "@/components/DistributionView";
 import OneShotResultView from "@/components/OneShotResultView";
@@ -178,6 +179,8 @@ export default function Home() {
     showWorkflow, setShowWorkflow,
     currentStepIdx, setCurrentStepIdx,
     showSteps, setShowSteps,
+    startActivePipeline,
+    clearActivePipeline,
   } = usePipelineStore();
 
   const {
@@ -371,6 +374,16 @@ export default function Home() {
     };
   }, [threadId, refreshState, getPollInterval]);
 
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setTimeout(() => {
+      if (usePipelineStore.getState().activePipeline) {
+        setLoading(false);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [loading, setLoading]);
+
   const configRef = useRef<any>(null);
 
   const handleSceneSubmit = useCallback((config: any) => {
@@ -430,6 +443,12 @@ export default function Home() {
         { signal: abortRef.current?.signal }
       );
       setSmartCreateLabel(submitResult.label);
+      startActivePipeline({
+        label: submitResult.label,
+        scenario: scenarioId,
+        scene: scenario,
+        startedAt: Date.now(),
+      });
     } catch (e: any) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       // Fallback: legacy blocking endpoint for s1 only
@@ -445,6 +464,12 @@ export default function Home() {
           }, { signal: abortRef.current?.signal });
           const label = result?.label || `s1_${Date.now()}`;
           setSmartCreateLabel(label);
+          startActivePipeline({
+            label,
+            scenario: scenarioId,
+            scene: scenario,
+            startedAt: Date.now(),
+          });
         } catch (fallbackErr: any) {
           if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") return;
           showToast(t("toast.execFailed") + `: ${fallbackErr?.message || String(fallbackErr)}`, "error");
@@ -607,6 +632,12 @@ export default function Home() {
       setWorkflowState(result.state || {});
       setShowWorkflow(true);
       setCurrentGate(1);
+      startActivePipeline({
+        label: result.label,
+        scenario: "s1",
+        scene: config.content_scenario || "product_direct",
+        startedAt: Date.now(),
+      });
       showToast(t("toast.workflowInit"), "success");
     } catch (e: any) {
       const msg = e?.message || String(e);
@@ -701,7 +732,7 @@ export default function Home() {
       </Suspense>
       {showSplash && <SplashScreen onEnter={() => setShowSplash(false)} />}
       <ErrorBoundary>
-      <div className={`min-h-screen bg-[var(--color-bg)] transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
+      <div className={`min-h-screen bg-[var(--color-bg)] overflow-x-hidden transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
         {/* Toast */}
         {toast && (
           <div
@@ -813,6 +844,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowSettings(true)}
+                aria-label={t("nav.settings")}
                 className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[rgba(53,20,26,0.06)] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
                 title="Settings"
               >
@@ -831,9 +863,10 @@ export default function Home() {
               )}
             </div>
           </div>
+          <PipelineStatusBar />
         </header>
 
-        <main className="max-w-[1440px] mx-auto px-6 py-6">
+        <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 overflow-x-hidden">
           <div key={stage + (activeScene || "")}>
           {/* Stage 0: Home — Scene selection + form */}
           {stage === "home" && showSelector && (
@@ -986,6 +1019,7 @@ export default function Home() {
                 saveToGallery(result, activeScene || "product_direct");
                 setStage("result");
                 setShowStageProgress(false);
+                clearActivePipeline();
               }}
             />
           )}
