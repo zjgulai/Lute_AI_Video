@@ -178,7 +178,8 @@ async def _get_config_for_thread(thread_id: str) -> dict[str, Any]:
 
 
 # Background task registry moved to src.tasks.bg_registry to break circular import.
-# Re-export for backward compatibility.
+# Re-export for backward compatibility (used by src.routers.scenario).
+from src.tasks.bg_registry import register_background_task as _register_background_task  # noqa: E402,F401,I001
 
 
 # ── Scenario helpers ──
