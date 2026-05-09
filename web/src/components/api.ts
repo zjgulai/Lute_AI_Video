@@ -298,9 +298,19 @@ const _nativeFetch = globalThis.fetch.bind(globalThis);
  */
 export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   // P1-A: 自动把相对路径补全 + 注入 auth header
-  const absUrl = url.startsWith("http")
-    ? url
-    : getApiBase().replace(/\/$/, "") + (url.startsWith("/") ? url : "/" + url);
+  // 2026-05-09 dedup: when base ends with "/api" (production behind nginx) and
+  // url already starts with "/api/" (e.g. /api/files, /api/admin/...), strip
+  // the base prefix to avoid producing "/api/api/..." which nginx 404s.
+  let absUrl: string;
+  if (url.startsWith("http")) {
+    absUrl = url;
+  } else {
+    const base = getApiBase().replace(/\/$/, "");
+    const path = url.startsWith("/") ? url : "/" + url;
+    absUrl = base.endsWith("/api") && path.startsWith("/api/")
+      ? base.slice(0, -"/api".length) + path
+      : base + path;
+  }
   const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
   const userHeaders = (init?.headers as Record<string, string>) || {};
   const mergedHeaders: Record<string, string> = {
@@ -433,7 +443,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 
 /** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
 export async function startPipeline(body: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/pipeline/start", {
+  const res = await apiFetch("/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -445,7 +455,7 @@ export async function startPipeline(body: any, options?: { signal?: AbortSignal 
 
 /** @deprecated StepRunner pipelines do not use LangGraph checkpoint state. */
 export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/state", {
+  const res = await apiFetch("/pipeline/" + threadId + "/state", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -461,7 +471,7 @@ export async function submitReview(
   reviewerNotes: string,
   options?: { signal?: AbortSignal }
 ): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/review/" + reviewNode, {
+  const res = await apiFetch("/pipeline/" + threadId + "/review/" + reviewNode, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ action, reviewer_notes: reviewerNotes }),
@@ -473,7 +483,7 @@ export async function submitReview(
 
 /** @deprecated Use /scenario/{s}/state/{label} instead. */
 export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/distribution", {
+  const res = await apiFetch("/pipeline/" + threadId + "/distribution", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -483,7 +493,7 @@ export async function fetchDistribution(threadId: string, options?: { signal?: A
 
 /** @deprecated Use /scenario/{s}/state/{label} instead. */
 export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/pipeline/" + threadId + "/output", {
+  const res = await apiFetch("/pipeline/" + threadId + "/output", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -494,7 +504,7 @@ export async function fetchOutput(threadId: string, options?: { signal?: AbortSi
 // ── Scenario pipelines (skill-based, no LangGraph) ──
 
 export async function runS1ProductDirect(config: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s1", {
+  const res = await apiFetch("/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(config),
@@ -511,7 +521,7 @@ export async function runS2BrandCampaign(body: {
   target_languages?: string[];
   week?: string;
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s2", {
+  const res = await apiFetch("/scenario/s2", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -529,7 +539,7 @@ export async function runS3InfluencerRemix(body: {
   brief_id?: string;
   video_duration?: number;
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s3", {
+  const res = await apiFetch("/scenario/s3", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -545,7 +555,7 @@ export async function runS4LiveShoot(body: {
   topic?: string;
   target_platforms?: string[];
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s4", {
+  const res = await apiFetch("/scenario/s4", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -558,7 +568,7 @@ export async function runS4LiveShoot(body: {
 // ── S1 Step-by-step pipeline APIs ──
 
 export async function startS1StepByStep(config: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s1/start", {
+  const res = await apiFetch("/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ ...config, mode: "step_by_step" }),
@@ -569,7 +579,7 @@ export async function startS1StepByStep(config: any, options?: { signal?: AbortS
 }
 
 export async function runS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s1/step/" + stepName, {
+  const res = await apiFetch("/scenario/s1/step/" + stepName, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
@@ -580,7 +590,7 @@ export async function runS1Step(label: string, stepName: string, options?: { sig
 }
 
 export async function regenerateS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s1/regenerate", {
+  const res = await apiFetch("/scenario/s1/regenerate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label, step: stepName }),
@@ -591,7 +601,7 @@ export async function regenerateS1Step(label: string, stepName: string, options?
 }
 
 export async function resumeS1(label: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s1/resume", {
+  const res = await apiFetch("/scenario/s1/resume", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
@@ -602,7 +612,7 @@ export async function resumeS1(label: string, options?: { signal?: AbortSignal }
 }
 
 export async function fetchS1State(label: string, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s1/state/" + label, {
+  const res = await apiFetch("/scenario/s1/state/" + label, {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -611,7 +621,7 @@ export async function fetchS1State(label: string, options?: { signal?: AbortSign
 }
 
 export async function updateS1State(label: string, updates: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s1/state/" + label, {
+  const res = await apiFetch("/scenario/s1/state/" + label, {
     method: "PUT",
     headers: getHeaders(),
     body: JSON.stringify(updates),
@@ -636,7 +646,7 @@ export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<a
     const { DEMO_ASSETS } = await import("@/demo-data");
     return DEMO_ASSETS;
   }
-  const res = await apiFetch(getFilesListUrl(), {
+  const res = await apiFetch("/api/files", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -692,8 +702,7 @@ export async function getSignedMediaUrl(filePath: string): Promise<string> {
   if (!encodedPath) return "";
 
   try {
-    const base = getApiBase().replace(/\/$/, "");
-    const res = await apiFetch(`${base}/api/media/sign?path=${encodeURIComponent(encodedPath)}`, {
+    const res = await apiFetch(`/api/media/sign?path=${encodeURIComponent(encodedPath)}`, {
       headers: getHeaders(),
     });
     if (res.ok) {
@@ -711,6 +720,26 @@ export async function getSignedMediaUrl(filePath: string): Promise<string> {
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Build a URL for the admin API surface.
+ *
+ * Admin routes are mounted at absolute paths like `/api/admin/auth/login` on the
+ * backend (no router prefix stripping). Callers pass the full `/api/admin/...`
+ * path. This helper handles the prod base = "/api" case where naive
+ * `base + path` would produce "/api/api/admin/..." and nginx would 404.
+ *
+ * Exported so non-adminFetch callers (e.g. the Nav admin-session probe which
+ * must NOT trigger the 401 redirect in `adminFetch`) can still construct the
+ * same URL.
+ */
+export function buildAdminUrl(path: string): string {
+  const base = getApiBase().replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : "/" + path;
+  return base.endsWith("/api") && normalizedPath.startsWith("/api/")
+    ? base.slice(0, -"/api".length) + normalizedPath
+    : base + normalizedPath;
+}
+
+/**
  * Admin API fetch — uses session cookie authentication.
  * Does NOT send X-API-Key header. Uses credentials: 'include' for HttpOnly cookie.
  * On 401, redirects to /admin/login.
@@ -719,8 +748,7 @@ export async function adminFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
-  const base = getApiBase().replace(/\/$/, "");
-  const url = base + (path.startsWith("/") ? path : "/" + path);
+  const url = buildAdminUrl(path);
 
   const mergedInit: RequestInit = {
     ...init,
@@ -771,7 +799,7 @@ export async function adminFetchJson<T = any>(
 
 export async function testConnection(options?: { signal?: AbortSignal }): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
   try {
-    const res = await apiFetch(getApiBase() + "/health", {
+    const res = await apiFetch("/health", {
       headers: getHeaders(false),
       signal: options?.signal,
     });
@@ -795,7 +823,7 @@ export async function runS5BrandVlog(body: {
   story_description: string;
   video_duration: number;
 }, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/scenario/s5", {
+  const res = await apiFetch("/scenario/s5", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -817,7 +845,7 @@ export async function submitScenario(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<{ label: string; status: string; trace_id: string }> {
-  const res = await apiFetch(getApiBase() + "/scenario/" + scenario + "/submit", {
+  const res = await apiFetch("/scenario/" + scenario + "/submit", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),
@@ -847,7 +875,7 @@ export async function getScenarioStatus(
   steps?: Record<string, any>;
   result?: any;
 }> {
-  const res = await apiFetch(getApiBase() + `/scenario/${scenario}/status/${encodeURIComponent(label)}`, {
+  const res = await apiFetch(`/scenario/${scenario}/status/${encodeURIComponent(label)}`, {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -858,7 +886,7 @@ export async function getScenarioStatus(
 // ── Distribution publishing APIs ──
 
 export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promise<any[]> {
-  const res = await apiFetch(getApiBase() + "/distribution/platforms", {
+  const res = await apiFetch("/distribution/platforms", {
     headers: getHeaders(false),
     signal: options?.signal,
   });
@@ -868,7 +896,7 @@ export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promis
 }
 
 export async function publishContent(platform: string, content: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/distribution/publish", {
+  const res = await apiFetch("/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ platform, content }),
@@ -890,7 +918,7 @@ export async function fetchPublishStatus(platform: string, postId: string, optio
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
 export async function publishVideo(videoId: string, platforms: string[], metadata: any, options?: { signal?: AbortSignal }): Promise<any> {
-  const res = await apiFetch(getApiBase() + "/publish/" + videoId, {
+  const res = await apiFetch("/publish/" + videoId, {
     method: "POST", headers: getHeaders(),
     body: JSON.stringify({ platforms, metadata }),
     signal: options?.signal,
@@ -901,7 +929,7 @@ export async function publishVideo(videoId: string, platforms: string[], metadat
 
 export async function fetchVideoMetrics(videoId: string, platform?: string, options?: { signal?: AbortSignal }): Promise<any> {
   const params = platform ? "?platform=" + platform : "";
-  const res = await apiFetch(getApiBase() + "/metrics/" + videoId + params, { headers: getHeaders(false), signal: options?.signal });
+  const res = await apiFetch("/metrics/" + videoId + params, { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch metrics");
   return res.json();
 }
@@ -911,7 +939,7 @@ export async function fetchDashboardOverview(scenario?: string, platform?: strin
   if (scenario) params.set("scenario", scenario);
   if (platform) params.set("platform", platform);
   if (days) params.set("days", String(days));
-  const res = await apiFetch(getApiBase() + "/dashboard/overview?" + params.toString(), { headers: getHeaders(false), signal: options?.signal });
+  const res = await apiFetch("/dashboard/overview?" + params.toString(), { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch dashboard");
   return res.json();
 }
@@ -941,7 +969,7 @@ export async function generateFastMode(body: {
   duration: number;
   enable_tts: boolean;
 }, options?: { signal?: AbortSignal }): Promise<FastModeResult> {
-  const res = await apiFetch(getApiBase() + "/fast/generate", {
+  const res = await apiFetch("/fast/generate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),

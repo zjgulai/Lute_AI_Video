@@ -8,7 +8,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { useAppStore } from "@/stores/useAppStore";
 import { usePipelineStore } from "@/stores/usePipelineStore";
 import { useExpertStore } from "@/stores/useExpertStore";
-import { getApiBase } from "./api";
+import { buildAdminUrl } from "./api";
 
 export default function Nav() {
   const pathname = usePathname();
@@ -20,8 +20,7 @@ export default function Nav() {
 
   useEffect(() => {
     let cancelled = false;
-    const url = getApiBase().replace(/\/$/, "") + "/api/admin/auth/session";
-    fetch(url, { credentials: "include" })
+    fetch(buildAdminUrl("/api/admin/auth/session"), { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled && data?.authenticated) setAdminVisible(true);
