@@ -6,7 +6,7 @@
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`). Round 3 quality system (observe mode) deployed: frame variance, AV sync, video specs checks active but non-blocking.
+**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`). Round 3 quality system (observe mode) deployed: frame variance, AV sync, video specs checks active but non-blocking. **Frontend UX v2 (2026-05-09):** information architecture redesigned (4-tab nav, `/works` + `/library` routes), a11y pass (labels, ARIA, sticky CTA), design tokens (`--ts-*`, `--sp-*`), mobile-responsive 375-1440px, background pipeline status bar. See `docs/design/information-architecture-v2.md`.
 
 
 > 历史更新记录已提取到 `docs/claude/updates/project-updates-202605-stable.md`。
@@ -205,9 +205,15 @@ AI_vedio/
 │   │   │   ├── fast/page.tsx   # Fast Mode UI
 │   │   │   ├── result/page.tsx # Pipeline result view
 │   │   │   ├── settings/page.tsx# Settings panel
-│   │   │   ├── brand-packages/page.tsx
-│   │   │   ├── influencers/page.tsx
-│   │   │   ├── footage/page.tsx
+│   │   │   ├── works/page.tsx          # v2: 我的作品 — final_work only (`kind=final_work`)
+│   │   │   ├── library/                # v2: 资产库 — tabs container
+│   │   │   │   ├── page.tsx            # Tab orchestrator (?tab=materials|brand_kit|influencers)
+│   │   │   │   ├── MaterialsTab.tsx    # Uploads + creation_intermediate
+│   │   │   │   ├── BrandKitTab.tsx     # Logo / 色板 / Brand Voice (≤ 20 items)
+│   │   │   │   └── InfluencersTab.tsx  # Influencer CRUD with TagInput
+│   │   │   ├── brand-packages/page.tsx # v2: 308-redirect → /library?tab=brand_kit
+│   │   │   ├── influencers/page.tsx    # v2: 308-redirect → /library?tab=influencers
+│   │   │   ├── footage/page.tsx        # v2: 308-redirect → /works
 │   │   │   └── admin/              # Admin Panel (Phase 1)
 │   │   │       ├── layout.tsx      # AdminLayout + auth guard + sidebar
 │   │   │       ├── page.tsx        # Redirect to /admin/dashboard
@@ -217,10 +223,16 @@ AI_vedio/
 │   │   │       ├── tenants/[tenantId]/page.tsx  # Tenant detail + API keys
 │   │   │       ├── logs/page.tsx       # Error log viewer + filters
 │   │   │       └── health/page.tsx     # Service health status cards
-│   │   ├── components/         # 40+ React components
+│   │   ├── components/         # 50+ React components (v2 added 6 primitives)
 │   │   │   ├── api.ts          # Backend HTTP client (localStorage + cookie fallback)
 │   │   │   ├── types.ts        # Frontend type definitions
-│   │   │   ├── Nav.tsx         # Navigation bar
+│   │   │   ├── Nav.tsx         # Navigation bar (v2: 4-tab + conditional admin entry)
+│   │   │   ├── TopHeader.tsx   # v2: shared sticky header (logo + Nav + PipelineStatusBar)
+│   │   │   ├── EmptyState.tsx  # v2: 5 unified SVG empty states (3-piece: illust+title+CTA)
+│   │   │   ├── FormFieldGroup.tsx   # v2: label + hint + error + auto-wired ARIA
+│   │   │   ├── StickyActionBar.tsx  # v2: sticky CTA + missing-fields hint
+│   │   │   ├── TagInput.tsx         # v2: chip input with keyboard nav
+│   │   │   ├── PipelineStatusBar.tsx # v2: cross-route bg pipeline indicator
 │   │   │   ├── SceneSelector.tsx # Home page scene cards
 │   │   │   ├── StepByStepView.tsx # Step-by-step pipeline view
 │   │   │   ├── StageProgress.tsx  # Pipeline step progress
@@ -549,6 +561,12 @@ Admin Panel tables added via Alembic migration `2d6b8e9c0f1a` (2026-05-07).
 
 ### Page Routes
 
+> **2026-05-09 IA v2:** Top navigation consolidated to 4 tabs (首页 / 我的作品 / 资产库 / 设置).
+> Old `/footage`, `/brand-packages`, `/influencers` are now 308-redirect shims only — all
+> content lives under `/works` and `/library` (with `?tab=` for materials / brand_kit /
+> influencers). See [`docs/design/information-architecture-v2.md`](docs/design/information-architecture-v2.md)
+> for the authoritative contract and [`docs/design/asset-lifecycle-state-machine.md`](docs/design/asset-lifecycle-state-machine.md)
+> for the asset `kind` state machine.
 
 | Route                 | Component                           | Purpose                                             |
 | --------------------- | ----------------------------------- | --------------------------------------------------- |
@@ -561,9 +579,11 @@ Admin Panel tables added via Alembic migration `2d6b8e9c0f1a` (2026-05-07).
 | `/fast`               | `fast/page.tsx`                     | Fast Mode direct generation                         |
 | `/result`             | `result/page.tsx`                   | Pipeline result + download                          |
 | `/settings`           | `settings/page.tsx`                 | API key + backend URL configuration                 |
-| `/brand-packages`     | `brand-packages/page.tsx`           | Brand asset management                              |
-| `/influencers`        | `influencers/page.tsx`              | Influencer management                               |
-| `/footage`            | `footage/page.tsx`                  | Portfolio/footage gallery                           |
+| **`/works`**          | **`works/page.tsx`**                | **v2: finished videos only (`kind=final_work`)**   |
+| **`/library`**        | **`library/page.tsx` + 3 tabs**     | **v2: materials / brand_kit / influencers (`?tab=`)** |
+| `/footage`            | `footage/page.tsx`                  | **308-redirect → `/works`** (legacy link compat)    |
+| `/brand-packages`     | `brand-packages/page.tsx`           | **308-redirect → `/library?tab=brand_kit`**         |
+| `/influencers`        | `influencers/page.tsx`              | **308-redirect → `/library?tab=influencers`**       |
 | `/admin`              | `admin/page.tsx`                    | Redirect to `/admin/dashboard`                      |
 | `/admin/login`        | `admin/login/page.tsx`              | Admin login (email + password)                      |
 | `/admin/dashboard`    | `admin/dashboard/page.tsx`          | System overview (tenants, pipelines, errors)        |
@@ -577,13 +597,15 @@ Admin Panel tables added via Alembic migration `2d6b8e9c0f1a` (2026-05-07).
 
 **useAppStore:** Navigation stage (home/recommend/generate/result), active scene, mode (expert/smart), pipeline mode (auto/step_by_step), video duration, loading/toast/disconnected state.
 
-**usePipelineStore:** Pipeline execution state, thread tracking, review status, step progress, current label, gate state.
+**usePipelineStore:** Pipeline execution state, thread tracking, review status, step progress, current label, gate state. **v2 (2026-05-09):** Adds `activePipeline: { label, scenario, scene, startedAt }` persisted via Zustand `persist` middleware (`ai-video-pipeline-store` localStorage key) so the cross-route `<PipelineStatusBar>` survives navigation and refresh.
 
 **useExpertStore:** Expert mode settings, advanced configuration.
 
 ### i18n
 
 Bilingual (zh-CN / en) via `I18nProvider` React context. Translations in `web/src/i18n/translations.ts`. All user-facing strings use translation keys.
+
+**v2 (2026-05-09):** Default locale is `zh` (was `en`); `I18nProvider` resolves the active locale on mount with priority `localStorage > cookie > navigator.language > "zh"` and updates `<html lang>` live without reload. `t(key, fallback?)` accepts a fallback and degrades to the last dotted segment of the key instead of leaking raw keys to users.
 
 ### API Client (`web/src/components/api.ts`)
 
@@ -599,6 +621,40 @@ Backend URL and API key stored via `localStorage` with cookie fallback (privacy/
 `isDemoMode()`(`web/src/components/api.ts:97`)按 hostname 判定(`github.io` / `.vercel.app`),
 是给"静态前端无后端"演示页用的纯前端降级标志,与后端 `API_KEY` 字符串无关 —— 后端不再
 对任何 key 做权限分级。
+
+### UX v2 Components (2026-05-09)
+
+Phase 1-5 redesign introduced 6 reusable frontend primitives under `web/src/components/`:
+
+| Component | Purpose | Used in |
+|---|---|---|
+| `TopHeader.tsx` | Shared sticky header (logo + `<Nav>` + `<PipelineStatusBar>`) | `/works`, `/library` |
+| `EmptyState.tsx` | Unified empty-state card with 5 inline SVG illustrations (`influencers` / `materials` / `brand-kit` / `works` / `search-empty`) | All list pages |
+| `FormFieldGroup.tsx` | `<label htmlFor>` + hint + error + auto-wired `aria-required` / `aria-describedby` / `aria-invalid` | Available for new forms |
+| `StickyActionBar.tsx` | Sticky CTA container with progress + missing-fields hint + Fortune Red micro-glow | `GuidedForm` |
+| `TagInput.tsx` | Chip input (Enter / `,` / blur commits, Backspace removes last) with keyboard nav | `InfluencersTab` platforms + style_tags |
+| `PipelineStatusBar.tsx` | Sticky status bar that polls `/scenario/{s}/state/{label}` every 5s; 4 states (running/paused/completed/error); completion triggers toast + browser Notification | Mounted in `TopHeader` + home header |
+
+**Design tokens (v2 — `web/src/app/globals.css`):**
+
+- Type scale (6 档): `--ts-display: 32px` / `--ts-h1: 24px` / `--ts-h2: 18px` / `--ts-h3: 14px` / `--ts-body: 13px` / `--ts-caption: 12px`
+- Spacing scale (8 档, 4pt grid): `--sp-1: 4px` through `--sp-16: 64px`
+- **Color tokens unchanged** — the existing 24-token "东方胶片" palette (`--fortune-red` / `--misty-pink` / `--gold-foil` / `--jade-accent` etc.) is preserved in full. No new colors introduced in the v2 redesign.
+- Utility: `.scrollbar-none` for horizontal-scroll chip strips on mobile.
+
+**Accessibility posture:**
+
+- `GuidedForm` (the default-active form, guarded by `NEXT_PUBLIC_USE_GUIDED_FORM !== "false"`): every input has a real `<label htmlFor>`, required fields have `aria-required="true"`, multiselect/duration/toggle have appropriate `role` + `aria-checked`.
+- `SceneForm` legacy block (hidden when GuidedForm active): gets a single `aria-hidden="true"` on the wrapper — screen readers skip all 40+ hidden inputs without per-field refactoring.
+- `Nav` locale toggle + settings gear: `aria-label`.
+- Full-site static a11y audit: 0 violations (Phase 3 QA V3.4.a).
+
+**Mobile breakpoints:**
+
+- `< lg:` (< 1024px): nav link text labels hidden, icons only with `aria-label` + `title`.
+- `< sm:` (< 640px): `SceneTabs` becomes a horizontal-scroll chip strip; `Nav` compact padding; `TopHeader` uses `px-4`.
+- Root containers on `/`, `/works`, `/library` carry `overflow-x-hidden` so inner horizontal-scroll widgets (chip strips) can't extend `body.scrollWidth`.
+- Verified: 25/25 combinations (375 / 414 / 768 / 1024 / 1440 × 5 routes) no horizontal overflow.
 
 ---
 
