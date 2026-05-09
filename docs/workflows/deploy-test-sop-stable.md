@@ -26,6 +26,9 @@ source: human+ai
 | 分支干净 | `git status` | 无未提交改动 |
 | SSH 密钥可用 | `ssh -i ai_video.pem ubuntu@101.34.52.232 "echo ok"` | 输出 `ok` |
 | `.env.prod` 已更新 | 检查 `deploy/lighthouse/.env.prod` | 含所有必需 env |
+| **Re-export 安全检查** | `git diff main..HEAD -- 'src/**/__init__.py' 'src/**/_*.py'` | 无被删除的 `from ... import ... as ...` 行（若有：当面 review，加 `# noqa: E402,F401,I001`）|
+
+> **关键**：文件名以 `_` 开头或路径含 `__init__.py` 的 Python 文件通常是 re-export 聚合点。ruff auto-fix 会把"本文件不用"但"其他文件通过该文件 import"的符号当 unused import 删掉，**触发 production ImportError**。必须在 deploy 前人工审这类文件的 F401 改动。见 §8 的 "2026-05-09 ruff over-fix" 事故。
 
 ---
 
@@ -41,12 +44,21 @@ rsync -avz --delete \
   --exclude='web/.next' \
   --exclude='rendering/node_modules' --exclude='.venv' \
   --exclude='output' --exclude='tmp' --exclude='__pycache__' \
+  --exclude='deploy/lighthouse/server.crt' \
+  --exclude='deploy/lighthouse/server.key' \
+  --exclude='deploy/lighthouse/*.pem' \
   --chmod=F644,D755 \
   ./ ubuntu@101.34.52.232:/opt/ai-video/
 ```
 
 > **关键：`--chmod=F644,D755`**
 > rsync `-p` 会保留源文件权限。macOS 本地文件可能为 600，同步到服务器后容器非 root 用户无法读取，导致 `PermissionError` 启动失败。`--chmod=F644,D755` 强制目标文件 644、目录 755，不受源权限影响。
+
+> **关键：`--exclude='deploy/lighthouse/server.{crt,key}'`**
+> `--delete` 会清理服务器上不存在于本地的文件。SSL 证书 (`server.crt` / `server.key`) 故意 gitignore，**只存在于服务器上**——若不 exclude，rsync 会删掉证书并创建同名空目录，导致 nginx 启动失败、HTTPS 不可达。证书文件 + 任何 `*.pem` 都必须 exclude。见 §8 的 "2026-05-09 SSL cert wipe" 事故。
+
+> **关键：使用 GNU rsync (3.x)，不是 macOS 自带 openrsync**
+> macOS 默认 rsync 是 `openrsync 2.6.9` 兼容层，不支持 `--chmod`。需要 `brew install rsync` 后用 `/opt/homebrew/bin/rsync`（Apple Silicon）或 `/usr/local/bin/rsync`（Intel）。
 
 ### 2.2 执行 deploy.sh
 
@@ -205,6 +217,40 @@ curl -sk -H "X-API-Key: ai_video_demo_2026" \
 **根因**：`Dockerfile.backend` 未 `COPY scripts/` 和 `migrations/`。
 **Workaround**：通过 `docker exec` 直接进入容器执行 Python 代码，或修改 Dockerfile 增加 COPY 指令。
 
+### 5.6 ruff over-fix 删除 re-export 导致 ImportError（已修复 2026-05-09，已写入 prevention）
+
+**症状**：`docker logs ai_video_backend` 报 `ImportError: cannot import name 'X' from 'src.routers._state'`，backend 无法启动。
+**根因**：ruff `--fix` 会把"本文件不引用"的 import 当 unused 删除（F401），但部分 import 是**给其他文件 re-export 用的**。例如 `src/routers/_state.py:182` 的 `from src.tasks.bg_registry import register_background_task as _register_background_task` —— 本文件不用，但 `src/routers/scenario.py` 通过 `from src.routers._state import _register_background_task` 引用。
+**修复**：恢复被删的 import，加 `# noqa: E402,F401,I001` 让 ruff 知道这是故意的：
+
+```python
+# Background task registry moved to src.tasks.bg_registry to break circular import.
+# Re-export for backward compatibility (used by src.routers.scenario).
+from src.tasks.bg_registry import register_background_task as _register_background_task  # noqa: E402,F401,I001
+```
+
+**Prevention**（已加入 §1 前置条件）：deploy 前跑 `git diff main..HEAD -- 'src/**/__init__.py' 'src/**/_*.py'`，对任何被删除的 import **人工 review**。
+
+### 5.7 rsync `--delete` 删除生产 SSL 证书（已修复 2026-05-09，已写入 prevention）
+
+**症状**：nginx 启动失败 `cannot load certificate "/etc/nginx/ssl/server.crt": no start line`，HTTPS 全部 `connection refused`。
+**根因**：SSL 证书 (`deploy/lighthouse/server.crt` / `server.key`) gitignore 不在仓库里，但**确实存在于服务器**。`rsync -avz --delete` 同步时把它们当"多余文件"删了，并且因为 nginx mount path 已经存在，rsync 还把它们重建成**同名空目录**——nginx 试图 load 一个目录当证书。
+**修复（紧急）**：从服务器上 Let's Encrypt 备份恢复：
+
+```bash
+ssh -i ai_video.pem ubuntu@101.34.52.232 'set -e
+sudo rmdir /opt/ai-video/deploy/lighthouse/server.crt
+sudo rmdir /opt/ai-video/deploy/lighthouse/server.key
+sudo cp /etc/letsencrypt/live/lute-tlz-dddd.top/fullchain.pem /opt/ai-video/deploy/lighthouse/server.crt
+sudo cp /etc/letsencrypt/live/lute-tlz-dddd.top/privkey.pem /opt/ai-video/deploy/lighthouse/server.key
+sudo chmod 644 /opt/ai-video/deploy/lighthouse/server.crt
+sudo chmod 600 /opt/ai-video/deploy/lighthouse/server.key
+sudo docker compose -f /opt/ai-video/deploy/lighthouse/docker-compose.prod.yml up -d --force-recreate nginx
+'
+```
+
+**Prevention**（已加入 §2.1 rsync 命令）：rsync 必须加 `--exclude='deploy/lighthouse/server.crt' --exclude='deploy/lighthouse/server.key' --exclude='deploy/lighthouse/*.pem'`。
+
 ---
 
 ## 6. 回滚方案
@@ -249,7 +295,10 @@ ssh ubuntu@101.34.52.232 "docker stop ai_video_backend"
 
 - [ ] 本地 `make ci` 通过
 - [ ] `web/.next/standalone/server.js` 存在
-- [ ] rsync 使用 `--chmod=F644,D755`
+- [ ] **Re-export safety**: `git diff main..HEAD -- 'src/**/__init__.py' 'src/**/_*.py'` 无被删除的 `from ... import` 行（若有：人工 review，加 `# noqa`）
+- [ ] **rsync 命令**：使用 GNU rsync 3.x（不是 macOS openrsync 2.6.9）
+- [ ] **rsync 命令**：包含 `--chmod=F644,D755`
+- [ ] **rsync 命令**：包含 `--exclude='deploy/lighthouse/server.crt' --exclude='deploy/lighthouse/server.key' --exclude='deploy/lighthouse/*.pem'`
 - [ ] deploy.sh Phase 0-3 全绿
 - [ ] smoke.sh 4/4 PASS
 - [ ] 前端 12 个路由 200
@@ -261,6 +310,22 @@ ssh ubuntu@101.34.52.232 "docker stop ai_video_backend"
 ---
 
 ## 8. 历史部署事故
+
+### 2026-05-09：ruff over-fix 删除 re-export，backend 启动 ImportError
+
+- **症状**：deploy.sh Phase 3 健康检查 `curl http://localhost:8001/health` 返回 000；`docker logs ai_video_backend` 报 `ImportError: cannot import name '_register_background_task' from 'src.routers._state'`
+- **根因**：commit `1fd1a5d` 用 `ruff --fix` 批量清理 226 个 violations，期间把 `src/routers/_state.py` 第 184 行的 re-export 当 unused import 删了。该 import 本文件不引用，但 `src/routers/scenario.py` 通过它接入 `bg_registry`
+- **修复**：hotfix commit `f02e749` 恢复 import + `# noqa: E402,F401,I001`
+- **影响时间**：~5 分钟（backend 502 → 用户访问失败）
+- **预防**：deploy 前 review `'src/**/__init__.py' 'src/**/_*.py'` 的 F401 改动；ruff `--fix` 不再 fire-and-forget。已加入 §1 前置条件 + §7 checklist
+
+### 2026-05-09：rsync `--delete` 删除生产 SSL 证书
+
+- **症状**：nginx 启动失败 `cannot load certificate "/etc/nginx/ssl/server.crt": no start line`；HTTPS 全部 `connection refused`
+- **根因**：rsync 命令带 `--delete`，但本地仓库 gitignore 不含 `deploy/lighthouse/server.crt` / `server.key`。同步时这两个文件被当"多余"删除，且由于 nginx mount path 已存在，被重建为**同名空目录**
+- **修复**：从 `/etc/letsencrypt/live/lute-tlz-dddd.top/{fullchain,privkey}.pem` 复制 + `force-recreate nginx`
+- **影响时间**：~3 分钟（HTTPS 全站不可达）
+- **预防**：rsync 必须 `--exclude='deploy/lighthouse/server.crt' --exclude='deploy/lighthouse/server.key' --exclude='deploy/lighthouse/*.pem'`。已加入 §2.1 rsync 命令 + §7 checklist
 
 ### 2026-05-09：volume 权限导致 Fast Mode / S1-S5 500
 
