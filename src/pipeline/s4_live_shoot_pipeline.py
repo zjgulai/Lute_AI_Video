@@ -173,11 +173,16 @@ class S4LiveShootPipeline:
         steps: dict[str, Any],
         errors: list[str],
     ) -> list[dict[str, Any]]:
-        """Generate Seedance video prompts referencing footage assets."""
+        """Generate Seedance video prompts referencing footage assets.
+
+        Returns a flat list of prompt dicts (one per segment) — same shape as
+        S1's _step_video_prompts so downstream _step_seedance_clips can use
+        vp.get("segment_prompt") directly.
+        """
         scripts_dict = self._get_step_output(steps, "scripts") or []
         footage_assets = config.get("footage_assets", [])
 
-        prompts: list[dict[str, Any]] = []
+        all_prompts: list[dict[str, Any]] = []
         for script in scripts_dict[:MAX_SCRIPTS_PER_RUN]:
             segs = script.get("segments", [])
             script_segs = []
@@ -197,13 +202,16 @@ class S4LiveShootPipeline:
                 "script_segments": script_segs,
                 "product_name": script.get("product_name", "Product"),
             })
-            if vp.success and vp.data:
-                prompts.append({"script_id": script.get("id"), "prompt": vp.data})
+            if vp.success and vp.data and isinstance(vp.data, list):
+                for p_dict in vp.data:
+                    p_dict["script_id"] = script.get("id", "")
+                    p_dict["product_name"] = script.get("product_name", "Product")
+                all_prompts.extend(vp.data)
             else:
                 errors.append(f"video_prompt_{script.get('id', '?')}_failed: {vp.error}")
 
-        logger.info("s4: video prompts complete", prompts=len(prompts))
-        return prompts
+        logger.info("s4: video prompts complete", prompts=len(all_prompts))
+        return all_prompts
 
     async def _step_thumbnails(
         self,

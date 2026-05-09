@@ -73,6 +73,11 @@ _SCENARIO_CONFIGS: dict[str, dict[str, Any]] = {
         "step_order": STEP_ORDER,
         "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
     },
+    "s2": {
+        # S2 Brand Campaign is an S1 wrapper (brand_mode=True) — same steps, same class
+        "step_order": STEP_ORDER,
+        "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
+    },
     "s4": {
         "step_order": [
             "scripts",

@@ -964,11 +964,25 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "enable_media_synthesis": body.get("enable_media_synthesis", True),
         }
     elif scenario == "s2":
+        brand_package = body.get("brand_package", {})
+        brand_name = brand_package.get("brand_name", "Brand")
+        # S2 is an S1 wrapper in brand_mode — construct a minimal product_catalog
+        # so S1's _step_strategy can run without KeyError.
+        product_catalog = {
+            "product_name": brand_name,
+            "name": brand_name,
+            "brand_name": brand_name,
+            "category": "brand_campaign",
+            "usps": brand_package.get("product_lines", ["quality"]),
+        }
         config = {
-            "brand_package": body.get("brand_package", {}),
+            "product_catalog": product_catalog,
+            "brand_guidelines": brand_package,
+            "brand_mode": True,
             "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
             "target_languages": body.get("target_languages", DEFAULT_LANGUAGES),
             "week": body.get("week", ""),
+            "enable_media_synthesis": True,
         }
     elif scenario == "s3":
         from src.tools.translate import translate_catalog_to_english
