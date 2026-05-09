@@ -208,7 +208,11 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
       )}
 
       {/* Legacy form (hidden when GuidedForm is active) */}
-      <div className={USE_GUIDED_FORM ? "hidden" : ""}>
+      <div
+        data-legacy-form
+        className={USE_GUIDED_FORM ? "hidden" : ""}
+        aria-hidden={USE_GUIDED_FORM ? "true" : undefined}
+      >
         {/* Scene-specific fields */}
       {scene === "product_direct" && (
         <div className="space-y-3">

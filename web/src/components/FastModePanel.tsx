@@ -87,29 +87,48 @@ export default function FastModePanel() {
       <div className="apple-card p-4 space-y-4">
         {/* Text input */}
         <div>
-          <label className="block text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5">
+          <label
+            htmlFor="fast-prompt"
+            className="block text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5"
+          >
             {t("fastMode.title")}
           </label>
           <textarea
+            id="fast-prompt"
+            name="prompt"
             value={userPrompt}
             onChange={(e) => setUserPrompt(e.target.value)}
             placeholder={t("fastMode.inputPlaceholder")}
             rows={4}
+            aria-required="true"
+            aria-describedby="fast-prompt-hint"
             className="w-full px-3 py-2 text-sm bg-[var(--bg-panel)] border border-[var(--border-default)] rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-foil)]/30 focus:border-[var(--gold-foil)] transition-all"
           />
-          <p className="text-[12px] text-[var(--text-muted)] mt-1">{t("fastMode.inputHint")}</p>
+          <p id="fast-prompt-hint" className="text-[12px] text-[var(--text-muted)] mt-1">
+            {t("fastMode.inputHint")}
+          </p>
         </div>
 
         {/* Duration selector */}
         <div>
-          <label className="block text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5">
+          <span
+            id="fast-duration-label"
+            className="block text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider mb-1.5"
+          >
             <Clock size={12} weight="fill" className="inline mr-1" />
             {t("fastMode.duration")}
-          </label>
-          <div className="flex gap-2">
+          </span>
+          <div
+            role="radiogroup"
+            aria-labelledby="fast-duration-label"
+            className="flex gap-2"
+          >
             {[10, 15].map((d) => (
               <button
                 key={d}
+                type="button"
+                role="radio"
+                aria-checked={duration === d}
                 onClick={() => setDuration(d as 10 | 15)}
                 className={`text-xs px-4 py-1.5 rounded-full font-medium transition-all cursor-pointer ${
                   duration === d
@@ -126,6 +145,10 @@ export default function FastModePanel() {
         {/* TTS toggle */}
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            role="switch"
+            aria-checked={enableTTS}
+            aria-label={t("fastMode.enableTTS")}
             onClick={() => setEnableTTS(!enableTTS)}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all cursor-pointer ${
               enableTTS

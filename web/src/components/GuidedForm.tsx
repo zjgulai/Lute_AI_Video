@@ -5,7 +5,6 @@ import { useI18n } from "@/i18n/I18nProvider";
 import {
   GUIDED_CARD_SEQUENCES,
   SCENE_VIDEO_TYPES,
-  TEMPLATE_PRESETS,
 } from "@/demo-data";
 import { CONTENT_SCENARIOS } from "./types";
 import type { GuidedCard as GuidedCardType } from "./types";
@@ -13,6 +12,7 @@ import GuidedCard from "./GuidedCard";
 import CardConnector from "./CardConnector";
 import LiveSummary from "./LiveSummary";
 import QuickTemplate from "./QuickTemplate";
+import StickyActionBar from "./StickyActionBar";
 import { CaretRight, Play } from "@phosphor-icons/react";
 
 interface Props {
@@ -164,6 +164,12 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
   ).length;
   const progress = cards.length > 0 ? Math.round((filledCount / cards.length) * 100) : 0;
 
+  const missingFieldLabels = useMemo(() => {
+    return cards
+      .filter((c) => c.priority === "required" && !values[c.fieldKey]?.trim()?.length)
+      .map((c) => c.stepName);
+  }, [cards, values]);
+
   // 获取连接文字
   const getConnectionText = (index: number): string => {
     if (index >= cards.length - 1) return "";
@@ -172,8 +178,18 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
 
   const scenarioTitle = CONTENT_SCENARIOS.find((s: { id: string; title: string }) => s.id === scene)?.title || scene;
 
+  const progressText = (
+    <span>
+      <span className="font-semibold text-[var(--text-h1)]">{filledCount}</span>
+      <span className="text-[var(--text-muted)]"> / {cards.length}</span>
+      <span className="ml-2">{t("step.fields")}</span>
+      <span className="ml-3 text-[var(--text-muted)]">·</span>
+      <span className="ml-3">{progress}%</span>
+    </span>
+  );
+
   return (
-    <div className="space-y-3">
+    <div data-guided-form className="space-y-3">
       {/* 顶部：场景标题 + 视频类型选择 + 模板 */}
       <div className="apple-card p-4">
         <div className="flex items-center justify-between mb-3">
@@ -191,11 +207,17 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
 
         {/* 视频类型选择 */}
         {videoTypes.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div
+            role="radiogroup"
+            aria-label={t("scene.selectVideoType")}
+            className="grid grid-cols-2 sm:grid-cols-3 gap-2"
+          >
             {videoTypes.map((vt) => (
               <button
                 key={vt.id}
                 type="button"
+                role="radio"
+                aria-checked={selectedVideoType === vt.id}
                 onClick={() => {
                   setSelectedVideoType(vt.id);
                   setValues({});
@@ -257,70 +279,20 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
         </div>
       </div>
 
-      {/* 底部：进度 + 提交 */}
-      <div className="apple-card p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* 进度圆环 */}
-            <div className="relative w-10 h-10">
-              <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
-                <circle
-                  cx="18" cy="18" r="16"
-                  fill="none"
-                  stroke="var(--color-border-light)"
-                  strokeWidth="3"
-                />
-                <circle
-                  cx="18" cy="18" r="16"
-                  fill="none"
-                  stroke="var(--color-accent)"
-                  strokeWidth="3"
-                  strokeDasharray={`${progress * 1.005} 100`}
-                  strokeLinecap="round"
-                  className="transition-all duration-500"
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[12px] font-semibold text-[var(--color-text-primary)]">
-                {progress}%
-              </span>
-            </div>
-            <div>
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                {filledCount} / {cards.length} {t("step.fields")}
-              </p>
-              <p className="text-[12px] text-[var(--color-text-tertiary)]">
-                {canSubmit
-                  ? t("summary.complete")
-                  : t("card.priority.required") + t("step.pending")}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading || !canSubmit}
-            className={`apple-btn apple-btn-primary py-2.5 px-6 text-sm transition-transform ${
-              canSubmit ? "hover:scale-[1.02]" : ""
-            }`}
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="animate-spin">
-                  <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
-                  <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
-                </svg>
-                {t("common.loading")}
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <Play size={14} weight="fill" />
-                {t("sceneForm.continue")}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
+      <StickyActionBar
+        primaryLabel={
+          <span className="flex items-center gap-2">
+            <Play size={14} weight="fill" />
+            {t("sceneForm.continue")}
+          </span>
+        }
+        onPrimary={handleSubmit}
+        disabled={!canSubmit}
+        loading={loading}
+        missingFields={missingFieldLabels}
+        missingLabel={t("form.stillNeed")}
+        progressText={progressText}
+      />
     </div>
   );
 }

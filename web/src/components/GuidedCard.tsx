@@ -80,14 +80,22 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
   );
 
   const renderInput = () => {
+    const fieldId = `guided-${card.fieldKey}`;
+    const hintId = `${fieldId}-hint`;
+    const requiredProp = card.priority === "required" ? { "aria-required": "true" as const } : {};
+
     switch (card.inputType) {
       case "textarea":
         return (
           <textarea
+            id={fieldId}
+            name={card.fieldKey}
             value={value}
             onChange={(e) => handleChange(e.target.value)}
             placeholder={card.placeholder ? t(card.placeholder) : undefined}
             maxLength={card.maxLength}
+            aria-describedby={hintId}
+            {...requiredProp}
             className="apple-input resize-none text-sm"
             rows={3}
           />
@@ -96,8 +104,12 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
       case "select":
         return (
           <select
+            id={fieldId}
+            name={card.fieldKey}
             value={value}
             onChange={(e) => handleChange(e.target.value)}
+            aria-describedby={hintId}
+            {...requiredProp}
             className="apple-input text-sm"
           >
             <option value="">{t("sceneForm.categoryPlaceholder")}</option>
@@ -111,13 +123,21 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
 
       case "multiselect":
         return (
-          <div className="flex flex-wrap gap-1.5">
+          <div
+            id={fieldId}
+            role="group"
+            aria-label={card.stepName}
+            aria-describedby={hintId}
+            className="flex flex-wrap gap-1.5"
+          >
             {(card.options || []).map((opt) => {
               const selected = value.split(",").includes(opt);
               return (
                 <button
                   key={opt}
                   type="button"
+                  role="checkbox"
+                  aria-checked={selected}
                   onClick={() => {
                     const current = value ? value.split(",") : [];
                     const next = selected
@@ -138,7 +158,11 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
         return (
           <div className="flex items-center gap-3">
             <button
+              id={fieldId}
               type="button"
+              role="switch"
+              aria-checked={value === "true"}
+              aria-label={card.stepName}
               onClick={() => handleChange(value === "true" ? "false" : "true")}
               className={`relative w-11 h-6 rounded-full transition-colors ${
                 value === "true" ? "bg-[var(--fortune-red)]" : "bg-[var(--border-default)]"
@@ -158,11 +182,19 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
 
       case "duration":
         return (
-          <div className="flex gap-2">
+          <div
+            id={fieldId}
+            role="radiogroup"
+            aria-label={card.stepName}
+            aria-describedby={hintId}
+            className="flex gap-2"
+          >
             {["15s", "30s", "45s", "60s"].map((d) => (
               <button
                 key={d}
                 type="button"
+                role="radio"
+                aria-checked={value === d}
                 onClick={() => handleChange(d)}
                 className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
                   value === d
@@ -202,9 +234,14 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
             </div>
             <input
               ref={fileInputRef}
+              id={fieldId}
+              name={card.fieldKey}
               type="file"
               className="hidden"
               accept={card.inputType === "image-upload" ? "image/*" : "video/*"}
+              aria-label={card.stepName}
+              aria-describedby={hintId}
+              {...requiredProp}
               onChange={handleUpload}
             />
             {value && (
@@ -222,11 +259,15 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
       default:
         return (
           <input
+            id={fieldId}
+            name={card.fieldKey}
             type="text"
             value={value}
             onChange={(e) => handleChange(e.target.value)}
             placeholder={card.placeholder ? t(card.placeholder) : undefined}
             maxLength={card.maxLength}
+            aria-describedby={hintId}
+            {...requiredProp}
             className="apple-input text-sm"
           />
         );
@@ -274,13 +315,24 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
         </span>
       </div>
 
-      {/* 引导问题 */}
-      <h4 className="text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
+      {/* 引导问题 — semantic <label> tied to the input via htmlFor */}
+      <label
+        htmlFor={`guided-${card.fieldKey}`}
+        className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5 cursor-pointer"
+      >
         {card.question}
-      </h4>
+        {card.priority === "required" && (
+          <span aria-label="required" className="ml-1 text-[var(--fortune-red)] font-semibold">
+            *
+          </span>
+        )}
+      </label>
 
       {/* 原因说明 */}
-      <p className="text-xs text-[var(--color-text-tertiary)] mb-3 leading-relaxed">
+      <p
+        id={`guided-${card.fieldKey}-hint`}
+        className="text-xs text-[var(--color-text-tertiary)] mb-3 leading-relaxed"
+      >
         {card.reason}
       </p>
 
