@@ -12,6 +12,7 @@ import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -39,16 +40,40 @@ CATEGORIES: dict[str, tuple[str, str]] = {
 
 LABEL_RE = re.compile(r"^(s\d)_(\d+)")
 
-# Quality ranking: lower number = higher priority. Categories not listed get 99 (lowest).
-# renders = 成片(remotion 完整组装),fast_mode = Fast Mode 直出。其余是中间产物。
 QUALITY_PRIORITY: dict[str, int] = {
     "renders": 0,
     "fast_mode": 1,
 }
 
-# Thumbnail posters live alongside other thumbnails but in a dedicated subfolder so
-# they're easy to identify, regenerate, and rsync. Naming: <category>__<filename>.jpg
-# (slashes in original path replaced by `__` so a single flat directory works).
+AssetKind = Literal["final_work", "creation_intermediate", "brand_kit"]
+
+KIND_BY_CATEGORY: dict[str, AssetKind] = {
+    "renders": "final_work",
+    "fast_mode": "final_work",
+    "seedance": "creation_intermediate",
+    "gpt_images": "creation_intermediate",
+    "audio": "creation_intermediate",
+    "keyframes": "creation_intermediate",
+    "thumbnails": "creation_intermediate",
+    "character_identity": "creation_intermediate",
+    "uploads": "creation_intermediate",
+    "assets": "creation_intermediate",
+    "demo": "creation_intermediate",
+    "quality-test": "creation_intermediate",
+}
+
+def _derive_kind(category: str, mime: str) -> AssetKind:
+    """Map (storage category, mime type) to lifecycle kind.
+
+    `final_work` is reserved for deliverable video outputs only; audio or image
+    artifacts inside `renders/` or `fast_mode/` remain `creation_intermediate`.
+    """
+    base = KIND_BY_CATEGORY.get(category, "creation_intermediate")
+    if base == "final_work" and not mime.startswith("video/"):
+        return "creation_intermediate"
+    return base
+
+
 THUMBNAIL_DIR = OUTPUT_DIR / "thumbnails" / "portfolio_posters"
 
 
@@ -70,12 +95,13 @@ class PortfolioFile(BaseModel):
     filename: str
     path: str
     category: str
+    kind: AssetKind = "creation_intermediate"
     scenario: str | None = None
     label: str | None = None
     produced_at: str
     size_bytes: int
     mime_type: str
-    thumbnail_path: str | None = None  # relative to OUTPUT_DIR; None for non-video or missing poster
+    thumbnail_path: str | None = None
 
 
 class PortfolioResponse(BaseModel):
@@ -135,6 +161,7 @@ def _scan_portfolio() -> list[PortfolioFile]:
                     filename=path.name,
                     path=str(rel),
                     category=category,
+                    kind=_derive_kind(category, mime),
                     scenario=scenario,
                     label=label,
                     produced_at=datetime.fromtimestamp(
@@ -168,13 +195,16 @@ def _scan_portfolio_cached() -> list[PortfolioFile]:
 @router.get("/")
 async def list_portfolio(
     category: str | None = None,
+    kind: AssetKind | None = None,
     limit: int | None = None,
     sort: str = "recent",
 ) -> PortfolioResponse:
     """Return pipeline-generated media files.
 
     Query params:
-    - `category`: filter to a single category (renders, seedance, ...).
+    - `category`: filter to a single storage bucket (renders, seedance, ...).
+    - `kind`: filter by lifecycle stage (`final_work` | `creation_intermediate` | `brand_kit`).
+              Preferred over `category` for UI-oriented queries.
     - `limit`: cap number of files returned (after sort+filter).
     - `sort`: `recent` (default, by produced_at desc) or `quality` (renders+fast_mode first,
               then by produced_at desc — used by frontend footage TOP-N display).
@@ -184,7 +214,6 @@ async def list_portfolio(
     """
     all_files = _scan_portfolio_cached()
 
-    # by_category aggregates over all files (pre-filter, pre-limit) so totals stay stable
     by_cat: dict[str, dict[str, int]] = {}
     for f in all_files:
         entry = by_cat.setdefault(f.category, {"count": 0, "bytes": 0})
@@ -194,16 +223,18 @@ async def list_portfolio(
     if category:
         all_files = [f for f in all_files if f.category == category]
 
+    if kind:
+        all_files = [f for f in all_files if f.kind == kind]
+
     if sort == "quality":
         all_files = sorted(
             all_files,
             key=lambda f: (
                 QUALITY_PRIORITY.get(f.category, 99),
-                # produced_at is ISO-8601 UTC; lex desc == chronological desc
                 _negate_iso(f.produced_at),
             ),
         )
-    else:  # recent
+    else:
         all_files = sorted(all_files, key=lambda f: f.produced_at, reverse=True)
 
     if limit is not None and limit > 0:

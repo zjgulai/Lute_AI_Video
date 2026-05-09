@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, Package, SquaresFour } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import { House, FilmSlate, FolderOpen, Gear, ShieldCheck } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useAppStore } from "@/stores/useAppStore";
 import { usePipelineStore } from "@/stores/usePipelineStore";
 import { useExpertStore } from "@/stores/useExpertStore";
+import { getApiBase } from "./api";
 
 export default function Nav() {
   const pathname = usePathname();
@@ -14,9 +16,25 @@ export default function Nav() {
   const resetApp = useAppStore((s) => s.resetApp);
   const resetPipeline = usePipelineStore((s) => s.resetAll);
   const resetExpert = useExpertStore((s) => s.resetExpert);
+  const [adminVisible, setAdminVisible] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const url = getApiBase().replace(/\/$/, "") + "/api/admin/auth/session";
+    fetch(url, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.authenticated) setAdminVisible(true);
+      })
+      .catch(() => {
+        // Probe failed (network or 401) — admin link stays hidden, no redirect
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   const handleHomeClick = () => {
-    // N-01 fix: reset all pipeline state when returning home
     localStorage.removeItem("ai_video_thread_id");
     localStorage.removeItem("ai_video_expert_session");
     resetPipeline();
@@ -29,38 +47,44 @@ export default function Nav() {
   };
 
   const links = [
-    { href: "/", label: t("nav.home"), icon: House, onClick: handleHomeClick },
-    { href: "/footage", label: t("nav.gallery"), icon: SquaresFour },
-    { href: "/brand-packages", label: t("nav.brandAssets"), icon: Package },
+    { href: "/", label: t("nav.home"), icon: House, onClick: handleHomeClick, match: (p: string) => p === "/" || p.startsWith("/s") || p === "/fast" || p === "/result" },
+    { href: "/works", label: t("nav.works"), icon: FilmSlate, match: (p: string) => p === "/works" || p.startsWith("/works/") },
+    { href: "/library", label: t("nav.library"), icon: FolderOpen, match: (p: string) => p === "/library" || p.startsWith("/library/") },
+    ...(adminVisible ? [{ href: "/admin/dashboard", label: t("nav.admin"), icon: ShieldCheck, match: (p: string) => p.startsWith("/admin") }] : []),
+    { href: "/settings", label: t("nav.settings"), icon: Gear, match: (p: string) => p === "/settings" },
   ];
 
   return (
-    <nav className="flex items-center gap-2">
+    <nav className="flex items-center gap-1 sm:gap-2 min-w-0">
       {links.map((link) => {
-        const isActive = pathname === link.href;
+        const isActive = link.match(pathname);
         const Icon = link.icon;
         return (
           <Link
             key={link.href}
             href={link.href}
             onClick={link.onClick}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            aria-label={link.label}
+            title={link.label}
+            className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all shrink-0 ${
               isActive
                 ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[rgba(53,20,26,0.06)]"
             }`}
           >
             <Icon size={18} weight="fill" />
-            {link.label}
+            <span className="hidden lg:inline">{link.label}</span>
           </Link>
         );
       })}
-      {/* Language toggle */}
       <button
         onClick={() => setLocale(locale === "en" ? "zh" : "en")}
-        className="ml-3 px-3 py-1.5 rounded-full text-xs font-semibold transition-all bg-[var(--bg-panel)] text-[var(--text-muted)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)] cursor-pointer border border-[var(--border-default)] min-w-[44px] text-center"
+        aria-label={locale === "zh" ? "Switch to English" : "切换到中文"}
+        className="ml-1 sm:ml-3 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold transition-all bg-[var(--bg-panel)] text-[var(--text-muted)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)] cursor-pointer border border-[var(--border-default)] min-w-[48px] sm:min-w-[56px] text-center shrink-0"
       >
-        {t("locale.toggle")}
+        <span className={locale === "zh" ? "text-[var(--fortune-red)]" : ""}>中</span>
+        <span className="mx-1 opacity-40">/</span>
+        <span className={locale === "en" ? "text-[var(--fortune-red)]" : ""}>EN</span>
       </button>
     </nav>
   );
