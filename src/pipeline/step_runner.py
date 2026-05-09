@@ -15,8 +15,7 @@ import structlog
 
 from src.pipeline.gate_manager import SCENARIO_GATE_DEFINITIONS
 from src.pipeline.state_manager import PipelineStateManager
-from src.skills.registry import SkillRegistry
-from src.telemetry import generate_trace_id, pipeline_metrics, error_collector
+from src.telemetry import error_collector, generate_trace_id, pipeline_metrics
 
 
 def _get_gate_after_steps(scenario: str = "s1") -> set[str]:

@@ -7,10 +7,11 @@ LLM is unavailable or the call fails.
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from src.tools.llm_client import llm
-from typing import Any
 
 logger = structlog.get_logger()
 
@@ -241,7 +242,7 @@ async def _score_keyframe_candidate(data: dict[str, Any], params: dict[str, Any]
             "product_visibility": round(product_score, 4),
             "style_consistency": round(style_score, 4),
         },
-        "explanation": f"Heuristic keyframe scoring based on prompt keywords",
+        "explanation": "Heuristic keyframe scoring based on prompt keywords",
         "heuristic": True,
     }
 

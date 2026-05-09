@@ -9,12 +9,12 @@ import logging
 import os
 import random
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 import httpx
 
 from src.connectors.base import PlatformConnector
-from typing import Any
 
 logger = logging.getLogger(__name__)
 

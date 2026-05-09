@@ -14,15 +14,14 @@ import logging
 import os
 import time
 from collections import OrderedDict
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 try:
-    from fastapi import FastAPI, Depends, Request
+    from fastapi import Depends, FastAPI
     from fastapi.middleware.cors import CORSMiddleware
     HAS_FASTAPI = True
 except ImportError:
@@ -78,7 +77,7 @@ if HAS_FASTAPI:
         # P0: Production API key sanity check — fail-fast if required keys missing
         from src.config import ENVIRONMENT
         if ENVIRONMENT == "production":
-            from src.config import DEEPSEEK_API_KEY, POYO_API_KEY, SILICONFLOW_API_KEY, SEEDANCE_API_KEY
+            from src.config import DEEPSEEK_API_KEY, POYO_API_KEY, SEEDANCE_API_KEY, SILICONFLOW_API_KEY
             missing = []
             if not DEEPSEEK_API_KEY:
                 missing.append("DEEPSEEK_API_KEY")
@@ -282,7 +281,7 @@ if HAS_FASTAPI:
             "trace_id": server_trace_id,
             "duration_ms": _duration_ms,
             "version": getattr(app, "version", "0.2.0"),
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }
 
         if isinstance(data, dict):
@@ -304,9 +303,8 @@ if HAS_FASTAPI:
         return new_response
 
     # ── Mount domain routers (P1-11) ──
-    from src.routers._deps import verify_api_key
-
     from src.routers import health
+    from src.routers._deps import verify_api_key
     app.include_router(health.router)
 
     from src.routers import pipeline

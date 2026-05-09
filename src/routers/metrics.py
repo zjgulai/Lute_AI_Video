@@ -1,15 +1,13 @@
 """metrics router — extracted from api.py (P1-11)."""
 
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException
 
 try:
     from src.storage import HAS_STORAGE
-    from src.storage.metrics_repository import VideoMetricsRepository
 except ImportError:
     HAS_STORAGE = False
 
 from src.routers._deps import _safe_error, verify_api_key
-
 
 router = APIRouter()
 

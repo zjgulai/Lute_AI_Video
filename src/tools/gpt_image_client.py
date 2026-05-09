@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import httpx
 import structlog
-
-from typing import Any
 
 from src.config import (
     OPENAI_API_KEY,
@@ -255,7 +254,7 @@ class GPTImageClient:
         return {
             "image_id": image_id,
             "prompt": prompt,
-            "image_url": f"[GPT_IMAGE_STUB — add OPENAI_API_KEY or POYO_API_KEY]",
+            "image_url": "[GPT_IMAGE_STUB — add OPENAI_API_KEY or POYO_API_KEY]",
             "local_path": str(self.output_dir / f"stub_{image_id}.png"),
             "quality": quality,
         }

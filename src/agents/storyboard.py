@@ -39,8 +39,8 @@ class StoryboardAgent:
             if self.use_mock:
                 sb = self._mock_storyboard(script)
             elif self.use_skills:
-                from src.skills.registry import SkillRegistry
                 import src.skills.storyboard  # noqa: F401
+                from src.skills.registry import SkillRegistry
                 skill_result = await SkillRegistry().execute("storyboard-skill", {
                     "scripts": [script.model_dump(mode="json")],
                 })

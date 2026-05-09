@@ -11,11 +11,12 @@ The {{product_url}} placeholder is replaced at render/publishing time.
 """
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
-from src.models import DistributionPlan, Platform, PlatformPost, Script, ThumbnailSet
+from src.models import DistributionPlan, PlatformPost, Script, ThumbnailSet
 from src.tools.llm_client import llm
-from typing import Any
 
 logger = structlog.get_logger()
 

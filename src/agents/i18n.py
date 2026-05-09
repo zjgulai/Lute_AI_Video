@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # English is the only supported language in v0.x.
 _SUPPORTED_LANGS: dict[str, str] = {"en": "English"}
 

@@ -48,8 +48,8 @@ class GPTImageGenerateSkill(SkillCallable):
         style_ref = params.get("style_ref")
         image_id = params.get("image_id", "img_001")
 
-        from src.tools.gpt_image_client import GPTImageClient
         from src.config import OPENAI_API_KEY, POYO_API_KEY
+        from src.tools.gpt_image_client import GPTImageClient
 
         client = GPTImageClient()
         try:

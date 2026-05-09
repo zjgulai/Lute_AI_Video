@@ -14,7 +14,6 @@ from src.models import Brief, Language, Platform, VideoType, WeeklyCalendar
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
-
 # Scenario-aware system prompt template
 STRATEGY_SYSTEM_PROMPT = """You are a Senior Content Strategist for short-form video content.
 
@@ -276,7 +275,6 @@ class ProductStrategySkill(SkillCallable):
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         """Execute by calling LLM with scenario-aware prompts."""
-        from src.skills.llm_skill import LLMSkill
         from src.tools.llm_client import llm
 
         # Build the prompt with params
@@ -414,6 +412,7 @@ class ProductStrategySkill(SkillCallable):
 
 # Auto-register on import
 import structlog
+
 _logger_ps = structlog.get_logger()
 try:
     SkillRegistry.register(ProductStrategySkill())

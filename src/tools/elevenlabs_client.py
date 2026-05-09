@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import httpx
 import structlog
-
-from typing import Any
 
 from src.config import (
     ELEVENLABS_API_KEY,
@@ -125,7 +124,10 @@ class ElevenLabsClient:
 
         Falls back to silent MP3 on any failure or non-audio content.
         """
-        import hashlib, asyncio, httpx
+        import asyncio
+        import hashlib
+
+        import httpx
 
         text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
         filename = f"poyo_tts_{language}_{text_hash}.mp3"

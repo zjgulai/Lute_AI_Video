@@ -12,20 +12,20 @@ from __future__ import annotations
 import asyncio
 import base64
 from pathlib import Path
+from typing import Any
 
 import httpx
 import structlog
 
 from src.config import (
-    SEEDANCE_API_KEY,
-    SEEDANCE_API_BASE_URL,
-    POYO_API_KEY,
-    POYO_API_BASE_URL,
-    POYO_VIDEO_MODEL,
     OUTPUT_DIR,
+    POYO_API_BASE_URL,
+    POYO_API_KEY,
+    POYO_VIDEO_MODEL,
+    SEEDANCE_API_BASE_URL,
+    SEEDANCE_API_KEY,
 )
 from src.tools.llm_client import get_request_api_key
-from typing import Any
 
 logger = structlog.get_logger()
 
@@ -153,7 +153,6 @@ class SeedanceClient:
             )
 
         # Native Seedance API
-        from src.tools.retry import retry_with_backoff
 
         payload = {
             "model": "seedance-2.0",
@@ -200,7 +199,6 @@ class SeedanceClient:
                 duration=duration,
             )
 
-        from src.tools.retry import retry_with_backoff
 
         payload = {
             "model": "seedance-2.0",
@@ -480,7 +478,7 @@ class SeedanceClient:
 
     def _stub_result(self, prompt: str, mode: str = "unknown") -> dict[str, Any]:
         return {
-            "video_url": f"[SEEDANCE_STUB — add API key]",
+            "video_url": "[SEEDANCE_STUB — add API key]",
             "local_path": str(self.output_dir / f"stub_{mode}_{hash(prompt) & 0xFFFF:04x}.mp4"),
             "prompt_used": prompt,
             "duration": 0,

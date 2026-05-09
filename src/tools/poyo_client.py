@@ -19,7 +19,7 @@ from typing import Any
 import httpx
 import structlog
 
-from src.config import POYO_API_KEY, POYO_API_BASE_URL
+from src.config import POYO_API_BASE_URL, POYO_API_KEY
 from src.tools.llm_client import get_request_api_key
 
 logger = structlog.get_logger()

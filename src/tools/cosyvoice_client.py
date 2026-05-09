@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from pathlib import Path
+from typing import Any
 
 import httpx
 import structlog
@@ -25,7 +26,6 @@ from src.config import (
     SILICONFLOW_API_KEY,
 )
 from src.tools.llm_client import get_request_api_key
-from typing import Any
 
 logger = structlog.get_logger()
 
@@ -124,7 +124,7 @@ class CosyVoiceClient:
                 track(api="cosyvoice", units=1)
                 return filepath
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(
                 "cosyvoice: synthesis timed out",
                 timeout=TTS_TIMEOUT_SECONDS,

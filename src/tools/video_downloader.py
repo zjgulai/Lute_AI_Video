@@ -13,16 +13,14 @@ import asyncio
 import ipaddress
 import json
 import subprocess
-import tempfile
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
+import structlog
 from pydantic import BaseModel
 
-import structlog
-
 from src.config import OUTPUT_DIR
-from typing import Any
 
 logger = structlog.get_logger()
 
@@ -221,7 +219,7 @@ class VideoDownloader:
             duration=30.0,
             source_url=url,
             platform=plat,
-            local_path=f"[MOCK_DOWNLOAD — add yt-dlp]",
+            local_path="[MOCK_DOWNLOAD — add yt-dlp]",
         )
 
     def _mock_transcription(self) -> list[TranscribeSegment]:

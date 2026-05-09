@@ -35,7 +35,6 @@ class FaceConsistencyChecker:
         if self._mediapipe_available is not None:
             return self._mediapipe_available
         try:
-            import mediapipe as mp  # type: ignore[import-untyped]
             self._mediapipe_available = True
             logger.info("face_consistency: MediaPipe available")
         except Exception:
@@ -46,7 +45,6 @@ class FaceConsistencyChecker:
         if self._deepface_available is not None:
             return self._deepface_available
         try:
-            import deepface  # type: ignore[import-untyped]
             self._deepface_available = True
             logger.info("face_consistency: DeepFace available")
         except Exception:

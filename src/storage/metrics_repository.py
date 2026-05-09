@@ -7,12 +7,10 @@ SQLite fallback. All queries are parameterised to prevent injection.
 import json
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-import asyncpg
-
-from .db import get_pool, get_sqlite_conn, is_pg_available
+from .db import get_pool, get_sqlite_conn
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ def _now() -> datetime:
     # video_metrics columns are TIMESTAMP (no tz) — match schema by returning
     # naive UTC. asyncpg refuses to compare a tz-aware param against a tz-naive
     # column, so we strip tzinfo here.
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _generate_id() -> str:
@@ -63,7 +61,7 @@ class VideoMetricsRepository:
     # Internal helpers (PG-first, SQLite fallback)
     # ------------------------------------------------------------------
 
-    async def _fetchrow(self, query: str, *args) -> Optional[dict[str, Any]]:
+    async def _fetchrow(self, query: str, *args) -> dict[str, Any] | None:
         pool = await get_pool()
         if pool is not None:
             async with pool.acquire() as conn:
@@ -108,9 +106,9 @@ class VideoMetricsRepository:
         video_id: str,
         scenario: str,
         platform: str,
-        post_id: Optional[str] = None,
-        post_url: Optional[str] = None,
-        metrics_dict: Optional[dict[str, Any]] = None,
+        post_id: str | None = None,
+        post_url: str | None = None,
+        metrics_dict: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Insert a new metrics snapshot row."""
         record_id = _generate_id()
@@ -174,7 +172,7 @@ class VideoMetricsRepository:
     async def get_metrics(
         self,
         video_id: str,
-        platform: Optional[str] = None,
+        platform: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get all metrics snapshots for a video, optionally filtered by platform.
 
@@ -198,8 +196,8 @@ class VideoMetricsRepository:
 
     async def get_dashboard_overview(
         self,
-        scenario: Optional[str] = None,
-        platform: Optional[str] = None,
+        scenario: str | None = None,
+        platform: str | None = None,
         days: int = 7,
     ) -> list[dict[str, Any]]:
         """Get aggregated dashboard data: latest metrics per video.
@@ -338,7 +336,7 @@ class VideoMetricsRepository:
 
     async def get_platform_comparison(
         self,
-        scenario: Optional[str] = None,
+        scenario: str | None = None,
         days: int = 7,
     ) -> list[dict[str, Any]]:
         """Metrics grouped by platform, optionally filtered by scenario.

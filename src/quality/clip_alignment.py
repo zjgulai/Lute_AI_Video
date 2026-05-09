@@ -38,7 +38,6 @@ class ClipAligner:
             return self._available
         try:
             from transformers import CLIPModel, CLIPProcessor  # type: ignore[import-untyped]
-            import torch  # type: ignore[import-untyped]
 
             self._processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
             self._model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -72,8 +71,8 @@ class ClipAligner:
             return None
 
         try:
-            from PIL import Image
             import torch
+            from PIL import Image
 
             image = Image.open(path).convert("RGB")
             inputs = self._processor(

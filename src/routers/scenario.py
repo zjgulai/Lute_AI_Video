@@ -3,7 +3,7 @@
 import asyncio
 
 import structlog
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 logger = structlog.get_logger()
 
@@ -15,18 +15,17 @@ except ImportError:
 from typing import Any
 
 from src.config import DEFAULT_LANGUAGES
-from src.routers._deps import _inject_api_keys, _safe_error, _classified_error, verify_api_key
+from src.routers._deps import _classified_error, _inject_api_keys, _safe_error, verify_api_key
 from src.routers._state import (
     _SCENARIO_STEP_ORDER,
     _STEP_DURATIONS,
-    _validate_scenario,
+    FastModeRequest,
+    S1StartRequest,
     _get_step_deps,
     _get_step_output,
     _register_background_task,
-    FastModeRequest,
-    S1StartRequest,
+    _validate_scenario,
 )
-
 
 router = APIRouter()
 
@@ -46,9 +45,9 @@ async def run_s1_product_direct(body: dict[str, Any]):
     # P1-C: 把用户填的多供应商 key 注入 contextvars,LLM/POYO/CosyVoice 客户端
     # 优先读 contextvars,实现按租户隔离,不污染 process-wide os.environ。
     _inject_api_keys(body.get("api_keys", {}))
-    from src.tools.translate import translate_catalog_to_english
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
+    from src.tools.translate import translate_catalog_to_english
 
     product_catalog = body.get("product_catalog", {})
     product_name = product_catalog.get("product_name", product_catalog.get("name", "unknown"))
@@ -194,8 +193,8 @@ async def run_s3_influencer_remix(body: dict[str, Any]):
         video_duration: int (optional, default 30, valid: 15/30/45/60/90)
     """
     _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
-    from src.tools.translate import translate_catalog_to_english
     from src.pipeline.s3_remix_pipeline import S3InfluencerRemixPipeline
+    from src.tools.translate import translate_catalog_to_english
 
     product = body.get("product", {})
     if isinstance(product, dict):
@@ -343,8 +342,8 @@ async def start_s1_pipeline(body: S1StartRequest):
         If mode is "auto", runs to completion and returns final state.
     """
     _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
 
     # P3-4: Bind pipeline context to all downstream structlog calls
     product = body.product_catalog.get("product_name") or body.product_catalog.get("name", "unknown")
@@ -386,8 +385,8 @@ async def run_s1_step(step_name: str, body: dict[str, Any]):
     Returns:
         Updated pipeline state dict after executing the step.
     """
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
 
     try:
         step_runner = StepRunner(PipelineStateManager())
@@ -414,9 +413,9 @@ async def regenerate_s1_step(body: dict[str, Any]):
         Updated pipeline state dict with regenerated step done and
         downstream steps pending.
     """
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_editor import invalidate_downstream
+    from src.pipeline.step_runner import StepRunner
 
     try:
         state_manager = PipelineStateManager()
@@ -438,8 +437,8 @@ async def resume_s1_pipeline(body: dict[str, Any]):
     Returns:
         Final pipeline state dict.
     """
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
 
     try:
         step_runner = StepRunner(PipelineStateManager())
@@ -719,8 +718,8 @@ async def regenerate_step(scenario: str, label: str, step_name: str):
         { label, regenerated_step, invalidated: [...] }
     """
     from src.pipeline.state_manager import PipelineStateManager
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.step_editor import invalidate_downstream
+    from src.pipeline.step_runner import StepRunner
 
     _validate_scenario(scenario)
     try:
@@ -856,8 +855,8 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
 
             log = structlog.get_logger()
             try:
-                from src.pipeline.step_runner import StepRunner
                 from src.pipeline.state_manager import PipelineStateManager
+                from src.pipeline.step_runner import StepRunner
 
                 step_runner = StepRunner(PipelineStateManager())
                 await step_runner.resume(label)
@@ -942,8 +941,8 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
     _validate_scenario(scenario)
     _inject_api_keys(body.get("api_keys", {}))
 
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
     from src.tools.cost_tracker import set_thread_id
 
     step_runner = StepRunner(PipelineStateManager())

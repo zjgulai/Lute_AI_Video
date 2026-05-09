@@ -7,9 +7,10 @@ All unit costs are rough averages and will be refined with real billing data.
 """
 
 import contextvars
-import structlog
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
+import structlog
 
 logger = structlog.get_logger()
 
@@ -71,7 +72,7 @@ def track(
         "tokens": tokens,
         "units": units,
         "cost_usd": round(cost, 6),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     _records.append(record)
     # P0: Prevent unbounded memory growth — cap at 10k records

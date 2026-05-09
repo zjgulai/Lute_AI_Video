@@ -12,8 +12,8 @@ Designed to be invoked from a FastAPI BackgroundTask or an asyncio loop.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from ..storage.metrics_repository import VideoMetricsRepository
 
@@ -21,14 +21,14 @@ logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-def _hours_since(dt: Optional[datetime]) -> float:
+def _hours_since(dt: datetime | None) -> float:
     """Return the number of hours between *now* and *dt* (0 if dt is None)."""
     if dt is None:
         return 0.0
-    delta = _now() - dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else _now() - dt
+    delta = _now() - dt.replace(tzinfo=UTC) if dt.tzinfo is None else _now() - dt
     return max(0.0, delta.total_seconds() / 3600.0)
 
 
@@ -72,7 +72,7 @@ class MetricsPoller:
 
         Returns True if a new metrics snapshot was saved, False if skipped.
         """
-        published_at: Optional[datetime] = post.get("published_at")
+        published_at: datetime | None = post.get("published_at")
         if published_at is None:
             logger.debug("metrics_poller: post %s has no published_at — skipping", post.get("id"))
             return False
@@ -95,7 +95,7 @@ class MetricsPoller:
             interval_hours = 12
 
         # Check if enough time has passed since last pull
-        pulled_at: Optional[datetime] = post.get("pulled_at")
+        pulled_at: datetime | None = post.get("pulled_at")
         last_pull = pulled_at or published_at
         hours_since_last = _hours_since(last_pull)
         if hours_since_last < interval_hours:
@@ -109,7 +109,7 @@ class MetricsPoller:
 
         # Time to poll
         platform: str = post.get("platform", "")
-        post_id: Optional[str] = post.get("post_id")
+        post_id: str | None = post.get("post_id")
         if not post_id:
             logger.warning("metrics_poller: post %s has no post_id — skipping", post.get("id"))
             return False

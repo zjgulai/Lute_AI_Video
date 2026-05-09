@@ -4,11 +4,11 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 import asyncpg
 
-from .db import get_pool, get_sqlite_conn, is_pg_available
+from .db import get_pool, get_sqlite_conn
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class BaseRepository:
                 return value
         return value
 
-    async def _fetchrow(self, query: str, *args) -> Optional[asyncpg.Record]:
+    async def _fetchrow(self, query: str, *args) -> asyncpg.Record | None:
         pool = await get_pool()
         if pool is not None:
             async with pool.acquire() as conn:
@@ -134,7 +134,7 @@ class BaseRepository:
             return await asyncio.to_thread(_sync_create)
         return data
 
-    async def get_by_id(self, id: str) -> Optional[dict[str, Any]]:
+    async def get_by_id(self, id: str) -> dict[str, Any] | None:
         query = f"SELECT * FROM {self.table_name} WHERE id = $1"
         row = await self._fetchrow(query, id)
         if row is None:
@@ -156,7 +156,7 @@ class BaseRepository:
         "publish_logs": {"id", "platform", "post_id", "content", "status", "url", "error", "created_at"},
     }
 
-    async def get_by_field(self, field: str, value: Any) -> Optional[dict[str, Any]]:
+    async def get_by_field(self, field: str, value: Any) -> dict[str, Any] | None:
         allowed = self._ALLOWED_FIELDS.get(self.table_name, set())
         if field not in allowed:
             raise ValueError(f"Invalid field name: {field!r}")
@@ -169,7 +169,7 @@ class BaseRepository:
             result[key] = self._from_json(result[key])
         return result
 
-    async def update(self, id: str, data: dict[str, Any]) -> Optional[dict[str, Any]]:
+    async def update(self, id: str, data: dict[str, Any]) -> dict[str, Any] | None:
         if not data:
             return await self.get_by_id(id)
         columns = list(data.keys())
@@ -235,7 +235,7 @@ class ThreadRepository(BaseRepository):
     def __init__(self):
         super().__init__("threads")
 
-    async def get_by_thread_id(self, thread_id: str) -> Optional[dict[str, Any]]:
+    async def get_by_thread_id(self, thread_id: str) -> dict[str, Any] | None:
         return await self.get_by_field("thread_id", thread_id)
 
 
@@ -243,7 +243,7 @@ class PipelineStateRepository(BaseRepository):
     def __init__(self):
         super().__init__("pipeline_states")
 
-    async def get_by_label(self, label: str) -> Optional[dict[str, Any]]:
+    async def get_by_label(self, label: str) -> dict[str, Any] | None:
         return await self.get_by_field("label", label)
 
 

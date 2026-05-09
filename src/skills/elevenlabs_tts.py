@@ -51,11 +51,12 @@ class ElevenLabsTTSSkill(SkillCallable):
         stability = float(params.get("stability", 0.5))
         similarity_boost = float(params.get("similarity_boost", 0.75))
 
-        from src.config import SILICONFLOW_API_KEY, ELEVENLABS_API_KEY, POYO_API_KEY
+        from src.config import ELEVENLABS_API_KEY, POYO_API_KEY, SILICONFLOW_API_KEY
 
         # ── Priority 1: SiliconFlow CosyVoice (Pro version TTS) ──
         if SILICONFLOW_API_KEY:
-            from src.tools.cosyvoice_client import CosyVoiceClient, VOICE_PRESETS as COSY_PRESETS
+            from src.tools.cosyvoice_client import VOICE_PRESETS as COSY_PRESETS
+            from src.tools.cosyvoice_client import CosyVoiceClient
 
             cosy_client = CosyVoiceClient()
             path: Path | None = None
@@ -88,7 +89,7 @@ class ElevenLabsTTSSkill(SkillCallable):
 
         # ── Priority 2: ElevenLabs (legacy fallback) ──
         else:
-            from src.tools.elevenlabs_client import ElevenLabsClient, VOICE_PRESETS
+            from src.tools.elevenlabs_client import VOICE_PRESETS, ElevenLabsClient
 
             client = ElevenLabsClient()
             try:

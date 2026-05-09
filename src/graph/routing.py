@@ -10,9 +10,9 @@ CHANGES_REQUESTED is treated as APPROVED to prevent infinite loops.
 from __future__ import annotations
 
 import contextvars
+from typing import Any
 
 from src.models.state import VideoPipelineState
-from typing import Any
 
 MAX_RETRIES = 3
 

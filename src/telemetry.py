@@ -17,11 +17,8 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-
-import structlog
-
 
 # ── Trace ID generation ──
 
@@ -41,7 +38,7 @@ class StepMetric:
     step_name: str
     duration_ms: float
     success: bool
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
@@ -52,7 +49,7 @@ class PipelineMetric:
     total_duration_ms: float
     success: bool
     error_count: int
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class PipelineMetrics:
@@ -277,7 +274,7 @@ class ErrorCollector:
             error: error message
             context: additional context dict
         """
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         self._errors.append(
             {
                 "label": label,

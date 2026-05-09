@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import httpx
 import structlog
 
 from src.config import OPENAI_API_KEY, OUTPUT_DIR
-from typing import Any
 
 logger = structlog.get_logger()
 

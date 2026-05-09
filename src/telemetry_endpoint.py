@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import Any, cast
 
 try:
-    from fastapi import APIRouter as _APIRouter, Query as _Query
+    from fastapi import APIRouter as _APIRouter
+    from fastapi import Query as _Query
 
     HAS_FASTAPI = True
 except ImportError:
@@ -48,6 +49,7 @@ if HAS_FASTAPI and router is not None:
     async def get_prometheus() -> Any:
         """Return Prometheus exposition format metrics for Grafana scraping."""
         from fastapi import Response
+
         from src.telemetry_prometheus import prometheus_content
 
         body, content_type = prometheus_content()

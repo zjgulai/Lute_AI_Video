@@ -8,8 +8,6 @@ import asyncio
 import json
 import os
 import time
-import uuid
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -181,7 +179,6 @@ async def _get_config_for_thread(thread_id: str) -> dict[str, Any]:
 
 # Background task registry moved to src.tasks.bg_registry to break circular import.
 # Re-export for backward compatibility.
-from src.tasks.bg_registry import register_background_task as _register_background_task
 
 
 # ── Scenario helpers ──

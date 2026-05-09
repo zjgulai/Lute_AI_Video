@@ -6,10 +6,11 @@ by returning the original text on failure.
 """
 
 import re
+from typing import Any
 
 import structlog
+
 from src.tools.llm_client import llm
-from typing import Any
 
 logger = structlog.get_logger()
 

@@ -11,9 +11,9 @@ Output: storyboard dict with each shot having keyframe_image_path added.
 
 from __future__ import annotations
 
-import structlog
-from pathlib import Path
 from typing import Any
+
+import structlog
 
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry

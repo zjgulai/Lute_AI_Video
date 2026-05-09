@@ -20,7 +20,7 @@ import hashlib
 import logging
 import re
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
@@ -39,7 +39,6 @@ _TENANT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
 from src.routers._admin_deps import (  # noqa: E402
     _check_login_rate_limit,
     _record_login_attempt,
-    get_admin_id,
     verify_admin_session,
 )
 
@@ -106,7 +105,7 @@ async def admin_login(request: Request, response: Response) -> dict[str, Any]:
     token = secrets.token_bytes(64)
     token_plain = token.hex()
     token_hash = hashlib.sha256(token_plain.encode()).hexdigest()
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    expires_at = datetime.now(UTC) + timedelta(hours=24)
 
     admin_id = str(row["id"])
     admin_email = row["email"]
@@ -424,7 +423,7 @@ async def get_tenant(
                 key_id = str(k["id"])
                 key_hash = k["key_hash"]
                 status = "revoked" if k["revoked_at"] else "active"
-                if k["expires_at"] and k["expires_at"] < datetime.now(timezone.utc):
+                if k["expires_at"] and k["expires_at"] < datetime.now(UTC):
                     status = "expired"
                 keys.append({
                     "id": key_id,
@@ -679,7 +678,7 @@ async def revoke_api_key(
             return {
                 "success": True,
                 "key_id": key_id,
-                "revoked_at": datetime.now(timezone.utc).isoformat(),
+                "revoked_at": datetime.now(UTC).isoformat(),
             }
 
     except HTTPException:
@@ -1043,14 +1042,14 @@ async def _check_single_service(name: str) -> dict[str, Any]:
 
 async def run_health_checks() -> None:
     """Run all health checks and store results. Called by background task."""
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
 
     services = {}
     for svc in ["postgres", "deepseek", "poyo", "siliconflow", "remotion"]:
         services[svc] = await _check_single_service(svc)
 
     entry = {
-        "checked_at": _dt.now(_tz.utc).isoformat(),
+        "checked_at": _dt.now(UTC).isoformat(),
         "services": services,
     }
 

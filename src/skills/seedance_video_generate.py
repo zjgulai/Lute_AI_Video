@@ -26,7 +26,6 @@ Output schema:
 
 from __future__ import annotations
 
-import asyncio
 import os
 import struct
 from pathlib import Path
@@ -387,7 +386,6 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         """
         import subprocess
         import tempfile
-        import struct
         import time
 
         t0 = time.perf_counter()

@@ -6,11 +6,11 @@ falls back to mock mode when credentials are absent.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from src.connectors.tiktok_connector import TikTokConnector
 from src.connectors.shopify_connector import ShopifyConnector
+from src.connectors.tiktok_connector import TikTokConnector
 
 logger = logging.getLogger(__name__)
 

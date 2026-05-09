@@ -4,10 +4,10 @@ import uuid
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from src.routers._deps import verify_api_key
 from src.config import OUTPUT_DIR
+from src.routers._deps import verify_api_key
 
 router = APIRouter()
 
@@ -37,7 +37,7 @@ MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100MB
 
 
 try:
-    from fastapi import UploadFile, File
+    from fastapi import File, UploadFile
 
     @router.post("/api/upload", dependencies=[Depends(verify_api_key)])
     async def upload_file(file: UploadFile = File(...)):

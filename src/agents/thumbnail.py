@@ -91,7 +91,7 @@ class ThumbnailAgent:
         # Mock mode: use degrade_thumbnails for deterministic test data
         # (skips DALL-E calls, no caption propagation, fixed prompts)
         if self.use_mock:
-            from src.data.mock_quality import degrade_thumbnails, QualityLevel
+            from src.data.mock_quality import QualityLevel, degrade_thumbnails
             try:
                 level = QualityLevel(self.quality_level)
             except ValueError:
@@ -118,8 +118,8 @@ class ThumbnailAgent:
                 caption_signals = _propagate_caption_signals(caption_plans, script.id)
 
             if self.use_skills:
-                from src.skills.registry import SkillRegistry
                 import src.skills.thumbnail_prompt  # noqa: F401
+                from src.skills.registry import SkillRegistry
 
                 skill_result = await SkillRegistry().execute("gpt-image-thumbnail-prompt", {
                     "hook_text": hook or "",

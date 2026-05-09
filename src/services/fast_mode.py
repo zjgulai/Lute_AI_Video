@@ -17,9 +17,9 @@ from typing import Any
 import structlog
 
 from src.config import DEFAULT_LLM_PROVIDER, OUTPUT_DIR
+from src.tools.cosyvoice_client import CosyVoiceClient
 from src.tools.llm_client import LLMClient
 from src.tools.seedance_client import SeedanceClient
-from src.tools.cosyvoice_client import CosyVoiceClient
 
 logger = structlog.get_logger()
 

@@ -216,6 +216,7 @@ class ScriptWriterSkill(SkillCallable):
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         import asyncio
+
         from src.tools.llm_client import llm
 
         briefs = params["briefs"]
@@ -414,7 +415,6 @@ class ScriptWriterSkill(SkillCallable):
         Returns a dict with check results that can be consumed by downstream skills
         or displayed in the audit report.
         """
-        import re
 
         segments = script.get("segments", [])
         total_duration = float(script.get("total_duration", 30))

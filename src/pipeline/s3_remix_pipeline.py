@@ -24,21 +24,20 @@ from typing import Any
 
 import structlog
 
-from src.skills.registry import SkillRegistry
-from src.skills.base import SkillResult
-from src.config import OUTPUT_DIR
-import src.skills.video_analysis  # noqa: F401 — auto-register
-import src.skills.remix_script  # noqa: F401 — auto-register
-import src.skills.seedance_prompt  # noqa: F401 — auto-register
-import src.skills.thumbnail_prompt  # noqa: F401 — auto-register
-import src.skills.seedance_video_generate  # noqa: F401 — auto-register (NEW)
+import src.skills.character_identity  # noqa: F401 — auto-register (NEW)
 import src.skills.elevenlabs_tts  # noqa: F401 — auto-register (NEW)
 import src.skills.gpt_image_generate  # noqa: F401 — auto-register (NEW)
-import src.skills.remotion_assemble  # noqa: F401 — auto-register (NEW)
-import src.skills.media_quality_audit  # noqa: F401 — auto-register (NEW)
-import src.skills.character_identity  # noqa: F401 — auto-register (NEW)
 import src.skills.keyframe_images  # noqa: F401 — auto-register (NEW)
-
+import src.skills.media_quality_audit  # noqa: F401 — auto-register (NEW)
+import src.skills.remix_script  # noqa: F401 — auto-register
+import src.skills.remotion_assemble  # noqa: F401 — auto-register (NEW)
+import src.skills.seedance_prompt  # noqa: F401 — auto-register
+import src.skills.seedance_video_generate  # noqa: F401 — auto-register (NEW)
+import src.skills.thumbnail_prompt  # noqa: F401 — auto-register
+import src.skills.video_analysis  # noqa: F401 — auto-register
+from src.config import OUTPUT_DIR
+from src.skills.base import SkillResult
+from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
 

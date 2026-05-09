@@ -11,7 +11,7 @@ Key components:
 """
 
 from src.skills.base import SkillCallable, SkillResult
-from src.skills.registry import SkillRegistry
 from src.skills.llm_skill import LLMSkill
+from src.skills.registry import SkillRegistry
 
 __all__ = ["SkillCallable", "SkillResult", "SkillRegistry", "LLMSkill"]

@@ -27,9 +27,8 @@ from src.config import OUTPUT_DIR as _CONFIG_OUTPUT_DIR
 PipelineStateRepository: Any = None  # type: ignore
 is_pg_available: Any = lambda: False  # type: ignore
 try:
-    from src.storage import get_pool, init_db
-    from src.storage.repository import PipelineStateRepository
     from src.storage.db import is_pg_available
+    from src.storage.repository import PipelineStateRepository
     HAS_STORAGE = True
 except ImportError:
     HAS_STORAGE = False
@@ -111,7 +110,7 @@ class PipelineStateManager:
         state_path = self._state_path(label)
         if not state_path.exists():
             return None
-        with open(state_path, "r", encoding="utf-8") as f:
+        with open(state_path, encoding="utf-8") as f:
             return json.load(f)
 
     async def save(self, label: str, state: dict[str, Any]) -> None:
@@ -245,7 +244,7 @@ class PipelineStateManager:
         count = 0
         for f in state_dir.glob("*.json"):
             label = f.stem
-            with open(f, "r", encoding="utf-8") as fh:
+            with open(f, encoding="utf-8") as fh:
                 state = json.load(fh)
             existing = await repo.get_by_label(label)
             if existing:

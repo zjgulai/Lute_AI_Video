@@ -17,9 +17,10 @@ Output schema:
 
 from __future__ import annotations
 
-import structlog
 from pathlib import Path
 from typing import Any
+
+import structlog
 
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
@@ -178,8 +179,8 @@ class CharacterIdentitySkill(SkillCallable):
         to avoid OOM on large keyframe images.
         """
         try:
-            from PIL import Image, ImageFilter
             import numpy as np
+            from PIL import Image, ImageFilter
 
             img = Image.open(path).convert("L")
             # Downsample if image is very large to prevent OOM
@@ -215,8 +216,8 @@ class CharacterIdentitySkill(SkillCallable):
             return ["#E8C9A0", "#4A3728", "#F5F5F5", "#2C2C2C", "#8B7355"]
 
         try:
-            from PIL import Image
             import numpy as np
+            from PIL import Image
 
             img = Image.open(path).convert("RGB")
             img = img.resize((64, 64))  # Downsample for speed

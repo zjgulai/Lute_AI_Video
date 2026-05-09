@@ -11,10 +11,10 @@ from typing import Any
 
 import structlog
 
+from src.config import DEFAULT_LANGUAGES
 from src.models.state import VideoPipelineState
 from src.telemetry import timed_node
 from src.tools.webhook_manager import get_webhook_manager
-from src.config import DEFAULT_LANGUAGES
 
 logger = structlog.get_logger()
 
@@ -280,7 +280,7 @@ async def thumbnail_node(state: VideoPipelineState) -> dict[str, Any]:
     mock_quality = state.get("mock_quality")
     if mock_quality:
         # Mock mode: bypass DALL-E, use deterministic quality-test data
-        from src.data.mock_quality import degrade_thumbnails, QualityLevel
+        from src.data.mock_quality import QualityLevel, degrade_thumbnails
         try:
             level = QualityLevel(mock_quality)
         except ValueError:

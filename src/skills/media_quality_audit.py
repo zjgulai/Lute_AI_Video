@@ -563,7 +563,6 @@ class MediaQualityAuditSkill(SkillCallable):
         # Compute similarity with the best reference frame
         try:
             from PIL import Image
-            import numpy as np
 
             target = Image.open(video_frame).convert("RGB")
 

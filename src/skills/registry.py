@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from src.skills.base import SkillCallable, SkillResult
-from typing import Any
 
 logger = structlog.get_logger()
 

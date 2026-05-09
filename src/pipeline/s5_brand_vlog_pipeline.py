@@ -12,15 +12,15 @@ from typing import Any
 
 import structlog
 
-from src.skills.registry import SkillRegistry
-from src.telemetry import generate_trace_id, pipeline_metrics
+import src.skills.elevenlabs_tts  # noqa: F401
+import src.skills.media_quality_audit  # noqa: F401
+import src.skills.remotion_assemble  # noqa: F401
 
 # Import-time skill auto-registration
 import src.skills.seedance_prompt  # noqa: F401
 import src.skills.seedance_video_generate  # noqa: F401
-import src.skills.elevenlabs_tts  # noqa: F401
-import src.skills.remotion_assemble  # noqa: F401
-import src.skills.media_quality_audit  # noqa: F401
+from src.skills.registry import SkillRegistry
+from src.telemetry import generate_trace_id, pipeline_metrics
 
 logger = structlog.get_logger()
 
@@ -339,7 +339,7 @@ class S5BrandVlogPipeline:
              "product_angle": view1, "model_in_shot": ""},
             {"shot_type": "over-shoulder", "duration_seconds": body_dur,
              "visual_description": f"从{view2}角度展示 {short} 在真实生活场景中的使用过程，镜头跟随手部动作平稳移动，捕捉产品的便捷操作瞬间",
-             "voiceover": f"无需繁琐准备，轻轻一按即可开始。每一个细节，都为忙碌的妈妈考虑。",
+             "voiceover": "无需繁琐准备，轻轻一按即可开始。每一个细节，都为忙碌的妈妈考虑。",
              "product_angle": view2, "model_in_shot": ""},
             {"shot_type": "static beauty", "duration_seconds": cta_dur,
              "visual_description": f"{short} {view_last}完整展示，浅景深干净背景，产品居中摆放，营造高级品牌定妆感，为视频画上圆满句号",
@@ -417,8 +417,8 @@ class S5BrandVlogPipeline:
         Each shot's product_angle is matched against view labels to find
         the corresponding keyframe image for visual consistency.
         """
+
         from src.config import OUTPUT_DIR
-        from pathlib import Path
 
         clip_paths = []
         clip_details = []

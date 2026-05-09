@@ -1,17 +1,17 @@
 """media router — extracted from api.py (P1-11)."""
 
-import os
-import hmac
-import hashlib
 import base64
+import hashlib
+import hmac
+import os
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from src.routers._deps import API_KEY, verify_api_key
 from src.config import OUTPUT_DIR
+from src.routers._deps import API_KEY, verify_api_key
 
 _MEDIA_TOKEN_SECRET = os.environ.get("MEDIA_SIGN_SECRET") or API_KEY
 _MEDIA_TOKEN_TTL = 900  # 15 minutes
@@ -67,8 +67,6 @@ async def serve_media(request: Request, media_path: str):
     P1-8: Supports optional signed-token access. Anonymous access is allowed,
     but signed URLs with ?token=&expires= provide path-level integrity.
     """
-    from fastapi.responses import FileResponse
-    from src.config import OUTPUT_DIR
 
     # P1-8: Validate signed token if present
     token = request.query_params.get("token")

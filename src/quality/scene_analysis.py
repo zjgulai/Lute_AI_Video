@@ -32,7 +32,6 @@ class SceneAnalyzer:
         if self._available is not None:
             return self._available
         try:
-            import scenedetect  # type: ignore[import-untyped]
             self._available = True
             logger.info("scene_analyzer: PySceneDetect available")
         except Exception as e:
@@ -58,7 +57,7 @@ class SceneAnalyzer:
             return []
 
         try:
-            from scenedetect import ContentDetector, open_video, SceneManager
+            from scenedetect import ContentDetector, SceneManager, open_video
 
             video = open_video(str(path))
             scene_manager = SceneManager()

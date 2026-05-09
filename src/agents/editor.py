@@ -3,11 +3,12 @@
 Uses Remotion for actual video rendering (via Node.js bridge).
 """
 
+from typing import Any
+
 import structlog
 
 from src.models import AssetPlan, EditComposition, EditTimelineEvent, Storyboard
 from src.tools.remotion_renderer import RemotionRenderer
-from typing import Any
 
 logger = structlog.get_logger()
 

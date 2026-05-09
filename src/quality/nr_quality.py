@@ -43,8 +43,6 @@ class NRQualityChecker:
         if self._cv_available is not None:
             return self._cv_available
         try:
-            import cv2  # type: ignore[import-untyped]
-            import numpy as np  # type: ignore[import-untyped]
             self._cv_available = True
         except Exception as e:
             self._cv_available = False
@@ -59,7 +57,6 @@ class NRQualityChecker:
         if self._pyiqa_available is not None:
             return self._pyiqa_available
         try:
-            import pyiqa  # type: ignore[import-untyped]
             self._pyiqa_available = True
             logger.info("nr_quality: pyiqa available — will use real BRISQUE/NIQE")
         except Exception:
@@ -106,7 +103,6 @@ class NRQualityChecker:
     def _check_pyiqa_brisque(self, path: Path) -> dict[str, Any]:
         try:
             import pyiqa
-            import torch
             from PIL import Image
 
             brisque_model = pyiqa.create_metric("brisque", device="cpu")
@@ -138,7 +134,6 @@ class NRQualityChecker:
 
     def _check_opencv_heuristic(self, path: Path) -> dict[str, Any]:
         import cv2
-        import numpy as np
 
         try:
             img = cv2.imread(str(path))

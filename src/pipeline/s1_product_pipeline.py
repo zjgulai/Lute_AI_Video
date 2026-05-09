@@ -28,29 +28,27 @@ import time
 from pathlib import Path
 from typing import Any
 
-from src.config import DEFAULT_LANGUAGES
-
 import structlog
 
-from src.config import OUTPUT_DIR
-from src.pipeline.state_manager import PipelineStateManager
-from src.pipeline.step_runner import StepRunner
-from src.skills.registry import SkillRegistry
+import src.skills.brand_compliance  # noqa: F401
+import src.skills.character_identity  # noqa: F401          ← Track 3: character identity
+import src.skills.elevenlabs_tts  # noqa: F401              ← NEW media
+import src.skills.gpt_image_generate  # noqa: F401          ← NEW media
+import src.skills.keyframe_images  # noqa: F401             ← Track 3: keyframe images
+import src.skills.media_quality_audit  # noqa: F401         ← NEW audit
 
 # Import-time skill auto-registration
 import src.skills.product_strategy  # noqa: F401
-import src.skills.script_writer  # noqa: F401
-import src.skills.brand_compliance  # noqa: F401
-import src.skills.storyboard  # noqa: F401  (best-effort; may not exist in repo)
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.thumbnail_prompt  # noqa: F401
-import src.skills.seedance_video_generate  # noqa: F401  ← NEW media
-import src.skills.elevenlabs_tts  # noqa: F401              ← NEW media
-import src.skills.gpt_image_generate  # noqa: F401          ← NEW media
 import src.skills.remotion_assemble  # noqa: F401           ← NEW media
-import src.skills.media_quality_audit  # noqa: F401         ← NEW audit
-import src.skills.character_identity  # noqa: F401          ← Track 3: character identity
-import src.skills.keyframe_images  # noqa: F401             ← Track 3: keyframe images
+import src.skills.script_writer  # noqa: F401
+import src.skills.seedance_prompt  # noqa: F401
+import src.skills.seedance_video_generate  # noqa: F401  ← NEW media
+import src.skills.storyboard  # noqa: F401  (best-effort; may not exist in repo)
+import src.skills.thumbnail_prompt  # noqa: F401
+from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
+from src.pipeline.state_manager import PipelineStateManager
+from src.pipeline.step_runner import StepRunner
+from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
 

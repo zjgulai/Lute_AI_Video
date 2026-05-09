@@ -9,7 +9,6 @@ This is the input model for the S3 (Influencer Remix) scenario.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field

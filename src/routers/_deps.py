@@ -8,10 +8,10 @@ import hashlib
 import logging
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import HTTPException, Header, Request
+from fastapi import Header, HTTPException, Request
 
 # Tenant ID context for request-scoped isolation (P2-8)
 _tenant_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -67,7 +67,7 @@ async def verify_api_key(request: Request, x_api_key: str | None = Header(None))
                 )
                 if row and not row["revoked_at"]:
                     expires = row["expires_at"]
-                    if expires is None or expires > datetime.now(timezone.utc):
+                    if expires is None or expires > datetime.now(UTC):
                         tenant_id = row["tenant_id"]
                         await conn.execute(
                             "UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1",
@@ -103,8 +103,9 @@ def _classified_error(exc: Exception, is_dev: bool = False) -> dict[str, Any]:
 
     T1.4: Uses error_classifier to map exceptions to structured PipelineError.
     """
-    from src.tools.error_classifier import classify_error
     import uuid as _uuid
+
+    from src.tools.error_classifier import classify_error
     _trace = str(_uuid.uuid4())[:8]
     logging.getLogger("api.error").error("internal_error trace_id=%s error=%s", _trace, str(exc)[:200])
     structured = classify_error(exc, context="api")

@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter

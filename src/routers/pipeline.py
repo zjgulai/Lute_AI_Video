@@ -16,7 +16,7 @@ import asyncio
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 try:
     from src.storage import HAS_STORAGE
@@ -24,17 +24,17 @@ except ImportError:
     HAS_STORAGE = False
 
 from src.config import DEFAULT_LANGUAGES
-from src.models import ApprovalStatus, REVIEW_NODES
-from src.routers._deps import _serialize, _safe_error, _inject_api_keys, verify_api_key
+from src.models import REVIEW_NODES, ApprovalStatus
+from src.routers._deps import _inject_api_keys, _safe_error, verify_api_key
 from src.routers._state import (
-    _active_threads,
-    _thread_label_map,
-    _label_thread_map,
-    _touch_thread_cache,
-    _cleanup_thread_cache,
-    _save_thread_index,
     PipelineStartRequest,
     ReviewAction,
+    _active_threads,
+    _cleanup_thread_cache,
+    _label_thread_map,
+    _save_thread_index,
+    _thread_label_map,
+    _touch_thread_cache,
 )
 
 router = APIRouter()
@@ -136,10 +136,10 @@ async def start_pipeline(req: PipelineStartRequest):
     Returns a synthetic thread_id for backward compatibility.
     The actual execution is delegated to StepRunner.
     """
-    from src.tools.translate import translate_catalog_to_english
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
     from src.routers._state import _register_background_task
+    from src.tools.translate import translate_catalog_to_english
 
     thread_id = str(uuid.uuid4())
 

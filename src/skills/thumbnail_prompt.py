@@ -160,6 +160,7 @@ class ThumbnailPromptSkill(SkillCallable):
 
 # Auto-register
 import structlog
+
 _logger_tp = structlog.get_logger()
 try:
     SkillRegistry.register(ThumbnailPromptSkill())

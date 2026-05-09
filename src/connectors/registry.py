@@ -1,6 +1,7 @@
-from src.connectors.tiktok_connector import TikTokConnector
-from src.connectors.shopify_connector import ShopifyConnector
 from typing import Any
+
+from src.connectors.shopify_connector import ShopifyConnector
+from src.connectors.tiktok_connector import TikTokConnector
 
 _CONNECTORS = {
     "tiktok": TikTokConnector,

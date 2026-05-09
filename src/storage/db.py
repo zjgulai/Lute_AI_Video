@@ -1,19 +1,17 @@
 """Database connection management with PostgreSQL primary and SQLite fallback."""
 
-import json
 import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import asyncpg
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_pool: Optional[asyncpg.Pool] = None
-_sqlite_conn: Optional[sqlite3.Connection] = None
+_pool: asyncpg.Pool | None = None
+_sqlite_conn: sqlite3.Connection | None = None
 _pg_available: bool = False  # Set to True after successful PG connection + table verification
 
 
@@ -214,6 +212,6 @@ def is_pg_available() -> bool:
     return _pg_available
 
 
-def get_sqlite_conn() -> Optional[sqlite3.Connection]:
+def get_sqlite_conn() -> sqlite3.Connection | None:
     """Return the SQLite connection (for fallback mode)."""
     return _sqlite_conn

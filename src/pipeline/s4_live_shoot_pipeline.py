@@ -21,14 +21,13 @@ from typing import Any
 
 import structlog
 
+import src.skills.script_writer  # noqa: F401
+import src.skills.seedance_prompt  # noqa: F401
+import src.skills.thumbnail_prompt  # noqa: F401
 from src.config import DEFAULT_LANGUAGES
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.skills.registry import SkillRegistry
-
-import src.skills.script_writer  # noqa: F401
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.thumbnail_prompt  # noqa: F401
 
 logger = structlog.get_logger()
 
@@ -267,7 +266,7 @@ class S4LiveShootPipeline:
         S4 has no keyframe_images step, so clips generate from text prompts only.
         """
         import asyncio
-        from src.config import OUTPUT_DIR
+
 
         clip_paths: list[str] = []
         clip_details: list[dict[str, Any]] = []

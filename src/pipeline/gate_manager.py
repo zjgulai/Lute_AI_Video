@@ -20,10 +20,10 @@ from typing import Any, Literal
 
 import structlog
 
+from src.config import DEFAULT_LANGUAGES
 from src.pipeline.candidate_scorer import score_candidate
 from src.pipeline.state_manager import PipelineStateManager
 from src.skills.registry import SkillRegistry
-from src.config import DEFAULT_LANGUAGES
 
 logger = structlog.get_logger()
 

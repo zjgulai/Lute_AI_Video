@@ -4,10 +4,11 @@ MVP: pure stub. Returns placeholder entries.
 Phase 2+: Flux, Runway Gen-3, Kling integration.
 """
 
+from typing import Any
+
 import structlog
 
 from src.models import AssetPlan
-from typing import Any
 
 logger = structlog.get_logger()
 

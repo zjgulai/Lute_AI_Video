@@ -11,7 +11,6 @@ Auto-registers with SkillRegistry on import as "remix-script-skill".
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
 import structlog
@@ -415,7 +414,7 @@ Remix {len(segments)} segments for the new product."""
             ),
             RemixScriptSegment(
                 segment_type="pitch",
-                keep_notes=f"Keep urgency level and offer framing from original",
+                keep_notes="Keep urgency level and offer framing from original",
                 replace_notes=f"Replace with {product_name} offer and value proposition",
                 remix_description=(
                     f"Pitch {product_name} with urgency. "
@@ -490,7 +489,7 @@ Remix {len(segments)} segments for the new product."""
         lines.append(f"Hook ({speech_style} tone{catchphrase_str}):")
         lines.append(f"  {hook_desc}")
         lines.append("")
-        lines.append(f"Body:")
+        lines.append("Body:")
         lines.append(f"  Introduce {product_name} — what it is and why it matters.")
         lines.append(f"  Key points: {usp_text}")
         lines.append(f"  Use {influencer_name}'s signature pacing and transitions.")

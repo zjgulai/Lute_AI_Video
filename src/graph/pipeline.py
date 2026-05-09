@@ -6,14 +6,16 @@ Builds a StateGraph with 12 worker nodes + 4 self-audit nodes
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
+import structlog
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langchain_core.runnables import RunnableConfig
 
+from src.config import DEFAULT_LANGUAGES
 from src.graph.nodes import (
     analytics_node,
     asset_sourcing_node,
@@ -41,11 +43,7 @@ from src.graph.routing import (
     route_after_thumbnail,
 )
 from src.models.state import VideoPipelineState
-from src.telemetry import generate_trace_id, error_collector
-
-import structlog
-from src.config import DEFAULT_LANGUAGES
-from typing import Any
+from src.telemetry import error_collector, generate_trace_id
 
 
 def _wrap_node_with_error_handling(node_func, node_name: str):
@@ -235,7 +233,6 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
     from enum import Enum
 
     import structlog
-    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
     from pydantic import BaseModel
 
     import src.models as _m
@@ -262,7 +259,6 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
             try:
                 import psycopg  # type: ignore[import-not-found]
                 from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore[import-not-found]
-
                 from psycopg import Connection  # type: ignore[import-not-found]
                 from psycopg.rows import DictRow, dict_row  # type: ignore[import-not-found]
 

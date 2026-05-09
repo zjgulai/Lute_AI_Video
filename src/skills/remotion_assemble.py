@@ -65,8 +65,8 @@ class RemotionAssembleSkill(SkillCallable):
     max_retries = 2
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
-        from src.tools.remotion_renderer import RemotionRenderer
         from src.config import OUTPUT_DIR
+        from src.tools.remotion_renderer import RemotionRenderer
 
         # === Inputs ===
         shots = params.get("shots") or []
@@ -541,7 +541,6 @@ class RemotionAssembleSkill(SkillCallable):
         markers) and overlays them at the bottom of the video.
         """
         import subprocess
-        import re
 
         try:
 

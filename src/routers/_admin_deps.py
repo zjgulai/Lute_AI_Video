@@ -12,9 +12,8 @@ Two layers of auth, zero crossover:
 import contextvars
 import hashlib
 import logging
-import secrets
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Cookie, HTTPException, Request
@@ -127,7 +126,7 @@ async def verify_admin_session(
             )
 
         expires_at: datetime = row["expires_at"]
-        if expires_at < datetime.now(timezone.utc):
+        if expires_at < datetime.now(UTC):
             raise HTTPException(
                 status_code=401, detail="Invalid or expired session"
             )

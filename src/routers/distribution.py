@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 try:
     from src.storage import HAS_STORAGE
@@ -12,11 +12,11 @@ except ImportError:
     PublishLogRepository = None  # type: ignore[misc,assignment]
 
 if TYPE_CHECKING:
-    from src.storage.repository import PublishLogRepository as _PublishLogRepositoryType
+    pass
 
-from src.routers._deps import _safe_error, verify_api_key
 from typing import Any
 
+from src.routers._deps import _safe_error, verify_api_key
 
 router = APIRouter()
 
