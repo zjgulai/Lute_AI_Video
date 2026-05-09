@@ -11,6 +11,9 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 
 > 历史更新记录已提取到 `docs/claude/updates/project-updates-202605-stable.md`。
 > 已知缺口与待办已提取到 `docs/claude/known-gaps-stable.md`。
+> Claude Code Agent 体系与项目标准见 `docs/claude/project-standard-stable.md`。
+> 详细生产部署指南见 `docs/workflows/deploy-lighthouse-stable.md`。
+> Portfolio 运营文档见 `docs/workflows/portfolio-ops-stable.md`。
 
 ## Architecture at a Glance
 
@@ -653,9 +656,6 @@ make ci            # Lint + test
 cd web && npm test # Frontend tests
 ```
 
-
-> 详细生产部署指南已提取到 `docs/workflows/deploy-lighthouse-stable.md`。
-
 ### Environment Variables
 
 Copy `.env.example` to `.env` and configure:
@@ -697,9 +697,6 @@ Key test areas:
 **CI:** GitHub Actions on push/PR to main — ruff lint + pyright type check + pytest (Python 3.11 + 3.12) + coverage.
 
 ---
-
-
-> Portfolio 与 Asset Library 运营文档已提取到 `docs/workflows/portfolio-ops-stable.md`。
 
 ## Key Patterns and Conventions
 
@@ -771,9 +768,6 @@ Literal `'ai_video_demo_2026'` 出现在 fallback / placeholder / i18n 之外的
 `apiFetch()`)。新组件直接调 `apiFetch()`,不要 `fetch(\`${API_BASE}/..., ...)`。
 
 ---
-
-
-> 详细缺口清单与待办已提取到 `docs/claude/known-gaps-stable.md`。
 
 ## Quick Reference
 

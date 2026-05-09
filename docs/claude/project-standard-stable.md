@@ -11,6 +11,9 @@ source: human+ai
 
 # AI Video Pipeline — Claude Code 项目标准
 
+> 项目架构、技术栈和快速参考见根目录 [`CLAUDE.md`](../../CLAUDE.md)。
+> 本文档专注 Agent 协作流程和质量门禁。
+
 ## 1. Project Overview
 
 | 字段 | 内容 |
