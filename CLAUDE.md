@@ -6,7 +6,7 @@
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`).
+**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`). Round 3 quality system (observe mode) deployed: frame variance, AV sync, video specs checks active but non-blocking.
 
 
 > 历史更新记录已提取到 `docs/claude/updates/project-updates-202605-stable.md`。
@@ -243,7 +243,6 @@ AI_vedio/
 │   │   │   ├── OneShotResultView.tsx # Fast mode result
 │   │   │   └── admin/
 │   │   │       └── AdminSidebar.tsx  # Admin nav sidebar (Dashboard/Tenants/Logs/Health)
-│   │   ├── stores/             # Zustand stores
 │   │   ├── stores/             # Zustand stores
 │   │   │   ├── useAppStore.ts  # Navigation, UI state, toast
 │   │   │   ├── usePipelineStore.ts # Pipeline execution state
@@ -665,6 +664,7 @@ Copy `.env.example` to `.env` and configure:
 - **Auth:** `API_KEY` (generated automatically if not set)
 - **CORS:** `CORS_ORIGINS=...` (comma-separated)
 - **Output:** `VIDEO_OUTPUT_DIR=./output`
+- **Quality Checks:** `QUALITY_MODE` (off/observe/enforce, default observe) + 10 configurable thresholds for frame variance, AV sync, video specs
 - **Webhook:** `WEBHOOK_URLS=...` (comma-separated URLs)
 
 Without API keys, the pipeline runs in **mock mode** — produces natural-language placeholder content without external API calls.
@@ -673,24 +673,20 @@ Without API keys, the pipeline runs in **mock mode** — produces natural-langua
 
 ## Testing
 
-**Backend:** 30+ test files in `tests/` (run `find tests -name 'test_*.py' | wc -l` for the
-current count — avoid hardcoding the number here, it goes stale fast). Pytest with asyncio
-auto mode. Coverage targets `src/`.
+**Backend:** Pytest with asyncio auto mode. Coverage targets `src/`.
 
 Key test areas:
 
-- Pipeline e2e (`test_e2e_pipeline.py`, `test_s1_e2e.py`, `test_s3_e2e.py`)
-- Routing logic (`test_routing.py`)
-- Graph compilation (`test_graph.py`)
-- API endpoints (`test_api.py`)
-- Media clients (`test_media_clients.py`)
-- State management (`test_state.py`)
-- Quality gates (`test_quality_gate.py`)
-- Compliance (`test_compliance.py`)
-- Individual agents (strategy, script, auditor, caption, thumbnail)
-- Database (`test_postgres.py`)
-- Webhook (`test_webhook_manager.py`)
-- Asset management (`test_asset_models.py`, `test_asset_library.py`)
+- **Pipeline e2e** — `test_e2e_pipeline.py`, `test_s1_e2e.py`, `test_s3_e2e.py`, `test_s4_e2e.py`, `test_s5_e2e.py`
+- **Quality system** — `test_auditor.py`, `test_auditor_quality_v2.py` (hook text, emotional arc, info density), `test_frame_variance.py`, `test_av_sync.py`, `test_video_specs.py`, `test_quality_thresholds.py`
+- **Routing + graph** — `test_routing.py`, `test_graph.py`
+- **API** — `test_api.py`, `test_admin.py`
+- **Media** — `test_media_clients.py`, `test_media_tools.py`, `test_keyframe_images.py`
+- **State + compliance** — `test_state.py`, `test_compliance.py`
+- **Agents** — strategy, script, auditor, caption, thumbnail (individual test files)
+- **Database** — `test_postgres.py`
+- **Webhook** — `test_webhook_manager.py`, `test_webhook_dispatch_e2e.py`
+- **Asset** — `test_asset_models.py`, `test_asset_library.py`
 
 **Frontend:** Vitest with jsdom. Component tests in `web/src/components/*.test.tsx`.
 
@@ -752,7 +748,7 @@ header（Host/X-Real-IP/X-Forwarded-For/X-Forwarded-Proto），13 个 location �
 
 ### Frontend Conventions
 
-- **Theme:** Warm Light Professional (`data-theme="light"`),2026-05-06 从暗黑剧场翻转。
+- **Theme:** Warm Light Professional (`data-theme="light"`).
 核心色: `#FDF8F6` 暖白底 + `#D75C70` Fortune Red accent + `#FCF5F2` 暖白阴影。
 - Film grain + vignette overlay on all pages
 - Chinese-first i18n with English toggle
