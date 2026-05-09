@@ -4,7 +4,7 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-09
 owner: self
 source: human+ai
 ---
@@ -238,5 +238,32 @@ Admin router 正常加载（`/api/admin/` 返回 401 而非 404），`alembic up
     hook_duration_max 等阈值。
   - `src/quality/skill_versioning.py`: SkillMonitor 记录 latency/success/fallback rate，
     SkillVersionRegistry 版本管理。
+
+**2026-05-09 更新 (5 场景全量非 demo E2E + 生产缺陷修复):**
+
+- **5 场景非 demo 端到端验证** — Fast Mode + S1-S5 全部通过 `submit+poll` 模式验证。
+  首次全量运行报告 `tmp/outputs/5scenario-e2e-20260509_154801.json`：Fast(187s)、
+  S1(1149s)、S3(1452s)、S4(393s)、S5(726s) 完成，S2 因 `product_catalog` 缺失失败，
+  S4 因 prompt 类型错误产出 12KB stub。修复后二次验证全部通过。
+- **S2 `product_catalog` 缺失修复** — `submit_scenario` S2 分支的 config 只包含 `brand_package`，
+  无 `product_catalog`；`_SCENARIO_CONFIGS` 无 `s2` 条目 → fallback 到 s1 → `_step_strategy`
+  需要 `config["product_catalog"]` → KeyError。修复：`scenario.py` S2 分支从 `brand_package`
+  自动构造 `product_catalog` + `brand_mode=True`；`step_runner.py:_SCENARIO_CONFIGS` 显式
+  添加 `s2` 条目复用 S1 pipeline class。非 demo E2E 通过，生成 9.9MB 真实视频。
+- **S4 `clip_0_failed: 'prompt' must be a string` 修复** — `s4_live_shoot_pipeline.py:_step_video_prompts`
+  将 `seedance-video-prompt` 返回的 `list[dict]` 整体嵌套进 `"prompt": vp.data`，下游
+  `_step_seedance_clips` 传入 `list` 而非 `string` 给 `seedance-video-generate-skill`，
+  `validate_params` 检查 `isinstance(prompt, str)` 失败。修复：改为扁平化模式（与 S1 一致），
+  直接 `all_prompts.extend(vp.data)`，每个元素保留 `segment_prompt` 字符串字段。
+  非 demo E2E 通过，`clip_details=[False, False, False]`，视频 `s4_with_audio.mp4` = 5.8MB
+  （之前 12KB stub）。
+- **生产部署 SOP 文档化** — 新增 `docs/workflows/deploy-test-sop-stable.md`，记录从代码到
+  生产环境的全流程：前置条件、rsync `--chmod=F644,D755` 权限策略、deploy.sh 四阶段、
+  smoke/前端路由/volume 权限/Admin Panel 验证清单、5 场景 E2E 测试方法、已知问题与
+  workaround、回滚方案、历史部署事故（2026-05-09 volume 权限 500、2026-05-08 admin.py
+  600 权限 502、2026-05-07 nginx limit_req 429 风暴）。
+- **CLAUDE.md 更新** — Overview 当前状态更新为 "6 scenarios (Fast Mode + S1-S5) verified
+  end-to-end in non-demo mode"。S2-S5 场景说明更新：s2 接入 StepRunner，s4 step_order
+  修正为 7 steps（原 "3 steps" 为旧描述，实际已扩展 seedance_clips/tts/assemble/audit）。
 
 ---

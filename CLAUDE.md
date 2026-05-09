@@ -6,7 +6,7 @@
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`). Round 3 quality system (observe mode) deployed: frame variance, AV sync, video specs checks active but non-blocking. **Frontend UX v2 (2026-05-09):** information architecture redesigned (4-tab nav, `/works` + `/library` routes), a11y pass (labels, ARIA, sticky CTA), design tokens (`--ts-*`, `--sp-*`), mobile-responsive 375-1440px, background pipeline status bar. See `docs/design/information-architecture-v2.md`.
+**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. **6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode** (see `tmp/outputs/5scenario-e2e-20260509_154801.json` for first full run, `tmp/outputs/5scenario-e2e-*.json` for post-fix verification). Round 3 quality system (observe mode) deployed: frame variance, AV sync, video specs checks active but non-blocking. **Known production fixes applied 2026-05-09:** S2 `product_catalog` auto-construction, S4 prompt type mismatch. **Frontend UX v2 (2026-05-09):** information architecture redesigned (4-tab nav, `/works` + `/library` routes), a11y pass (labels, ARIA, sticky CTA), design tokens (`--ts-*`, `--sp-*`), mobile-responsive 375-1440px, background pipeline status bar. See `docs/design/information-architecture-v2.md`.
 
 
 > 历史更新记录已提取到 `docs/claude/updates/project-updates-202605-stable.md`。
@@ -474,15 +474,16 @@ Gate approval triggers background task resume to avoid HTTP 504 on long-running 
 
 ### S2-S5: Other Scenarios
 
-**Phase 2 (2026-05-07) 已全部接入 StepRunner:**
+**Phase 2 (2026-05-07) 已全部接入 StepRunner，Phase 3 (2026-05-09) S2 修复完成:**
 
 - S3/S4/S5 实现 `run_step(step_name, state)` 接口，`run()` 内部委托给 StepRunner 以保持向后兼容
 - `step_runner.py:_SCENARIO_CONFIGS` 集中定义各场景的 step_order：
   - s1: 12 steps (strategy → audit)
+  - s2: 12 steps (strategy → audit)，复用 S1 pipeline class，`brand_mode=True`
   - s3: 12 steps (video_analysis → audit)
-  - s4: 3 steps (scripts → video_prompts → thumbnails)
+  - s4: 7 steps (scripts → video_prompts → thumbnails → seedance_clips → tts_audio → assemble_final → audit)
   - s5: 6 steps (vlog_strategy → audit)
-- S2 是 S1 的 wrapper (`brand_mode=True`)，无需单独迁移
+- S2 是 S1 的 wrapper (`brand_mode=True`)，`submit_scenario` 自动从 `brand_package` 构造 `product_catalog`，无需前端额外传递
 
 Gate 系统目前仅在 S1 启用，S3-S5 的 gate 接入是后续迭代方向。
 

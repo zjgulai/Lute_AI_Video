@@ -4,7 +4,7 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-09
 owner: self
 source: human+ai
 ---
@@ -16,6 +16,21 @@ source: human+ai
 详细内容见下文。
 
 ### 1. 已知功能缺陷(已修复)
+
+> **2026-05-09 修复 (S2/S4 生产缺陷):**
+>
+> - **S2 `strategy_failed: 'product_catalog'`** — `submit_scenario` S2 分支的 config 缺少
+> `product_catalog`，StepRunner fallback 到 s1 pipeline 后 `_step_strategy` 需要
+> `config["product_catalog"]` → KeyError。修复：`scenario.py` S2 分支从 `brand_package`
+> 自动构造 `product_catalog` + `brand_mode=True`；`step_runner.py:_SCENARIO_CONFIGS`
+> 显式添加 `s2` 条目复用 S1 pipeline class。验证：非 demo E2E 通过，生成 9.9MB 真实视频。
+> 前端无需额外传递 `product_catalog`。
+> - **S4 `clip_0_failed: 'prompt' must be a string`** — `s4_live_shoot_pipeline.py:_step_video_prompts`
+> 将 `seedance-video-prompt` 返回的 `list[dict]` 整体嵌套进 `"prompt": vp.data`，下游
+> `_step_seedance_clips` 传入 `list` 而非 `string` 给 `seedance-video-generate-skill`，
+> `validate_params` 检查 `isinstance(prompt, str)` 失败。修复：改为扁平化模式（与 S1 一致），
+> 直接 `all_prompts.extend(vp.data)`。验证：非 demo E2E 通过，`clip_details=[False, False, False]`，
+> 视频 `s4_with_audio.mp4` = 5.8MB（之前 12KB stub）。
 
 > **2026-05-07 修复:**
 >
