@@ -89,7 +89,7 @@ export default function GalleryGrid({ items, onPlay }: Props) {
           >
             <span className="text-lg">{SCENE_ICONS[scene] || "🎬"}</span>
             <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-              {t(`scene.${scene}.title`) || t(scene) || scene}
+              {t(`scene.${scene}.title`, t("scene.other.title", "未分类"))}
             </span>
             <span className="text-[12px] text-[var(--color-text-tertiary)]">({sceneItems.length})</span>
           </div>
