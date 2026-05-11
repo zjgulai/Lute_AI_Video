@@ -8,12 +8,14 @@ full set of real pipeline outputs.
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from src.config import OUTPUT_DIR
@@ -77,6 +79,46 @@ def _derive_kind(category: str, mime: str) -> AssetKind:
 
 THUMBNAIL_DIR = OUTPUT_DIR / "thumbnails" / "portfolio_posters"
 
+BRAND_PATH_RE = re.compile(r"^brand_assets/([^/]+)/([^/]+)/images/")
+
+
+@lru_cache(maxsize=128)
+def _load_brand_info(brand: str, slug: str) -> dict | None:
+    """Read brand_assets/<brand>/<slug>/info.json with LRU cache.
+
+    Cache keyed by (brand, slug); invalidated by process restart (info.json is
+    only written by scrape_momcozy.py, which is run out-of-band).
+    """
+    info_path = OUTPUT_DIR / "brand_assets" / brand / slug / "info.json"
+    if not info_path.is_file():
+        return None
+    try:
+        return json.loads(info_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _brand_meta_for(rel_path: str) -> tuple[str | None, str | None, str | None, str | None, str | None, str | None]:
+    """Return (title, slug, brand, source_url, description, price) for a brand asset path.
+
+    Returns (None, ...) tuple for non-brand paths or when info.json is missing.
+    """
+    m = BRAND_PATH_RE.match(rel_path)
+    if not m:
+        return (None, None, None, None, None, None)
+    brand, slug = m.group(1), m.group(2)
+    info = _load_brand_info(brand, slug)
+    if info is None:
+        return (None, slug, brand, None, None, None)
+    return (
+        info.get("title") or None,
+        info.get("slug") or slug,
+        info.get("vendor") or brand,
+        info.get("source_url") or None,
+        info.get("description") or None,
+        info.get("price") or None,
+    )
+
 
 def _thumbnail_path_for(rel_path: str) -> str | None:
     """Return relative thumbnail path (under OUTPUT_DIR) if the poster jpg exists.
@@ -103,6 +145,12 @@ class PortfolioFile(BaseModel):
     size_bytes: int
     mime_type: str
     thumbnail_path: str | None = None
+    product_title: str | None = None
+    product_slug: str | None = None
+    product_brand: str | None = None
+    product_source_url: str | None = None
+    product_description: str | None = None
+    product_price: str | None = None
 
 
 class PortfolioResponse(BaseModel):
@@ -159,6 +207,9 @@ def _scan_portfolio() -> list[PortfolioFile]:
             scenario = m.group(1) if m else None
             label = f"{scenario}_{m.group(2)}" if m else None
             thumb = _thumbnail_path_for(str(rel)) if mime.startswith("video/") else None
+            (p_title, p_slug, p_brand, p_url, p_desc, p_price) = (
+                _brand_meta_for(str(rel)) if category == "brand_assets" else (None, None, None, None, None, None)
+            )
             files.append(
                 PortfolioFile(
                     id=str(rel),
@@ -174,6 +225,12 @@ def _scan_portfolio() -> list[PortfolioFile]:
                     size_bytes=st.st_size,
                     mime_type=mime,
                     thumbnail_path=thumb,
+                    product_title=p_title,
+                    product_slug=p_slug,
+                    product_brand=p_brand,
+                    product_source_url=p_url,
+                    product_description=p_desc,
+                    product_price=p_price,
                 )
             )
     return files
@@ -274,3 +331,57 @@ def _negate_iso(iso: str) -> str:
     so we map each char to its inverse ordinal. Stable across all valid ISO inputs.
     """
     return "".join(chr(0xFFFF - ord(c)) for c in iso)
+
+
+class BrandPresetsResponse(BaseModel):
+    brand: str
+    presets: list[dict]
+    scraped_at: str | None = None
+
+
+_PRESET_CACHE: dict[str, tuple[BrandPresetsResponse, float]] = {}
+_PRESET_TTL = 60
+
+
+@router.get("/brand-presets", response_model=BrandPresetsResponse)
+async def get_brand_presets(brand: str = "momcozy") -> BrandPresetsResponse:
+    """Return scraped quick-template presets for a brand.
+
+    Source of truth is the scraper output at
+    output/brand_assets/<brand>/<brand>_presets.json, written by
+    scripts/scrape_momcozy.py. Front-end QuickTemplate consumes this in
+    preference to the bundled demo-data fallback so a re-scrape is visible
+    without redeploying the web bundle.
+
+    404 if the brand directory or presets file is absent.
+    """
+    safe_brand = re.sub(r"[^A-Za-z0-9_-]", "", brand) or "momcozy"
+    now = time.time()
+    cached = _PRESET_CACHE.get(safe_brand)
+    if cached is not None and now - cached[1] < _PRESET_TTL:
+        return cached[0]
+
+    presets_path = OUTPUT_DIR / "brand_assets" / safe_brand / f"{safe_brand}_presets.json"
+    if not presets_path.is_file():
+        raise HTTPException(status_code=404, detail=f"No presets for brand={safe_brand}")
+    try:
+        presets_data = json.loads(presets_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read presets: {exc}") from exc
+
+    manifest_path = OUTPUT_DIR / "brand_assets" / safe_brand / "_manifest.json"
+    scraped_at: str | None = None
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            scraped_at = manifest.get("scraped_at")
+        except (json.JSONDecodeError, OSError):
+            scraped_at = None
+
+    resp = BrandPresetsResponse(
+        brand=safe_brand,
+        presets=presets_data if isinstance(presets_data, list) else [],
+        scraped_at=scraped_at,
+    )
+    _PRESET_CACHE[safe_brand] = (resp, now)
+    return resp

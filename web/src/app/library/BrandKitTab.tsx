@@ -29,12 +29,21 @@ interface PortfolioFile {
   size_bytes: number;
   mime_type: string;
   produced_at: string;
+  product_title?: string | null;
+  product_slug?: string | null;
+  product_brand?: string | null;
+  product_source_url?: string | null;
+  product_description?: string | null;
+  product_price?: string | null;
 }
 
 interface ProductGroup {
   brand: string;
   slug: string;
   prettyName: string;
+  description: string | null;
+  price: string | null;
+  sourceUrl: string | null;
   imageCount: number;
   totalBytes: number;
   coverPath: string;
@@ -66,11 +75,18 @@ function groupByProduct(files: PortfolioFile[]): ProductGroup[] {
       existing.totalBytes += f.size_bytes;
       existing.files.push(f);
       if (f.filename.startsWith("01.")) existing.coverPath = f.path;
+      if (!existing.description && f.product_description) existing.description = f.product_description;
+      if (!existing.price && f.product_price) existing.price = f.product_price;
+      if (!existing.sourceUrl && f.product_source_url) existing.sourceUrl = f.product_source_url;
+      if (f.product_title) existing.prettyName = f.product_title;
     } else {
       map.set(key, {
-        brand: parsed.brand,
-        slug: parsed.slug,
-        prettyName: prettifySlug(parsed.slug),
+        brand: f.product_brand || parsed.brand,
+        slug: f.product_slug || parsed.slug,
+        prettyName: f.product_title || prettifySlug(parsed.slug),
+        description: f.product_description || null,
+        price: f.product_price || null,
+        sourceUrl: f.product_source_url || null,
         imageCount: 1,
         totalBytes: f.size_bytes,
         coverPath: f.path,
@@ -245,7 +261,7 @@ export default function BrandKitTab() {
                   />
                 </div>
                 <div className="p-3">
-                  <h4 className="text-[12px] font-medium text-[var(--text-h1)] truncate" title={g.prettyName}>
+                  <h4 className="text-[12px] font-medium text-[var(--text-h1)] line-clamp-2" title={g.prettyName}>
                     {g.prettyName}
                   </h4>
                   <div className="flex items-center justify-between mt-1.5">
@@ -253,7 +269,11 @@ export default function BrandKitTab() {
                       <ImageIcon size={11} weight="fill" />
                       {g.imageCount} {t("library.brand_kit.gallery.imageSuffix")}
                     </p>
-                    <p className="text-[11px] text-[var(--text-muted)]">{formatBytes(g.totalBytes)}</p>
+                    {g.price ? (
+                      <p className="text-[11px] font-semibold text-[var(--fortune-red)]">{g.price}</p>
+                    ) : (
+                      <p className="text-[11px] text-[var(--text-muted)]">{formatBytes(g.totalBytes)}</p>
+                    )}
                   </div>
                 </div>
               </button>
@@ -271,32 +291,51 @@ export default function BrandKitTab() {
             className="apple-card max-w-5xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-3 bg-[var(--bg-card)]/95 backdrop-blur-md border-b border-[var(--border-default)]">
-              <div className="min-w-0">
-                <h4 className="text-[15px] font-semibold text-[var(--text-h1)] truncate">
-                  {expandedGroup.prettyName}
-                </h4>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5 truncate">
-                  {expandedGroup.imageCount} {t("library.brand_kit.gallery.imageSuffix")} · {formatBytes(expandedGroup.totalBytes)} · {expandedGroup.brand}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href={`https://${expandedGroup.brand}.com/products/${expandedGroup.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[12px] text-[var(--fortune-red)] flex items-center gap-1 hover:underline"
-                >
-                  {t("library.brand_kit.gallery.source")}
-                  <ArrowSquareOut size={12} weight="fill" />
-                </a>
-                <button
-                  onClick={() => setExpandedSlug(null)}
-                  className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] px-2 py-1"
-                  aria-label={t("guide.back")}
-                >
-                  ✕
-                </button>
+            <header className="sticky top-0 z-10 px-5 py-4 bg-[var(--bg-card)]/95 backdrop-blur-md border-b border-[var(--border-default)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-[15px] font-semibold text-[var(--text-h1)]">
+                    {expandedGroup.prettyName}
+                  </h4>
+                  <div className="flex items-center gap-3 mt-1 text-[11px] text-[var(--text-muted)]">
+                    <span>{expandedGroup.imageCount} {t("library.brand_kit.gallery.imageSuffix")}</span>
+                    <span>·</span>
+                    <span>{formatBytes(expandedGroup.totalBytes)}</span>
+                    {expandedGroup.price && (
+                      <>
+                        <span>·</span>
+                        <span className="font-semibold text-[var(--fortune-red)]">{expandedGroup.price}</span>
+                      </>
+                    )}
+                    <span>·</span>
+                    <span>{expandedGroup.brand}</span>
+                  </div>
+                  {expandedGroup.description && (
+                    <p className="text-[12px] text-[var(--text-body)] mt-2 leading-relaxed">
+                      {expandedGroup.description}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {expandedGroup.sourceUrl && (
+                    <a
+                      href={expandedGroup.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[12px] text-[var(--fortune-red)] flex items-center gap-1 hover:underline"
+                    >
+                      {t("library.brand_kit.gallery.source")}
+                      <ArrowSquareOut size={12} weight="fill" />
+                    </a>
+                  )}
+                  <button
+                    onClick={() => setExpandedSlug(null)}
+                    className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] px-2 py-1"
+                    aria-label={t("guide.back")}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             </header>
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
