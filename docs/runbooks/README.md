@@ -27,6 +27,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | [poyo-rejection.md](./poyo-rejection.md) | POYO 图片/视频生成内容审核拒绝 | 5-10 min |
 | [pipeline-stuck.md](./pipeline-stuck.md) | Pipeline 卡在 running 状态超阈值 | 10-20 min |
 | [db-pool-exhausted.md](./db-pool-exhausted.md) | asyncpg 连接池耗尽 | 5-10 min |
+| [brand-assets-refresh.md](./brand-assets-refresh.md) | 品牌资产抓取刷新 / 新增产品 / 灾难恢复 | 2-5 min |
 
 ## 灾难恢复
 
