@@ -62,6 +62,12 @@ if HAS_FASTAPI:
                     health.get("status"),
                     is_pg_available(),
                 )
+                if health.get("backend") == "postgresql" and health.get("status") == "tables_missing":
+                    _log.error(
+                        "PG tables missing - /metrics/* and /admin/* will return "
+                        "503 until migrations run. Fix: docker exec ai_video_backend "
+                        "alembic upgrade head"
+                    )
             except Exception:
                 pass
         # P2-1: Restore active threads from disk (standalone mode only)
