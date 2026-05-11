@@ -258,3 +258,68 @@ def _get_step_output(state: dict[str, Any], step_name: str) -> Any:
     if step_data.get("edited") and step_data.get("edited_output") is not None:
         return step_data["edited_output"]
     return step_data.get("output")
+
+
+VALID_VIDEO_DURATIONS = (15, 30, 45, 60, 90)
+DEFAULT_VIDEO_DURATION = 30
+
+
+def coerce_video_duration(body: dict[str, Any], default: int = DEFAULT_VIDEO_DURATION) -> int:
+    """Coerce body['video_duration'] to a valid int from the 5-tier set.
+
+    Defends the dict-typed submit endpoints (/scenario/s1, /s2, /s3, /s4, /s5,
+    /scenario/{s}/submit) against non-numeric input that historically reached
+    seedance and crashed with TypeError: '<' not supported between str and int
+    (V-2 QA, 2026-05-11).
+
+    Behavior:
+      - Missing / None  -> default (30)
+      - Numeric string  -> int(...) then clamped to nearest valid tier
+      - int / float     -> clamped to nearest valid tier
+      - Garbage string  -> raises HTTPException(422) with field-level detail
+                            so the frontend's inline-form-error path renders.
+    """
+    from fastapi import HTTPException
+
+    raw = body.get("video_duration")
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        raise HTTPException(
+            status_code=422,
+            detail=[{
+                "loc": ["body", "video_duration"],
+                "msg": "video_duration must be an integer in {15,30,45,60,90}",
+                "type": "value_error.bool",
+                "input": raw,
+            }],
+        )
+    if isinstance(raw, (int, float)):
+        n = int(raw)
+    elif isinstance(raw, str):
+        try:
+            n = int(raw.strip())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=[{
+                    "loc": ["body", "video_duration"],
+                    "msg": f"video_duration must be a number, got {raw!r}",
+                    "type": "value_error.int",
+                    "input": raw,
+                }],
+            ) from exc
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail=[{
+                "loc": ["body", "video_duration"],
+                "msg": f"video_duration must be a number, got {type(raw).__name__}",
+                "type": "value_error.type",
+                "input": str(raw)[:100],
+            }],
+        )
+    if n in VALID_VIDEO_DURATIONS:
+        return n
+    return min(VALID_VIDEO_DURATIONS, key=lambda v: abs(v - n))
+

@@ -25,6 +25,7 @@ from src.routers._state import (
     _get_step_output,
     _register_background_task,
     _validate_scenario,
+    coerce_video_duration,
 )
 
 router = APIRouter()
@@ -67,7 +68,7 @@ async def run_s1_product_direct(body: dict[str, Any]):
         "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
         "target_languages": DEFAULT_LANGUAGES,
         "week": body.get("week", ""),
-        "video_duration": body.get("video_duration", 30),
+        "video_duration": coerce_video_duration(body),
         "brand_mode": body.get("brand_mode", False),
         "enable_media_synthesis": body.get("enable_media_synthesis", True),
     }
@@ -95,7 +96,7 @@ async def run_s1_product_direct(body: dict[str, Any]):
             week=body.get("week", ""),
             brand_mode=body.get("brand_mode", False),
             enable_media_synthesis=body.get("enable_media_synthesis", True),
-            video_duration=body.get("video_duration", 30),
+            video_duration=coerce_video_duration(body),
         )
         # S1ProductDirectPipeline returns a dict differently — extract steps from the state
         return final_state
@@ -215,7 +216,7 @@ async def run_s3_influencer_remix(body: dict[str, Any]):
         product=product,
         influencer_name=body.get("influencer_name", "Influencer"),
         brief_id=body.get("brief_id", ""),
-        video_duration=body.get("video_duration", 30),
+        video_duration=coerce_video_duration(body),
     )
     return r.to_dict()
 
@@ -273,7 +274,7 @@ async def run_s5_brand_vlog(body: dict[str, Any]):
         scene_id=body.get("scene_id", "living-room"),
         selected_models=body.get("selected_models", []),
         story_description=body.get("story_description", ""),
-        video_duration=body.get("video_duration", 30),
+        video_duration=coerce_video_duration(body),
     )
     return r
 
@@ -958,7 +959,7 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
             "target_languages": DEFAULT_LANGUAGES,
             "week": body.get("week", ""),
-            "video_duration": body.get("video_duration", 30),
+            "video_duration": coerce_video_duration(body),
             "brand_mode": body.get("brand_mode", False),
             "enable_media_synthesis": body.get("enable_media_synthesis", True),
         }
@@ -993,7 +994,7 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "product": product,
             "influencer_name": body.get("influencer_name", "Influencer"),
             "brief_id": body.get("brief_id", ""),
-            "video_duration": body.get("video_duration", 30),
+            "video_duration": coerce_video_duration(body),
         }
     elif scenario == "s4":
         config = {
@@ -1009,7 +1010,7 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "scene_id": body.get("scene_id", "living-room"),
             "selected_models": body.get("selected_models", []),
             "story_description": body.get("story_description", ""),
-            "video_duration": body.get("video_duration", 30),
+            "video_duration": coerce_video_duration(body),
         }
     else:
         raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
