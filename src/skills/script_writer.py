@@ -318,7 +318,7 @@ class ScriptWriterSkill(SkillCallable):
         )
 
         try:
-            raw = await llm.invoke_json(system_prompt, user_message)
+            raw = await llm.invoke_json(system_prompt, user_message, model="deepseek-chat")
         except Exception:
             logger.warning("script-writer: LLM invoke failed", brief_id=brief.get("id"))
             return None
@@ -474,8 +474,9 @@ class ScriptWriterSkill(SkillCallable):
 
         # Overall self-check score
         all_ok = all(c["ok"] for c in checks.values())
+        dict_checks = [c for c in checks.values() if isinstance(c, dict) and "ok" in c]
+        checks["overall_score"] = sum(1 for c in dict_checks if c["ok"]) / len(dict_checks) if dict_checks else 0.0
         checks["overall_ok"] = all_ok
-        checks["overall_score"] = sum(1 for c in checks.values() if c["ok"]) / len([c for c in checks.values() if isinstance(c, dict) and "ok" in c])
 
         return checks
 

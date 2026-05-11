@@ -317,7 +317,7 @@ class ProductStrategySkill(SkillCallable):
             user = user.replace(placeholder, val)
 
         try:
-            raw = await llm.invoke_json(system, user)
+            raw = await llm.invoke_json(system, user, model="deepseek-chat")
 
             # Parse into WeeklyCalendar
             if isinstance(raw, dict) and "briefs" in raw:

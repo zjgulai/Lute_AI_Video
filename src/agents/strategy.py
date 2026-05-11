@@ -199,7 +199,7 @@ class StrategyAgent:
             if addendum:
                 system_prompt = system_prompt + "\n\n" + addendum
 
-            data = await llm.invoke_json(system_prompt, user_message)
+            data = await llm.invoke_json(system_prompt, user_message, model="deepseek-chat")
             briefs = [Brief(**b) for b in data["briefs"]]
             return WeeklyCalendar(week=data.get("week", week), briefs=briefs)
         except Exception as e:

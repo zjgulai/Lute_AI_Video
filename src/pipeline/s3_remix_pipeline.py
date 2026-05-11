@@ -17,6 +17,7 @@ Self-verification runs inside each media skill; cross-artifact audit runs at the
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import time
 from pathlib import Path
@@ -626,7 +627,7 @@ class S3InfluencerRemixPipeline:
     ) -> dict[str, Any]:
         """Step 8: invoke seedance-video-generate-skill with bounded concurrency.
 
-        Uses asyncio.Semaphore(2) to cap concurrent API calls to poyo.ai limits.
+        Uses asyncio.Semaphore(4) to cap concurrent API calls to poyo.ai limits.
         Returns a unified dict {clip_paths, clip_details, total_duration} matching S1 format.
 
         Continuity chain: the last frame of clip N becomes the
@@ -655,7 +656,7 @@ class S3InfluencerRemixPipeline:
         VIDEO_MAX_DURATION = 15
         clip_duration = min(VIDEO_MAX_DURATION, max(4, self._video_duration // max(len(capped), 1)))
 
-        _sem = asyncio.Semaphore(2)
+        _sem = asyncio.Semaphore(4)
 
         async def _gen_single(i: int, vp: dict[str, Any], last_frame: str | None) -> tuple[int, Any, str | None]:
             async with _sem:
@@ -768,18 +769,33 @@ class S3InfluencerRemixPipeline:
 
         thumbnail_paths: list[str] = []
         capped = thumbnail_prompts[:MAX_THUMBNAILS_PER_DEMO]
+        valid = [(i, tp.get("prompt", "")) for i, tp in enumerate(capped) if tp.get("prompt") and len(tp.get("prompt", "")) >= 5]
+        if not valid:
+            logger.info("s3: step 7 done", thumbnails=0)
+            return thumbnail_paths
 
-        for i, tp in enumerate(capped):
-            prompt = tp.get("prompt", "")
-            if not prompt or len(prompt) < 5:
+        thumb_sem = asyncio.Semaphore(2)
+
+        async def _gen_one(i: int, prompt: str) -> tuple[int, Any]:
+            async with thumb_sem:
+                res = await self._registry.execute("gpt-image-generate-skill", {
+                    "prompt": prompt,
+                    "size": "1024x1792",
+                    "quality": "high",
+                    "image_id": f"{label}_thumb_{i}",
+                })
+                return i, res
+
+        tasks = [_gen_one(i, prompt) for i, prompt in valid]
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for raw in raw_results:
+            if isinstance(raw, Exception):
+                errors.append(f"thumb_failed_with_exception: {raw}")
                 continue
-
-            res = await self._registry.execute("gpt-image-generate-skill", {
-                "prompt": prompt,
-                "size": "1024x1792",
-                "quality": "high",
-                "image_id": f"{label}_thumb_{i}",
-            })
+            if not isinstance(raw, tuple):
+                continue
+            i, res = raw
             if res.success and res.data:
                 path = res.data.get("image_path", "")
                 if path:

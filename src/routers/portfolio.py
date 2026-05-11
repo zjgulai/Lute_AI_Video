@@ -20,7 +20,7 @@ from src.config import OUTPUT_DIR
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
-MEDIA_EXTS = {".mp4", ".mp3", ".wav", ".mov", ".webm", ".png", ".jpg", ".jpeg", ".gif"}
+MEDIA_EXTS = {".mp4", ".mp3", ".wav", ".mov", ".webm", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 CATEGORIES: dict[str, tuple[str, str]] = {
     "renders": ("renders", "remotion_assemble"),
@@ -35,6 +35,7 @@ CATEGORIES: dict[str, tuple[str, str]] = {
     "assets": ("assets", "asset_storage"),
     "thumbnails": ("thumbnails", "thumbnail_generate"),
     "uploads": ("uploads", "user_uploads"),
+    "brand_assets": ("brand_assets", "external_scrape"),
 }
 
 LABEL_RE = re.compile(r"^(s\d)_(\d+)")
@@ -59,6 +60,7 @@ KIND_BY_CATEGORY: dict[str, AssetKind] = {
     "assets": "creation_intermediate",
     "demo": "creation_intermediate",
     "quality-test": "creation_intermediate",
+    "brand_assets": "brand_kit",
 }
 
 def _derive_kind(category: str, mime: str) -> AssetKind:
@@ -121,6 +123,7 @@ def _guess_mime(ext: str) -> str:
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
         ".gif": "image/gif",
+        ".webp": "image/webp",
     }.get(ext.lower(), "application/octet-stream")
 
 
@@ -146,9 +149,11 @@ def _scan_portfolio() -> list[PortfolioFile]:
             if st.st_size <= 0:
                 continue
             mime = _guess_mime(ext)
-            # Skip tiny video/image files — likely generation failures or stubs
+            # Skip tiny video/image files — likely generation failures or stubs.
+            # Brand assets are exempt: scraped Shopify CDN images are 60-300KB.
             if not mime.startswith("audio/") and st.st_size <= min_bytes:
-                continue
+                if category != "brand_assets":
+                    continue
             rel = path.relative_to(OUTPUT_DIR)
             m = LABEL_RE.match(path.stem)
             scenario = m.group(1) if m else None
@@ -196,6 +201,7 @@ async def list_portfolio(
     category: str | None = None,
     kind: AssetKind | None = None,
     limit: int | None = None,
+    offset: int = 0,
     sort: str = "recent",
 ) -> PortfolioResponse:
     """Return pipeline-generated media files.
@@ -204,10 +210,16 @@ async def list_portfolio(
     - `category`: filter to a single storage bucket (renders, seedance, ...).
     - `kind`: filter by lifecycle stage (`final_work` | `creation_intermediate` | `brand_kit`).
               Preferred over `category` for UI-oriented queries.
-    - `limit`: cap number of files returned (after sort+filter).
-    - `sort`: `recent` (default, by produced_at desc) or `quality` (renders+fast_mode first,
-              then by produced_at desc — used by frontend footage TOP-N display).
+    - `limit`: cap number of files returned (after sort+filter+offset).
+    - `offset`: skip N files after sort+filter (for pagination). Default 0.
+    - `sort`: ordering mode. Options:
+              - `recent` (default): by produced_at desc
+              - `quality`: renders+fast_mode first, then produced_at desc
+              - `size_desc`: largest files first
+              - `size_asc`: smallest files first
 
+    `total` is the total count AFTER filter but BEFORE limit/offset — use it to drive
+    pagination controls.
     `by_category` aggregates the *unfiltered* full set so UI can show overall counts
     even when displaying a TOP-N slice.
     """
@@ -233,14 +245,23 @@ async def list_portfolio(
                 _negate_iso(f.produced_at),
             ),
         )
+    elif sort == "size_desc":
+        all_files = sorted(all_files, key=lambda f: f.size_bytes, reverse=True)
+    elif sort == "size_asc":
+        all_files = sorted(all_files, key=lambda f: f.size_bytes)
     else:
         all_files = sorted(all_files, key=lambda f: f.produced_at, reverse=True)
+
+    total_after_filter = len(all_files)
+
+    if offset > 0:
+        all_files = all_files[offset:]
 
     if limit is not None and limit > 0:
         all_files = all_files[:limit]
 
     return PortfolioResponse(
-        total=len(all_files),
+        total=total_after_filter,
         by_category=by_cat,
         files=all_files,
     )

@@ -100,7 +100,7 @@ class ScriptWriterAgent:
         )
 
         try:
-            raw_data = await llm.invoke_json(SCRIPT_WRITER_SYSTEM_PROMPT_EN, user_message)
+            raw_data = await llm.invoke_json(SCRIPT_WRITER_SYSTEM_PROMPT_EN, user_message, model="deepseek-chat")
             scripts: list[Script] = []
             if isinstance(raw_data, list):
                 for raw_script in raw_data:
