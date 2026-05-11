@@ -176,37 +176,75 @@ class VideoDownloader:
         return await _do_download()
 
     async def _real_transcribe(self, video_path: str) -> list[TranscribeSegment]:
-        """Transcribe using Whisper (via whisper-cli or faster-whisper)."""
+        """Transcribe using faster-whisper (Python API, preferred) or whisper CLI (fallback).
+
+        faster-whisper is ~200 MB vs openai-whisper+torch ~1.8 GB — we install
+        it as the primary transcription backend. The CLI subprocess path is kept
+        as a fallback for environments that installed openai-whisper directly.
+        """
         async def _do_transcribe():
             async with asyncio.timeout(TRANSCRIBE_TIMEOUT_SECONDS):
-                # Try faster-whisper first, fallback to whisper-cli
-                result = subprocess.run(
-                    [
-                        "whisper",
-                        video_path,
-                        "--model", "base",
-                        "--output_format", "json",
-                        "--language", "en",
-                    ],
-                    capture_output=True, text=True, timeout=TRANSCRIBE_TIMEOUT_SECONDS,
+                try:
+                    from faster_whisper import WhisperModel
+                except ImportError:
+                    return await self._cli_whisper_transcribe(video_path)
+
+                def _run_faster_whisper() -> list[TranscribeSegment]:
+                    model = WhisperModel("base", device="cpu", compute_type="int8")
+                    segments_iter, _info = model.transcribe(
+                        video_path, language="en", beam_size=1
+                    )
+                    return [
+                        TranscribeSegment(
+                            start=float(s.start),
+                            end=float(s.end),
+                            text=(s.text or "").strip(),
+                        )
+                        for s in segments_iter
+                    ]
+
+                segments = await asyncio.to_thread(_run_faster_whisper)
+                logger.info(
+                    "video_downloader: transcribed",
+                    segments=len(segments),
+                    backend="faster-whisper",
                 )
-                if result.returncode != 0:
-                    raise TranscriptionError(f"whisper failed: {result.stderr[:500]}")
-
-                # Parse whisper JSON output
-                data = json.loads(result.stdout)
-                segments = []
-                for seg in data.get("segments", []):
-                    segments.append(TranscribeSegment(
-                        start=seg.get("start", 0.0),
-                        end=seg.get("end", 0.0),
-                        text=seg.get("text", "").strip(),
-                    ))
-
-                logger.info("video_downloader: transcribed", segments=len(segments))
                 return segments
 
         return await _do_transcribe()
+
+    async def _cli_whisper_transcribe(self, video_path: str) -> list[TranscribeSegment]:
+        """Fallback: shell out to the `whisper` CLI (openai-whisper package)."""
+        async with asyncio.timeout(TRANSCRIBE_TIMEOUT_SECONDS):
+            result = subprocess.run(
+                [
+                    "whisper",
+                    video_path,
+                    "--model", "base",
+                    "--output_format", "json",
+                    "--language", "en",
+                ],
+                capture_output=True, text=True, timeout=TRANSCRIBE_TIMEOUT_SECONDS,
+            )
+            if result.returncode != 0:
+                raise TranscriptionError(f"whisper failed: {result.stderr[:500]}")
+
+            data = json.loads(result.stdout)
+            segments = [
+                TranscribeSegment(
+                    start=seg.get("start", 0.0),
+                    end=seg.get("end", 0.0),
+                    text=seg.get("text", "").strip(),
+                )
+                for seg in data.get("segments", [])
+            ]
+            logger.info(
+                "video_downloader: transcribed",
+                segments=len(segments),
+                backend="whisper-cli",
+            )
+            return segments
+
 
     # ── Mock implementations ──
 
@@ -259,6 +297,11 @@ class VideoDownloader:
             return False
 
     def _check_whisper(self) -> bool:
+        try:
+            import faster_whisper  # noqa: F401
+            return True
+        except ImportError:
+            pass
         try:
             result = subprocess.run(
                 ["whisper", "--help"],
