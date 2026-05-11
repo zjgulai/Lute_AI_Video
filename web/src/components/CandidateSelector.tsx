@@ -144,6 +144,7 @@ export default function CandidateSelector({
         return (
           <div
             key={candidate.id}
+            data-candidate-id={candidate.id}
             className={`flex-1 min-w-[200px] max-w-[260px] apple-card p-4 border-2 transition-all relative ${
               isSelected ? "ring-2 ring-[rgba(215,92,112,0.20)]" : ""
             } ${borderClass}`}

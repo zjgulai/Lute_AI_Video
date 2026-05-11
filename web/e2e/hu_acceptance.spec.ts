@@ -73,19 +73,13 @@ test.describe("HU-05 — i18n switching with no language bleed", () => {
     "路特创新视频创作平台",
   ];
 
-  const KNOWN_LEAK_ROUTES = new Set<string>([
-    "/",
-  ]);
+  const KNOWN_LEAK_ROUTES = new Set<string>([]);
 
   for (const path of PAGES) {
     test(`${path} renders English text after switching locale to EN`, async ({ page }) => {
       test.skip(
         KNOWN_LEAK_ROUTES.has(path),
-        "Known i18n debt: SceneSelector quick-template cards in web/src/demo-data.ts " +
-          "(lines ~1020-1145) ship hardcoded zh-CN strings instead of using t() keys " +
-          "from web/src/i18n/translations.ts (which already has card.reason.* / card.connect.* / " +
-          "card.step.* / etc.). Fixing requires demo-data.ts to consume locale at render-time. " +
-          "Tracked but out of scope for HU-05 automation.",
+        "Reserved hook for routes with known untranslated zh-CN strings.",
       );
 
       await injectDemoKey(page);

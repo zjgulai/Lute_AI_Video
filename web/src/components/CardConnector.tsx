@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import { useI18n } from "@/i18n/I18nProvider";
+import { tCardCopy } from "@/i18n/cardCopyEn";
 
 type ConnectorTier = "primary" | "gold" | "glow" | "complete" | "dashed";
 
@@ -34,7 +36,9 @@ const TIER_ARROW_BORDER: Record<ConnectorTier, string> = {
 };
 
 export default function CardConnector({ text, tier = "primary" }: Props) {
+  const { locale } = useI18n();
   if (!text) return null;
+  const displayText = tCardCopy(text, locale) ?? text;
 
   const lineClass = TIER_LINE_CLASS[tier];
   const textClass = TIER_TEXT_CLASS[tier];
@@ -46,7 +50,7 @@ export default function CardConnector({ text, tier = "primary" }: Props) {
       <div className="flex items-center gap-2 my-0.5">
         <div className={`w-8 h-px ${lineClass} opacity-70`} />
         <span className={`text-[12px] italic whitespace-nowrap ${textClass}`}>
-          {text}
+          {displayText}
         </span>
         <div className={`w-8 h-px ${lineClass} opacity-70`} />
       </div>

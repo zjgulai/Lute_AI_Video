@@ -112,6 +112,8 @@ MOCK_PRODUCT_CATEGORY = os.getenv("MOCK_PRODUCT_CATEGORY", "wearable breast pump
 # LLM
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# SSOT for LLM provider default. render.yaml, deploy/lighthouse/.env.prod,
+# deploy/tencent-cloudbase.md, deploy/CLOUDBASE_STEP_BY_STEP.md MUST mirror.
 DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "deepseek")  # deepseek | anthropic | openai | kimi
 KIMI_MODEL = os.getenv("KIMI_MODEL", "kimi-k2-0905-preview")
 

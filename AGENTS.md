@@ -613,7 +613,9 @@ From the 2026-05-03 production-readiness review:
 - **Remotion rendering integration:** Now runs as a separate `rendering:3001` HTTP service
   (since 2026-05-02). Backend posts pipeline state JSON to `/assemble`, no more
   `npx remotion` shell out.
-- **Redis/Celery declared but unused:** Still in `requirements.txt` but no live consumer.
+- **Redis/Celery legacy reference:** Previously mentioned in requirements.txt;
+  verified removed as of 2026-05-11. No `import redis`/`import celery` in `src/`
+  or `tests/`. If a future feature needs a task queue, add the dep then.
 
 ---
 

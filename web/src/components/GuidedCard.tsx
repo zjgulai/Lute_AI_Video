@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef } from "react";
 import type { GuidedCard as GuidedCardType } from "./types";
 import { useI18n } from "@/i18n/I18nProvider";
+import { tCardCopy } from "@/i18n/cardCopyEn";
 import { apiFetch } from "./api";
 import AssetPickerModal, { type AcceptKind } from "./AssetPickerModal";
 import { Folder } from "@phosphor-icons/react";
@@ -35,7 +36,7 @@ const PRIORITY_STYLES: Record<string, { border: string; badge: string; badgeText
 };
 
 export default function GuidedCard({ card, value, onChange, isFocused, onFocus, error }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [isExpanded, setIsExpanded] = useState(card.priority !== "optional" || !value);
   const [isCompleted] = useState(!!value && value.trim().length > 0);
   const [uploading, setUploading] = useState(false);
@@ -43,6 +44,12 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const styles = PRIORITY_STYLES[card.priority] || PRIORITY_STYLES.required;
+  const stepNameLocalized = tCardCopy(card.stepName, locale) ?? card.stepName;
+  const questionLocalized = tCardCopy(card.question, locale) ?? card.question;
+  const reasonLocalized = tCardCopy(card.reason, locale) ?? card.reason;
+  const placeholderLocalized = card.placeholder
+    ? (tCardCopy(card.placeholder, locale) ?? t(card.placeholder))
+    : undefined;
 
   const handleChange = useCallback(
     (newValue: string) => {
@@ -101,7 +108,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
             name={card.fieldKey}
             value={value}
             onChange={(e) => handleChange(e.target.value)}
-            placeholder={card.placeholder ? t(card.placeholder) : undefined}
+            placeholder={placeholderLocalized}
             maxLength={card.maxLength}
             {...errorProps}
             {...requiredProp}
@@ -135,7 +142,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
           <div
             id={fieldId}
             role="group"
-            aria-label={card.stepName}
+            aria-label={stepNameLocalized}
             aria-describedby={hintId}
             className="flex flex-wrap gap-1.5"
           >
@@ -171,7 +178,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
               type="button"
               role="switch"
               aria-checked={value === "true"}
-              aria-label={card.stepName}
+              aria-label={stepNameLocalized}
               onClick={() => handleChange(value === "true" ? "false" : "true")}
               className={`relative w-11 h-6 rounded-full transition-colors ${
                 value === "true" ? "bg-[var(--fortune-red)]" : "bg-[var(--border-default)]"
@@ -194,7 +201,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
           <div
             id={fieldId}
             role="radiogroup"
-            aria-label={card.stepName}
+            aria-label={stepNameLocalized}
             aria-describedby={hintId}
             className="flex gap-2"
           >
@@ -248,7 +255,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
               type="file"
               className="hidden"
               accept={card.inputType === "image-upload" ? "image/*" : "video/*"}
-              aria-label={card.stepName}
+              aria-label={stepNameLocalized}
               aria-describedby={hintId}
               {...requiredProp}
               onChange={handleUpload}
@@ -292,7 +299,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
             type="text"
             value={value}
             onChange={(e) => handleChange(e.target.value)}
-            placeholder={card.placeholder ? t(card.placeholder) : undefined}
+            placeholder={placeholderLocalized}
             maxLength={card.maxLength}
             {...errorProps}
             {...requiredProp}
@@ -312,7 +319,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
         <div className="flex items-center gap-2">
           <span className="text-sm">{card.stepIcon}</span>
           <span className="text-xs font-medium text-[var(--color-text-secondary)]">
-            {card.stepName}
+            {stepNameLocalized}
           </span>
           <span className="text-xs text-[var(--color-text-tertiary)] truncate flex-1">
             {value}
@@ -339,7 +346,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
         </span>
         <span className="text-lg">{card.stepIcon}</span>
         <span className="text-xs font-medium text-[var(--color-text-secondary)]">
-          {card.stepName}
+          {stepNameLocalized}
         </span>
       </div>
 
@@ -348,7 +355,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
         htmlFor={`guided-${card.fieldKey}`}
         className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5 cursor-pointer"
       >
-        {card.question}
+        {questionLocalized}
         {card.priority === "required" && (
           <span aria-label="required" className="ml-1 text-[var(--fortune-red)] font-semibold">
             *
@@ -361,7 +368,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
         id={`guided-${card.fieldKey}-hint`}
         className="text-xs text-[var(--color-text-tertiary)] mb-3 leading-relaxed"
       >
-        {card.reason}
+        {reasonLocalized}
       </p>
 
       {/* 输入区域 */}

@@ -56,7 +56,7 @@
 | `API_KEY` | `ai_video_demo_2026` |
 | `CORS_ORIGINS` | `https://zjgulai.github.io` |
 | `VIDEO_OUTPUT_DIR` | `/app/output` |
-| `DEFAULT_LLM_PROVIDER` | `kimi` |
+| `DEFAULT_LLM_PROVIDER` | `deepseek` |
 | `LOG_LEVEL` | `INFO` |
 
 7. 点击「创建并部署」

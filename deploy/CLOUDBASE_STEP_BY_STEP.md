@@ -64,7 +64,7 @@
 | `API_KEY` | `ai_video_demo_2026` | API 认证密钥 |
 | `CORS_ORIGINS` | `https://zjgulai.github.io` | 允许 GitHub Pages 跨域访问 |
 | `VIDEO_OUTPUT_DIR` | `/app/output` | 视频输出目录 |
-| `DEFAULT_LLM_PROVIDER` | `kimi` | 默认 LLM 提供商 |
+| `DEFAULT_LLM_PROVIDER` | `deepseek` | 默认 LLM 提供商（与 `src/config.py` 默认一致） |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 
 > ⚠️ **重要**：`CORS_ORIGINS` 必须填 `https://zjgulai.github.io`，否则前端无法连接！
