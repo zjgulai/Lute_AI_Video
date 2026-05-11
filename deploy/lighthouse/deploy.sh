@@ -16,12 +16,18 @@
 #   cd /opt/ai-video/web && npm ci
 #
 # --- Sync from laptop (run on your local machine) ---
-#   rsync -avz -e "ssh -i ~/Downloads/ai_video.pem" \
+#   rsync -avz --chmod=F644,D755 -e "ssh -i ~/Downloads/ai_video.pem" \
 #     ./web/src/ ubuntu@101.34.52.232:/opt/ai-video/web/src/
-#   rsync -avz -e "ssh -i ~/Downloads/ai_video.pem" \
+#   rsync -avz --chmod=F644,D755 -e "ssh -i ~/Downloads/ai_video.pem" \
 #     ./src/ ubuntu@101.34.52.232:/opt/ai-video/src/
-#   rsync -avz -e "ssh -i ~/Downloads/ai_video.pem" \
+#   rsync -avz --chmod=F644,D755 -e "ssh -i ~/Downloads/ai_video.pem" \
 #     ./deploy/lighthouse/ ubuntu@101.34.52.232:/opt/ai-video/deploy/lighthouse/
+#
+# IMPORTANT: --chmod=F644 forces world-readable perms on rsync. Without it,
+# any local file with mode 0600 (e.g. src/routers/admin.py historically) gets
+# faithfully copied as 0600 to the server, where the backend container runs
+# as `appuser` and cannot read it. Symptom: PermissionError: [Errno 13]
+# /app/src/routers/admin.py at startup → 502 on /api/health.
 
 set -euo pipefail
 
@@ -56,6 +62,15 @@ if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
 else
   echo "  ✓ requirements.txt 与 backend image 一致"
 fi
+echo ""
+
+# -- Phase 0.5: defensive chmod for backend src/ --
+# rsync without --chmod can copy 0600 files (PermissionError 502 — see header).
+# Belt-and-suspenders: normalize perms before backend restart so even a forgetful
+# rsync survives. Cost: ~50ms. Benefit: never see /app/src/routers/admin.py 502 again.
+echo "[0.5/5] Normalizing src/ file permissions..."
+sudo find /opt/ai-video/src -type f -name '*.py' ! -perm 644 -exec chmod 644 {} \; 2>/dev/null || true
+echo "  ✓ src/**.py normalized to 0644"
 echo ""
 
 # -- Phase 1: Build frontend on host --
