@@ -80,6 +80,8 @@ security_self_check.py
 .claude/
 .kiro/
 .hermes/
+.sisyphus/
+.playwright-mcp/
 
 # Archive / drafts (keep locally, not in git)
 tmp/
