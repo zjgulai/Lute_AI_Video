@@ -4,7 +4,7 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-05-09
+updated: 2026-05-11
 owner: self
 source: human+ai
 ---
@@ -13,6 +13,29 @@ source: human+ai
 
 本文档按日期记录 2026 年 5 月的全部项目变更，供追溯和审计。
 原始来源为 CLAUDE.md Overview 段落，因体积过大提取至此。
+
+**2026-05-11 v0.2.0 → v0.2.4 总览（4 次发版，9 个 commit）：**
+
+> 这一波是「补完 + 加固」轮次：QA 全面打点 → 暴露真实 bug 链 → Tier-2/3 设计与执行 →
+> HU 自动化 → 品牌资产数据流诊断 + 4-phase 修复。所有改动在 production
+> `https://101.34.52.232` 端到端验证，每发版均带 git tag。
+
+| 版本 | commit | 主体改动 |
+|---|---|---|
+| **v0.2.1** | `5c4d192` | Tier-2 (submit-lock + 422 inline error + 429 retry-after) + Tier-3 (3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT 统一 + Admin/Gate vitest) + HU-05 (cardCopyEn 100-string zh→en) + deploy SOP fix (admin.py 0600 → Phase 0.5 防御 chmod) |
+| **v0.2.2** | `c52cad8` | Creation Guide 重构为独立 5-tab `CreationGuide.tsx` (Overview / Scenes / Frontend / Admin / Runbooks) + ~120 i18n keys (zh+en) |
+| **v0.2.3** | `2238a84` | `BrandKitTab.tsx` 由硬编码 2 条改为 fetch `/api/portfolio/?kind=brand_kit`，137 张抓取的 momcozy 产品图全部可见 |
+| **v0.2.4** | `7daadc1` | 品牌资产 Phase 2-4：PortfolioFile 暴露 product_title/price/source_url/description (LRU 读 info.json) + 新 `/brand-presets` API + QuickTemplate API 化 + cron 刷新脚本 + brand-assets-refresh runbook |
+
+具体修复细节、QA 截图、生产验证步骤见：
+- [`.kiro/plan/RECONCILIATION-2026-05-11.md`](../../../.kiro/plan/RECONCILIATION-2026-05-11.md)
+- [`.kiro/plan/DEPLOY-CHECKLIST-2026-05-12.md`](../../../.kiro/plan/DEPLOY-CHECKLIST-2026-05-12.md)
+- [`.kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md`](../../../.kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md)
+- [`tmp/outputs/production-qa-2026-05-11/`](../../../tmp/outputs/production-qa-2026-05-11/)
+
+下一步规划见 [`.kiro/plan/NEXT-STEPS-2026-05-11.md`](../../../.kiro/plan/NEXT-STEPS-2026-05-11.md)。
+
+---
 
 **2026-05-06 更新:**
 

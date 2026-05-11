@@ -4,14 +4,50 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-05-09
+updated: 2026-05-11
 owner: self
 source: human+ai
 ---
 
 # 已知缺口与待办清单
 
-最近一次盘点:2026-05-08(第三轮质量提升 18 项全部完成，质量体系从 "事后检查" 升级为 "全过程可控")。
+最近一次盘点：**2026-05-11 (v0.2.4)** — Tier-2/Tier-3/HU-05/Brand Assets Phase 1-4 全部上线，权威细分见
+[`AGENTS.md` Known Gaps](../../AGENTS.md#known-gaps-and-todos) 和
+[`.kiro/plan/NEXT-STEPS-2026-05-11.md`](../../.kiro/plan/NEXT-STEPS-2026-05-11.md)。
+
+> 上一次盘点：2026-05-08 (第三轮质量提升 18 项全部完成)。
+
+## 0. 2026-05-11 / v0.2.4 关闭项总览
+
+下列项已在 v0.2.0 → v0.2.4 区间被实际修复并上线生产，从未闭项中移除：
+
+- **配置漂移 `DEFAULT_LLM_PROVIDER`** — `4bf096b` (v0.2.1) — `src/config.py:115` 标注为
+  SSOT，4 个镜像文件（render.yaml / .env.prod / 2 篇 deploy 文档）全部对齐 `deepseek`。
+- **Redis/Celery legacy** — `4bf096b` 验证 src/ 与 tests/ 完全无引用，requirements 也无；
+  AGENTS.md 历史描述已修订。
+- **Long pipeline UX (HTTP 超时)** — 异步 submit + `/status` 轮询已在 2026-05-08 上线，
+  nginx 1500s 退居兜底。
+- **S2-S5 Gate 系统** — `gate_manager.py` per-scenario + 52 个 `test_gate_scenario_configs.py`
+  + `_build_skill_params` 扩展（`remix_script` / `vlog_strategy`）。
+- **admin.py 0600 → backend 502** — `5c4d192` (v0.2.1) 在 `deploy.sh` 加 Phase 0.5
+  防御 chmod + 头部注释带 `--chmod=F644,D755`。
+- **GAP-A 防双击** — `db89079` (v0.2.1) `useSubmitting` 接入 5 个 submit 入口。
+- **GAP-B 422 inline error** — `db89079` + `74f5310` 字段级红框 + `aria-invalid` +
+  Pydantic `loc` 自动映射。
+- **GAP-C `parseApiError` + ApiError class + 429 retry** — `db89079`，4 个 API helper
+  改为抛 `ApiError`，前端展示 `(retry in Ns)` 后缀。
+- **HU-05 `cardCopyEn` 100 条 zh→en 映射** — `4bf096b` (v0.2.2)，`GuidedCard` /
+  `CardConnector` 渲染时 `tCardCopy(text, locale)`。
+- **Creation Guide 重构** — `c52cad8` (v0.2.2) 抽取独立 `CreationGuide.tsx`，5-tab
+  导航（Overview / Scenes / Frontend / Admin / Runbooks），加 ~120 i18n 翻译。
+- **Brand Kit Tab 数据流断链** — `2238a84` (v0.2.3) `BrandKitTab.tsx` 改为 fetch
+  `/api/portfolio/?kind=brand_kit`，137 张 momcozy 抓取图全部可见。
+- **品牌资产 product 元信息** — `74f5310` (v0.2.4) `PortfolioFile` 增加 6 个产品字段
+  （title / slug / brand / source_url / description / price），LRU 读 info.json。
+- **QuickTemplate 抓取数据流** — `7daadc1` (v0.2.4) 新增 `/api/portfolio/brand-presets`
+  endpoint，前端 fetch + merge over demo-data，刷新 scraper 不需重新部署 frontend。
+- **3 篇 ADR + 5 篇 Runbook** — `4bf096b` + `7daadc1` 落入 `docs/architecture/adr/`
+  + `docs/runbooks/`。
 
 详细内容见下文。
 

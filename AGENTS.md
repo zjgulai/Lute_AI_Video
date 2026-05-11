@@ -2,11 +2,13 @@
 
 ## Overview
 
-**Short Video Agent** (v0.2.0) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
+**Short Video Agent** (v0.2.4) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 5 scenarios verified end-to-end in non-demo mode (see `tmp/outputs/non-demo-end-to-end-verification-20260502.md`). CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
+**Current status (2026-05-11, v0.2.4):** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
+
+**Recent releases (v0.2.0 → v0.2.4):** Tier-2 submit-lock + 422/429 error rendering, Tier-3 3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT, HU-05 cardCopyEn 100-string zh→en, Creation Guide 5-tab redesign, Brand Kit tab API wiring (137 momcozy product images now visible), product metadata API (title/price/source URL), `/api/portfolio/brand-presets` endpoint, deploy.sh Phase 0.5 defensive chmod. See `.kiro/plan/NEXT-STEPS-2026-05-11.md` for next-step plan + open backlog.
 
 ---
 
@@ -593,29 +595,150 @@ Key test areas:
 
 ## Known Gaps and TODOs
 
-From the 2026-05-03 production-readiness review:
-- **Configuration divergence:** `DEFAULT_LLM_PROVIDER` value differs across `config.py`
-  fallback (`anthropic`), `render.yaml` (`kimi`), and `deploy/lighthouse/.env.prod`
-  (`deepseek`, the live value). Pick one canonical default and align the rest.
-- **video_metrics in Docker init SQL:** Alembic has the PG table; `src/storage/migrations/001_init.sql`
-  does not. Fresh `docker compose up` falls back to SQLite until `alembic upgrade head` runs.
-- **POYO content-moderation coverage:** `src/tools/poyo_safety.py` substitutes the most
-  common maternal/baby trigger phrases, but D5 still hit 1 thumbnail rejection (caught by
-  pipeline retry). Add new regex rules as new triggers surface in production logs.
-- **Long pipeline UX:** S2/S3/S5 can take 10-30 min. curl/HTTP clients commonly time out
-  before the pipeline finishes (backend keeps running). Consider async submit + GET
-  /status/{thread_id} polling for the long scenarios.
-- **api_assets.py compat shim:** `/api/assets/*` uses in-memory dicts (`_brand_packages`,
-  `_influencers`). Frontend OpenAPI types still reference these paths, so don't remove the
-  router; do migrate any new asset features to `src/routers/assets.py` instead.
-- **S2-S5 lack step-by-step / gate system:** S1 only. Adding gates to S2-S5 is a planned
-  follow-up.
-- **Remotion rendering integration:** Now runs as a separate `rendering:3001` HTTP service
-  (since 2026-05-02). Backend posts pipeline state JSON to `/assemble`, no more
-  `npx remotion` shell out.
-- **Redis/Celery legacy reference:** Previously mentioned in requirements.txt;
-  verified removed as of 2026-05-11. No `import redis`/`import celery` in `src/`
-  or `tests/`. If a future feature needs a task queue, add the dep then.
+Last updated: **2026-05-11** (after v0.2.4 — brand assets Phase 2-4 shipped).
+
+### ✅ Resolved since 2026-05-03 baseline
+
+- ~~**Configuration divergence**~~ — Fixed in `4bf096b` (v0.2.1). `src/config.py:115`
+  marked as SSOT with comment naming the 4 mirror files; `render.yaml` + `.env.prod` +
+  `deploy/CLOUDBASE_STEP_BY_STEP.md` + `deploy/tencent-cloudbase.md` all aligned on
+  `deepseek`.
+- ~~**Redis/Celery legacy reference**~~ — Verified 2026-05-11: no `import redis` /
+  `import celery` anywhere in `src/` or `tests/`, not in `requirements.txt`. AGENTS.md
+  line 616 corrected. Was stale since at least 2026-04.
+- ~~**Long pipeline UX (HTTP timeout)**~~ — Unified async submit + `/status` polling
+  shipped 2026-05-08; nginx 1500s timeout now a safety net only.
+- ~~**S2-S5 gate system gap**~~ — `gate_manager.py` per-scenario configuration + 52
+  `test_gate_scenario_configs.py` tests + `_build_skill_params` support for
+  remix_script / vlog_strategy (2026-05-08). Real-API-key E2E for S3-S5 Gate still
+  not run in production (kept in "untested paths" below).
+- ~~**admin.py 0600 permission bug**~~ — `5c4d192` (2026-05-11) added `--chmod=F644,D755`
+  to all rsync SOPs + Phase 0.5 defensive chmod in `deploy.sh`. Prevents the 502
+  PermissionError that bit deploy #1 of Tier-3.
+- ~~**Frontend submit-lock (GAP-A)**~~ — `db89079` (v0.2.1) wired `useSubmitting` into
+  5 entry points (handleStart / startSmartCreate / FastModePanel / AssetUploader /
+  SettingsPanel test connection). Prevents double-click duplicate LLM billing.
+- ~~**Frontend 422 inline form error (GAP-B)**~~ — `db89079` + `74f5310` — `FormField` /
+  `aria-invalid` threaded into `GuidedCard`, Pydantic loc path auto-mapped to field
+  keys.
+- ~~**Frontend 422/429 parser (GAP-C)**~~ — `db89079`. `ApiError` class +
+  `parseApiError` wired into 4 core helpers. 429 shows `(retry in Ns)` inline.
+- ~~**HU-05 card-copy i18n**~~ — `4bf096b` (v0.2.2). `cardCopyEn.ts` 100-string map +
+  `GuidedCard` / `CardConnector` use `tCardCopy` at render time. Previously
+  `GUIDED_CARD_SEQUENCES` zh-only.
+- ~~**Brand assets ingestion gap**~~ — `2238a84` → `74f5310` → `7daadc1` (v0.2.2-v0.2.4).
+  BrandKitTab now fetches `/api/portfolio/?kind=brand_kit`; PortfolioFile exposes
+  `product_title` / `product_price` / `product_source_url` / `product_description` from
+  LRU-cached `info.json`; new `GET /api/portfolio/brand-presets?brand=<brand>`
+  endpoint; `QuickTemplate` merges API presets over bundled demo data; refresh script +
+  cron runbook. 137 scraped momcozy images now fully wired end-to-end.
+- ~~**Missing ADRs / Runbooks**~~ — `4bf096b` added 3 ADRs (dual-runtime / two-layer-auth /
+  db-strategy) + 4 runbooks (deepseek-timeout / poyo-rejection / pipeline-stuck /
+  db-pool-exhausted). `7daadc1` added brand-assets-refresh runbook. All under
+  `docs/architecture/adr/` and `docs/runbooks/`.
+- ~~**Creation Guide UX monolith**~~ — `c52cad8` (v0.2.2) extracted to 5-tab
+  `CreationGuide.tsx`; adds Frontend/Backend/Runbooks tabs that didn't exist before.
+
+### 🟡 Still open — real technical debt
+
+#### P0 (block next release if left)
+
+None. The v0.2.4 release is clean.
+
+#### P1 (do next sprint)
+
+- **yt-dlp + openai-whisper not in backend image.** S3 KOL video-analysis skill runs
+  in mock mode; real transcription requires adding the two packages (~2GB image growth
+  for whisper+torch) to `Dockerfile.backend`. Decide image-size vs. feature-value
+  trade-off before installing.
+- **Untested path A (Human Review branch coverage).** Pipeline's `strategy_audit` /
+  `script_audit` / `editing_audit` / `thumbnail_audit` score in `[0.60, 0.90)` triggers
+  HITL. D10 `contextvars` routing override + `GatePanel` APPROVE / CHANGES_REQUESTED /
+  REJECT branches have unit tests but no real-input production run. Need to lower
+  thresholds on a disposable pipeline or craft a low-quality brief.
+- **Untested path B (S3-S5 Gate E2E with real API key).** S1 has `test_gate_full_flow_e2e.py`;
+  S3/S4/S5 only have mocked unit coverage. Needs a real key + manual run to validate
+  front-end `CandidateSelector` state mapping for non-S1 scenarios.
+- **Untested path D (Metrics full chain).** `/metrics/*` video-performance endpoints +
+  `src/tasks/metrics_poller.py` poller + PG `video_metrics` table + front-end
+  `PerformanceDashboard` — never verified end-to-end in production. Alembic has the
+  table but `src/storage/migrations/001_init.sql` still doesn't, so a fresh
+  `docker compose up` without `alembic upgrade head` is metrics-blind.
+- **Untested path E.2 (Uploaded asset used in final video).** `test_upload_e2e.py`
+  covers upload → disk → /api/files → /api/media round-trip. The "uploaded asset gets
+  referenced by keyframe/seedance/remotion in the final video" loop is **not** verified.
+- **Untested path G (degradation chain).** `pipeline_degraded=True` + `error_collector`
+  FIFO + `/telemetry` visibility never exercised in production (all 5 scenarios went
+  green). No mock-POYO-500 / mock-DeepSeek-timeout integration test.
+- **`video_duration: "not-a-number"` accepted by backend.** Discovered during V-2 QA
+  (2026-05-11): `/api/scenario/s*/submit` accepts non-numeric `video_duration` and
+  crashes later at seedance step with `'<' not supported between 'str' and 'int'`.
+  Pydantic model needs stricter type coercion.
+
+#### P2 (nice-to-have)
+
+- **`video_metrics` in Docker init SQL.** Fresh `docker compose up` still falls back
+  to SQLite until `alembic upgrade head` runs. Either add the CREATE TABLE to
+  `001_init.sql` or make Alembic migration auto-run at startup.
+- **POYO content-moderation coverage expansion.** `poyo_safety.py` now has 11+ rules
+  but the universe of triggers is open-ended. Watch the structured `poyo_cm_rejection`
+  log events in production and fold new triggers into `_REPLACEMENTS` + unit tests.
+- **`api_assets.py` compat shim.** `/api/assets/*` still uses in-memory dicts for
+  `_brand_packages` / `_influencers`. Frontend OpenAPI types reference these paths,
+  so don't remove the router; do migrate any new asset features to
+  `src/routers/assets.py` and/or `src/routers/portfolio.py` instead.
+- **Untested path C (Distribution / Publish).** Requires real platform credentials
+  (TikTok / Shopify). Mock-only tests today.
+- **Untested path F (Webhook dispatch).** `WEBHOOK_URLS` left empty in prod since
+  launch. Set `WEBHOOK_URLS` to a `webhook.site` test URL + run any scenario → verify
+  `audit.completed` / `pipeline.completed` events arrive.
+- **Untested path H (multi-tenant concurrency + API Key isolation).** `contextvars`
+  isolation verified in single-request unit tests; never pressure-tested with
+  concurrent requests from 2+ tenants using different API keys.
+- **Untested path I (i18n walkthrough).** GatePanel / DistributionView / InsightReport
+  manual walkthrough in EN mode to catch hardcoded-string leaks. `hu_acceptance.spec.ts`
+  HU-05 covers `/` `/works` `/library` but not the three creator-flow pages.
+- **Untested path J (alternative deploy targets).** `render.yaml` (overseas) +
+  `deploy/tencent-cloudbase.md` (CloudBase) not verified since Lighthouse became
+  canonical. Low priority unless someone needs to deploy to one of them.
+- **Untested path K (Quality ML real-deps).** `src/quality/` lazy-imports
+  transformers / torch / opencv / mediapipe / deepface / pyiqa / scenedetect.
+  Production has `ffmpeg` only → `nr_quality.py` runs "skipped" branch. Deciding
+  which ML dep to install is a ~600MB-2GB image-size call.
+- **Untested path L (quality_score feedback loop).** Upstream skills emit
+  `quality_score` / `_self_check`; downstream (`keyframe_images` / `seedance_clips` /
+  `remotion_assemble`) do not read and regenerate on sub-threshold scores yet. Design
+  exists, implementation doesn't.
+- **Frontend eslint 286 errors (pre-existing).** CI doesn't gate on `npm run lint`.
+  Mostly `@typescript-eslint/no-explicit-any` in catch blocks. `any` → `unknown`
+  migration could land ~100 of them; `no-img-element` another ~15. Low-priority because
+  zero behavioral impact.
+- **`video_metrics` Alembic vs Docker init-sql drift.** See P2 above.
+- **HU-05 `SCENE_VIDEO_TYPES.desc` still Chinese.** The card-hint subtitles on the
+  video-type selector remain hardcoded zh (not covered by `cardCopyEn`). Small
+  follow-up: extend the map or move these copies into `translations.ts`.
+- **HU-02 desktop notification + HU-03 script quality.** Left as manual-verify only
+  (cannot automate in Playwright: permission gesture + subjective evaluation).
+
+### 🔵 Architecture-level references
+
+- **Remotion rendering integration:** `rendering:3001` HTTP service since 2026-05-02.
+  Backend posts pipeline state JSON to `/assemble`.
+- **pyright strict:** `reportUnknownMemberType` / `reportUnknownVariableType` not
+  enabled. Noise far outweighs value while the codebase is `dict[str, Any]`-heavy.
+  Revisit if typed data classes (`ProductCatalog`, `PipelineConfig`, etc.) are
+  introduced.
+- **LangGraph proxy layer (P4-4):** `/pipeline/*` proxies to StepRunner. State
+  conversion is best-effort; some legacy fields may be dropped. Original LangGraph
+  code kept as compat layer; proxy can be iteratively filled in if a caller needs
+  a specific legacy field.
+
+See also:
+- `.kiro/plan/NEXT-STEPS-2026-05-11.md` — tech-debt prioritization + execution plan
+- `.kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md` — closed (Phase 1-4 shipped)
+- `.kiro/plan/RECONCILIATION-2026-05-11.md` — Tier-2/3 + HU-05 reconciliation
+- `docs/claude/known-gaps-stable.md` — more granular Claude-side history
+- `docs/runbooks/README.md` — 5 incident runbooks
 
 ---
 

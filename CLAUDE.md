@@ -2,17 +2,24 @@
 
 ## Overview
 
-**Short Video Agent** (v0.2.0) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
+**Short Video Agent** (v0.2.4) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status:** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. **6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode** (see `tmp/outputs/5scenario-e2e-20260509_154801.json` for first full run, `tmp/outputs/5scenario-e2e-*.json` for post-fix verification). Round 3 quality system (observe mode) deployed: frame variance, AV sync, video specs checks active but non-blocking. **Known production fixes applied 2026-05-09:** S2 `product_catalog` auto-construction, S4 prompt type mismatch. **Frontend UX v2 (2026-05-09):** information architecture redesigned (4-tab nav, `/works` + `/library` routes), a11y pass (labels, ARIA, sticky CTA), design tokens (`--ts-*`, `--sp-*`), mobile-responsive 375-1440px, background pipeline status bar. See `docs/design/information-architecture-v2.md`.
+**Current status (2026-05-11, v0.2.4):** Production live at `https://101.34.52.232` on Tencent Lighthouse. 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. Quality system in observe mode (frame variance, AV sync, video specs).
 
+**Recent releases (v0.2.0 → v0.2.4):**
+- **v0.2.4** (`7daadc1`, 2026-05-11) — Brand assets Phase 2-4: rich product metadata in `/api/portfolio/?kind=brand_kit` (title/price/description/source URL via LRU `info.json`), new `/api/portfolio/brand-presets?brand=X` endpoint, `QuickTemplate` consumes API + falls back to demo data, refresh script + cron runbook.
+- **v0.2.3** (`2238a84`, 2026-05-11) — Brand Kit tab now fetches the 137 scraped Momcozy product images from `/api/portfolio/`. Was hard-coded to 2 preset cards.
+- **v0.2.2** (`c52cad8`, 2026-05-11) — Creation Guide redesigned as 5-tab `CreationGuide.tsx` (Overview / Scenes / Frontend / Admin / Runbooks), ~120 new i18n keys.
+- **v0.2.1** (`5c4d192`, 2026-05-11) — Tier-2 (submit-lock + 422 inline error + 429 retry) + Tier-3 (3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT + Admin/Gate vitest) + HU-05 (`cardCopyEn` 100-string zh→en map) + deploy SOP fix (admin.py 0600 → Phase 0.5 defensive chmod).
+- **v0.2.0 baseline** (2026-05-09) — 6 scenarios E2E verified, S2/S4 production crashes fixed, frontend UX v2 (4-tab nav, `/works` + `/library`).
 
-> 历史更新记录已提取到 `docs/claude/updates/project-updates-202605-stable.md`。
-> 已知缺口与待办已提取到 `docs/claude/known-gaps-stable.md`。
+> 历史更新记录见 `docs/claude/updates/project-updates-202605-stable.md`。
+> 已知缺口与下一步计划见 `docs/claude/known-gaps-stable.md` + `.kiro/plan/NEXT-STEPS-2026-05-11.md`。
 > Claude Code Agent 体系与项目标准见 `docs/claude/project-standard-stable.md`。
-> 详细生产部署指南见 `docs/workflows/deploy-lighthouse-stable.md`。
+> 详细生产部署指南见 `docs/workflows/deploy-lighthouse-stable.md` + `docs/runbooks/README.md`。
+> 架构决策见 `docs/architecture/adr/README.md`。
 > Portfolio 运营文档见 `docs/workflows/portfolio-ops-stable.md`。
 
 ## Architecture at a Glance
