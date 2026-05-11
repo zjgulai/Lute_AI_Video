@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { adminFetch } from "@/components/api";
+import { adminFetch, parseApiError } from "@/components/api";
 import { Key, WarningCircle } from "@phosphor-icons/react";
 
 export default function AdminLoginPage() {
@@ -11,9 +11,17 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [retryAfter, setRetryAfter] = useState(0);
+
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const id = setInterval(() => setRetryAfter((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [retryAfter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (retryAfter > 0) return;
     setError("");
     setLoading(true);
 
@@ -25,8 +33,15 @@ export default function AdminLoginPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail || "Invalid credentials");
+        const info = await parseApiError(res);
+        if (info.status === 429 && info.retryAfterSec) {
+          setRetryAfter(info.retryAfterSec);
+          setError(`Too many attempts. Try again in ${info.retryAfterSec}s.`);
+        } else if (info.status === 422) {
+          setError(info.message || "Invalid request");
+        } else {
+          setError(info.message || "Invalid credentials");
+        }
         setLoading(false);
         return;
       }
@@ -82,13 +97,17 @@ export default function AdminLoginPage() {
           {error && (
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[rgba(208,78,90,0.1)] text-[var(--crimson-mist)] text-xs">
               <WarningCircle size={14} weight="fill" className="shrink-0" />
-              {error}
+              <span>
+                {retryAfter > 0
+                  ? `Too many attempts. Try again in ${retryAfter}s.`
+                  : error}
+              </span>
             </div>
           )}
 
           <button
             type="submit"
-            disabled={loading || !email || !password}
+            disabled={loading || !email || !password || retryAfter > 0}
             className="apple-btn apple-btn-primary text-sm w-full py-2.5 disabled:opacity-50"
           >
             {loading ? (

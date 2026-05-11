@@ -473,6 +473,71 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
   throw lastError;
 }
 
+export interface ApiErrorInfo {
+  status: number;
+  message: string;
+  fieldErrors: Record<string, string>;
+  retryAfterSec: number | null;
+}
+
+export async function parseApiError(res: Response): Promise<ApiErrorInfo> {
+  const info: ApiErrorInfo = {
+    status: res.status,
+    message: res.statusText || `HTTP ${res.status}`,
+    fieldErrors: {},
+    retryAfterSec: null,
+  };
+
+  if (res.status === 429) {
+    const headerRetry = res.headers.get("Retry-After");
+    if (headerRetry) {
+      const n = parseInt(headerRetry, 10);
+      if (Number.isFinite(n) && n > 0) info.retryAfterSec = n;
+    }
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.clone().json();
+  } catch {
+    try {
+      const text = await res.clone().text();
+      if (text) info.message = text.slice(0, 300);
+    } catch { /* unreadable */ }
+    return info;
+  }
+
+  if (body && typeof body === "object") {
+    const obj = body as Record<string, unknown>;
+    if (typeof obj.detail === "string") {
+      info.message = obj.detail;
+    } else if (Array.isArray(obj.detail)) {
+      const messages: string[] = [];
+      for (const item of obj.detail) {
+        if (!item || typeof item !== "object") continue;
+        const e = item as Record<string, unknown>;
+        const msg = typeof e.msg === "string" ? e.msg : "Invalid value";
+        const loc = Array.isArray(e.loc) ? e.loc : [];
+        const field = loc
+          .filter((p) => typeof p === "string" && p !== "body" && p !== "query" && p !== "path")
+          .join(".");
+        if (field) {
+          info.fieldErrors[field] = msg;
+          messages.push(`${field}: ${msg}`);
+        } else {
+          messages.push(msg);
+        }
+      }
+      if (messages.length > 0) info.message = messages.join("; ");
+    }
+    if (typeof obj.retry_after_sec === "number" && obj.retry_after_sec > 0) {
+      info.retryAfterSec = obj.retry_after_sec;
+    }
+  }
+
+  return info;
+}
+
 // ── Core pipeline APIs ──
 
 /** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
