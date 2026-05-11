@@ -687,12 +687,12 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
           <div className="apple-card p-3 space-y-2">
             <h3 className="text-[12px] font-semibold text-[var(--text-body)] uppercase tracking-wider">
               <Camera size={16} weight="fill" className="inline-block align-middle mr-1.5 text-[var(--fortune-red)]" />
-              品牌VLOG
+              {t("scene.brand_vlog.title")}
             </h3>
             {/* Brand + Product SKU */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">品牌规范</label>
+                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">{t("vlog.brandLabel")}</label>
                 <select
                   value={vlogBrandId}
                   onChange={(e) => { setVlogBrandId(e.target.value); const brand = VLOG_BRANDS.find(b => b.id === e.target.value); if (brand?.products?.[0]) setVlogProductId(brand.products[0].id); }}
@@ -702,17 +702,17 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
                 </select>
               </div>
               <div>
-                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">产品SKU</label>
+                <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">{t("vlog.productSku")}</label>
                 <select value={vlogProductId} onChange={(e) => setVlogProductId(e.target.value)} className="apple-input text-sm">
                   {(VLOG_BRANDS.find(b => b.id === vlogBrandId)?.products || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                <p className="text-[12px] text-[var(--text-muted)] mt-0.5">选择产品后自动回填六视图</p>
+                <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{t("vlog.productSkuHint")}</p>
               </div>
             </div>
 
             {/* Scene Selection */}
             <div>
-              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">场景选择</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">{t("vlog.scene")}</label>
               <div className="grid grid-cols-3 gap-2">
                 {VLOG_SCENES.map(s => (
                   <button
@@ -734,7 +734,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
             {/* Six-View */}
             <div>
-              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">产品六视图</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">{t("vlog.views")}</label>
               {VLOG_BRANDS.find(b => b.id === vlogBrandId)?.products.find(p => p.id === vlogProductId)?.views && (
                 <VlogSixView views={VLOG_BRANDS.find(b => b.id === vlogBrandId)!.products.find(p => p.id === vlogProductId)!.views} />
               )}
@@ -742,7 +742,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
             {/* Model Selection */}
             <div>
-              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">模特图选择 · 支持多选</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">{t("vlog.models")} · {t("vlog.modelsHint")}</label>
               <VlogModelSelector
                 models={VLOG_MODELS}
                 selected={vlogModelIds}
@@ -752,24 +752,24 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
 
             {/* Story Description */}
             <div>
-              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">故事描述</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">{t("vlog.story")}</label>
               <textarea
                 value={vlogStory}
                 onChange={(e) => setVlogStory(e.target.value.slice(0, 300))}
-                placeholder="例如：以年轻母亲在客厅使用产品为核心，穿插婴儿安静入睡的镜头，强调免手扶、静音和日常高效场景，结尾突出更自由的使用体验。"
+                placeholder={t("vlog.storyPlaceholder")}
                 className="apple-input resize-none text-sm"
                 rows={4}
                 maxLength={300}
               />
               <div className="flex justify-between mt-1">
-                <span className="text-[12px] text-[var(--text-muted)]">描述人物动作、情绪、卖点节奏和结尾指令</span>
+                <span className="text-[12px] text-[var(--text-muted)]">{t("vlog.storyHint")}</span>
                 <span className="text-[12px] text-[var(--text-muted)]">{vlogStory.length} / 300</span>
               </div>
             </div>
 
             {/* Duration */}
             <div>
-              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">视频时长</label>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-2">{t("vlog.duration")}</label>
               <div className="flex gap-2">
                 {VLOG_DURATION_OPTIONS.map(d => (
                   <button

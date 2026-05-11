@@ -14,6 +14,7 @@ import {
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import EmptyState from "@/components/EmptyState";
+import Pagination from "@/components/Pagination";
 
 interface MaterialAsset {
   id: string;
@@ -51,8 +52,11 @@ export default function MaterialsTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [failedUploads, setFailedUploads] = useState<{ file: File; error: string }[]>([]);
   const [preview, setPreview] = useState<MaterialAsset | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 24;
 
   const fetchAssets = useCallback(async () => {
     setLoading(true);
@@ -83,9 +87,9 @@ export default function MaterialsTab() {
     }
 
     try {
-      const res = await apiFetch("/portfolio/?kind=creation_intermediate&limit=200&sort=recent");
+      const res = await apiFetch("/portfolio/?kind=creation_intermediate&limit=500&sort=size_desc");
       if (!res.ok) {
-        const fallback = await apiFetch("/portfolio/?limit=200&sort=recent");
+        const fallback = await apiFetch("/portfolio/?limit=500&sort=size_desc");
         if (!fallback.ok) throw new Error(`${t("common.fetchFailed")} (${fallback.status})`);
         const data = await fallback.json();
         const mapped: MaterialAsset[] = (data.files || [])
@@ -143,13 +147,30 @@ export default function MaterialsTab() {
     });
   }, [assets, typeFilter, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredAssets.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pagedAssets = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredAssets.slice(start, start + PAGE_SIZE);
+  }, [filteredAssets, safePage]);
+
+  const handleFilterChange = (next: TypeFilter) => {
+    setTypeFilter(next);
+    setPage(1);
+  };
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    setPage(1);
+  };
+
   const uploadFiles = async (files: File[]) => {
     if (isDemoMode()) {
-      setError("Demo 模式下无法上传");
+      setError(t("library.demoModeUploadDisabled"));
       return;
     }
     setUploading(true);
     setError(null);
+    const newFailures: { file: File; error: string }[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       setUploadProgress(`${t("footage.uploading")} (${i + 1}${t("footage.of")}${files.length}): ${file.name}`);
@@ -161,12 +182,25 @@ export default function MaterialsTab() {
         const res = await apiFetch("/api/upload", { method: "POST", body: formData });
         if (!res.ok) throw new Error(`${t("footage.uploadFailed")} (${res.status})`);
       } catch (e: any) {
-        setError(e.message || `${t("footage.uploadFailed")}: "${file.name}"`);
+        newFailures.push({ file, error: e.message || t("footage.uploadFailed") });
       }
     }
     setUploadProgress(null);
     setUploading(false);
+    if (newFailures.length > 0) {
+      setFailedUploads((prev) => [...prev, ...newFailures]);
+    }
     await fetchAssets();
+  };
+
+  const retryFailedUploads = async () => {
+    const filesToRetry = failedUploads.map((f) => f.file);
+    setFailedUploads([]);
+    await uploadFiles(filesToRetry);
+  };
+
+  const dismissFailedUploads = () => {
+    setFailedUploads([]);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,7 +218,7 @@ export default function MaterialsTab() {
             return (
               <button
                 key={id}
-                onClick={() => setTypeFilter(id)}
+                onClick={() => handleFilterChange(id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                   isActive
                     ? "bg-[rgba(215,92,112,0.12)] text-[var(--fortune-red)]"
@@ -207,7 +241,7 @@ export default function MaterialsTab() {
             type="search"
             aria-label={t("library.tab.materials")}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder={t("footage.searchPlaceholder")}
             className="apple-input text-sm pl-9 pr-4 w-full"
           />
@@ -247,6 +281,56 @@ export default function MaterialsTab() {
         <div className="apple-card p-3 border-l-4 border-[var(--fortune-red)] bg-[var(--bg-panel)] flex items-center gap-2">
           <Spinner size={16} weight="fill" className="text-[var(--fortune-red)] animate-spin shrink-0" />
           <span className="text-xs text-[var(--jade-accent)] font-medium">{uploadProgress || t("footage.uploadProgress")}</span>
+        </div>
+      )}
+
+      {failedUploads.length > 0 && !uploading && (
+        <div
+          role="alert"
+          className="apple-card p-3 border-l-4 border-[var(--crimson-mist)] bg-[rgba(196,91,80,0.06)] space-y-2"
+        >
+          <div className="flex items-start gap-2">
+            <WarningCircle size={16} weight="fill" className="text-[var(--crimson-mist)] shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0 text-xs">
+              <p className="font-medium text-[var(--crimson-mist)]">
+                {t("upload.someFailed", "{count} 个文件上传失败").replace(
+                  "{count}",
+                  String(failedUploads.length),
+                )}
+              </p>
+              <ul className="mt-1 space-y-0.5 text-[var(--text-muted)] truncate">
+                {failedUploads.slice(0, 3).map((f, i) => (
+                  <li key={`${f.file.name}-${i}`} className="truncate">
+                    · {f.file.name} — {f.error}
+                  </li>
+                ))}
+                {failedUploads.length > 3 && (
+                  <li className="text-[var(--text-muted)]">
+                    {t("upload.andMore", "及其余 {count} 个").replace(
+                      "{count}",
+                      String(failedUploads.length - 3),
+                    )}
+                  </li>
+                )}
+              </ul>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={dismissFailedUploads}
+              className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
+            >
+              {t("upload.dismissFailed", "忽略")}
+            </button>
+            <button
+              type="button"
+              onClick={retryFailedUploads}
+              className="apple-btn apple-btn-primary text-xs py-1.5 px-3"
+            >
+              {t("upload.retryFailed", "重试上传")}
+            </button>
+          </div>
         </div>
       )}
 
@@ -291,8 +375,9 @@ export default function MaterialsTab() {
       )}
 
       {!loading && filteredAssets.length > 0 && (
+        <>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {filteredAssets.map((asset) => {
+          {pagedAssets.map((asset) => {
             const url = getMediaUrl(asset.filePath);
             const thumb = asset.thumbnailPath ? getMediaUrl(asset.thumbnailPath) : "";
             const isVideo = isVideoMime(asset.mimeType);
@@ -347,6 +432,13 @@ export default function MaterialsTab() {
             );
           })}
         </div>
+        <Pagination
+          page={safePage}
+          pageSize={PAGE_SIZE}
+          total={filteredAssets.length}
+          onPageChange={setPage}
+        />
+        </>
       )}
 
       {preview && (
@@ -364,13 +456,22 @@ export default function MaterialsTab() {
             </button>
             <div className="rounded-xl overflow-hidden bg-black/60">
               {isVideoMime(preview.mimeType) ? (
-                <video src={getMediaUrl(preview.filePath)} controls autoPlay className="max-w-[85vw] max-h-[75vh] object-contain" />
+                <video
+                  src={getMediaUrl(preview.filePath)}
+                  poster={preview.thumbnailPath ? getMediaUrl(preview.thumbnailPath) : undefined}
+                  controls
+                  autoPlay
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="max-w-[85vw] max-h-[75vh] object-contain"
+                />
               ) : isImageMime(preview.mimeType) ? (
                 <img src={getMediaUrl(preview.filePath)} alt={preview.originalName} className="max-w-[85vw] max-h-[75vh] object-contain" />
               ) : (
                 <div className="px-12 py-16 text-center">
                   <MusicNotes size={48} weight="fill" className="text-white/40 mx-auto mb-4" />
-                  <audio src={getMediaUrl(preview.filePath)} controls className="w-64" />
+                  <audio src={getMediaUrl(preview.filePath)} controls preload="metadata" className="w-64" />
                 </div>
               )}
             </div>

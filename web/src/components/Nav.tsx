@@ -16,32 +16,46 @@ export default function Nav() {
   const resetApp = useAppStore((s) => s.resetApp);
   const resetPipeline = usePipelineStore((s) => s.resetAll);
   const resetExpert = useExpertStore((s) => s.resetExpert);
-  const [adminVisible, setAdminVisible] = useState(false);
+  const [adminVisible, setAdminVisible] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem("hermes_admin_visible") === "1";
+  });
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const CACHE_KEY = "hermes_admin_visible";
+    if (sessionStorage.getItem(CACHE_KEY) !== null) return;
+
     let cancelled = false;
     fetch(buildAdminUrl("/api/admin/auth/session"), { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled && data?.authenticated) setAdminVisible(true);
+        const visible = Boolean(data?.authenticated);
+        if (!cancelled) {
+          sessionStorage.setItem(CACHE_KEY, visible ? "1" : "0");
+          if (visible) setAdminVisible(true);
+        }
       })
       .catch(() => {
-        // Probe failed (network or 401) — admin link stays hidden, no redirect
+        if (!cancelled) sessionStorage.setItem(CACHE_KEY, "0");
       });
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, []);
 
   const handleHomeClick = () => {
-    localStorage.removeItem("ai_video_thread_id");
-    localStorage.removeItem("ai_video_expert_session");
-    resetPipeline();
-    resetExpert();
-    resetApp();
+    const hasActiveRun = !!usePipelineStore.getState().activePipeline;
+    if (!hasActiveRun) {
+      localStorage.removeItem("ai_video_thread_id");
+      localStorage.removeItem("ai_video_expert_session");
+      resetPipeline();
+      resetExpert();
+      resetApp();
+    }
     if (typeof window !== "undefined") {
       // eslint-disable-next-line no-console
-      console.log("[HERMES:UI] NAV Home → resetAll stage=home");
+      console.log("[HERMES:UI] NAV Home", hasActiveRun ? "preserve activeRun" : "→ resetAll stage=home");
     }
   };
 

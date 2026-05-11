@@ -7,6 +7,8 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import TopHeader from "@/components/TopHeader";
 import EmptyState from "@/components/EmptyState";
+import { ListSkeleton } from "@/components/Skeleton";
+import Pagination from "@/components/Pagination";
 
 interface FinalWork {
   id: string;
@@ -82,6 +84,8 @@ export default function WorksPage() {
   const [sceneFilter, setSceneFilter] = useState<SceneFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [preview, setPreview] = useState<FinalWork | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 24;
 
   const fetchWorks = useCallback(async () => {
     setLoading(true);
@@ -113,9 +117,9 @@ export default function WorksPage() {
     }
 
     try {
-      const res = await apiFetch("/portfolio/?kind=final_work&limit=100&sort=recent");
+      const res = await apiFetch("/portfolio/?kind=final_work&limit=500&sort=size_desc");
       if (!res.ok) {
-        const res2 = await apiFetch("/portfolio/?limit=100&sort=quality");
+        const res2 = await apiFetch("/portfolio/?limit=500&sort=size_desc");
         if (!res2.ok) throw new Error(`${t("common.fetchFailed")} (${res2.status})`);
         const data = await res2.json();
         const mapped: FinalWork[] = (data.files || [])
@@ -190,6 +194,22 @@ export default function WorksPage() {
     });
   }, [enrichedWorks, sceneFilter, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredWorks.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pagedWorks = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredWorks.slice(start, start + PAGE_SIZE);
+  }, [filteredWorks, safePage]);
+
+  const handleFilterChange = (next: SceneFilter) => {
+    setSceneFilter(next);
+    setPage(1);
+  };
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    setPage(1);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)] overflow-x-hidden">
       <TopHeader />
@@ -213,7 +233,7 @@ export default function WorksPage() {
               return (
                 <button
                   key={id}
-                  onClick={() => setSceneFilter(id)}
+                  onClick={() => handleFilterChange(id)}
                   className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer border ${
                     isActive
                       ? "bg-[rgba(215,92,112,0.10)] border-[var(--fortune-red)] text-[var(--fortune-red)]"
@@ -238,7 +258,7 @@ export default function WorksPage() {
               type="search"
               aria-label={t("works.title")}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder={t("footage.searchPlaceholder")}
               className="apple-input text-sm pl-9 pr-4 w-full"
             />
@@ -295,8 +315,9 @@ export default function WorksPage() {
         )}
 
         {!loading && filteredWorks.length > 0 && (
+          <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {filteredWorks.map(({ work, scene }) => {
+            {pagedWorks.map(({ work, scene }) => {
               const sceneLabel =
                 scene === "other" ? "" : t(`scene.${scene}.title`);
               const thumbUrl = work.thumbnailPath ? getMediaUrl(work.thumbnailPath) : "";
@@ -352,6 +373,13 @@ export default function WorksPage() {
               );
             })}
           </div>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filteredWorks.length}
+            onPageChange={setPage}
+          />
+          </>
         )}
       </div>
 
@@ -371,8 +399,11 @@ export default function WorksPage() {
             <div className="rounded-xl overflow-hidden bg-black/60">
               <video
                 src={getMediaUrl(preview.path)}
+                poster={preview.thumbnailPath ? getMediaUrl(preview.thumbnailPath) : undefined}
                 controls
                 autoPlay
+                muted
+                playsInline
                 className="max-w-[85vw] max-h-[75vh] object-contain"
                 preload="metadata"
               />

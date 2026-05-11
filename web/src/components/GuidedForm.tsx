@@ -47,7 +47,10 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
   const cards = cardSequence.cards;
 
   // 表单值状态
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string>>({
+    brand_name: "Momcozy",
+    brand_id: "momcozy",
+  });
   const [focusedIndex, setFocusedIndex] = useState(0);
 
   // 卡片标签映射（用于 LiveSummary）
@@ -202,7 +205,7 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
               {t("scene.selectVideoType")}
             </span>
           </div>
-          <QuickTemplate onApply={handleApplyTemplate} />
+          <QuickTemplate scene={scene} onApply={handleApplyTemplate} />
         </div>
 
         {/* 视频类型选择 */}

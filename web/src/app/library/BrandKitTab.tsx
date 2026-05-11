@@ -49,7 +49,7 @@ export default function BrandKitTab() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-[12px] text-[var(--text-muted)]">
-            {items.length} 项 · 仅显示用户主动维护的品牌身份资产
+            {items.length} {t("library.brandKitCountSuffix")}
           </p>
         </div>
         <button
@@ -131,9 +131,9 @@ export default function BrandKitTab() {
                 )}
                 <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
                   {item.type === "logo" && "Logo"}
-                  {item.type === "color" && "色板"}
+                  {item.type === "color" && t("library.brandKitTypeColor")}
                   {item.type === "voice" && "Brand Voice"}
-                  {item.type === "font" && "字体"}
+                  {item.type === "font" && t("library.brandKitTypeFont")}
                 </p>
               </div>
             </div>

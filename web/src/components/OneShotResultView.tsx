@@ -689,7 +689,7 @@ function MediaView({
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] text-[var(--text-h1)] truncate">{p.split("/").pop()}</p>
                   {getMediaUrl(p) ? (
-                    <audio src={getMediaUrl(p)} controls className="w-full h-8" />
+                    <audio src={getMediaUrl(p)} controls preload="metadata" className="w-full h-8" />
                   ) : (
                     <p className="text-[12px] text-[var(--text-muted)] py-1">Audio preview unavailable (demo mode)</p>
                   )}

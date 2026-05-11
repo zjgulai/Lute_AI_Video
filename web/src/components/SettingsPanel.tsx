@@ -13,6 +13,7 @@ import {
   testConnection,
 } from "./api";
 import { X, Check, WarningCircle, ArrowCounterClockwise, HardDrives, Key, Lightning } from "@phosphor-icons/react";
+import { ConfirmModal } from "./ConfirmModal";
 
 interface Props {
   onClose: () => void;
@@ -24,6 +25,7 @@ export default function SettingsPanel({ onClose }: Props) {
   const [key, setKey] = useState(getApiKey());
   const [demo, setDemo] = useState(isDemoMode());
   const [testing, setTesting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [testResult, setTestResult] = useState<{
     ok?: boolean;
     message?: string;
@@ -44,11 +46,16 @@ export default function SettingsPanel({ onClose }: Props) {
   };
 
   const handleReset = () => {
+    setShowResetConfirm(true);
+  };
+
+  const confirmReset = () => {
     resetApiConfig();
     setBaseUrl(getApiBase());
     setKey(getApiKey());
     setDemo(isDemoMode());
     setTestResult(null);
+    setShowResetConfirm(false);
   };
 
   const handleTest = async () => {
@@ -74,7 +81,7 @@ export default function SettingsPanel({ onClose }: Props) {
         setTestResult({
           ok: true,
           message: renderUnavailable
-            ? "Connected — " + summary + "(rendering 不可用,可上线但无法生成视频)"
+            ? "Connected — " + summary + " · " + t("settings.renderUnavailable")
             : "Connected — " + summary,
         });
       } else {
@@ -233,6 +240,16 @@ export default function SettingsPanel({ onClose }: Props) {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={showResetConfirm}
+        title={t("confirm.resetSettings.title", "重置 API 设置？")}
+        body={t("confirm.resetSettings.body", "将清除自定义后端地址、API Key 和 Demo 模式开关，恢复为默认值。")}
+        confirmLabel={t("confirm.resetSettings.yes", "确认重置")}
+        confirmVariant="danger"
+        cancelLabel={t("confirm.cancel", "取消")}
+        onConfirm={confirmReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 }

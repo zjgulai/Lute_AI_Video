@@ -12,6 +12,26 @@ import { getScenarioStatus } from "./api";
 const POLL_INTERVAL_MS = 5000;
 const POLL_FAILURE_THRESHOLD = 5;
 
+const STEP_ESTIMATED_SECONDS: Record<string, number> = {
+  strategy: 5,
+  scripts: 10,
+  compliance: 2,
+  storyboards: 5,
+  keyframe_images: 190,
+  video_prompts: 3,
+  thumbnail_prompts: 3,
+  seedance_clips: 240,
+  tts_audio: 5,
+  thumbnail_images: 160,
+  assemble_final: 5,
+  audit: 2,
+  video_analysis: 60,
+  character_identity: 30,
+  remix_script: 15,
+  thumbnails: 30,
+  vlog_strategy: 60,
+};
+
 type StatusKind = "running" | "paused" | "completed" | "error";
 
 interface StatusSnapshot {
@@ -20,6 +40,7 @@ interface StatusSnapshot {
   progress: number;
   totalSteps: number;
   doneSteps: number;
+  remainingStepNames: string[];
   errors: string[];
 }
 
@@ -29,12 +50,25 @@ function formatElapsed(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function formatRemaining(seconds: number): string {
+  if (seconds <= 60) return `~${Math.max(1, Math.round(seconds))}s`;
+  const m = Math.round(seconds / 60);
+  return `~${m}m`;
+}
+
+function estimateRemainingSeconds(remainingSteps: string[]): number {
+  return remainingSteps.reduce((acc, name) => acc + (STEP_ESTIMATED_SECONDS[name] ?? 30), 0);
+}
+
 function deriveSnapshot(data: any): StatusSnapshot {
   const stepsObj = data?.steps || {};
   const stepEntries = Object.entries(stepsObj) as [string, { status?: string }][];
   const totalSteps = stepEntries.length;
   const doneSteps = stepEntries.filter(([, v]) => v?.status === "done").length;
   const progress = totalSteps === 0 ? 0 : Math.round((doneSteps / totalSteps) * 100);
+  const remainingStepNames = stepEntries
+    .filter(([, v]) => v?.status !== "done")
+    .map(([name]) => name);
 
   const rawStatus = data?.status as string | undefined;
   let status: StatusKind = "running";
@@ -48,6 +82,7 @@ function deriveSnapshot(data: any): StatusSnapshot {
     progress,
     totalSteps,
     doneSteps,
+    remainingStepNames,
     errors: Array.isArray(data?.errors) ? data.errors.slice(0, 3) : [],
   };
 }
@@ -65,6 +100,7 @@ export default function PipelineStatusBar() {
   const [elapsed, setElapsed] = useState(0);
   const [hidden, setHidden] = useState(false);
   const completionNotifiedRef = useRef(false);
+  const pausedNotifiedRef = useRef(false);
   const failureCountRef = useRef(0);
 
   const isDismissed = activePipeline ? dismissedLabels.includes(activePipeline.label) : false;
@@ -80,6 +116,7 @@ export default function PipelineStatusBar() {
     }
 
     completionNotifiedRef.current = false;
+    pausedNotifiedRef.current = false;
     failureCountRef.current = 0;
 
     const updateElapsed = () => {
@@ -112,6 +149,23 @@ export default function PipelineStatusBar() {
               });
             } catch {}
           }
+        }
+
+        if (snap.status === "paused" && !pausedNotifiedRef.current) {
+          pausedNotifiedRef.current = true;
+          showToast(t("pipeline.pausedNotice", "节点已完成，等待你审核"), "info");
+          if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+            try {
+              new Notification(t("pipeline.pausedTitle", "需要你审核"), {
+                body: t("pipeline.pausedNotice", "节点已完成，等待你审核"),
+                icon: "/favicon.ico",
+                tag: `${activePipeline.label}-paused`,
+              });
+            } catch {}
+          }
+        }
+        if (snap.status === "running") {
+          pausedNotifiedRef.current = false;
         }
 
         if (snap.status === "completed" || snap.status === "error") {
@@ -151,6 +205,8 @@ export default function PipelineStatusBar() {
   const progress = snapshot?.progress ?? 0;
   const totalSteps = snapshot?.totalSteps ?? 0;
   const doneSteps = snapshot?.doneSteps ?? 0;
+  const remainingSteps = snapshot?.remainingStepNames ?? [];
+  const remainingSeconds = status === "running" ? estimateRemainingSeconds(remainingSteps) : 0;
 
   const tone =
     status === "completed"
@@ -220,6 +276,11 @@ export default function PipelineStatusBar() {
             {snapshot && totalSteps > 0 && status !== "error" && (
               <span className="text-[var(--text-muted)] tabular-nums">
                 {doneSteps}/{totalSteps} · {progress}%
+              </span>
+            )}
+            {status === "running" && remainingSeconds > 0 && (
+              <span className="text-[var(--text-muted)] tabular-nums" title={t("pipeline.remainingHint")}>
+                · {t("pipeline.remaining")} {formatRemaining(remainingSeconds)}
               </span>
             )}
             <span className="hidden sm:inline text-[var(--text-muted)] tabular-nums ml-auto">

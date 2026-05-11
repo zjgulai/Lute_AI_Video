@@ -4,6 +4,8 @@ import React, { useState, useCallback, useRef } from "react";
 import type { GuidedCard as GuidedCardType } from "./types";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch } from "./api";
+import AssetPickerModal, { type AcceptKind } from "./AssetPickerModal";
+import { Folder } from "@phosphor-icons/react";
 
 interface Props {
   card: GuidedCardType;
@@ -36,6 +38,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
   const [isExpanded, setIsExpanded] = useState(card.priority !== "optional" || !value);
   const [isCompleted] = useState(!!value && value.trim().length > 0);
   const [uploading, setUploading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const styles = PRIORITY_STYLES[card.priority] || PRIORITY_STYLES.required;
@@ -175,7 +178,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
               />
             </button>
             <span className="text-sm text-[var(--color-text-secondary)]">
-              {value === "true" ? t("sceneForm.keepOriginalAudio") : "AI 配音"}
+              {value === "true" ? t("sceneForm.keepOriginalAudio") : t("sceneForm.aiVoiceover")}
             </span>
           </div>
         );
@@ -244,14 +247,33 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
               {...requiredProp}
               onChange={handleUpload}
             />
-            {value && (
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => handleChange("")}
-                className="text-[12px] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors"
+                onClick={() => setPickerOpen(true)}
+                className="flex items-center gap-1.5 text-[12px] text-[var(--color-accent)] hover:opacity-80 transition-opacity"
               >
-                {t("upload.clear") || "清除"}
+                <Folder size={12} weight="fill" />
+                {t("picker.fromLibrary")}
               </button>
+              {value && (
+                <button
+                  type="button"
+                  onClick={() => handleChange("")}
+                  className="text-[12px] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors"
+                >
+                  {t("upload.clear")}
+                </button>
+              )}
+            </div>
+            {pickerOpen && (
+              <AssetPickerModal
+                acceptKind={(card.inputType === "image-upload" ? "image" : "video") as AcceptKind}
+                onPick={(urls) => {
+                  if (urls.length > 0) handleChange(urls[0]);
+                }}
+                onClose={() => setPickerOpen(false)}
+              />
             )}
           </div>
         );

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useCallback, useRef, useMemo } from "react";
+import { useEffect, useCallback, useRef, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Suspense } from "react";
+import { ShieldCheck } from "@phosphor-icons/react";
 import type { ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import {
@@ -17,6 +19,7 @@ import {
   getMediaUrl,
   isDemoMode,
   submitScenario,
+  hasApiKey,
 } from "@/components/api";
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
@@ -25,12 +28,14 @@ import PipelineStatusBar from "@/components/PipelineStatusBar";
 import ReviewPanel from "@/components/ReviewPanel";
 import DistributionView from "@/components/DistributionView";
 import OneShotResultView from "@/components/OneShotResultView";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import CompareView, { Version } from "@/components/CompareView";
 import StepByStepView from "@/components/StepByStepView";
 import VideoWorkflow from "@/components/VideoWorkflow";
 import GatePanel from "@/components/GatePanel";
 import StageProgress from "@/components/StageProgress";
 import SplashScreen from "@/components/SplashScreen";
+import ApiKeyGate from "@/components/ApiKeyGate";
 import RecommendPanel from "@/components/RecommendPanel";
 import FastModePanel from "@/components/FastModePanel";
 import Nav from "@/components/Nav";
@@ -163,6 +168,8 @@ export default function Home() {
     videoDuration,
     disconnected, setDisconnected,
   } = useAppStore();
+
+  const [keyConfigured, setKeyConfigured] = useState<boolean>(() => hasApiKey());
 
   const {
     threadId, setThreadId,
@@ -715,6 +722,19 @@ export default function Home() {
     useAppStore.getState().resetApp();
   };
 
+  const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
+  const requestAbandon = () => {
+    if (threadId || oneshotResult) {
+      setShowAbandonConfirm(true);
+    } else {
+      resetAll();
+    }
+  };
+  const confirmAbandon = () => {
+    setShowAbandonConfirm(false);
+    resetAll();
+  };
+
   const currentReview = reviewState?.current_review;
   const pipelineComplete =
     reviewState?.pipeline_complete === true && reviewState?.current_review === null;
@@ -731,6 +751,7 @@ export default function Home() {
         <URLSync activeScene={activeScene} mode={mode} pathname={pathname} router={router} showSplash={showSplash} />
       </Suspense>
       {showSplash && <SplashScreen onEnter={() => setShowSplash(false)} />}
+      {!showSplash && !keyConfigured && <ApiKeyGate onUnlock={() => setKeyConfigured(true)} />}
       <ErrorBoundary>
       <div className={`min-h-screen bg-[var(--color-bg)] overflow-x-hidden transition-opacity duration-700 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
         {/* Toast */}
@@ -842,20 +863,17 @@ export default function Home() {
               <Nav />
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowSettings(true)}
-                aria-label={t("nav.settings")}
-                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[rgba(53,20,26,0.06)] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors cursor-pointer"
-                title="Settings"
+              <Link
+                href="/admin/dashboard"
+                aria-label={t("nav.admin")}
+                title={t("nav.admin")}
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[rgba(53,20,26,0.06)] text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-              </button>
+                <ShieldCheck size={16} weight="fill" />
+              </Link>
               {(threadId || oneshotResult) && (
                 <button
-                  onClick={resetAll}
+                  onClick={requestAbandon}
                   className="text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(53,20,26,0.06)] cursor-pointer"
                 >
                   {t("app.abandon")}
@@ -1158,6 +1176,17 @@ export default function Home() {
         {showSettings && (
           <SettingsPanel onClose={() => setShowSettings(false)} />
         )}
+
+        <ConfirmModal
+          open={showAbandonConfirm}
+          title={t("confirm.abandon.title")}
+          body={t("confirm.abandon.body")}
+          confirmLabel={t("confirm.abandon.yes")}
+          confirmVariant="danger"
+          cancelLabel={t("confirm.cancel")}
+          onConfirm={confirmAbandon}
+          onCancel={() => setShowAbandonConfirm(false)}
+        />
       </div>
       </ErrorBoundary>
     </>

@@ -119,13 +119,21 @@ export default function InsightReport({ result, scenario }: Props) {
 
     const metricName = t(`insight.${bestMetric}`);
     const comparison = direction === "up"
-      ? `高于同类均值 ${delta.toFixed(0)}%`
+      ? `${t("insight.aboveAverage")} ${delta.toFixed(0)}%`
       : direction === "down"
-      ? `低于同类均值 ${Math.abs(delta).toFixed(0)}%`
-      : "与同类均值持平";
+      ? `${t("insight.belowAverage")} ${Math.abs(delta).toFixed(0)}%`
+      : t("insight.atAverage");
 
     const videoTypeName = t(`videoType.${videoType}`) || t("insight.title");
-    return `这条${videoTypeName}的${metricName}表现${comparison}，整体内容质量${result?.audit_report?.overall_status === "PASS" ? "达标" : "有优化空间"}。建议继续强化${metricConfig.primary[0]}相关的内容策略。`;
+    const quality = result?.audit_report?.overall_status === "PASS"
+      ? t("insight.qualityPass")
+      : t("insight.qualityImprove");
+    return t("insight.summaryTemplate")
+      .replace("{videoType}", videoTypeName)
+      .replace("{metric}", metricName)
+      .replace("{comparison}", comparison)
+      .replace("{quality}", quality)
+      .replace("{primary}", metricConfig.primary[0]);
   }, [metrics, metricConfig, videoType, t, result]);
 
   // Next step suggestions
@@ -134,13 +142,13 @@ export default function InsightReport({ result, scenario }: Props) {
     const { direction: ctrDir } = compareMetric("ctr", metrics.ctr);
     const { direction: watchDir } = compareMetric("watchRate", metrics.watchRate);
 
-    if (watchDir === "down") steps.push("前3秒 Hook 吸引力不足，建议强化开头冲突或悬念");
-    if (ctrDir === "down") steps.push("封面/标题点击率偏低，尝试 A/B 测试不同封面文案");
-    if (metrics.shares < 100) steps.push("分享率较低，可增加互动引导或情绪共鸣点");
-    if (steps.length === 0) steps.push("整体表现良好，建议扩大投放预算测试更多平台");
+    if (watchDir === "down") steps.push(t("insight.stepHookWeak"));
+    if (ctrDir === "down") steps.push(t("insight.stepCoverCtr"));
+    if (metrics.shares < 100) steps.push(t("insight.stepShareLow"));
+    if (steps.length === 0) steps.push(t("insight.stepAllGood"));
 
     return steps;
-  }, [metrics]);
+  }, [metrics, t]);
 
   // ROI breakdown (sales-type videos only)
   const showRoiTree = metricConfig.primary.includes("sales");
@@ -219,12 +227,12 @@ export default function InsightReport({ result, scenario }: Props) {
           </div>
           <div className="space-y-2 text-xs">
             <RoiNode label={`${t("insight.views")}: ${formatMetric("views", metrics.views)}`} level={0} />
-            <RoiNode label={`${t("insight.ctr")}: ${formatMetric("ctr", metrics.ctr)} → ${formatMetric("views", metrics.views * metrics.ctr)} 点击`} level={1} />
+            <RoiNode label={`${t("insight.ctr")}: ${formatMetric("ctr", metrics.ctr)} → ${formatMetric("views", metrics.views * metrics.ctr)} ${t("insight.clicks")}`} level={1} />
             <RoiNode label={`${t("insight.cvr")}: ${formatMetric("cvr", metrics.cvr)} → ${formatMetric("sales", metrics.sales)} ${t("insight.sales")}`} level={2} />
             <div className="pl-8 pt-1 border-t border-[var(--color-border-light)] mt-2">
               <span className="text-[var(--color-text-secondary)]">
-                预估 ROI: <span className="font-bold text-[var(--jade-accent)]">{((metrics.sales * 50) / 500).toFixed(1)}x</span>
-                <span className="text-[var(--color-text-tertiary)] ml-1">(按客单价 $50, 投放成本 $500)</span>
+                {t("insight.estimatedRoi")}: <span className="font-bold text-[var(--jade-accent)]">{((metrics.sales * 50) / 500).toFixed(1)}x</span>
+                <span className="text-[var(--color-text-tertiary)] ml-1">{t("insight.roiAssumption")}</span>
               </span>
             </div>
           </div>

@@ -89,7 +89,7 @@ export default function InfluencersTab() {
   const handleSave = async () => {
     if (!formName.trim()) return;
     if (isDemoMode()) {
-      setError("Demo 模式下无法创建或编辑");
+      setError(t("library.demoModeEditDisabled"));
       return;
     }
     setSaving(true);
@@ -126,7 +126,7 @@ export default function InfluencersTab() {
 
   const handleDelete = async (influencerId: string) => {
     if (isDemoMode()) {
-      setError("Demo 模式下无法删除");
+      setError(t("library.demoModeDeleteDisabled"));
       setDeleteConfirm(null);
       return;
     }
@@ -154,7 +154,7 @@ export default function InfluencersTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-[var(--text-muted)]">
-          {influencers.length} 位合作网红
+          {influencers.length} {t("library.influencerCountSuffix")}
         </p>
         {!loading && influencers.length > 0 && (
           <button
@@ -178,9 +178,27 @@ export default function InfluencersTab() {
       )}
 
       {loading && (
-        <div className="apple-card p-12 text-center">
-          <Spinner size={32} weight="fill" className="text-[var(--fortune-red)] mx-auto mb-3 animate-spin" />
-          <p className="text-sm text-[var(--text-body)]">{t("inf.loading")}</p>
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="apple-card p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full skeleton shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-3/4 skeleton rounded" />
+                  <div className="h-2.5 w-1/2 skeleton rounded" />
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                <div className="h-4 w-12 skeleton rounded-full" />
+                <div className="h-4 w-16 skeleton rounded-full" />
+                <div className="h-4 w-10 skeleton rounded-full" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

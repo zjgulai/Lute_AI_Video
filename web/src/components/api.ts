@@ -79,13 +79,20 @@ export function setApiBase(url: string) {
   }
 }
 
-/** Backend API Key (runtime-configurable via localStorage or env). */
+/** Backend API Key (runtime-configurable via localStorage or env).
+ *  Returns "" when no key is configured — callers MUST handle the empty case
+ *  (the backend will 401 on missing/invalid keys). The home page enforces a
+ *  key-entry gate before allowing any creative-API request. */
 export function getApiKey(): string {
   if (typeof window !== "undefined") {
     const stored = storageGet(STORAGE_KEYS.apiKey);
     if (stored) return stored;
   }
-  return readEnv("NEXT_PUBLIC_API_KEY") || "ai_video_demo_2026";
+  return readEnv("NEXT_PUBLIC_API_KEY") || "";
+}
+
+export function hasApiKey(): boolean {
+  return getApiKey().trim().length > 0;
 }
 
 export function setApiKey(key: string) {
@@ -296,6 +303,32 @@ const _nativeFetch = globalThis.fetch.bind(globalThis);
  *   [HERMES:ERR]  500 Internal Server Error (120ms) trace_id=cxxxxx {error body...}
  *   [HERMES:ERR]  NETWORK_ERROR (0ms) trace_id=cxxxxx message
  */
+/** Routes whose own purpose is auth probing — must NOT trigger session-expired redirect.
+ *  Otherwise the gate's own probe creates a redirect loop. */
+const AUTH_PROBE_PATHS = ["/api/admin/auth/", "/distribution/platforms"];
+
+function _isAuthProbe(absUrl: string): boolean {
+  return AUTH_PROBE_PATHS.some((p) => absUrl.includes(p));
+}
+
+let _authExpiryHandled = false;
+
+function _maybeHandleAuthExpiry(res: Response, absUrl: string): void {
+  if (res.status !== 401) return;
+  if (_isAuthProbe(absUrl)) return;
+  if (typeof window === "undefined") return;
+  if (_authExpiryHandled) return;
+
+  if (location.pathname.startsWith("/admin")) return;
+
+  _authExpiryHandled = true;
+  setApiKey("");
+  const target = "/?session_expired=1";
+  if (location.pathname !== "/" || !location.search.includes("session_expired")) {
+    window.location.href = target;
+  }
+}
+
 export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   // P1-A: 自动把相对路径补全 + 注入 auth header
   // 2026-05-09 dedup: when base ends with "/api" (production behind nginx) and
@@ -392,6 +425,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
             errText.slice(0, 500) || "[no body]"
           );
         }
+        _maybeHandleAuthExpiry(res, absUrl);
         return res;
       }
 

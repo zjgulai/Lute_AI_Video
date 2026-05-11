@@ -73,7 +73,7 @@ const SCENARIO_DETAILS: Record<string, { descKey: string; platformsKey: string; 
 
 export default function SceneSelector({ onStart, loading, pipelineMode = "step_by_step", onModeChange }: Props) {
   const { t } = useI18n();
-  const [productName, setProductName] = useState("孕妇枕");
+  const [productName, setProductName] = useState("Momcozy KleanPal Pro Baby Bottle Washer");
   const [brandName, setBrandName] = useState("Momcozy");
   const [uspsStr, setUspsStr] = useState("");
   const [selectedScenario, setSelectedScenario] = useState<string>(

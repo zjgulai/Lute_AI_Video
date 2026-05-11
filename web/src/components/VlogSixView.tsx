@@ -2,16 +2,18 @@
 
 import React from "react";
 import type { ProductViewAngle } from "./types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface Props {
   views: ProductViewAngle[];
 }
 
 export default function VlogSixView({ views }: Props) {
+  const { t } = useI18n();
   if (!views || views.length === 0) {
     return (
       <div className="apple-card p-8 text-center">
-        <p className="text-xs text-[var(--text-body)]">请先选择产品SKU以自动回填六视图</p>
+        <p className="text-xs text-[var(--text-body)]">{t("vlog.sixViewEmpty")}</p>
       </div>
     );
   }

@@ -919,7 +919,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
       <div className="space-y-2 p-2">
         {urls.map((url: string, i: number) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
-            <audio src={url} controls className="w-full" />
+            <audio src={url} controls preload="metadata" className="w-full" />
           </div>
         ))}
       </div>

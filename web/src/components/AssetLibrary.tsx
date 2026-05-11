@@ -312,7 +312,7 @@ export default function AssetLibrary({ onClose }: Props) {
               {preview.type === "audio" && (
                 <div className="w-full max-w-md p-6 flex flex-col items-center gap-4">
                   <span className="text-4xl">{getIcon("audio")}</span>
-                  <audio src={getMediaUrl(preview.path)} controls className="w-full" />
+                  <audio src={getMediaUrl(preview.path)} controls preload="metadata" className="w-full" />
                 </div>
               )}
             </div>

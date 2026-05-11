@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { ModelProfile } from "./types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface Props {
   models: ModelProfile[];
@@ -14,8 +15,10 @@ export default function VlogModelSelector({
   models,
   selected,
   onChange,
-  emptyLabel = "请选择至少一个模特图",
+  emptyLabel,
 }: Props) {
+  const { t } = useI18n();
+  const resolvedEmptyLabel = emptyLabel ?? t("vlog.modelsEmpty");
   const toggleModel = (id: string) => {
     if (selected.includes(id)) {
       onChange(selected.filter((s) => s !== id));
@@ -100,7 +103,7 @@ export default function VlogModelSelector({
         </div>
       ) : (
         <div className="p-6 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] text-center">
-          <p className="text-xs text-[var(--color-text-tertiary)]">{emptyLabel}</p>
+          <p className="text-xs text-[var(--color-text-tertiary)]">{resolvedEmptyLabel}</p>
         </div>
       )}
     </div>

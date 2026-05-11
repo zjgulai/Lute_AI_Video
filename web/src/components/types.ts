@@ -173,6 +173,8 @@ export interface TemplatePreset {
   scene: string;
   videoType: string;
   values: Record<string, string>;
+  description?: string;
+  descriptionEn?: string;
 }
 
 // 品牌VLOG — 产品六视图角度
