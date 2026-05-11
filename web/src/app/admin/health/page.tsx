@@ -83,8 +83,25 @@ export default function AdminHealthPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16">
-        <div className="w-5 h-5 border-2 border-[var(--fortune-red)] border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-4" aria-busy="true" aria-live="polite">
+        <div className="flex items-center justify-between">
+          <div className="h-5 w-32 skeleton rounded" />
+          <div className="h-3 w-20 skeleton rounded" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="apple-card p-3 border border-[var(--divider-light)]">
+              <div className="flex items-center justify-between mb-2">
+                <div className="h-3 w-24 skeleton rounded" />
+                <div className="w-4 h-4 rounded-full skeleton" />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-12 skeleton rounded-full" />
+                <div className="h-3 w-10 skeleton rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

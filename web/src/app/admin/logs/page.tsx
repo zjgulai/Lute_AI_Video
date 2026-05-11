@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { adminFetchJson } from "@/components/api";
 import { X } from "@phosphor-icons/react";
+import { TableRowSkeleton } from "@/components/Skeleton";
 
 interface LogEntry {
   id: string;
@@ -146,8 +147,22 @@ export default function AdminLogsPage() {
 
       {/* Loading */}
       {loading && (
-        <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-[var(--fortune-red)] border-t-transparent rounded-full animate-spin" />
+        <div className="apple-card overflow-hidden" aria-busy="true" aria-live="polite">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-[var(--divider-light)]">
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Time</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Code</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Tenant</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <TableRowSkeleton key={i} />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

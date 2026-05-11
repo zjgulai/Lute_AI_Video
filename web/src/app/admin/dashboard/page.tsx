@@ -55,8 +55,33 @@ export default function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-5 h-5 border-2 border-[var(--fortune-red)] border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-6" aria-busy="true" aria-live="polite">
+        <div className="flex items-center justify-between">
+          <div className="h-5 w-32 skeleton rounded" />
+          <div className="h-3 w-16 skeleton rounded" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="apple-card p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg skeleton shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-6 w-16 skeleton rounded" />
+                  <div className="h-3 w-24 skeleton rounded" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="apple-card p-4 space-y-3">
+          <div className="h-4 w-28 skeleton rounded" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="p-2.5 rounded-lg bg-[var(--bg-panel)] space-y-1.5">
+              <div className="h-3 w-3/4 skeleton rounded" />
+              <div className="h-2.5 w-1/2 skeleton rounded" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
