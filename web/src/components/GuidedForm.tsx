@@ -19,9 +19,10 @@ interface Props {
   scene: string;
   onSubmit: (config: any) => void;
   loading: boolean;
+  fieldErrors?: Record<string, string>;
 }
 
-export default function GuidedForm({ scene, onSubmit, loading }: Props) {
+export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Props) {
   const { t } = useI18n();
 
   // 视频类型选择
@@ -173,6 +174,22 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
       .map((c) => c.stepName);
   }, [cards, values]);
 
+  const cardErrors = useMemo(() => {
+    const out: Record<string, string> = {};
+    if (!fieldErrors) return out;
+    const entries = Object.entries(fieldErrors);
+    for (const card of cards) {
+      const direct = fieldErrors[card.fieldKey];
+      if (direct) { out[card.fieldKey] = direct; continue; }
+      const match = entries.find(([path]) => {
+        const tail = path.split(".").pop() || "";
+        return tail === card.fieldKey;
+      });
+      if (match) out[card.fieldKey] = match[1];
+    }
+    return out;
+  }, [cards, fieldErrors]);
+
   // 获取连接文字
   const getConnectionText = (index: number): string => {
     if (index >= cards.length - 1) return "";
@@ -264,6 +281,7 @@ export default function GuidedForm({ scene, onSubmit, loading }: Props) {
                   onChange={handleValueChange}
                   isFocused={focusedIndex === index}
                   onFocus={() => setFocusedIndex(index)}
+                  error={cardErrors[card.fieldKey]}
                 />
               </div>
             </React.Fragment>

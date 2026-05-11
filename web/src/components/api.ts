@@ -538,6 +538,19 @@ export async function parseApiError(res: Response): Promise<ApiErrorInfo> {
   return info;
 }
 
+export class ApiError extends Error {
+  info: ApiErrorInfo;
+  constructor(info: ApiErrorInfo) {
+    super(info.message);
+    this.name = "ApiError";
+    this.info = info;
+  }
+}
+
+export function isApiError(e: unknown): e is ApiError {
+  return e instanceof ApiError;
+}
+
 // ── Core pipeline APIs ──
 
 /** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
@@ -609,7 +622,7 @@ export async function runS1ProductDirect(config: any, options?: { signal?: Abort
     body: JSON.stringify(config),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 failed: " + res.statusText);
+  if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
 }
 
@@ -928,7 +941,7 @@ export async function runS5BrandVlog(body: {
     body: JSON.stringify(body),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("Brand VLOG scenario failed (" + res.status + ")");
+  if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
 }
 
@@ -950,7 +963,7 @@ export async function submitScenario(
     body: JSON.stringify(body),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error(`Submit ${scenario} failed (${res.status})`);
+  if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
 }
 
@@ -1074,10 +1087,7 @@ export async function generateFastMode(body: {
     body: JSON.stringify(body),
     signal: options?.signal,
   });
-  if (!res.ok) {
-    const err = await res.text().catch(() => "Fast Mode generation failed");
-    throw new Error(err);
-  }
+  if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
 }
 

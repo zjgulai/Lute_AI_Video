@@ -3,55 +3,60 @@
 import { useState } from "react";
 import { Lightning, Clock, SpeakerHigh, CaretDown, CaretUp, Copy, ArrowCounterClockwise, Play, Article, Cpu, Timer, HardDrives } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { generateFastMode, getMediaUrl, isDemoMode, type FastModeResult } from "./api";
+import { generateFastMode, getMediaUrl, isDemoMode, isApiError, type FastModeResult } from "./api";
 import { DEMO_FAST_MODE_RESULT } from "@/demo-data";
+import { useSubmitting } from "@/hooks/useSubmitting";
 
 export default function FastModePanel() {
   const { t } = useI18n();
   const [userPrompt, setUserPrompt] = useState("");
   const [duration, setDuration] = useState<10 | 15>(15);
   const [enableTTS, setEnableTTS] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { submitting: loading, wrap } = useSubmitting();
   const [result, setResult] = useState<FastModeResult | null>(null);
   const [error, setError] = useState("");
   const [showDebug, setShowDebug] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  async function handleGenerate() {
-    if (!userPrompt.trim() || loading) return;
-    setLoading(true);
-    setError("");
-    setResult(null);
-    if (isDemoMode()) {
-      await new Promise((r) => setTimeout(r, 800));
-      setResult({
-        ...(DEMO_FAST_MODE_RESULT as FastModeResult),
-        user_prompt: userPrompt.trim(),
-        duration_seconds: duration,
-        timing: {
-          ...DEMO_FAST_MODE_RESULT.timing,
-          tts_ms: enableTTS ? 240 : 0,
-        },
-        model_info: {
-          ...DEMO_FAST_MODE_RESULT.model_info,
-          tts: enableTTS ? "doubao-tts" : "",
-        },
-      });
-      setLoading(false);
-      return;
-    }
-    try {
-      const res = await generateFastMode({
-        user_prompt: userPrompt.trim(),
-        duration,
-        enable_tts: enableTTS,
-      });
-      setResult(res);
-    } catch (e: any) {
-      setError(e.message || "Generation failed");
-    } finally {
-      setLoading(false);
-    }
+  function handleGenerate() {
+    if (!userPrompt.trim()) return;
+    void wrap(async () => {
+      setError("");
+      setResult(null);
+      if (isDemoMode()) {
+        await new Promise((r) => setTimeout(r, 800));
+        setResult({
+          ...(DEMO_FAST_MODE_RESULT as FastModeResult),
+          user_prompt: userPrompt.trim(),
+          duration_seconds: duration,
+          timing: {
+            ...DEMO_FAST_MODE_RESULT.timing,
+            tts_ms: enableTTS ? 240 : 0,
+          },
+          model_info: {
+            ...DEMO_FAST_MODE_RESULT.model_info,
+            tts: enableTTS ? "doubao-tts" : "",
+          },
+        });
+        return;
+      }
+      try {
+        const res = await generateFastMode({
+          user_prompt: userPrompt.trim(),
+          duration,
+          enable_tts: enableTTS,
+        });
+        setResult(res);
+      } catch (e: unknown) {
+        if (isApiError(e)) {
+          const tail = e.info.retryAfterSec != null ? ` (retry in ${e.info.retryAfterSec}s)` : "";
+          setError(e.info.message + tail);
+        } else {
+          const msg = e instanceof Error ? e.message : String(e);
+          setError(msg || "Generation failed");
+        }
+      }
+    });
   }
 
   function handleCopyPrompt() {

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch } from "./api";
+import { useSubmitting } from "@/hooks/useSubmitting";
 
 const ACCEPT_TYPES = {
   video: ".mp4,.mov,.webm",
@@ -24,7 +25,7 @@ interface Props {
 export default function AssetUploader({ onUpload }: Props) {
   const { t } = useI18n();
   const [dragActive, setDragActive] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const { submitting: uploading, wrap } = useSubmitting();
   const [results, setResults] = useState<UploadResult[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -53,31 +54,31 @@ export default function AssetUploader({ onUpload }: Props) {
     }
   };
 
-  const uploadFiles = async (files: FileList) => {
-    setUploading(true);
-    const uploaded: UploadResult[] = [];
+  const uploadFiles = (files: FileList) => {
+    void wrap(async () => {
+      const uploaded: UploadResult[] = [];
 
-    for (const file of Array.from(files)) {
-      const formData = new FormData();
-      formData.append("file", file);
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append("file", file);
 
-      try {
-        const res = await apiFetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          uploaded.push(data);
+        try {
+          const res = await apiFetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            uploaded.push(data);
+          }
+        } catch (e) {
+          console.error("Upload failed", e);
         }
-      } catch (e) {
-        console.error("Upload failed", e);
       }
-    }
 
-    setResults(uploaded);
-    setUploading(false);
-    onUpload?.(uploaded);
+      setResults(uploaded);
+      onUpload?.(uploaded);
+    });
   };
 
   const getFileIcon = (filename: string) => {

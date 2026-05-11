@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseApiError } from "./api";
+import { parseApiError, ApiError, isApiError } from "./api";
 
 function mkRes(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(typeof body === "string" ? body : JSON.stringify(body), {
@@ -59,5 +59,28 @@ describe("parseApiError", () => {
     const info = await parseApiError(res);
     expect(info.status).toBe(504);
     expect(info.message).toBe("Gateway Timeout");
+  });
+});
+
+describe("ApiError", () => {
+  it("isApiError returns true for ApiError and false for plain Error", async () => {
+    const info = await parseApiError(new Response("{}", { status: 422 }));
+    const apiErr = new ApiError(info);
+    expect(isApiError(apiErr)).toBe(true);
+    expect(isApiError(new Error("plain"))).toBe(false);
+    expect(isApiError("string")).toBe(false);
+    expect(isApiError(null)).toBe(false);
+  });
+
+  it("carries fieldErrors from parseApiError through .info", async () => {
+    const res = new Response(
+      JSON.stringify({
+        detail: [{ loc: ["body", "product_name"], msg: "field required" }],
+      }),
+      { status: 422, headers: { "content-type": "application/json" } }
+    );
+    const apiErr = new ApiError(await parseApiError(res));
+    expect(apiErr.info.fieldErrors).toEqual({ product_name: "field required" });
+    expect(apiErr.message).toContain("product_name");
   });
 });

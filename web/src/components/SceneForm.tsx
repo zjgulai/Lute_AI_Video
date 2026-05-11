@@ -16,6 +16,7 @@ interface Props {
   scene: string;
   onSubmit: (config: any) => void;
   loading: boolean;
+  fieldErrors?: Record<string, string>;
 }
 
 const CATEGORIES = ["Home", "Baby", "Electronics", "Health", "Fashion", "Other"];
@@ -39,7 +40,7 @@ const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   influencer_remix: Users,
 };
 
-export default function SceneForm({ scene, onSubmit, loading }: Props) {
+export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Props) {
   const { t } = useI18n();
   const [mode, setMode] = useState<"expert" | "smart">("expert");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -204,7 +205,7 @@ export default function SceneForm({ scene, onSubmit, loading }: Props) {
     <div className="space-y-3">
       {/* GuidedForm (v2.0) */}
       {USE_GUIDED_FORM && (
-        <GuidedForm scene={scene} onSubmit={onSubmit} loading={loading} />
+        <GuidedForm scene={scene} onSubmit={onSubmit} loading={loading} fieldErrors={fieldErrors} />
       )}
 
       {/* Legacy form (hidden when GuidedForm is active) */}

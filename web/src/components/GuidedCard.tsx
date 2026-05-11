@@ -13,6 +13,7 @@ interface Props {
   onChange: (fieldKey: string, value: string) => void;
   isFocused: boolean;
   onFocus: () => void;
+  error?: string;
 }
 
 const PRIORITY_STYLES: Record<string, { border: string; badge: string; badgeText: string }> = {
@@ -33,7 +34,7 @@ const PRIORITY_STYLES: Record<string, { border: string; badge: string; badgeText
   },
 };
 
-export default function GuidedCard({ card, value, onChange, isFocused, onFocus }: Props) {
+export default function GuidedCard({ card, value, onChange, isFocused, onFocus, error }: Props) {
   const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(card.priority !== "optional" || !value);
   const [isCompleted] = useState(!!value && value.trim().length > 0);
@@ -85,7 +86,12 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
   const renderInput = () => {
     const fieldId = `guided-${card.fieldKey}`;
     const hintId = `${fieldId}-hint`;
+    const errorId = `${fieldId}-error`;
     const requiredProp = card.priority === "required" ? { "aria-required": "true" as const } : {};
+    const errorProps = error
+      ? { "aria-invalid": true as const, "aria-describedby": `${hintId} ${errorId}` }
+      : { "aria-describedby": hintId };
+    const errorClass = error ? " border-[var(--fortune-red)]" : "";
 
     switch (card.inputType) {
       case "textarea":
@@ -97,9 +103,9 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
             onChange={(e) => handleChange(e.target.value)}
             placeholder={card.placeholder ? t(card.placeholder) : undefined}
             maxLength={card.maxLength}
-            aria-describedby={hintId}
+            {...errorProps}
             {...requiredProp}
-            className="apple-input resize-none text-sm"
+            className={`apple-input resize-none text-sm${errorClass}`}
             rows={3}
           />
         );
@@ -111,9 +117,9 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
             name={card.fieldKey}
             value={value}
             onChange={(e) => handleChange(e.target.value)}
-            aria-describedby={hintId}
+            {...errorProps}
             {...requiredProp}
-            className="apple-input text-sm"
+            className={`apple-input text-sm${errorClass}`}
           >
             <option value="">{t("sceneForm.categoryPlaceholder")}</option>
             {(card.options || []).map((opt) => (
@@ -288,9 +294,9 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
             onChange={(e) => handleChange(e.target.value)}
             placeholder={card.placeholder ? t(card.placeholder) : undefined}
             maxLength={card.maxLength}
-            aria-describedby={hintId}
+            {...errorProps}
             {...requiredProp}
-            className="apple-input text-sm"
+            className={`apple-input text-sm${errorClass}`}
           />
         );
     }
@@ -360,6 +366,16 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus }
 
       {/* 输入区域 */}
       <div onClick={(e) => e.stopPropagation()}>{renderInput()}</div>
+
+      {error && (
+        <p
+          id={`guided-${card.fieldKey}-error`}
+          role="alert"
+          className="mt-1.5 text-[12px] text-[var(--fortune-red)]"
+        >
+          {error}
+        </p>
+      )}
 
       {/* 字数提示（textarea 且有 maxLength） */}
       {card.inputType === "textarea" && card.maxLength && (

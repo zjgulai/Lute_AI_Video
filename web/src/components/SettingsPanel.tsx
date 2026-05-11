@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useSubmitting } from "@/hooks/useSubmitting";
 import {
   getApiBase,
   getApiKey,
@@ -24,7 +25,7 @@ export default function SettingsPanel({ onClose }: Props) {
   const [baseUrl, setBaseUrl] = useState(getApiBase());
   const [key, setKey] = useState(getApiKey());
   const [demo, setDemo] = useState(isDemoMode());
-  const [testing, setTesting] = useState(false);
+  const { submitting: testing, wrap: wrapTest } = useSubmitting();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [testResult, setTestResult] = useState<{
     ok?: boolean;
@@ -58,10 +59,8 @@ export default function SettingsPanel({ onClose }: Props) {
     setShowResetConfirm(false);
   };
 
-  const handleTest = async () => {
-    setTesting(true);
+  const handleTest = () => wrapTest(async () => {
     setTestResult(null);
-    // Temporarily set values for the test
     const prevBase = getApiBase();
     const prevKey = getApiKey();
     setApiBase(baseUrl.trim());
@@ -87,15 +86,14 @@ export default function SettingsPanel({ onClose }: Props) {
       } else {
         setTestResult({ ok: false, message: result.error || "Connection failed (" + result.status + ")" });
       }
-    } catch (e: any) {
-      setTestResult({ ok: false, message: e.message || "Unknown error" });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setTestResult({ ok: false, message: msg || "Unknown error" });
     } finally {
-      // Restore previous values if user hasn't saved yet
       setApiBase(prevBase);
       setApiKey(prevKey);
-      setTesting(false);
     }
-  };
+  });
 
   return (
     <div className="apple-modal-overlay" onClick={onClose}>

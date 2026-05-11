@@ -20,6 +20,7 @@ import {
   isDemoMode,
   submitScenario,
   hasApiKey,
+  isApiError,
 } from "@/components/api";
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
@@ -48,6 +49,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { usePipelineStore } from "@/stores/usePipelineStore";
 import { useExpertStore } from "@/stores/useExpertStore";
 import { useExecutionBar } from "@/hooks/useExecutionBar";
+import { useSubmitting } from "@/hooks/useSubmitting";
 
 const STORAGE_KEY = "ai_video_thread_id";
 
@@ -170,6 +172,7 @@ export default function Home() {
   } = useAppStore();
 
   const [keyConfigured, setKeyConfigured] = useState<boolean>(() => hasApiKey());
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const {
     threadId, setThreadId,
@@ -200,7 +203,32 @@ export default function Home() {
   // v2.0: Execution bar for Smart Create
   const { isGenerating, generatingLabel, generatingProgress, startGenerating, stopGenerating } = useExecutionBar();
 
+  // GAP-A: synchronous lock — `loading` from store is async-propagated so a
+  // rapid double-click can fire the pipeline twice before the button disables.
+  const { submitting: starting, wrap: wrapStart } = useSubmitting();
+
   const { t } = useI18n();
+
+  // GAP-C: ApiError → fieldErrors state for inline form rendering; 429 → retry hint;
+  // other → toast only. Callers MUST `setFieldErrors({})` before resubmit.
+  const reportSubmitError = useCallback((e: unknown, fallbackKey: string) => {
+    if (isApiError(e)) {
+      setFieldErrors(e.info.fieldErrors);
+      const tail =
+        e.info.retryAfterSec != null
+          ? ` (retry in ${e.info.retryAfterSec}s)`
+          : "";
+      showToast(t(fallbackKey) + `: ${e.info.message}${tail}`, "error");
+      return;
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    if (e instanceof TypeError && (msg.includes("Failed to fetch") || msg.includes("NetworkError"))) {
+      setDisconnected(true);
+      showToast(t("toast.backendDisconnected"), "error");
+    } else {
+      showToast(t(fallbackKey) + `: ${msg}`, "error");
+    }
+  }, [t, showToast, setDisconnected]);
 
   // v2.0: Save completed creations to gallery (localStorage)
   const saveToGallery = useCallback((result: any, scenario: string) => {
@@ -414,10 +442,10 @@ export default function Home() {
     return map[scenario] || "s1";
   };
 
-  const startSmartCreate = async (config: any) => {
-    if (loading) return;
+  const startSmartCreate = (config: any) => wrapStart(async () => {
     const scenario = config.content_scenario || "product_direct";
     const scenarioId = scenarioToId(scenario);
+    setFieldErrors({});
 
     // Demo mode: skip API calls, serve mock data instantly
     if (isDemoMode()) {
@@ -456,7 +484,7 @@ export default function Home() {
         scene: scenario,
         startedAt: Date.now(),
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       // Fallback: legacy blocking endpoint for s1 only
       if (scenarioId === "s1") {
@@ -477,21 +505,22 @@ export default function Home() {
             scene: scenario,
             startedAt: Date.now(),
           });
-        } catch (fallbackErr: any) {
+        } catch (fallbackErr: unknown) {
           if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") return;
-          showToast(t("toast.execFailed") + `: ${fallbackErr?.message || String(fallbackErr)}`, "error");
+          reportSubmitError(fallbackErr, "toast.execFailed");
           setShowStageProgress(false);
           stopGenerating();
         }
       } else {
-        showToast(t("toast.execFailed") + `: ${e?.message || String(e)}`, "error");
+        reportSubmitError(e, "toast.execFailed");
         setShowStageProgress(false);
         stopGenerating();
       }
     }
-  };
+  });
 
-  const handleStart = async (config: any) => {
+  const handleStart = (config: any) => wrapStart(async () => {
+    setFieldErrors({});
     // Demo mode: skip all API calls, serve mock data instantly
     if (isDemoMode()) {
       const scenario = config.content_scenario || "product_direct";
@@ -557,14 +586,8 @@ export default function Home() {
         setOneshotScenario(scenario);
         saveToGallery(result, scenario);
         showToast(t("toast.vlogDone"), "success");
-      } catch (e: any) {
-        const msg = e?.message || String(e);
-        if (e instanceof TypeError && (msg.includes("Failed to fetch") || msg.includes("NetworkError"))) {
-          setDisconnected(true);
-          showToast(t("toast.backendDisconnected"), "error");
-        } else {
-          showToast(t("toast.execFailed") + `: ${msg}`, "error");
-        }
+      } catch (e: unknown) {
+        reportSubmitError(e, "toast.execFailed");
       }
       setLoading(false);
       return;
@@ -592,17 +615,8 @@ export default function Home() {
         setOneshotScenario(scenario);
         saveToGallery(result, scenario);
         showToast(t("toast.autoDone"), "success");
-      } catch (e: any) {
-        const msg = e?.message || String(e);
-        if (
-          e instanceof TypeError &&
-          (msg.includes("Failed to fetch") || msg.includes("NetworkError"))
-        ) {
-          setDisconnected(true);
-          showToast(t("toast.backendDisconnected"), "error");
-        } else {
-          showToast(t("toast.execFailed") + `: ${msg}`, "error");
-        }
+      } catch (e: unknown) {
+        reportSubmitError(e, "toast.execFailed");
       }
       setLoading(false);
       return;
@@ -646,20 +660,11 @@ export default function Home() {
         startedAt: Date.now(),
       });
       showToast(t("toast.workflowInit"), "success");
-    } catch (e: any) {
-      const msg = e?.message || String(e);
-      if (
-        e instanceof TypeError &&
-        (msg.includes("Failed to fetch") || msg.includes("NetworkError"))
-      ) {
-        setDisconnected(true);
-        showToast(t("toast.backendDisconnected"), "error");
-      } else {
-        showToast(t("toast.initFailed") + `: ${msg}`, "error");
-      }
+    } catch (e: unknown) {
+      reportSubmitError(e, "toast.initFailed");
     }
     setLoading(false);
-  };
+  });
 
   const handleReview = async (
     action: "approve" | "reject" | "request_changes",
@@ -900,7 +905,8 @@ export default function Home() {
                 <SceneForm
                   scene={activeScene}
                   onSubmit={handleSceneSubmit}
-                  loading={loading}
+                  loading={loading || starting}
+                  fieldErrors={fieldErrors}
                 />
               )}
             </div>
