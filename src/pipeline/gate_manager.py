@@ -22,6 +22,7 @@ import structlog
 
 from src.config import DEFAULT_LANGUAGES
 from src.pipeline.candidate_scorer import score_candidate
+from src.pipeline.model_thresholds import get_threshold, is_acceptable
 from src.pipeline.state_manager import PipelineStateManager
 from src.skills.registry import SkillRegistry
 
@@ -438,15 +439,24 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
             "variant": variant_name,
             "data": candidate_data,
             "score": score_result,
+            "acceptable": is_acceptable(
+                score_result.get("overall", 0.0), candidate_step
+            ),
             "recommended": False,
         })
 
     candidates = valid_candidates
 
-    # Determine the recommended (highest-scoring) candidate
+    # Determine the recommended (highest-scoring) candidate.
+    # Only mark `recommended=True` when score crosses the model-aware
+    # threshold (Decision F, 2026-05-13). Below threshold, surface the best
+    # candidate but leave `recommended=False` so the UI shows no ★ and the
+    # gate must be explicitly approved or regenerated.
+    threshold = get_threshold(candidate_step)
     if candidates:
         best = max(candidates, key=lambda c: c["score"].get("overall", 0))
-        best["recommended"] = True
+        if best["score"].get("overall", 0) >= threshold:
+            best["recommended"] = True
 
     # Store candidates in state under gates.{gate_id}.candidates
     gates_state = dict(state.get("gates", {}))
@@ -786,20 +796,26 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
             "heuristic": True,
         }
 
-    # Update candidate in place
     candidates[target_idx] = {
         "id": new_candidate_id,
         "variant": variant_name,
         "data": candidate_data,
         "score": score_result,
+        "acceptable": is_acceptable(
+            score_result.get("overall", 0.0), candidate_step
+        ),
         "recommended": False,
     }
 
-    # Recompute recommended (highest scorer)
+    # Recompute recommended: highest scorer that is also above threshold.
+    # Same Decision F (2026-05-13) policy as initial generation — never
+    # ★-mark a sub-threshold candidate after regeneration either.
+    threshold = get_threshold(candidate_step)
     if candidates:
         best = max(candidates, key=lambda c: c["score"].get("overall", 0))
+        best_meets_threshold = best["score"].get("overall", 0) >= threshold
         for c in candidates:
-            c["recommended"] = c["id"] == best["id"]
+            c["recommended"] = best_meets_threshold and c["id"] == best["id"]
 
     gate_state["candidates"] = candidates
     gates_state[gate_id] = gate_state
