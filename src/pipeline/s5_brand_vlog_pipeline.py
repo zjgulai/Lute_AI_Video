@@ -26,6 +26,21 @@ logger = structlog.get_logger()
 
 VIDEO_MAX_DURATION = 15  # Happy Horse API limit
 
+# Decision E (2026-05-13): S5 must NEVER produce identifiable children's
+# faces or full-body shots. This block is appended to every clip prompt as
+# a final defense-in-depth, in case upstream `vlog_strategy` /
+# `seedance-video-prompt` skills strip or paraphrase the constraints.
+S5_ABSTRACTION_GUARD = (
+    "\n\n[Visual constraints (HARD enforcement, must obey):"
+    " do NOT generate identifiable children's faces, full bodies, or clearly"
+    " recognizable persons. If a child-related scene is required, only the"
+    " following abstracted expressions are allowed: adult-hand product close-up,"
+    " empty-environment shot (no people), product close-up, back-view /"
+    " silhouette / side-view (no recognizable facial features). All shots"
+    " containing people must remain abstracted, never producing a real face"
+    " or any individually-identifiable likeness.]"
+)
+
 SCENE_MAP = {
     "office": {"name": "职场", "desc": "高效与通勤节奏"},
     "living-room": {"name": "客厅", "desc": "轻松陪伴和家庭氛围"},
@@ -415,19 +430,27 @@ class S5BrandVlogPipeline:
         self, reg, video_prompts, product_name, label, errors, video_duration,
         product_sku: dict[str, Any] | None = None,
     ):
-        """Generate video clips per segment via Happy Horse (REUSE pattern).
+        """Generate video clips per segment via Seedance 2 (multi-clip).
 
-        P3: Supports keyframe anchoring via product_sku.views image paths.
-        Each shot's product_angle is matched against view labels to find
-        the corresponding keyframe image for visual consistency.
+        Sprint 1 P1-4: routes through ModelRouter (scenario="s5") and
+        delegates last-frame extraction to VideoContinuityManagerSkill
+        for visual continuity across the N×15s clip sequence that yields
+        S5's 30-90s VLOG durations.
+
+        Continuity priority per segment:
+            1. keyframe_image_path (product view, if product_angle matches)
+            2. continuity_frame_path (last frame of previous clip)
+            3. (text-to-video fallback)
         """
 
         from src.config import OUTPUT_DIR
+        from src.pipeline.model_router import select_model
 
+        s5_model = select_model("s5")
         clip_paths = []
         clip_details = []
         per_clip = min(VIDEO_MAX_DURATION, video_duration)
-        last_frame = None
+        last_frame: str | None = None
 
         # P3: Build keyframe image mapping from product views
         keyframe_map: dict[str, str] = {}
@@ -450,11 +473,14 @@ class S5BrandVlogPipeline:
             seg_dur = float(vp.get("duration_seconds", per_clip))
             seg_dur = max(4, min(seg_dur, VIDEO_MAX_DURATION))
 
+            final_prompt = str(prompt_text) + S5_ABSTRACTION_GUARD
+
             gen_params: dict[str, Any] = {
-                "prompt": str(prompt_text),
+                "prompt": final_prompt,
                 "duration": int(seg_dur),
                 "resolution": "720p",
                 "output_label": f"{label}_seg_{i}",
+                "model": s5_model,
             }
 
             # P3: Keyframe anchoring — use product view image if available
@@ -481,20 +507,18 @@ class S5BrandVlogPipeline:
                         "shot_type": vp.get("shot_type", ""),
                         "product_angle": product_angle,
                         "keyframe_used": bool(kf_path),
+                        "model": s5_model,
                     })
-                    # Extract last frame for continuity
-                    try:
-                        import subprocess
-                        out_dir = OUTPUT_DIR / "seedance" / "continuity_frames"
-                        out_dir.mkdir(parents=True, exist_ok=True)
-                        fp = out_dir / f"vlog_last_{i}.jpg"
-                        subprocess.run(
-                            ["ffmpeg", "-y", "-sseof", "-1", "-i", path, "-vframes", "1", "-q:v", "2", str(fp)],
-                            capture_output=True, timeout=15,
-                        )
-                        if fp.exists() and fp.stat().st_size > 100:
-                            last_frame = str(fp)
-                    except Exception:
+                    # P1-4: delegate last-frame extraction to skill for
+                    # consistent async handling + fallback semantics.
+                    cm_params = {
+                        "video_path": path,
+                        "output_dir": str(OUTPUT_DIR / "seedance" / "continuity_frames"),
+                    }
+                    cm_res = await reg.execute("video-continuity-manager-skill", cm_params)
+                    if cm_res.success and cm_res.data:
+                        last_frame = cm_res.data.get("continuity_frame_path")
+                    else:
                         last_frame = None
             else:
                 errors.append(f"clip_{i}_failed: {res.error}")
@@ -503,7 +527,12 @@ class S5BrandVlogPipeline:
             if i < len(video_prompts) - 1:
                 await asyncio.sleep(3.0)
 
-        return {"clip_paths": clip_paths, "clip_details": clip_details, "total_duration": sum(d.get("duration", 0) for d in clip_details)}
+        return {
+            "clip_paths": clip_paths,
+            "clip_details": clip_details,
+            "total_duration": sum(d.get("duration", 0) for d in clip_details),
+            "model": s5_model,
+        }
 
     async def _step_tts_audio(self, reg, scripts, errors):
         """Generate TTS audio via CosyVoice (REUSE)."""

@@ -22,6 +22,7 @@ import structlog
 
 from src.config import DEFAULT_LANGUAGES
 from src.pipeline.candidate_scorer import score_candidate
+from src.pipeline.model_router import select_model
 from src.pipeline.model_thresholds import get_threshold, is_acceptable
 from src.pipeline.state_manager import PipelineStateManager
 from src.skills.registry import SkillRegistry
@@ -440,7 +441,9 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
             "data": candidate_data,
             "score": score_result,
             "acceptable": is_acceptable(
-                score_result.get("overall", 0.0), candidate_step
+                score_result.get("overall", 0.0),
+                candidate_step,
+                model_id=select_model(scenario),
             ),
             "recommended": False,
         })
@@ -452,7 +455,10 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
     # threshold (Decision F, 2026-05-13). Below threshold, surface the best
     # candidate but leave `recommended=False` so the UI shows no ★ and the
     # gate must be explicitly approved or regenerated.
-    threshold = get_threshold(candidate_step)
+    # Sprint 1 P1-6: threshold is now scenario-aware via ModelRouter, so
+    # S1 (seedance-2, 0.65) and S4 (seedance-2-fast, 0.65) hold the
+    # premium bar while S3-via-Wan-2-6 budget paths use 0.55.
+    threshold = get_threshold(candidate_step, model_id=select_model(scenario))
     if candidates:
         best = max(candidates, key=lambda c: c["score"].get("overall", 0))
         if best["score"].get("overall", 0) >= threshold:
@@ -802,7 +808,9 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
         "data": candidate_data,
         "score": score_result,
         "acceptable": is_acceptable(
-            score_result.get("overall", 0.0), candidate_step
+            score_result.get("overall", 0.0),
+            candidate_step,
+            model_id=select_model(scenario),
         ),
         "recommended": False,
     }
@@ -810,7 +818,8 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
     # Recompute recommended: highest scorer that is also above threshold.
     # Same Decision F (2026-05-13) policy as initial generation — never
     # ★-mark a sub-threshold candidate after regeneration either.
-    threshold = get_threshold(candidate_step)
+    # Sprint 1 P1-6: scenario-aware threshold mirrors generate_candidates.
+    threshold = get_threshold(candidate_step, model_id=select_model(scenario))
     if candidates:
         best = max(candidates, key=lambda c: c["score"].get("overall", 0))
         best_meets_threshold = best["score"].get("overall", 0) >= threshold
