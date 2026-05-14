@@ -36,7 +36,7 @@ MAX_RETRIES = 3
 # Pro version: Happy Horse (Alibaba) — supports text-to-video, image-to-video,
 # reference-to-video, and video-edit workflows.
 # Docs: https://docs.poyo.ai/api-manual/video-series/happy-horse
-POYO_MODEL_NAME = POYO_VIDEO_MODEL or "happy-horse"
+POYO_MODEL_NAME = POYO_VIDEO_MODEL or "seedance-2"
 
 
 class SeedanceTimeoutError(asyncio.TimeoutError):

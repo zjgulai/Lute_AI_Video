@@ -171,7 +171,7 @@ POYO_API_BASE_URL: str = os.environ.get("POYO_API_BASE_URL", "https://api.poyo.a
 
 # poyo.ai model names (override if provider changes slugs)
 POYO_IMAGE_MODEL: str = os.environ.get("POYO_IMAGE_MODEL", "gpt-image-2")
-POYO_VIDEO_MODEL: str = os.environ.get("POYO_VIDEO_MODEL", "happy-horse")
+POYO_VIDEO_MODEL: str = os.environ.get("POYO_VIDEO_MODEL", "seedance-2")
 POYO_TTS_MODEL: str = os.environ.get("POYO_TTS_MODEL", "generate-music")
 
 # ── Runtime mode ──

@@ -360,7 +360,7 @@ S2-S5 have simpler pipeline implementations without step-by-step mode or gates. 
 ```
 Primary (text):  DeepSeek V4-Pro    https://api.deepseek.com
 Image:           poyo.ai GPT-4o     https://api.poyo.ai    (model: gpt-image-2)
-Video:           poyo.ai Happy Horse https://api.poyo.ai   (model: happy-horse)
+Video:           poyo.ai Seedance 2  https://api.poyo.ai   (model: seedance-2, 15s + native audio + multi-shot; default since 2026-05-14)
                  or Seedance 2.0    https://api.seedance.ai
 TTS:             SiliconFlow CosyVoice https://api.siliconflow.cn/v1
                                           (model: FunAudioLLM/CosyVoice2-0.5B)
