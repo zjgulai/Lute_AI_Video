@@ -92,6 +92,9 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         resolution = params.get("resolution", DEFAULT_RESOLUTION)
         image_refs = params.get("image_refs") or []
         output_label = params.get("output_label", "clip")
+        # Sprint 1 P1-2: per-call model override (set by ModelRouter at the
+        # pipeline layer). When None, SeedanceClient falls back to env default.
+        model: str | None = params.get("model")
 
         # ── Track 3: keyframe / continuity-frame support ──
         keyframe_image_path: str | None = params.get("keyframe_image_path") or (
@@ -117,6 +120,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                         prompt=prompt,
                         duration=duration,
                         style_preserve=True,
+                        model=model,
                     )
                 else:
                     # Image doesn't exist or is too small — fall through to text_to_video
@@ -127,6 +131,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                         image_refs=None,
                         duration=duration,
                         resolution=resolution,
+                        model=model,
                     )
             elif image_refs:
                 ref_url = image_refs[0]
@@ -139,6 +144,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                         image_refs=None,
                         duration=duration,
                         resolution=resolution,
+                        model=model,
                     )
                 else:
                     api_result = await client.image_to_video(
@@ -146,6 +152,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                         prompt=prompt,
                         duration=duration,
                         style_preserve=True,
+                        model=model,
                     )
             else:
                 api_result = await client.text_to_video(
@@ -153,6 +160,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                     image_refs=None,
                     duration=duration,
                     resolution=resolution,
+                    model=model,
                 )
         finally:
             # Best-effort close httpx client

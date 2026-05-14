@@ -32,10 +32,11 @@ logger = structlog.get_logger()
 SEEDANCE_TIMEOUT_SECONDS = 120.0
 MAX_RETRIES = 3
 
-# poyo.ai uses a different async architecture
-# Pro version: Happy Horse (Alibaba) — supports text-to-video, image-to-video,
-# reference-to-video, and video-edit workflows.
-# Docs: https://docs.poyo.ai/api-manual/video-series/happy-horse
+# poyo.ai uses an async submit+poll architecture. Default model is driven by
+# POYO_VIDEO_MODEL env var (Sprint 0 S0-1 default: seedance-2). Callers may
+# override per-request via the `model` parameter on text_to_video /
+# image_to_video — see ModelRouter.select_model(scenario) for the routing
+# contract introduced in Sprint 1 P1-1.
 POYO_MODEL_NAME = POYO_VIDEO_MODEL or "seedance-2"
 
 
@@ -139,6 +140,7 @@ class SeedanceClient:
         image_refs: list[str] | None = None,
         duration: int = 10,
         resolution: str = "720p",
+        model: str | None = None,
     ) -> dict[str, Any]:
         if not self.api_key:
             logger.warning("seedance: no API key — returning stub")
@@ -150,12 +152,13 @@ class SeedanceClient:
                 image_refs=image_refs,
                 duration=duration,
                 resolution=resolution,
+                model=model,
             )
 
         # Native Seedance API
 
         payload = {
-            "model": "seedance-2.0",
+            "model": model or "seedance-2.0",
             "prompt": prompt,
             "duration": duration,
             "resolution": resolution,
@@ -187,6 +190,7 @@ class SeedanceClient:
         prompt: str = "",
         duration: int = 10,
         style_preserve: bool = True,
+        model: str | None = None,
     ) -> dict[str, Any]:
         if not self.api_key:
             return self._stub_result(prompt=prompt, mode="image_to_video")
@@ -197,11 +201,12 @@ class SeedanceClient:
                 prompt=prompt,
                 image_refs=[image_url],
                 duration=duration,
+                model=model,
             )
 
 
         payload = {
-            "model": "seedance-2.0",
+            "model": model or "seedance-2.0",
             "image": image_url,
             "duration": duration,
             "style_preserve": style_preserve,
@@ -229,6 +234,7 @@ class SeedanceClient:
         image_refs: list[str] | None = None,
         duration: int = 10,
         resolution: str = "720p",
+        model: str | None = None,
     ) -> dict[str, Any]:
         """poyo.ai flow: submit → poll → download with retry + backoff.
 
@@ -245,6 +251,7 @@ class SeedanceClient:
                 duration=duration,
                 resolution=resolution,
                 attempt=attempt,
+                model=model,
             )
             # If successful (has local_path with real video URL), return immediately
             if not result.get("_stub_mode"):
@@ -285,15 +292,19 @@ class SeedanceClient:
         duration: int,
         resolution: str,
         attempt: int,
+        model: str | None = None,
     ) -> dict[str, Any]:
-        """Single attempt: submit → poll → download.
+        """Single attempt: submit → poll → download via poyo.ai.
 
-        Uses Happy Horse model on poyo.ai.
-        Reference: https://docs.poyo.ai/api-manual/video-series/happy-horse
+        Model selection (Sprint 1 P1-2):
+        - If `model` is None, falls back to `POYO_MODEL_NAME` (env-driven default).
+        - Schema (prompt / image_urls / aspect_ratio / resolution / duration)
+          is wire-compatible across happy-horse / seedance-2 / wan-* / kling-*
+          on poyo.ai's OpenAI-compatible proxy.
         """
-        # POYO Happy Horse hard limit: prompt must be <= 2500 chars.
-        # Truncate at word boundary with 100-char safety buffer to avoid 400 errors
-        # when LLM exceeds the upstream constraint.
+        active_model = model or POYO_MODEL_NAME
+        # POYO hard limit on prompt length (2500 chars). Truncate at word
+        # boundary with safety buffer to avoid upstream 400 errors.
         POYO_PROMPT_HARD_LIMIT = 2400
         if len(prompt) > POYO_PROMPT_HARD_LIMIT:
             logger.warning(
@@ -330,24 +341,26 @@ class SeedanceClient:
             "duration": int(duration),
         }
         if image_refs:
-            # Happy Horse uses image_urls (max 1 item) for first-frame guidance.
-            # Do not mix image_urls with reference_image_urls.
-            # Local paths get base64-inlined; URLs pass through.
+            # Single first-frame guidance: poyo accepts image_urls (typically
+            # max 1 item depending on model). Local paths get base64-inlined;
+            # URLs pass through. Multi-reference (seedance-2 supports up to 12
+            # assets) is deferred to a future P1-2.x extension.
             input_payload["image_urls"] = [_to_poyo_image_url(image_refs[0])]
             if len(image_refs) > 1:
                 logger.info(
-                    "happy-horse: only first image used as first-frame",
+                    "poyo: only first image used as first-frame reference",
                     total_refs=len(image_refs),
+                    model=active_model,
                 )
 
         submit_body = {
-            "model": POYO_MODEL_NAME,
+            "model": active_model,
             "input": input_payload,
         }
 
         logger.info(
             "poyo: submitting task",
-            model=POYO_MODEL_NAME,
+            model=active_model,
             resolution=resolution,
             duration=duration,
             attempt=attempt + 1,
