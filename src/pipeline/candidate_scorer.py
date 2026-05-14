@@ -15,6 +15,110 @@ from src.tools.llm_client import llm
 
 logger = structlog.get_logger()
 
+# ── Baby Safety Sensitivity Keywords ──
+_BABY_PRODUCT_KEYWORDS: list[str] = [
+    "baby", "infant", "toddler", "newborn", "child", "children",
+    "nursery", "feeding", "diaper", "breast pump", "bottle",
+    "pacifier", "teether", "stroller", "crib", "carrier",
+    "bib", "burp cloth", "swaddle", "monitor", "toy",
+]
+
+_BABY_SAFETY_POSITIVE_KEYWORDS: list[str] = [
+    "safety", "safe", "caution", "warning", "supervised", "supervision",
+    "age recommendation", "age appropriate", "not suitable for",
+    "choking hazard", "small parts", "bpa free", "fda approved",
+    "certified", "tested", "compliant", "meets safety standards",
+    "cpsc", "astm", "iso", "en71", "follow instructions",
+    "under adult", "parental guidance", "keep away",
+]
+
+_BABY_SAFETY_RISK_KEYWORDS: list[str] = [
+    "unsupervised", "unattended", "sleep with", "co-sleep", "overnight",
+    "prolonged", "excessive", "continuous use", "leave alone",
+    "without supervision", "ignore warning", "disregard",
+]
+
+
+def _is_baby_product(product_catalog: dict[str, Any] | None) -> bool:
+    """Detect if the product is baby/infant related from catalog data.
+
+    Checks product name, category, tags, and description for baby-related terms.
+    Returns True if any baby-related keyword is found.
+    """
+    if not product_catalog:
+        return False
+
+    text_sources: list[str] = []
+
+    # Product name
+    name = product_catalog.get("product_name") or product_catalog.get("name", "")
+    if isinstance(name, str):
+        text_sources.append(name)
+
+    # Product category
+    category = product_catalog.get("category", "")
+    if isinstance(category, str):
+        text_sources.append(category)
+
+    # Tags
+    tags = product_catalog.get("tags", [])
+    if isinstance(tags, list):
+        text_sources.extend(str(t) for t in tags if t)
+
+    # Description
+    description = product_catalog.get("description", "")
+    if isinstance(description, str):
+        text_sources.append(description)
+
+    # Products list (nested catalog format)
+    products = product_catalog.get("products", [])
+    if isinstance(products, list):
+        for p in products:
+            if isinstance(p, dict):
+                for key in ("name", "product_name", "category", "description"):
+                    val = p.get(key, "")
+                    if isinstance(val, str):
+                        text_sources.append(val)
+                for t in p.get("tags", []) if isinstance(p.get("tags"), list) else []:
+                    if isinstance(t, str):
+                        text_sources.append(t)
+
+    combined = " ".join(text_sources).lower()
+    return any(kw in combined for kw in _BABY_PRODUCT_KEYWORDS)
+
+
+def _heuristic_baby_safety_sensitivity(script_text: str, is_baby_product: bool) -> float:
+    """Heuristic scoring for baby safety sensitivity in script content.
+
+    Returns 1.0 for non-baby products (dimension is neutral).
+    For baby products, scores based on presence of safety-related content:
+      - High score (0.8-1.0): adequate safety warnings and certifications
+      - Medium score (0.4-0.7): some safety content but incomplete
+      - Low score (0.0-0.3): missing safety info or contains risky advice
+    """
+    if not is_baby_product:
+        return 1.0
+
+    if not script_text:
+        return 0.0  # Empty script for baby product = no safety info
+
+    text_lower = script_text.lower()
+
+    positive_hits = sum(1 for kw in _BABY_SAFETY_POSITIVE_KEYWORDS if kw in text_lower)
+    risk_hits = sum(1 for kw in _BABY_SAFETY_RISK_KEYWORDS if kw in text_lower)
+
+    # Risk keywords are strong negative signals — each one heavily penalizes
+    if risk_hits > 0:
+        return max(0.0, 0.3 - risk_hits * 0.1)
+
+    # No safety content at all for a baby product is a significant gap
+    if positive_hits == 0:
+        return 0.3
+
+    # Score increases with more safety coverage, capped at 1.0
+    score = 0.5 + min(0.5, positive_hits * 0.08)
+    return min(1.0, score)
+
 
 async def score_candidate(
     step_name: str,
@@ -74,20 +178,26 @@ async def _score_script_candidate(script: dict[str, Any], params: dict[str, Any]
 
     usps = params.get("usps", [])
     brand_guidelines = params.get("brand_guidelines", "")
+    product_catalog = params.get("product_catalog")
 
     # Try LLM-based scoring
     try:
-        return await _llm_score_script(script, usps, brand_guidelines)
+        return await _llm_score_script(script, usps, brand_guidelines, product_catalog)
     except Exception as exc:
         logger.warning(
             "candidate_scorer: LLM scoring failed, using heuristics",
             step="scripts",
             error=str(exc)[:100],
         )
-        return _heuristic_score_script(script, usps)
+        return _heuristic_score_script(script, usps, product_catalog)
 
 
-async def _llm_score_script(script: dict[str, Any], usps: list[str], brand_guidelines: str) -> dict[str, Any]:
+async def _llm_score_script(
+    script: dict[str, Any],
+    usps: list[str],
+    brand_guidelines: str,
+    product_catalog: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Score a script candidate using the LLM."""
     script_text = _extract_script_text(script)
     usp_text = "\n".join(f"- {u}" for u in usps) if usps else "None provided"
@@ -123,15 +233,27 @@ async def _llm_score_script(script: dict[str, Any], usps: list[str], brand_guide
     }
     explanation = result.get("explanation", "LLM evaluation")
 
+    # Apply baby-safety sensitivity penalty (no-op for non-baby products)
+    is_baby = _is_baby_product(product_catalog)
+    if is_baby:
+        safety_score = _heuristic_baby_safety_sensitivity(script_text, True)
+        breakdown["baby_safety"] = round(safety_score, 4)
+        overall = overall * safety_score
+        explanation = f"{explanation} | baby_safety={safety_score:.2f}"
+
     return {
-        "overall": overall,
+        "overall": round(overall, 4),
         "breakdown": breakdown,
         "explanation": explanation,
         "heuristic": False,
     }
 
 
-def _heuristic_score_script(script: dict[str, Any], usps: list[str]) -> dict[str, Any]:
+def _heuristic_score_script(
+    script: dict[str, Any],
+    usps: list[str],
+    product_catalog: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Score a script candidate using deterministic heuristics.
 
     Uses USP mention count, segment structure, word count, and hook presence.
@@ -200,20 +322,31 @@ def _heuristic_score_script(script: dict[str, Any], usps: list[str]) -> dict[str
         + brand_tone * 0.10
     )
 
+    breakdown = {
+        "text_quality": round(text_quality, 4),
+        "strategy_fit": round(strategy_fit, 4),
+        "usp_coverage": round(usp_coverage, 4),
+        "platform_fit": round(platform_fit, 4),
+        "brand_tone": round(brand_tone, 4),
+    }
+    explanation = (
+        f"Heuristic scoring: word_count={word_count}, "
+        f"usp_mentions={usp_score:.0%}, "
+        f"has_hook={has_hook}, has_cta={has_cta}"
+    )
+
+    # Apply baby-safety sensitivity penalty (no-op for non-baby products)
+    is_baby = _is_baby_product(product_catalog)
+    if is_baby:
+        safety_score = _heuristic_baby_safety_sensitivity(script_text, True)
+        breakdown["baby_safety"] = round(safety_score, 4)
+        overall = overall * safety_score
+        explanation = f"{explanation}, baby_safety={safety_score:.2f}"
+
     return {
         "overall": round(overall, 4),
-        "breakdown": {
-            "text_quality": round(text_quality, 4),
-            "strategy_fit": round(strategy_fit, 4),
-            "usp_coverage": round(usp_coverage, 4),
-            "platform_fit": round(platform_fit, 4),
-            "brand_tone": round(brand_tone, 4),
-        },
-        "explanation": (
-            f"Heuristic scoring: word_count={word_count}, "
-            f"usp_mentions={usp_score:.0%}, "
-            f"has_hook={has_hook}, has_cta={has_cta}"
-        ),
+        "breakdown": breakdown,
+        "explanation": explanation,
         "heuristic": True,
     }
 

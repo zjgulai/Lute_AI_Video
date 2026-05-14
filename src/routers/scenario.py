@@ -30,6 +30,26 @@ from src.routers._state import (
 
 router = APIRouter()
 
+
+def _validate_s5_scene_id(scene_id: Any) -> str:
+    """Reject scene_id values not present in S5 SCENE_MAP.
+
+    Treats unset/empty as the default "living-room". Raises 422 on unknown
+    string values (e.g. "nursery" — removed for child-safety compliance).
+    """
+    from src.pipeline.s5_brand_vlog_pipeline import SCENE_MAP
+
+    if scene_id is None or scene_id == "":
+        return "living-room"
+    if not isinstance(scene_id, str) or scene_id not in SCENE_MAP:
+        allowed = ", ".join(sorted(SCENE_MAP.keys()))
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid scene_id: {scene_id!r}. Allowed: {allowed}",
+        )
+    return scene_id
+
+
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
 async def run_s1_product_direct(body: dict[str, Any]):
     """Run S1 Product Direct pipeline (auto mode via StepRunner for progress visibility).
@@ -251,7 +271,7 @@ async def run_s5_brand_vlog(body: dict[str, Any]):
     Request body:
         brand_id: str — brand identifier (e.g. "momcozy")
         product_sku: dict — product SKU with views[] (six-view angles)
-        scene_id: str — scene identifier (office/living-room/bedroom/nursery/outdoor/kitchen)
+        scene_id: str — scene identifier (office/living-room/bedroom/outdoor/kitchen)
         selected_models: list[dict] — model profiles with name/role/description
         story_description: str — user's story direction (max 300 chars)
         video_duration: int — target video seconds (15/30/45/60/90)
@@ -259,19 +279,19 @@ async def run_s5_brand_vlog(body: dict[str, Any]):
     _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
     product_sku = body.get("product_sku", {})
     brand_id = body.get("brand_id", "momcozy")
-    # P3-4: Bind pipeline context
+    scene_id = _validate_s5_scene_id(body.get("scene_id"))
     structlog.contextvars.bind_contextvars(
         product_name=product_sku.get("name", "unknown") if isinstance(product_sku, dict) else "unknown",
         brand_name=brand_id,
         scenario="s5",
-        scene_id=body.get("scene_id", "living-room"),
+        scene_id=scene_id,
     )
     from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
     p = S5BrandVlogPipeline()
     r = await p.run(
         brand_id=body.get("brand_id", "momcozy"),
         product_sku=body.get("product_sku", {}),
-        scene_id=body.get("scene_id", "living-room"),
+        scene_id=scene_id,
         selected_models=body.get("selected_models", []),
         story_description=body.get("story_description", ""),
         video_duration=coerce_video_duration(body),
@@ -1007,7 +1027,7 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
         config = {
             "brand_id": body.get("brand_id", "momcozy"),
             "product_sku": body.get("product_sku", {}),
-            "scene_id": body.get("scene_id", "living-room"),
+            "scene_id": _validate_s5_scene_id(body.get("scene_id")),
             "selected_models": body.get("selected_models", []),
             "story_description": body.get("story_description", ""),
             "video_duration": coerce_video_duration(body),
