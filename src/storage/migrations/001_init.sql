@@ -31,6 +31,17 @@ CREATE TABLE IF NOT EXISTS pipeline_states (
 -- gates column (added 2026-05-03 for S1 step-by-step gate persistence)
 ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS gates JSONB DEFAULT '{}';
 
+-- Phase 0 #1 fix (2026-05-15): runtime state columns, mirrors Alembic
+-- 7a2f4b8c9d12. Inlined so a fresh `docker compose up` matches the
+-- migrated PG schema without requiring `alembic upgrade head`. Closes
+-- Oracle-identified regression where degraded/version/trace fields were
+-- dropped on PG round-trip.
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS schema_version INT;
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS pipeline_degraded BOOLEAN;
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS degraded_reason TEXT;
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS trace_id TEXT;
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS structured_errors JSONB DEFAULT '[]';
+
 -- brand_packages
 CREATE TABLE IF NOT EXISTS brand_packages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

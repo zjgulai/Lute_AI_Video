@@ -155,6 +155,14 @@ class PipelineStateManager:
                     "errors": state.get("errors"),
                     "media_synthesis_errors": state.get("media_synthesis_errors"),
                     "gates": state.get("gates"),
+                    # Phase 0 #1 (2026-05-15): persist runtime state fields
+                    # that previously vanished on PG round-trip. All 5 are
+                    # nullable in PG schema (migration 7a2f4b8c9d12).
+                    "schema_version": state.get("schema_version"),
+                    "pipeline_degraded": state.get("pipeline_degraded"),
+                    "degraded_reason": state.get("degraded_reason"),
+                    "trace_id": state.get("trace_id"),
+                    "structured_errors": state.get("structured_errors"),
                 }
                 if existing:
                     await repo.update(existing["id"], data)
@@ -199,6 +207,16 @@ class PipelineStateManager:
                         gates_val = row["gates"]
                     except (KeyError, IndexError):
                         gates_val = {}
+                    # Phase 0 #1 (2026-05-15): runtime state columns added by
+                    # Alembic 7a2f4b8c9d12. Pre-migration PG schemas may not
+                    # have them — degrade gracefully to defaults so load
+                    # never crashes on an un-migrated DB.
+                    def _safe_get(col: str, default: Any = None) -> Any:
+                        try:
+                            return row[col]
+                        except (KeyError, IndexError):
+                            return default
+
                     pg_state = {
                         "label": row["label"],
                         "scenario": row["scenario"],
@@ -209,6 +227,11 @@ class PipelineStateManager:
                         "errors": row["errors"],
                         "media_synthesis_errors": row["media_synthesis_errors"],
                         "gates": gates_val or {},
+                        "schema_version": _safe_get("schema_version", 0),
+                        "pipeline_degraded": _safe_get("pipeline_degraded", False),
+                        "degraded_reason": _safe_get("degraded_reason"),
+                        "trace_id": _safe_get("trace_id"),
+                        "structured_errors": _safe_get("structured_errors", []) or [],
                     }
             except Exception as e:
                 logger.warning("PG load failed, using filesystem: %s", str(e)[:100])
