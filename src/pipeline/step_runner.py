@@ -349,12 +349,14 @@ class StepRunner:
         pipeline = pipeline_class()
         step_start = time.perf_counter()
         trace_id = state.get("trace_id", "unknown")
-        # Sprint 3 P3-4: hard budget enforcement for Expert mode. Raises
-        # BudgetExceededError BEFORE invoking the next expensive step so
-        # runaway spend is stopped at the gate, not after.
-        from src.tools.cost_tracker import check_budget
-        check_budget(state.get("label"), state.get("mode", "auto"))
         try:
+            # Sprint 3 P3-4 (Phase 0 fix): hard budget enforcement for Expert
+            # mode. Inside try: so BudgetExceededError flows through the
+            # existing degraded handler — sets pipeline_degraded=True,
+            # degraded_reason, structured_errors. Without this, the prior
+            # placement (outside try) caused HTTP 500 / stuck pending state.
+            from src.tools.cost_tracker import check_budget
+            check_budget(state.get("label"), state.get("mode", "auto"))
             result = await pipeline.run_step(step_name, state)
         except Exception as exc:
             step_duration_ms = (time.perf_counter() - step_start) * 1000
