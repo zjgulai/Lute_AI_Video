@@ -58,6 +58,8 @@ addopts = "--tb=short -v"
 # e2e 测试默认 skip(skipif 检测 env credentials),只有用户配齐外部资源才跑
 markers = [
     "e2e: 端到端测试,需要真实 API key / platform credentials / webhook URL",
+    "llm_stability: 标记 LLM 非确定性测试 — 同 prompt 跑 N 次,验证输出 schema/字段稳定。CI 默认 skip(需 DEEPSEEK/OPENAI key + 配额),手动触发:`pytest -m llm_stability`",
+    "media_stability: 标记媒体生成非确定性测试 — 同 prompt 生成 N 次,验证 duration/file_size 一致性。CI 默认 skip(需 POYO key + 配额),手动触发:`pytest -m media_stability`",
 ]
 
 [tool.pyright]
