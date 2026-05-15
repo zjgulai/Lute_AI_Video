@@ -1,7 +1,7 @@
 """add_runtime_state_columns_to_pipeline_states
 
 Revision ID: 7a2f4b8c9d12
-Revises: 1efc41794d64
+Revises: 2d6b8e9c0f1a
 Create Date: 2026-05-15
 
 Phase 0 #1 fix (closes Oracle-identified PG round-trip regression):
@@ -29,7 +29,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '7a2f4b8c9d12'
-down_revision: Union[str, None] = '1efc41794d64'
+down_revision: Union[str, None] = '2d6b8e9c0f1a'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
