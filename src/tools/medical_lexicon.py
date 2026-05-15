@@ -214,6 +214,62 @@ def get_all_medical_terms() -> list[str]:
     ]
 
 
+# Phase 0 #3 (2026-05-15): severity-aware classification map. Closes the
+# Oracle-identified regression where BrandCompliance was collapsing all 3
+# tiers (BANNED / FLAGGED / COMPETITOR) into severity="high", causing
+# benign phrases like "natural lighting" or "doctor recommended" to be
+# treated as hard-blocks instead of warnings.
+#
+# Severity contract:
+# - "high"  → BLOCKED (script must not generate)
+# - "low"   → FLAGGED (warning surfaced to reviewer, generation continues)
+#
+# Lookups use case-insensitive substring match identical to BrandCompliance,
+# so terms map back to their tier even when matched as part of a larger
+# phrase.
+
+
+def get_term_severity(term: str) -> str:
+    """Return "high" if `term` is in any BANNED tier, else "low".
+
+    Returns "high" by default for unknown terms — preserves backward-compat
+    with callers that supplied custom forbidden_content entries expecting
+    high-severity (the pre-Phase-0 behavior).
+    """
+    t = term.lower().strip()
+    banned_set = {*[s.lower() for s in MEDICAL_BANNED_CLAIMS],
+                  *[s.lower() for s in MEDICAL_BANNED_CLAIMS_ZH]}
+    flagged_set = {*[s.lower() for s in MEDICAL_FLAGGED_CLAIMS],
+                   *[s.lower() for s in MEDICAL_FLAGGED_CLAIMS_ZH],
+                   *[s.lower() for s in MEDICAL_COMPETITOR_CLAIMS],
+                   *[s.lower() for s in MEDICAL_COMPETITOR_CLAIMS_ZH]}
+    if t in banned_set:
+        return "high"
+    if t in flagged_set:
+        return "low"
+    return "high"
+
+
+def build_severity_map() -> dict[str, str]:
+    """Return a {term: "high"|"low"} dict for every term in the lexicon.
+
+    BrandComplianceSkill caches this once and looks up matched terms in O(1).
+    Caller-provided forbidden_content entries that are NOT in this map default
+    to "high" (backward-compat).
+    """
+    out: dict[str, str] = {}
+    for term in (*MEDICAL_BANNED_CLAIMS, *MEDICAL_BANNED_CLAIMS_ZH):
+        out[term.lower()] = "high"
+    for term in (
+        *MEDICAL_FLAGGED_CLAIMS,
+        *MEDICAL_FLAGGED_CLAIMS_ZH,
+        *MEDICAL_COMPETITOR_CLAIMS,
+        *MEDICAL_COMPETITOR_CLAIMS_ZH,
+    ):
+        out[term.lower()] = "low"
+    return out
+
+
 def merge_medical_lexicon(
     brand_guidelines: dict[str, Any] | None,
     *,
@@ -223,6 +279,11 @@ def merge_medical_lexicon(
 ) -> dict[str, Any]:
     """Return a copy of `brand_guidelines` with the medical lexicon merged into
     `forbidden_content` so BrandComplianceSkill auto-detects medical claims.
+
+    Phase 0 #3 (2026-05-15): also writes ``_medical_lexicon_severity`` —
+    a {term_lower: "high"|"low"} dict that BrandComplianceSkill reads to
+    avoid collapsing FLAGGED + COMPETITOR tiers into BLOCKED. Caller-
+    provided forbidden_content entries default to "high" (back-compat).
 
     Args:
         brand_guidelines: existing dict or None; None returns dict with just
@@ -235,7 +296,8 @@ def merge_medical_lexicon(
 
     Returns:
         dict with merged `forbidden_content` (BANNED + optional tiers +
-        any caller-provided entries, deduplicated).
+        any caller-provided entries, deduplicated) and
+        ``_medical_lexicon_severity`` map.
     """
     base: list[str] = list(MEDICAL_BANNED_CLAIMS)
     if include_flagged:
@@ -254,4 +316,5 @@ def merge_medical_lexicon(
     # Preserve caller-provided entries first so brand-specific overrides win.
     combined = existing + [term for term in base if term not in existing]
     result["forbidden_content"] = combined
+    result["_medical_lexicon_severity"] = build_severity_map()
     return result

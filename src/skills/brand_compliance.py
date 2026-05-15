@@ -69,10 +69,16 @@ class BrandComplianceSkill(SkillCallable):
         brand_name = _extract_brand_name(guidelines)
         tone = _extract_tone(guidelines)
         forbidden = guidelines.get("forbidden_content", [])
+        # Phase 0 #3 (2026-05-15): per-term severity map injected by
+        # merge_medical_lexicon. FLAGGED + COMPETITOR tiers → "low"
+        # so benign phrases ("natural lighting", "doctor recommended")
+        # don't get hard-blocked as BANNED. Unknown terms default to "high"
+        # for back-compat with brand-specific custom forbidden_content.
+        severity_map: dict[str, str] = guidelines.get("_medical_lexicon_severity", {})
 
         reports = []
         for script in scripts:
-            flags = self._check_script(script, brand_name, tone, forbidden)
+            flags = self._check_script(script, brand_name, tone, forbidden, severity_map)
             status = "PASS"
             has_high = any(f.get("severity") == "high" for f in flags)
             has_low = any(f.get("severity") == "low" for f in flags)
@@ -90,9 +96,17 @@ class BrandComplianceSkill(SkillCallable):
 
         return SkillResult(success=True, data={"reports": reports, "count": len(reports)})
 
-    def _check_script(self, script: dict[str, Any], brand_name: str, tone: str, forbidden: list[str]) -> list[dict[str, Any]]:
+    def _check_script(
+        self,
+        script: dict[str, Any],
+        brand_name: str,
+        tone: str,
+        forbidden: list[str],
+        severity_map: dict[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
         flags = []
         text = self._script_text(script).lower()
+        sev_map = severity_map or {}
 
         # Brand name presence (low severity if missing)
         if brand_name and brand_name.lower() not in text:
@@ -102,12 +116,14 @@ class BrandComplianceSkill(SkillCallable):
                 "message": f"Brand name '{brand_name}' not found in script"
             })
 
-        # Forbidden content
+        # Forbidden content — Phase 0 #3: severity from lexicon map, default
+        # "high" preserves back-compat for caller-provided custom entries.
         for fb in forbidden:
             if fb.lower() in text:
+                severity = sev_map.get(fb.lower(), "high")
                 flags.append({
                     "rule": "forbidden_content",
-                    "severity": "high",
+                    "severity": severity,
                     "message": f"Forbidden content detected: '{fb}'"
                 })
 
