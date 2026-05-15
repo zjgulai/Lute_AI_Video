@@ -32,7 +32,33 @@ _UNIT_COSTS: dict[str, float] = {
 
 SOFT_BUDGET_PER_PIPELINE = 5.0  # USD
 
+# Sprint 3 P3-4: hard budget for Expert mode (closes diagnostic R-COST-EXP).
+# Expert mode generates 3 candidates per gate × 3 gates with regenerate
+# allowed, so worst-case cost can hit $11.98/condition (per diagnostic).
+# This hard cap stops runaway spend by raising BudgetExceededError before
+# the next expensive step. Auto mode uses the soft warning above.
+HARD_BUDGET_EXPERT_MODE = 5.0  # USD
+
 _records: list[dict[str, Any]] = []
+
+
+class BudgetExceededError(RuntimeError):
+    """Raised when a pipeline thread exceeds its hard budget cap.
+
+    Carries `thread_id`, `total_usd`, `cap_usd`, `mode` so callers (StepRunner)
+    can record degraded_reason and surface the failure cleanly without
+    swallowing the actionable context.
+    """
+
+    def __init__(self, thread_id: str | None, total_usd: float, cap_usd: float, mode: str):
+        self.thread_id = thread_id
+        self.total_usd = total_usd
+        self.cap_usd = cap_usd
+        self.mode = mode
+        super().__init__(
+            f"Budget exceeded: thread={thread_id} mode={mode} "
+            f"total=${total_usd:.4f} cap=${cap_usd:.2f}"
+        )
 
 
 def set_thread_id(thread_id: str | None) -> None:
@@ -96,3 +122,27 @@ def get_pipeline_cost(thread_id: str | None) -> float:
     if not thread_id:
         return 0.0
     return sum(r["cost_usd"] for r in _records if r.get("thread_id") == thread_id)
+
+
+def check_budget(thread_id: str | None, mode: str) -> None:
+    """Sprint 3 P3-4: raise BudgetExceededError if Expert mode is over the
+    hard cap.
+
+    Auto mode and unknown modes only emit the soft-warning path (which
+    already lives inside ``track``). Expert mode requires hard enforcement
+    because diagnostic R-COST-EXP showed worst-case 18 Seedance calls
+    reaching $11.98/condition with the soft warning being merely advisory.
+
+    Call this BEFORE invoking the next expensive step (e.g., from
+    StepRunner._execute_step right before pipeline.run_step).
+    """
+    if mode != "expert":
+        return
+    total = get_pipeline_cost(thread_id)
+    if total >= HARD_BUDGET_EXPERT_MODE:
+        raise BudgetExceededError(
+            thread_id=thread_id,
+            total_usd=total,
+            cap_usd=HARD_BUDGET_EXPERT_MODE,
+            mode=mode,
+        )
