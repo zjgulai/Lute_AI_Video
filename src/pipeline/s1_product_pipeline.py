@@ -174,6 +174,26 @@ class S1ProductDirectPipeline:
         result["audit_report"] = self._get_step_output(steps, "audit") or {}
         result["steps_completed"] = 12
 
+        # Sprint 3 P3-1: C2PA Content Credentials signing for EU AI Act
+        # compliance. No-op when C2PA_ENABLED is unset (default). Replaces
+        # final_video_path with a signed copy when the env var is set and
+        # cert/key are provisioned; on any failure, returns the unsigned
+        # path so downstream consumers never break.
+        if result.get("final_video_path"):
+            from src.tools.c2pa_signer import sign_video
+            result["final_video_path"] = sign_video(
+                result["final_video_path"],
+                title=f"{brand_name or product_name} (AI generated)",
+            )
+
+        # Sprint 3 P3-3: surface partial artifacts when degraded so callers
+        # can salvage usable outputs (clips, audio, scripts) instead of
+        # treating an empty final_video_path as silent failure.
+        from src.pipeline.partial_artifacts import summarize_partial_artifacts
+        partial = summarize_partial_artifacts(final_state)
+        if partial["degraded"]:
+            result["partial_artifacts"] = partial
+
         # Apply fallbacks for empty briefs/scripts to preserve old behavior
         if not result["briefs"]:
             result["briefs"] = self._fallback_briefs(product_name, brand_name, platforms[0])

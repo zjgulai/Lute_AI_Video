@@ -227,6 +227,21 @@ class S2BrandCampaignPipeline:
         result["audit_report"] = get(steps, "audit") or {}
         result["steps_completed"] = 12
 
+        # Sprint 3 P3-1: C2PA signing for EU AI Act compliance (no-op when
+        # C2PA_ENABLED unset).
+        if result.get("final_video_path"):
+            from src.tools.c2pa_signer import sign_video
+            result["final_video_path"] = sign_video(
+                result["final_video_path"],
+                title=f"{brand_name} brand campaign (AI generated)",
+            )
+
+        # Sprint 3 P3-3: partial artifacts when degraded
+        from src.pipeline.partial_artifacts import summarize_partial_artifacts
+        partial = summarize_partial_artifacts(final_state)
+        if partial["degraded"]:
+            result["partial_artifacts"] = partial
+
         logger.info(
             "s2: pipeline complete",
             brand=brand_name,
