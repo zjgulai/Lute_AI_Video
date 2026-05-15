@@ -411,6 +411,22 @@ async def _llm_score_keyframe_image(
 
     Returns None on any failure (missing OPENAI_API_KEY, file gone, LLM
     error). Caller should fall back to the heuristic path.
+
+    Decision D scope clarification (2026-05-13):
+        Decision D constrains MODEL SELECTION FOR GENERATION (image / video
+        production) to the poyo.ai catalog. This function is an EVALUATION
+        tool — it analyzes an already-generated keyframe to score its
+        quality, producing no user-visible content. As of 2026-05-15 poyo
+        does not offer a vision API (`gpt-4o-image` is text→image only,
+        their /v1/chat/completions schema accepts text-only `content`),
+        so OpenAI direct is the only path that satisfies the diagnostic's
+        CQ-5 requirement (replace prompt-keyword heuristic with
+        vision-grounded scoring). The Decision D supplier-lockin risk
+        (R-VENDOR-LOCK) does not apply here because (1) cost per call is
+        negligible (~$0.0002 for 1024² low-detail vs. $0.05–$0.45/s for
+        Seedance generation), (2) failure gracefully degrades to the
+        heuristic path, (3) no user-facing content is produced. Switch
+        to a poyo-hosted vision model the moment poyo ships one.
     """
     from pathlib import Path
 
