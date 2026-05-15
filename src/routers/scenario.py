@@ -186,7 +186,7 @@ async def run_s2_brand_campaign(body: dict[str, Any]):
         mode="auto",
     )
 
-    from src.pipeline.s2_brand_pipeline import S2BrandCampaignPipeline
+    from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
     p = S2BrandCampaignPipeline()
     r = await p.run(
         brand_package=body.get("brand_package", {}),
