@@ -7,6 +7,7 @@ import { apiFetch, isDemoMode } from "@/components/api";
 import TagInput from "@/components/TagInput";
 import EmptyState from "@/components/EmptyState";
 
+import { errorMessage } from "@/lib/errors";
 interface InfluencerProfile {
   influencer_id: string;
   name: string;
@@ -43,8 +44,8 @@ export default function InfluencersTab() {
       try {
         const { DEMO_INFLUENCERS } = await import("@/demo-data");
         setInfluencers(DEMO_INFLUENCERS || []);
-      } catch (e: any) {
-        setError(e.message || t("common.fetchFailed"));
+      } catch (e: unknown) {
+        setError(errorMessage(e, t("common.fetchFailed")));
       } finally {
         setLoading(false);
       }
@@ -55,8 +56,8 @@ export default function InfluencersTab() {
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
       setInfluencers(data.influencers || []);
-    } catch (e: any) {
-      setError(e.message || t("common.fetchFailed"));
+    } catch (e: unknown) {
+      setError(errorMessage(e, t("common.fetchFailed")));
     } finally {
       setLoading(false);
     }
@@ -117,8 +118,8 @@ export default function InfluencersTab() {
       }
       setShowForm(false);
       await fetchInfluencers();
-    } catch (e: any) {
-      setError(e.message || t("common.saveFailed"));
+    } catch (e: unknown) {
+      setError(errorMessage(e, t("common.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -135,8 +136,8 @@ export default function InfluencersTab() {
       if (!res.ok) throw new Error(`${t("common.deleteFailed")} (${res.status})`);
       setDeleteConfirm(null);
       await fetchInfluencers();
-    } catch (e: any) {
-      setError(e.message || t("common.deleteFailed"));
+    } catch (e: unknown) {
+      setError(errorMessage(e, t("common.deleteFailed")));
     }
   };
 

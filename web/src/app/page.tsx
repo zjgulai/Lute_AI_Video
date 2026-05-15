@@ -8,6 +8,7 @@ import { Suspense } from "react";
 import { ShieldCheck } from "@phosphor-icons/react";
 import type { ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
+import { errorMessage } from "@/lib/errors";
 import {
   fetchState,
   submitReview,
@@ -382,7 +383,7 @@ export default function Home() {
       }
       setReviewState(data);
       setDisconnected(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (
         e instanceof TypeError &&
         (e.message === "Failed to fetch" || e.message.includes("NetworkError"))
@@ -702,7 +703,7 @@ export default function Home() {
           // retry
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       if (
         e instanceof TypeError &&
@@ -711,7 +712,7 @@ export default function Home() {
         setDisconnected(true);
         showToast(t("app.backendDisconnectShort"), "error");
       } else {
-        showToast(t("toast.reviewSubmitFailed") + `: ${e.message}`, "error");
+        showToast(t("toast.reviewSubmitFailed") + `: ${errorMessage(e)}`, "error");
       }
     }
     setLoading(false);
@@ -1003,8 +1004,8 @@ export default function Home() {
                         setShowCompare(true);
                         setCurrentGate(0);
                         showToast(t("toast.workflowDone"), "success");
-                      } catch (e: any) {
-                        showToast(t("toast.execFailed") + `: ${e?.message || String(e)}`, "error");
+                      } catch (e: unknown) {
+                        showToast(t("toast.execFailed") + `: ${errorMessage(e)}`, "error");
                       }
                     } else {
                       setCurrentGate(currentGate + 1);

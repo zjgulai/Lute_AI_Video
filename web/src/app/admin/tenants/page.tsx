@@ -6,6 +6,7 @@ import { adminFetchJson } from "@/components/api";
 import { Plus, MagnifyingGlass, Circle, X } from "@phosphor-icons/react";
 import { TableRowSkeleton } from "@/components/Skeleton";
 
+import { errorMessage } from "@/lib/errors";
 interface Tenant {
   id: string;
   tenant_id: string;
@@ -75,8 +76,8 @@ export default function AdminTenantsPage() {
       setNewDisplayName("");
       setNewContactEmail("");
       load();
-    } catch (err: any) {
-      setCreateError(err.message || "Failed to create tenant");
+    } catch (err: unknown) {
+      setCreateError(errorMessage(err, "Failed to create tenant"));
     } finally {
       setCreating(false);
     }

@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { adminFetchJson } from "@/components/api";
+import { errorMessage } from "@/lib/errors";
 import {
   ArrowLeft,
   Key,
@@ -88,8 +89,8 @@ export default function AdminTenantDetailPage({
       setNewKeyId(result.id);
       setNewKey(result.api_key);
       setKeyVisible(false);
-    } catch (err: any) {
-      alert(err.message || "Failed to create key");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to create key"));
     } finally {
       setCreating(false);
     }
@@ -103,8 +104,8 @@ export default function AdminTenantDetailPage({
         { method: "POST" }
       );
       load();
-    } catch (err: any) {
-      alert(err.message || "Failed to revoke key");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to revoke key"));
     }
   };
 
@@ -126,8 +127,8 @@ export default function AdminTenantDetailPage({
       });
       load();
       setShowDisable(false);
-    } catch (err: any) {
-      alert(err.message || "Failed to update tenant");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to update tenant"));
     }
   };
 

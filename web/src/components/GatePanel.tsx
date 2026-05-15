@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { isDemoMode, fetchS1State, apiFetch } from "./api";
 
 
+import { errorMessage } from "@/lib/errors";
 // P1-A: 删除本地 getHeaders + 硬编码 demo key,
 // 全部走 apiFetch() 自动注入 X-API-Key + 自动拼 base URL,
 // SettingsPanel 修改 API key 后立即对所有 Gate 操作生效。
@@ -128,9 +129,9 @@ export default function GatePanel({
       try {
         const demoCandidates = await generateDemoCandidates(gateId);
         setCandidates(demoCandidates);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("GatePanel demo generate error:", e);
-        setError(e.message || String(e));
+        setError(errorMessage(e));
       } finally {
         setLoading(false);
       }
@@ -148,9 +149,9 @@ export default function GatePanel({
       }
       const data = await res.json();
       setCandidates(data.candidates || []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("GatePanel generate error:", e);
-      setError(e.message || String(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -191,9 +192,9 @@ export default function GatePanel({
             },
           }))
         );
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("GatePanel demo regenerate error:", e);
-        setError(e.message || String(e));
+        setError(errorMessage(e));
       } finally {
         setLoading(false);
       }
@@ -217,9 +218,9 @@ export default function GatePanel({
         const stateData = await stateRes.json();
         setCandidates(stateData.candidates || []);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("GatePanel regenerate error:", e);
-      setError(e.message || String(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -333,7 +334,7 @@ export default function GatePanel({
 
             // Continue polling
             pollTimerRef.current = setTimeout(() => poll(pollCount + 1), 5000);
-          } catch (pollErr: any) {
+          } catch (pollErr: unknown) {
             console.error("GatePanel poll error:", pollErr);
             // Continue polling on error
             pollTimerRef.current = setTimeout(() => poll(pollCount + 1), 5000);
@@ -348,9 +349,9 @@ export default function GatePanel({
           onApprove(selectedIds);
         }, 800);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("GatePanel approve error:", e);
-      setError(e.message || String(e));
+      setError(errorMessage(e));
     } finally {
       setApproving(false);
     }

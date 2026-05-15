@@ -1,6 +1,8 @@
 // AI Video Pipeline backend API helpers
 // Runtime-configurable via localStorage (with cookie fallback) or build-time env vars.
 
+import { errorMessage } from "@/lib/errors";
+
 const STORAGE_KEYS = {
   apiBase: "ai_video_api_base",
   apiKey: "ai_video_api_key",
@@ -450,13 +452,14 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
         }
       }
       return res;
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastError = err;
-      const isRetryable = err.name === "TypeError" || err.name === "TimeoutError" || err.name === "AbortError";
+      const errName = err instanceof Error ? err.name : "";
+      const isRetryable = errName === "TypeError" || errName === "TimeoutError" || errName === "AbortError";
       if (isRetryable && attempt < maxRetries) {
         if (_apiLogEnabled) {
           const duration = Math.round(performance.now() - start);
-          console.warn(`[HERMES:RETRY] NETWORK_ERROR (${duration}ms) trace_id=${traceId} attempt=${attempt + 1}/${maxRetries + 1} ${err.message || ""}`);
+          console.warn(`[HERMES:RETRY] NETWORK_ERROR (${duration}ms) trace_id=${traceId} attempt=${attempt + 1}/${maxRetries + 1} ${errorMessage(err, "")}`);
         }
         await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         continue;
@@ -920,8 +923,8 @@ export async function testConnection(options?: { signal?: AbortSignal }): Promis
     }
     const data = await res.json().catch(() => ({}));
     return { ok: true, status: res.status, data };
-  } catch (e: any) {
-    return { ok: false, status: 0, error: e.message || "Network error" };
+  } catch (e: unknown) {
+    return { ok: false, status: 0, error: errorMessage(e, "Network error") };
   }
 }
 

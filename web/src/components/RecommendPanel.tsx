@@ -8,6 +8,7 @@ import { startS1StepByStep, runS1Step, isDemoMode } from "./api";
 
 
 
+import { errorMessage } from "@/lib/errors";
 interface Props {
   config: any;  // The config from SceneForm
   onBack: () => void;
@@ -45,8 +46,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
         setPlatforms(config.target_platforms || ["tiktok", "shopify"]);
         setDuration(config.video_duration || 30);
         setLoading(false);
-      } catch (e: any) {
-        setError(e.message || "Failed to load demo recommendation");
+      } catch (e: unknown) {
+        setError(errorMessage(e, "Failed to load demo recommendation"));
         setLoading(false);
       }
       return;
@@ -74,8 +75,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
       setDuration(config.video_duration || 30);
 
       setLoading(false);
-    } catch (e: any) {
-      setError(e.message || "Failed to get recommendation");
+    } catch (e: unknown) {
+      setError(errorMessage(e, "Failed to get recommendation"));
       setLoading(false);
     }
   }

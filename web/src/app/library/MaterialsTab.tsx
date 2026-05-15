@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
+import { errorMessage } from "@/lib/errors";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
 
@@ -78,8 +79,8 @@ export default function MaterialsTab() {
           isAiGenerated: (a.tags || []).some((tg: string) => tg.includes("ai-") || tg.includes("seedance")),
         }));
         setAssets(mapped.filter((m) => !isVideoMime(m.mimeType) || m.sizeBytes === 0 || m.tags.every((t) => t !== "renders")));
-      } catch (e: any) {
-        setError(e.message || t("common.fetchFailed"));
+      } catch (e: unknown) {
+        setError(errorMessage(e, t("common.fetchFailed")));
       } finally {
         setLoading(false);
       }
@@ -123,8 +124,8 @@ export default function MaterialsTab() {
         isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category),
       }));
       setAssets(mapped);
-    } catch (e: any) {
-      setError(e.message || t("common.fetchFailed"));
+    } catch (e: unknown) {
+      setError(errorMessage(e, t("common.fetchFailed")));
     } finally {
       setLoading(false);
     }
@@ -181,8 +182,8 @@ export default function MaterialsTab() {
         formData.append("metadata", JSON.stringify({ source: "library-materials" }));
         const res = await apiFetch("/api/upload", { method: "POST", body: formData });
         if (!res.ok) throw new Error(`${t("footage.uploadFailed")} (${res.status})`);
-      } catch (e: any) {
-        newFailures.push({ file, error: e.message || t("footage.uploadFailed") });
+      } catch (e: unknown) {
+        newFailures.push({ file, error: errorMessage(e, t("footage.uploadFailed")) });
       }
     }
     setUploadProgress(null);

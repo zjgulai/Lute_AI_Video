@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { publishVideo } from "./api";
 
+import { errorMessage } from "@/lib/errors";
 interface PublishResult {
   platform: string;
   post_id?: string;
@@ -89,11 +90,11 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
 
       setProgress(updatedProgress);
       onPublished?.(resultsArray);
-    } catch (err: any) {
-      setOverallError(err.message || t("common.fetchFailed"));
+    } catch (err: unknown) {
+      setOverallError(errorMessage(err, t("common.fetchFailed")));
       const errorProgress: Record<string, PlatformProgress> = {};
       selectedPlatforms.forEach((p) => {
-        errorProgress[p] = { state: "error", result: { platform: p, success: false, error: err.message } };
+        errorProgress[p] = { state: "error", result: { platform: p, success: false, error: errorMessage(err) } };
       });
       setProgress(errorProgress);
     }

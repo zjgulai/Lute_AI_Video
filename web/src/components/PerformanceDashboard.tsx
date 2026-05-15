@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { fetchDashboardOverview } from "./api";
 
+import { errorMessage } from "@/lib/errors";
 interface Props {
   scenario?: string;
   onClose?: () => void;
@@ -70,8 +71,8 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
       const days = timeFilter === "7d" ? 7 : timeFilter === "14d" ? 14 : 30;
       const result = await fetchDashboardOverview(scenario, platform, days);
       setData(result);
-    } catch (err: any) {
-      setError(err.message || t("common.fetchFailed"));
+    } catch (err: unknown) {
+      setError(errorMessage(err, t("common.fetchFailed")));
       setData(null);
     } finally {
       setLoading(false);

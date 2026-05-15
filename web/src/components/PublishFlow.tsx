@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { publishVideo } from "./api";
 import { PaperPlaneRight, CheckCircle, ArrowCounterClockwise } from "@phosphor-icons/react";
 
+import { errorMessage } from "@/lib/errors";
 interface Props {
   result: any;
 }
@@ -84,8 +85,8 @@ export default function PublishFlow({ result }: Props) {
         .map((r: any) => r.platform);
 
       setPublishedPlatforms(new Set(successful));
-    } catch (err: any) {
-      setError(err.message || t("common.fetchFailed"));
+    } catch (err: unknown) {
+      setError(errorMessage(err, t("common.fetchFailed")));
     } finally {
       setPublishing(false);
     }

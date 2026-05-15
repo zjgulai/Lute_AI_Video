@@ -14,6 +14,7 @@ import PerformanceDashboard from "./PerformanceDashboard";
 import PublishPanel from "./PublishPanel";
 import DirectorPlayback from "./DirectorPlayback";
 
+import { errorMessage } from "@/lib/errors";
 const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   shopify: ShoppingBag,
   amazon: ShoppingCart,
@@ -794,8 +795,8 @@ function PlatformPublishRow({ platform, result }: { platform: string; result: an
       };
       const res = await publishContent(platform, content);
       setPubResult({ success: true, ...res });
-    } catch (err: any) {
-      setPubResult({ success: false, error: err.message || t("dist.publishFailed") });
+    } catch (err: unknown) {
+      setPubResult({ success: false, error: errorMessage(err, t("dist.publishFailed")) });
     } finally {
       setIsPublishing(false);
     }

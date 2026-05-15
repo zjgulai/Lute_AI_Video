@@ -7,6 +7,7 @@ import { ShoppingBag, ShoppingCart, MusicNotes, ChatCircle, ArrowSquareOut, Vide
 import type { IconProps } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 
+import { errorMessage } from "@/lib/errors";
 const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   shopify: ShoppingBag,
   amazon: ShoppingCart,
@@ -78,8 +79,8 @@ export default function DistributionView({ threadId, onRestart }: Props) {
       };
       const result = await publishContent(platform, content);
       setPublishResults((prev) => ({ ...prev, [key]: { success: true, ...result } }));
-    } catch (err: any) {
-      setPublishResults((prev) => ({ ...prev, [key]: { success: false, error: err.message || t("dist.publishFailed") } }));
+    } catch (err: unknown) {
+      setPublishResults((prev) => ({ ...prev, [key]: { success: false, error: errorMessage(err, t("dist.publishFailed")) } }));
     } finally {
       setPublishing((prev) => ({ ...prev, [key]: false }));
     }
@@ -92,8 +93,8 @@ export default function DistributionView({ threadId, onRestart }: Props) {
     try {
       const data = await fetchPublishStatus(platform, postId);
       setStatusData(data);
-    } catch (err: any) {
-      setStatusData({ error: err.message || t("dist.statusFailed") });
+    } catch (err: unknown) {
+      setStatusData({ error: errorMessage(err, t("dist.statusFailed")) });
     } finally {
       setStatusLoading(false);
     }

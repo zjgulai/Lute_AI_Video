@@ -10,6 +10,7 @@ import EmptyState from "@/components/EmptyState";
 import { ListSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
 
+import { errorMessage } from "@/lib/errors";
 interface FinalWork {
   id: string;
   filename: string;
@@ -108,8 +109,8 @@ export default function WorksPage() {
             thumbnailPath: a.thumbnail_path || null,
           }));
         setWorks(demoFinals);
-      } catch (e: any) {
-        setError(e.message || t("common.fetchFailed"));
+      } catch (e: unknown) {
+        setError(errorMessage(e, t("common.fetchFailed")));
       } finally {
         setLoading(false);
       }
@@ -151,8 +152,8 @@ export default function WorksPage() {
         thumbnailPath: f.thumbnail_path,
       }));
       setWorks(mapped);
-    } catch (e: any) {
-      setError(e.message || t("common.fetchFailed"));
+    } catch (e: unknown) {
+      setError(errorMessage(e, t("common.fetchFailed")));
     } finally {
       setLoading(false);
     }

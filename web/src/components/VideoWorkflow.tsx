@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { getMediaUrl } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
+import { errorMessage } from "@/lib/errors";
 
 interface Props {
   config: any;
@@ -114,9 +115,9 @@ export default function VideoWorkflow({
       const newState = result?.state || result;
       onStateChange(newState);
       setViewingStep(stepName);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      const msg = e?.message || String(e);
+      const msg = errorMessage(e);
       try { await refreshState(); } catch { /* best-effort reload */ }
       showToast(t("toast.stepExecFailed") + `: ${msg}`, "error");
     } finally {
@@ -137,8 +138,8 @@ export default function VideoWorkflow({
       onStateChange(newState);
       setViewingStep(stepName);
       setEditingStep(null);
-    } catch (e: any) {
-      const msg = e?.message || String(e);
+    } catch (e: unknown) {
+      const msg = errorMessage(e);
       if (e instanceof DOMException && e.name === "AbortError") return;
       try { await refreshState(); } catch { /* best-effort reload */ }
       showToast(t("toast.regenerateFailed") + `: ${msg}`, "error");
@@ -165,10 +166,10 @@ export default function VideoWorkflow({
       onStateChange({ ...state, steps: updatedSteps });
       setEditingStep(null);
       showToast(t("toast.saveSuccess"), "success");
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       try { await refreshState(); } catch { /* best-effort reload */ }
-      showToast(t("toast.saveFailed") + `: ${e?.message || String(e)}`, "error");
+      showToast(t("toast.saveFailed") + `: ${errorMessage(e)}`, "error");
     } finally {
       setLoading(false);
       setLoadingText(t("app.loading"));
@@ -184,8 +185,8 @@ export default function VideoWorkflow({
       const finalState = result?.state || result;
       onStateChange(finalState);
       onComplete(finalState);
-    } catch (e: any) {
-      const msg = e?.message || String(e);
+    } catch (e: unknown) {
+      const msg = errorMessage(e);
       if (e instanceof DOMException && e.name === "AbortError") return;
       try { await refreshState(); } catch { /* best-effort reload */ }
       showToast(t("toast.resumeFailed") + `: ${msg}`, "error");

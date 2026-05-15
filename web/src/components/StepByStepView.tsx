@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { errorMessage } from "@/lib/errors";
 
 interface Props {
   label: string;
@@ -90,10 +91,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     try {
       const result = await runS1Step(label, stepName);
       onStepComplete(result?.state || result);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Step execution failed:", err);
-      onError?.(t("toast.stepExecFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
+      onError?.(t("toast.stepExecFailed") + `: ${errorMessage(err).slice(0, 80)}`);
       const { fetchS1State } = await import("./api");
       const freshState = await fetchS1State(label);
       onStepComplete(freshState);
@@ -106,10 +107,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     try {
       const result = await regenerateS1Step(label, stepName);
       onStepComplete(result?.state || result);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Regeneration failed:", err);
-      onError?.(t("toast.regenerateFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
+      onError?.(t("toast.regenerateFailed") + `: ${errorMessage(err).slice(0, 80)}`);
       const { fetchS1State } = await import("./api");
       const freshState = await fetchS1State(label);
       onStepComplete(freshState);
@@ -121,10 +122,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     try {
       const result = await resumeS1(label);
       onResume(result?.state || result);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Resume failed:", err);
-      onError?.(t("toast.resumeFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
+      onError?.(t("toast.resumeFailed") + `: ${errorMessage(err).slice(0, 80)}`);
     }
   };
 
@@ -167,10 +168,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
       onStepComplete(freshState);
       setEditingStep(null);
       setEditValue("");
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Save edit failed:", err);
-      onError?.(t("toast.saveFailed") + `: ${err?.message || String(err).slice(0, 80)}`);
+      onError?.(t("toast.saveFailed") + `: ${errorMessage(err).slice(0, 80)}`);
     }
   };
 
