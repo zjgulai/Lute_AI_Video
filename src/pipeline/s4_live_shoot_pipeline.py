@@ -264,10 +264,14 @@ class S4LiveShootPipeline:
         """Generate video clips from Seedance prompts.
 
         S4 has no keyframe_images step, so clips generate from text prompts only.
+
+        Phase 2 prereq (Oracle review #4): route through ModelRouter.
+        Default S4 model is seedance-2-fast (cheap turbo for live-shoot iteration).
         """
         import asyncio
+        from src.pipeline.model_router import select_model
 
-
+        s4_model = select_model("s4")
         clip_paths: list[str] = []
         clip_details: list[dict[str, Any]] = []
         _sem = asyncio.Semaphore(2)
@@ -284,6 +288,7 @@ class S4LiveShootPipeline:
                     "duration": 5,
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
+                    "model": s4_model,
                 })
                 return i, res
 
