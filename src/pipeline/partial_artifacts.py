@@ -55,6 +55,10 @@ def _step_has_output(step_data: dict[str, Any]) -> bool:
     a tuple of empty strings) are treated as missing — they look like
     'success' but carry nothing usable. We check both empty-collection and
     all-empty-string-elements cases.
+
+    P4-5 (TODO-13, 2026-05-15): seedance_clips with all-stub clips also count
+    as missing. The skill returns success=True with is_stub=True per clip
+    when API fails / mock mode, so dict non-empty alone isn't enough.
     """
     if not step_data:
         return False
@@ -70,8 +74,13 @@ def _step_has_output(step_data: dict[str, Any]) -> bool:
     if isinstance(output, tuple):
         if not output:
             return False
-        # All-empty-string tuple = degraded sentinel ("", "")
         if all(isinstance(v, str) and not v.strip() for v in output):
+            return False
+    if isinstance(output, dict) and "clip_details" in output:
+        clip_details = output.get("clip_details") or []
+        if clip_details and all(
+            isinstance(d, dict) and d.get("is_stub", False) for d in clip_details
+        ):
             return False
     return True
 

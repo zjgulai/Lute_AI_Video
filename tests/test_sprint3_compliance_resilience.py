@@ -60,6 +60,38 @@ class TestStepHasOutput:
         step = {"status": "done", "output": None, "edited": True, "edited_output": [1]}
         assert _step_has_output(step) is True
 
+    def test_seedance_clips_all_stub_treated_as_missing(self):
+        step = {
+            "status": "done",
+            "output": {
+                "clip_details": [
+                    {"video_path": "/tmp/a.mp4", "is_stub": True, "duration_seconds": 0},
+                    {"video_path": "/tmp/b.mp4", "is_stub": True, "duration_seconds": 0},
+                    {"video_path": "/tmp/c.mp4", "is_stub": True, "duration_seconds": 0},
+                ],
+            },
+        }
+        assert _step_has_output(step) is False
+
+    def test_seedance_clips_mixed_stub_and_real_is_valid(self):
+        step = {
+            "status": "done",
+            "output": {
+                "clip_details": [
+                    {"video_path": "/tmp/a.mp4", "is_stub": True, "duration_seconds": 0},
+                    {"video_path": "/tmp/b.mp4", "is_stub": False, "duration_seconds": 8},
+                ],
+            },
+        }
+        assert _step_has_output(step) is True
+
+    def test_seedance_clips_no_clip_details_field_falls_back_to_dict_check(self):
+        step = {
+            "status": "done",
+            "output": {"some_other_field": "value"},
+        }
+        assert _step_has_output(step) is True
+
 
 class TestSummarizePartialArtifacts:
     def test_none_state_treated_as_degraded(self):
