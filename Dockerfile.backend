@@ -1,6 +1,19 @@
 FROM python:3.12-slim
 WORKDIR /app
 
+# 2026-05-15 incident: apt-get install gcc/libpq-dev/ffmpeg (~200MB across 49
+# packages) hung 74+ min on deb.debian.org from China. Switch to Aliyun mirror
+# before any apt-get call. Debian 13 Trixie uses deb822 format in
+# sources.list.d/debian.sources, not the legacy /etc/apt/sources.list.
+# Override-able via APT_MIRROR build-arg for overseas builds.
+ARG APT_MIRROR=mirrors.aliyun.com
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \
+    fi && \
+    if [ -f /etc/apt/sources.list ]; then \
+      sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list; \
+    fi
+
 # Install system deps:
 #   - gcc, libpq-dev: psycopg2-binary, pillow build deps
 #   - ffmpeg: required by seedance_video_generate._measure_duration (ffprobe)
