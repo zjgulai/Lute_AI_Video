@@ -250,10 +250,10 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
                 }`}
               >
                 <div className="text-xs font-semibold text-[var(--color-text-primary)]">
-                  {t(`videoType.${vt.id}`) || vt.name}
+                  {t(`videoType.${vt.id}`, vt.name)}
                 </div>
                 <div className="text-[12px] text-[var(--color-text-tertiary)] mt-0.5">
-                  {vt.desc}
+                  {t(`videoTypeDesc.${vt.id}`, vt.desc)}
                 </div>
               </button>
             ))}
