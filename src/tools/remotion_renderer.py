@@ -188,6 +188,7 @@ class RemotionRenderer:
         input_json: Path,
         output_filename: str = "output.mp4",
         blocking: bool = False,
+        composition_id: str = "ShortVideo",
     ) -> Path:
         """Trigger Remotion rendering.
 
@@ -195,6 +196,9 @@ class RemotionRenderer:
             input_json: Path to pipeline JSON.
             output_filename: Output .mp4 filename.
             blocking: If True, wait for render to complete.
+            composition_id: Remotion composition id to render (Sprint 4 P4-2).
+                Defaults to "ShortVideo" (9:16). Other registered compositions
+                in rendering/src/Root.tsx: "ShortVideo_1x1", "ShortVideo_16x9".
 
         Returns:
             Path to output video (or expected path if async).
@@ -215,6 +219,7 @@ class RemotionRenderer:
             "npx", "tsx", str(RENDER_SCRIPT),
             "--input", str(input_json),
             "--output", str(output_path),
+            "--composition", composition_id,
         ]
 
         logger.info("remotion: starting render", cmd=" ".join(cmd))

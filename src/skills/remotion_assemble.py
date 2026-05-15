@@ -217,6 +217,47 @@ class RemotionAssembleSkill(SkillCallable):
             is_stub = True
             self._write_stub_mp4(output_path, output_label)
 
+        # === Sprint 4 P4-2: aspect-ratio fan-out ===
+        # When `aspect_ratios` param has multiple entries, render the
+        # additional Remotion compositions (1:1, 16:9). The primary 9:16
+        # has already been rendered above as `output_path`. Failures here
+        # are non-fatal — only the primary path matters for back-compat;
+        # extra aspects are best-effort.
+        aspect_ratios = params.get("aspect_ratios") or ["9:16"]
+        # Map aspect ratio → Remotion composition id (registered in Root.tsx)
+        _ASPECT_TO_COMPOSITION_ID: dict[str, str] = {
+            "9:16": "ShortVideo",
+            "1:1": "ShortVideo_1x1",
+            "16:9": "ShortVideo_16x9",
+        }
+        video_paths: dict[str, str] = {"9:16": str(output_path)}
+        if remotion_done and len(aspect_ratios) > 1 and is_remotion_available:
+            for ratio in aspect_ratios:
+                if ratio == "9:16":
+                    continue
+                comp_id = _ASPECT_TO_COMPOSITION_ID.get(ratio)
+                if comp_id is None:
+                    logger.warning("remotion_assemble: unknown aspect ratio, skipping", ratio=ratio)
+                    continue
+                fan_filename = f"{output_label}_{ratio.replace(':', 'x')}.mp4"
+                try:
+                    fan_path = renderer.render(
+                        input_json=render_json_path,
+                        output_filename=fan_filename,
+                        blocking=True,
+                        composition_id=comp_id,
+                    )
+                    if fan_path.exists() and fan_path.stat().st_size > 1000:
+                        video_paths[ratio] = str(fan_path)
+                        logger.info("remotion_assemble: fan-out render complete",
+                                    ratio=ratio, composition_id=comp_id, path=str(fan_path))
+                    else:
+                        logger.warning("remotion_assemble: fan-out render produced empty file",
+                                       ratio=ratio, path=str(fan_path))
+                except Exception as exc:
+                    logger.warning("remotion_assemble: fan-out render failed (non-fatal)",
+                                   ratio=ratio, error=str(exc)[:200])
+
         # === (Optional) Burn lyrics subtitles into the video (ffmpeg fallback only) ===
         if not is_stub and not remotion_done and lyrics_text:
             subtitled = self._try_burn_lyrics(
@@ -259,6 +300,7 @@ class RemotionAssembleSkill(SkillCallable):
             success=True,
             data={
                 "video_path": str(output_path),
+                "video_paths": video_paths,
                 "render_json_path": str(render_json_path),
                 "duration_seconds": duration_seconds or float(total_duration),
                 "file_size_bytes": file_size,
@@ -272,6 +314,7 @@ class RemotionAssembleSkill(SkillCallable):
                 "render_mode": render_mode if not is_stub else "stub",
                 "audio_muxed": bool(audio_paths) and not is_stub,
                 "clip_count": len(valid_clips),
+                "aspect_ratios_rendered": list(video_paths.keys()),
             },
         )
 

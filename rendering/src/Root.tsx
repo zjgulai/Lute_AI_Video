@@ -66,24 +66,38 @@ const sampleData = {
 
 const fps = 30;
 
+// Sprint 4 P4-2: aspect ratio fan-out for multi-platform delivery.
+// Each composition keeps the same VideoComposition logic but at different
+// (width, height) to produce 9:16 (TikTok/Reels), 1:1 (IG feed), and
+// 16:9 (YouTube landscape) output mp4s. The Python remotion_assemble
+// skill picks the composition by id when `aspect_ratios` is requested.
+const ASPECT_PRESETS = [
+  { id: "ShortVideo", label: "9:16", width: 1080, height: 1920 },
+  { id: "ShortVideo_1x1", label: "1:1", width: 1080, height: 1080 },
+  { id: "ShortVideo_16x9", label: "16:9", width: 1920, height: 1080 },
+];
+
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-      <Composition
-        id="ShortVideo"
-        component={VideoComposition}
-        durationInFrames={Math.ceil(45 * fps)}
-        fps={fps}
-        width={1080}
-        height={1920}
-        defaultProps={{
-          data: { ...sampleData, brand_name: "@BrandName" },
-          audioSrc: null,
-          backgroundColor: "#FFF5F7",
-          primaryColor: "#FF6B9D",
-          textColor: "#2D3436",
-        }}
-      />
+      {ASPECT_PRESETS.map((preset) => (
+        <Composition
+          key={preset.id}
+          id={preset.id}
+          component={VideoComposition}
+          durationInFrames={Math.ceil(45 * fps)}
+          fps={fps}
+          width={preset.width}
+          height={preset.height}
+          defaultProps={{
+            data: { ...sampleData, brand_name: "@BrandName" },
+            audioSrc: null,
+            backgroundColor: "#FFF5F7",
+            primaryColor: "#FF6B9D",
+            textColor: "#2D3436",
+          }}
+        />
+      ))}
     </>
   );
 };
