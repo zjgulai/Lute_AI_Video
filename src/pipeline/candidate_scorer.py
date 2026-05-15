@@ -120,6 +120,46 @@ def _heuristic_baby_safety_sensitivity(script_text: str, is_baby_product: bool) 
     return min(1.0, score)
 
 
+# Sprint 2 P2-5 — scenario-specific weights for script scoring.
+# Diagnostic §8.2 framing: each scenario has different priorities. S2/S5
+# care more about brand_tone (品牌氛围), S1 about USP coverage (产品卖点),
+# S3 about platform_fit (原生感/平台适配), S4 about CTA brevity.
+# All rows sum to 1.0. The "default" row mirrors the pre-P2-5 weights so
+# unknown scenarios are not regressed.
+_SCRIPT_WEIGHTS: dict[str, dict[str, float]] = {
+    "default": {
+        "text_quality": 0.30, "strategy_fit": 0.25, "usp_coverage": 0.20,
+        "platform_fit": 0.15, "brand_tone": 0.10,
+    },
+    "s1": {
+        "text_quality": 0.25, "strategy_fit": 0.20, "usp_coverage": 0.30,
+        "platform_fit": 0.15, "brand_tone": 0.10,
+    },
+    "s2": {
+        "text_quality": 0.20, "strategy_fit": 0.25, "usp_coverage": 0.10,
+        "platform_fit": 0.10, "brand_tone": 0.35,
+    },
+    "s3": {
+        "text_quality": 0.20, "strategy_fit": 0.15, "usp_coverage": 0.20,
+        "platform_fit": 0.30, "brand_tone": 0.15,
+    },
+    "s4": {
+        "text_quality": 0.30, "strategy_fit": 0.15, "usp_coverage": 0.25,
+        "platform_fit": 0.20, "brand_tone": 0.10,
+    },
+    "s5": {
+        "text_quality": 0.20, "strategy_fit": 0.20, "usp_coverage": 0.10,
+        "platform_fit": 0.10, "brand_tone": 0.40,
+    },
+}
+
+
+def _resolve_script_weights(scenario: str | None) -> dict[str, float]:
+    if scenario is None:
+        return _SCRIPT_WEIGHTS["default"]
+    return _SCRIPT_WEIGHTS.get(scenario.lower(), _SCRIPT_WEIGHTS["default"])
+
+
 async def score_candidate(
     step_name: str,
     candidate_data: dict[str, Any],
@@ -179,17 +219,18 @@ async def _score_script_candidate(script: dict[str, Any], params: dict[str, Any]
     usps = params.get("usps", [])
     brand_guidelines = params.get("brand_guidelines", "")
     product_catalog = params.get("product_catalog")
+    scenario = params.get("scenario")
 
     # Try LLM-based scoring
     try:
-        return await _llm_score_script(script, usps, brand_guidelines, product_catalog)
+        return await _llm_score_script(script, usps, brand_guidelines, product_catalog, scenario)
     except Exception as exc:
         logger.warning(
             "candidate_scorer: LLM scoring failed, using heuristics",
             step="scripts",
             error=str(exc)[:100],
         )
-        return _heuristic_score_script(script, usps, product_catalog)
+        return _heuristic_score_script(script, usps, product_catalog, scenario)
 
 
 async def _llm_score_script(
@@ -197,6 +238,7 @@ async def _llm_score_script(
     usps: list[str],
     brand_guidelines: str,
     product_catalog: dict[str, Any] | None = None,
+    scenario: str | None = None,
 ) -> dict[str, Any]:
     """Score a script candidate using the LLM."""
     script_text = _extract_script_text(script)
@@ -223,7 +265,6 @@ async def _llm_score_script(
 
     result = await llm.invoke_json(system_prompt, user_message)
 
-    overall = float(result.get("overall", result.get("text_quality", 0.75)))
     breakdown = {
         "text_quality": float(result.get("text_quality", 0.0)),
         "strategy_fit": float(result.get("strategy_fit", 0.0)),
@@ -231,6 +272,11 @@ async def _llm_score_script(
         "platform_fit": float(result.get("platform_fit", 0.0)),
         "brand_tone": float(result.get("brand_tone", 0.0)),
     }
+    # P2-5: recompute overall from scenario-weighted breakdown to ignore any
+    # mis-weighted LLM-returned overall. The LLM's 5 dimension scores are
+    # still the source of truth, only the aggregation is scenario-tilted.
+    weights = _resolve_script_weights(scenario)
+    overall = sum(breakdown[k] * weights[k] for k in weights)
     explanation = result.get("explanation", "LLM evaluation")
 
     # Apply baby-safety sensitivity penalty (no-op for non-baby products)
@@ -253,6 +299,7 @@ def _heuristic_score_script(
     script: dict[str, Any],
     usps: list[str],
     product_catalog: dict[str, Any] | None = None,
+    scenario: str | None = None,
 ) -> dict[str, Any]:
     """Score a script candidate using deterministic heuristics.
 
@@ -277,6 +324,7 @@ def _heuristic_score_script(
 
     text_lower = script_text.lower()
     word_count = len(script_text.split())
+    weights = _resolve_script_weights(scenario)
 
     # USP coverage: count how many USPs appear in the script
     usp_score = 0.0
@@ -315,11 +363,11 @@ def _heuristic_score_script(
     brand_tone = 0.75  # generic default
 
     overall = (
-        text_quality * 0.30
-        + strategy_fit * 0.25
-        + usp_coverage * 0.20
-        + platform_fit * 0.15
-        + brand_tone * 0.10
+        text_quality * weights["text_quality"]
+        + strategy_fit * weights["strategy_fit"]
+        + usp_coverage * weights["usp_coverage"]
+        + platform_fit * weights["platform_fit"]
+        + brand_tone * weights["brand_tone"]
     )
 
     breakdown = {
@@ -351,20 +399,139 @@ def _heuristic_score_script(
     }
 
 
-async def _score_keyframe_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Score a keyframe image candidate with multi-dimensional heuristics.
+async def _llm_score_keyframe_image(
+    image_path: str,
+    prompt: str,
+) -> dict[str, Any] | None:
+    """Score a keyframe by sending the actual generated PNG to gpt-4o vision.
 
-    Dimensions: composition (30%), lighting (20%), product visibility (25%), style consistency (25%).
-    When LLM is unavailable, scores based on prompt keywords rather than a fixed default.
+    Sprint 2 P2-4: replaces the prompt-keyword heuristic with vision-grounded
+    evaluation. Closes diagnostic R-GATE-SCORE / CQ-5 — Gate was scoring the
+    prompt instead of the rendered image.
+
+    Returns None on any failure (missing OPENAI_API_KEY, file gone, LLM
+    error). Caller should fall back to the heuristic path.
     """
-    prompt = str(data.get("prompt", "")).lower()
-    if not prompt:
+    from pathlib import Path
+
+    p = Path(image_path)
+    if not p.exists() or p.stat().st_size < 100:
+        return None
+
+    try:
+        import base64
+        import os
+
+        from openai import AsyncOpenAI
+
+        from src.config import OPENAI_API_KEY
+
+        api_key = os.environ.get("OPENAI_API_KEY") or OPENAI_API_KEY
+        if not api_key:
+            return None
+
+        with open(p, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+
+        suffix = p.suffix.lower().lstrip(".") or "png"
+        mime = "image/jpeg" if suffix in ("jpg", "jpeg") else f"image/{suffix}"
+        data_url = f"data:{mime};base64,{b64}"
+
+        client = AsyncOpenAI(api_key=api_key, timeout=60.0)
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert visual quality evaluator for marketing "
+                        "video keyframes. Score the image on four dimensions from "
+                        "0.0 to 1.0. Return ONLY valid JSON with keys: "
+                        "composition, lighting, product_visibility, "
+                        "style_consistency, overall, explanation."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                f"Evaluate this keyframe.\n\n"
+                                f"Intended prompt: {prompt[:500]}\n\n"
+                                "Score dimensions:\n"
+                                "- composition (30%): framing, rule-of-thirds, balance\n"
+                                "- lighting (20%): exposure, mood, light direction\n"
+                                "- product_visibility (25%): subject clarity, hero placement\n"
+                                "- style_consistency (25%): aligns with prompt intent\n\n"
+                                "Return JSON only."
+                            ),
+                        },
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
+            max_tokens=400,
+            response_format={"type": "json_object"},
+        )
+        import json as _json
+
+        raw = response.choices[0].message.content or "{}"
+        result = _json.loads(raw)
+
+        breakdown = {
+            "composition": float(result.get("composition", 0.0)),
+            "lighting": float(result.get("lighting", 0.0)),
+            "product_visibility": float(result.get("product_visibility", 0.0)),
+            "style_consistency": float(result.get("style_consistency", 0.0)),
+        }
+        overall = float(
+            result.get(
+                "overall",
+                breakdown["composition"] * 0.30
+                + breakdown["lighting"] * 0.20
+                + breakdown["product_visibility"] * 0.25
+                + breakdown["style_consistency"] * 0.25,
+            )
+        )
+
+        return {
+            "overall": round(overall, 4),
+            "breakdown": {k: round(v, 4) for k, v in breakdown.items()},
+            "explanation": result.get("explanation", "gpt-4o vision evaluation"),
+            "heuristic": False,
+        }
+    except Exception as exc:
+        logger.warning(
+            "candidate_scorer: vision scoring failed, will fall back to heuristic",
+            error=str(exc)[:200],
+        )
+        return None
+
+
+async def _score_keyframe_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Score a keyframe image candidate.
+
+    Sprint 2 P2-4: when an actual image file is available (data.image_path),
+    delegates to gpt-4o vision for grounded scoring; falls back to the
+    prompt-keyword heuristic when no image / no API key / LLM error.
+    """
+    image_path = data.get("image_path") or data.get("keyframe_image_path") or ""
+    prompt = str(data.get("prompt", ""))
+
+    if image_path:
+        vision_result = await _llm_score_keyframe_image(image_path, prompt)
+        if vision_result is not None:
+            return vision_result
+
+    prompt_lower = prompt.lower()
+    if not prompt_lower:
         return _heuristic_generic(data, default=0.50)
 
-    composition_score = 1.0 if any(kw in prompt for kw in ["center", "rule of thirds", "close-up", "framed"]) else 0.6
-    lighting_score = 1.0 if any(kw in prompt for kw in ["soft", "natural", "studio", "warm", "bright"]) else 0.6
-    product_score = 1.0 if any(kw in prompt for kw in ["product", "device", "item", "hero shot"]) else 0.5
-    style_score = 0.8  # baseline — LLM scoring would refine this
+    composition_score = 1.0 if any(kw in prompt_lower for kw in ["center", "rule of thirds", "close-up", "framed"]) else 0.6
+    lighting_score = 1.0 if any(kw in prompt_lower for kw in ["soft", "natural", "studio", "warm", "bright"]) else 0.6
+    product_score = 1.0 if any(kw in prompt_lower for kw in ["product", "device", "item", "hero shot"]) else 0.5
+    style_score = 0.8
 
     overall = composition_score * 0.30 + lighting_score * 0.20 + product_score * 0.25 + style_score * 0.25
     return {
@@ -375,7 +542,7 @@ async def _score_keyframe_candidate(data: dict[str, Any], params: dict[str, Any]
             "product_visibility": round(product_score, 4),
             "style_consistency": round(style_score, 4),
         },
-        "explanation": "Heuristic keyframe scoring based on prompt keywords",
+        "explanation": "Heuristic keyframe scoring based on prompt keywords (no image available)",
         "heuristic": True,
     }
 

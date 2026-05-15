@@ -352,6 +352,7 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
         "usps": usps,
         "brand_guidelines": _extract_brand_guidelines(state.get("config", {})),
         "product_catalog": state.get("config", {}).get("product_catalog", {}),
+        "scenario": scenario,
     }
 
     # Variant configurations
@@ -739,6 +740,7 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
         "usps": usps,
         "brand_guidelines": _extract_brand_guidelines(state.get("config", {})),
         "product_catalog": state.get("config", {}).get("product_catalog", {}),
+        "scenario": scenario,
     }
 
     # Temperature mapping for variant
