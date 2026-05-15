@@ -11,7 +11,6 @@ from src.tools.medical_lexicon import (
     MEDICAL_BANNED_CLAIMS,
     MEDICAL_BANNED_CLAIMS_ZH,
     MEDICAL_COMPETITOR_CLAIMS,
-    MEDICAL_COMPETITOR_CLAIMS_ZH,
     MEDICAL_FLAGGED_CLAIMS,
     MEDICAL_FLAGGED_CLAIMS_ZH,
     get_all_medical_terms,

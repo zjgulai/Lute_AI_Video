@@ -21,7 +21,6 @@ from src.tools.medical_lexicon import (
     merge_medical_lexicon,
 )
 
-
 # Phase 0 #1: PG round-trip preservation
 
 

@@ -43,27 +43,35 @@ echo ""
 echo "[1/5] Current alembic revision:"
 run_in_container "current"
 
-# Step 2: Render upgrade SQL for review
+# Step 2: Determine mode + render the matching SQL for review.
+# Downgrade mode renders the rollback SQL; upgrade mode renders the
+# forward SQL. Either way, operator sees the exact statements before
+# committing.
+if [ "${1:-}" = "--downgrade" ]; then
+  MODE="DOWNGRADE (rollback)"
+  ACTION="downgrade -1"
+  SQL_RENDER="downgrade --sql 7a2f4b8c9d12:2d6b8e9c0f1a"
+  WARNING="This will REMOVE the 5 runtime-state columns from pipeline_states.
+Existing rows lose schema_version/pipeline_degraded/etc data."
+else
+  MODE="UPGRADE"
+  ACTION="upgrade head"
+  SQL_RENDER="upgrade --sql 2d6b8e9c0f1a:7a2f4b8c9d12"
+  WARNING="This will ADD 5 nullable columns to pipeline_states. Existing rows
+default to NULL/[]. Forward-compatible."
+fi
+
 echo ""
-echo "[2/5] Upgrade SQL (offline render, NOT applied yet):"
-run_in_container "upgrade --sql 2d6b8e9c0f1a:7a2f4b8c9d12"
+echo "[2/5] $MODE SQL (offline render, NOT applied yet):"
+run_in_container "$SQL_RENDER"
 
 # Step 3: Confirmation prompt
 echo ""
-if [ "${1:-}" = "--downgrade" ]; then
-  echo "MODE: DOWNGRADE (rollback)"
-  echo "This will REMOVE the 5 runtime-state columns from pipeline_states."
-  echo "Existing rows lose schema_version/pipeline_degraded/etc data."
-  ACTION="downgrade -1"
-else
-  echo "MODE: UPGRADE"
-  echo "This will ADD 5 nullable columns to pipeline_states. Existing rows"
-  echo "default to NULL/[]. Forward-compatible."
-  ACTION="upgrade head"
-fi
-
-read -p "Proceed with '$ACTION'? Type 'yes' to confirm: " CONFIRM
-if [ "$CONFIRM" != "yes" ]; then
+echo "MODE: $MODE"
+echo "$WARNING"
+echo ""
+read -p "Proceed with 'alembic $ACTION'? Type 'yes' to confirm: " CONFIRM
+if [ "${CONFIRM:-}" != "yes" ]; then
   echo "Aborted."
   exit 1
 fi

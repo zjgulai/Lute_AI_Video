@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -25,13 +24,12 @@ from src.pipeline.partial_artifacts import (
 from src.pipeline.state_manager import _check_schema_version
 from src.tools.c2pa_signer import build_manifest, is_enabled, sign_video
 from src.tools.cost_tracker import (
-    BudgetExceededError,
     HARD_BUDGET_EXPERT_MODE,
+    BudgetExceededError,
     check_budget,
     set_thread_id,
     track,
 )
-
 
 # ───────── P3-3 partial_artifacts ─────────
 

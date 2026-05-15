@@ -112,7 +112,11 @@ rsync -avz --chmod=F644 \
 
 ✋ **Operator confirm**：rsync 输出没有 error。
 
-## 步骤 3：在 server 上重启 backend + 跑 alembic upgrade
+## 步骤 3：在 server 上重建 backend 镜像 + 跑 alembic upgrade
+
+⚠️ **重要**: Phase 0 修改了 `Dockerfile.backend`（加入 `COPY migrations ./migrations`），
+因此 backend 镜像**必须重建**才能让 `/app/migrations/` 存在于容器内。
+不重建就跑 `run_alembic_upgrade.sh` 会失败，因为它在容器内执行 `cd /app/migrations`。
 
 ```bash
 ssh -i ~/Downloads/ai_video.pem ubuntu@101.34.52.232
@@ -121,16 +125,23 @@ cd /opt/ai-video
 # 3a. 把 run_alembic_upgrade.sh 设为可执行（rsync 已经 +x，但保险）
 chmod +x scripts/run_alembic_upgrade.sh
 
-# 3b. 重启 backend container（不重启 nginx — 流量不中断）
+# 3b. ★ 重建 backend 镜像（Phase 0 改了 Dockerfile，必须 rebuild）
 cd deploy/lighthouse
-sudo docker-compose -f docker-compose.prod.yml restart backend
+sudo docker-compose -f docker-compose.prod.yml build backend
+
+# 3c. 重启 backend container (启动新镜像)
+sudo docker-compose -f docker-compose.prod.yml up -d --no-deps backend
 sleep 10
 
-# 3c. 健康检查
+# 3d. 健康检查
 curl -fsS https://101.34.52.232/health | head -5
 # Expect: HTTP 200, JSON with status:ok
 
-# 3d. 跑 alembic migration（脚本会 PROMPT 确认 SQL）
+# 3e. 验证 migrations 在容器内可见
+sudo docker-compose -f docker-compose.prod.yml exec backend ls -la /app/migrations/
+# Expect: 看到 alembic.ini + alembic/ 子目录
+
+# 3f. 跑 alembic migration（脚本会 PROMPT 确认 SQL）
 cd /opt/ai-video
 ./scripts/run_alembic_upgrade.sh
 # 脚本会显示要执行的 SQL，让你 type 'yes' 确认

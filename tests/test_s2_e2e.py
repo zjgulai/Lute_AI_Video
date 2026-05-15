@@ -20,30 +20,29 @@ from typing import Any
 
 import pytest
 
-from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
-from src.skills.registry import SkillRegistry
-
-import src.skills.script_writer  # noqa: F401
 import src.skills.brand_compliance  # noqa: F401
-import src.skills.storyboard  # noqa: F401
+import src.skills.elevenlabs_tts  # noqa: F401
+import src.skills.media_quality_audit  # noqa: F401
+import src.skills.remotion_assemble  # noqa: F401
+import src.skills.script_writer  # noqa: F401
 import src.skills.seedance_prompt  # noqa: F401
 import src.skills.seedance_video_generate  # noqa: F401
-import src.skills.elevenlabs_tts  # noqa: F401
-import src.skills.remotion_assemble  # noqa: F401
-import src.skills.media_quality_audit  # noqa: F401
+import src.skills.storyboard  # noqa: F401
+from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
+from src.skills.registry import SkillRegistry
 
 
 @pytest.fixture(autouse=True)
 def _clear_registry():
     SkillRegistry.clear_global()
-    import src.skills.script_writer  # noqa: F401
     import src.skills.brand_compliance  # noqa: F401
-    import src.skills.storyboard  # noqa: F401
+    import src.skills.elevenlabs_tts  # noqa: F401
+    import src.skills.media_quality_audit  # noqa: F401
+    import src.skills.remotion_assemble  # noqa: F401
+    import src.skills.script_writer  # noqa: F401
     import src.skills.seedance_prompt  # noqa: F401
     import src.skills.seedance_video_generate  # noqa: F401
-    import src.skills.elevenlabs_tts  # noqa: F401
-    import src.skills.remotion_assemble  # noqa: F401
-    import src.skills.media_quality_audit  # noqa: F401
+    import src.skills.storyboard  # noqa: F401
     yield
     SkillRegistry.clear_global()
 

@@ -29,6 +29,12 @@ COPY src ./src
 COPY scripts ./scripts
 COPY pyproject.toml ./
 
+# Phase 0 #1 (2026-05-15): alembic migrations must travel with the image so
+# scripts/run_alembic_upgrade.sh can find /app/migrations inside the running
+# container. Before this, only src/ + scripts/ + requirements.txt were in
+# the image, so alembic upgrade failed with "Path doesn't exist: alembic".
+COPY migrations ./migrations
+
 # P1-15: Copy strategy_source/ and rendering/ so the container behaves
 # identically to local dev. strategy_source/ contains scenario configs and
 # quality thresholds; rendering/ contains Remotion templates referenced by

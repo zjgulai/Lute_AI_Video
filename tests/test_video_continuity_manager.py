@@ -1,6 +1,5 @@
 """Tests for src/skills/video_continuity_manager.py (Sprint 1 P1-3)."""
 
-import asyncio
 import subprocess
 from pathlib import Path
 
