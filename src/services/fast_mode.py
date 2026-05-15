@@ -16,7 +16,8 @@ from typing import Any
 
 import structlog
 
-from src.config import DEFAULT_LLM_PROVIDER, OUTPUT_DIR, POYO_VIDEO_MODEL
+from src.config import DEFAULT_LLM_PROVIDER, OUTPUT_DIR
+from src.pipeline.model_router import select_model
 from src.tools.cosyvoice_client import CosyVoiceClient
 from src.tools.llm_client import LLMClient
 from src.tools.seedance_client import SeedanceClient
@@ -74,7 +75,13 @@ class FastModeService:
         self.cosyvoice = CosyVoiceClient(output_dir=FAST_MODE_OUTPUT_DIR / "audio")
         # P2: Cache model metadata once at init — avoids per-request reflection
         self._llm_model = self._resolve_llm_model()
-        self._video_model = f"poyo-{POYO_VIDEO_MODEL}" if self.seedance._is_poyo else "seedance-2.0"
+        # Phase 2 prereq (Oracle review #4): fast_mode is the equivalent of an
+        # S1 product-direct shortcut, so use ModelRouter's S1 chain
+        # (preferred=seedance-2). Falls back to env POYO_VIDEO_MODEL only if
+        # we're not on poyo (native seedance-2.0 path).
+        self._video_model = (
+            f"poyo-{select_model('s1')}" if self.seedance._is_poyo else "seedance-2.0"
+        )
 
     def _resolve_llm_model(self) -> str:
         """Resolve the actual LLM model name once at initialization."""
@@ -142,6 +149,7 @@ class FastModeService:
             prompt=video_prompt,
             duration=duration,
             resolution="720p",
+            model=select_model("s1") if self.seedance._is_poyo else None,
         )
 
         tts_future = None
