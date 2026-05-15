@@ -221,23 +221,54 @@ class VideoMetricsRepository:
 
         where_clause = " AND ".join(conditions)
 
-        query = f"""
-            SELECT DISTINCT ON (vm.video_id, vm.platform)
-                vm.id,
-                vm.video_id,
-                vm.scenario,
-                vm.platform,
-                vm.post_id,
-                vm.post_url,
-                vm.metrics,
-                vm.pulled_at,
-                vm.published_at
-            FROM video_metrics vm
-            WHERE {where_clause}
-            ORDER BY vm.video_id, vm.platform, vm.pulled_at DESC
+        pool = await get_pool()
+        if pool is not None:
+            query = f"""
+                SELECT DISTINCT ON (vm.video_id, vm.platform)
+                    vm.id,
+                    vm.video_id,
+                    vm.scenario,
+                    vm.platform,
+                    vm.post_id,
+                    vm.post_url,
+                    vm.metrics,
+                    vm.pulled_at,
+                    vm.published_at
+                FROM video_metrics vm
+                WHERE {where_clause}
+                ORDER BY vm.video_id, vm.platform, vm.pulled_at DESC
+            """
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(query, *params)
+                return [_deserialize_row(dict(r)) for r in rows]
+
+        # SQLite fallback — DISTINCT ON is PG-only, use ROW_NUMBER() pattern.
+        # Sprint 4 P4-4: bug discovered when SQLite path was first exercised
+        # in tests; production PG path was unaffected.
+        conn = get_sqlite_conn()
+        if conn is None:
+            return []
+        sqlite_where = where_clause.replace("$1", "?").replace("$2", "?").replace("$3", "?")
+        sqlite_query = f"""
+            WITH latest AS (
+                SELECT vm.id, vm.video_id, vm.scenario, vm.platform,
+                       vm.post_id, vm.post_url, vm.metrics,
+                       vm.pulled_at, vm.published_at,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY vm.video_id, vm.platform
+                           ORDER BY vm.pulled_at DESC
+                       ) AS rn
+                FROM video_metrics vm
+                WHERE {sqlite_where}
+            )
+            SELECT id, video_id, scenario, platform, post_id, post_url,
+                   metrics, pulled_at, published_at
+            FROM latest
+            WHERE rn = 1
+            ORDER BY video_id, platform
         """
-        rows = await self._fetch(query, *params)
-        return [_deserialize_row(r) for r in rows]
+        cursor = conn.execute(sqlite_query, tuple(params))
+        return [_deserialize_row(dict(row)) for row in cursor.fetchall()]
 
     async def get_active_posts(self) -> list[dict[str, Any]]:
         """Get all posts that need polling (published within 30 days).
@@ -246,23 +277,51 @@ class VideoMetricsRepository:
         callers can check pulled_at to decide whether a new pull is due.
         """
         cutoff = _now() - timedelta(days=30)
-        query = """
-            SELECT DISTINCT ON (vm.video_id, vm.platform)
-                vm.id,
-                vm.video_id,
-                vm.scenario,
-                vm.platform,
-                vm.post_id,
-                vm.post_url,
-                vm.metrics,
-                vm.pulled_at,
-                vm.published_at
-            FROM video_metrics vm
-            WHERE vm.published_at >= $1
-            ORDER BY vm.video_id, vm.platform, vm.pulled_at DESC
+        pool = await get_pool()
+        if pool is not None:
+            query = """
+                SELECT DISTINCT ON (vm.video_id, vm.platform)
+                    vm.id,
+                    vm.video_id,
+                    vm.scenario,
+                    vm.platform,
+                    vm.post_id,
+                    vm.post_url,
+                    vm.metrics,
+                    vm.pulled_at,
+                    vm.published_at
+                FROM video_metrics vm
+                WHERE vm.published_at >= $1
+                ORDER BY vm.video_id, vm.platform, vm.pulled_at DESC
+            """
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(query, cutoff)
+                return [_deserialize_row(dict(r)) for r in rows]
+
+        # SQLite fallback — DISTINCT ON is PG-only, use ROW_NUMBER() pattern.
+        conn = get_sqlite_conn()
+        if conn is None:
+            return []
+        sqlite_query = """
+            WITH latest AS (
+                SELECT vm.id, vm.video_id, vm.scenario, vm.platform,
+                       vm.post_id, vm.post_url, vm.metrics,
+                       vm.pulled_at, vm.published_at,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY vm.video_id, vm.platform
+                           ORDER BY vm.pulled_at DESC
+                       ) AS rn
+                FROM video_metrics vm
+                WHERE vm.published_at >= ?
+            )
+            SELECT id, video_id, scenario, platform, post_id, post_url,
+                   metrics, pulled_at, published_at
+            FROM latest
+            WHERE rn = 1
+            ORDER BY video_id, platform
         """
-        rows = await self._fetch(query, cutoff)
-        return [_deserialize_row(r) for r in rows]
+        cursor = conn.execute(sqlite_query, (cutoff,))
+        return [_deserialize_row(dict(row)) for row in cursor.fetchall()]
 
     async def get_scenario_aggregates(self, days: int = 7) -> list[dict[str, Any]]:
         """Average metrics grouped by scenario over the given time window.

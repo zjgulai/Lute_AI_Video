@@ -76,6 +76,12 @@ def _create_sqlite_tables() -> None:
             mode TEXT DEFAULT 'auto',
             errors TEXT DEFAULT '[]',
             media_synthesis_errors TEXT DEFAULT '[]',
+            gates TEXT DEFAULT '{}',
+            schema_version INTEGER,
+            pipeline_degraded INTEGER,
+            degraded_reason TEXT,
+            trace_id TEXT,
+            structured_errors TEXT DEFAULT '[]',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
