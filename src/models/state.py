@@ -26,12 +26,30 @@ from src.models import (
     WeeklyCalendar,
 )
 
+# Sprint 3 P3-5: current schema version. Increment when a state-shape change
+# would break old consumers (field removed, type narrowed, semantics changed).
+# Adding new optional fields with total=False does NOT require a bump.
+# Persisted states missing `schema_version` are treated as version 0.
+STATE_SCHEMA_VERSION: int = 1
+
 
 class VideoPipelineState(TypedDict, total=False):
     """Master state flowing through the 12-node video creation pipeline.
 
     Fields are TypedDict with total=False so nodes can add fields incrementally.
+
+    Schema versioning (Sprint 3 P3-5):
+        ``schema_version`` is a monotonically-increasing integer. Bump it
+        whenever the state shape changes in a way that would break old
+        consumers (removing a field, narrowing a type, renaming a key).
+        Adding new optional fields does NOT require a bump. See
+        ``STATE_SCHEMA_VERSION`` constant below — that's the runtime value
+        set by StepRunner.init_state. PipelineStateManager.load logs a
+        warning when a persisted state's version differs from current.
     """
+
+    # ── Schema versioning ──
+    schema_version: int  # Sprint 3 P3-5; missing → treated as 0
 
     # ── Input Configuration ──
     product_catalog: dict[str, Any]  # Product info, USPs, specs

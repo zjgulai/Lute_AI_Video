@@ -56,6 +56,27 @@ def _json_default(obj):
     return str(obj)
 
 
+def _check_schema_version(state: dict[str, Any] | None, label: str) -> None:
+    """Log a warning when persisted state's schema_version differs from runtime.
+
+    Sprint 3 P3-5 contract: observability only. Loading proceeds regardless
+    so that pre-versioned states (schema_version absent → treated as 0) still
+    open. Callers needing migration logic can inspect state.get(
+    'schema_version', 0) directly.
+    """
+    if state is None:
+        return
+    from src.models.state import STATE_SCHEMA_VERSION
+
+    persisted = state.get("schema_version", 0)
+    if persisted != STATE_SCHEMA_VERSION:
+        logger.warning(
+            "state schema version mismatch: label=%s persisted=%d runtime=%d "
+            "(loading proceeds; consider migration)",
+            label, persisted, STATE_SCHEMA_VERSION,
+        )
+
+
 class PipelineStateManager:
     """Manages pipeline state persistence to the filesystem and PG.
 
@@ -158,6 +179,11 @@ class PipelineStateManager:
         P1-4: If PG is healthy but has no data for this label while FS does,
         it means PG was down during a prior save. In that case, sync FS data
         back to PG and return it. This ensures PG never stays behind FS.
+
+        Sprint 3 P3-5: Logs a warning when persisted state's schema_version
+        differs from runtime STATE_SCHEMA_VERSION (missing == 0). Loading
+        proceeds — callers decide whether to migrate. This is observability,
+        not enforcement: the goal is to detect drift before it bites.
         """
         fs_state = self._load_from_fs(label)
         pg_state = None
@@ -186,10 +212,12 @@ class PipelineStateManager:
                     }
             except Exception as e:
                 logger.warning("PG load failed, using filesystem: %s", str(e)[:100])
+                _check_schema_version(fs_state, label)
                 return fs_state
 
         # PG has data — return it (primary source of truth)
         if pg_state is not None:
+            _check_schema_version(pg_state, label)
             return pg_state
 
         # PG is empty but FS has data — PG was down during save. Backfill.
@@ -213,9 +241,11 @@ class PipelineStateManager:
                 })
             except Exception as e:
                 logger.warning("PG backfill failed for %s: %s", label, str(e)[:100])
+            _check_schema_version(fs_state, label)
             return fs_state
 
         # Neither has data
+        _check_schema_version(fs_state, label)
         return fs_state
 
     async def exists(self, label: str) -> bool:

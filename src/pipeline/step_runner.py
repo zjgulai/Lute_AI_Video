@@ -184,7 +184,9 @@ class StepRunner:
             }
 
         trace_id = generate_trace_id()
+        from src.models.state import STATE_SCHEMA_VERSION
         state = {
+            "schema_version": STATE_SCHEMA_VERSION,
             "label": label,
             "scenario": scenario,
             "config": config,
