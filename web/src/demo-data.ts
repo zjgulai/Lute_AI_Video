@@ -959,7 +959,6 @@ export const VLOG_SCENES = [
   { id: "office", name: "职场", desc: "突出高效与通勤节奏" },
   { id: "living-room", name: "客厅", desc: "轻松陪伴和家庭氛围" },
   { id: "bedroom", name: "卧室", desc: "安静、亲密、睡前场景" },
-  { id: "nursery", name: "儿童房", desc: "亲子布景和成长陪伴" },
   { id: "outdoor", name: "户外", desc: "日常出行与生活方式" },
   { id: "kitchen", name: "厨房", desc: "高效家务和台面操作" },
 ];
@@ -1308,7 +1307,7 @@ export const GUIDED_CARD_SEQUENCES: CardSequence[] = [
         connectionText: "场景是 VLOG 的舞台",
         fieldKey: "scene_id",
         inputType: "select",
-        options: ["office", "living-room", "bedroom", "nursery", "outdoor", "kitchen"],
+        options: ["office", "living-room", "bedroom", "outdoor", "kitchen"],
       },
       {
         priority: "required",
