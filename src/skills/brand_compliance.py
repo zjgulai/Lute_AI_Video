@@ -58,7 +58,13 @@ class BrandComplianceSkill(SkillCallable):
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         scripts = params["scripts"]
         guidelines = params.get("brand_guidelines", {})
-        logger.info("brand-compliance: auditing", script_count=len(scripts))
+        # Sprint 3 P3-2: auto-merge the medical-claim lexicon (244 terms across
+        # EN+ZH × BANNED+FLAGGED+COMPETITOR tiers) into forbidden_content so
+        # every brand_guidelines dict gets baseline FDA/FTC/广告法 enforcement
+        # without callers having to remember.
+        from src.tools.medical_lexicon import merge_medical_lexicon
+        guidelines = merge_medical_lexicon(guidelines)
+        logger.info("brand-compliance: auditing", script_count=len(scripts), forbidden_count=len(guidelines.get("forbidden_content", [])))
 
         brand_name = _extract_brand_name(guidelines)
         tone = _extract_tone(guidelines)
