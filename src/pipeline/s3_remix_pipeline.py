@@ -643,6 +643,13 @@ class S3InfluencerRemixPipeline:
         clip_details: list[dict[str, Any]] = []
         product_name = product.get("name", "Product")
 
+        # Phase 2 prereq (Oracle review #4): route S3 through ModelRouter.
+        # Default S3 model is kling-3-0/standard (character consistency for
+        # influencer remix). Without this, S3 inherited POYO_VIDEO_MODEL env
+        # default, producing diagnostic R-VENDOR-LOCK mixed-state.
+        from src.pipeline.model_router import select_model
+        s3_model = select_model("s3")
+
         # Collect keyframe image paths for image_to_video mode
         kf_image_paths: list[str] = []
         if keyframe_images:
@@ -666,6 +673,7 @@ class S3InfluencerRemixPipeline:
                     "duration": clip_duration,
                     "resolution": "720p",
                     "output_label": f"{label}_clip_{i}",
+                    "model": s3_model,
                 }
                 if last_frame:
                     gen_params["continuity_frame_path"] = last_frame
