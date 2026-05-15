@@ -18,9 +18,18 @@ if config.config_file_name is not None:
 # No SQLAlchemy ORM models — migrations are hand-written asyncpg SQL.
 target_metadata = None
 
-# Override sqlalchemy.url from DATABASE_URL env var
+# Override sqlalchemy.url from DATABASE_URL env var.
+# Phase 0 #1 (2026-05-15): backend image ships psycopg v3, not psycopg2.
+# SQLAlchemy's default postgres dialect picks psycopg2 unless the URL says
+# otherwise — translate `postgresql://` -> `postgresql+psycopg://` so the
+# v3 driver is used. asyncpg URLs (`postgresql+asyncpg://`) are left as-is
+# and will fail loudly because alembic runs synchronously.
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
+    if database_url.startswith("postgresql://"):
+        database_url = "postgresql+psycopg://" + database_url[len("postgresql://"):]
+    elif database_url.startswith("postgres://"):
+        database_url = "postgresql+psycopg://" + database_url[len("postgres://"):]
     config.set_main_option("sqlalchemy.url", database_url)
 
 # other values from the config, defined by the needs of env.py,
