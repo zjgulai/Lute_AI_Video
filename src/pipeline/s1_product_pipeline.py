@@ -708,7 +708,14 @@ class S1ProductDirectPipeline:
         Each prompt dict from seedance-video-prompt is sent as a separate
         image_to_video call with keyframe anchoring. Continuity chain
         preserves visual consistency across segment boundaries.
+
+        Phase 2 prereq (Oracle review #4): every gen_params dict carries the
+        explicit model id from ModelRouter so S1 / S2 (brand_mode) routes
+        through select_model() instead of inheriting the env-default fallback.
         """
+        from src.pipeline.model_router import select_model
+        s1_model = select_model("s1")
+
         clip_paths: list[str] = []
 
         # Collect keyframe image paths per segment
@@ -754,6 +761,7 @@ class S1ProductDirectPipeline:
                     "duration": int(seg_duration),
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
+                    "model": s1_model,
                 }
 
                 # P1-16: In concurrent mode we rely on keyframe anchoring.
@@ -836,6 +844,7 @@ class S1ProductDirectPipeline:
                 "duration": per_clip_duration,
                 "resolution": "720p",
                 "output_label": f"{label}_clip_filler",
+                "model": s1_model,
             }
             if last_frame_path:
                 filler_params["continuity_frame_path"] = last_frame_path
