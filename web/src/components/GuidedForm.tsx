@@ -196,7 +196,8 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
     return cards[index + 1]?.connectionText || "";
   };
 
-  const scenarioTitle = CONTENT_SCENARIOS.find((s: { id: string; title: string }) => s.id === scene)?.title || scene;
+  const scenarioFromData = CONTENT_SCENARIOS.find((s: { id: string; title: string }) => s.id === scene);
+  const scenarioTitle = t(`scene.${scene}.title`, scenarioFromData?.title || scene);
 
   const progressText = (
     <span>

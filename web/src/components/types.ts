@@ -123,8 +123,8 @@ export const CONTENT_SCENARIOS = [
   },
   {
     id: "brand_vlog",
-    title: "品牌VLOG",
-    desc: "基于品牌素材（六视图+模特+场景+故事）一键生成 VLOG 风格短片",
+    title: "Brand VLOG",
+    desc: "Select product SKU to auto-fill six-view, choose model roles, input story direction, AI generates a complete VLOG narrative video.",
     iconName: SCENE_ICON_NAMES.brand_vlog,
     platforms: ["tiktok", "shopify", "youtube_shorts"],
   },
