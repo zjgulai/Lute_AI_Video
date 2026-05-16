@@ -15,6 +15,7 @@ from typing import Any
 
 import structlog
 
+from src.pipeline.feedback_gate import evaluate_upstream_quality
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -38,6 +39,44 @@ class KeyframeImagesSkill(SkillCallable):
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         storyboard: dict[str, Any] = params["storyboard"]
+
+        gate_attempt = int(params.get("_quality_attempt", 0))
+        gate_decision, gate_score, gate_reason = evaluate_upstream_quality(
+            upstream_data=storyboard,
+            consumer="keyframe_images",
+            attempt=gate_attempt,
+        )
+        if gate_decision == "regenerate":
+            logger.info(
+                "keyframe: feedback_gate regenerate",
+                score=gate_score,
+                attempt=gate_attempt,
+                reason=gate_reason,
+            )
+            return SkillResult(
+                success=False,
+                data={
+                    "regenerate_upstream": "storyboard",
+                    "reason": gate_reason,
+                    "score": gate_score,
+                    "consumer": "keyframe_images",
+                    "attempt": gate_attempt,
+                },
+                error=gate_reason,
+                metadata={
+                    "regenerate_upstream": "storyboard",
+                    "feedback_gate_score": gate_score,
+                    "feedback_gate_attempt": gate_attempt,
+                },
+            )
+        if gate_decision == "warn":
+            params["_quality_warning"] = gate_reason
+            logger.warning(
+                "keyframe: feedback_gate warn",
+                score=gate_score,
+                reason=gate_reason,
+            )
+
         shots: list[dict[str, Any]] = storyboard.get("shots", [])
         identity_card: dict[str, Any] | None = params.get("identity_card")
 
@@ -91,6 +130,8 @@ class KeyframeImagesSkill(SkillCallable):
             capped_shots[i]["keyframe_prompt"] = comp_prompt
 
         storyboard["keyframes_generated"] = len(capped_shots)
+        if params.get("_quality_warning"):
+            storyboard["_quality_warning"] = params["_quality_warning"]
         return SkillResult(success=True, data=storyboard)
 
     # ── Prompt composition ──

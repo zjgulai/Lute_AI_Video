@@ -84,6 +84,7 @@ def _create_sqlite_tables() -> None:
             degraded_reason TEXT,
             trace_id TEXT,
             structured_errors TEXT DEFAULT '[]',
+            regenerate_chain TEXT DEFAULT '[]',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );

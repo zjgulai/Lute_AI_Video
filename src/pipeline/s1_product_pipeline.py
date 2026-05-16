@@ -294,6 +294,9 @@ class S1ProductDirectPipeline:
 
         if step_name == "keyframe_images":
             storyboards = self._get_step_output(steps, "storyboards") or []
+            quality_attempt = int(steps.get("storyboards", {}).get("_quality_attempt", 0))
+            if quality_attempt and storyboards:
+                storyboards = [{**sb, "_quality_attempt": quality_attempt} for sb in storyboards]
             return await self._step_keyframe_images(
                 reg=reg,
                 storyboards=storyboards,
@@ -526,14 +529,37 @@ class S1ProductDirectPipeline:
 
         Serial generation: poyo.ai has strict concurrency limits on
         image generation tasks. Parallel requests cause queue rejects.
+
+        TODO-D11: if any storyboard's quality gate triggers regenerate
+        upstream, propagate the signal as a marker on the first returned
+        storyboard. step_runner detects and dispatches the regenerate.
         """
         keyframe_results: list[dict[str, Any]] = []
+        regenerate_signal: dict[str, Any] | None = None
         for sb in storyboards[:MAX_CLIPS_PER_DEMO]:
             res = await reg.execute("keyframe-images", {
                 "storyboard": sb,
                 "size": "1024x1792",
                 "quality": "high",
+                "_quality_attempt": sb.get("_quality_attempt", 0),
             })
+            if (
+                not res.success
+                and isinstance(res.data, dict)
+                and res.data.get("regenerate_upstream")
+                and regenerate_signal is None
+            ):
+                regenerate_signal = {
+                    "_regenerate_upstream": res.data["regenerate_upstream"],
+                    "reason": res.data.get("reason", ""),
+                    "score": res.data.get("score"),
+                    "consumer": res.data.get("consumer", "keyframe_images"),
+                    "attempt": res.data.get("attempt", 0),
+                }
+                fallback_sb = dict(sb)
+                fallback_sb.update(regenerate_signal)
+                keyframe_results.append(fallback_sb)
+                continue
             if res.success and res.data:
                 keyframe_results.append(res.data)
             else:

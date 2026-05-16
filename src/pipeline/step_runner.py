@@ -32,6 +32,32 @@ def _get_gate_id_for_step(step_name: str, scenario: str = "s1") -> str:
             return gate_id
     return ""
 
+
+_SCENARIO_REGENERATE_STEP_MAP: dict[str, str] = {
+    "storyboard": "storyboards",
+    "storyboards": "storyboards",
+    "seedance_prompt": "video_prompts",
+    "video_prompts": "video_prompts",
+    "script_writer": "scripts",
+    "scripts": "scripts",
+}
+
+
+def _detect_regenerate_signal(result: Any) -> dict[str, Any] | None:
+    """Inspect a step result for the TODO-D11 regenerate sentinel.
+
+    Contract: a step that hit feedback_gate may embed a marker dict
+    `{"_regenerate_upstream": "<upstream_skill>", "score": ..., "reason": ...,
+       "consumer": ..., "attempt": ...}` either as the first element of a
+    list result or as a top-level dict. Returns the marker if found, else None.
+    """
+    if isinstance(result, dict) and result.get("_regenerate_upstream"):
+        return result
+    if isinstance(result, list) and result and isinstance(result[0], dict) and result[0].get("_regenerate_upstream"):
+        return result[0]
+    return None
+
+
 logger = structlog.get_logger()
 
 # Ordered list of all pipeline step names
@@ -393,7 +419,17 @@ class StepRunner:
             success=True,
         )
 
-        # Update state with result and actual duration
+        regen_signal = _detect_regenerate_signal(result)
+        if regen_signal is not None:
+            return await self._handle_regenerate_signal(
+                state=state,
+                step_name=step_name,
+                step_data=step_data,
+                step_duration_ms=step_duration_ms,
+                signal=regen_signal,
+                trace_id=trace_id,
+            )
+
         step_data["output"] = result
         step_data["status"] = "done"
         step_data["completed_at"] = datetime.now().isoformat()
@@ -421,4 +457,69 @@ class StepRunner:
 
         await self.state_manager.save(state["label"], state)
         logger.info("step_runner: step complete", step=step_name, label=state["label"], trace_id=trace_id, duration_ms=round(step_duration_ms, 2))
+        return state
+
+    async def _handle_regenerate_signal(
+        self,
+        state: dict[str, Any],
+        step_name: str,
+        step_data: dict[str, Any],
+        step_duration_ms: float,
+        signal: dict[str, Any],
+        trace_id: str,
+    ) -> dict[str, Any]:
+        """TODO-D11: handle a feedback_gate regenerate-upstream signal.
+
+        Records one entry to state.regenerate_chain (audit trail), bumps
+        the upstream step's _quality_attempt counter, then re-queues the
+        upstream step by setting current_step + status='pending'. The
+        downstream step that emitted the signal stays unchanged so the
+        next loop will re-run it after upstream regenerates.
+        """
+        upstream_skill = signal.get("_regenerate_upstream") or signal.get("regenerate_upstream") or ""
+        upstream_step = _SCENARIO_REGENERATE_STEP_MAP.get(upstream_skill, upstream_skill)
+        steps = state.get("steps", {})
+        if upstream_step not in steps:
+            logger.warning(
+                "step_runner: regenerate signal points at unknown upstream step",
+                upstream_skill=upstream_skill,
+                upstream_step=upstream_step,
+                consumer=step_name,
+                trace_id=trace_id,
+            )
+            step_data["status"] = "done"
+            step_data["completed_at"] = datetime.now().isoformat()
+            step_data["duration_ms"] = round(step_duration_ms)
+            await self.state_manager.save(state["label"], state)
+            return state
+
+        chain: list[dict[str, Any]] = state.setdefault("regenerate_chain", [])
+        attempt = int(signal.get("attempt", 0)) + 1
+        chain.append({
+            "ts": datetime.now().isoformat(),
+            "consumer": signal.get("consumer", step_name),
+            "upstream_skill": upstream_skill,
+            "upstream_step": upstream_step,
+            "score": signal.get("score"),
+            "reason": signal.get("reason", ""),
+            "attempt": attempt,
+            "trace_id": trace_id,
+        })
+
+        upstream_step_data = steps[upstream_step]
+        upstream_step_data["status"] = "pending"
+        upstream_step_data["_quality_attempt"] = attempt
+        upstream_step_data.pop("completed_at", None)
+        step_data["status"] = "pending"
+        step_data.pop("completed_at", None)
+        state["current_step"] = upstream_step
+        logger.info(
+            "step_runner: feedback_gate regenerate dispatched",
+            consumer=step_name,
+            upstream_step=upstream_step,
+            attempt=attempt,
+            score=signal.get("score"),
+            trace_id=trace_id,
+        )
+        await self.state_manager.save(state["label"], state)
         return state
