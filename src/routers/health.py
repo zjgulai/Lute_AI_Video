@@ -88,9 +88,21 @@ async def health():
         except Exception as e:
             persistence_status["error"] = str(e)[:200]
 
+    media_tools: dict[str, Any] = {}
+    try:
+        from src.tools.video_downloader import VideoDownloader
+        downloader = VideoDownloader()
+        media_tools["ytdlp_available"] = downloader._ytdlp_available
+        media_tools["whisper_available"] = downloader._whisper_available
+    except Exception as e:
+        media_tools["error"] = str(e)[:200]
+        media_tools["ytdlp_available"] = False
+        media_tools["whisper_available"] = False
+
     return {
         "status": "ok",
-        "version": "0.2.0",
+        "version": "0.2.5",
         "remotion": remotion_env,
         "persistence": persistence_status,
+        "media_tools": media_tools,
     }

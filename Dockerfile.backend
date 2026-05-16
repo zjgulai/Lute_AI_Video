@@ -17,8 +17,10 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
 # Install system deps:
 #   - gcc, libpq-dev: psycopg2-binary, pillow build deps
 #   - ffmpeg: required by seedance_video_generate._measure_duration (ffprobe)
-#     and _build_stub_mp4/_extract_last_frame. Without it, real POYO MP4s fail
-#     duration verification and get fallback'd to 20-byte stubs.
+#     and _build_stub_mp4/_extract_last_frame. Also required by yt-dlp post-
+#     processing (--extract-audio, format conversion) for S3 KOL video
+#     download path. Without ffmpeg, real POYO MP4s fail duration verification
+#     and yt-dlp post-process steps fail.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev ffmpeg && \
     rm -rf /var/lib/apt/lists/*
