@@ -28,6 +28,7 @@ function LibraryContent() {
 
   useEffect(() => {
     if (isTabId(paramTab) && paramTab !== activeTab) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab(paramTab);
     }
   }, [paramTab, activeTab]);

@@ -63,6 +63,7 @@ export default function InfluencersTab() {
     }
   }, [t]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchInfluencers(); }, [fetchInfluencers]);
 
   const openCreateForm = () => {

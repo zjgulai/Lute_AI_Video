@@ -111,3 +111,7 @@ assets/portfolio/index.json
 # Next.js build cache
 .next/
 .next.old/
+
+# Baidu Cloud Sync temp metadata
+*.baiduyun.uploading.cfg
+.*.baiduyun.uploading.cfg

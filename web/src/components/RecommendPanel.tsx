@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Sparkle } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import DurationSlider from "./DurationSlider";
@@ -26,12 +26,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   const [error, setError] = useState("");
 
   const [starting, setStarting] = useState(false);
-  useEffect(() => {
-    fetchRecommendation();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  async function fetchRecommendation() {
+  const fetchRecommendation = useCallback(async () => {
     // Demo mode: use mock data, skip all API calls
     if (isDemoMode()) {
       try {
@@ -80,7 +76,12 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
       setError(errorMessage(e, "Failed to get recommendation"));
       setLoading(false);
     }
-  }
+  }, [config]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRecommendation();
+  }, [fetchRecommendation]);
 
   function handleStart() {
     if (starting) return;

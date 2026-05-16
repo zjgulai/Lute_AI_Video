@@ -39,22 +39,7 @@ export default function AssetUploader({ onUpload }: Props) {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files?.length) {
-      uploadFiles(e.dataTransfer.files);
-    }
-  }, []);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      uploadFiles(e.target.files);
-    }
-  };
-
-  const uploadFiles = (files: FileList) => {
+  const uploadFiles = useCallback((files: FileList) => {
     void wrap(async () => {
       const uploaded: UploadResult[] = [];
 
@@ -79,6 +64,21 @@ export default function AssetUploader({ onUpload }: Props) {
       setResults(uploaded);
       onUpload?.(uploaded);
     });
+  }, [wrap, onUpload]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files?.length) {
+      uploadFiles(e.dataTransfer.files);
+    }
+  }, [uploadFiles]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
+      uploadFiles(e.target.files);
+    }
   };
 
   const getFileIcon = (filename: string) => {

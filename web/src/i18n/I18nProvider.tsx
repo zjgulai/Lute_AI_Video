@@ -63,6 +63,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     } catch {
       chosen = detectBrowserLocale();
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocaleState(chosen);
     setHydrated(true);
     if (typeof document !== "undefined") {

@@ -108,6 +108,7 @@ export default function PipelineStatusBar() {
 
   useEffect(() => {
     if (!activePipeline) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSnapshot(null);
       setElapsed(0);
       completionNotifiedRef.current = false;

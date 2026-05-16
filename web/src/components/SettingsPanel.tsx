@@ -33,6 +33,7 @@ export default function SettingsPanel({ onClose }: Props) {
   } | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBaseUrl(getApiBase());
     setKey(getApiKey());
     setDemo(isDemoMode());

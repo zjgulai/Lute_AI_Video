@@ -21,6 +21,7 @@ export default function ApiKeyGate({ onUnlock }: Props) {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("session_expired") === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessionExpired(true);
       params.delete("session_expired");
       const newSearch = params.toString();

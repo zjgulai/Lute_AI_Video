@@ -131,6 +131,7 @@ export default function MaterialsTab() {
     }
   }, [t]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchAssets(); }, [fetchAssets]);
 
   const filteredAssets = useMemo(() => {

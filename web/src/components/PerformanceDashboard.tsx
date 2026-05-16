@@ -80,6 +80,7 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
   }, [scenarioFilter, platformFilter, timeFilter, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, [loadData]);
 

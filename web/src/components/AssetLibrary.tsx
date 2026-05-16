@@ -63,6 +63,7 @@ export default function AssetLibrary({ onClose }: Props) {
   }, [locale]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAssets();
   }, [loadAssets]);
 

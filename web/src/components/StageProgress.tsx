@@ -160,6 +160,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
     const newComplete = stageStates.map((s) => s.allDone);
     const triggered = newComplete.map((c, i) => c && !prevComplete[i]);
     if (triggered.some(Boolean)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCelebrations(triggered);
       setTimeout(() => setCelebrations([false, false, false]), 1200);
     }
@@ -177,6 +178,9 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
   }, []);
 
   // Polling with exponential backoff
+  // Use ref for self-reference (react-hooks/no-use-before-define safe)
+  const pollRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const poll = useCallback(async () => {
     if (completedRef.current || pollError) return;
 
@@ -231,8 +235,11 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       POLL_BASE_INTERVAL_MS * Math.pow(2, failureCountRef.current),
       POLL_MAX_INTERVAL_MS
     );
-    timeoutRef.current = setTimeout(poll, backoffMs);
+    timeoutRef.current = setTimeout(() => pollRef.current(), backoffMs);
   }, [label, scenario, onComplete, onGatePause, onError, pollError, t, STAGES]);
+
+  // Keep ref synced with latest poll callback
+  pollRef.current = poll;
 
   useEffect(() => {
     timeoutRef.current = setTimeout(poll, POLL_BASE_INTERVAL_MS);

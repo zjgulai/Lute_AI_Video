@@ -95,6 +95,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
       const stored = localStorage.getItem("hermes_gallery_items");
       if (stored) {
         const items = JSON.parse(stored);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setRecentWorks(items.slice(0, 2));
       }
     } catch {
@@ -105,6 +106,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
   const scenario = CONTENT_SCENARIOS.find((s) => s.id === selectedScenario);
   useEffect(() => {
     if (scenario) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedPlatforms([...scenario.platforms]);
     }
   }, [selectedScenario]);
