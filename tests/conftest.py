@@ -7,8 +7,13 @@ import os
 # src.api / src.routers 在测试 import 时拿到稳定的 API_KEY。
 os.environ.setdefault("API_KEY", "test-api-key-for-pytest")
 
-import pytest
+# ADR-004 Option D: production default is disabled. Tests that need the
+# live path either patch the flag explicitly or rely on this default-off.
+os.environ.setdefault("S3_VIRAL_EXTRACT_DISABLED", "0")
+
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 @pytest.fixture
@@ -118,7 +123,7 @@ def sample_brand_guidelines():
 @pytest.fixture
 def sample_brief():
     """A single brief for unit testing downstream nodes."""
-    from src.models import Brief, VideoType, Platform, Language
+    from src.models import Brief, Language, Platform, VideoType
 
     return Brief(
         id="BRIEF-001",
@@ -135,7 +140,7 @@ def sample_brief():
 @pytest.fixture
 def sample_script(sample_brief):
     """A sample script for testing downstream nodes."""
-    from src.models import Script, ScriptSegment, Platform, Language
+    from src.models import Language, Platform, Script, ScriptSegment
 
     return Script(
         id="SCRIPT-BRIEF-001-EN",

@@ -178,6 +178,10 @@ POYO_TTS_MODEL: str = os.environ.get("POYO_TTS_MODEL", "generate-music")
 ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "development")
 ALLOW_MOCK_MODE: bool = os.environ.get("ALLOW_MOCK_MODE", "").lower() in ("1", "true", "yes")
 
+# ── S3 copyright safety (ADR-004 Option D) ──
+# Default 1 = disabled. Flip to 0 ONLY after legal sign-off + fingerprint pre-screen.
+S3_VIRAL_EXTRACT_DISABLED: bool = os.environ.get("S3_VIRAL_EXTRACT_DISABLED", "1").lower() in ("1", "true", "yes")
+
 # ── Quality checks mode ──
 # off: disable all new quality checks (backward compatible)
 # observe: run checks and record results in metadata, but do not block pipeline

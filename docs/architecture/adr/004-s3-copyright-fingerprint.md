@@ -1,16 +1,17 @@
 ---
 name: adr-004-s3-copyright-fingerprint
-description: ADR #004 文档（Proposed），评估 S3 Influencer Remix 场景下版权指纹预审（Pex / Audible Magic / 自建 Chromaprint+AcoustID / 跳过 4 个方案）的 5 维度对比与推荐路径。当决定 S3 是否引入版权预审、选型商业 vs 自建、估算合规成本时使用。
+description: ADR #004 文档（Accepted: Option D），评估 S3 Influencer Remix 场景下版权指纹预审（Pex / Audible Magic / 自建 Chromaprint+AcoustID / 跳过 4 个方案）的 5 维度对比与推荐路径。决议 2026-05-17 选 Option D（关闭 S3 viral 提取接口），通过 S3_VIRAL_EXTRACT_DISABLED=1 feature flag 实现。当决定 S3 是否引入版权预审、选型商业 vs 自建、估算合规成本时使用。
 ---
 
 # ADR #004 — S3 Influencer Remix 版权指纹预审选型
 
 | | |
 |---|---|
-| **状态** | Proposed（等待用户决策） |
-| **日期** | 2026-05-15 |
-| **决策者** | 工程团队 + 法务 + 业务（待 Sign-off） |
+| **状态** | **Accepted: Option D**（2026-05-17 用户决策） |
+| **日期** | 2026-05-15（Proposed）→ 2026-05-17（Accepted） |
+| **决策者** | 用户 + 工程团队 |
 | **影响** | S3 场景流程、合规风险、运营成本、上线时间 |
+| **实施** | commit T2 — `S3_VIRAL_EXTRACT_DISABLED=1` env flag (default), `src/pipeline/s3_remix_pipeline.py:_step_video_analysis` early-return + reuse `_soft_degraded` fallback, `tests/test_s3_viral_disabled.py` 3 tests |
 
 ## 一、Context
 

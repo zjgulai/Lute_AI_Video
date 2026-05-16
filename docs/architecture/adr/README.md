@@ -20,7 +20,7 @@ description: ADR 索引文档，列出本仓库所有架构决策记录（ADR）
 | [001](./001-dual-runtime.md) | Dual Runtime Strategy | Accepted | Python FastAPI 后端 + Node.js Remotion 渲染服务，通过 HTTP + 共享 volume 通信 |
 | [002](./002-two-layer-auth.md) | Two-Layer Auth Architecture | Accepted | 业务接口 `X-API-Key` 无状态 + 管理后台 Cookie session 有状态，两套并行 |
 | [003](./003-db-strategy.md) | PostgreSQL First, SQLite Fallback | Accepted | 生产 PG fail-fast，本地 dev / CI SQLite 默认，禁止静默退化 |
-| [004](./004-s3-copyright-fingerprint.md) | S3 Copyright Fingerprint Selection | **Proposed** | Pex / Audible Magic / 自建 / 跳过 4 方案 5 维度对比，待用户回答预算 + 法务诉求后定 |
+| [004](./004-s3-copyright-fingerprint.md) | S3 Copyright Fingerprint Selection | **Accepted: Option D** | 2026-05-17 决议：关闭 S3 viral 提取接口（`S3_VIRAL_EXTRACT_DISABLED=1` 默认）。Pex/Audible Magic/自建均超预算或工期，跳过技术方案，等业务需求重启再评估 |
 
 ## 写新 ADR
 

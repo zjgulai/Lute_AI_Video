@@ -36,7 +36,7 @@ import src.skills.seedance_prompt  # noqa: F401 — auto-register
 import src.skills.seedance_video_generate  # noqa: F401 — auto-register (NEW)
 import src.skills.thumbnail_prompt  # noqa: F401 — auto-register
 import src.skills.video_analysis  # noqa: F401 — auto-register
-from src.config import OUTPUT_DIR
+from src.config import OUTPUT_DIR, S3_VIRAL_EXTRACT_DISABLED
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -131,10 +131,15 @@ class S3InfluencerRemixPipeline:
                 extract_segments=config.get("extract_segments", True),
             )
             if not res.success:
+                disabled_by_policy = res.error == "s3_viral_extract_disabled_by_policy"
                 errors.append(f"video_analysis_failed: {res.error}")
                 return {
                     "_soft_degraded": True,
-                    "_degraded_reason": "video_analysis_failed_using_fallback",
+                    "_degraded_reason": (
+                        "s3_viral_extract_disabled_adr004"
+                        if disabled_by_policy
+                        else "video_analysis_failed_using_fallback"
+                    ),
                     "_degraded_detail": str(res.error or "unknown")[:200],
                     "viral_segments": [],
                     "fallback_prompt": (
@@ -360,6 +365,16 @@ class S3InfluencerRemixPipeline:
         video_url: str,
         extract_segments: bool,
     ) -> SkillResult:
+        if S3_VIRAL_EXTRACT_DISABLED:
+            logger.warning(
+                "s3: video_analysis skipped — S3_VIRAL_EXTRACT_DISABLED=1 (ADR-004 Option D)",
+                video_url=video_url,
+            )
+            return SkillResult(
+                success=False,
+                error="s3_viral_extract_disabled_by_policy",
+                data=None,
+            )
         logger.info("s3: step 1 — video analysis")
         return await self._registry.execute("video-analysis-skill", {
             "video_url": video_url,
