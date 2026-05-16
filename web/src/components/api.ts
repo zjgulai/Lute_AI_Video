@@ -57,7 +57,7 @@ function storageRemove(key: string): void {
 
 function readEnv(key: string): string | undefined {
   if (typeof process === "undefined") return undefined;
-  return (process as any).env?.[key] as string | undefined;
+  return (process as unknown as { env?: Record<string, string | undefined> }).env?.[key];
 }
 
 /** Backend API base URL (runtime-configurable via localStorage or env). */
@@ -181,7 +181,7 @@ export function getHeaders(contentType = true): Record<string, string> {
 // 调试时通过 localStorage.setItem('debug_api', '1') 显式开启。
 function _initialLogEnabled(): boolean {
   if (typeof window === "undefined") return true; // SSR 默认开
-  if (typeof process !== "undefined" && (process as any).env?.NODE_ENV === "production") {
+  if (typeof process !== "undefined" && (process as unknown as { env?: { NODE_ENV?: string } }).env?.NODE_ENV === "production") {
     try {
       return localStorage.getItem("debug_api") === "1";
     } catch {
@@ -209,14 +209,14 @@ export function isApiLoggingEnabled(): boolean {
  * 命中规则(字段名小写):key/token/secret/password/auth/api_keys/x-api-key/_key/apikey。
  * 输入任意值,原对象不被修改。返回脱敏副本。
  */
-function redactSensitive(value: any, depth = 0): any {
+function redactSensitive(value: unknown, depth = 0): unknown {
   if (depth > 6) return "[redacted-depth-limit]";
   if (value == null) return value;
   if (Array.isArray(value)) {
     return value.map((v) => redactSensitive(v, depth + 1));
   }
   if (typeof value === "object") {
-    const out: Record<string, any> = {};
+    const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       const kLower = k.toLowerCase();
       if (
@@ -370,7 +370,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 
   // Merge trace ID
   mergedHeaders["X-Client-Trace-Id"] = traceId;
-  let mergedInit: RequestInit = { ...init, headers: mergedHeaders };
+  const mergedInit: RequestInit = { ...init, headers: mergedHeaders };
 
   // P3-5: Apply timeout via AbortController (respect caller's signal)
   const timeoutMs = _getTimeoutMs(absUrl);
@@ -396,7 +396,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
   }
 
   // P3-5: Inner fetch with retry logic
-  let lastError: any;
+  let lastError: unknown;
   const maxRetries = isHealthUrl(absUrl) ? 0 : API_FETCH_MAX_RETRIES;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -471,7 +471,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 
   const duration = Math.round(performance.now() - start);
   if (_apiLogEnabled) {
-    console.error(`[HERMES:ERR] NETWORK_ERROR (${duration}ms) trace_id=${traceId}`, lastError?.message || "Unknown error");
+    console.error(`[HERMES:ERR] NETWORK_ERROR (${duration}ms) trace_id=${traceId}`, (lastError as { message?: string } | undefined)?.message || "Unknown error");
   }
   throw lastError;
 }
@@ -557,7 +557,7 @@ export function isApiError(e: unknown): e is ApiError {
 // ── Core pipeline APIs ──
 
 /** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
-export async function startPipeline(body: any, options?: { signal?: AbortSignal }): Promise<any> {
+export async function startPipeline(body: unknown, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch("/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
@@ -618,7 +618,7 @@ export async function fetchOutput(threadId: string, options?: { signal?: AbortSi
 
 // ── Scenario pipelines (skill-based, no LangGraph) ──
 
-export async function runS1ProductDirect(config: any, options?: { signal?: AbortSignal }): Promise<any> {
+export async function runS1ProductDirect(config: unknown, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch("/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
@@ -631,7 +631,7 @@ export async function runS1ProductDirect(config: any, options?: { signal?: Abort
 
 /** @deprecated S2 is a thin wrapper around S1. Use runS1ProductDirect with brand_mode=true. */
 export async function runS2BrandCampaign(body: {
-  brand_package: any;
+  brand_package: unknown;
   target_platforms?: string[];
   target_languages?: string[];
   week?: string;
@@ -649,7 +649,7 @@ export async function runS2BrandCampaign(body: {
 /** @deprecated Use /scenario/s3 (StepRunner) instead. */
 export async function runS3InfluencerRemix(body: {
   video_url: string;
-  product: any;
+  product: unknown;
   influencer_name?: string;
   brief_id?: string;
   video_duration?: number;
@@ -665,8 +665,8 @@ export async function runS3InfluencerRemix(body: {
 }
 
 export async function runS4LiveShoot(body: {
-  footage_assets: any[];
-  product_info: any;
+  footage_assets: unknown[];
+  product_info: unknown;
   topic?: string;
   target_platforms?: string[];
 }, options?: { signal?: AbortSignal }): Promise<any> {
@@ -682,11 +682,11 @@ export async function runS4LiveShoot(body: {
 
 // ── S1 Step-by-step pipeline APIs ──
 
-export async function startS1StepByStep(config: any, options?: { signal?: AbortSignal }): Promise<any> {
+export async function startS1StepByStep(config: unknown, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch("/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({ ...config, mode: "step_by_step" }),
+    body: JSON.stringify({ ...(config as Record<string, unknown>), mode: "step_by_step" }),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("S1 step-by-step start failed: " + res.statusText);
@@ -735,7 +735,7 @@ export async function fetchS1State(label: string, options?: { signal?: AbortSign
   return res.json();
 }
 
-export async function updateS1State(label: string, updates: any, options?: { signal?: AbortSignal }): Promise<any> {
+export async function updateS1State(label: string, updates: unknown, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch("/scenario/s1/state/" + label, {
     method: "PUT",
     headers: getHeaders(),
@@ -746,7 +746,7 @@ export async function updateS1State(label: string, updates: any, options?: { sig
   return res.json();
 }
 
-export function downloadJson(data: any, filename: string) {
+export function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -756,7 +756,7 @@ export function downloadJson(data: any, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<any[]> {
+export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<unknown[]> {
   if (isDemoMode()) {
     const { DEMO_ASSETS } = await import("@/demo-data");
     return DEMO_ASSETS;
@@ -912,7 +912,7 @@ export async function adminFetch(
 /**
  * Fetch JSON from admin API. Returns parsed data or throws on error.
  */
-export async function adminFetchJson<T = any>(
+export async function adminFetchJson<T = unknown>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
@@ -926,7 +926,7 @@ export async function adminFetchJson<T = any>(
 
 // ── Connection test ──
 
-export async function testConnection(options?: { signal?: AbortSignal }): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
+export async function testConnection(options?: { signal?: AbortSignal }): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> {
   try {
     const res = await apiFetch("/health", {
       headers: getHeaders(false),
@@ -946,9 +946,9 @@ export async function testConnection(options?: { signal?: AbortSignal }): Promis
 
 export async function runS5BrandVlog(body: {
   brand_id: string;
-  product_sku: any;
+  product_sku: unknown;
   scene_id: string;
-  selected_models: any[];
+  selected_models: unknown[];
   story_description: string;
   video_duration: number;
 }, options?: { signal?: AbortSignal }): Promise<any> {
@@ -971,7 +971,7 @@ export async function runS5BrandVlog(body: {
  */
 export async function submitScenario(
   scenario: string,
-  body: any,
+  body: unknown,
   options?: { signal?: AbortSignal }
 ): Promise<{ label: string; status: string; trace_id: string }> {
   const res = await apiFetch("/scenario/" + scenario + "/submit", {
@@ -1001,8 +1001,8 @@ export async function getScenarioStatus(
   pipeline_degraded: boolean;
   gate_status: string | null;
   errors: string[];
-  steps?: Record<string, any>;
-  result?: any;
+  steps?: Record<string, unknown>;
+  result?: unknown;
 }> {
   const res = await apiFetch(`/scenario/${scenario}/status/${encodeURIComponent(label)}`, {
     headers: getHeaders(false),
@@ -1014,7 +1014,7 @@ export async function getScenarioStatus(
 
 // ── Distribution publishing APIs ──
 
-export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promise<any[]> {
+export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promise<unknown[]> {
   const res = await apiFetch("/distribution/platforms", {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -1024,7 +1024,7 @@ export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promis
   return data.platforms || [];
 }
 
-export async function publishContent(platform: string, content: any, options?: { signal?: AbortSignal }): Promise<any> {
+export async function publishContent(platform: string, content: unknown, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch("/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
@@ -1046,7 +1046,7 @@ export async function fetchPublishStatus(platform: string, postId: string, optio
 
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
-export async function publishVideo(videoId: string, platforms: string[], metadata: any, options?: { signal?: AbortSignal }): Promise<any> {
+export async function publishVideo(videoId: string, platforms: string[], metadata: unknown, options?: { signal?: AbortSignal }): Promise<any> {
   const res = await apiFetch("/publish/" + videoId, {
     method: "POST", headers: getHeaders(),
     body: JSON.stringify({ platforms, metadata }),
@@ -1116,11 +1116,11 @@ export async function generateFastMode(body: {
 export function logUI(
   action: "CLICK" | "NAV" | "SUBMIT" | "TOGGLE" | "SELECT" | "INPUT" | "RESET",
   component: string,
-  details?: Record<string, any>
+  details?: Record<string, unknown>
 ) {
   const traceId = genTraceId();
   const detailStr = details ? JSON.stringify(details) : "";
-  // eslint-disable-next-line no-console
+   
   console.log(`[HERMES:UI]   ${action.padEnd(6)} ${component.padEnd(24)} trace=${traceId}${detailStr ? " " + detailStr : ""}`);
   return traceId;
 }
@@ -1128,28 +1128,28 @@ export function logUI(
 /** Pipeline 生命周期日志 — 记录 pipeline 启动/步骤/完成/错误 */
 export function logPipe(
   event: "START" | "STEP" | "GATE" | "COMPLETE" | "CANCEL" | "ERROR" | "RECOVER",
-  details?: Record<string, any>
+  details?: Record<string, unknown>
 ) {
   const traceId = genTraceId();
   const detailStr = details ? JSON.stringify(details) : "";
   const level = event === "ERROR" ? "error" : "log";
-  // eslint-disable-next-line no-console
+   
   console[level](`[HERMES:PIPE]  ${event.padEnd(8)} ${detailStr ? " " + detailStr : ""} trace=${traceId}`);
   return traceId;
 }
 
 /** 辅助：生成状态变化日志 */
-export function logStateChange(store: string, key: string, oldVal: any, newVal: any) {
+export function logStateChange(store: string, key: string, oldVal: unknown, newVal: unknown) {
   const oldStr = oldVal === undefined || oldVal === null ? "null" : String(oldVal).slice(0, 40);
   const newStr = newVal === undefined || newVal === null ? "null" : String(newVal).slice(0, 40);
-  // eslint-disable-next-line no-console
+   
   console.log(`[HERMES:STATE] ${store}.${key.padEnd(20)} ${oldStr} → ${newStr}`);
 }
 
 /** 辅助：生成 bug 检测日志（用于断言失败时） */
 export function logBug(assertion: string, expected: string, actual: string, context?: Record<string, any>) {
   const traceId = genTraceId();
-  // eslint-disable-next-line no-console
+   
   console.error(
     `[HERMES:BUG]   ASSERT_FAIL ${assertion} expected="${expected}" actual="${actual}" trace=${traceId}`,
     context || ""
@@ -1161,7 +1161,7 @@ export function logBug(assertion: string, expected: string, actual: string, cont
 export function logTest(testId: string, passed: boolean, message?: string) {
   const status = passed ? "PASS" : "FAIL";
   const traceId = genTraceId();
-  // eslint-disable-next-line no-console
+   
   console[passed ? "log" : "error"](`[HERMES:TEST]  ${status.padEnd(4)} ${testId.padEnd(12)} ${message || ""} trace=${traceId}`);
   return traceId;
 }

@@ -12,15 +12,15 @@ export interface ActivePipeline {
 interface PipelineState {
   threadId: string | null;
   reviewState: ReviewState | null;
-  oneshotResult: any | null;
+  oneshotResult: unknown | null;
   oneshotScenario: string;
   stepByStepLabel: string | null;
-  stepByStepState: any | null;
+  stepByStepState: unknown | null;
   showStepByStep: boolean;
   smartCreateLabel: string | null;
-  workflowConfig: any | null;
+  workflowConfig: unknown | null;
   workflowLabel: string | null;
-  workflowState: any | null;
+  workflowState: unknown | null;
   showWorkflow: boolean;
   workflowRerenderKey: number;
   currentStepIdx: number;
@@ -30,15 +30,15 @@ interface PipelineState {
 
   setThreadId: (id: string | null) => void;
   setReviewState: (state: ReviewState | null) => void;
-  setOneshotResult: (result: any | null) => void;
+  setOneshotResult: (result: unknown | null) => void;
   setOneshotScenario: (scenario: string) => void;
   setStepByStepLabel: (label: string | null) => void;
-  setStepByStepState: (state: any | null) => void;
+  setStepByStepState: (state: unknown | null) => void;
   setShowStepByStep: (v: boolean) => void;
   setSmartCreateLabel: (label: string | null) => void;
-  setWorkflowConfig: (config: any | null) => void;
+  setWorkflowConfig: (config: unknown | null) => void;
   setWorkflowLabel: (label: string | null) => void;
-  setWorkflowState: (state: any | null) => void;
+  setWorkflowState: (state: unknown | null) => void;
   setShowWorkflow: (v: boolean) => void;
   setWorkflowRerenderKey: (key: number) => void;
   setCurrentStepIdx: (idx: number) => void;

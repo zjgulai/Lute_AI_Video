@@ -6,9 +6,9 @@ import { errorMessage } from "@/lib/errors";
 
 interface Props {
   label: string;
-  state: any;
-  onStepComplete: (newState: any) => void;
-  onResume: (finalState: any) => void;
+  state: Record<string, unknown>;
+  onStepComplete: (newState: Record<string, unknown>) => void;
+  onResume: (finalState: Record<string, unknown>) => void;
   onError?: (message: string) => void;
   loading: boolean;
 }
@@ -64,8 +64,8 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
   const [editValue, setEditValue] = useState<string>("");
   const [confirmRegen, setConfirmRegen] = useState<string | null>(null);
 
-  const steps = state?.steps || {};
-  const stepOrder: string[] = state?.meta?.step_order || _FALLBACK_STEP_ORDER;
+  const steps = (state?.steps as Record<string, Record<string, unknown>>) || {};
+  const stepOrder: string[] = (state?.meta as Record<string, unknown>)?.step_order as string[] || _FALLBACK_STEP_ORDER;
 
   const getCurrentStep = (): string | null => {
     for (const step of stepOrder) {

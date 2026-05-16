@@ -46,13 +46,16 @@ interface AppState {
 }
 
 // 带日志的 setter 包装器 — 只记录关键 state 变化
-function loggedSet(set: any, get: any) {
-  return (patch: any) => {
+function loggedSet(
+  set: (patch: Partial<AppState>) => void,
+  get: () => AppState,
+) {
+  return (patch: Partial<AppState>) => {
     const prev = get();
     set(patch);
     const next = get();
     // 只记录关键字段的变化
-    const trackedKeys = ["stage", "activeScene", "mode", "loading", "disconnected", "showSettings"];
+    const trackedKeys: (keyof AppState)[] = ["stage", "activeScene", "mode", "loading", "disconnected", "showSettings"];
     for (const key of trackedKeys) {
       if (key in patch && prev[key] !== next[key]) {
         logStateChange("AppStore", key, prev[key], next[key]);

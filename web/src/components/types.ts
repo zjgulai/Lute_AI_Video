@@ -3,6 +3,7 @@ export interface ReviewState {
   status: string;
   current_review: string | null;
   pipeline_complete: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   state: any;
 }
 

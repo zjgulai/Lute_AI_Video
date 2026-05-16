@@ -877,7 +877,7 @@ export default function Home() {
               >
                 <ShieldCheck size={16} weight="fill" />
               </Link>
-              {(threadId || oneshotResult) && (
+              {Boolean(threadId || oneshotResult) && (
                 <button
                   onClick={requestAbandon}
                   className="text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(53,20,26,0.06)] cursor-pointer"
@@ -983,14 +983,16 @@ export default function Home() {
                         showToast(t("gate.finalReview") + " approved — loading results...", "info");
                         // Demo mode: build versions directly from workflowState
                         if (isDemoMode()) {
-                          const demoVersions = extractVersions({ steps: workflowState?.steps || {} });
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          const ws = workflowState as any;
+                          const demoVersions = extractVersions({ steps: ws?.steps || {} });
                           setCompareVersions(demoVersions.length > 0 ? demoVersions : [{
                             label: "Version A",
                             scriptVariant: "standard",
-                            videoPath: workflowState?.steps?.assemble_final?.output || "",
-                            thumbnailPath: workflowState?.steps?.thumbnail_images?.output?.[0] || "",
-                            auditReport: workflowState?.steps?.audit?.output || null,
-                            duration: workflowState?.steps?.audit?.output?.duration_seconds || 0,
+                            videoPath: ws?.steps?.assemble_final?.output || "",
+                            thumbnailPath: ws?.steps?.thumbnail_images?.output?.[0] || "",
+                            auditReport: ws?.steps?.audit?.output || null,
+                            duration: ws?.steps?.audit?.output?.duration_seconds || 0,
                             fileSize: 0,
                           }]);
                           setShowCompare(true);
@@ -1064,7 +1066,7 @@ export default function Home() {
           {showStepByStep && stepByStepLabel && stepByStepState && (
             <StepByStepView
               label={stepByStepLabel}
-              state={stepByStepState}
+              state={stepByStepState as Record<string, unknown>}
               onStepComplete={(newState) => setStepByStepState(newState)}
               onResume={(finalState) => {
                 setStepByStepState(finalState);
