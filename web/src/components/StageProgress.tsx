@@ -7,7 +7,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 interface Props {
   label: string;
   scenario: string;
-  onComplete: (result: any) => void;
+  onComplete: (result: unknown) => void;
   onGatePause?: (gateId: string | null) => void;
   onError?: (errors: string[]) => void;
 }
@@ -57,14 +57,14 @@ function getStages(scenario: string) {
 
 function getAverageDurationForStepType(
   stepName: string,
-  steps: Record<string, any>,
+  steps: Record<string, Record<string, unknown>>,
   stageDefs: ReturnType<typeof getStages>,
 ): number | null {
   const sameStep = Object.entries(steps).filter(
     ([name, data]) =>
       name === stepName &&
       data?.status === "done" &&
-      data?.duration_ms &&
+      typeof data?.duration_ms === "number" &&
       data.duration_ms > 0,
   );
   if (sameStep.length > 0) {
@@ -75,15 +75,15 @@ function getAverageDurationForStepType(
   if (!stage) return null;
   const stageDoneWithDuration = stage.steps
     .map((s) => steps[s])
-    .filter((d) => d?.status === "done" && d?.duration_ms && d.duration_ms > 0);
+    .filter((d): d is Record<string, unknown> => Boolean(d?.status === "done" && typeof d?.duration_ms === "number" && (d.duration_ms as number) > 0));
   if (stageDoneWithDuration.length > 0) {
-    const avg = stageDoneWithDuration.reduce((sum, d) => sum + d.duration_ms, 0) / stageDoneWithDuration.length;
+    const avg = stageDoneWithDuration.reduce((sum, d) => sum + (d.duration_ms as number), 0) / stageDoneWithDuration.length;
     return avg / 1000;
   }
   return null;
 }
 
-function getStageProgress(stage: ReturnType<typeof getStages>[0], steps: Record<string, any>): number {
+function getStageProgress(stage: ReturnType<typeof getStages>[0], steps: Record<string, Record<string, unknown>>): number {
   const total = stage.steps.length;
   const done = stage.steps.filter((s) => steps[s]?.status === "done").length;
   return total === 0 ? 0 : Math.round((done / total) * 100);
@@ -91,7 +91,7 @@ function getStageProgress(stage: ReturnType<typeof getStages>[0], steps: Record<
 
 function getStageStatus(
   stageId: string,
-  steps: Record<string, any>,
+  steps: Record<string, Record<string, unknown>>,
   t: (key: string) => string,
   stageDefs: ReturnType<typeof getStages>,
   narrativeKey?: string,
@@ -125,7 +125,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
   const { t } = useI18n();
   const STAGES = getStages(scenario);
 
-  const [steps, setSteps] = useState<Record<string, any>>({});
+  const [steps, setSteps] = useState<Record<string, Record<string, unknown>>>({});
   const [status, setStatus] = useState<string>("running");
   const [gateStatus, setGateStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -185,7 +185,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       failureCountRef.current = 0;
       setPollError(null);
 
-      const newSteps = data.steps || {};
+      const newSteps = (data.steps as Record<string, Record<string, unknown>>) || {};
       setSteps(newSteps);
       setStatus(data.status);
       setGateStatus(data.gate_status);
@@ -260,11 +260,12 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       for (const st of stage.steps) {
         const stepData = steps[st];
         const isDone = stepData?.status === "done";
-        const hasDuration = stepData?.duration_ms && stepData.duration_ms > 0;
+        const durationMs = typeof stepData?.duration_ms === "number" ? stepData.duration_ms : 0;
+        const hasDuration = durationMs > 0;
 
         if (isDone) {
           if (hasDuration) {
-            completedActual += stepData.duration_ms / 1000;
+            completedActual += durationMs / 1000;
           } else {
             completedFallback += stage.estimatedSeconds / stage.steps.length;
           }

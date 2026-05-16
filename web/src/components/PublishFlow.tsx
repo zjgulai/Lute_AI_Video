@@ -7,7 +7,7 @@ import { PaperPlaneRight, CheckCircle, ArrowCounterClockwise } from "@phosphor-i
 
 import { errorMessage } from "@/lib/errors";
 interface Props {
-  result: any;
+  result: Record<string, unknown>;
 }
 
 const ALL_PLATFORMS = [
@@ -28,9 +28,9 @@ export default function PublishFlow({ result }: Props) {
 
   // AI-recommended platforms based on briefs
   const recommendedPlatforms = useMemo(() => {
-    const briefs = result?.briefs || [];
+    const briefs = (result?.briefs as Record<string, unknown>[]) || [];
     const platformsFromBriefs = briefs
-      .map((b: any) => b.platform)
+      .map((b) => b.platform as string | undefined)
       .filter(Boolean);
     const unique = Array.from(new Set(platformsFromBriefs));
     return unique.length > 0 ? unique : ["tiktok", "shopify"];
@@ -38,13 +38,13 @@ export default function PublishFlow({ result }: Props) {
 
   // Auto-fill metadata from result
   const metadata = useMemo(() => {
-    const brief = result?.briefs?.[0] || {};
-    const script = result?.scripts?.[0] || {};
-    const segments = script.segments || [];
+    const brief = ((result?.briefs as Record<string, unknown>[]) || [])[0] || {};
+    const script = ((result?.scripts as Record<string, unknown>[]) || [])[0] || {};
+    const segments = (script.segments as Record<string, unknown>[]) || [];
 
-    const title = brief.product_name || brief.brand_name || script.product_name || "";
-    const description = brief.key_message || brief.description || segments.slice(0, 3).map((s: any) => s.voiceover).join(" ") || "";
-    const tags = brief.tags || brief.usp_priority || [];
+    const title = (brief.product_name as string) || (brief.brand_name as string) || (script.product_name as string) || "";
+    const description = (brief.key_message as string) || (brief.description as string) || segments.slice(0, 3).map((s) => s.voiceover as string).join(" ") || "";
+    const tags = (brief.tags as string[]) || (brief.usp_priority as string[]) || [];
 
     return { title, description, tags };
   }, [result]);
@@ -65,7 +65,7 @@ export default function PublishFlow({ result }: Props) {
     setError(null);
 
     try {
-      const videoPath = result?.final_video_path || "";
+      const videoPath = (result?.final_video_path as string) || "";
       const videoId = videoPath.split("/").pop()?.split(".")[0] || videoPath;
 
       const results = await publishVideo(
@@ -81,8 +81,8 @@ export default function PublishFlow({ result }: Props) {
 
       const resultsArray = Array.isArray(results) ? results : [results];
       const successful = resultsArray
-        .filter((r: any) => r.success)
-        .map((r: any) => r.platform);
+        .filter((r: Record<string, unknown>) => r.success)
+        .map((r: Record<string, unknown>) => r.platform as string);
 
       setPublishedPlatforms(new Set(successful));
     } catch (err: unknown) {

@@ -22,7 +22,7 @@ async function generateDemoCandidates(gateId: string): Promise<Candidate[]> {
       const scripts = demo.scripts || [];
       if (scripts.length === 0) return [];
       const variants: Array<"standard" | "creative" | "conservative"> = ["standard", "creative", "conservative"];
-      return scripts.slice(0, 3).map((s: any, i: number) => ({
+      return scripts.slice(0, 3).map((s: Record<string, unknown>, i: number) => ({
         id: `script-${i + 1}`,
         variant: variants[i % variants.length],
         score: { overall: 0.85 + Math.random() * 0.12, explanation: "Strong script with clear structure" },
@@ -33,7 +33,7 @@ async function generateDemoCandidates(gateId: string): Promise<Candidate[]> {
     case "gate_2_keyframe": {
       const boards = demo.storyboards || [];
       if (boards.length === 0) return [];
-      return boards.slice(0, 3).map((b: any, i: number) => ({
+      return boards.slice(0, 3).map((b: Record<string, unknown>, i: number) => ({
         id: `keyframe-${i + 1}`,
         variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as "standard" | "creative" | "conservative",
         score: { overall: 0.82 + Math.random() * 0.15, explanation: "Good visual composition" },
@@ -44,7 +44,7 @@ async function generateDemoCandidates(gateId: string): Promise<Candidate[]> {
     case "gate_3_clips": {
       const clips = demo.seedance_output?.clip_details || [];
       if (clips.length === 0) return [];
-      return clips.slice(0, 3).map((c: any, i: number) => ({
+      return clips.slice(0, 3).map((c: Record<string, unknown>, i: number) => ({
         id: `clip-${i + 1}`,
         variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as "standard" | "creative" | "conservative",
         score: { overall: 0.88 + Math.random() * 0.1, explanation: "High quality clip generation" },
@@ -317,8 +317,8 @@ export default function GatePanel({
             // Completion check 4: state has stabilized (no changes for 3 consecutive polls)
             const stateHash = JSON.stringify({
               current_step: currentStepName,
-              gates: Object.entries(gates).map(([k, v]) => `${k}:${(v as any)?.status}`),
-              steps: Object.entries(state.steps || {}).map(([k, v]) => `${k}:${(v as any)?.status}`),
+              gates: Object.entries(gates).map(([k, v]) => `${k}:${(v as Record<string, unknown>)?.status}`),
+              steps: Object.entries(state.steps || {}).map(([k, v]) => `${k}:${(v as Record<string, unknown>)?.status}`),
             });
             if (stateHash === lastStateHash) {
               stableCount++;

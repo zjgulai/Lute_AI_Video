@@ -6,87 +6,91 @@ import { Clock, Article, CheckCircle, Image, MagnifyingGlass, VideoCamera, Penci
 import type { IconProps } from "@phosphor-icons/react";
 
 // ── Pipeline stages with human-readable labels ──
+function nested(s: Record<string, unknown>, key: string): unknown {
+  return (s?.audit_reports as Record<string, unknown> | undefined)?.[key];
+}
+
 const STAGES = [
   {
     key: "strategy",
     label: "pstage.strategy",
     iconKey: "strategy",
-    check: (s: any) => s?.weekly_calendar,
-    auditCheck: (s: any) => s?.audit_reports?.strategy,
+    check: (s: Record<string, unknown>) => s?.weekly_calendar,
+    auditCheck: (s: Record<string, unknown>) => nested(s, "strategy"),
   },
   {
     key: "script",
     label: "pstage.script",
     iconKey: "script",
-    check: (s: any) => s?.scripts,
-    auditCheck: (s: any) => s?.audit_reports?.script,
+    check: (s: Record<string, unknown>) => s?.scripts,
+    auditCheck: (s: Record<string, unknown>) => nested(s, "script"),
   },
   {
     key: "compliance",
     label: "pstage.compliance",
     iconKey: "compliance",
-    check: (s: any) => s?.compliance_reports,
+    check: (s: Record<string, unknown>) => s?.compliance_reports,
   },
   {
     key: "storyboard",
     label: "pstage.storyboard",
     iconKey: "storyboard",
-    check: (s: any) => s?.storyboards,
+    check: (s: Record<string, unknown>) => s?.storyboards,
   },
   {
     key: "asset_sourcing",
     label: "pstage.asset_sourcing",
     iconKey: "asset_sourcing",
-    check: (s: any) => s?.asset_plans,
+    check: (s: Record<string, unknown>) => s?.asset_plans,
   },
   {
     key: "media_gen",
     label: "pstage.media_gen",
     iconKey: "media_gen",
-    check: (s: any) => s?.generated_assets,
+    check: (s: Record<string, unknown>) => s?.generated_assets,
   },
   {
     key: "editing",
     label: "pstage.editing",
     iconKey: "editing",
-    check: (s: any) => s?.edit_compositions,
-    auditCheck: (s: any) => s?.audit_reports?.edit,
+    check: (s: Record<string, unknown>) => s?.edit_compositions,
+    auditCheck: (s: Record<string, unknown>) => nested(s, "edit"),
   },
   {
     key: "audio",
     label: "pstage.audio",
     iconKey: "audio",
-    check: (s: any) => s?.audio_plans,
+    check: (s: Record<string, unknown>) => s?.audio_plans,
   },
   {
     key: "caption",
     label: "pstage.caption",
     iconKey: "caption",
-    check: (s: any) => s?.caption_plans,
+    check: (s: Record<string, unknown>) => s?.caption_plans,
   },
   {
     key: "thumbnail",
     label: "pstage.thumbnail",
     iconKey: "thumbnail",
-    check: (s: any) => s?.thumbnail_sets,
-    auditCheck: (s: any) => s?.audit_reports?.thumbnail,
+    check: (s: Record<string, unknown>) => s?.thumbnail_sets,
+    auditCheck: (s: Record<string, unknown>) => nested(s, "thumbnail"),
   },
   {
     key: "distribution",
     label: "pstage.distribution",
     iconKey: "distribution",
-    check: (s: any) => s?.distribution_plans,
+    check: (s: Record<string, unknown>) => s?.distribution_plans,
   },
   {
     key: "analytics",
     label: "pstage.analytics",
     iconKey: "analytics",
-    check: (s: any) => s?.analytics_reports,
+    check: (s: Record<string, unknown>) => s?.analytics_reports,
   },
 ];
 
 interface Props {
-  state: any;
+  state: Record<string, unknown>;
   currentReview: string | null | undefined;
   pipelineComplete: boolean;
   threadId?: string|null|undefined;
@@ -154,8 +158,8 @@ export default function PipelineMonitor({ state, currentReview, pipelineComplete
 
         <div className="space-y-0">
           {STAGES.map((stage, i) => {
-            const done = stage.check(state);
-            const hasAudit = stage.auditCheck && stage.auditCheck(state);
+            const done = Boolean(stage.check(state));
+            const hasAudit = Boolean(stage.auditCheck && stage.auditCheck(state));
             const isActive = i === activeIdx;
             const isPast = i < activeIdx;
 

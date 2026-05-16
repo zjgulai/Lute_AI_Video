@@ -8,7 +8,7 @@ import PublishFlow from "./PublishFlow";
 import InsightReport from "./InsightReport";
 
 interface Props {
-  result: any;
+  result: Record<string, unknown>;
   scenario?: string;
 }
 
@@ -16,11 +16,11 @@ export default function DirectorPlayback({ result, scenario }: Props) {
   const { t } = useI18n();
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
-  const videoPath = result.final_video_path || result.clip_paths?.[0] || "";
-  const scripts = result.scripts || [];
-  const storyboards = result.storyboards || [];
-  const audit = result.audit_report;
-  const briefs = result.briefs || [];
+  const videoPath = (result.final_video_path as string) || (result.clip_paths as string[] | undefined)?.[0] || "";
+  const scripts = (result.scripts as Record<string, unknown>[]) || [];
+  const storyboards = (result.storyboards as Record<string, unknown>[]) || [];
+  const audit = result.audit_report as Record<string, unknown> | undefined;
+  const briefs = (result.briefs as Record<string, unknown>[]) || [];
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
@@ -56,21 +56,21 @@ export default function DirectorPlayback({ result, scenario }: Props) {
           title={t("playback.script")}
         >
           <div className="space-y-3">
-            {scripts.map((script: any, si: number) => (
+            {scripts.map((script: Record<string, unknown>, si: number) => (
               <div key={si} className="apple-card p-4">
                 <h4 className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">
-                  {script.product_name || script.id}
+                  {(script.product_name as string) || (script.id as string)}
                 </h4>
                 <div className="space-y-2">
-                  {(script.segments || []).map((seg: any, i: number) => (
+                  {((script.segments as Record<string, unknown>[]) || []).map((seg: Record<string, unknown>, i: number) => (
                     <div key={i} className="text-sm border-l-2 border-[var(--color-border-light)] pl-3">
                       <span className="text-[12px] uppercase tracking-wider text-[var(--color-accent)] font-medium">
-                        {t(`segment.${seg.segment_type}`) || seg.segment_type}
+                        {t(`segment.${seg.segment_type as string}`) || (seg.segment_type as string)}
                       </span>
-                      <p className="text-[var(--color-text-primary)] mt-0.5">{seg.voiceover}</p>
-                      {seg.text_overlay && (
+                      <p className="text-[var(--color-text-primary)] mt-0.5">{seg.voiceover as string}</p>
+                      {Boolean(seg.text_overlay) && (
                         <p className="text-xs text-[var(--color-text-tertiary)] mt-1 italic">
-                          "{seg.text_overlay}"
+                          &quot;{seg.text_overlay as string}&quot;
                         </p>
                       )}
                     </div>
@@ -89,18 +89,18 @@ export default function DirectorPlayback({ result, scenario }: Props) {
           title={t("playback.keyframes")}
         >
           <div className="grid grid-cols-2 gap-3">
-            {storyboards.map((sb: any, i: number) => (
+            {storyboards.map((sb: Record<string, unknown>, i: number) => (
               <div key={i} className="apple-card p-3">
                 <div className="text-[12px] font-medium text-[var(--color-text-secondary)] mb-1">
-                  {sb.scene_title}
+                  {sb.scene_title as string}
                 </div>
                 <p className="text-xs text-[var(--color-text-tertiary)] line-clamp-3">
-                  {sb.visual_description}
+                  {sb.visual_description as string}
                 </p>
                 <div className="flex gap-2 mt-2 text-[12px] text-[var(--color-text-tertiary)]">
-                  <span>{sb.shot_type}</span>
+                  <span>{sb.shot_type as string}</span>
                   <span>·</span>
-                  <span>{sb.total_duration}s</span>
+                  <span>{sb.total_duration as number}s</span>
                 </div>
               </div>
             ))}
@@ -117,20 +117,20 @@ export default function DirectorPlayback({ result, scenario }: Props) {
           <div className="apple-card p-4">
             <div className="flex items-center gap-3 mb-3">
               <div className={`text-lg font-bold ${audit.overall_status === "PASS" ? "text-[var(--jade-accent)]" : "text-[var(--color-warning)]"}`}>
-                {Math.round((audit.overall_score || 0) * 100)}%
+                {Math.round(((audit.overall_score as number) || 0) * 100)}%
               </div>
               <div>
                 <div className="text-sm font-medium text-[var(--color-text-primary)]">
                   {audit.overall_status === "PASS" ? t("quality.PASS") : t("quality.WARN")}
                 </div>
-                <p className="text-xs text-[var(--color-text-tertiary)]">{audit.summary}</p>
+                <p className="text-xs text-[var(--color-text-tertiary)]">{audit.summary as string}</p>
               </div>
             </div>
-            {(audit.criteria || []).map((c: any, i: number) => (
+            {((audit.criteria as Record<string, unknown>[]) || []).map((c: Record<string, unknown>, i: number) => (
               <div key={i} className="flex items-center justify-between py-1.5 border-t border-[var(--color-border-light)]">
-                <span className="text-xs text-[var(--color-text-secondary)]">{c.name}</span>
+                <span className="text-xs text-[var(--color-text-secondary)]">{c.name as string}</span>
                 <span className={`text-xs font-medium ${c.status === "PASS" ? "text-[var(--jade-accent)]" : c.status === "WARN" ? "text-[var(--color-warning)]" : "text-[var(--color-error)]"}`}>
-                  {c.status}
+                  {c.status as string}
                 </span>
               </div>
             ))}
