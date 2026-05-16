@@ -1,0 +1,155 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Deployment reason (audit trail)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  preflight:
+    name: Preflight (lint + test + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python deps
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src/ --output-format=github
+
+      - name: Test
+        run: python -m pytest tests/ --tb=short -q --timeout=60
+        env:
+          OPENAI_API_KEY: "sk-test"
+          ANTHROPIC_API_KEY: "sk-ant-test"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Frontend type check
+        working-directory: web
+        run: |
+          npm ci
+          npx tsc --noEmit
+
+      - name: Frontend test
+        working-directory: web
+        run: npx vitest run
+
+  build-images:
+    name: Build + cache backend image
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (cache only)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: false
+          load: false
+          tags: ai-video-backend:deploy-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            APT_MIRROR=deb.debian.org
+            PIP_INDEX_URL=https://pypi.org/simple/
+
+  deploy:
+    name: Deploy to Lighthouse
+    needs: [preflight, build-images]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://101.34.52.232
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required secrets
+        run: |
+          missing=0
+          for var in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_TARGET_DIR; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Missing required secret: $var"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            exit 1
+          fi
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_TARGET_DIR: ${{ secrets.DEPLOY_TARGET_DIR }}
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Rsync to server
+        run: |
+          rsync -avz --delete \
+            --chmod=F644,D755 \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='.next' \
+            --exclude='.next.old' \
+            --exclude='.venv' \
+            --exclude='output' \
+            --exclude='__pycache__' \
+            --exclude='.pytest_cache' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_TARGET_DIR }}/"
+
+      - name: Trigger remote deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd ${{ secrets.DEPLOY_TARGET_DIR }} && bash deploy/lighthouse/deploy.sh"
+
+      - name: Smoke test /health
+        run: |
+          sleep 15
+          response=$(curl -sk --max-time 30 "https://${{ secrets.DEPLOY_HOST }}/health" || echo "FAIL")
+          echo "Response: $response"
+          if [[ "$response" != *'"status":"ok"'* ]]; then
+            echo "::error::/health did not return ok"
+            exit 1
+          fi
+
+      - name: Log deploy event
+        run: |
+          echo "::notice::Deployed ${{ github.sha }} to https://${{ secrets.DEPLOY_HOST }} (reason: ${{ inputs.reason || 'tag push' }})"
