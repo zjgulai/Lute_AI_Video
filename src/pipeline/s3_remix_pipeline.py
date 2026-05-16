@@ -132,7 +132,21 @@ class S3InfluencerRemixPipeline:
             )
             if not res.success:
                 errors.append(f"video_analysis_failed: {res.error}")
-                return {}
+                return {
+                    "_soft_degraded": True,
+                    "_degraded_reason": "video_analysis_failed_using_fallback",
+                    "_degraded_detail": str(res.error or "unknown")[:200],
+                    "viral_segments": [],
+                    "fallback_prompt": (
+                        "Generic product remix from original creator's segment. "
+                        "Original video unavailable; emphasize product benefits + "
+                        "creator's signature delivery style."
+                    ),
+                    "hook_type": "question",
+                    "speech_style": "neutral",
+                    "segments": [],
+                    "emotion_curve": [],
+                }
             return res.data
 
         if step_name == "character_identity":
@@ -367,13 +381,21 @@ class S3InfluencerRemixPipeline:
             "competitor_context": product.get("competitor_context", []),
             "usage_scenario": product.get("usage_scenario", ""),
         }
-        return await self._registry.execute("remix-script-skill", {
+        params = {
             "analysis": analysis,
             "product": product,
             "product_context": product_context,
             "influencer_name": influencer_name,
             "brief_id": brief_id,
-        })
+        }
+        if analysis.get("_soft_degraded") and analysis.get("fallback_prompt"):
+            params["fallback_prompt"] = analysis["fallback_prompt"]
+            params["upstream_degraded"] = True
+            logger.warning(
+                "s3: remix_script proceeding with video_analysis fallback prompt",
+                reason=analysis.get("_degraded_reason"),
+            )
+        return await self._registry.execute("remix-script-skill", params)
 
     async def _step_video_prompts(
         self,

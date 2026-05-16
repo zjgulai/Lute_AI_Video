@@ -76,6 +76,26 @@ def _result_indicates_all_stubs(result: Any) -> bool:
     return False
 
 
+def _result_indicates_soft_degraded(result: Any) -> dict[str, Any] | None:
+    """TODO-D10 PR2: detect a soft-degraded sentinel from any step.
+
+    Contract: a step that hit a recoverable failure but produced fallback
+    output (instead of halting the pipeline) embeds:
+      `{"_soft_degraded": True, "_degraded_reason": "...", "_degraded_detail": "..."}`
+    plus the normal output fields. step_runner appends to
+    state.soft_degraded_reasons (list, audit-only) and lets the pipeline
+    continue. Distinct from the hard pipeline_degraded flag which halts.
+    """
+    if not isinstance(result, dict):
+        return None
+    if result.get("_soft_degraded") is True:
+        return {
+            "reason": result.get("_degraded_reason", "unknown"),
+            "detail": result.get("_degraded_detail", ""),
+        }
+    return None
+
+
 logger = structlog.get_logger()
 
 # Ordered list of all pipeline step names
@@ -462,6 +482,22 @@ class StepRunner:
             logger.warning(
                 "step_runner: all seedance clips are stubs, pipeline degraded",
                 label=state["label"],
+                trace_id=trace_id,
+            )
+
+        soft_signal = _result_indicates_soft_degraded(result)
+        if soft_signal is not None:
+            state.setdefault("soft_degraded_reasons", []).append({
+                "ts": datetime.now().isoformat(),
+                "step": step_name,
+                "reason": soft_signal["reason"],
+                "detail": soft_signal["detail"],
+                "trace_id": trace_id,
+            })
+            logger.warning(
+                "step_runner: soft degraded, continuing with fallback",
+                step=step_name,
+                reason=soft_signal["reason"],
                 trace_id=trace_id,
             )
 
