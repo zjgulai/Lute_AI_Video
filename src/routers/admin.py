@@ -158,6 +158,18 @@ async def admin_login(request: Request, response: Response) -> dict[str, Any]:
         max_age=86400,
     )
 
+    from src.storage.audit_logger import audit_log
+    await audit_log(
+        actor_type="admin",
+        actor_id=admin_id,
+        action="admin.login.success",
+        resource_type="admin",
+        resource_id=admin_id,
+        payload={"email": admin_email},
+        client_ip=client_ip,
+        trace_id=request.headers.get("x-trace-id"),
+    )
+
     return {
         "admin_id": admin_id,
         "email": admin_email,
@@ -196,6 +208,16 @@ async def admin_logout(
     response.delete_cookie(
         key=CSRF_COOKIE_NAME,
         path="/api/admin",
+    )
+    from src.storage.audit_logger import audit_log
+    await audit_log(
+        actor_type="admin",
+        actor_id=admin_id,
+        action="admin.logout",
+        resource_type="admin",
+        resource_id=admin_id,
+        client_ip=request.client.host if request.client else None,
+        trace_id=request.headers.get("x-trace-id"),
     )
     return {"success": True}
 

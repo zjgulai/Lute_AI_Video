@@ -126,6 +126,19 @@ def _create_sqlite_tables() -> None:
             published_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id TEXT PRIMARY KEY,
+            ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            actor_type TEXT NOT NULL,
+            actor_id TEXT,
+            action TEXT NOT NULL,
+            resource_type TEXT,
+            resource_id TEXT,
+            payload TEXT DEFAULT '{}',
+            success INTEGER DEFAULT 1,
+            client_ip TEXT,
+            trace_id TEXT
+        );
         CREATE INDEX IF NOT EXISTS idx_threads_thread_id ON threads(thread_id);
         CREATE INDEX IF NOT EXISTS idx_pipeline_states_label ON pipeline_states(label);
         CREATE INDEX IF NOT EXISTS idx_publish_logs_platform ON publish_logs(platform);
@@ -133,6 +146,9 @@ def _create_sqlite_tables() -> None:
         CREATE INDEX IF NOT EXISTS idx_vm_scenario ON video_metrics(scenario);
         CREATE INDEX IF NOT EXISTS idx_vm_platform ON video_metrics(platform);
         CREATE INDEX IF NOT EXISTS idx_vm_pulled_at ON video_metrics(pulled_at);
+        CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(ts DESC);
+        CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_type, actor_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
     """)
     _sqlite_conn.commit()
 
