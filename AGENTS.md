@@ -374,9 +374,11 @@ Configured via `.env`:
 - `DEFAULT_LLM_PROVIDER` — canonical value is `deepseek`. Live in `deploy/lighthouse/.env.prod`,
   and `src/services/fast_mode.py:121` special-cases `"deepseek"` to switch the V4-Pro reasoning
   model down to `deepseek-chat` (V3) for sub-5s latency on simple text-to-video.
-  **Known divergence (待统一):** `src/config.py:105` fallback is `"anthropic"`, `render.yaml`
-  sets `"kimi"`, `deploy/tencent-cloudbase.md` documents `"kimi"`. When updating any of these,
-  align the others or update this section.
+  All sources aligned (2026-05-17): `src/config.py:117` fallback = `deepseek`,
+  `render.yaml:25` = `deepseek`, `deploy/tencent-cloudbase.md:59` = `deepseek`,
+  `deploy/CLOUDBASE_STEP_BY_STEP.md:67` = `deepseek`. Stale `kimi` / `anthropic`
+  references in `drafts/` and `docs/research/` are historical research notes only —
+  do not align them, they're not used by any code path.
 
 ---
 
@@ -392,11 +394,11 @@ Configured via `.env`:
 - `brand_packages` — brand guidelines + assets
 - `influencers` — influencer profiles
 - `publish_logs` — multi-platform publish history
-- `video_metrics` — performance metrics; Alembic migration `1efc41794d64` (2026-05-01) adds the
-  PG table. `src/storage/migrations/001_init.sql` does NOT include it, so a fresh Docker
-  Compose stack still runs SQLite-only until `alembic upgrade head` runs against the PG.
-  Repository (`metrics_repository.py`) is PG-first with SQLite fallback — both paths are
-  exercised in tests.
+- `video_metrics` — performance metrics; both Alembic migration `1efc41794d64`
+  (2026-05-01) and `src/storage/migrations/001_init.sql` (inlined 2026-05-17) create
+  the PG table, so a fresh `docker compose up` lands a complete schema without
+  requiring `alembic upgrade head`. Repository (`metrics_repository.py`) is PG-first
+  with SQLite fallback — both paths are exercised in tests.
 
 **Migrations:** Alembic in `migrations/`. Docker Compose auto-loads SQL from `src/storage/migrations/`.
 
@@ -661,9 +663,9 @@ None. The v0.2.4 release is clean.
   front-end `CandidateSelector` state mapping for non-S1 scenarios.
 - **Untested path D (Metrics full chain).** `/metrics/*` video-performance endpoints +
   `src/tasks/metrics_poller.py` poller + PG `video_metrics` table + front-end
-  `PerformanceDashboard` — never verified end-to-end in production. Alembic has the
-  table but `src/storage/migrations/001_init.sql` still doesn't, so a fresh
-  `docker compose up` without `alembic upgrade head` is metrics-blind.
+  `PerformanceDashboard` — never verified end-to-end in production. Init SQL +
+  Alembic are both in sync since 2026-05-17, but the poller/dashboard wire has no
+  smoke test.
 - **Untested path E.2 (Uploaded asset used in final video).** `test_upload_e2e.py`
   covers upload → disk → /api/files → /api/media round-trip. The "uploaded asset gets
   referenced by keyframe/seedance/remotion in the final video" loop is **not** verified.
@@ -677,9 +679,6 @@ None. The v0.2.4 release is clean.
 
 #### P2 (nice-to-have)
 
-- **`video_metrics` in Docker init SQL.** Fresh `docker compose up` still falls back
-  to SQLite until `alembic upgrade head` runs. Either add the CREATE TABLE to
-  `001_init.sql` or make Alembic migration auto-run at startup.
 - **POYO content-moderation coverage expansion.** `poyo_safety.py` now has 11+ rules
   but the universe of triggers is open-ended. Watch the structured `poyo_cm_rejection`
   log events in production and fold new triggers into `_REPLACEMENTS` + unit tests.
@@ -713,7 +712,6 @@ None. The v0.2.4 release is clean.
   Mostly `@typescript-eslint/no-explicit-any` in catch blocks. `any` → `unknown`
   migration could land ~100 of them; `no-img-element` another ~15. Low-priority because
   zero behavioral impact.
-- **`video_metrics` Alembic vs Docker init-sql drift.** See P2 above.
 - **HU-05 `SCENE_VIDEO_TYPES.desc` still Chinese.** The card-hint subtitles on the
   video-type selector remain hardcoded zh (not covered by `cardCopyEn`). Small
   follow-up: extend the map or move these copies into `translations.ts`.

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // P2-3: Standalone build artifacts (next.config.mjs output: "standalone")
+    // — minified chunks trigger no-this-alias false positives. Not source.
+    "dist/**",
   ]),
   // P1-A: 业务文件禁止硬编码 demo API key + 禁止 import 已 deprecated 的 API_BASE 常量
   {
