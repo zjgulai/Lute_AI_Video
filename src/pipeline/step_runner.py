@@ -58,6 +58,24 @@ def _detect_regenerate_signal(result: Any) -> dict[str, Any] | None:
     return None
 
 
+def _result_indicates_all_stubs(result: Any) -> bool:
+    """TODO-D10: detect the S5 all-stubs sentinel from _step_seedance_clips.
+
+    Contract: when every seedance clip is a stub (POYO failure / content-mod
+    rejection), the step returns a dict with `_all_stubs=True`. step_runner
+    sets pipeline_degraded so partial_artifacts.summarize correctly flags
+    the run as degraded and downstream steps short-circuit.
+    """
+    if not isinstance(result, dict):
+        return False
+    if result.get("_all_stubs") is True:
+        return True
+    details = result.get("clip_details")
+    if isinstance(details, list) and details and all(d.get("is_stub", False) for d in details):
+        return True
+    return False
+
+
 logger = structlog.get_logger()
 
 # Ordered list of all pipeline step names
@@ -434,6 +452,18 @@ class StepRunner:
         step_data["status"] = "done"
         step_data["completed_at"] = datetime.now().isoformat()
         step_data["duration_ms"] = round(step_duration_ms)
+
+        if step_name == "seedance_clips" and _result_indicates_all_stubs(result):
+            state["pipeline_degraded"] = True
+            state["degraded_reason"] = "all_seedance_clips_are_stubs"
+            state.setdefault("errors", []).append(
+                "seedance API returned all stub clips; check POYO_API_KEY + content moderation"
+            )
+            logger.warning(
+                "step_runner: all seedance clips are stubs, pipeline degraded",
+                label=state["label"],
+                trace_id=trace_id,
+            )
 
         # Gate pause: if this step is a gate trigger and NOT auto mode, pause here
         scenario = state.get("scenario", "s1")

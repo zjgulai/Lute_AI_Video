@@ -527,11 +527,13 @@ class S5BrandVlogPipeline:
             if i < len(video_prompts) - 1:
                 await asyncio.sleep(3.0)
 
+        all_stubs = bool(clip_paths) and self._all_clips_are_stubs(clip_paths, clip_details)
         return {
             "clip_paths": clip_paths,
             "clip_details": clip_details,
             "total_duration": sum(d.get("duration", 0) for d in clip_details),
             "model": s5_model,
+            "_all_stubs": all_stubs,
         }
 
     async def _step_tts_audio(self, reg, scripts, errors):
