@@ -114,3 +114,26 @@ jobs:
 
       - name: Run vitest
         run: npx vitest run
+
+  docker-build:
+    name: Docker build validate (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (validate, no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: false
+          load: false
+          tags: ai-video-backend:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            APT_MIRROR=deb.debian.org
+            PIP_INDEX_URL=https://pypi.org/simple/
