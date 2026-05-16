@@ -7,16 +7,25 @@ independent of the tenant API key auth layer.
 Two layers of auth, zero crossover:
   Creative API:  x-api-key header → verify_api_key → tenant_id
   Admin API:     admin_session cookie → verify_admin_session → admin_id
+
+CSRF protection (2026-05-16):
+  All state-changing admin endpoints (POST/PUT/DELETE) MUST also depend on
+  verify_csrf_token. Defense-in-depth on top of SameSite=Lax cookies.
+  Pattern: double-submit cookie — login sets csrf_token cookie (non-HttpOnly,
+  readable by JS); client sends same value in X-CSRF-Token header; server
+  compares. Cross-origin requests can't read the cookie (Same-Origin Policy)
+  so attacker can't forge the header.
 """
 
 import contextvars
 import hashlib
 import logging
+import secrets
 import time
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import Cookie, HTTPException, Request
+from fastapi import Cookie, Header, HTTPException, Request
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +151,42 @@ async def verify_admin_session(
         raise HTTPException(
             status_code=500, detail="Session validation failed"
         )
+
+
+# ── CSRF token (double-submit cookie pattern) ──
+
+CSRF_COOKIE_NAME = "admin_csrf"
+CSRF_HEADER_NAME = "x-csrf-token"
+
+
+def generate_csrf_token() -> str:
+    """Generate a fresh CSRF token. Called by login endpoint."""
+    return secrets.token_urlsafe(32)
+
+
+async def verify_csrf_token(
+    request: Request,
+    admin_csrf: str | None = Cookie(None),
+    x_csrf_token: str | None = Header(None),
+) -> None:
+    """Validate CSRF double-submit on state-changing admin endpoints.
+
+    Compares the admin_csrf cookie value with the X-CSRF-Token header.
+    Both must be present, both must match. Attackers performing CSRF
+    cannot read the cookie (Same-Origin Policy) so cannot replay the
+    header. SameSite=Lax already blocks cross-site POST navigation, so
+    this is defense-in-depth, not the only line.
+
+    GET / HEAD / OPTIONS skip this check (read-only methods).
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if not admin_csrf:
+        raise HTTPException(status_code=403, detail="Missing CSRF cookie")
+    if not x_csrf_token:
+        raise HTTPException(status_code=403, detail="Missing X-CSRF-Token header")
+    if not secrets.compare_digest(admin_csrf, x_csrf_token):
+        raise HTTPException(status_code=403, detail="CSRF token mismatch")
 
 
 # ── Helpers ──

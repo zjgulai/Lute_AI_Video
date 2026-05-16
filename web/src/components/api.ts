@@ -878,6 +878,20 @@ export async function adminFetch(
     delete (mergedInit.headers as Record<string, string>)["X-API-Key"];
   }
 
+  // CSRF double-submit: read admin_csrf cookie + send as X-CSRF-Token header.
+  // Backend verify_csrf_token (src/routers/_admin_deps.py) compares cookie
+  // value to header value on POST/PUT/DELETE/PATCH. SameSite=Lax cookie
+  // already blocks cross-site POST, this is defense-in-depth.
+  const method = (mergedInit.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+    if (typeof document !== "undefined") {
+      const m = document.cookie.match(/(?:^|; )admin_csrf=([^;]+)/);
+      if (m && mergedInit.headers) {
+        (mergedInit.headers as Record<string, string>)["X-CSRF-Token"] = decodeURIComponent(m[1]);
+      }
+    }
+  }
+
   try {
     const res = await fetch(url, mergedInit);
 

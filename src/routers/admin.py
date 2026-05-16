@@ -37,9 +37,12 @@ _TENANT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
 # ── Helpers ──
 
 from src.routers._admin_deps import (  # noqa: E402
+    CSRF_COOKIE_NAME,
     _check_login_rate_limit,
     _record_login_attempt,
+    generate_csrf_token,
     verify_admin_session,
+    verify_csrf_token,
 )
 
 # ═══════════════════════════════════════════════════════════════════
@@ -144,9 +147,21 @@ async def admin_login(request: Request, response: Response) -> dict[str, Any]:
         max_age=86400,  # 24 hours
     )
 
+    csrf_token = generate_csrf_token()
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=False,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        path="/api/admin",
+        max_age=86400,
+    )
+
     return {
         "admin_id": admin_id,
         "email": admin_email,
+        "csrf_token": csrf_token,
     }
 
 
@@ -155,6 +170,7 @@ async def admin_logout(
     request: Request,
     response: Response,
     admin_id: str = Depends(verify_admin_session),
+    _csrf: None = Depends(verify_csrf_token),
 ) -> dict[str, Any]:
     """Logout — clear the admin session."""
     admin_session = request.cookies.get("admin_session", "")
@@ -175,6 +191,10 @@ async def admin_logout(
 
     response.delete_cookie(
         key="admin_session",
+        path="/api/admin",
+    )
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
         path="/api/admin",
     )
     return {"success": True}
@@ -228,6 +248,7 @@ def _validate_tenant_id(tenant_id: str) -> None:
 async def create_tenant(
     request: Request,
     admin_id: str = Depends(verify_admin_session),
+    _csrf: None = Depends(verify_csrf_token),
 ) -> dict[str, Any]:
     """Create a new tenant. Does NOT generate an API key — use
     POST /tenants/{tenant_id}/keys for that."""
@@ -484,6 +505,7 @@ async def update_tenant(
     tenant_id: str,
     request: Request,
     admin_id: str = Depends(verify_admin_session),
+    _csrf: None = Depends(verify_csrf_token),
 ) -> dict[str, Any]:
     """Update tenant info or enable/disable. Disabling cascades to revoke all API keys."""
     body = await request.json()
@@ -577,6 +599,7 @@ async def create_api_key(
     tenant_id: str,
     request: Request,
     admin_id: str = Depends(verify_admin_session),
+    _csrf: None = Depends(verify_csrf_token),
 ) -> dict[str, Any]:
     """Create a new API key for a tenant. Returns the plaintext key EXACTLY ONCE."""
     body = await request.json()
@@ -643,6 +666,7 @@ async def revoke_api_key(
     tenant_id: str,
     key_id: str,
     admin_id: str = Depends(verify_admin_session),
+    _csrf: None = Depends(verify_csrf_token),
 ) -> dict[str, Any]:
     """Revoke an API key."""
     try:
