@@ -99,6 +99,11 @@ async def health():
         media_tools["ytdlp_available"] = False
         media_tools["whisper_available"] = False
 
+    try:
+        media_tools["clip_available"] = _check_clip_imports_only()
+    except Exception:
+        media_tools["clip_available"] = False
+
     return {
         "status": "ok",
         "version": "0.2.5",
@@ -106,3 +111,13 @@ async def health():
         "persistence": persistence_status,
         "media_tools": media_tools,
     }
+
+
+def _check_clip_imports_only() -> bool:
+    try:
+        import torch  # noqa: F401
+        import transformers  # noqa: F401
+        from PIL import Image  # noqa: F401
+        return True
+    except ImportError:
+        return False

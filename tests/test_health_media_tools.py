@@ -18,8 +18,10 @@ async def test_health_exposes_media_tools():
     mt = result["media_tools"]
     assert "ytdlp_available" in mt
     assert "whisper_available" in mt
+    assert "clip_available" in mt
     assert isinstance(mt["ytdlp_available"], bool)
     assert isinstance(mt["whisper_available"], bool)
+    assert isinstance(mt["clip_available"], bool)
 
 
 @pytest.mark.asyncio

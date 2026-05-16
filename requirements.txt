@@ -36,6 +36,15 @@ bcrypt>=4.2
 yt-dlp>=2025.9.5
 faster-whisper>=1.0
 
+# Quality module — CLIP text-image alignment (D15 Option CLIP-only)
+# transformers + torch + Pillow enable src/quality/clip_alignment.py to score
+# keyframe/storyboard alignment. ~600MB image growth (torch CPU wheels).
+# Decision: keep CPU-only to stay under 4GB image budget. GPU users override
+# via PIP_INDEX_URL + cuda-aware torch in deploy/lighthouse/.env.prod.
+transformers>=4.40
+torch>=2.0
+Pillow>=10.0
+
 # Development
 pytest>=8.0
 pytest-asyncio>=0.23
