@@ -87,6 +87,10 @@ fi
 # ChunkLoadError if an old HTML cached in a browser references them.
 echo "  Cleaning old build artifacts..."
 rm -rf .next/standalone/ .next/static/ .next/server/ .next/*.json
+# .next.old/ accumulates from previous deploys (next.js renames the prev
+# .next to .next.old during build). Without explicit cleanup, eslint runs
+# from CI pick up thousands of .next.old/ files. Disk + speed cost both.
+rm -rf .next.old/
 
 export NEXT_PUBLIC_API_BASE_URL=/api
 # P0-F: Lighthouse 是 canonical 非 demo 生产部署 — 必须设 false,

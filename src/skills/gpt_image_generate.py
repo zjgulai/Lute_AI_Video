@@ -63,8 +63,8 @@ class GPTImageGenerateSkill(SkillCallable):
         finally:
             try:
                 await client.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("gpt_image_generate: client.close failed", error=str(exc))
 
         has_key = bool(OPENAI_API_KEY or POYO_API_KEY)
         is_stub = (not has_key) or "STUB" in (api_result.get("image_url") or "")

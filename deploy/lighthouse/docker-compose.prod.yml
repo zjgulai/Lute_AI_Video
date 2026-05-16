@@ -1,5 +1,14 @@
 version: '3.8'
 
+# Shared logging config: cap each container's stdout/stderr log file to 100MB,
+# keep 3 rotated files. Prevents disk-fill deadlock under high error volume.
+# Without this, docker default is unlimited per-container log files.
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "3"
+
 services:
   backend:
     build:
@@ -33,6 +42,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging: *default-logging
 
   rendering:
     build:
@@ -56,6 +66,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    logging: *default-logging
 
   frontend:
     # P4-1: Use pre-built standalone output (host builds, Docker runs)
@@ -92,6 +103,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging: *default-logging
 
   nginx:
     image: nginx:alpine
@@ -111,6 +123,7 @@ services:
       - frontend
     networks:
       - ai_video_net
+    logging: *default-logging
 
 volumes:
   backend_output:

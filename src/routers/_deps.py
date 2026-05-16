@@ -33,7 +33,11 @@ API_KEY = os.getenv("API_KEY", "")
 if not API_KEY:
     logging.warning("SECURITY: API_KEY environment variable is not set. Generating a temporary key for this session.")
     API_KEY = secrets.token_urlsafe(32)
-    logging.warning("SECURITY: Temporary API_KEY = %s  (set this in your .env for persistence)", API_KEY)
+    logging.warning(
+        "SECURITY: Temporary API_KEY generated (length=%d). "
+        "Set API_KEY env var for persistence — DO NOT rely on logged value.",
+        len(API_KEY),
+    )
 
 async def verify_api_key(request: Request, x_api_key: str | None = Header(None)):
     """Verify API key and resolve tenant_id (P2-8).

@@ -163,7 +163,6 @@ if HAS_FASTAPI:
         "http://localhost:3001",
         "http://localhost",
         "https://lute-ai-video.tcloudbaseapp.com",
-        "https://*.tcloudbaseapp.com",
     ]
     if _cors_env:
         allow_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
