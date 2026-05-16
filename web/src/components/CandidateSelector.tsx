@@ -5,14 +5,14 @@ import { useI18n } from "@/i18n/I18nProvider";
 
 interface Score {
   overall: number;
-  breakdown?: any;
+  breakdown?: Record<string, unknown>;
   explanation?: string;
 }
 
 export interface Candidate {
   id: string;
   variant: "standard" | "creative" | "conservative";
-  data: any;
+  data: unknown;
   score: Score;
   recommended: boolean;
 }
@@ -56,7 +56,7 @@ function getVariantLabelKey(variant: string): string {
   }
 }
 
-function getDataPreview(data: any): string {
+function getDataPreview(data: unknown): string {
   if (!data) return "";
   if (typeof data === "string") return data.slice(0, 100);
   const str = JSON.stringify(data, null, 2);

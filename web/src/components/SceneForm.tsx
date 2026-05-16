@@ -14,7 +14,7 @@ const USE_GUIDED_FORM = process.env.NEXT_PUBLIC_USE_GUIDED_FORM !== "false";
 
 interface Props {
   scene: string;
-  onSubmit: (config: any) => void;
+  onSubmit: (config: Record<string, unknown>) => void;
   loading: boolean;
   fieldErrors?: Record<string, string>;
 }
@@ -105,7 +105,7 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
         text: text.trim(),
       }));
 
-    let config: any = {
+    const config: Record<string, unknown> = {
       content_scenario: scene,
       target_platforms: selectedPlatforms,
       target_languages: ["en"],

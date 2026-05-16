@@ -47,7 +47,7 @@ const STAGE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
 };
 
 interface Props {
-  onStart: (config: any) => void;
+  onStart: (config: Record<string, unknown>) => void;
   loading: boolean;
   pipelineMode?: "auto" | "step_by_step";
   onModeChange?: (mode: "auto" | "step_by_step") => void;
@@ -83,7 +83,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
     ...CONTENT_SCENARIOS[0].platforms,
   ]);
   const [showApiKeys, setShowApiKeys] = useState(false);
-  const [uploadedAssets, setUploadedAssets] = useState<any[]>([]);
+  const [uploadedAssets, setUploadedAssets] = useState<Record<string, unknown>[]>([]);
   const [videoDuration, setVideoDuration] = useState(10);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [backendApiKey, setBackendApiKey] = useState("");
@@ -263,7 +263,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
               </span>
             )}
           </div>
-          <AssetUploader onUpload={(results) => setUploadedAssets(prev => [...prev, ...results])} />
+          <AssetUploader onUpload={(results) => setUploadedAssets(prev => [...prev, ...(results as unknown as Record<string, unknown>[])])} />
         </div>
 
         {/* Platform Chips */}

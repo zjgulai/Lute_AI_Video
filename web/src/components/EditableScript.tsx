@@ -2,15 +2,29 @@
 
 import { useI18n } from "@/i18n/I18nProvider";
 
+interface Script {
+  segments?: Segment[];
+  [key: string]: unknown;
+}
+
+interface Segment {
+  segment_type?: string;
+  start_time?: number;
+  end_time?: number;
+  voiceover?: string;
+  visual_description?: string;
+  [key: string]: unknown;
+}
+
 interface Props {
-  script: any;
-  onChange: (updated: any) => void;
+  script: Script;
+  onChange: (updated: Script) => void;
 }
 
 export default function EditableScript({ script, onChange }: Props) {
   const { t } = useI18n();
   const handleSegmentChange = (index: number, field: string, value: string) => {
-    const updatedSegments = (script.segments || []).map((seg: any, i: number) =>
+    const updatedSegments = (script.segments || []).map((seg, i) =>
       i === index ? { ...seg, [field]: value } : seg
     );
     onChange({ ...script, segments: updatedSegments });
@@ -18,7 +32,7 @@ export default function EditableScript({ script, onChange }: Props) {
 
   return (
     <div className="apple-card p-3 bg-[var(--bg-card)] space-y-3">
-      {(script.segments || []).map((seg: any, i: number) => (
+      {(script.segments || []).map((seg, i) => (
         <div key={i} className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>

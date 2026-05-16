@@ -10,16 +10,16 @@ import { startS1StepByStep, runS1Step, isDemoMode } from "./api";
 
 import { errorMessage } from "@/lib/errors";
 interface Props {
-  config: any;  // The config from SceneForm
+  config: Record<string, unknown>;  // The config from SceneForm
   onBack: () => void;
-  onStart: (finalConfig: any) => void;
+  onStart: (finalConfig: Record<string, unknown>) => void;
 }
 
 export default function RecommendPanel({ config, onBack, onStart }: Props) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [duration, setDuration] = useState(30);
-  const [platforms, setPlatforms] = useState<string[]>(config.target_platforms || []);
+  const [platforms, setPlatforms] = useState<string[]>((config.target_platforms as string[]) || []);
   const [summary, setSummary] = useState("");
   const [tone, setTone] = useState("");
   const [mode, setMode] = useState<"expert" | "smart">("expert");
@@ -28,6 +28,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   const [starting, setStarting] = useState(false);
   useEffect(() => {
     fetchRecommendation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchRecommendation() {
@@ -43,8 +44,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
           setSummary(firstBrief.key_message || firstBrief.topic || "");
           setTone(firstBrief.hook_type || "");
         }
-        setPlatforms(config.target_platforms || ["tiktok", "shopify"]);
-        setDuration(config.video_duration || 30);
+        setPlatforms((config.target_platforms as string[]) || ["tiktok", "shopify"]);
+        setDuration((config.video_duration as number) || 30);
         setLoading(false);
       } catch (e: unknown) {
         setError(errorMessage(e, "Failed to load demo recommendation"));
@@ -69,10 +70,10 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
       }
 
       // Platforms from config
-      setPlatforms(config.target_platforms || ["tiktok", "shopify"]);
+      setPlatforms((config.target_platforms as string[]) || ["tiktok", "shopify"]);
 
       // AI-recommended duration — infer from strategy or default to 30
-      setDuration(config.video_duration || 30);
+      setDuration((config.video_duration as number) || 30);
 
       setLoading(false);
     } catch (e: unknown) {

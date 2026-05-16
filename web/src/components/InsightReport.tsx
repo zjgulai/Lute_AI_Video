@@ -6,7 +6,7 @@ import { TrendUp, TrendDown, Minus, Lightbulb, ChartBar, CaretDown, CaretUp } fr
 import PerformanceDashboard from "./PerformanceDashboard";
 
 interface Props {
-  result: any;
+  result: Record<string, unknown>;
   scenario: string;
 }
 
@@ -40,17 +40,17 @@ const BENCHMARKS: Record<string, number> = {
 };
 
 // Generate deterministic mock metrics from result data
-function deriveMetrics(result: any): Record<string, number> {
-  const audit = result?.audit_report;
-  const score = audit?.overall_score || 0.7;
-  const briefs = result?.briefs || [];
-  const script = result?.scripts?.[0] || {};
-  const duration = result?.video_duration || 30;
+function deriveMetrics(result: Record<string, unknown>): Record<string, number> {
+  const audit = result?.audit_report as Record<string, unknown> | undefined;
+  const score = (audit?.overall_score as number) || 0.7;
+  const briefs = (result?.briefs as Record<string, unknown>[]) || [];
+  const script = ((result?.scripts as Record<string, unknown>[]) || [])[0] || {};
+  const duration = (result?.video_duration as number) || 30;
 
   // Seed from content hash for determinism
   const seed = JSON.stringify({
-    product: script.product_name || briefs[0]?.product_name || "",
-    platform: briefs[0]?.platform || "tiktok",
+    product: (script.product_name as string) || (briefs[0]?.product_name as string) || "",
+    platform: (briefs[0]?.platform as string) || "tiktok",
     duration,
   });
   const hash = seed.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
@@ -68,13 +68,13 @@ function deriveMetrics(result: any): Record<string, number> {
   };
 }
 
-function getVideoType(result: any): string {
-  const briefs = result?.briefs || [];
-  const videoType = briefs[0]?.video_type || result?.video_type;
+function getVideoType(result: Record<string, unknown>): string {
+  const briefs = (result?.briefs as Record<string, unknown>[]) || [];
+  const videoType = (briefs[0]?.video_type as string) || (result?.video_type as string);
   if (videoType) return videoType;
 
   // Infer from scenario + content
-  const scenario = result?.scenario || "";
+  const scenario = (result?.scenario as string) || "";
   if (scenario.includes("brand")) return "brand_image";
   if (scenario.includes("product")) return "product_seed";
   if (scenario.includes("live")) return "store_live";
@@ -125,7 +125,7 @@ export default function InsightReport({ result, scenario }: Props) {
       : t("insight.atAverage");
 
     const videoTypeName = t(`videoType.${videoType}`) || t("insight.title");
-    const quality = result?.audit_report?.overall_status === "PASS"
+    const quality = (result?.audit_report as Record<string, unknown> | undefined)?.overall_status === "PASS"
       ? t("insight.qualityPass")
       : t("insight.qualityImprove");
     return t("insight.summaryTemplate")
