@@ -77,23 +77,28 @@ def _result_indicates_all_stubs(result: Any) -> bool:
 
 
 def _result_indicates_soft_degraded(result: Any) -> dict[str, Any] | None:
-    """TODO-D10 PR2: detect a soft-degraded sentinel from any step.
+    """TODO-D10 PR2/PR3: detect a soft-degraded sentinel from any step.
 
     Contract: a step that hit a recoverable failure but produced fallback
     output (instead of halting the pipeline) embeds:
       `{"_soft_degraded": True, "_degraded_reason": "...", "_degraded_detail": "..."}`
-    plus the normal output fields. step_runner appends to
+    plus the normal output fields. The marker may live at the top level
+    (dict result) OR as the first element of a list result (when the
+    step's normal contract is list[dict]). step_runner appends to
     state.soft_degraded_reasons (list, audit-only) and lets the pipeline
     continue. Distinct from the hard pipeline_degraded flag which halts.
     """
-    if not isinstance(result, dict):
+    candidate: Any = None
+    if isinstance(result, dict) and result.get("_soft_degraded") is True:
+        candidate = result
+    elif isinstance(result, list) and result and isinstance(result[0], dict) and result[0].get("_soft_degraded") is True:
+        candidate = result[0]
+    if candidate is None:
         return None
-    if result.get("_soft_degraded") is True:
-        return {
-            "reason": result.get("_degraded_reason", "unknown"),
-            "detail": result.get("_degraded_detail", ""),
-        }
-    return None
+    return {
+        "reason": candidate.get("_degraded_reason", "unknown"),
+        "detail": candidate.get("_degraded_detail", ""),
+    }
 
 
 logger = structlog.get_logger()

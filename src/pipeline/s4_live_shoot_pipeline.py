@@ -40,6 +40,56 @@ class S4LiveShootPipeline:
 
     # ═══ StepRunner interface ═══
 
+    @staticmethod
+    def _validate_footage_assets(
+        footage_assets: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """TODO-D10 PR3: split footage into valid + invalid lists.
+
+        An asset is invalid when it has no filename / path / url, OR carries
+        an explicit `is_corrupted=True` marker (set by upload/ffprobe step),
+        OR its file_size is 0. The split keeps validation cheap (no ffprobe
+        call here) — heavier checks belong to the upload pipeline.
+        """
+        valid: list[dict[str, Any]] = []
+        invalid: list[dict[str, Any]] = []
+        for fa in footage_assets:
+            if not isinstance(fa, dict):
+                invalid.append({"raw": fa, "reason": "not_a_dict"})
+                continue
+            if fa.get("is_corrupted") is True:
+                invalid.append({**fa, "reason": "is_corrupted"})
+                continue
+            if fa.get("file_size") == 0:
+                invalid.append({**fa, "reason": "zero_size"})
+                continue
+            has_ref = bool(
+                fa.get("filename")
+                or fa.get("path")
+                or fa.get("url")
+                or fa.get("file_url")
+                or fa.get("asset_id"),
+            )
+            if not has_ref:
+                invalid.append({**fa, "reason": "no_reference"})
+                continue
+            valid.append(fa)
+        return valid, invalid
+
+    @staticmethod
+    def _extract_stock_footage_urls(brand_guidelines: dict[str, Any]) -> list[str]:
+        """TODO-D10 PR3: read brand_package.stock_footage_urls if present.
+
+        Backward-compatible: if brand_guidelines is missing or lacks the
+        key, returns []. Callers treat [] as 'no stock fallback available'.
+        """
+        if not isinstance(brand_guidelines, dict):
+            return []
+        urls = brand_guidelines.get("stock_footage_urls") or []
+        if not isinstance(urls, list):
+            return []
+        return [u for u in urls if isinstance(u, str) and u]
+
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step given the current state dict.
 
@@ -134,11 +184,59 @@ class S4LiveShootPipeline:
         errors: list[str],
     ) -> list[dict[str, Any]]:
         """Generate scripts from footage descriptions + product info."""
-        footage_assets = config.get("footage_assets", [])
+        raw_footage = config.get("footage_assets", [])
         product_info = config.get("product_info", {})
         topic = config.get("topic", "")
         platforms = config.get("target_platforms", ["tiktok", "shopify"])
         product_name = config.get("product_name") or product_info.get("name", "Product")
+        brand_guidelines = config.get("brand_guidelines") or {}
+
+        valid_footage, invalid_footage = self._validate_footage_assets(raw_footage)
+        all_invalid = bool(raw_footage) and not valid_footage
+        soft_signal: dict[str, Any] | None = None
+
+        if all_invalid:
+            stock_urls = self._extract_stock_footage_urls(brand_guidelines)
+            if stock_urls:
+                stock_assets = [{"filename": u, "url": u, "is_stock": True} for u in stock_urls]
+                config["footage_assets"] = stock_assets
+                soft_signal = {
+                    "_soft_degraded": True,
+                    "_degraded_reason": "footage_invalid_using_stock_fallback",
+                    "_degraded_detail": (
+                        f"all {len(raw_footage)} uploaded footage invalid; "
+                        f"using {len(stock_assets)} stock asset(s) from brand_guidelines"
+                    ),
+                }
+                logger.warning(
+                    "s4: all footage invalid, using stock fallback",
+                    invalid_count=len(invalid_footage),
+                    stock_count=len(stock_assets),
+                )
+            else:
+                config["footage_assets"] = []
+                soft_signal = {
+                    "_soft_degraded": True,
+                    "_degraded_reason": "footage_invalid_no_stock_fallback",
+                    "_degraded_detail": (
+                        f"all {len(raw_footage)} uploaded footage invalid; "
+                        "no brand_guidelines.stock_footage_urls available; "
+                        "proceeding without footage references"
+                    ),
+                }
+                logger.warning(
+                    "s4: all footage invalid, no stock fallback",
+                    invalid_count=len(invalid_footage),
+                )
+        elif invalid_footage:
+            config["footage_assets"] = valid_footage
+            logger.info(
+                "s4: filtered invalid footage assets",
+                valid=len(valid_footage),
+                invalid=len(invalid_footage),
+            )
+
+        footage_assets_used = config.get("footage_assets", [])
 
         brief_data = {
             "id": "LIVE-001",
@@ -153,16 +251,22 @@ class S4LiveShootPipeline:
 
         scr = await reg.execute("script-writer-skill", {
             "briefs": [brief_data],
-            "brand_guidelines": {"footage_available": len(footage_assets)},
+            "brand_guidelines": {"footage_available": len(footage_assets_used)},
             "target_languages": DEFAULT_LANGUAGES,
         })
         if scr.success and scr.data:
             scripts = scr.data.get("scripts", [])
             logger.info("s4: scripts complete", scripts=len(scripts))
+            if soft_signal is not None and scripts:
+                scripts = [{**soft_signal, **scripts[0]}, *scripts[1:]]
+            elif soft_signal is not None:
+                scripts = [soft_signal]
             return scripts
 
         errors.append(f"scripts_failed: {scr.error}")
         logger.warning("s4: script generation failed", error=scr.error)
+        if soft_signal is not None:
+            return [soft_signal]
         return []
 
     async def _step_video_prompts(
@@ -269,6 +373,7 @@ class S4LiveShootPipeline:
         Default S4 model is seedance-2-fast (cheap turbo for live-shoot iteration).
         """
         import asyncio
+
         from src.pipeline.model_router import select_model
 
         s4_model = select_model("s4")
