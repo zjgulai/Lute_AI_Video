@@ -102,8 +102,9 @@ class BaseRepository:
             await asyncio.to_thread(_sync_execute)
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
-        record_id = self._generate_id()
-        data["id"] = record_id
+        if not data.get("id"):
+            data["id"] = self._generate_id()
+        record_id = data["id"]
         columns = list(data.keys())
         placeholders = [f"${i + 1}" for i in range(len(columns))]
         query = f"""

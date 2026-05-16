@@ -15,6 +15,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from src.models.brand import BrandAssetPackage
 from src.models.influencer import InfluencerProfile, InfluencerRemixBrief
+from src.storage.asset_stores import BrandPackageStore, InfluencerStore
 from src.tools.asset_storage import AssetStorage
 
 logger = structlog.get_logger()
@@ -23,9 +24,12 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 
 # ── In-memory storage for brand packages and influencers ──
-# (Replace with database in production)
+# Kept for backwards compat (BRAND_PACKAGE_USE_PG=0). When the flag is on,
+# the *Store adapters route reads + writes to PG.
 _brand_packages: dict[str, BrandAssetPackage] = {}
 _influencers: dict[str, InfluencerProfile] = {}
+_brand_store = BrandPackageStore(_brand_packages)
+_influencer_store = InfluencerStore(_influencers)
 
 # Initialize asset storage with default data dir
 _asset_storage = AssetStorage()
@@ -98,7 +102,7 @@ async def create_brand_package(package: BrandAssetPackage):
     from datetime import datetime
     package.created_at = datetime.utcnow().isoformat()
     package.updated_at = package.created_at
-    _brand_packages[package.package_id] = package
+    await _brand_store.create(package)
     logger.info("api: brand package created", id=package.package_id)
     return package.to_dict()
 
@@ -106,7 +110,7 @@ async def create_brand_package(package: BrandAssetPackage):
 @router.get("/brand-packages/{package_id}", tags=["brand"])
 async def get_brand_package(package_id: str):
     """Get a brand asset package by ID."""
-    package = _brand_packages.get(package_id)
+    package = await _brand_store.get(package_id)
     if not package:
         raise HTTPException(status_code=404, detail=f"Brand package '{package_id}' not found")
     return package.to_dict()
@@ -115,15 +119,16 @@ async def get_brand_package(package_id: str):
 @router.get("/brand-packages", tags=["brand"])
 async def list_brand_packages():
     """List all brand asset packages."""
-    return {"packages": [p.to_dict() for p in _brand_packages.values()], "total": len(_brand_packages)}
+    packages = await _brand_store.list_all()
+    return {"packages": [p.to_dict() for p in packages], "total": len(packages)}
 
 
 @router.delete("/brand-packages/{package_id}", tags=["brand"])
 async def delete_brand_package(package_id: str):
     """Delete a brand asset package."""
-    if package_id not in _brand_packages:
+    deleted = await _brand_store.delete(package_id)
+    if not deleted:
         raise HTTPException(status_code=404)
-    del _brand_packages[package_id]
     return {"deleted": True}
 
 
@@ -139,7 +144,7 @@ async def create_influencer(profile: InfluencerProfile):
     from datetime import datetime
     profile.created_at = datetime.utcnow().isoformat()
     profile.updated_at = profile.created_at
-    _influencers[profile.influencer_id] = profile
+    await _influencer_store.create(profile)
     logger.info("api: influencer created", id=profile.influencer_id)
     return profile.to_dict()
 
@@ -147,7 +152,7 @@ async def create_influencer(profile: InfluencerProfile):
 @router.get("/influencers/{influencer_id}", tags=["influencer"])
 async def get_influencer(influencer_id: str):
     """Get influencer profile."""
-    profile = _influencers.get(influencer_id)
+    profile = await _influencer_store.get(influencer_id)
     if not profile:
         raise HTTPException(status_code=404)
     return profile.to_dict()
@@ -156,7 +161,8 @@ async def get_influencer(influencer_id: str):
 @router.get("/influencers", tags=["influencer"])
 async def list_influencers():
     """List all influencers."""
-    return {"influencers": [p.to_dict() for p in _influencers.values()], "total": len(_influencers)}
+    profiles = await _influencer_store.list_all()
+    return {"influencers": [p.to_dict() for p in profiles], "total": len(profiles)}
 
 
 @router.put("/influencers/{influencer_id}/product-links", tags=["influencer"])
@@ -173,13 +179,14 @@ async def update_influencer_product_links(
     Returns:
         Updated influencer profile.
     """
-    profile = _influencers.get(influencer_id)
+    profile = await _influencer_store.get(influencer_id)
     if not profile:
         raise HTTPException(status_code=404)
     from src.models.influencer import InfluencerProductLink
     profile.product_links = [InfluencerProductLink(**l) for l in links]
     from datetime import datetime
     profile.updated_at = datetime.utcnow().isoformat()
+    await _influencer_store.update(profile)
     logger.info("api: influencer links updated", id=influencer_id, count=len(links))
     return profile.to_dict()
 
@@ -187,9 +194,9 @@ async def update_influencer_product_links(
 @router.delete("/influencers/{influencer_id}", tags=["influencer"])
 async def delete_influencer(influencer_id: str):
     """Delete an influencer profile."""
-    if influencer_id not in _influencers:
+    deleted = await _influencer_store.delete(influencer_id)
+    if not deleted:
         raise HTTPException(status_code=404)
-    del _influencers[influencer_id]
     return {"deleted": True}
 
 
