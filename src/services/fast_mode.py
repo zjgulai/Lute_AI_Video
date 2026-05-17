@@ -301,6 +301,13 @@ class FastModeService:
             "tts_path": tts_path,
         }
 
+        if local_path:
+            try:
+                from src.tools.poster_extractor import ensure_poster
+                ensure_poster(local_path)
+            except Exception:
+                pass
+
         logger.info(
             "fast_mode: complete",
             total_time_ms=total_time_ms,

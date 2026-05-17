@@ -296,6 +296,15 @@ class RemotionAssembleSkill(SkillCallable):
         file_size = output_path.stat().st_size if output_path.exists() else 0
         duration_seconds = self._measure_duration(output_path) if output_path.exists() else float(total_duration)
 
+        if not is_stub and output_path.exists():
+            try:
+                from src.tools.poster_extractor import ensure_poster
+                ensure_poster(output_path)
+                for ratio_path in video_paths.values():
+                    ensure_poster(ratio_path)
+            except Exception:
+                pass
+
         return SkillResult(
             success=True,
             data={

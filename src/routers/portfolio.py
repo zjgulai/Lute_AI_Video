@@ -125,11 +125,24 @@ def _thumbnail_path_for(rel_path: str) -> str | None:
 
     Naming convention: rel_path "seedance/s1_001.mp4" → poster
     "thumbnails/portfolio_posters/seedance__s1_001.jpg".
+
+    Backstop: when the poster is missing, synthesize it via ffmpeg so legacy
+    videos produced before the inline poster-extraction hooks landed get a
+    thumbnail on first scan. Amortized by the 30s scan cache.
     """
     flat = rel_path.replace("/", "__").rsplit(".", 1)[0] + ".jpg"
     poster = THUMBNAIL_DIR / flat
     if poster.is_file():
         return str(poster.relative_to(OUTPUT_DIR))
+    src = OUTPUT_DIR / rel_path
+    if src.is_file() and src.suffix.lower() in {".mp4", ".mov", ".webm"}:
+        try:
+            from src.tools.poster_extractor import ensure_poster
+            generated = ensure_poster(src)
+            if generated is not None and generated.is_file():
+                return str(generated.relative_to(OUTPUT_DIR))
+        except Exception:
+            return None
     return None
 
 

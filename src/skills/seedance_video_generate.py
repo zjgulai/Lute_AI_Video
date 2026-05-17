@@ -202,6 +202,15 @@ class SeedanceVideoGenerateSkill(SkillCallable):
 
         file_size = local_path.stat().st_size if (local_path and local_path.exists()) else 0
 
+        # Best-effort poster extraction so /works and /library always have a
+        # thumbnail. Skips silently if ffmpeg missing or extraction fails.
+        if local_path and local_path.exists() and not is_stub:
+            try:
+                from src.tools.poster_extractor import ensure_poster
+                ensure_poster(local_path)
+            except Exception:
+                pass
+
         return SkillResult(
             success=True,
             data={

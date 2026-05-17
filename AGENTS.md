@@ -2,13 +2,13 @@
 
 ## Overview
 
-**Short Video Agent** (v0.2.5) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
+**Short Video Agent** (v0.2.6) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status (2026-05-17, v0.2.5):** Production live at `https://video.lute-tlz-dddd.top` (Let's Encrypt cert, canonical) on Tencent Lighthouse since 2026-05-03. IP `https://101.34.52.232` remains as a self-signed fallback. The apex `https://lute-tlz-dddd.top` serves a static landing page that routes to either video.lute (this project) or voc.lute (Apache Superset BI, separate service). 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
+**Current status (2026-05-17, v0.2.6):** Production live at `https://video.lute-tlz-dddd.top` (Let's Encrypt cert, canonical) on Tencent Lighthouse since 2026-05-03. IP `https://101.34.52.232` remains as a self-signed fallback. The apex `https://lute-tlz-dddd.top` serves a static landing page that routes to either video.lute (this project) or voc.lute (Apache Superset BI, separate service). 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
 
-**Recent releases (v0.2.0 → v0.2.5):** Tier-2 submit-lock + 422/429 error rendering, Tier-3 3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT, HU-05 cardCopyEn 100-string zh→en, Creation Guide 5-tab redesign, Brand Kit tab API wiring (137 momcozy product images now visible), product metadata API (title/price/source URL), `/api/portfolio/brand-presets` endpoint, deploy.sh Phase 0.5 defensive chmod. **2026-05-17 v0.2.5**: ADR-004 Accepted Option D (`S3_VIRAL_EXTRACT_DISABLED=1` default — closes S3 KOL viral extraction by policy), `/health` `media_tools` observability for yt-dlp/whisper/clip availability, transformers+torch+Pillow added to image (~600MB) for `src/quality/clip_alignment.py`, frontend eslint sweep (~245 → ~30 errors via `any → unknown`). See `.kiro/plan/TODO-2026-05-17.md` + `.kiro/plan/MASTER-PLAN-STATUS-2026-05-17.md`.
+**Recent releases (v0.2.0 → v0.2.6):** Tier-2 submit-lock + 422/429 error rendering, Tier-3 3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT, HU-05 cardCopyEn 100-string zh→en, Creation Guide 5-tab redesign, Brand Kit tab API wiring (137 momcozy product images now visible), product metadata API (title/price/source URL), `/api/portfolio/brand-presets` endpoint, deploy.sh Phase 0.5 defensive chmod. **2026-05-17 v0.2.5**: ADR-004 Accepted Option D (`S3_VIRAL_EXTRACT_DISABLED=1` default — closes S3 KOL viral extraction by policy), `/health` `media_tools` observability for yt-dlp/whisper/clip availability, transformers+torch+Pillow added to image (~600MB) for `src/quality/clip_alignment.py`, frontend eslint sweep (~245 → ~30 errors via `any → unknown`). **2026-05-17 v0.2.6**: ADR-005 Accepted (poster extraction at every video producer + portfolio router backstop, `src/tools/poster_extractor.py`); /works and /library video thumbnails now reach 100% coverage in production (verified 86/86 final_works); `/api/assets/` nginx burst raised 20→100 to fix 429 on `/library?tab=influencers` after consecutive tab switches; new `docs/runbooks/thumbnail-missing.md`. See `.kiro/plan/TODO-2026-05-17.md` + `.kiro/plan/MASTER-PLAN-STATUS-2026-05-17.md`.
 
 ---
 
@@ -642,16 +642,32 @@ Last updated: **2026-05-11** (after v0.2.4 — brand assets Phase 2-4 shipped).
   cron runbook. 137 scraped momcozy images now fully wired end-to-end.
 - ~~**Missing ADRs / Runbooks**~~ — `4bf096b` added 3 ADRs (dual-runtime / two-layer-auth /
   db-strategy) + 4 runbooks (deepseek-timeout / poyo-rejection / pipeline-stuck /
-  db-pool-exhausted). `7daadc1` added brand-assets-refresh runbook. All under
-  `docs/architecture/adr/` and `docs/runbooks/`.
+  db-pool-exhausted). `7daadc1` added brand-assets-refresh runbook. ADR-005 +
+  `thumbnail-missing.md` runbook added 2026-05-17 (v0.2.6) alongside the
+  poster-extraction refactor. All under `docs/architecture/adr/` and `docs/runbooks/`.
 - ~~**Creation Guide UX monolith**~~ — `c52cad8` (v0.2.2) extracted to 5-tab
   `CreationGuide.tsx`; adds Frontend/Backend/Runbooks tabs that didn't exist before.
+- ~~**/works and /library video cards show black tile**~~ — fixed 2026-05-17 (v0.2.6,
+  ADR-005). `portfolio_hook.rebuild_portfolio_listener` was the only producer of
+  `output/thumbnails/portfolio_posters/*.jpg`, fired only on the LangGraph
+  `pipeline.completed` webhook. Fast-mode runs and ad-hoc seedance/remotion calls
+  never fired that event, so every video produced outside the full pipeline rendered
+  as a black `<FilmSlate>` placeholder. New shared helper `src/tools/poster_extractor.py`
+  is called inline at every producer (`seedance_video_generate`, `remotion_assemble`,
+  `services/fast_mode.py`) plus a router-level backstop in
+  `_thumbnail_path_for` that synthesizes a poster on first scan when one is missing.
+  Verified 86/86 final_works coverage in production.
+- ~~**429 on `/library?tab=influencers` after consecutive tab switches**~~ — fixed
+  2026-05-17 (v0.2.6). nginx `/api/assets/` location had `burst=20` while the
+  equivalent `/api/portfolio/` listing path had `burst=100`. Library tab switching
+  bursts both, exhausting the asset bucket. Raised to `burst=100` to match the sibling
+  listing endpoint. Verified 30/30 rapid `GET /api/assets/influencers` return 200.
 
 ### 🟡 Still open — real technical debt
 
 #### P0 (block next release if left)
 
-None. The v0.2.4 release is clean.
+None. The v0.2.6 release is clean.
 
 #### P1 (do next sprint)
 

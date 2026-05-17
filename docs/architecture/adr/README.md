@@ -21,6 +21,7 @@ description: ADR 索引文档，列出本仓库所有架构决策记录（ADR）
 | [002](./002-two-layer-auth.md) | Two-Layer Auth Architecture | Accepted | 业务接口 `X-API-Key` 无状态 + 管理后台 Cookie session 有状态，两套并行 |
 | [003](./003-db-strategy.md) | PostgreSQL First, SQLite Fallback | Accepted | 生产 PG fail-fast，本地 dev / CI SQLite 默认，禁止静默退化 |
 | [004](./004-s3-copyright-fingerprint.md) | S3 Copyright Fingerprint Selection | **Accepted: Option D** | 2026-05-17 决议：关闭 S3 viral 提取接口（`S3_VIRAL_EXTRACT_DISABLED=1` 默认）。Pex/Audible Magic/自建均超预算或工期，跳过技术方案，等业务需求重启再评估 |
+| [005](./005-poster-extraction-everywhere.md) | Poster Extraction at Every Video Producer | Accepted | 2026-05-17 决议：废弃"靠 pipeline.completed 单一钩子"模型，改为 `ensure_poster()` 在 4 个写 mp4 的代码路径内联调用 + portfolio router backstop，解决 fast_mode 等旁路场景视频卡片黑底问题 |
 
 ## 写新 ADR
 
