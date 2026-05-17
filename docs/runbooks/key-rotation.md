@@ -37,7 +37,36 @@ related:
 
 ---
 
-## \u9636\u6bb5 1 \u2014 \u5907\u4efd\u5f53\u524d\u72b6\u6001\uff083 min\uff09
+## ⚠️ 2026-05-17 Audit: 已确认泄露范围
+
+AI 对 git history + origin/main + .gitignore 做完整扫描后的真实结论：
+
+| Key | git history | origin/main | .gitignore 保护 | 风险评级 | 紧急 rotate? |
+|---|---|---|---|---|---|
+| `POYO_API_KEY` (`sk-pyIO0phv-...`) | ✅ commit `49d5bdc` (sprint2-backup) | ✅ **YES, 已推到 origin/main** | ✅ now | 🔴 **HIGH** | **是，本周必做** |
+| `DEEPSEEK_API_KEY` | ❌ 历史无 | ❌ | ✅ | 🟢 SAFE | defer (90d 周期 rotation) |
+| `SILICONFLOW_API_KEY` | ❌ 历史无 | ❌ | ✅ | 🟢 SAFE | defer (90d 周期 rotation) |
+| `API_KEY` (`ai_video_demo_2026`) | ✅ public by design | ✅ | ✅ now | 🟡 demo-only read-only | 仅在 demo key 被滥用时 |
+
+**结论**: 4 个 key 中只有 **1 个 (POYO) 是真正泄露 + 紧急 rotate 优先**，其他 3 个不紧急。可优先 rotate POYO 单个再按 90d 周期 rotate 余下 3 个。
+
+### POYO key 紧急 rotate 步骤
+
+1. 登 https://poyo.ai/dashboard → API Keys
+2. 点 "Generate new key"，复制新 key
+3. SSH 到生产 `ssh -i ~/ai_video.pem ubuntu@101.34.52.232`
+4. `nano /opt/ai-video/deploy/lighthouse/.env.prod` → 替换 `POYO_API_KEY=<new>`
+5. `docker compose -f /opt/ai-video/deploy/lighthouse/docker-compose.prod.yml up -d --force-recreate backend`
+6. 等 30s 后验证: `curl -sk https://video.lute-tlz-dddd.top/health | grep version`
+7. **泄露的旧 key disable**: 回 poyo.ai dashboard → 找旧 key → Revoke
+
+### 注意
+- 老 commit `49d5bdc` 在 sprint2-backup branch，**已在 origin/main 之外的分支**。但 origin 可能保留了 dangling object。**rotate POYO key 即可彻底闭环**。
+- 不需要 `git filter-repo` 清理 history（已 rotate 等于 deactivate，老 history 中的 key 失效后无安全意义）。
+
+---
+
+
 
 ```bash
 ssh -i ./ai_video.pem ubuntu@101.34.52.232
