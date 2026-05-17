@@ -314,6 +314,9 @@ if HAS_FASTAPI:
     from src.routers._deps import verify_api_key
     app.include_router(health.router)
 
+    from src.routers import prometheus
+    app.include_router(prometheus.router)
+
     from src.routers import pipeline
     app.include_router(pipeline.router, dependencies=[Depends(verify_api_key)])
 

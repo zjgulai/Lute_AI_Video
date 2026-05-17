@@ -372,12 +372,16 @@ async def fast_submit(req: FastModeRequest):
 
     async def _run() -> dict[str, Any]:
         tid = task_id_holder.get("id", "")
-        if tid:
-            update_fast_task_stage(tid, "llm")
+
+        def _on_stage(stage: str) -> None:
+            if tid:
+                update_fast_task_stage(tid, stage)
+
         return await service.generate(
             user_prompt=user_prompt,
             duration=duration,
             enable_tts=enable_tts,
+            on_stage=_on_stage,
         )
 
     task = asyncio.create_task(_run())

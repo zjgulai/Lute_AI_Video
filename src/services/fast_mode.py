@@ -52,6 +52,20 @@ Requirements:
 - No product showcase / 360 rotation / turntable patterns
 - Focus on cinematic, lifestyle, or narrative shots
 
+CONTENT SAFETY (POYO/Seedance content filter rejects prompts that imply):
+- Real human faces, especially children, public figures, or recognizable identities
+- Brand logos, trademarked characters, or copyrighted IP
+- Violence, blood, weapons, gore, war scenes
+- Explicit/sexual content, nudity, suggestive poses
+- Drugs, alcohol abuse, smoking
+- Political figures, religious symbols, cultural sensitive topics
+- Medical procedures, surgical content, injuries
+
+If the user prompt is borderline (e.g. mentions a person, child, or product),
+REWRITE to remove these elements: replace people with abstract figures or
+silhouettes, products with generic stand-ins, brand names with neutral terms.
+Default to nature/landscape/abstract/object-focused safe imagery.
+
 HARD CONSTRAINT: video_prompt MUST be <= 1000 characters.
 The downstream POYO API rejects prompts > 2500 chars.
 
@@ -100,6 +114,7 @@ class FastModeService:
         user_prompt: str,
         duration: int = 15,
         enable_tts: bool = False,
+        on_stage: "callable | None" = None,
     ) -> dict[str, Any]:
         """Generate a short video from simple text input.
 
@@ -114,7 +129,14 @@ class FastModeService:
         total_start = time.perf_counter()
         duration = max(10, min(15, duration))
 
-        # ── Step 1: LLM prompt enhancement ──
+        def _stage(s: str) -> None:
+            if on_stage is not None:
+                try:
+                    on_stage(s)
+                except Exception:
+                    pass
+
+        _stage("llm")
         llm_start = time.perf_counter()
         logger.info("fast_mode: enhancing prompt", user_prompt=user_prompt[:100])
 
@@ -143,6 +165,7 @@ class FastModeService:
 
         # ── Step 2: Video + optional TTS in parallel ──
         video_start = time.perf_counter()
+        _stage("video")
         logger.info("fast_mode: generating video", duration=duration, enable_tts=enable_tts)
 
         video_future = self.seedance.text_to_video(
@@ -154,6 +177,7 @@ class FastModeService:
 
         tts_future = None
         if enable_tts and scene_description:
+            _stage("tts")
             tts_future = self.cosyvoice.synthesize(
                 text=scene_description,
                 language="en",
