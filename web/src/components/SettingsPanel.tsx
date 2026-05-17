@@ -69,7 +69,12 @@ export default function SettingsPanel({ onClose }: Props) {
     try {
       const result = await testConnection();
       if (result.ok) {
-        const data = result.data || {};
+        const data = (result.data || {}) as {
+          status?: string;
+          version?: string;
+          persistence?: { backend?: string };
+          remotion?: { available?: boolean };
+        };
         const parts: string[] = [];
         if (data.status) parts.push(String(data.status).toUpperCase());
         if (data.version) parts.push("v" + data.version);

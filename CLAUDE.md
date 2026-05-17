@@ -516,9 +516,12 @@ Configured via `.env`:
 - `DEFAULT_LLM_PROVIDER` — canonical value is `deepseek`. Live in `deploy/lighthouse/.env.prod`,
 and `src/services/fast_mode.py:121` special-cases `"deepseek"` to switch the V4-Pro reasoning
 model down to `deepseek-chat` (V3) for sub-5s latency on simple text-to-video.
-**Known divergence (待统一):** `src/config.py:105` fallback is `"anthropic"`, `render.yaml`
-sets `"kimi"`, `deploy/tencent-cloudbase.md` documents `"kimi"`. When updating any of these,
-align the others or update this section.
+All sources aligned (2026-05-17): `src/config.py:117` fallback = `deepseek`,
+`render.yaml:24` = `deepseek`, `deploy/tencent-cloudbase.md:59` = `deepseek`,
+`deploy/CLOUDBASE_STEP_BY_STEP.md:67` = `deepseek`, `.env.example:33` = `deepseek`.
+Stale `kimi` / `anthropic` references in `drafts/`, `docs/research/`, `docs/analysis/`,
+and `.hermes/archive/` are historical research notes only — do not align them, they're
+not used by any code path.
 
 ---
 

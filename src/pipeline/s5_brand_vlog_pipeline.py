@@ -273,29 +273,45 @@ class S5BrandVlogPipeline:
 
         llm = LLMClient(timeout=120.0)
 
-        views = product_sku.get("views", [])
+        views = product_sku.get("views", []) if isinstance(product_sku, dict) else []
         views_text = "\n".join(
             f"- {v.get('label', '?')} ({v.get('title', '?')}): {v.get('usage_note', '')}"
-            for v in views
+            for v in views if isinstance(v, dict)
         ) if views else "(no view data)"
 
+        normalized_models: list[dict[str, Any]] = []
+        for m in models:
+            if isinstance(m, dict):
+                normalized_models.append(m)
+            elif isinstance(m, str):
+                normalized_models.append({"name": m, "role": "", "description": ""})
         models_text = "\n".join(
             f"- {m.get('name', '?')} (角色: {m.get('role', '?')}): {m.get('description', '')}"
-            for m in models
-        ) if models else "(no models)"
+            for m in normalized_models
+        ) if normalized_models else "(no models)"
 
         scene_info = SCENE_MAP.get(scene_id, {"name": scene_id, "desc": ""})
         scene_context = f"{scene_info['name']} — {scene_info['desc']}"
-        tags = ", ".join(product_sku.get("tags", []))
+        tags = ", ".join(product_sku.get("tags", []) if isinstance(product_sku, dict) else [])
 
         system_prompt = (
             "你是母婴品牌的创意导演，擅长将产品素材转化为 VLOG 叙事分镜。"
             "输出严格的 JSON 数组，不要任何解释文字。"
         )
 
+        if isinstance(product_sku, dict):
+            sku_name = product_sku.get('name', 'Product')
+            sku_short = product_sku.get('shortName', '')
+        elif isinstance(product_sku, str) and product_sku.strip():
+            sku_name = product_sku.strip()
+            sku_short = ''
+        else:
+            sku_name = 'Product'
+            sku_short = ''
+
         user_prompt = f"""请生成一个 {duration} 秒的 VLOG 视频分镜脚本。
 
-产品: {product_sku.get('name', 'Product')} ({product_sku.get('shortName', '')})
+产品: {sku_name} ({sku_short})
 产品标签: {tags or '母婴产品'}
 可用产品角度:
 {views_text}
@@ -339,8 +355,10 @@ class S5BrandVlogPipeline:
 
         return self._build_fallback_shots(product_sku, duration)
 
-    def _build_fallback_shots(self, product_sku: dict[str, Any], duration: int) -> list[dict[str, Any]]:
+    def _build_fallback_shots(self, product_sku: Any, duration: int) -> list[dict[str, Any]]:
         """Fallback shot list with structured narrative — not generic rotation."""
+        if not isinstance(product_sku, dict):
+            product_sku = {"name": str(product_sku).strip()} if isinstance(product_sku, str) and product_sku.strip() else {}
         name = product_sku.get("name", "Product")
         short = product_sku.get("shortName", name)
         views = product_sku.get("views", [])

@@ -186,8 +186,9 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     if (!output) return "";
     if (Array.isArray(output)) return `${output.length}${t("step.items")}`;
     if (typeof output === "object") {
-      if (output.overall_status) return `${t("quality.overallStatus")}: ${output.overall_status}`;
-      if (output.summary) return String(output.summary).slice(0, 60);
+      const obj = output as { overall_status?: string; summary?: string };
+      if (obj.overall_status) return `${t("quality.overallStatus")}: ${obj.overall_status}`;
+      if (obj.summary) return String(obj.summary).slice(0, 60);
       const keys = Object.keys(output);
       if (keys.length > 0) return `${keys.length}${t("step.fields")}`;
     }
