@@ -1,0 +1,64 @@
+name: e2e-prod
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/e2e/production/**"
+      - "web/playwright.prod.config.ts"
+      - "web/package.json"
+      - ".github/workflows/e2e-prod.yml"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL to test (defaults to https://video.lute-tlz-dddd.top)"
+        required: false
+        default: "https://video.lute-tlz-dddd.top"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-prod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_PROD_URL: ${{ github.event.inputs.base_url || 'https://video.lute-tlz-dddd.top' }}
+      PLAYWRIGHT_API_KEY: ${{ secrets.PROD_DEMO_API_KEY || 'ai_video_demo_2026' }}
+      CI: "true"
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run production E2E suite
+        run: npx playwright test -c playwright.prod.config.ts --reporter=list,html
+
+      - name: Upload Playwright HTML report on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_attempt }}
+          path: web/playwright-report/
+          retention-days: 14
+
+      - name: Upload trace artifacts on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ github.run_attempt }}
+          path: web/test-results/
+          retention-days: 7
