@@ -73,4 +73,46 @@ describe("AdminTenantsPage", () => {
     expect(container.textContent || "").toMatch(/failed/i);
     cleanup();
   });
+
+  it("issues POST /api/admin/tenants when create form is submitted", async () => {
+    adminFetchJson.mockResolvedValueOnce(SAMPLE);
+    const { container, cleanup } = render();
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    const newTenantBtn = Array.from(container.querySelectorAll("button"))
+      .find((b) => /new tenant/i.test(b.textContent || "")) as HTMLButtonElement | undefined;
+    expect(newTenantBtn).toBeTruthy();
+    await act(async () => { newTenantBtn?.click(); });
+
+    const form = container.querySelector("form") as HTMLFormElement | null;
+    expect(form).toBeTruthy();
+    const tenantIdInput = container.querySelector('input[placeholder*="tenant" i]') as HTMLInputElement | null
+      || (form?.querySelectorAll("input")[0] as HTMLInputElement);
+    const displayInput = (form?.querySelectorAll("input")[1] as HTMLInputElement);
+    const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement
+      || (form?.querySelectorAll("input")[2] as HTMLInputElement);
+
+    await act(async () => {
+      tenantIdInput.value = "newtenant";
+      tenantIdInput.dispatchEvent(new Event("input", { bubbles: true }));
+      displayInput.value = "New Co";
+      displayInput.dispatchEvent(new Event("input", { bubbles: true }));
+      emailInput.value = "ops@new.test";
+      emailInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    adminFetchJson.mockResolvedValueOnce({});
+    adminFetchJson.mockResolvedValueOnce(SAMPLE);
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    const postCall = adminFetchJson.mock.calls.find(
+      (c: unknown[]) => (c[1] as { method?: string })?.method === "POST"
+    );
+    expect(postCall).toBeTruthy();
+    expect(postCall?.[0]).toBe("/api/admin/tenants");
+    cleanup();
+  });
 });

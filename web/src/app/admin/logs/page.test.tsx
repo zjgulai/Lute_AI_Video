@@ -66,4 +66,15 @@ describe("AdminLogsPage", () => {
     expect(container.textContent || "").toMatch(/failed/i);
     cleanup();
   });
+
+  it("includes pagination + 24h time-range params in initial fetch URL", async () => {
+    adminFetchJson.mockResolvedValueOnce(SAMPLE);
+    const { cleanup } = render();
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    const callPath = (adminFetchJson.mock.calls[0]?.[0] || "") as string;
+    expect(callPath).toMatch(/page=1/);
+    expect(callPath).toMatch(/limit=50/);
+    expect(callPath).toMatch(/from=\d{4}-\d{2}-\d{2}T/);
+    cleanup();
+  });
 });
