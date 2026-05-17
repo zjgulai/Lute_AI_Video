@@ -370,8 +370,17 @@ class ProductStrategySkill(SkillCallable):
         if "product_catalog" not in params:
             errors.append("missing 'product_catalog'")
         pc = params.get("product_catalog", {})
-        if isinstance(pc, dict) and not pc.get("product_name") and not pc.get("name"):
-            errors.append("product_catalog missing product_name/name")
+        if isinstance(pc, dict):
+            has_root_name = bool(pc.get("product_name") or pc.get("name"))
+            products = pc.get("products") or []
+            has_nested_name = bool(
+                isinstance(products, list)
+                and products
+                and isinstance(products[0], dict)
+                and (products[0].get("product_name") or products[0].get("name"))
+            )
+            if not has_root_name and not has_nested_name:
+                errors.append("product_catalog missing product_name/name (root or products[0])")
         return errors
 
     def validate_output(self, data: Any) -> list[str]:

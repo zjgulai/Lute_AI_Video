@@ -5,6 +5,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from src._version import APP_VERSION
+
 try:
     from src.storage.db import (  # noqa: F401  # availability sentinel; reimported inside body
         check_pg_health,
@@ -106,7 +108,7 @@ async def health():
 
     return {
         "status": "ok",
-        "version": "0.2.5",
+        "version": APP_VERSION,
         "remotion": remotion_env,
         "persistence": persistence_status,
         "media_tools": media_tools,

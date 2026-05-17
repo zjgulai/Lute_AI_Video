@@ -1,6 +1,6 @@
 [project]
 name = "short-video-agent"
-version = "0.2.0"
+version = "0.2.5"
 description = "Multi-agent short video creation system for cross-border e-commerce — wearable breast pump & feeding appliances"
 requires-python = ">=3.11"
 dependencies = [

@@ -32,6 +32,7 @@ services:
       - backend_output:/app/output
       - ../../src:/app/src:ro
       - ../../requirements.txt:/app/requirements.txt:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
     networks:
       - ai_video_net
     depends_on:

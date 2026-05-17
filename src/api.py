@@ -37,6 +37,8 @@ except ImportError:
     init_db = None  # type: ignore[assignment]
     HAS_STORAGE = False
 
+from src._version import APP_VERSION
+
 
 # ── FastAPI app ──
 
@@ -45,7 +47,7 @@ if HAS_FASTAPI:
     assert Depends is not None
     assert CORSMiddleware is not None
 
-    app = FastAPI(title="Short Video Agent API", version="0.2.0")
+    app = FastAPI(title="Short Video Agent API", version=APP_VERSION)
 
     @app.on_event("startup")
     async def startup():
@@ -285,7 +287,7 @@ if HAS_FASTAPI:
         meta = {
             "trace_id": server_trace_id,
             "duration_ms": _duration_ms,
-            "version": getattr(app, "version", "0.2.0"),
+            "version": APP_VERSION,
             "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }
 
