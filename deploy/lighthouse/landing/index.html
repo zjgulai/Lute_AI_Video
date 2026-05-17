@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>路特数据科学平台 / Lute Data Science Hub</title>
+<meta name="description" content="路特创新视频与商业智能平台入口 — Root Innovation Video Creation & Voice-of-Customer Analytics">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@500;600&family=Noto+Sans+SC:wght@400;500&display=swap">
+<style>
+  :root {
+    --fortune-red: #D75C70;
+    --fortune-red-100: #F9D0D6;
+    --fortune-red-200: #F4AFB9;
+    --fortune-red-600: #C44A5E;
+    --gold-foil: #D8BE78;
+    --jade-accent: #6E966E;
+    --pure-white: #FDF8F6;
+    --pure-white-300: #FCF5F2;
+    --bg-page: #FDF8F6;
+    --bg-card: #FFFFFF;
+    --bg-panel: #FCF5F2;
+    --text-h1: #35141A;
+    --text-body: #59585E;
+    --text-muted: #9B9795;
+    --border-default: rgba(53, 20, 26, 0.10);
+    --border-hover: rgba(215, 92, 112, 0.30);
+    --shadow-sm: 0 1px 2px rgba(53, 20, 26, 0.04);
+    --shadow-md: 0 4px 12px rgba(53, 20, 26, 0.06);
+    --shadow-lg: 0 12px 32px rgba(215, 92, 112, 0.10);
+    --font-display: 'Montserrat', -apple-system, sans-serif;
+    --font-body: 'Inter', -apple-system, 'Noto Sans SC', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-body);
+    background: radial-gradient(ellipse at 30% 20%, rgba(215,92,112,0.08) 0%, var(--bg-page) 55%, var(--pure-white-300) 100%);
+    color: var(--text-h1);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 5vh 24px 8vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(215, 92, 112, 0.10);
+    border: 1px solid rgba(215, 92, 112, 0.18);
+    color: var(--fortune-red);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 28px;
+    animation: fade-up 500ms 0ms ease-out both;
+  }
+  .brand {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 7vw, 72px);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    margin: 0 0 8px;
+    color: var(--text-h1);
+    animation: fade-up 500ms 80ms ease-out both;
+  }
+  .divider {
+    width: 48px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--fortune-red);
+    opacity: 0.7;
+    margin: 16px 0 12px;
+    animation: fade-up 500ms 140ms ease-out both;
+  }
+  .tagline {
+    font-size: 18px;
+    color: var(--text-body);
+    margin: 0;
+    font-weight: 400;
+    animation: fade-up 500ms 200ms ease-out both;
+  }
+  .tagline-en {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 4px 0 0;
+    letter-spacing: 0.02em;
+    animation: fade-up 500ms 240ms ease-out both;
+  }
+  .grid {
+    margin-top: 64px;
+    display: grid;
+    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    width: 100%;
+    animation: fade-up 600ms 320ms ease-out both;
+  }
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: 20px;
+    padding: 32px 28px 28px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(215,92,112,0.05) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 250ms ease;
+    pointer-events: none;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--border-hover);
+  }
+  .card:hover::before { opacity: 1; }
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(215, 92, 112, 0.10);
+    color: var(--fortune-red);
+    margin-bottom: 20px;
+  }
+  .card-icon.voc {
+    background: rgba(110, 150, 110, 0.12);
+    color: var(--jade-accent);
+  }
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    color: var(--text-h1);
+  }
+  .card-subtitle {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fortune-red);
+    margin: 0 0 14px;
+  }
+  .card-subtitle.voc { color: var(--jade-accent); }
+  .card-desc {
+    font-size: 14px;
+    color: var(--text-body);
+    margin: 0 0 24px;
+    line-height: 1.6;
+  }
+  .card-desc-en {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 24px;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+  }
+  .card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--fortune-red);
+  }
+  .card-cta.voc { color: var(--jade-accent); }
+  .card-cta-arrow {
+    transition: transform 250ms ease;
+  }
+  .card:hover .card-cta-arrow { transform: translateX(4px); }
+  .card-meta {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-default);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .footer {
+    margin-top: 64px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    animation: fade-up 600ms 480ms ease-out both;
+  }
+  .footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 200ms ease, color 200ms ease;
+  }
+  .footer a:hover {
+    color: var(--text-h1);
+    border-bottom-color: var(--text-muted);
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+  @media (max-width: 640px) {
+    .page { padding: 4vh 20px 6vh; }
+    .grid { margin-top: 40px; }
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+    <span class="badge">Root Innovation · Lute Data Science</span>
+    <h1 class="brand">Lute</h1>
+    <div class="divider"></div>
+    <p class="tagline">数据 · 创新 · 共创</p>
+    <p class="tagline-en">Data Science Hub for Cross-Border E-Commerce</p>
+
+    <div class="grid">
+      <a class="card" href="https://video.lute-tlz-dddd.top">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 4l14 8-14 8V4z" fill="currentColor"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">AI Video Pipeline</p>
+        <h2 class="card-title">短视频创作平台</h2>
+        <p class="card-desc">16 步 AI 评审管线 · 多场景自动出片 · 多平台分发</p>
+        <p class="card-desc-en">Multi-agent video creation: strategy → script → storyboard → keyframe → seedance → audio → caption → thumbnail → distribution</p>
+        <div class="card-meta">
+          <span class="chip">S1-S5 + Fast Mode</span>
+          <span class="chip">DeepSeek + POYO</span>
+          <span class="chip">Remotion Render</span>
+        </div>
+        <span class="card-cta">
+          打开视频平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://voc.lute-tlz-dddd.top">
+        <div class="card-icon voc">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle voc">Voice of Customer</p>
+        <h2 class="card-title">客户声音分析平台</h2>
+        <p class="card-desc">Apache Superset · 跨境电商 NLP 增量处理 · 评论/反馈/舆情挖掘</p>
+        <p class="card-desc-en">Customer review analytics &amp; sentiment dashboards on Apache Superset</p>
+        <div class="card-meta">
+          <span class="chip">Apache Superset</span>
+          <span class="chip">VOC NLP</span>
+          <span class="chip">PostgreSQL</span>
+        </div>
+        <span class="card-cta voc">
+          打开数据平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+    </div>
+
+    <p class="footer">
+      © 2026 Lute · Digital &amp; Data Science Dept. · Powered by
+      <a href="https://video.lute-tlz-dddd.top">video.lute</a> &middot;
+      <a href="https://voc.lute-tlz-dddd.top">voc.lute</a>
+    </p>
+  </main>
+</body>
+</html>

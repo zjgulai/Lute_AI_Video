@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : 2,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_PROD_URL || "https://101.34.52.232",
+    baseURL: process.env.PLAYWRIGHT_PROD_URL || "https://video.lute-tlz-dddd.top",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     ignoreHTTPSErrors: true,

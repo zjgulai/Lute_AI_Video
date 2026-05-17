@@ -6,7 +6,7 @@
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status (2026-05-17, v0.2.5):** Production live at `https://101.34.52.232` on Tencent Lighthouse since 2026-05-03. 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
+**Current status (2026-05-17, v0.2.5):** Production live at `https://video.lute-tlz-dddd.top` (Let's Encrypt cert, canonical) on Tencent Lighthouse since 2026-05-03. IP `https://101.34.52.232` remains as a self-signed fallback. The apex `https://lute-tlz-dddd.top` serves a static landing page that routes to either video.lute (this project) or voc.lute (Apache Superset BI, separate service). 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
 
 **Recent releases (v0.2.0 → v0.2.5):** Tier-2 submit-lock + 422/429 error rendering, Tier-3 3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT, HU-05 cardCopyEn 100-string zh→en, Creation Guide 5-tab redesign, Brand Kit tab API wiring (137 momcozy product images now visible), product metadata API (title/price/source URL), `/api/portfolio/brand-presets` endpoint, deploy.sh Phase 0.5 defensive chmod. **2026-05-17 v0.2.5**: ADR-004 Accepted Option D (`S3_VIRAL_EXTRACT_DISABLED=1` default — closes S3 KOL viral extraction by policy), `/health` `media_tools` observability for yt-dlp/whisper/clip availability, transformers+torch+Pillow added to image (~600MB) for `src/quality/clip_alignment.py`, frontend eslint sweep (~245 → ~30 errors via `any → unknown`). See `.kiro/plan/TODO-2026-05-17.md` + `.kiro/plan/MASTER-PLAN-STATUS-2026-05-17.md`.
 
@@ -506,11 +506,17 @@ cd web && npm test # Frontend tests
 
 The project ships three deploy targets, in priority order:
 
-1. **Tencent Lighthouse (canonical)** — current production at `https://101.34.52.232`.
+1. **Tencent Lighthouse (canonical)** — current production at `https://video.lute-tlz-dddd.top`
+   (Let's Encrypt cert, SAN: `lute-tlz-dddd.top, video.lute-tlz-dddd.top, voc.lute-tlz-dddd.top`,
+   auto-renew via certbot.timer + deploy-hook). IP `https://101.34.52.232` is the self-signed
+   fallback for IP-direct access. The apex `https://lute-tlz-dddd.top` serves a static
+   landing page (deploy/lighthouse/landing/index.html) routing to video.lute / voc.lute.
    `deploy/lighthouse/` contains `docker-compose.prod.yml` (backend + frontend + nginx +
-   rendering), `nginx.conf` (with 1500s `proxy_read_timeout` for long-running pipelines),
-   and `.env.prod` (live secrets — gitignored). Deploy via `rsync -e "ssh -i ai_video.pem"`
-   to `ubuntu@101.34.52.232:/opt/ai-video/` then `docker compose up -d --force-recreate`.
+   rendering), `nginx.conf` (3 server blocks: video / voc / IP-fallback, with 1500s
+   `proxy_read_timeout` for long-running pipelines), `ai_video_locations.conf` (shared
+   location snippet), and `.env.prod` (live secrets — gitignored). Deploy via
+   `rsync -e "ssh -i ai_video.pem"` to `ubuntu@101.34.52.232:/opt/ai-video/` then
+   `docker compose up -d --force-recreate`.
    Note: rsync to bind-mounted nginx.conf needs `--inplace --no-whole-file` or an explicit
    `docker restart ai_video_nginx` afterwards (nginx locks the inode at startup, so a
    default rename-based rsync makes `nginx -s reload` a no-op).

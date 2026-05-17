@@ -119,6 +119,7 @@ services:
       - ./proxy_params.conf:/etc/nginx/proxy_params.conf:ro
       - ./server.crt:/etc/nginx/ssl/server.crt:ro
       - ./server.key:/etc/nginx/ssl/server.key:ro
+      - ./landing:/var/www/landing:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
       - backend_output:/var/www/media:ro
