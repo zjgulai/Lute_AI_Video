@@ -389,9 +389,8 @@ class SeedanceClient:
 
         logger.info("poyo: task submitted", task_id=task_id, attempt=attempt + 1)
 
-        # Poll status
         poll_interval = 5.0
-        max_polls = 60  # 300s max
+        max_polls = 120  # 600s = 10min — covers slow Seedance generation per real prod observation
 
         for i in range(max_polls):
             await asyncio.sleep(poll_interval)

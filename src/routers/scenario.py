@@ -1,6 +1,7 @@
 """scenario router — extracted from api.py (P1-11)."""
 
 import asyncio
+import time
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
@@ -342,6 +343,73 @@ async def fast_generate(req: FastModeRequest):
     except Exception as e:
         logger.error("fast_mode failed", error=str(e))
         raise HTTPException(status_code=500, detail=_safe_error(e))
+
+
+@router.post("/fast/submit", dependencies=[Depends(verify_api_key)])
+async def fast_submit(req: FastModeRequest):
+    """Fast Mode async submit — returns task_id immediately, status polled separately.
+
+    Companion to /fast/generate (sync, blocks 5-10 min). This endpoint kicks off
+    generation in a background task and returns within ~50ms with a task_id.
+    Frontend polls GET /fast/status/{task_id} to track progress.
+
+    Returns:
+        { task_id, status: "queued", started_at_unix }
+    """
+    _inject_api_keys(req.api_keys)
+    from src.services.fast_mode import get_fast_mode_service
+    from src.tasks.fast_task_registry import (
+        register_fast_task,
+        update_fast_task_stage,
+    )
+
+    service = get_fast_mode_service()
+    duration = max(10, min(15, req.duration))
+    enable_tts = req.enable_tts
+    user_prompt = req.user_prompt
+
+    task_id_holder: dict[str, str] = {}
+
+    async def _run() -> dict[str, Any]:
+        tid = task_id_holder.get("id", "")
+        if tid:
+            update_fast_task_stage(tid, "llm")
+        return await service.generate(
+            user_prompt=user_prompt,
+            duration=duration,
+            enable_tts=enable_tts,
+        )
+
+    task = asyncio.create_task(_run())
+    task_id = register_fast_task(task)
+    task_id_holder["id"] = task_id
+
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "started_at_unix": int(time.time()),
+    }
+
+
+@router.get("/fast/status/{task_id}", dependencies=[Depends(verify_api_key)])
+async def fast_status(task_id: str):
+    """Poll Fast Mode async task progress.
+
+    Returns:
+        { task_id, status: "running"|"done"|"failed",
+          stage: "queued"|"llm"|"video"|"tts",
+          elapsed_sec, result?, error? }
+
+    HTTP semantics:
+        200 OK — task exists; check status field
+        404 Not Found — task_id unknown or expired (>10min after completion)
+    """
+    from src.tasks.fast_task_registry import get_fast_task
+
+    snapshot = get_fast_task(task_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"Unknown or expired task_id: {task_id}")
+    return snapshot
 
 
 @router.post("/scenario/s1/start", dependencies=[Depends(verify_api_key)])

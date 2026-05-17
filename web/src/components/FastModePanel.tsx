@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Lightning, Clock, SpeakerHigh, CaretDown, CaretUp, Copy, ArrowCounterClockwise, Play, Article, Cpu, Timer, HardDrives } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { generateFastMode, getMediaUrl, isDemoMode, isApiError, type FastModeResult } from "./api";
+import { submitFastMode, pollFastStatus, getMediaUrl, isDemoMode, isApiError, type FastModeResult, type FastStatusResponse } from "./api";
 import { DEMO_FAST_MODE_RESULT } from "@/demo-data";
 import { useSubmitting } from "@/hooks/useSubmitting";
 
@@ -17,12 +17,16 @@ export default function FastModePanel() {
   const [error, setError] = useState("");
   const [showDebug, setShowDebug] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [progressStage, setProgressStage] = useState<FastStatusResponse["stage"] | null>(null);
+  const [progressSec, setProgressSec] = useState(0);
 
   function handleGenerate() {
     if (!userPrompt.trim()) return;
     void wrap(async () => {
       setError("");
       setResult(null);
+      setProgressStage(null);
+      setProgressSec(0);
       if (isDemoMode()) {
         await new Promise((r) => setTimeout(r, 800));
         setResult({
@@ -41,10 +45,19 @@ export default function FastModePanel() {
         return;
       }
       try {
-        const res = await generateFastMode({
+        const { task_id } = await submitFastMode({
           user_prompt: userPrompt.trim(),
           duration,
           enable_tts: enableTTS,
+        });
+        setProgressStage("queued");
+        const res = await pollFastStatus(task_id, {
+          intervalMs: 2000,
+          maxWaitMs: 600_000,
+          onProgress: (s) => {
+            setProgressStage(s.stage);
+            setProgressSec(s.elapsed_sec);
+          },
         });
         setResult(res);
       } catch (e: unknown) {
@@ -55,6 +68,8 @@ export default function FastModePanel() {
           const msg = e instanceof Error ? e.message : String(e);
           setError(msg || "Generation failed");
         }
+      } finally {
+        setProgressStage(null);
       }
     });
   }
@@ -185,6 +200,20 @@ export default function FastModePanel() {
             </span>
           )}
         </button>
+
+        {loading && progressStage && (
+          <div className="text-xs text-[var(--text-body)] bg-[rgba(215,168,52,0.05)] px-3 py-2 rounded-lg">
+            <div className="flex items-center justify-between">
+              <span>
+                {progressStage === "queued" && "Submitting..."}
+                {progressStage === "llm" && "Enhancing prompt with DeepSeek..."}
+                {progressStage === "video" && "Generating video with Seedance..."}
+                {progressStage === "tts" && "Synthesizing voiceover..."}
+              </span>
+              <span className="font-mono text-[var(--text-muted)]">{progressSec.toFixed(1)}s</span>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="text-xs text-[var(--crimson-mist)] bg-[rgba(196,91,80,0.05)] px-3 py-2 rounded-lg">

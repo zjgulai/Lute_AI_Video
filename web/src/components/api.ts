@@ -1108,6 +1108,74 @@ export async function generateFastMode(body: {
   return res.json();
 }
 
+export interface FastSubmitResponse {
+  task_id: string;
+  status: "queued";
+  started_at_unix: number;
+}
+
+export interface FastStatusResponse {
+  task_id: string;
+  status: "running" | "done" | "failed";
+  stage: "queued" | "llm" | "video" | "tts";
+  elapsed_sec: number;
+  result: FastModeResult | null;
+  error: string | null;
+}
+
+export async function submitFastMode(body: {
+  user_prompt: string;
+  duration: number;
+  enable_tts: boolean;
+}, options?: { signal?: AbortSignal }): Promise<FastSubmitResponse> {
+  const res = await apiFetch("/fast/submit", {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchFastStatus(
+  taskId: string,
+  options?: { signal?: AbortSignal },
+): Promise<FastStatusResponse> {
+  const res = await apiFetch(`/fast/status/${encodeURIComponent(taskId)}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function pollFastStatus(
+  taskId: string,
+  opts?: {
+    signal?: AbortSignal;
+    onProgress?: (s: FastStatusResponse) => void;
+    intervalMs?: number;
+    maxWaitMs?: number;
+  },
+): Promise<FastModeResult> {
+  const interval = opts?.intervalMs ?? 2000;
+  const maxWait = opts?.maxWaitMs ?? 600_000;
+  const start = Date.now();
+
+  while (Date.now() - start < maxWait) {
+    if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const snap = await fetchFastStatus(taskId, { signal: opts?.signal });
+    opts?.onProgress?.(snap);
+    if (snap.status === "done" && snap.result) return snap.result;
+    if (snap.status === "failed") {
+      throw new Error(snap.error || "Fast Mode generation failed");
+    }
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  throw new Error(`Fast Mode timed out after ${maxWait}ms`);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Wave 2: 标准化交互日志 — UI / STATE / PIPE
 // ═══════════════════════════════════════════════════════════════
