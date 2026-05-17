@@ -89,7 +89,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
   const [backendApiKey, setBackendApiKey] = useState("");
 
   // Recent works preview (loaded from gallery localStorage)
-  const [recentWorks, setRecentWorks] = useState<any[]>([]);
+  const [recentWorks, setRecentWorks] = useState<Record<string, unknown>[]>([]);
   useEffect(() => {
     try {
       const stored = localStorage.getItem("hermes_gallery_items");
@@ -424,15 +424,15 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                 <div className="grid grid-cols-2 gap-2">
                   {recentWorks.map((item) => (
                     <Link
-                      key={item.id}
+                      key={item.id as string}
                       href="/footage"
                       className="group relative rounded-xl overflow-hidden bg-[var(--bg-panel)] block shadow-sm hover:shadow-md transition-all duration-200"
                     >
                       <div className="aspect-[4/3] relative">
-                        {item.thumbnail ? (
+                        {Boolean(item.thumbnail) ? (
                           <img
-                            src={getMediaUrl(item.thumbnail)}
-                            alt={item.title}
+                            src={getMediaUrl(item.thumbnail as string)}
+                            alt={item.title as string | undefined}
                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                             loading="lazy"
                           />
@@ -447,7 +447,7 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                         )}
                       </div>
                       <div className="px-2 py-1.5 bg-[var(--bg-card)]">
-                        <p className="text-[10px] font-medium text-[var(--text-h1)] truncate">{item.title}</p>
+                        <p className="text-[10px] font-medium text-[var(--text-h1)] truncate">{item.title as string}</p>
                       </div>
                     </Link>
                   ))}

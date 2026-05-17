@@ -66,17 +66,17 @@ export default function MaterialsTab() {
     if (isDemoMode()) {
       try {
         const { DEMO_FOOTAGE_ASSETS } = await import("@/demo-data");
-        const mapped: MaterialAsset[] = (DEMO_FOOTAGE_ASSETS || []).map((a: any, i: number) => ({
-          id: a.asset_id || `demo-${i}`,
-          filename: a.filename,
-          originalName: a.original_name || a.filename,
-          filePath: a.file_path,
-          sizeBytes: a.file_size || 0,
-          mimeType: a.mime_type || "application/octet-stream",
-          thumbnailPath: a.thumbnail_path || null,
-          tags: a.tags || [],
-          producedAt: a.metadata?.uploaded_at || new Date().toISOString(),
-          isAiGenerated: (a.tags || []).some((tg: string) => tg.includes("ai-") || tg.includes("seedance")),
+        const mapped: MaterialAsset[] = (DEMO_FOOTAGE_ASSETS || []).map((a: Record<string, unknown>, i: number) => ({
+          id: (a.asset_id as string) || `demo-${i}`,
+          filename: a.filename as string,
+          originalName: (a.original_name as string) || (a.filename as string),
+          filePath: a.file_path as string,
+          sizeBytes: (a.file_size as number) || 0,
+          mimeType: (a.mime_type as string) || "application/octet-stream",
+          thumbnailPath: (a.thumbnail_path as string | null) || null,
+          tags: (a.tags as string[]) || [],
+          producedAt: ((a.metadata as Record<string, unknown> | undefined)?.uploaded_at as string) || new Date().toISOString(),
+          isAiGenerated: ((a.tags as string[]) || []).some((tg: string) => tg.includes("ai-") || tg.includes("seedance")),
         }));
         setAssets(mapped.filter((m) => !isVideoMime(m.mimeType) || m.sizeBytes === 0 || m.tags.every((t) => t !== "renders")));
       } catch (e: unknown) {
@@ -94,34 +94,34 @@ export default function MaterialsTab() {
         if (!fallback.ok) throw new Error(`${t("common.fetchFailed")} (${fallback.status})`);
         const data = await fallback.json();
         const mapped: MaterialAsset[] = (data.files || [])
-          .filter((f: any) => f.category !== "renders" && f.category !== "fast_mode")
-          .map((f: any) => ({
-            id: f.id,
-            filename: f.filename,
-            originalName: f.filename,
-            filePath: f.path,
-            sizeBytes: f.size_bytes,
-            mimeType: f.mime_type,
-            thumbnailPath: f.thumbnail_path,
-            tags: [f.category],
-            producedAt: f.produced_at,
-            isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category),
+          .filter((f: Record<string, unknown>) => f.category !== "renders" && f.category !== "fast_mode")
+          .map((f: Record<string, unknown>) => ({
+            id: f.id as string,
+            filename: f.filename as string,
+            originalName: f.filename as string,
+            filePath: f.path as string,
+            sizeBytes: f.size_bytes as number,
+            mimeType: f.mime_type as string,
+            thumbnailPath: f.thumbnail_path as string | null,
+            tags: [f.category as string],
+            producedAt: f.produced_at as string,
+            isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category as string),
           }));
         setAssets(mapped);
         return;
       }
       const data = await res.json();
-      const mapped: MaterialAsset[] = (data.files || []).map((f: any) => ({
-        id: f.id,
-        filename: f.filename,
-        originalName: f.filename,
-        filePath: f.path,
-        sizeBytes: f.size_bytes,
-        mimeType: f.mime_type,
-        thumbnailPath: f.thumbnail_path,
-        tags: [f.category],
-        producedAt: f.produced_at,
-        isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category),
+      const mapped: MaterialAsset[] = (data.files || []).map((f: Record<string, unknown>) => ({
+        id: f.id as string,
+        filename: f.filename as string,
+        originalName: f.filename as string,
+        filePath: f.path as string,
+        sizeBytes: f.size_bytes as number,
+        mimeType: f.mime_type as string,
+        thumbnailPath: f.thumbnail_path as string | null,
+        tags: [f.category as string],
+        producedAt: f.produced_at as string,
+        isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category as string),
       }));
       setAssets(mapped);
     } catch (e: unknown) {

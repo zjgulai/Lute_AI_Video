@@ -96,7 +96,7 @@ export default function InfluencersTab() {
     }
     setSaving(true);
     try {
-      const body: Record<string, any> = {
+      const body: Record<string, unknown> = {
         name: formName.trim(),
         handle: formHandle.trim() || undefined,
         platforms: formPlatforms,

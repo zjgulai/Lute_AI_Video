@@ -2,9 +2,17 @@
 
 import { useI18n } from "@/i18n/I18nProvider";
 
+interface Brief {
+  product_name?: string;
+  description?: string;
+  key_message?: string;
+  hook_type?: string;
+  [key: string]: unknown;
+}
+
 interface Props {
-  brief: any;
-  onChange: (updated: any) => void;
+  brief: Brief;
+  onChange: (updated: Brief) => void;
 }
 
 export default function EditableBrief({ brief, onChange }: Props) {

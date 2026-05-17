@@ -5,7 +5,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { X, CheckCircle } from "@phosphor-icons/react";
 
 interface Props {
-  result: any;
+  result: Record<string, unknown>;
   onDismiss?: () => void;
 }
 
@@ -23,10 +23,13 @@ export default function CreativeSummary({ result, onDismiss }: Props) {
 
   if (!visible || !result) return null;
 
-  const productName = result.scripts?.[0]?.product_name || result.briefs?.[0]?.topic || "";
-  const duration = result.video_duration || 0;
-  const score = result.audit_report?.overall_score || 0;
-  const platforms = result.briefs?.map((b: any) => b.platform).filter(Boolean) || [];
+  const scripts = (result.scripts as Record<string, unknown>[]) || [];
+  const briefs = (result.briefs as Record<string, unknown>[]) || [];
+  const audit = (result.audit_report as Record<string, unknown>) || {};
+  const productName = (scripts[0]?.product_name as string) || (briefs[0]?.topic as string) || "";
+  const duration = (result.video_duration as number) || 0;
+  const score = (audit.overall_score as number) || 0;
+  const platforms = briefs.map((b) => b.platform as string | undefined).filter(Boolean) || [];
 
   return (
     <div className="fixed bottom-6 right-6 z-50 animate-slide-up">

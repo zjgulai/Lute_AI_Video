@@ -60,8 +60,8 @@ function estimateRemainingSeconds(remainingSteps: string[]): number {
   return remainingSteps.reduce((acc, name) => acc + (STEP_ESTIMATED_SECONDS[name] ?? 30), 0);
 }
 
-function deriveSnapshot(data: any): StatusSnapshot {
-  const stepsObj = data?.steps || {};
+function deriveSnapshot(data: Record<string, unknown>): StatusSnapshot {
+  const stepsObj = (data?.steps as Record<string, { status?: string }>) || {};
   const stepEntries = Object.entries(stepsObj) as [string, { status?: string }][];
   const totalSteps = stepEntries.length;
   const doneSteps = stepEntries.filter(([, v]) => v?.status === "done").length;
@@ -78,12 +78,12 @@ function deriveSnapshot(data: any): StatusSnapshot {
 
   return {
     status,
-    currentStep: data?.current_step ?? null,
+    currentStep: (data?.current_step as string | null) ?? null,
     progress,
     totalSteps,
     doneSteps,
     remainingStepNames,
-    errors: Array.isArray(data?.errors) ? data.errors.slice(0, 3) : [],
+    errors: Array.isArray(data?.errors) ? (data.errors as string[]).slice(0, 3) : [],
   };
 }
 

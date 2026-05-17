@@ -17,7 +17,7 @@ import { CaretRight, Play } from "@phosphor-icons/react";
 
 interface Props {
   scene: string;
-  onSubmit: (config: any) => void;
+  onSubmit: (config: Record<string, unknown>) => void;
   loading: boolean;
   fieldErrors?: Record<string, string>;
 }
@@ -75,8 +75,7 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
   }, []);
 
   const handleSubmit = useCallback(() => {
-    // 构建提交配置
-    const config: any = {
+    const config: Record<string, unknown> = {
       content_scenario: scene,
       content_scenario_subtype: selectedVideoType,
       target_platforms: ["tiktok"],

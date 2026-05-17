@@ -17,7 +17,7 @@ interface Props {
   onClose: () => void;
 }
 
-function collectTags(f: any): string[] {
+function collectTags(f: Record<string, unknown>): string[] {
   const out: string[] = [];
   if (typeof f.label === "string" && f.label.trim()) out.push(f.label.trim());
   if (Array.isArray(f.tags)) out.push(...f.tags.map((x: unknown) => String(x)).filter(Boolean));
@@ -40,20 +40,20 @@ export default function AssetLibrary({ onClose }: Props) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const files = data.files || [];
-        const mapped: Asset[] = files.map((f: any) => {
-          const mime = f.mime_type || "";
+        const mapped: Asset[] = files.map((f: Record<string, unknown>) => {
+          const mime = (f.mime_type as string) || "";
           let type: Asset["type"] = "video";
           if (mime.startsWith("image/")) type = "image";
           else if (mime.startsWith("audio/")) type = "audio";
           return {
-            filename: f.filename,
-            path: f.path,
-            size: f.size_bytes,
+            filename: f.filename as string,
+            path: f.path as string,
+            size: f.size_bytes as number,
             type,
             created: f.produced_at
-              ? new Date(f.produced_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")
+              ? new Date(f.produced_at as string).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")
               : "-",
-            tags: f.scenario ? [f.category, f.scenario] : [f.category],
+            tags: f.scenario ? [f.category as string, f.scenario as string] : [f.category as string],
           };
         });
         setAssets(mapped);
