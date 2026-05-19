@@ -26,6 +26,7 @@ services:
       - .env.prod
     environment:
       - PYTHONPATH=/app
+      - ENVIRONMENT=production
       - LOG_LEVEL=INFO
       - RENDERING_SERVICE_URL=http://rendering:3001
     volumes:

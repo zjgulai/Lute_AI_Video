@@ -11,6 +11,7 @@ metrics from each platform's API according to an adaptive polling schedule:
 Designed to be invoked from a FastAPI BackgroundTask or an asyncio loop.
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -35,8 +36,9 @@ def _hours_since(dt: datetime | None) -> float:
 class MetricsPoller:
     """Periodically fetch and store video performance metrics from platforms."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_concurrency: int = 3) -> None:
         self.repo = VideoMetricsRepository()
+        self.max_concurrency = max(1, max_concurrency)
 
     # ------------------------------------------------------------------
     # Public entry points
@@ -53,14 +55,21 @@ class MetricsPoller:
         if not posts:
             logger.info("metrics_poller: no active posts found")
             return
-        pulled = 0
-        skipped = 0
-        for post in posts:
-            pulled_ok = await self.pull_single(post)
-            if pulled_ok:
-                pulled += 1
-            else:
-                skipped += 1
+        sem = asyncio.Semaphore(self.max_concurrency)
+
+        async def _pull_guarded(post: dict[str, Any]) -> bool:
+            async with sem:
+                return await self.pull_single(post)
+
+        results = await asyncio.gather(
+            *(_pull_guarded(post) for post in posts),
+            return_exceptions=True,
+        )
+        pulled = sum(1 for r in results if r is True)
+        skipped = len(results) - pulled
+        for r in results:
+            if isinstance(r, Exception):
+                logger.warning("metrics_poller: pull task failed", exc_info=r)
         logger.info(
             "metrics_poller: pull_all finished — %d pulled, %d skipped",
             pulled,
@@ -120,6 +129,7 @@ class MetricsPoller:
                 video_id=post["video_id"],
                 scenario=post["scenario"],
                 platform=platform,
+                tenant_id=post.get("tenant_id"),
                 post_id=post_id,
                 post_url=post.get("post_url"),
                 metrics_dict=metrics,

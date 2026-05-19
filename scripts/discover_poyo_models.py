@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Discover available poyo.ai models by trial."""
-import asyncio, httpx, json
+import asyncio, httpx, os
 
-API_KEY = "sk-pyIO0phv-0iMKF-CNQB-zdxtepLCAW_26xBYJC0AZw6j2qg3vytMmLzIQh-eHC"
+API_KEY = os.getenv("POYO_API_KEY")
 BASE = "https://api.poyo.ai"
 
 IMAGE_MODELS = ["gpt-image-2", "gpt-image-1", "gpt-4o-image", "seedream", "dall-e-3", "dalle-3"]
@@ -28,6 +28,8 @@ async def test_model(client, model, payload):
         return False
 
 async def main():
+    if not API_KEY:
+        raise SystemExit("POYO_API_KEY is required")
     client = httpx.AsyncClient(
         base_url=BASE,
         headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},

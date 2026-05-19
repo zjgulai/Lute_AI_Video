@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Debug why httpx gets 403 but curl works."""
-import asyncio, sys, json, subprocess
+import asyncio, sys, json, os, subprocess
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-API_KEY = "sk-pyIO0phv-0iMKF-CNQB-zdxtepLCAW_26xBYJC0AZw6j2qg3vytMmLzIQh-eHC"
+API_KEY = os.getenv("POYO_API_KEY")
 BODY = {"model": "seedance-2", "input": {"prompt": "test", "duration": 5}}
 
 def test_curl():
@@ -70,6 +70,8 @@ async def test_httpx_http1():
     print("---")
 
 async def main():
+    if not API_KEY:
+        raise SystemExit("POYO_API_KEY is required")
     test_curl()
     await test_httpx_plain()
     await test_httpx_with_ua()

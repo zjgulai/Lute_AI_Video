@@ -52,6 +52,12 @@ def _deserialize_row(row: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _sqlite_placeholders(where_clause: str) -> str:
+    for i in range(1, 10):
+        where_clause = where_clause.replace(f"${i}", "?")
+    return where_clause
+
+
 class VideoMetricsRepository:
     """CRUD operations for the video_metrics table."""
 
@@ -70,7 +76,7 @@ class VideoMetricsRepository:
         conn = get_sqlite_conn()
         if conn is None:
             return None
-        cursor = conn.execute(query, args)
+        cursor = conn.execute(_sqlite_placeholders(query), args)
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -83,7 +89,7 @@ class VideoMetricsRepository:
         conn = get_sqlite_conn()
         if conn is None:
             return []
-        cursor = conn.execute(query, args)
+        cursor = conn.execute(_sqlite_placeholders(query), args)
         return [dict(row) for row in cursor.fetchall()]
 
     async def _execute(self, query: str, *args) -> None:
@@ -94,7 +100,7 @@ class VideoMetricsRepository:
             return
         conn = get_sqlite_conn()
         if conn is not None:
-            conn.execute(query, args)
+            conn.execute(_sqlite_placeholders(query), args)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -106,6 +112,7 @@ class VideoMetricsRepository:
         video_id: str,
         scenario: str,
         platform: str,
+        tenant_id: str | None = None,
         post_id: str | None = None,
         post_url: str | None = None,
         metrics_dict: dict[str, Any] | None = None,
@@ -121,15 +128,16 @@ class VideoMetricsRepository:
                 row = await conn.fetchrow(
                     """
                     INSERT INTO video_metrics
-                        (id, video_id, scenario, platform, post_id, post_url,
+                        (id, video_id, scenario, platform, tenant_id, post_id, post_url,
                          metrics, pulled_at, published_at, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $8, $8)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $9, $9)
                     RETURNING *
                     """,
                     record_id,
                     video_id,
                     scenario,
                     platform,
+                    tenant_id,
                     post_id,
                     post_url,
                     metrics_json,
@@ -143,15 +151,16 @@ class VideoMetricsRepository:
             conn.execute(
                 """
                 INSERT INTO video_metrics
-                    (id, video_id, scenario, platform, post_id, post_url,
+                    (id, video_id, scenario, platform, tenant_id, post_id, post_url,
                      metrics, pulled_at, published_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
                     video_id,
                     scenario,
                     platform,
+                    tenant_id,
                     post_id,
                     post_url,
                     metrics_json,
@@ -173,25 +182,28 @@ class VideoMetricsRepository:
         self,
         video_id: str,
         platform: str | None = None,
+        tenant_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get all metrics snapshots for a video, optionally filtered by platform.
 
         Results are ordered by pulled_at descending (newest first).
         """
+        conditions = ["video_id = $1"]
+        params: list[Any] = [video_id]
+        idx = 2
         if platform:
-            query = """
-                SELECT * FROM video_metrics
-                WHERE video_id = $1 AND platform = $2
-                ORDER BY pulled_at DESC
-            """
-            rows = await self._fetch(query, video_id, platform)
-        else:
-            query = """
-                SELECT * FROM video_metrics
-                WHERE video_id = $1
-                ORDER BY pulled_at DESC
-            """
-            rows = await self._fetch(query, video_id)
+            conditions.append(f"platform = ${idx}")
+            params.append(platform)
+            idx += 1
+        if tenant_id is not None:
+            conditions.append(f"tenant_id = ${idx}")
+            params.append(tenant_id)
+        query = f"""
+            SELECT * FROM video_metrics
+            WHERE {" AND ".join(conditions)}
+            ORDER BY pulled_at DESC
+        """
+        rows = await self._fetch(query, *params)
         return [_deserialize_row(r) for r in rows]
 
     async def get_dashboard_overview(
@@ -199,6 +211,7 @@ class VideoMetricsRepository:
         scenario: str | None = None,
         platform: str | None = None,
         days: int = 7,
+        tenant_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get aggregated dashboard data: latest metrics per video.
 
@@ -218,6 +231,10 @@ class VideoMetricsRepository:
             conditions.append(f"vm.platform = ${idx}")
             params.append(platform)
             idx += 1
+        if tenant_id is not None:
+            conditions.append(f"vm.tenant_id = ${idx}")
+            params.append(tenant_id)
+            idx += 1
 
         where_clause = " AND ".join(conditions)
 
@@ -229,6 +246,7 @@ class VideoMetricsRepository:
                     vm.video_id,
                     vm.scenario,
                     vm.platform,
+                    vm.tenant_id,
                     vm.post_id,
                     vm.post_url,
                     vm.metrics,
@@ -248,10 +266,10 @@ class VideoMetricsRepository:
         conn = get_sqlite_conn()
         if conn is None:
             return []
-        sqlite_where = where_clause.replace("$1", "?").replace("$2", "?").replace("$3", "?")
+        sqlite_where = _sqlite_placeholders(where_clause)
         sqlite_query = f"""
             WITH latest AS (
-                SELECT vm.id, vm.video_id, vm.scenario, vm.platform,
+                SELECT vm.id, vm.video_id, vm.scenario, vm.platform, vm.tenant_id,
                        vm.post_id, vm.post_url, vm.metrics,
                        vm.pulled_at, vm.published_at,
                        ROW_NUMBER() OVER (
@@ -261,7 +279,7 @@ class VideoMetricsRepository:
                 FROM video_metrics vm
                 WHERE {sqlite_where}
             )
-            SELECT id, video_id, scenario, platform, post_id, post_url,
+            SELECT id, video_id, scenario, platform, tenant_id, post_id, post_url,
                    metrics, pulled_at, published_at
             FROM latest
             WHERE rn = 1
@@ -285,6 +303,7 @@ class VideoMetricsRepository:
                     vm.video_id,
                     vm.scenario,
                     vm.platform,
+                    vm.tenant_id,
                     vm.post_id,
                     vm.post_url,
                     vm.metrics,
@@ -304,7 +323,7 @@ class VideoMetricsRepository:
             return []
         sqlite_query = """
             WITH latest AS (
-                SELECT vm.id, vm.video_id, vm.scenario, vm.platform,
+                SELECT vm.id, vm.video_id, vm.scenario, vm.platform, vm.tenant_id,
                        vm.post_id, vm.post_url, vm.metrics,
                        vm.pulled_at, vm.published_at,
                        ROW_NUMBER() OVER (
@@ -314,7 +333,7 @@ class VideoMetricsRepository:
                 FROM video_metrics vm
                 WHERE vm.published_at >= ?
             )
-            SELECT id, video_id, scenario, platform, post_id, post_url,
+            SELECT id, video_id, scenario, platform, tenant_id, post_id, post_url,
                    metrics, pulled_at, published_at
             FROM latest
             WHERE rn = 1

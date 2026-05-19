@@ -87,8 +87,12 @@ class RemotionAssembleSkill(SkillCallable):
                     try:
                         lyrics_text = p.read_text(encoding="utf-8")
                         break
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning(
+                            "remotion_assemble: lyrics read failed",
+                            lyrics_path=str(p),
+                            error=str(exc)[:200],
+                        )
 
         # === Build render JSON in the shape render.ts expects ===
         render_payload = self._build_render_payload(
@@ -302,8 +306,12 @@ class RemotionAssembleSkill(SkillCallable):
                 ensure_poster(output_path)
                 for ratio_path in video_paths.values():
                     ensure_poster(ratio_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "remotion_assemble: poster extraction failed",
+                    video_path=str(output_path),
+                    error=str(exc)[:200],
+                )
 
         return SkillResult(
             success=True,
@@ -776,8 +784,12 @@ class RemotionAssembleSkill(SkillCallable):
             )
             if result.returncode == 0:
                 return float(result.stdout.strip() or "0.0")
-        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception):
-            pass
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
+            logger.debug(
+                "remotion_assemble: ffprobe duration failed",
+                video_path=str(path),
+                error=str(exc)[:200],
+            )
         return 0.0
 
     @staticmethod
@@ -815,8 +827,13 @@ class RemotionAssembleSkill(SkillCallable):
                 )
                 if result.returncode == 0:
                     return float(result.stdout.strip() or "0.0")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "remotion_assemble: stream duration probe failed",
+                    video_path=str(path),
+                    stream=stream_spec,
+                    error=str(exc)[:200],
+                )
             return -1.0
 
         video_dur = _stream_duration("v:0")
@@ -902,8 +919,13 @@ class RemotionAssembleSkill(SkillCallable):
                 str(path),
             ]
             subprocess.run(cmd, capture_output=True, timeout=30, check=True)
-        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception):
+        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as exc:
             # ffmpeg unavailable or failed — write minimal magic-byte stub
+            logger.warning(
+                "remotion_assemble: ffmpeg stub generation failed",
+                output_path=str(path),
+                error=str(exc)[:200],
+            )
             marker = label.encode()[:8].ljust(8, b"\0")
             path.write_bytes(b"\x00\x00\x00\x14ftypisom" + marker)
 
@@ -958,5 +980,8 @@ class RemotionAssembleSkill(SkillCallable):
 try:
     SkillRegistry.register(RemotionAssembleSkill())
     logger.info("remotion_assemble_skill: registered")
-except ValueError:
-    pass
+except ValueError as exc:
+    logger.debug(
+        "remotion_assemble_skill: already registered",
+        error=str(exc)[:200],
+    )

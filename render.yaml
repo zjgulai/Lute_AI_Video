@@ -15,8 +15,10 @@ services:
     envVars:
       - key: PYTHONPATH
         value: /app
+      - key: ENVIRONMENT
+        value: production
       - key: API_KEY
-        value: ai_video_demo_2026
+        generateValue: true
       - key: CORS_ORIGINS
         value: "https://zjgulai.github.io"
       - key: VIDEO_OUTPUT_DIR

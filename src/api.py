@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 
+from src._version import APP_VERSION
+
 load_dotenv()
 
 try:
@@ -36,9 +38,6 @@ try:
 except ImportError:
     init_db = None  # type: ignore[assignment]
     HAS_STORAGE = False
-
-from src._version import APP_VERSION
-
 
 # ── FastAPI app ──
 
@@ -70,8 +69,10 @@ if HAS_FASTAPI:
                         "503 until migrations run. Fix: docker exec ai_video_backend "
                         "alembic upgrade head"
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.getLogger("api.startup").warning(
+                    "persistence health check failed: %s", exc
+                )
         # P2-1: Restore active threads from disk (standalone mode only)
         from src.routers._state import _restore_thread_index
         _restore_thread_index()
@@ -121,24 +122,30 @@ if HAS_FASTAPI:
                     await asyncio.sleep(300)  # 5 minutes
                     try:
                         await run_health_checks()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logging.getLogger("api.admin").warning(
+                            "admin health check failed: %s", exc
+                        )
 
             async def _admin_session_cleanup_loop():
                 while True:
                     await asyncio.sleep(3600)  # 1 hour
                     try:
                         await cleanup_expired_sessions()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logging.getLogger("api.admin").warning(
+                            "admin session cleanup failed: %s", exc
+                        )
 
             async def _admin_log_cleanup_loop():
                 while True:
                     await asyncio.sleep(3600)  # 1 hour
                     try:
                         await cleanup_old_logs()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logging.getLogger("api.admin").warning(
+                            "admin log cleanup failed: %s", exc
+                        )
 
             _register_background_task(
                 asyncio.create_task(_admin_health_loop()),

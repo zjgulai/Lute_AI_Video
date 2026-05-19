@@ -17,7 +17,7 @@ async def test_dashboard_overview_returns_empty_list_when_no_metrics(monkeypatch
     from src.routers import metrics as metrics_router
 
     class _FakeRepo:
-        async def get_dashboard_overview(self, scenario=None, platform=None, days=7):
+        async def get_dashboard_overview(self, scenario=None, platform=None, days=7, tenant_id=None):
             return []
 
     def _fake_ctor(self=None):

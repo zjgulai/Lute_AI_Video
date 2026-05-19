@@ -20,6 +20,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import structlog
+
+logger = structlog.get_logger()
+
 # ── Trace ID generation ──
 
 
@@ -86,8 +90,13 @@ class PipelineMetrics:
                 duration_sec=duration_ms / 1000.0,
                 success=success,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "telemetry: prometheus step metric failed",
+                label=label,
+                step=step_name,
+                error=str(exc)[:200],
+            )
 
     def record_pipeline(
         self,
@@ -125,8 +134,13 @@ class PipelineMetrics:
                 success=success,
                 error_count=error_count,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "telemetry: prometheus pipeline metric failed",
+                label=label,
+                scenario=scenario,
+                error=str(exc)[:200],
+            )
 
     def get_summary(self) -> dict[str, Any]:
         """Return aggregated stats for all recorded metrics.
@@ -202,8 +216,13 @@ def _persist_error_to_db(
         asyncio.ensure_future(
             _persist_error_async(label, step, error, context)
         )
-    except Exception:
-        pass  # Never let log persistence break the pipeline
+    except Exception as exc:
+        logger.warning(
+            "telemetry: error log persistence scheduling failed",
+            label=label,
+            step=step,
+            error=str(exc)[:200],
+        )
 
 
 async def _persist_error_async(
@@ -239,8 +258,13 @@ async def _persist_error_async(
                 error[:2000],  # Truncate very long messages
                 traceback_text[:5000] if traceback_text else None,
             )
-    except Exception:
-        pass  # Silent — never let log persistence break anything
+    except Exception as exc:
+        logger.warning(
+            "telemetry: error log persistence failed",
+            label=label,
+            step=step,
+            error=str(exc)[:200],
+        )
 
 
 # ── ErrorCollector ──

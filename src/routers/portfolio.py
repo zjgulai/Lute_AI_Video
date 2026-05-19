@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from src.config import OUTPUT_DIR
+from src.routers._deps import get_auth_context
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -48,6 +49,7 @@ QUALITY_PRIORITY: dict[str, int] = {
 }
 
 AssetKind = Literal["final_work", "creation_intermediate", "brand_kit"]
+MediaType = Literal["video", "image", "audio"]
 
 KIND_BY_CATEGORY: dict[str, AssetKind] = {
     "renders": "final_work",
@@ -120,22 +122,21 @@ def _brand_meta_for(rel_path: str) -> tuple[str | None, str | None, str | None, 
     )
 
 
-def _thumbnail_path_for(rel_path: str) -> str | None:
+def _thumbnail_path_for(rel_path: str, *, generate_missing: bool = False) -> str | None:
     """Return relative thumbnail path (under OUTPUT_DIR) if the poster jpg exists.
 
     Naming convention: rel_path "seedance/s1_001.mp4" → poster
     "thumbnails/portfolio_posters/seedance__s1_001.jpg".
 
-    Backstop: when the poster is missing, synthesize it via ffmpeg so legacy
-    videos produced before the inline poster-extraction hooks landed get a
-    thumbnail on first scan. Amortized by the 30s scan cache.
+    Request handlers keep `generate_missing=False` so portfolio listing stays a
+    read-only operation. Background hooks/scripts may opt in to poster synthesis.
     """
     flat = rel_path.replace("/", "__").rsplit(".", 1)[0] + ".jpg"
     poster = THUMBNAIL_DIR / flat
     if poster.is_file():
         return str(poster.relative_to(OUTPUT_DIR))
     src = OUTPUT_DIR / rel_path
-    if src.is_file() and src.suffix.lower() in {".mp4", ".mov", ".webm"}:
+    if generate_missing and src.is_file() and src.suffix.lower() in {".mp4", ".mov", ".webm"}:
         try:
             from src.tools.poster_extractor import ensure_poster
             generated = ensure_poster(src)
@@ -164,6 +165,7 @@ class PortfolioFile(BaseModel):
     product_source_url: str | None = None
     product_description: str | None = None
     product_price: str | None = None
+    tenant_id: str | None = None
 
 
 class PortfolioResponse(BaseModel):
@@ -186,6 +188,16 @@ def _guess_mime(ext: str) -> str:
         ".gif": "image/gif",
         ".webp": "image/webp",
     }.get(ext.lower(), "application/octet-stream")
+
+
+def _media_type_for(mime: str) -> MediaType | None:
+    if mime.startswith("video/"):
+        return "video"
+    if mime.startswith("image/"):
+        return "image"
+    if mime.startswith("audio/"):
+        return "audio"
+    return None
 
 
 def _scan_portfolio() -> list[PortfolioFile]:
@@ -219,6 +231,7 @@ def _scan_portfolio() -> list[PortfolioFile]:
             m = LABEL_RE.match(path.stem)
             scenario = m.group(1) if m else None
             label = f"{scenario}_{m.group(2)}" if m else None
+            tenant_id = _tenant_id_for_path(rel, category)
             thumb = _thumbnail_path_for(str(rel)) if mime.startswith("video/") else None
             (p_title, p_slug, p_brand, p_url, p_desc, p_price) = (
                 _brand_meta_for(str(rel)) if category == "brand_assets" else (None, None, None, None, None, None)
@@ -244,12 +257,42 @@ def _scan_portfolio() -> list[PortfolioFile]:
                     product_source_url=p_url,
                     product_description=p_desc,
                     product_price=p_price,
+                    tenant_id=tenant_id,
                 )
             )
     return files
 
 
+def _tenant_id_for_path(rel: Path, category: str) -> str | None:
+    """Infer tenant ownership from canonical output path conventions."""
+    parts = rel.parts
+    if len(parts) >= 2 and parts[0] == "tenants":
+        return parts[1]
+    if len(parts) >= 2 and parts[0] == "uploads":
+        return parts[1]
+    # Historical generated outputs predate tenant folders and are global/default.
+    if category in {"brand_assets", "demo"}:
+        return None
+    return "default"
+
+
+def _filter_by_auth_tenant(files: list[PortfolioFile]) -> list[PortfolioFile]:
+    """Limit portfolio listing to global assets plus the current tenant's files."""
+    ctx = get_auth_context()
+    if ctx is None or ctx.tenant_id in {"default", "test-bundle"}:
+        return files
+    return [f for f in files if f.tenant_id in {None, ctx.tenant_id}]
+
+
+def _tenant_cache_scope() -> str:
+    ctx = get_auth_context()
+    if ctx is None or ctx.tenant_id in {"default", "test-bundle"}:
+        return "*"
+    return ctx.tenant_id
+
+
 _CACHE: dict[str, tuple[list[PortfolioFile], float]] = {}
+_VIEW_CACHE: dict[tuple[str, str | None, AssetKind | None, MediaType | None, str], tuple[list[PortfolioFile], int, float]] = {}
 _CACHE_TTL = 30  # seconds
 
 
@@ -263,13 +306,67 @@ def _scan_portfolio_cached() -> list[PortfolioFile]:
             return files
     files = _scan_portfolio()
     _CACHE[key] = (files, now)
+    _VIEW_CACHE.clear()
     return files
+
+
+def _category_summary(files: list[PortfolioFile]) -> dict[str, dict[str, int]]:
+    by_cat: dict[str, dict[str, int]] = {}
+    for f in files:
+        entry = by_cat.setdefault(f.category, {"count": 0, "bytes": 0})
+        entry["count"] += 1
+        entry["bytes"] += f.size_bytes
+    return by_cat
+
+
+def _filtered_sorted_view(
+    files: list[PortfolioFile],
+    *,
+    category: str | None,
+    kind: AssetKind | None,
+    media_type: MediaType | None,
+    sort: str,
+    tenant_scope: str,
+) -> tuple[list[PortfolioFile], int]:
+    key = (tenant_scope, category, kind, media_type, sort)
+    now = time.time()
+    cached = _VIEW_CACHE.get(key)
+    if cached is not None and now - cached[2] < _CACHE_TTL:
+        return cached[0], cached[1]
+
+    filtered = files
+    if category:
+        filtered = [f for f in filtered if f.category == category]
+    if kind:
+        filtered = [f for f in filtered if f.kind == kind]
+    if media_type:
+        filtered = [f for f in filtered if _media_type_for(f.mime_type) == media_type]
+
+    if sort == "quality":
+        filtered = sorted(
+            filtered,
+            key=lambda f: (
+                QUALITY_PRIORITY.get(f.category, 99),
+                _negate_iso(f.produced_at),
+            ),
+        )
+    elif sort == "size_desc":
+        filtered = sorted(filtered, key=lambda f: f.size_bytes, reverse=True)
+    elif sort == "size_asc":
+        filtered = sorted(filtered, key=lambda f: f.size_bytes)
+    else:
+        filtered = sorted(filtered, key=lambda f: f.produced_at, reverse=True)
+
+    total = len(filtered)
+    _VIEW_CACHE[key] = (filtered, total, now)
+    return filtered, total
 
 
 @router.get("/")
 async def list_portfolio(
     category: str | None = None,
     kind: AssetKind | None = None,
+    media_type: MediaType | None = None,
     limit: int | None = None,
     offset: int = 0,
     sort: str = "recent",
@@ -280,6 +377,7 @@ async def list_portfolio(
     - `category`: filter to a single storage bucket (renders, seedance, ...).
     - `kind`: filter by lifecycle stage (`final_work` | `creation_intermediate` | `brand_kit`).
               Preferred over `category` for UI-oriented queries.
+    - `media_type`: filter by media family (`video` | `image` | `audio`).
     - `limit`: cap number of files returned (after sort+filter+offset).
     - `offset`: skip N files after sort+filter (for pagination). Default 0.
     - `sort`: ordering mode. Options:
@@ -293,36 +391,17 @@ async def list_portfolio(
     `by_category` aggregates the *unfiltered* full set so UI can show overall counts
     even when displaying a TOP-N slice.
     """
-    all_files = _scan_portfolio_cached()
+    all_files = _filter_by_auth_tenant(_scan_portfolio_cached())
 
-    by_cat: dict[str, dict[str, int]] = {}
-    for f in all_files:
-        entry = by_cat.setdefault(f.category, {"count": 0, "bytes": 0})
-        entry["count"] += 1
-        entry["bytes"] += f.size_bytes
-
-    if category:
-        all_files = [f for f in all_files if f.category == category]
-
-    if kind:
-        all_files = [f for f in all_files if f.kind == kind]
-
-    if sort == "quality":
-        all_files = sorted(
-            all_files,
-            key=lambda f: (
-                QUALITY_PRIORITY.get(f.category, 99),
-                _negate_iso(f.produced_at),
-            ),
-        )
-    elif sort == "size_desc":
-        all_files = sorted(all_files, key=lambda f: f.size_bytes, reverse=True)
-    elif sort == "size_asc":
-        all_files = sorted(all_files, key=lambda f: f.size_bytes)
-    else:
-        all_files = sorted(all_files, key=lambda f: f.produced_at, reverse=True)
-
-    total_after_filter = len(all_files)
+    by_cat = _category_summary(all_files)
+    all_files, total_after_filter = _filtered_sorted_view(
+        all_files,
+        category=category,
+        kind=kind,
+        media_type=media_type,
+        sort=sort,
+        tenant_scope=_tenant_cache_scope(),
+    )
 
     if offset > 0:
         all_files = all_files[offset:]

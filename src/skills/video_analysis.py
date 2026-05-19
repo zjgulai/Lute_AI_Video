@@ -571,8 +571,12 @@ and visual style elements."""
             raw = await llm.invoke_json(system, user)
             if isinstance(raw, dict):
                 return raw
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "video_analysis: visual llm analysis failed",
+                frame_count=len(frame_paths),
+                error=str(exc)[:200],
+            )
 
         return None
 

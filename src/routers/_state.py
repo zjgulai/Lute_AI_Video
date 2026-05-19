@@ -6,6 +6,7 @@ without circular dependencies.
 
 import asyncio
 import json
+import logging
 import os
 import time
 from typing import Any
@@ -102,8 +103,10 @@ def _save_thread_index():
         _THREAD_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(_THREAD_INDEX_PATH, "w") as f:
             json.dump(list(_active_threads.keys()), f)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger("routers.state").warning(
+            "thread index save failed: %s", exc
+        )
 
 
 def _restore_thread_index():
@@ -122,8 +125,10 @@ def _restore_thread_index():
             for tid in ids:
                 if isinstance(tid, str):
                     _active_threads[tid] = {"configurable": {"thread_id": tid}}
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger("routers.state").warning(
+            "thread index restore failed: %s", exc
+        )
 
 
 def _touch_thread_cache(thread_id: str) -> None:
@@ -322,4 +327,3 @@ def coerce_video_duration(body: dict[str, Any], default: int = DEFAULT_VIDEO_DUR
     if n in VALID_VIDEO_DURATIONS:
         return n
     return min(VALID_VIDEO_DURATIONS, key=lambda v: abs(v - n))
-

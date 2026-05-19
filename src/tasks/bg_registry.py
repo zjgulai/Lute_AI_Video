@@ -10,6 +10,7 @@ without depending on each other.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
@@ -53,8 +54,16 @@ def register_background_task(task: asyncio.Task[Any], label: str) -> str:
                     label=label,
                     duration_sec=round(duration_sec, 2),
                 )
-        except (asyncio.CancelledError, Exception):
-            pass
+        except asyncio.CancelledError:
+            logging.getLogger("tasks.bg_registry").debug(
+                "background task callback cancelled",
+                extra={"task_id": task_id, "label": label},
+            )
+        except Exception as exc:
+            logging.getLogger("tasks.bg_registry").warning(
+                "background task callback failed: %s", exc,
+                extra={"task_id": task_id, "label": label},
+            )
         finally:
             _background_tasks.pop(task_id, None)
 

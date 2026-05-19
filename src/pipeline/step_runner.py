@@ -254,10 +254,14 @@ class StepRunner:
 
         trace_id = generate_trace_id()
         from src.models.state import STATE_SCHEMA_VERSION
+        from src.routers._deps import get_auth_context
+
+        auth_ctx = get_auth_context()
         state = {
             "schema_version": STATE_SCHEMA_VERSION,
             "label": label,
             "scenario": scenario,
+            "tenant_id": auth_ctx.tenant_id if auth_ctx else config.get("tenant_id", "default"),
             "config": config,
             "steps": steps,
             "current_step": step_order[0],

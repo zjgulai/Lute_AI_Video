@@ -198,8 +198,11 @@ async def admin_logout(
                     "DELETE FROM admin_sessions WHERE token_hash = $1",
                     token_hash,
                 )
-        except Exception:
-            pass  # Best-effort cleanup
+        except Exception as exc:
+            logger.warning(
+                "admin logout session cleanup failed: %s",
+                str(exc)[:200],
+            )
 
     response.delete_cookie(
         key="admin_session",
@@ -501,8 +504,12 @@ async def get_tenant(
                         "scenario": config.get("scenario", "unknown") if isinstance(config, dict) else "unknown",
                         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                     })
-            except Exception:
-                pass  # pipeline_states table might not exist or query might fail
+            except Exception as exc:
+                logger.warning(
+                    "admin tenant recent runs query failed tenant_id=%s error=%s",
+                    tenant_id,
+                    str(exc)[:200],
+                )
 
             return {
                 "id": str(tenant["id"]),
@@ -772,8 +779,11 @@ async def dashboard_summary(
                     "SELECT COUNT(*) as total FROM pipeline_states WHERE created_at >= CURRENT_DATE"
                 )
                 pipeline_total = pipeline_total_row["total"] if pipeline_total_row else 0
-            except Exception:
-                pass  # pipeline_states may have different schema or be empty
+            except Exception as exc:
+                logger.warning(
+                    "admin dashboard pipeline count query failed: %s",
+                    str(exc)[:200],
+                )
 
             # Recent errors from error_logs
             error_rows = await conn.fetch(
@@ -809,8 +819,11 @@ async def dashboard_summary(
                 error_24h = error_24h_row["total"] if error_24h_row else 0
                 if total_24h > 0:
                     error_rate_24h = round(error_24h / total_24h, 4)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "admin dashboard error rate query failed: %s",
+                    str(exc)[:200],
+                )
 
             return {
                 "tenant_count": tenant_count_row["total"] if tenant_count_row else 0,
@@ -989,8 +1002,11 @@ async def cleanup_expired_sessions() -> None:
             await conn.execute(
                 "DELETE FROM admin_sessions WHERE expires_at < NOW()"
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "admin expired session cleanup failed: %s",
+            str(exc)[:200],
+        )
 
 
 async def cleanup_old_logs() -> None:
@@ -1017,8 +1033,11 @@ async def cleanup_old_logs() -> None:
                 )
                 """
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "admin old log cleanup failed: %s",
+            str(exc)[:200],
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -166,8 +166,11 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             # Best-effort close httpx client
             try:
                 await client.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "seedance_video_generate: client close failed",
+                    error=str(exc)[:200],
+                )
 
         is_stub = "_stub_mode" in api_result or not api_result.get("video_url", "").startswith(("http://", "https://"))
         local_path_str = api_result.get("local_path", "")
@@ -208,8 +211,12 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             try:
                 from src.tools.poster_extractor import ensure_poster
                 ensure_poster(local_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "seedance_video_generate: poster extraction failed",
+                    video_path=str(local_path),
+                    error=str(exc)[:200],
+                )
 
         return SkillResult(
             success=True,
@@ -361,8 +368,12 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             )
             if result.returncode == 0:
                 return float(result.stdout.strip() or "0.0")
-        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception):
-            pass
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
+            logger.debug(
+                "seedance_video_generate: ffprobe duration failed",
+                video_path=str(path),
+                error=str(exc)[:200],
+            )
         return 0.0
 
     @staticmethod
@@ -505,6 +516,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         if not src.exists() or src.stat().st_size < 100:
             return ""
 
+        frame_path: Path | None = None
         try:
             fd, frame_path_str = tempfile.mkstemp(suffix=".jpg")
             os.close(fd)
@@ -522,8 +534,21 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             if frame_path.exists() and frame_path.stat().st_size > 100:
                 return str(frame_path)
         except (FileNotFoundError, subprocess.TimeoutExpired,
-                subprocess.CalledProcessError, Exception):
-            pass
+                subprocess.CalledProcessError, Exception) as exc:
+            logger.debug(
+                "seedance_video_generate: last-frame extraction failed",
+                video_path=str(src),
+                error=str(exc)[:200],
+            )
+            if frame_path and frame_path.exists():
+                try:
+                    frame_path.unlink()
+                except OSError as cleanup_exc:
+                    logger.debug(
+                        "seedance_video_generate: temp frame cleanup failed",
+                        frame_path=str(frame_path),
+                        error=str(cleanup_exc)[:200],
+                    )
         return ""
 
     @staticmethod
@@ -546,8 +571,13 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 str(path),
             ]
             subprocess.run(cmd, capture_output=True, timeout=30, check=True)
-        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception):
+        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as exc:
             # ffmpeg unavailable or failed — write minimal magic-byte stub
+            logger.warning(
+                "seedance_video_generate: ffmpeg stub generation failed",
+                output_path=str(path),
+                error=str(exc)[:200],
+            )
             marker = label.encode()[:8].ljust(8, b"\0")
             path.write_bytes(b"\x00\x00\x00\x14" + b"ftyp" + b"isom" + marker)
 
@@ -607,5 +637,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
 try:
     SkillRegistry.register(SeedanceVideoGenerateSkill())
     logger.info("seedance_video_generate_skill: registered")
-except ValueError:
-    pass
+except ValueError as exc:
+    logger.debug(
+        "seedance_video_generate_skill: already registered",
+        error=str(exc)[:200],
+    )

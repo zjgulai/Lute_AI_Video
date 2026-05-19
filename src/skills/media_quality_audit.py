@@ -846,8 +846,12 @@ class MediaQualityAuditSkill(SkillCallable):
             if frame_path.exists() and frame_path.stat().st_size > 100:
                 return frame_path
         except (FileNotFoundError, subprocess.TimeoutExpired,
-                subprocess.CalledProcessError, Exception):
-            pass
+                subprocess.CalledProcessError, Exception) as exc:
+            logger.debug(
+                "media_quality_audit: frame extraction failed",
+                video_path=str(video_path),
+                error=str(exc)[:200],
+            )
         return None
 
     @staticmethod
@@ -947,8 +951,12 @@ class MediaQualityAuditSkill(SkillCallable):
             )
             if result.returncode == 0:
                 return float(result.stdout.strip() or "0.0")
-        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception):
-            pass
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
+            logger.debug(
+                "media_quality_audit: ffprobe duration failed",
+                video_path=str(path),
+                error=str(exc)[:200],
+            )
         return 0.0
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:
@@ -993,5 +1001,8 @@ class MediaQualityAuditSkill(SkillCallable):
 try:
     SkillRegistry.register(MediaQualityAuditSkill())
     logger.info("media_quality_audit_skill: registered")
-except ValueError:
-    pass
+except ValueError as exc:
+    logger.debug(
+        "media_quality_audit_skill: already registered",
+        error=str(exc)[:200],
+    )

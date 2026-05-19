@@ -5,7 +5,7 @@ module: deploy
 topic: local-vs-production-differences
 status: stable
 created: 2026-04-30
-updated: 2026-04-30
+updated: 2026-05-18
 owner: self
 source: human+ai
 ---
@@ -91,7 +91,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://ai_video:ai_video_dev_202
 
 **生产** (`deploy/lighthouse/.env.prod`)
 ```bash
-DATABASE_URL=postgresql://ai_video:zl1023ZL!@sh-postgres-ll9jlu32.sql.tencentcdb.com:22986/ai_vedio
+DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
 ```
 
 **关键影响**
@@ -115,11 +115,11 @@ DATABASE_URL=postgresql://ai_video:zl1023ZL!@sh-postgres-ll9jlu32.sql.tencentcdb
 
 | 变量 | 本地 .env | 生产 .env.prod | 说明 |
 |------|----------|---------------|------|
-| `DEEPSEEK_API_KEY` | `sk-your-deepseek-key` | `sk-c9aa5457...` | 真实 API key |
-| `POYO_API_KEY` | `sk-your-poyo-key` | `sk-pyIO0phv...` | 真实 API key |
-| `SILICONFLOW_API_KEY` | `sk-your-siliconflow-key` | `sk-sbfdkklr...` | 真实 API key |
+| `DEEPSEEK_API_KEY` | `sk-your-deepseek-key` | `<redacted>` | 真实 API key |
+| `POYO_API_KEY` | `sk-your-poyo-key` | `<redacted>` | 真实 API key |
+| `SILICONFLOW_API_KEY` | `sk-your-siliconflow-key` | `<redacted>` | 真实 API key |
 | `DATABASE_URL` | `localhost:5432` | `tencentcdb.com:22986` | 完全不同 |
-| `API_KEY` | 自动生成 | `ai_video_demo_2026` | 生产固定 |
+| `API_KEY` | 自动生成 | `<tenant-or-test-bundle-key>` | API 认证 |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8001` | `https://101.34.52.232/api` | 构建时注入 |
 | `NEXT_PUBLIC_IS_DEMO` | `false` | `"true"` | 构建时注入 |
 | `VIDEO_OUTPUT_DIR` | `./output` | `/app/output` | Docker 内路径 |

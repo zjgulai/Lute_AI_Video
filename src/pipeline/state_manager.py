@@ -163,6 +163,7 @@ class PipelineStateManager:
                     "degraded_reason": state.get("degraded_reason"),
                     "trace_id": state.get("trace_id"),
                     "structured_errors": state.get("structured_errors"),
+                    "tenant_id": state.get("tenant_id"),
                 }
                 if existing:
                     await repo.update(existing["id"], data)
@@ -232,6 +233,7 @@ class PipelineStateManager:
                         "degraded_reason": _safe_get("degraded_reason"),
                         "trace_id": _safe_get("trace_id"),
                         "structured_errors": _safe_get("structured_errors", []) or [],
+                        "tenant_id": _safe_get("tenant_id"),
                     }
             except Exception as e:
                 logger.warning("PG load failed, using filesystem: %s", str(e)[:100])
@@ -261,6 +263,7 @@ class PipelineStateManager:
                     "errors": fs_state.get("errors"),
                     "media_synthesis_errors": fs_state.get("media_synthesis_errors"),
                     "gates": fs_state.get("gates"),
+                    "tenant_id": fs_state.get("tenant_id"),
                 })
             except Exception as e:
                 logger.warning("PG backfill failed for %s: %s", label, str(e)[:100])
@@ -279,8 +282,12 @@ class PipelineStateManager:
                 row = await repo.get_by_label(label)
                 if row:
                     return True
-            except Exception:
-                pass  # fall through to filesystem check
+            except Exception as exc:
+                logger.warning(
+                    "PG state existence check failed for %s: %s",
+                    label,
+                    str(exc)[:100],
+                )
         return self._state_path(label).exists()
 
     @classmethod

@@ -225,8 +225,12 @@ class ElevenLabsTTSSkill(SkillCallable):
             )
             if result.returncode == 0:
                 return float(result.stdout.strip() or "0.0")
-        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception):
-            pass
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
+            logger.debug(
+                "elevenlabs_tts: ffprobe duration failed",
+                audio_path=str(path),
+                error=str(exc)[:200],
+            )
         return 0.0
 
     @staticmethod
@@ -308,5 +312,8 @@ class ElevenLabsTTSSkill(SkillCallable):
 try:
     SkillRegistry.register(ElevenLabsTTSSkill())
     logger.info("elevenlabs_tts_skill: registered")
-except ValueError:
-    pass
+except ValueError as exc:
+    logger.debug(
+        "elevenlabs_tts_skill: already registered",
+        error=str(exc)[:200],
+    )

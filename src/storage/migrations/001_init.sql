@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS pipeline_states (
     errors JSONB DEFAULT '[]',
     media_synthesis_errors JSONB DEFAULT '[]',
     gates JSONB DEFAULT '{}',
+    tenant_id VARCHAR(64),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -41,6 +42,7 @@ ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS pipeline_degraded BOOLEAN;
 ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS degraded_reason TEXT;
 ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS trace_id TEXT;
 ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS structured_errors JSONB DEFAULT '[]';
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64);
 
 -- brand_packages
 CREATE TABLE IF NOT EXISTS brand_packages (
@@ -83,6 +85,7 @@ CREATE TABLE IF NOT EXISTS video_metrics (
     video_id VARCHAR(128) NOT NULL,
     scenario VARCHAR(32) NOT NULL,
     platform VARCHAR(32) NOT NULL,
+    tenant_id VARCHAR(64),
     post_id VARCHAR(128),
     post_url TEXT,
     metrics JSONB DEFAULT '{}',
@@ -90,6 +93,7 @@ CREATE TABLE IF NOT EXISTS video_metrics (
     published_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW()
 );
+ALTER TABLE video_metrics ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64);
 
 -- api_keys: per-tenant API key management (P2-8)
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -109,8 +113,12 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id);
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_threads_thread_id ON threads(thread_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_states_label ON pipeline_states(label);
+CREATE INDEX IF NOT EXISTS idx_pipeline_states_tenant ON pipeline_states(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_publish_logs_platform ON publish_logs(platform);
 CREATE INDEX IF NOT EXISTS idx_vm_video_id ON video_metrics(video_id);
 CREATE INDEX IF NOT EXISTS idx_vm_scenario ON video_metrics(scenario);
 CREATE INDEX IF NOT EXISTS idx_vm_platform ON video_metrics(platform);
+CREATE INDEX IF NOT EXISTS idx_vm_tenant ON video_metrics(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_vm_pulled_at ON video_metrics(pulled_at);
+CREATE INDEX IF NOT EXISTS idx_vm_video_platform_pulled ON video_metrics(video_id, platform, pulled_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vm_pulled_scenario_platform ON video_metrics(pulled_at DESC, scenario, platform);

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -105,8 +106,11 @@ class FastModeService:
             for attr in ("model_name", "model", "model_id"):
                 if hasattr(client, attr):
                     return str(getattr(client, attr))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "fast_mode: llm model resolution failed",
+                error=str(exc)[:200],
+            )
         return DEFAULT_LLM_PROVIDER
 
     async def generate(
@@ -114,7 +118,7 @@ class FastModeService:
         user_prompt: str,
         duration: int = 15,
         enable_tts: bool = False,
-        on_stage: "callable | None" = None,
+        on_stage: Callable[[str], object] | None = None,
     ) -> dict[str, Any]:
         """Generate a short video from simple text input.
 
@@ -133,8 +137,12 @@ class FastModeService:
             if on_stage is not None:
                 try:
                     on_stage(s)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "fast_mode: stage callback failed",
+                        stage=s,
+                        error=str(exc)[:200],
+                    )
 
         _stage("llm")
         llm_start = time.perf_counter()
@@ -305,8 +313,12 @@ class FastModeService:
             try:
                 from src.tools.poster_extractor import ensure_poster
                 ensure_poster(local_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "fast_mode: poster extraction failed",
+                    video_path=str(local_path),
+                    error=str(exc)[:200],
+                )
 
         logger.info(
             "fast_mode: complete",

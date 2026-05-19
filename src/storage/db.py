@@ -58,6 +58,7 @@ def _create_sqlite_tables() -> None:
     """Create tables in SQLite for development fallback."""
     if _sqlite_conn is None:
         return
+    _ensure_sqlite_compat_columns()
     _sqlite_conn.executescript("""
         CREATE TABLE IF NOT EXISTS threads (
             id TEXT PRIMARY KEY,
@@ -86,6 +87,7 @@ def _create_sqlite_tables() -> None:
             structured_errors TEXT DEFAULT '[]',
             regenerate_chain TEXT DEFAULT '[]',
             soft_degraded_reasons TEXT DEFAULT '[]',
+            tenant_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -109,6 +111,7 @@ def _create_sqlite_tables() -> None:
         CREATE TABLE IF NOT EXISTS publish_logs (
             id TEXT PRIMARY KEY,
             platform TEXT NOT NULL,
+            tenant_id TEXT,
             post_id TEXT,
             content TEXT DEFAULT '{}',
             status TEXT,
@@ -121,6 +124,7 @@ def _create_sqlite_tables() -> None:
             video_id TEXT NOT NULL,
             scenario TEXT NOT NULL,
             platform TEXT NOT NULL,
+            tenant_id TEXT,
             post_id TEXT,
             post_url TEXT,
             metrics TEXT DEFAULT '{}',
@@ -143,16 +147,37 @@ def _create_sqlite_tables() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_threads_thread_id ON threads(thread_id);
         CREATE INDEX IF NOT EXISTS idx_pipeline_states_label ON pipeline_states(label);
+        CREATE INDEX IF NOT EXISTS idx_pipeline_states_tenant ON pipeline_states(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_publish_logs_platform ON publish_logs(platform);
         CREATE INDEX IF NOT EXISTS idx_vm_video_id ON video_metrics(video_id);
         CREATE INDEX IF NOT EXISTS idx_vm_scenario ON video_metrics(scenario);
         CREATE INDEX IF NOT EXISTS idx_vm_platform ON video_metrics(platform);
+        CREATE INDEX IF NOT EXISTS idx_vm_tenant ON video_metrics(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_vm_pulled_at ON video_metrics(pulled_at);
         CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(ts DESC);
         CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_type, actor_id);
         CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
     """)
     _sqlite_conn.commit()
+
+
+def _ensure_sqlite_compat_columns() -> None:
+    """Backfill columns for existing SQLite fallback databases."""
+    if _sqlite_conn is None:
+        return
+
+    for table, column, column_type in (
+        ("pipeline_states", "tenant_id", "TEXT"),
+        ("video_metrics", "tenant_id", "TEXT"),
+    ):
+        rows = _sqlite_conn.execute(f"PRAGMA table_info({table})").fetchall()
+        if not rows:
+            continue
+        existing = {row["name"] for row in rows}
+        if column in existing:
+            continue
+        _sqlite_conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+        logger.info("SQLite fallback schema backfilled %s.%s", table, column)
 
 
 # Required tables for the application to function with PG persistence

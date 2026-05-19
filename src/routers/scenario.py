@@ -16,7 +16,13 @@ except ImportError:
 from typing import Any
 
 from src.config import DEFAULT_LANGUAGES
-from src.routers._deps import _classified_error, _inject_api_keys, _safe_error, verify_api_key
+from src.routers._deps import (
+    _classified_error,
+    _inject_api_keys,
+    _safe_error,
+    get_auth_context,
+    verify_api_key,
+)
 from src.routers._state import (
     _SCENARIO_STEP_ORDER,
     _STEP_DURATIONS,
@@ -49,6 +55,24 @@ def _validate_s5_scene_id(scene_id: Any) -> str:
             detail=f"Invalid scene_id: {scene_id!r}. Allowed: {allowed}",
         )
     return scene_id
+
+
+def _assert_state_access(state: dict[str, Any] | None) -> None:
+    """Reject cross-tenant access to persisted pipeline state."""
+    if state is None:
+        return
+    ctx = get_auth_context()
+    if ctx is None:
+        return
+    state_tenant = state.get("tenant_id")
+    # Older local/dev states predate tenant ownership. Keep default/test-bundle
+    # access compatible, but do not let DB tenant keys inherit orphaned states.
+    if not state_tenant:
+        if ctx.tenant_id in {"default", "test-bundle"}:
+            return
+        raise HTTPException(status_code=404, detail="State not found")
+    if state_tenant != ctx.tenant_id:
+        raise HTTPException(status_code=404, detail="State not found")
 
 
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
@@ -482,9 +506,17 @@ async def run_s1_step(step_name: str, body: dict[str, Any]):
     from src.pipeline.step_runner import StepRunner
 
     try:
-        step_runner = StepRunner(PipelineStateManager())
+        state_manager = PipelineStateManager()
+        state = await state_manager.load(body["label"])
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {body['label']}")
+        _assert_state_access(state)
+
+        step_runner = StepRunner(state_manager)
         result = await step_runner.run_step(body["label"], step_name)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         import logging
         logging.error("s1 step failed: %s", e)
@@ -512,10 +544,17 @@ async def regenerate_s1_step(body: dict[str, Any]):
 
     try:
         state_manager = PipelineStateManager()
+        state = await state_manager.load(body["label"])
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {body['label']}")
+        _assert_state_access(state)
+
         await invalidate_downstream(body["label"], body["step"], state_manager)
         step_runner = StepRunner(state_manager)
         result = await step_runner.regenerate_step(body["label"], body["step"])
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
@@ -534,9 +573,17 @@ async def resume_s1_pipeline(body: dict[str, Any]):
     from src.pipeline.step_runner import StepRunner
 
     try:
-        step_runner = StepRunner(PipelineStateManager())
+        state_manager = PipelineStateManager()
+        state = await state_manager.load(body["label"])
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {body['label']}")
+        _assert_state_access(state)
+
+        step_runner = StepRunner(state_manager)
         result = await step_runner.resume(body["label"])
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         import logging
         logging.error("s1 regenerate failed: %s", e)
@@ -557,6 +604,7 @@ async def get_s1_state(label: str):
         state = await state_manager.load(label)
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
         result = dict(state)
         result["meta"] = {
             "step_order": _SCENARIO_STEP_ORDER.get("s1", []),
@@ -600,6 +648,7 @@ async def update_s1_state(label: str, body: dict[str, Any]):
         state = await state_manager.load(label)
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
 
         updated_state = deep_merge(state, body)
         await state_manager.save(label, updated_state)
@@ -631,6 +680,7 @@ async def list_steps(scenario: str, label: str):
         state = await state_manager.load(label)
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
 
         steps_data = state.get("steps", {})
         order = _SCENARIO_STEP_ORDER[scenario]
@@ -712,6 +762,7 @@ async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
         state = await state_manager.load(label)
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
 
         steps_data = state.get("steps", {})
         deps = _get_step_deps(scenario, step_name)
@@ -775,6 +826,7 @@ async def edit_step_output(scenario: str, label: str, body: dict[str, Any]):
     Returns:
         { label, updated_step, state }.
     """
+    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_editor import update_step_output
 
     _validate_scenario(scenario)
@@ -786,6 +838,12 @@ async def edit_step_output(scenario: str, label: str, body: dict[str, Any]):
         raise HTTPException(status_code=400, detail="Missing required field: updates")
 
     try:
+        state_manager = PipelineStateManager()
+        state = await state_manager.load(label)
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
+
         result = await update_step_output(label, step_name, updates)
         return {
             "label": label,
@@ -820,6 +878,7 @@ async def regenerate_step(scenario: str, label: str, step_name: str):
         state = await state_manager.load(label)
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
 
         order = _SCENARIO_STEP_ORDER[scenario]
         try:
@@ -865,9 +924,15 @@ async def get_gate(scenario: str, label: str, gate_id: str):
     Returns:
         Gate state dict with candidates, status, selections.
     """
+    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import get_gate_state as _get_gate_state
 
     _validate_scenario(scenario)
+    state = await PipelineStateManager().load(label)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+    _assert_state_access(state)
+
     result = await _get_gate_state(label, gate_id)
     if "error" in result:
         from fastapi import HTTPException
@@ -890,10 +955,16 @@ async def generate_gate_candidates(scenario: str, label: str, gate_id: str):
     Returns:
         dict with candidates array, gate_id, label.
     """
+    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import generate_candidates as _generate_candidates
 
     _validate_scenario(scenario)
     try:
+        state = await PipelineStateManager().load(label)
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
+
         result = await _generate_candidates(label, gate_id)
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
@@ -924,6 +995,7 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
     Returns:
         Approval result with selected_ids and next_step.
     """
+    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import approve_gate as _approve_gate
 
     _validate_scenario(scenario)
@@ -932,6 +1004,12 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
         raise HTTPException(status_code=400, detail="Missing or invalid required field: selected_ids (list[str])")
 
     try:
+        state_manager = PipelineStateManager()
+        state = await state_manager.load(label)
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
+
         result = await _approve_gate(label, gate_id, selected_ids)
         if "error" in result:
             status_code = 400
@@ -948,10 +1026,9 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
 
             log = structlog.get_logger()
             try:
-                from src.pipeline.state_manager import PipelineStateManager
                 from src.pipeline.step_runner import StepRunner
 
-                step_runner = StepRunner(PipelineStateManager())
+                step_runner = StepRunner(state_manager)
                 await step_runner.resume(label)
                 log.info(
                     "background_resume_complete",
@@ -998,10 +1075,16 @@ async def regenerate_gate_candidate(scenario: str, label: str, gate_id: str, can
     Returns:
         Updated candidate dict with new data and score.
     """
+    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import regenerate_candidate as _regenerate_candidate
 
     _validate_scenario(scenario)
     try:
+        state = await PipelineStateManager().load(label)
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
+
         result = await _regenerate_candidate(label, gate_id, candidate_id)
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
@@ -1149,6 +1232,7 @@ async def get_scenario_status(scenario: str, label: str):
         state = await state_manager.load(label)
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
+        _assert_state_access(state)
 
         step_order = _SCENARIO_STEP_ORDER.get(scenario, [])
         current_step = state.get("current_step", "")

@@ -303,8 +303,11 @@ def compile_pipeline(checkpointer=None, db_url: str | None = None) -> CompiledSt
             if isinstance(_serde, JsonPlusSerializer):
                 try:
                     checkpointer.serde = _serde.with_msgpack_allowlist(_model_classes)  # type: ignore[union-attr]
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.warning(
+                        "pipeline: serializer allowlist update failed",
+                        error=str(exc)[:200],
+                    )
 
     graph = build_pipeline()
 

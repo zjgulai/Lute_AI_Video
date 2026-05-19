@@ -7,9 +7,17 @@ try:
 except ImportError:
     HAS_STORAGE = False
 
-from src.routers._deps import _safe_error, verify_api_key
+from src.routers._deps import _safe_error, get_auth_context, verify_api_key
 
 router = APIRouter()
+
+
+def _metrics_tenant_filter() -> str | None:
+    ctx = get_auth_context()
+    if ctx is None or ctx.tenant_id in {"default", "test-bundle"}:
+        return None
+    return ctx.tenant_id
+
 
 @router.get("/metrics/{video_id}", dependencies=[Depends(verify_api_key)])
 async def get_video_metrics(video_id: str, platform: str | None = None):
@@ -20,7 +28,7 @@ async def get_video_metrics(video_id: str, platform: str | None = None):
     try:
         from src.storage.metrics_repository import VideoMetricsRepository
         repo = VideoMetricsRepository()
-        rows = await repo.get_metrics(video_id, platform=platform)
+        rows = await repo.get_metrics(video_id, platform=platform, tenant_id=_metrics_tenant_filter())
         return {"video_id": video_id, "metrics": rows}
     except Exception as e:
         import logging
@@ -44,7 +52,7 @@ async def get_dashboard_overview(scenario: str | None = None, platform: str | No
         from src.storage.metrics_repository import VideoMetricsRepository
         repo = VideoMetricsRepository()
         rows = await repo.get_dashboard_overview(
-            scenario=scenario, platform=platform, days=days
+            scenario=scenario, platform=platform, days=days, tenant_id=_metrics_tenant_filter()
         )
         return {
             "scenario": scenario,
@@ -75,5 +83,4 @@ async def trigger_metrics_pull():
         import logging
         logging.error("trigger_metrics_pull failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
-
 

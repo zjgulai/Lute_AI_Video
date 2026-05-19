@@ -21,7 +21,6 @@ import os
 import pytest
 from fastapi import HTTPException
 
-
 # ── _sanitize_filename 纯单元 ──
 
 class TestSanitizeFilename:
@@ -217,14 +216,16 @@ class TestUploadEndpoint:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_upload_oversize_returns_413(self, app, monkeypatch):
+    async def test_upload_oversize_returns_413(self, app, tmp_path, monkeypatch):
         """超过 MAX_UPLOAD_SIZE 应该 413。
 
         实际跑 100MB 太慢,monkeypatch 把限制改小,上传少量字节触发。
         """
         from httpx import ASGITransport, AsyncClient
+
         from src.routers import assets as assets_mod
 
+        monkeypatch.setattr(assets_mod, "OUTPUT_DIR", tmp_path)
         # 把 100MB 限制调到 100B,触发 413
         monkeypatch.setattr(assets_mod, "MAX_UPLOAD_SIZE", 100)
 
@@ -238,3 +239,4 @@ class TestUploadEndpoint:
             )
         assert response.status_code == 413
         assert "too large" in response.json()["detail"].lower()
+        assert list((tmp_path / "uploads").glob("*")) == []

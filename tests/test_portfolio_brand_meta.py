@@ -11,8 +11,8 @@ Covers:
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -149,3 +149,70 @@ async def test_get_brand_presets_sanitizes_brand_arg(brand_assets_root):
     with pytest.raises(HTTPException) as exc_info:
         await get_brand_presets(brand="../etc/passwd")
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_portfolio_does_not_generate_missing_video_poster(tmp_path, monkeypatch):
+    """Portfolio listing must stay read-only when a legacy video lacks poster."""
+    import src.routers.portfolio as portfolio_mod
+    import src.tools.poster_extractor as poster_extractor
+
+    output_dir = tmp_path / "output"
+    renders = output_dir / "renders"
+    renders.mkdir(parents=True)
+    video = renders / "s1_1700000000.mp4"
+    video.write_bytes(b"0" * (1024 * 1024 + 1))
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("ensure_poster must not run in list_portfolio")
+
+    monkeypatch.setattr(portfolio_mod, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(
+        portfolio_mod,
+        "THUMBNAIL_DIR",
+        output_dir / "thumbnails" / "portfolio_posters",
+    )
+    monkeypatch.setattr(poster_extractor, "ensure_poster", fail_if_called)
+    portfolio_mod._CACHE.clear()
+
+    resp = await portfolio_mod.list_portfolio(limit=10)
+
+    assert resp.total == 1
+    assert resp.files[0].thumbnail_path is None
+    assert not (output_dir / "thumbnails" / "portfolio_posters").exists()
+
+
+@pytest.mark.asyncio
+async def test_list_portfolio_filters_by_media_type(tmp_path, monkeypatch):
+    import src.routers.portfolio as portfolio_mod
+
+    output_dir = tmp_path / "output"
+    renders = output_dir / "renders"
+    audio = output_dir / "audio"
+    images = output_dir / "gpt_images"
+    renders.mkdir(parents=True)
+    audio.mkdir(parents=True)
+    images.mkdir(parents=True)
+    (renders / "s1_1700000000.mp4").write_bytes(b"0" * (1024 * 1024 + 1))
+    (audio / "voice.mp3").write_bytes(b"audio")
+    (images / "image.png").write_bytes(b"0" * (1024 * 1024 + 1))
+
+    monkeypatch.setattr(portfolio_mod, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(
+        portfolio_mod,
+        "THUMBNAIL_DIR",
+        output_dir / "thumbnails" / "portfolio_posters",
+    )
+    portfolio_mod._CACHE.clear()
+    portfolio_mod._VIEW_CACHE.clear()
+
+    videos = await portfolio_mod.list_portfolio(media_type="video", limit=10)
+    audios = await portfolio_mod.list_portfolio(media_type="audio", limit=10)
+    images_resp = await portfolio_mod.list_portfolio(media_type="image", limit=10)
+
+    assert videos.total == 1
+    assert videos.files[0].mime_type.startswith("video/")
+    assert audios.total == 1
+    assert audios.files[0].mime_type.startswith("audio/")
+    assert images_resp.total == 1
+    assert images_resp.files[0].mime_type.startswith("image/")

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { act } from "react";
 import SettingsPanel from "./SettingsPanel";
 import { I18nProvider } from "@/i18n/I18nProvider";
@@ -32,13 +32,33 @@ function renderWithProvider(ui: React.ReactElement) {
 describe("SettingsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.setItem("app-locale", "en");
   });
 
   it("renders API configuration inputs", () => {
     const { container, cleanup } = renderWithProvider(
       <SettingsPanel onClose={() => {}} />
     );
-    expect(container.querySelector('input[type="text"]')).toBeInTheDocument();
+    expect(container.textContent).toContain("Settings");
+    expect(container.textContent).toContain("Backend access");
+    expect(container.textContent).toContain("Target host");
+    expect(container.querySelector('input[type="text"]')).not.toBeNull();
+    expect(container.querySelector('input[type="password"]')).not.toBeNull();
+    cleanup();
+  });
+
+  it("switches between settings tabs", () => {
+    const { container, cleanup } = renderWithProvider(
+      <SettingsPanel onClose={() => {}} />
+    );
+    const providersTab = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Providers")
+    );
+    expect(providersTab).toBeTruthy();
+    act(() => providersTab?.click());
+    expect(container.textContent).toContain("Provider stack");
+    expect(container.textContent).toContain("DeepSeek");
+    expect(container.textContent).toContain("poyo.ai Seedance");
     cleanup();
   });
 

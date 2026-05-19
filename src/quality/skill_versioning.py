@@ -93,8 +93,12 @@ class SkillMonitor:
                             all_skills.add(rec.get("skill", ""))
                         except json.JSONDecodeError:
                             continue
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "skill_versioning: execution log scan failed",
+                log_path=str(self._log_path),
+                error=str(exc)[:200],
+            )
 
         return {
             "skills": {s: self._get_skill_report(s) for s in all_skills if s},
@@ -124,8 +128,13 @@ class SkillMonitor:
                                 durations.append(float(rec.get("duration_ms", 0)))
                         except (json.JSONDecodeError, ValueError):
                             continue
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "skill_versioning: duration report scan failed",
+                skill=skill_name,
+                output_dir=str(self.output_dir),
+                error=str(exc)[:200],
+            )
 
         avg_dur = sum(durations) / len(durations) if durations else 0
         p95_dur = sorted(durations)[int(len(durations) * 0.95)] if len(durations) >= 20 else avg_dur

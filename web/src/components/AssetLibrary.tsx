@@ -7,6 +7,8 @@ import { useI18n } from "@/i18n/I18nProvider";
 interface Asset {
   filename: string;
   path: string;
+  mediaUrl: string;
+  thumbnailUrl: string;
   size: number;
   type: "video" | "image" | "audio";
   created: string;
@@ -15,13 +17,6 @@ interface Asset {
 
 interface Props {
   onClose: () => void;
-}
-
-function collectTags(f: Record<string, unknown>): string[] {
-  const out: string[] = [];
-  if (typeof f.label === "string" && f.label.trim()) out.push(f.label.trim());
-  if (Array.isArray(f.tags)) out.push(...f.tags.map((x: unknown) => String(x)).filter(Boolean));
-  return [...new Set(out)].slice(0, 12);
 }
 
 export default function AssetLibrary({ onClose }: Props) {
@@ -35,7 +30,8 @@ export default function AssetLibrary({ onClose }: Props) {
   const loadAssets = useCallback(() => {
     setLoading(true);
     setError(false);
-    apiFetch("/portfolio/")
+    const typeQuery = filter === "all" ? "" : `&media_type=${filter}`;
+    apiFetch(`/portfolio/?limit=200&sort=recent${typeQuery}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -45,9 +41,13 @@ export default function AssetLibrary({ onClose }: Props) {
           let type: Asset["type"] = "video";
           if (mime.startsWith("image/")) type = "image";
           else if (mime.startsWith("audio/")) type = "audio";
+          const path = f.path as string;
+          const thumbnailPath = (f.thumbnail_path as string | null) || "";
           return {
             filename: f.filename as string,
-            path: f.path as string,
+            path,
+            mediaUrl: getMediaUrl(path),
+            thumbnailUrl: thumbnailPath ? getMediaUrl(thumbnailPath) : "",
             size: f.size_bytes as number,
             type,
             created: f.produced_at
@@ -60,14 +60,14 @@ export default function AssetLibrary({ onClose }: Props) {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [locale]);
+  }, [filter, locale]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAssets();
   }, [loadAssets]);
 
-  const filtered = filter === "all" ? assets : assets.filter((a) => a.type === filter);
+  const filtered = assets;
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -85,8 +85,7 @@ export default function AssetLibrary({ onClose }: Props) {
   };
 
   const openNewTab = (asset: Asset) => {
-    const url = getMediaUrl(asset.path);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    if (asset.mediaUrl) window.open(asset.mediaUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -185,9 +184,9 @@ export default function AssetLibrary({ onClose }: Props) {
                 >
                   <div className="aspect-video bg-[var(--bg-panel)] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom relative">
                     {asset.type === "image" ? (
-                      getMediaUrl(asset.path) ? (
+                      asset.mediaUrl ? (
                         <img
-                          src={getMediaUrl(asset.path)}
+                          src={asset.mediaUrl}
                           alt={asset.filename}
                           className="w-full h-full object-cover pointer-events-none select-none"
                           draggable={false}
@@ -200,14 +199,14 @@ export default function AssetLibrary({ onClose }: Props) {
                         </div>
                       )
                     ) : asset.type === "video" ? (
-                      getMediaUrl(asset.path) ? (
+                      asset.thumbnailUrl ? (
                         <>
-                          <video
-                            src={getMediaUrl(asset.path)}
+                          <img
+                            src={asset.thumbnailUrl}
+                            alt={asset.filename}
                             className="w-full h-full object-cover pointer-events-none select-none"
-                            preload="metadata"
-                            muted
-                            playsInline
+                            draggable={false}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors pointer-events-none">
                             <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
@@ -296,7 +295,7 @@ export default function AssetLibrary({ onClose }: Props) {
             <div className="flex-1 min-h-0 flex items-center justify-center bg-black p-2">
               {preview.type === "video" && (
                 <video
-                  src={getMediaUrl(preview.path)}
+                  src={preview.mediaUrl}
                   className="max-h-[75vh] max-w-full object-contain"
                   controls
                   autoPlay
@@ -305,7 +304,7 @@ export default function AssetLibrary({ onClose }: Props) {
               )}
               {preview.type === "image" && (
                 <img
-                  src={getMediaUrl(preview.path)}
+                  src={preview.mediaUrl}
                   alt={preview.filename}
                   className="max-h-[75vh] max-w-full object-contain"
                 />
@@ -313,7 +312,7 @@ export default function AssetLibrary({ onClose }: Props) {
               {preview.type === "audio" && (
                 <div className="w-full max-w-md p-6 flex flex-col items-center gap-4">
                   <span className="text-4xl">{getIcon("audio")}</span>
-                  <audio src={getMediaUrl(preview.path)} controls preload="metadata" className="w-full" />
+                  <audio src={preview.mediaUrl} controls preload="metadata" className="w-full" />
                 </div>
               )}
             </div>

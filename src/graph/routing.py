@@ -12,9 +12,12 @@ from __future__ import annotations
 import contextvars
 from typing import Any
 
+import structlog
+
 from src.models.state import VideoPipelineState
 
 MAX_RETRIES = 3
+logger = structlog.get_logger()
 
 # D10: Per-request override for human review decisions.
 # LangGraph's checkpoint recovery does not preserve update_state across
@@ -111,8 +114,13 @@ def _audit_guard(state: VideoPipelineState, checkpoint_key: str) -> str | None:
             if thresholds:
                 auto_approve = thresholds.get("auto_approve", auto_approve)
                 auto_reject = thresholds.get("auto_reject", auto_reject)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "routing: scenario threshold load failed",
+                scenario=scenario,
+                checkpoint=checkpoint_key,
+                error=str(exc)[:200],
+            )
 
     # Handle both Pydantic model and dict form
     if hasattr(report, "overall_score"):

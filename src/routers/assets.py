@@ -7,7 +7,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.config import OUTPUT_DIR
-from src.routers._deps import verify_api_key
+from src.routers._deps import get_auth_context, verify_api_key
 
 router = APIRouter()
 
@@ -34,6 +34,33 @@ def _sanitize_filename(filename: str | None) -> str:
 
 
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100MB
+UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
+
+
+def _current_upload_dir() -> Path:
+    ctx = get_auth_context()
+    uploads_dir = OUTPUT_DIR / "uploads"
+    if ctx is not None and ctx.tenant_id not in {"default", "test-bundle"}:
+        uploads_dir = uploads_dir / ctx.tenant_id
+    resolved = uploads_dir.resolve()
+    root = OUTPUT_DIR.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        raise HTTPException(status_code=500, detail="Upload storage misconfigured")
+    return resolved
+
+
+def _can_list_media(rel: Path) -> bool:
+    ctx = get_auth_context()
+    if ctx is None or ctx.tenant_id in {"default", "test-bundle"}:
+        return True
+    parts = rel.parts
+    if len(parts) >= 2 and parts[0] == "uploads" and parts[1] == ctx.tenant_id:
+        return True
+    if len(parts) >= 2 and parts[0] == "tenants" and parts[1] == ctx.tenant_id:
+        return True
+    return bool(parts and parts[0] in {"brand_assets", "demo"})
 
 
 try:
@@ -42,7 +69,7 @@ try:
     @router.post("/api/upload", dependencies=[Depends(verify_api_key)])
     async def upload_file(file: UploadFile = File(...)):
         """Upload an asset file (video, image, audio, document) to uploads dir."""
-        uploads_dir = OUTPUT_DIR / "uploads"
+        uploads_dir = _current_upload_dir()
         uploads_dir.mkdir(parents=True, exist_ok=True)
 
         # Sanitize filename
@@ -50,11 +77,20 @@ try:
         original_name = Path(file.filename or "upload").name
         dest = uploads_dir / unique_name
 
-        content = await file.read()
-        if len(content) > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"File too large. Max size: {MAX_UPLOAD_SIZE // (1024*1024)}MB")
-
-        dest.write_bytes(content)
+        size = 0
+        try:
+            with dest.open("wb") as out:
+                while chunk := await file.read(UPLOAD_CHUNK_SIZE):
+                    size += len(chunk)
+                    if size > MAX_UPLOAD_SIZE:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"File too large. Max size: {MAX_UPLOAD_SIZE // (1024*1024)}MB",
+                        )
+                    out.write(chunk)
+        except HTTPException:
+            dest.unlink(missing_ok=True)
+            raise
 
         rel_upload = (uploads_dir / unique_name).relative_to(OUTPUT_DIR.resolve())
         media_suffix = "/".join(quote(p, safe="") for p in rel_upload.parts)
@@ -63,7 +99,7 @@ try:
             "filename": unique_name,
             "original_name": original_name,
             "path": f"/api/media/{media_suffix}",
-            "size": len(content),
+            "size": size,
             "content_type": file.content_type,
         }
 except ImportError:
@@ -93,6 +129,8 @@ async def list_files():
         except ValueError:
             continue
         if any(part.startswith(".") for part in rel.parts):
+            continue
+        if not _can_list_media(rel):
             continue
         try:
             st = f.stat()

@@ -25,7 +25,7 @@ except ImportError:
 
 from src.config import DEFAULT_LANGUAGES
 from src.models import REVIEW_NODES, ApprovalStatus
-from src.routers._deps import _inject_api_keys, _safe_error, verify_api_key
+from src.routers._deps import _inject_api_keys, _safe_error, get_auth_context, verify_api_key
 from src.routers._state import (
     PipelineStartRequest,
     ReviewAction,
@@ -115,6 +115,22 @@ def _get_state_status(legacy_state: dict[str, Any]) -> str:
     if legacy_state.get("status") == "not_found":
         return "not_found"
     return "interrupted"
+
+
+def _assert_state_access(state: dict[str, Any] | None) -> None:
+    """Reject cross-tenant access to StepRunner-backed legacy pipeline state."""
+    if state is None:
+        return
+    ctx = get_auth_context()
+    if ctx is None:
+        return
+    state_tenant = state.get("tenant_id")
+    if not state_tenant:
+        if ctx.tenant_id in {"default", "test-bundle"}:
+            return
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+    if state_tenant != ctx.tenant_id:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
 
 
 async def _load_steprunner_state(label: str) -> dict[str, Any] | None:
@@ -212,6 +228,7 @@ async def get_pipeline_state(thread_id: str):
 
     try:
         state = await _load_steprunner_state(label)
+        _assert_state_access(state)
         legacy = _steprunner_state_to_legacy(label, state)
         status = _get_state_status(legacy)
 
@@ -285,6 +302,7 @@ async def get_pipeline_output(thread_id: str):
     state = await _load_steprunner_state(label)
     if state is None:
         raise HTTPException(status_code=404, detail="Pipeline not found")
+    _assert_state_access(state)
 
     return _steprunner_state_to_legacy(label, state)
 
@@ -299,6 +317,7 @@ async def get_distribution_plans(thread_id: str):
     state = await _load_steprunner_state(label)
     if state is None:
         raise HTTPException(status_code=404, detail="Pipeline not found")
+    _assert_state_access(state)
 
     legacy = _steprunner_state_to_legacy(label, state)
     plans = legacy.get("distribution_plans", [])
@@ -315,6 +334,7 @@ async def export_pipeline_output(thread_id: str):
     state = await _load_steprunner_state(label)
     if state is None:
         raise HTTPException(status_code=404, detail="Pipeline not found")
+    _assert_state_access(state)
 
     legacy = _steprunner_state_to_legacy(label, state)
 
