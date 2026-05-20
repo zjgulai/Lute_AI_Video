@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ShieldCheck } from "@phosphor-icons/react";
-import type { ReviewState } from "@/components/types";
+import type { AuditReport, ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -54,26 +54,81 @@ import { useSubmitting } from "@/hooks/useSubmitting";
 
 const STORAGE_KEY = "ai_video_thread_id";
 
-function extractVersions(state: any): Version[] {
+type UnknownRecord = Record<string, unknown>;
+
+type PipelineStepLike = {
+  output?: unknown;
+};
+
+type PipelineStateLike = {
+  steps?: Record<string, PipelineStepLike>;
+};
+
+type SceneConfig = UnknownRecord & {
+  mode?: string;
+  content_scenario?: string;
+  product_catalog?: UnknownRecord & {
+    name?: string;
+    products?: Array<UnknownRecord & { name?: string; usps?: unknown }>;
+    usps?: unknown;
+  };
+  brand_guidelines?: UnknownRecord & { brand_name?: string };
+  target_platforms?: string[];
+  target_languages?: string[];
+  content_calendar_week?: string;
+  video_duration?: number;
+  brand_id?: string;
+  product_sku?: unknown;
+  scene_id?: string;
+  selected_models?: unknown[];
+  story_description?: string;
+};
+
+type GalleryResult = {
+  briefs?: UnknownRecord[];
+  scripts?: UnknownRecord[];
+  thumbnail_image_paths?: string[];
+  final_video_path?: string;
+  video_duration?: number;
+  audit_report?: { overall_score?: number };
+};
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
+}
+
+function asAuditReport(value: unknown): AuditReport | null {
+  const record = asRecord(value);
+  if (typeof record.overall_score === "number" && typeof record.overall_status === "string") {
+    return value as AuditReport;
+  }
+  return null;
+}
+
+function extractVersions(state: PipelineStateLike): Version[] {
   const versions: Version[] = [];
   const steps = state?.steps || {};
   const assembleOutput = steps.assemble_final?.output;
   const auditOutput = steps.audit?.output;
-  const scripts = steps.scripts?.output || [];
+  const auditRecord = asRecord(auditOutput);
+  const scripts = Array.isArray(steps.scripts?.output) ? steps.scripts.output : [];
 
   // Extract video path from assemble_final output (string, or object with video_path, or array)
+  const assembleRecord = asRecord(assembleOutput);
   const videoPath =
     typeof assembleOutput === "string"
       ? assembleOutput
-      : assembleOutput?.video_path || (Array.isArray(assembleOutput) ? assembleOutput[0] : "");
+      : String(assembleRecord.video_path || (Array.isArray(assembleOutput) ? assembleOutput[0] : ""));
+
+  const firstScript = asRecord(scripts[0]);
 
   versions.push({
     label: "Version A",
-    scriptVariant: scripts[0]?.variant || "standard",
+    scriptVariant: String(firstScript.variant || "standard"),
     videoPath,
-    thumbnailPath: steps.thumbnail_images?.output?.[0] || "",
-    auditReport: auditOutput || null,
-    duration: auditOutput?.duration_seconds || 0,
+    thumbnailPath: Array.isArray(steps.thumbnail_images?.output) ? String(steps.thumbnail_images.output[0] || "") : "",
+    auditReport: asAuditReport(auditOutput),
+    duration: typeof auditRecord.duration_seconds === "number" ? auditRecord.duration_seconds : 0,
     fileSize: 0,
   });
 
@@ -82,18 +137,21 @@ function extractVersions(state: any): Version[] {
   if (scripts.length >= 2) {
     const secondVideoPath = Array.isArray(assembleOutput)
       ? assembleOutput[1] || ""
-      : typeof assembleOutput === "object" && assembleOutput?.video_path_2
-        ? assembleOutput.video_path_2
+      : assembleRecord.video_path_2
+        ? assembleRecord.video_path_2
         : "";
 
     if (secondVideoPath) {
+      const secondScript = asRecord(scripts[1]);
       versions.push({
         label: "Version B",
-        scriptVariant: scripts[1]?.variant || "creative",
-        videoPath: secondVideoPath,
-        thumbnailPath: steps.thumbnail_images?.output?.[1] || steps.thumbnail_images?.output?.[0] || "",
-        auditReport: auditOutput || null,
-        duration: auditOutput?.duration_seconds || 0,
+        scriptVariant: String(secondScript.variant || "creative"),
+        videoPath: String(secondVideoPath),
+        thumbnailPath: Array.isArray(steps.thumbnail_images?.output)
+          ? String(steps.thumbnail_images.output[1] || steps.thumbnail_images.output[0] || "")
+          : "",
+        auditReport: asAuditReport(auditOutput),
+        duration: typeof auditRecord.duration_seconds === "number" ? auditRecord.duration_seconds : 0,
         fileSize: 0,
       });
     }
@@ -232,7 +290,7 @@ export default function Home() {
   }, [t, showToast, setDisconnected]);
 
   // v2.0: Save completed creations to gallery (localStorage)
-  const saveToGallery = useCallback((result: any, scenario: string) => {
+  const saveToGallery = useCallback((result: GalleryResult, scenario: string) => {
     try {
       const brief = result?.briefs?.[0] || {};
       const script = result?.scripts?.[0] || {};
@@ -420,13 +478,14 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [loading, setLoading]);
 
-  const configRef = useRef<any>(null);
+  const [pendingConfig, setPendingConfig] = useState<SceneConfig | null>(null);
 
-  const handleSceneSubmit = useCallback((config: any) => {
-    configRef.current = config;
+  const handleSceneSubmit = useCallback((config: Record<string, unknown>) => {
+    const sceneConfig = config as SceneConfig;
+    setPendingConfig(sceneConfig);
     // Extract mode from the submitted config if present
-    if (config.mode) {
-      setMode(config.mode);
+    if (sceneConfig.mode === "expert" || sceneConfig.mode === "smart") {
+      setMode(sceneConfig.mode);
     }
     setStage("recommend");
   }, []);
@@ -443,7 +502,7 @@ export default function Home() {
     return map[scenario] || "s1";
   };
 
-  const startSmartCreate = (config: any) => wrapStart(async () => {
+  const startSmartCreate = (config: SceneConfig) => wrapStart(async () => {
     const scenario = config.content_scenario || "product_direct";
     const scenarioId = scenarioToId(scenario);
     setFieldErrors({});
@@ -520,7 +579,7 @@ export default function Home() {
     }
   });
 
-  const handleStart = (config: any) => wrapStart(async () => {
+  const handleStart = (config: SceneConfig) => wrapStart(async () => {
     setFieldErrors({});
     // Demo mode: skip all API calls, serve mock data instantly
     if (isDemoMode()) {
@@ -914,9 +973,9 @@ export default function Home() {
           )}
 
           {/* Stage 1: Recommend — AI recommendation panel */}
-          {stage === "recommend" && configRef.current && (
+          {stage === "recommend" && pendingConfig !== null ? (
             <RecommendPanel
-              config={configRef.current}
+              config={pendingConfig}
               onBack={() => setStage("home")}
               onStart={(finalConfig) => {
                 if (finalConfig.mode === "smart" || mode === "smart") {
@@ -932,10 +991,10 @@ export default function Home() {
                 }
               }}
             />
-          )}
+          ) : null}
 
           {/* Stage 2: Generate — pipeline execution view */}
-          {stage === "generate" && mode === "expert" && (
+          {stage === "generate" && mode === "expert" ? (
             showCompare ? (
               <CompareView
                 versions={compareVersions}
@@ -962,7 +1021,7 @@ export default function Home() {
                 }}
               />
             ) : showWorkflow && workflowLabel && currentGate >= 1 ? (
-              workflowState ? (
+              workflowState !== null ? (
                 <GatePanel
                   key={`gate-${currentGate}`}
                   label={workflowLabel}
@@ -983,16 +1042,22 @@ export default function Home() {
                         showToast(t("gate.finalReview") + " approved — loading results...", "info");
                         // Demo mode: build versions directly from workflowState
                         if (isDemoMode()) {
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          const ws = workflowState as any;
-                          const demoVersions = extractVersions({ steps: ws?.steps || {} });
+                          const ws = asRecord(workflowState);
+                          const wsSteps = asRecord(ws.steps);
+                          const demoVersions = extractVersions({ steps: wsSteps as PipelineStateLike["steps"] || {} });
+                          const assembleFinal = asRecord(wsSteps.assemble_final);
+                          const thumbnailImages = asRecord(wsSteps.thumbnail_images);
+                          const auditStep = asRecord(wsSteps.audit);
+                          const thumbnailOutput = Array.isArray(thumbnailImages.output) ? thumbnailImages.output : [];
+                          const auditOutput = auditStep.output;
+                          const auditRecord = asRecord(auditOutput);
                           setCompareVersions(demoVersions.length > 0 ? demoVersions : [{
                             label: "Version A",
                             scriptVariant: "standard",
-                            videoPath: ws?.steps?.assemble_final?.output || "",
-                            thumbnailPath: ws?.steps?.thumbnail_images?.output?.[0] || "",
-                            auditReport: ws?.steps?.audit?.output || null,
-                            duration: ws?.steps?.audit?.output?.duration_seconds || 0,
+                            videoPath: String(assembleFinal.output || ""),
+                            thumbnailPath: String(thumbnailOutput[0] || ""),
+                            auditReport: asAuditReport(auditOutput),
+                            duration: typeof auditRecord.duration_seconds === "number" ? auditRecord.duration_seconds : 0,
                             fileSize: 0,
                           }]);
                           setShowCompare(true);
@@ -1034,25 +1099,25 @@ export default function Home() {
                 </div>
               )
             ) : null
-          )}
+          ) : null}
 
-          {stage === "generate" && mode === "smart" && smartCreateLabel && (
+          {stage === "generate" && mode === "smart" && smartCreateLabel !== null ? (
             <StageProgress
               label={smartCreateLabel}
               scenario={scenarioToId(activeScene || "product_direct")}
               onComplete={(result) => {
                 setOneshotResult(result);
                 setOneshotScenario(activeScene || "product_direct");
-                saveToGallery(result, activeScene || "product_direct");
+                saveToGallery(result as GalleryResult, activeScene || "product_direct");
                 setStage("result");
                 setShowStageProgress(false);
                 clearActivePipeline();
               }}
             />
-          )}
+          ) : null}
 
           {/* Stage 3: Result — one-shot result view */}
-          {stage === "result" && oneshotResult && (
+          {stage === "result" && oneshotResult !== null ? (
             <OneShotResultView
               scenario={oneshotScenario}
               result={oneshotResult}
@@ -1061,9 +1126,9 @@ export default function Home() {
                 setStage("home");
               }}
             />
-          )}
+          ) : null}
 
-          {showStepByStep && stepByStepLabel && stepByStepState && (
+          {showStepByStep && stepByStepLabel !== null && stepByStepState !== null ? (
             <StepByStepView
               label={stepByStepLabel}
               state={stepByStepState as Record<string, unknown>}
@@ -1078,10 +1143,10 @@ export default function Home() {
               onError={(msg) => showToast(msg, "error")}
               loading={loading}
             />
-          )}
+          ) : null}
 
           {/* Backward-compatible: only show when stage-machine does NOT handle it */}
-          {!(stage === "generate" && mode === "expert") && !(stage === "result" && oneshotResult) && showWorkflow && workflowLabel && workflowState && (
+          {!(stage === "generate" && mode === "expert") && !(stage === "result" && oneshotResult !== null) && showWorkflow && workflowLabel !== null && workflowState !== null ? (
             <VideoWorkflow
               config={workflowConfig}
               label={workflowLabel}
@@ -1098,7 +1163,7 @@ export default function Home() {
               setLoading={setLoading}
               setLoadingText={setLoadingText}
             />
-          )}
+          ) : null}
 
           {showCompletion && (
             <div className="grid grid-cols-[320px_1fr] gap-3">

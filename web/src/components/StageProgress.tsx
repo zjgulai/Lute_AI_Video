@@ -238,8 +238,10 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
     timeoutRef.current = setTimeout(() => pollRef.current(), backoffMs);
   }, [label, scenario, onComplete, onGatePause, onError, pollError, t, STAGES]);
 
-  // Keep ref synced with latest poll callback
-  pollRef.current = poll;
+  // Keep ref synced with latest poll callback.
+  useEffect(() => {
+    pollRef.current = poll;
+  }, [poll]);
 
   useEffect(() => {
     timeoutRef.current = setTimeout(poll, POLL_BASE_INTERVAL_MS);
