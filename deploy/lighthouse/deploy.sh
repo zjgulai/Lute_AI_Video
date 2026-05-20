@@ -8,7 +8,7 @@
 # What it does:
 #   1. Sync code from local machine (run rsync on your laptop first, see below)
 #   2. Build frontend on host (reuses node_modules, ~30s incremental)
-#   3. Restart backend container (picks up new Python code via volume)
+#   3. Recreate backend container (picks up new Python code + env_file)
 #   4. Restart frontend container (picks up new .next/standalone via volume)
 #   5. Health checks
 #
@@ -134,7 +134,7 @@ echo ""
 # -- Phase 2: Restart containers --
 echo "[2/5] Restarting containers..."
 cd ../deploy/lighthouse
-$COMPOSE restart backend 2>&1 | tail -3
+$COMPOSE up -d --force-recreate backend 2>&1 | tail -3
 $COMPOSE up -d --force-recreate frontend 2>&1 | tail -3
 # Recreate nginx to pick up nginx.conf changes AND volume mount changes.
 # nginx locks inode at startup, so a file edit alone is not enough.

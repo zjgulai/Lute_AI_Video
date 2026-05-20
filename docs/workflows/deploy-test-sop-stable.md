@@ -73,7 +73,7 @@ deploy.sh 四阶段：
 |---|---|---|
 | Phase 0 | requirements.txt sha256 hash 比对 | "requirements changed, will rebuild" 或 "requirements unchanged" |
 | Phase 1 | 前端构建 | `standalone/server.js` 和 `static/chunks/` 存在 |
-| Phase 2 | 容器重启/重建 | backend restart, frontend --force-recreate, nginx --force-recreate |
+| Phase 2 | 容器重启/重建 | backend --force-recreate, frontend --force-recreate, nginx --force-recreate |
 | Phase 3 | 健康检查 | `/api/health` 200, persistence=postgresql |
 | Phase 4 | 清理 | `docker system prune -f` |
 
