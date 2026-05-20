@@ -109,6 +109,7 @@ STEP_ORDER = [
     "scripts",
     "compliance",
     "storyboards",
+    "continuity_storyboard_grid",
     "keyframe_images",
     "video_prompts",
     "thumbnail_prompts",
@@ -125,6 +126,7 @@ STEP_METHOD_MAP = {
     "scripts": "_step_scripts",
     "compliance": "_step_compliance",
     "storyboards": "_step_storyboards",
+    "continuity_storyboard_grid": "_step_continuity_storyboard_grid",
     "keyframe_images": "_step_keyframe_images",
     "video_prompts": "_step_video_prompts",
     "thumbnail_prompts": "_step_thumbnail_prompts",
@@ -218,6 +220,31 @@ def _get_step_input(state: dict[str, Any], step_name: str, input_key: str) -> An
     return step_data.get("output")
 
 
+def _with_continuity_defaults(config: dict[str, Any], scenario: str) -> dict[str, Any]:
+    """Attach S1/S2 continuity defaults without changing caller-owned config."""
+    if scenario not in {"s1", "s2"}:
+        return config
+
+    normalized = dict(config)
+    normalized.setdefault("continuity_mode", True)
+    normalized.setdefault("storyboard_grid", 12)
+    normalized.setdefault("clip_group_size", 3)
+    return normalized
+
+
+def _mirror_continuity_output(state: dict[str, Any], result: Any) -> None:
+    """Expose continuity output at top level for consumers that do not read steps."""
+    if not isinstance(result, dict):
+        return
+
+    state["continuity_storyboard_grid"] = result.get("continuity_storyboard_grid", result)
+    state["continuity_micro_shots"] = result.get("continuity_micro_shots", result.get("micro_shots", []))
+    state["clip_groups"] = result.get("clip_groups", [])
+    state["transition_plan"] = result.get("transition_plan", [])
+    if result.get("metadata"):
+        state["continuity_storyboard_metadata"] = result["metadata"]
+
+
 class StepRunner:
     """Runs individual steps of the S1 pipeline using state persistence."""
 
@@ -238,6 +265,7 @@ class StepRunner:
 
         scenario_cfg = _get_scenario_config(scenario)
         step_order = scenario_cfg["step_order"]
+        config = _with_continuity_defaults(config, scenario)
 
         # Build empty step statuses
         steps = {}
@@ -481,6 +509,9 @@ class StepRunner:
         step_data["status"] = "done"
         step_data["completed_at"] = datetime.now().isoformat()
         step_data["duration_ms"] = round(step_duration_ms)
+
+        if step_name == "continuity_storyboard_grid":
+            _mirror_continuity_output(state, result)
 
         if step_name == "seedance_clips" and _result_indicates_all_stubs(result):
             state["pipeline_degraded"] = True

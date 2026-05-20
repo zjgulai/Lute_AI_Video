@@ -32,6 +32,7 @@ import structlog
 
 import src.skills.brand_compliance  # noqa: F401
 import src.skills.character_identity  # noqa: F401          ← Track 3: character identity
+import src.skills.continuity_storyboard_grid  # noqa: F401
 import src.skills.elevenlabs_tts  # noqa: F401              ← NEW media
 import src.skills.gpt_image_generate  # noqa: F401          ← NEW media
 import src.skills.keyframe_images  # noqa: F401             ← Track 3: keyframe images
@@ -83,6 +84,9 @@ class S1ProductDirectPipeline:
         enable_media_synthesis: bool = True,
         output_label: str | None = None,
         video_duration: int = 30,
+        continuity_mode: bool = True,
+        storyboard_grid: int | str = 12,
+        clip_group_size: int = 3,
     ) -> dict[str, Any]:
         """Run the full S1 pipeline end-to-end.
 
@@ -116,6 +120,10 @@ class S1ProductDirectPipeline:
             "product_name": product_name,
             "brand_name": brand_name,
             "target_language": target_language,
+            "continuity_mode": continuity_mode,
+            "storyboard_grid": storyboard_grid,
+            "clip_group_size": clip_group_size,
+            "transition_style": "match_cut",
         }
 
         state_manager = PipelineStateManager()
@@ -240,6 +248,84 @@ class S1ProductDirectPipeline:
         import os
         return all(os.path.basename(str(p)).lower().startswith("stub_") for p in clip_paths)
 
+    @staticmethod
+    def _normalize_continuity_config(config: dict[str, Any]) -> dict[str, Any]:
+        """Normalize continuity options while preserving false as an explicit skip."""
+        raw_mode = config.get("continuity_mode", True)
+        if isinstance(raw_mode, str):
+            continuity_mode = raw_mode.strip().lower() not in {"0", "false", "no", "off", "disabled"}
+        else:
+            continuity_mode = bool(raw_mode)
+
+        try:
+            storyboard_grid = int(config.get("storyboard_grid", 12))
+        except (TypeError, ValueError):
+            storyboard_grid = 12
+        if storyboard_grid not in {9, 12, 24}:
+            storyboard_grid = 12
+
+        try:
+            clip_group_size = int(config.get("clip_group_size", 3))
+        except (TypeError, ValueError):
+            clip_group_size = 3
+        if clip_group_size <= 0:
+            clip_group_size = 3
+
+        transition_style = str(config.get("transition_style") or "match_cut")
+        if transition_style not in {"clean", "soft_crossfade", "match_cut"}:
+            transition_style = "match_cut"
+
+        return {
+            "continuity_mode": continuity_mode,
+            "storyboard_grid": storyboard_grid,
+            "clip_group_size": clip_group_size,
+            "transition_style": transition_style,
+        }
+
+    @staticmethod
+    def _transition_plan_from_clip_groups(clip_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "from_clip": group.get("clip_index"),
+                "to_clip": int(group.get("clip_index", 0)) + 1,
+                "transition": group.get("transition_to_next"),
+                "transition_type": group.get("transition_type"),
+            }
+            for group in clip_groups
+            if group.get("transition_to_next")
+        ]
+
+    @staticmethod
+    def _continuity_output(
+        grid: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        clip_groups = grid.get("clip_groups", [])
+        if not isinstance(clip_groups, list):
+            clip_groups = []
+        micro_shots = grid.get("micro_shots", [])
+        if not isinstance(micro_shots, list):
+            micro_shots = []
+        output_metadata = metadata or {}
+        status = "skipped" if grid.get("skipped") or output_metadata.get("skipped") else "done"
+        continuity_grid = {
+            **grid,
+            "metadata": output_metadata,
+            "status": status,
+        }
+        transition_plan = S1ProductDirectPipeline._transition_plan_from_clip_groups(
+            [group for group in clip_groups if isinstance(group, dict)]
+        )
+        return {
+            **continuity_grid,
+            "continuity_storyboard_grid": continuity_grid,
+            "continuity_micro_shots": micro_shots,
+            "clip_groups": clip_groups,
+            "transition_plan": transition_plan,
+            "metadata": output_metadata,
+            "status": status,
+        }
+
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step given the current state dict.
 
@@ -290,6 +376,19 @@ class S1ProductDirectPipeline:
                 reg=reg,
                 scripts=scripts,
                 errors=errors,
+            )
+
+        if step_name == "continuity_storyboard_grid":
+            scripts = self._get_step_output(steps, "scripts") or []
+            storyboards = self._get_step_output(steps, "storyboards") or []
+            continuity_config = self._normalize_continuity_config(config)
+            return await self._step_continuity_storyboard_grid(
+                reg=reg,
+                product_catalog=config.get("product_catalog", {}),
+                scripts=scripts,
+                storyboards=storyboards,
+                errors=errors,
+                **continuity_config,
             )
 
         if step_name == "keyframe_images":
@@ -424,6 +523,80 @@ class S1ProductDirectPipeline:
         raise ValueError(f"Unknown step name: {step_name}")
 
     # ═══ Step implementations ═══
+
+    async def _step_continuity_storyboard_grid(
+        self,
+        reg: SkillRegistry,
+        product_catalog: dict[str, Any],
+        scripts: list[dict[str, Any]],
+        storyboards: list[dict[str, Any]],
+        errors: list[str],
+        continuity_mode: bool,
+        storyboard_grid: int,
+        clip_group_size: int,
+        transition_style: str,
+    ) -> dict[str, Any]:
+        if not continuity_mode:
+            product_name = product_catalog.get("product_name") or product_catalog.get("name") or "Product"
+            skipped_grid = {
+                "grid_type": "skipped",
+                "product_name": product_name,
+                "visual_identity": {},
+                "micro_shots": [],
+                "clip_groups": [],
+                "storyboards": storyboards,
+                "skipped": True,
+            }
+            return self._continuity_output(
+                skipped_grid,
+                {
+                    "skipped": True,
+                    "reason": "continuity_mode=false",
+                    "storyboard_grid": storyboard_grid,
+                    "clip_group_size": clip_group_size,
+                },
+            )
+
+        res = await reg.execute(
+            "continuity-storyboard-grid",
+            {
+                "product_catalog": product_catalog,
+                "scripts": scripts,
+                "storyboards": storyboards,
+                "storyboard_grid": storyboard_grid,
+                "clip_group_size": clip_group_size,
+                "continuity_mode": continuity_mode,
+                "transition_style": transition_style,
+            },
+        )
+        if res.success and isinstance(res.data, dict):
+            metadata = {
+                **res.metadata,
+                "storyboard_grid": storyboard_grid,
+                "clip_group_size": clip_group_size,
+                "continuity_mode": continuity_mode,
+            }
+            return self._continuity_output(res.data, metadata)
+
+        errors.append(f"continuity_storyboard_grid_failed: {res.error}")
+        fallback_grid = {
+            "grid_type": "12-grid",
+            "product_name": product_catalog.get("product_name") or product_catalog.get("name") or "Product",
+            "visual_identity": {},
+            "micro_shots": [],
+            "clip_groups": [],
+            "degraded": True,
+        }
+        return self._continuity_output(
+            fallback_grid,
+            {
+                "degraded": True,
+                "error": res.error,
+                "storyboard_grid": storyboard_grid,
+                "clip_group_size": clip_group_size,
+                "continuity_mode": continuity_mode,
+            },
+        )
 
     async def _step_strategy(
         self,

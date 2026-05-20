@@ -85,6 +85,9 @@ class S1StartRequest(BaseModel):
     video_duration: int = 30
     mode: str = "auto"
     brand_mode: bool = False
+    continuity_mode: bool = True
+    storyboard_grid: int = 12
+    clip_group_size: int = 3
     api_keys: dict[str, str] = {}
 
 
@@ -192,13 +195,15 @@ from src.tasks.bg_registry import register_background_task as _register_backgrou
 _SCENARIO_STEP_ORDER: dict[str, list[str]] = {
     "s1": [
         "strategy", "scripts", "compliance", "storyboards",
-        "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
-        "tts_audio", "thumbnail_images", "assemble_final", "audit",
+        "continuity_storyboard_grid", "keyframe_images", "video_prompts",
+        "thumbnail_prompts", "seedance_clips", "tts_audio",
+        "thumbnail_images", "assemble_final", "audit",
     ],
     "s2": [  # S2 is S1 with brand_mode=True
         "strategy", "scripts", "compliance", "storyboards",
-        "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
-        "tts_audio", "thumbnail_images", "assemble_final", "audit",
+        "continuity_storyboard_grid", "keyframe_images", "video_prompts",
+        "thumbnail_prompts", "seedance_clips", "tts_audio",
+        "thumbnail_images", "assemble_final", "audit",
     ],
     "s3": [
         "video_analysis", "character_identity", "remix_script",
@@ -221,6 +226,7 @@ _STEP_DURATIONS: dict[str, str] = {
     "scripts": "~5s",
     "compliance": "~2s",
     "storyboards": "~4s",
+    "continuity_storyboard_grid": "~1s",
     "keyframe_images": "~5-60s",
     "video_prompts": "~3s",
     "thumbnail_prompts": "~3s",
