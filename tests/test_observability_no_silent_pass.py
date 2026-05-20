@@ -2,6 +2,7 @@ import ast
 from pathlib import Path
 
 SRC_ROOT = Path("src")
+ADMIN_ROUTER_TARGETS = tuple(sorted(Path("src/routers/admin").glob("*.py")))
 
 TARGETS = (
     Path("src/services/fast_mode.py"),
@@ -14,7 +15,7 @@ TARGETS = (
     Path("src/graph/pipeline.py"),
     Path("src/graph/routing.py"),
     Path("src/pipeline/state_manager.py"),
-    Path("src/routers/admin.py"),
+    *ADMIN_ROUTER_TARGETS,
     Path("src/skills/elevenlabs_tts.py"),
     Path("src/skills/media_quality_audit.py"),
     Path("src/skills/video_analysis.py"),

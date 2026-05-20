@@ -83,6 +83,7 @@ async def test_portfolio_filters_and_caches_by_tenant(tmp_path, monkeypatch):
 
 def test_assets_file_listing_rejects_other_tenant_paths():
     from pathlib import Path
+
     from src.routers import assets
 
     with auth_context("tenant-a"):
@@ -95,8 +96,8 @@ def test_assets_file_listing_rejects_other_tenant_paths():
 
 @pytest.mark.asyncio
 async def test_metrics_repository_filters_by_tenant(tmp_path, monkeypatch):
-    from src.storage import db as db_module
     import src.storage.metrics_repository as mr_module
+    from src.storage import db as db_module
     from src.storage.metrics_repository import VideoMetricsRepository
 
     db_path = tmp_path / "metrics.db"

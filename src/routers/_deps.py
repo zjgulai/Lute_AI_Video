@@ -7,9 +7,8 @@ import contextvars
 import hashlib
 import logging
 import os
-import secrets
-from datetime import UTC, datetime
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -88,13 +87,12 @@ API_KEY = os.getenv("API_KEY", "")
 TEST_BUNDLE_KEY = os.getenv("TEST_BUNDLE_KEY", "")
 ALLOW_TEST_BUNDLE_KEY = os.getenv("ALLOW_TEST_BUNDLE_KEY", "").lower() in ("1", "true", "yes")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-if not API_KEY:
-    logging.warning("SECURITY: API_KEY environment variable is not set. Generating a temporary key for this session.")
-    API_KEY = secrets.token_urlsafe(32)
-    logging.warning(
-        "SECURITY: Temporary API_KEY generated (length=%d). "
-        "Set API_KEY env var for persistence — DO NOT rely on logged value.",
-        len(API_KEY),
+if not API_KEY and not TEST_BUNDLE_KEY:
+    logging.error("SECURITY: API_KEY environment variable is not set and no TEST_BUNDLE_KEY configured.")
+    raise RuntimeError(
+        "API_KEY or TEST_BUNDLE_KEY environment variable is required. "
+        "Set API_KEY before starting the server in production, "
+        "or TEST_BUNDLE_KEY for local development."
     )
 
 async def verify_api_key(request: Request, x_api_key: str | None = Header(None)) -> AuthContext:
@@ -146,12 +144,13 @@ async def verify_api_key(request: Request, x_api_key: str | None = Header(None))
                             key_hash,
                         )
     except Exception as exc:
+        logging.getLogger("api.auth").error(
+            "api_key_db_lookup_failed env=%s error=%s", ENVIRONMENT, str(exc)[:200]
+        )
         if ENVIRONMENT == "production":
-            logging.getLogger("api.auth").error(
-                "api_key_db_lookup_failed error=%s", str(exc)[:200]
-            )
             raise HTTPException(status_code=503, detail="Authentication backend unavailable")
-        # Development fallback keeps local workflows usable when PG is absent.
+        # Development: PG lookup failed, but do NOT auto-approve.
+        # Auth must still pass via TEST_BUNDLE_KEY or env API_KEY below.
 
     # 2. Explicit test bundle key. This is a developer/test convenience, not a public demo key.
     if auth_ctx is None and TEST_BUNDLE_KEY and x_api_key == TEST_BUNDLE_KEY:

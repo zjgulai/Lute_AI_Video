@@ -924,8 +924,8 @@ async def get_gate(scenario: str, label: str, gate_id: str):
     Returns:
         Gate state dict with candidates, status, selections.
     """
-    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import get_gate_state as _get_gate_state
+    from src.pipeline.state_manager import PipelineStateManager
 
     _validate_scenario(scenario)
     state = await PipelineStateManager().load(label)
@@ -935,7 +935,6 @@ async def get_gate(scenario: str, label: str, gate_id: str):
 
     result = await _get_gate_state(label, gate_id)
     if "error" in result:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=result["error"])
     return result
 
@@ -955,8 +954,8 @@ async def generate_gate_candidates(scenario: str, label: str, gate_id: str):
     Returns:
         dict with candidates array, gate_id, label.
     """
-    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import generate_candidates as _generate_candidates
+    from src.pipeline.state_manager import PipelineStateManager
 
     _validate_scenario(scenario)
     try:
@@ -995,8 +994,8 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
     Returns:
         Approval result with selected_ids and next_step.
     """
-    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import approve_gate as _approve_gate
+    from src.pipeline.state_manager import PipelineStateManager
 
     _validate_scenario(scenario)
     selected_ids = body.get("selected_ids", [])
@@ -1075,8 +1074,8 @@ async def regenerate_gate_candidate(scenario: str, label: str, gate_id: str, can
     Returns:
         Updated candidate dict with new data and score.
     """
-    from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.gate_manager import regenerate_candidate as _regenerate_candidate
+    from src.pipeline.state_manager import PipelineStateManager
 
     _validate_scenario(scenario)
     try:
