@@ -13,7 +13,14 @@
 set -euo pipefail
 
 BASE="${BASE:-https://101.34.52.232}"
-API_KEY="${API_KEY:-ai_video_demo_2026}"
+API_KEY="${API_KEY:-}"
+if [ -z "$API_KEY" ] && [ -f ".env.prod" ]; then
+  API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"
+fi
+if [ -z "$API_KEY" ]; then
+  echo "ERROR: API_KEY is required. Set API_KEY env var or run from deploy/lighthouse with .env.prod present." >&2
+  exit 2
+fi
 
 # curl 用 -k 跳过自签证书校验,production 用真实证书后可去掉
 CURL="curl -sS -k -o /dev/null -w %{http_code}"

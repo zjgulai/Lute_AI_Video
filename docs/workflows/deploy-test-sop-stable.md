@@ -160,15 +160,18 @@ curl -sk -b /tmp/admin.jar \
 使用 submit + poll 模式，避免 HTTP 超时：
 
 ```bash
+API_KEY=$(ssh -i ai_video.pem ubuntu@101.34.52.232 \
+  "cd /opt/ai-video/deploy/lighthouse && grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2-")
+
 # 1. 提交（立即返回 label）
 curl -sk -X POST \
-  -H "Content-Type: application/json" -H "X-API-Key: ai_video_demo_2026" \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
   -d '{"product_catalog":{...}}' \
   "https://101.34.52.232/api/scenario/s1/submit"
 # → {"label":"s1_xxxx", "status":"queued"}
 
 # 2. 轮询状态（每 30s）
-curl -sk -H "X-API-Key: ai_video_demo_2026" \
+curl -sk -H "X-API-Key: $API_KEY" \
   "https://101.34.52.232/api/scenario/s1/status/{label}"
 # → 关注 "status" 字段：running / paused / completed / error
 ```

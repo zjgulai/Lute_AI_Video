@@ -16,12 +16,16 @@
 #   cd /opt/ai-video/web && npm ci
 #
 # --- Sync from laptop (run on your local machine) ---
-#   rsync -avz --chmod=F644,D755 -e "ssh -i ~/Downloads/ai_video.pem" \
-#     ./web/src/ ubuntu@101.34.52.232:/opt/ai-video/web/src/
-#   rsync -avz --chmod=F644,D755 -e "ssh -i ~/Downloads/ai_video.pem" \
-#     ./src/ ubuntu@101.34.52.232:/opt/ai-video/src/
-#   rsync -avz --chmod=F644,D755 -e "ssh -i ~/Downloads/ai_video.pem" \
-#     ./deploy/lighthouse/ ubuntu@101.34.52.232:/opt/ai-video/deploy/lighthouse/
+#   rsync -avz --delete --chmod=F644,D755 \
+#     -e "ssh -i ~/Downloads/ai_video.pem" \
+#     --exclude='.git' --exclude='web/node_modules' --exclude='web/.next' \
+#     --exclude='rendering/node_modules' --exclude='.venv' \
+#     --exclude='output' --exclude='tmp' --exclude='__pycache__' \
+#     --exclude='deploy/lighthouse/.env.prod' \
+#     --exclude='deploy/lighthouse/server.crt' \
+#     --exclude='deploy/lighthouse/server.key' \
+#     --exclude='deploy/lighthouse/*.pem' \
+#     ./ ubuntu@101.34.52.232:/opt/ai-video/
 #
 # IMPORTANT: --chmod=F644 forces world-readable perms on rsync. Without it,
 # any local file with mode 0600 (e.g. src/routers/admin.py historically) gets
@@ -33,6 +37,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 COMPOSE="sudo docker-compose -f docker-compose.prod.yml"
+DEPLOY_API_KEY="${API_KEY:-}"
+if [ -z "$DEPLOY_API_KEY" ] && [ -f ".env.prod" ]; then
+  DEPLOY_API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"
+fi
 
 echo "========================================"
 echo "  AI Video Fast Deploy"
@@ -71,6 +79,15 @@ echo ""
 echo "[0.5/5] Normalizing src/ file permissions..."
 sudo find /opt/ai-video/src -type f -name '*.py' ! -perm 644 -exec chmod 644 {} \; 2>/dev/null || true
 echo "  ✓ src/**.py normalized to 0644"
+echo ""
+
+# -- Phase 0.6: remove stale module files after package split --
+# 2026-05-20: src/routers/admin.py was split into src/routers/admin/.
+# If an incremental rsync left the old file on the server, Python may import
+# the stale module instead of the package. Delete this one known legacy file.
+echo "[0.6/5] Removing stale split-module files..."
+sudo rm -f /opt/ai-video/src/routers/admin.py
+echo "  ✓ stale src/routers/admin.py removed if present"
 echo ""
 
 # -- Phase 1: Build frontend on host --
@@ -155,7 +172,7 @@ fi
 # Check Fast Mode API
 FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ai_video_demo_2026" \
+  -H "X-API-Key: $DEPLOY_API_KEY" \
   -d '{"user_prompt":"test","duration":10}' \
   https://localhost/api/fast/generate || echo "000")
 if [ "$FAST_STATUS" = "200" ]; then
