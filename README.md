@@ -1,199 +1,176 @@
-# AI Video Pipeline — Local Development Guide
+# Short Video Agent v0.2.7
 
-## Overview
+Multi-agent AI video creation pipeline for cross-border e-commerce.
+Automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
 
-16-node LangGraph pipeline that produces short-form marketing videos with self-audit + human-in-the-loop review.
+Built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints.
 
-Pipeline flow:
-Strategy → Audit → Script → Audit → Compliance → Storyboard → Asset Sourcing → Media Generation → Edit → Audit → Audio → Caption → Thumbnail → Audit → Distribution → Analytics
-
-4 human review checkpoints (strategy, script, edit, thumbnail) with AI self-audit driving auto-approve/reject decisions.
+**Live:** [https://101.34.52.232](https://101.34.52.232) (Tencent Lighthouse)
 
 ---
 
 ## Prerequisites
 
-- **Python 3.11+** with pip
-- **Node.js 18+** with npm (for WebUI + Remotion rendering)
+- **Python 3.12+**
+- **Node.js 22+** with pnpm (for WebUI + Remotion rendering)
 
-Check:
-```
-python3 --version && node --version && npm --version
+```bash
+python3 --version  # >= 3.12
+node --version     # >= 22
+pnpm --version
 ```
 
 ---
 
-## Quick Start（本地开发）
+## Quick Start
 
-### 1. Python 后端
+### 1. Clone & Setup
 
 ```bash
-cd /Users/pray/project/hermes_evo/AI_vedio
+git clone <repo>
+cd AI_vedio
 
-# 创建虚拟环境（仅首次，如已存在则跳过）
+# Python backend
 python3 -m venv .venv
-
-# 激活虚拟环境（每次新开终端都要执行！）
 source .venv/bin/activate
-
-# 安装后端依赖（仅首次）
 pip install -r requirements.txt
 
-# 启动 FastAPI 服务器
-python3 -m uvicorn src.api:app --reload --port 8001
-```
-
-后端地址 `http://localhost:8001`，可以用 `http://localhost:8001/health` 验证。
-
-### 2. WebUI（Next.js）
-
-新开一个终端窗口：
-
-```bash
-cd /Users/pray/project/hermes_evo/AI_vedio
-
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 进入前端目录
+# Frontend
 cd web
-
-# 安装前端依赖（仅首次）
-npm install
-
-# 启动开发服务器
-npm run dev
+pnpm install
 ```
 
-WebUI runs at `http://localhost:3000`
+### 2. Environment
 
-### 3. Use the WebUI
-
-1. Open http://localhost:3000
-2. (Optional) Click "Configure API Keys" to enter your API keys directly
-3. Click "Start Pipeline"
-4. The pipeline runs to first review checkpoint
-5. Review AI self-audit report, approve/reject/request changes
-6. Repeat for all 4 checkpoints
-7. Final output: scripts, storyboards, caption plans, thumbnail variants, distribution plans
-
-### 4. Generate .mp4 (Remotion)
-
-After pipeline completes, the state JSON is at `output/renders/<run>_state.json`.
-
-```bash
-cd AI_vedio/rendering
-npm install        # one-time
-npx tsx src/render.ts --input ../output/renders/demo_output_state.json --output ../output/video.mp4
-```
-
----
-
-## API Key Configuration
-
-### Option A: WebUI (recommended for first use)
-At http://localhost:3000, click "Configure API Keys" and enter keys. They're sent with the pipeline request and injected into the server's environment. Works immediately, no restart needed.
-
-### Option B: .env file
 ```bash
 cp .env.example .env
-# Edit .env with your keys
-ANTHROPIC_API_KEY=sk-...
-OPENAI_API_KEY=sk-...
-ELEVENLABS_API_KEY=...
+# Edit .env with your API keys:
+#   DEEPSEEK_API_KEY, POYO_API_KEY, SILICONFLOW_API_KEY
 ```
 
-### Option C: Direct API call
+### 3. Run
+
 ```bash
-curl -X POST http://localhost:8001/pipeline/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_keys": {
-      "ANTHROPIC_API_KEY": "sk-...",
-      "OPENAI_API_KEY": "sk-..."
-    },
-    "target_platforms": ["tiktok", "facebook"],
-    "target_languages": ["en"]
-  }'
+# Terminal 1: Backend
+source .venv/bin/activate
+uvicorn src.api:app --reload --port 8001
+
+# Terminal 2: Frontend
+cd web
+pnpm dev
 ```
 
-If no keys are provided anywhere, the pipeline runs in **mock mode** — produces natural-language placeholder content without calling any external API.
+Backend: http://localhost:8001<br>
+Frontend: http://localhost:3000
+
+### 4. Docker Compose (all services)
+
+```bash
+docker compose up -d
+```
 
 ---
 
 ## Architecture
 
 ```
-web/                    Next.js 16 — Review UI (TypeScript + Tailwind CSS 4)
-rendering/              Remotion 4 — .mp4 video renderer (TypeScript, standalone)
+web/                    Next.js 16 — Review UI (React 19 + TypeScript + Tailwind CSS 3)
+rendering/              Remotion 4 — .mp4 video renderer (standalone)
 src/
-  api.py                FastAPI backend — pipeline endpoints, review submission
-  config.py             Configuration — reads from os.environ (not .env directly)
+  api.py                FastAPI app — middleware, router mounts
+  config.py             Environment config + structlog + sensitive-data sanitizer
   graph/
-    pipeline.py         LangGraph pipeline compilation + checkpoint config
-    nodes.py            16 node functions (strategy → analytics)
-    routing.py          Conditional routing with retry guard + audit guard
-  agents/
-    strategy_writer.py  Content calendar generation
-    script_writer.py    Multi-language script writer (EN/ES/FR/DE)
-    auditor.py          Self-audit scoring (4 checkpoints)
-    compliance.py       Brand compliance pre-check
-    storyboard.py       Visual shot planning
-    asset_sourcing.py   Asset library search (Supabase/pgvector or mock)
-    caption.py          Caption plan generation
-    thumbnail.py        Thumbnail variant generation
-    media_generation.py DALL-E image generation (or mock)
-    editor.py           Video editing composition plan
-    audio_designer.py   Audio plan + TTS (ElevenLabs or mock)
-    distribution.py     Platform distribution plan
-    analytics.py        Performance analytics report
-    i18n.py             Internationalization service
-  tools/
-    llm_client.py       Multi-provider LLM (OpenAI/Anthropic) with timeout + retry
-    dalle_client.py     DALL-E 3 with asyncio.timeout(120s) + retry
-    elevenlabs_client.py TTS with asyncio.timeout(60s) + retry
-    remotion_renderer.py Remotion environment validation
-    retry.py            Exponential backoff (3 attempts)
-    webhook_manager.py  Event dispatch (audit.completed, pipeline.completed)
-    metrics_repository.py Pipeline run persistence (JSON/SQLite)
-    error_classifier.py structured error classification
-    asset_library.py    Supabase + pgvector asset search
-  models/
-    state.py            VideoPipelineState (26+ fields)
-    __init__.py         Pydantic models + ErrorCode + PipelineError
-  telemetry.py          @timed_node decorator + PipelineMetrics
-tests/                  381 tests across 22+ files (0 failures)
+    pipeline.py         LangGraph 16-node pipeline compilation + checkpoint config
+    nodes.py            12 worker + 4 audit node implementations
+    routing.py          Conditional routing + retry guard + audit guard + D10 override
+  agents/               14 agent implementations (strategy, script, compliance, ...)
+  pipeline/
+    step_runner.py      Step-by-step execution engine (S1-S5)
+    state_manager.py    Pipeline state persistence
+    gate_manager.py     Expert Studio 3-candidate generation
+  routers/              FastAPI domain routers
+    pipeline.py, scenario.py, distribution.py, metrics.py,
+    assets.py, media.py, health.py, admin/ (auth/tenants/dashboard/logs/health)
+  models/               Pydantic models (split by domain: enums, pipeline, media, audit, ...)
+  tools/                External API clients (llm_client, poyo_client, cosyvoice_client, ...)
+  quality/              ML-powered quality assessment (CLIP, BRISQUE, face, safe-zone, ...)
+  storage/              Database layer (asyncpg + SQLite fallback)
+tests/                  380+ tests across 112 files
+docs/                   Project documentation (ADR, runbooks, workflows, guides)
 ```
+
+### LLM Provider Chain
+
+| Role | Model | Provider |
+|------|-------|----------|
+| Text (LLM) | DeepSeek-V4-Pro | DeepSeek |
+| Image | GPT-4o Image | poyo.ai |
+| Video | Seedance 2 | poyo.ai |
+| TTS | CosyVoice2-0.5B | SiliconFlow |
 
 ---
 
-## Endpoints
+## Key Endpoints
+
+### Pipeline & Scenarios
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Health check + Remotion env report |
-| POST | `/pipeline/start` | Start pipeline (accepts optional `api_keys`) |
-| GET | `/pipeline/{id}/state` | Get current pipeline state |
-| POST | `/pipeline/{id}/review/{node}` | Submit human review (approve/reject/request_changes) |
-| GET | `/pipeline/{id}/output` | Get final pipeline output |
+| POST | `/scenario/s1` | S1: Product Direct |
+| POST | `/scenario/s2` | S2: Brand Campaign |
+| POST | `/scenario/s3` | S3: Influencer Remix |
+| POST | `/scenario/s4` | S4: Live Shoot |
+| POST | `/scenario/s5` | S5: Brand VLOG |
+| POST | `/fast/generate` | Fast Mode: direct text→video |
+| GET | `/scenario/{s}/state/{label}` | Get pipeline state |
+| POST | `/scenario/{s}/step/{step}` | Execute single step |
+| POST | `/scenario/{s}/regenerate/{label}/{step}` | Regenerate step |
+
+### Admin Panel
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/admin/auth/login` | Admin login (session cookie) |
+| GET | `/api/admin/dashboard/summary` | System overview |
+| GET | `/api/admin/tenants` | Tenant list |
+| POST | `/api/admin/tenants/{id}/keys` | Create API key |
+| GET | `/api/admin/logs` | Error log viewer |
+| GET | `/api/admin/health/status` | Service health |
+
+See [docs/reference/api-endpoints.md](docs/reference/api-endpoints.md) for full API reference.
 
 ---
 
 ## Running Tests
 
 ```bash
-cd AI_vedio
-python3 -m pytest tests/ -v --tb=short
-```
+# Backend
+make test           # pytest
+make lint           # ruff
+make typecheck      # pyright
+make ci             # lint + test
 
-381 tests, 0 expected failures (7 API tests skip if fastapi not installed).
+# Frontend
+cd web
+pnpm test           # vitest
+pnpm lint           # eslint
+
+# E2E
+cd web
+pnpm e2e            # Playwright local
+pnpm e2e:prod       # Playwright production
+```
 
 ---
 
 ## Project Status
 
-- All 20 hardening gaps (GAP-1 through GAP-20) closed
-- Production readiness audit complete
-- Mock pipeline run produces full 26-field state with 15/16 nodes executed
-- Ready for real LLM content: fill API keys, run with `--live` flag
-- Ready for .mp4 rendering: transfer state JSON to Node.js environment with Remotion
+- **v0.2.7** — Brand assets Phase 2-4, portfolio API, quick templates
+- 6 scenarios (Fast Mode + S1-S5) verified end-to-end in production
+- Quality system in observe mode (frame variance, AV sync, video specs)
+- Admin Panel Phase 1 operational (tenants, logs, health, auth)
+- 380+ tests, CI/CD via GitHub Actions
+
+See [docs/claude/updates/project-updates-202605-stable.md](docs/claude/updates/project-updates-202605-stable.md) for release history.
+
+See [docs/workflows/deploy-lighthouse-stable.md](docs/workflows/deploy-lighthouse-stable.md) for production deployment guide.

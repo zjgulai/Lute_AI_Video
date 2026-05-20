@@ -5,7 +5,7 @@ module: deploy
 topic: local-vs-production-differences
 status: stable
 created: 2026-04-30
-updated: 2026-05-18
+updated: 2026-05-19
 owner: self
 source: human+ai
 ---
@@ -29,7 +29,7 @@ source: human+ai
 | **媒体文件存储** | `./output/` 本地目录 | Docker Volume `backend_output` | 容器重启后数据是否持久化 |
 | **静态资源** | `public/` 目录自动 serve | `public/portfolio/` 预置到镜像 | 新资源必须重新构建镜像 |
 | **CORS 策略** | 宽松 (`localhost:3000`, `localhost:3001`) | 严格 (`101.34.52.232`, `localhost:3000`) | 跨域问题只在生产出现 |
-| **API Key** | 自动生成随机字符串 | 固定 `ai_video_demo_2026` | 前端硬编码的 key 必须与后端一致 |
+| **API Key** | 自动生成随机字符串或本地测试值 | 生产租户 key；受控测试环境可启用 `TEST_BUNDLE_KEY` | `ai_video_demo_2026` 仅用于本地/测试打包，不是公共只读 key |
 | **Demo 数据** | 可能缺失 portfolio 文件 | `/opt/ai-video/web/public/portfolio/` (14个文件) | 演示模式依赖这些文件 |
 | **容器化** | 无 | Docker Compose 三容器 | 本地调试无法发现 Docker 特有问题 |
 | **SSL 证书** | 无 | 自签名 (`server.crt` / `server.key`) | 外部 API 调用可能因证书问题失败 |
@@ -141,7 +141,7 @@ DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
 ### 后端代码检查
 - [ ] 数据库连接字符串从环境变量读取，没有硬编码
 - [ ] 文件路径使用 `OUTPUT_DIR` 环境变量，不是相对路径
-- [ ] API Key 验证兼容固定 key 和自动生成 key
+- [ ] API Key 验证兼容租户 key、自动生成 key 和显式测试打包 key
 - [ ] CORS origins 包含生产域名
 
 ### 配置检查

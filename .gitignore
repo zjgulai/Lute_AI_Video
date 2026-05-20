@@ -82,6 +82,7 @@ security_self_check.py
 .hermes/
 .sisyphus/
 .playwright-mcp/
+.omc/
 
 # Archive / drafts (keep locally, not in git)
 tmp/

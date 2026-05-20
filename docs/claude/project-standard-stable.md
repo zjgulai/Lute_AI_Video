@@ -18,7 +18,7 @@ source: human+ai
 
 | 字段 | 内容 |
 |------|------|
-| 项目名称 | AI Video Pipeline (Short Video Agent v0.2.0) |
+| 项目名称 | AI Video Pipeline (Short Video Agent v0.2.7) |
 | 业务领域 | 跨境电商短视频 AI 自动化生产 |
 | 主要技术栈 | Python 3.12 + FastAPI, Next.js 16 + React 19, PostgreSQL, LangGraph |
 | 核心模块 | 16-node pipeline (strategy→script→compliance→storyboard→asset→media→edit→audio→caption→thumbnail→distribution→analytics) |
