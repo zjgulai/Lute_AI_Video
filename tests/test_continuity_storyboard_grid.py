@@ -62,8 +62,49 @@ async def test_grid_24_is_explicitly_downgraded_to_12(bottle_warmer_params):
 
     assert result.success is True
     assert result.metadata["requested_grid"] == "24"
-    assert result.metadata["effective_grid"] == "12"
+    assert result.metadata["effective_grid"] == 12
     assert result.data["grid_type"] == "12-grid"
+
+
+@pytest.mark.asyncio
+async def test_grid_auto_is_explicitly_downgraded_to_12(bottle_warmer_params):
+    skill = ContinuityStoryboardGridSkill()
+    bottle_warmer_params["storyboard_grid"] = "auto"
+
+    result = await skill.execute(bottle_warmer_params)
+
+    assert result.success is True
+    assert result.metadata["requested_grid"] == "auto"
+    assert result.metadata["effective_grid"] == 12
+    assert result.data["grid_type"] == "12-grid"
+
+
+@pytest.mark.asyncio
+async def test_grid_9_is_explicitly_downgraded_to_12(bottle_warmer_params):
+    skill = ContinuityStoryboardGridSkill()
+    bottle_warmer_params["storyboard_grid"] = 9
+
+    result = await skill.execute(bottle_warmer_params)
+
+    assert result.success is True
+    assert result.metadata["requested_grid"] == 9
+    assert result.metadata["effective_grid"] == 12
+    assert result.data["grid_type"] == "12-grid"
+
+
+@pytest.mark.asyncio
+async def test_output_includes_visual_identity(bottle_warmer_params):
+    skill = ContinuityStoryboardGridSkill()
+
+    result = await skill.execute(bottle_warmer_params)
+
+    visual_identity = result.data["visual_identity"]
+    assert visual_identity["location"] == "warm night kitchen and nursery doorway"
+    assert visual_identity["lighting"] == "soft warm low-light"
+    assert visual_identity["product_anchor"] == (
+        "same bottle warmer on the same countertop"
+    )
+    assert "soft green indicator" in visual_identity["color_palette"]
 
 
 @pytest.mark.asyncio
@@ -135,7 +176,7 @@ async def test_registry_execute_uses_safe_execute_path(bottle_warmer_params):
 
     assert result.success is True
     assert result.metadata["requested_grid"] == "12"
-    assert result.metadata["effective_grid"] == "12"
+    assert result.metadata["effective_grid"] == 12
     assert result.metadata["retries"] == 0
 
 

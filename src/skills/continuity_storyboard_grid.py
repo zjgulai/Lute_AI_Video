@@ -9,6 +9,7 @@ from src.skills.registry import SkillRegistry
 
 SUPPORTED_GRID_TYPES = {"auto", "9", "12", "24"}
 DEFAULT_GRID_TYPE = "12"
+EFFECTIVE_GRID = 12
 SAFETY_NOTES = ("no close-up infant face", "no medical claim", "no distress-heavy imagery")
 
 
@@ -57,7 +58,7 @@ class ContinuityStoryboardGridSkill(SkillCallable):
                 "grid_size": 12,
                 "clip_group_count": 4,
                 "requested_grid": requested_grid,
-                "effective_grid": DEFAULT_GRID_TYPE,
+                "effective_grid": EFFECTIVE_GRID,
             },
         )
 
@@ -130,16 +131,18 @@ class ContinuityStoryboardGridSkill(SkillCallable):
                 "clip_group_count": 4,
                 "requested_grid": _requested_grid_type(params.get("storyboard_grid"))
                 or DEFAULT_GRID_TYPE,
-                "effective_grid": DEFAULT_GRID_TYPE,
+                "effective_grid": EFFECTIVE_GRID,
             },
         )
 
 
-def _requested_grid_type(value: Any) -> str | None:
+def _requested_grid_type(value: Any) -> Any:
     grid_type = str(value or DEFAULT_GRID_TYPE)
     if grid_type not in SUPPORTED_GRID_TYPES:
         return None
-    return grid_type
+    if value is None:
+        return DEFAULT_GRID_TYPE
+    return value
 
 
 def _extract_product_name(product_catalog: Any) -> str:
