@@ -9,7 +9,7 @@ from src.skills.registry import SkillRegistry
 
 SUPPORTED_GRID_TYPES = {"auto", "9", "12", "24"}
 DEFAULT_GRID_TYPE = "12"
-SAFETY_NOTES = ["no close-up infant face", "no medical claim", "no distress-heavy imagery"]
+SAFETY_NOTES = ("no close-up infant face", "no medical claim", "no distress-heavy imagery")
 
 
 class ContinuityStoryboardGridSkill(SkillCallable):
@@ -20,8 +20,8 @@ class ContinuityStoryboardGridSkill(SkillCallable):
     max_retries = 1
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
-        grid_type = _normalize_grid_type(params.get("storyboard_grid"))
-        if grid_type is None:
+        requested_grid = _requested_grid_type(params.get("storyboard_grid"))
+        if requested_grid is None:
             return SkillResult(
                 success=False,
                 error=f"unsupported storyboard_grid: {params.get('storyboard_grid')}",
@@ -53,14 +53,19 @@ class ContinuityStoryboardGridSkill(SkillCallable):
                 "micro_shots": micro_shots,
                 "clip_groups": clip_groups,
             },
-            metadata={"grid_size": 12, "clip_group_count": 4},
+            metadata={
+                "grid_size": 12,
+                "clip_group_count": 4,
+                "requested_grid": requested_grid,
+                "effective_grid": DEFAULT_GRID_TYPE,
+            },
         )
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors: list[str] = []
         if not isinstance(params, dict):
             return ["params must be a dict"]
-        if _normalize_grid_type(params.get("storyboard_grid")) is None:
+        if _requested_grid_type(params.get("storyboard_grid")) is None:
             errors.append(f"unsupported storyboard_grid: {params.get('storyboard_grid')}")
         return errors
 
@@ -74,15 +79,26 @@ class ContinuityStoryboardGridSkill(SkillCallable):
 
         if not isinstance(micro_shots, list) or len(micro_shots) != 12:
             errors.append("micro_shots must contain 12 entries")
-        elif [shot.get("index") for shot in micro_shots] != list(range(1, 13)):
-            errors.append("micro_shots indices must be 1..12")
-        elif any(_missing_micro_shot_fields(shot) for shot in micro_shots):
-            errors.append("micro_shots missing continuity fields")
+        elif not all(isinstance(shot, dict) for shot in micro_shots):
+            errors.append("micro_shots entries must be dicts")
+        else:
+            if [shot.get("index") for shot in micro_shots] != list(range(1, 13)):
+                errors.append("micro_shots indices must be 1..12")
+            if any(_missing_micro_shot_fields(shot) for shot in micro_shots):
+                errors.append("micro_shots missing continuity fields")
 
         if not isinstance(clip_groups, list) or len(clip_groups) != 4:
             errors.append("clip_groups must contain 4 entries")
-        elif _covered_indices(clip_groups) != list(range(1, 13)):
-            errors.append("clip_groups must cover shot indices 1..12 once")
+        elif not all(isinstance(group, dict) for group in clip_groups):
+            errors.append("clip_groups entries must be dicts")
+        else:
+            invalid_groups = [
+                group for group in clip_groups if not isinstance(group.get("shot_indices"), list)
+            ]
+            if invalid_groups:
+                errors.append("clip_groups shot_indices must be lists")
+            elif _covered_indices(clip_groups) != list(range(1, 13)):
+                errors.append("clip_groups must cover shot indices 1..12 once")
 
         return errors
 
@@ -109,14 +125,21 @@ class ContinuityStoryboardGridSkill(SkillCallable):
                     transition_style=str(params.get("transition_style") or "match_cut"),
                 ),
             },
+            metadata={
+                "grid_size": 12,
+                "clip_group_count": 4,
+                "requested_grid": _requested_grid_type(params.get("storyboard_grid"))
+                or DEFAULT_GRID_TYPE,
+                "effective_grid": DEFAULT_GRID_TYPE,
+            },
         )
 
 
-def _normalize_grid_type(value: Any) -> str | None:
+def _requested_grid_type(value: Any) -> str | None:
     grid_type = str(value or DEFAULT_GRID_TYPE)
     if grid_type not in SUPPORTED_GRID_TYPES:
         return None
-    return DEFAULT_GRID_TYPE
+    return grid_type
 
 
 def _extract_product_name(product_catalog: Any) -> str:
@@ -295,7 +318,7 @@ def _build_bottle_warmer_micro_shots() -> list[dict[str, Any]]:
             "continuity_in": continuity_in,
             "continuity_out": continuity_out,
             "transition_out": transition_out,
-            "safety_notes": SAFETY_NOTES,
+            "safety_notes": list(SAFETY_NOTES),
         }
         for index, (
             beat,
