@@ -117,8 +117,10 @@ async def run_s1_product_direct(body: dict[str, Any]):
         "brand_mode": body.get("brand_mode", False),
         "enable_media_synthesis": body.get("enable_media_synthesis", True),
         "continuity_mode": body.get("continuity_mode", True),
+        "continuity_generation_mode": body.get("continuity_generation_mode", "standard"),
         "storyboard_grid": body.get("storyboard_grid", 12),
         "clip_group_size": body.get("clip_group_size", 3),
+        "transition_style": body.get("transition_style", "match_cut"),
     }
 
     state_manager = PipelineStateManager()
@@ -146,8 +148,10 @@ async def run_s1_product_direct(body: dict[str, Any]):
             enable_media_synthesis=body.get("enable_media_synthesis", True),
             video_duration=coerce_video_duration(body),
             continuity_mode=body.get("continuity_mode", True),
+            continuity_generation_mode=body.get("continuity_generation_mode", "standard"),
             storyboard_grid=body.get("storyboard_grid", 12),
             clip_group_size=body.get("clip_group_size", 3),
+            transition_style=body.get("transition_style", "match_cut"),
         )
         # S1ProductDirectPipeline returns a dict differently — extract steps from the state
         return final_state
@@ -1143,8 +1147,10 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "brand_mode": body.get("brand_mode", False),
             "enable_media_synthesis": body.get("enable_media_synthesis", True),
             "continuity_mode": body.get("continuity_mode", True),
+            "continuity_generation_mode": body.get("continuity_generation_mode", "standard"),
             "storyboard_grid": body.get("storyboard_grid", 12),
             "clip_group_size": body.get("clip_group_size", 3),
+            "transition_style": body.get("transition_style", "match_cut"),
         }
     elif scenario == "s2":
         brand_package = body.get("brand_package", {})

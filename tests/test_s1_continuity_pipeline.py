@@ -690,16 +690,20 @@ async def test_scenario_s1_typeerror_fallback_preserves_explicit_continuity_fals
         {
             "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
             "continuity_mode": False,
+            "continuity_generation_mode": "high_quality",
             "storyboard_grid": "24",
             "clip_group_size": 4,
+            "transition_style": "soft_crossfade",
         }
     )
 
     kwargs = captured["kwargs"]
     assert result == {"success": True}
     assert kwargs["continuity_mode"] is False
+    assert kwargs["continuity_generation_mode"] == "high_quality"
     assert kwargs["storyboard_grid"] == "24"
     assert kwargs["clip_group_size"] == 4
+    assert kwargs["transition_style"] == "soft_crossfade"
 
 
 @pytest.mark.asyncio
@@ -791,8 +795,10 @@ async def test_unified_scenario_s1_entry_preserves_explicit_continuity_false(
         {
             "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
             "continuity_mode": False,
+            "continuity_generation_mode": "high_quality",
             "storyboard_grid": 12,
             "clip_group_size": 3,
+            "transition_style": "soft_crossfade",
         },
     )
 
@@ -800,8 +806,10 @@ async def test_unified_scenario_s1_entry_preserves_explicit_continuity_false(
     assert result["label"] == "s1_unified_entry_test"
     assert captured["scenario"] == "s1"
     assert config["continuity_mode"] is False
+    assert config["continuity_generation_mode"] == "high_quality"
     assert config["storyboard_grid"] == 12
     assert config["clip_group_size"] == 3
+    assert config["transition_style"] == "soft_crossfade"
 
 
 @pytest.mark.asyncio
