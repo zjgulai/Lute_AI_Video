@@ -251,11 +251,24 @@ class S1ProductDirectPipeline:
     @staticmethod
     def _normalize_continuity_config(config: dict[str, Any]) -> dict[str, Any]:
         """Normalize continuity options while preserving false as an explicit skip."""
+        generation_modes = {"standard", "high_quality"}
         raw_mode = config.get("continuity_mode", True)
+        continuity_generation_mode = "standard"
         if isinstance(raw_mode, str):
-            continuity_mode = raw_mode.strip().lower() not in {"0", "false", "no", "off", "disabled"}
+            normalized_mode = raw_mode.strip().lower()
+            if normalized_mode in generation_modes:
+                continuity_mode = True
+                continuity_generation_mode = normalized_mode
+            else:
+                continuity_mode = normalized_mode not in {"0", "false", "no", "off", "disabled"}
         else:
             continuity_mode = bool(raw_mode)
+
+        raw_generation_mode = config.get("continuity_generation_mode")
+        if continuity_mode and isinstance(raw_generation_mode, str):
+            normalized_generation_mode = raw_generation_mode.strip().lower()
+            if normalized_generation_mode in generation_modes:
+                continuity_generation_mode = normalized_generation_mode
 
         try:
             storyboard_grid = int(config.get("storyboard_grid", 12))
@@ -277,6 +290,7 @@ class S1ProductDirectPipeline:
 
         return {
             "continuity_mode": continuity_mode,
+            "continuity_generation_mode": continuity_generation_mode,
             "storyboard_grid": storyboard_grid,
             "clip_group_size": clip_group_size,
             "transition_style": transition_style,
@@ -388,7 +402,10 @@ class S1ProductDirectPipeline:
                 scripts=scripts,
                 storyboards=storyboards,
                 errors=errors,
-                **continuity_config,
+                continuity_mode=continuity_config["continuity_mode"],
+                storyboard_grid=continuity_config["storyboard_grid"],
+                clip_group_size=continuity_config["clip_group_size"],
+                transition_style=continuity_config["transition_style"],
             )
 
         if step_name == "keyframe_images":
@@ -426,6 +443,7 @@ class S1ProductDirectPipeline:
         if step_name == "seedance_clips":
             prompts = self._get_step_output(steps, "video_prompts") or []
             keyframes = self._get_step_output(steps, "keyframe_images") or []
+            continuity_config = self._normalize_continuity_config(config)
             return await self._step_seedance_clips(
                 reg=reg,
                 video_prompts=prompts,
@@ -434,6 +452,7 @@ class S1ProductDirectPipeline:
                 label=config.get("output_label", "s1"),
                 errors=media_errors,
                 video_duration=config.get("video_duration", 30),
+                continuity_mode=continuity_config["continuity_generation_mode"],
             )
 
         if step_name == "tts_audio":
@@ -922,6 +941,7 @@ class S1ProductDirectPipeline:
         errors: list[str],
         video_duration: int = 30,
         keyframe_images: list[dict[str, Any]] | None = None,
+        continuity_mode: str = "standard",
     ) -> dict[str, Any]:
         """Generate video clips per segment using Sora 2 Pro (25s cap).
 
@@ -935,6 +955,7 @@ class S1ProductDirectPipeline:
         """
         from src.pipeline.model_router import select_model
         s1_model = select_model("s1")
+        continuity_mode = continuity_mode if continuity_mode == "high_quality" else "standard"
 
         clip_paths: list[str] = []
 
@@ -957,6 +978,7 @@ class S1ProductDirectPipeline:
 
         clip_durations: list[float] = []
         clip_details: list[dict[str, Any]] = []
+        continuity_frame_by_index: dict[int, bool] = {}
 
         # P1-16 (2026-05-10 OPT-E): Bounded concurrent clip generation.
         # poyo.ai default observed limit was 2; raised to 4 after 5000-log-line
@@ -990,16 +1012,46 @@ class S1ProductDirectPipeline:
                 if kf_path:
                     gen_params["keyframe_image_path"] = kf_path
 
+                continuity_frame = vp.get("_continuity_frame_path")
+                if continuity_frame:
+                    gen_params["continuity_frame_path"] = continuity_frame
+                    continuity_frame_by_index[i] = True
+                else:
+                    continuity_frame_by_index[i] = False
+
                 res = await reg.execute("seedance-video-generate-skill", gen_params)
                 return i, res
 
-        # Launch all clips concurrently (max 2 in flight at any time)
-        clip_tasks = []
-        for i, vp in enumerate(video_prompts):
-            kf_path = kf_image_paths[i] if i < len(kf_image_paths) and kf_image_paths[i] else None
-            clip_tasks.append(_gen_single_clip(i, vp, kf_path))
+        if continuity_mode == "high_quality":
+            raw_results: list[Any] = []
+            for i, vp in enumerate(video_prompts):
+                kf_path = kf_image_paths[i] if i < len(kf_image_paths) and kf_image_paths[i] else None
+                next_prompt = dict(vp)
+                if last_frame_path:
+                    next_prompt["_continuity_frame_path"] = last_frame_path
+                try:
+                    result = await _gen_single_clip(i, next_prompt, kf_path)
+                except Exception as exc:
+                    raw_results.append(exc)
+                    last_frame_path = None
+                    continue
+                raw_results.append(result)
+                if isinstance(result, tuple) and result[1].success and result[1].data:
+                    generated_path = result[1].data.get("video_path", "")
+                    last_frame_path = self._extract_clip_last_frame(
+                        video_path=generated_path,
+                        output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
+                    )
+                else:
+                    last_frame_path = None
+        else:
+            # Launch all clips concurrently (max 4 in flight at any time)
+            clip_tasks = []
+            for i, vp in enumerate(video_prompts):
+                kf_path = kf_image_paths[i] if i < len(kf_image_paths) and kf_image_paths[i] else None
+                clip_tasks.append(_gen_single_clip(i, vp, kf_path))
 
-        raw_results = await asyncio.gather(*clip_tasks, return_exceptions=True)
+            raw_results = await asyncio.gather(*clip_tasks, return_exceptions=True)
 
         # Surface any unhandled exceptions raised by clip generators
         for raw in raw_results:
@@ -1026,7 +1078,10 @@ class S1ProductDirectPipeline:
                         "prompt_used": skill_result.data.get("prompt_used", ""),
                         "segment_type": video_prompts[i].get("segment_type", "body"),
                         "shot_type": video_prompts[i].get("shot_type", ""),
-                        "continuity_frame": False,  # P1-16: keyframe-based in concurrent mode
+                        "clip_index": video_prompts[i].get("clip_index", i + 1),
+                        "transition_to_next": video_prompts[i].get("transition_to_next", ""),
+                        "transition_type": video_prompts[i].get("transition_type", "clean"),
+                        "continuity_frame": continuity_frame_by_index.get(i, False),
                     })
 
                     if not skill_result.data.get("verification", {}).get("all_ok", True):
@@ -1036,15 +1091,16 @@ class S1ProductDirectPipeline:
 
         # P1-16: Post-generation: extract last frames from completed clips in order
         # for potential filler generation or downstream continuity needs.
-        for p in clip_paths:
-            frame = self._extract_clip_last_frame(
-                video_path=p,
-                output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
-            )
-            if frame:
-                last_frame_path = frame
-            else:
-                last_frame_path = None
+        if continuity_mode == "standard":
+            for p in clip_paths:
+                frame = self._extract_clip_last_frame(
+                    video_path=p,
+                    output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
+                )
+                if frame:
+                    last_frame_path = frame
+                else:
+                    last_frame_path = None
 
         # ── Duration fallback: if total clip duration < 80% target, generate filler ──
         total_clip_duration = sum(clip_durations)

@@ -745,3 +745,180 @@ async def test_unified_scenario_s1_entry_preserves_explicit_continuity_false(
     assert config["continuity_mode"] is False
     assert config["storyboard_grid"] == 12
     assert config["clip_group_size"] == 3
+
+
+@pytest.mark.asyncio
+async def test_seedance_grouped_prompts_keep_transition_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    calls: list[dict[str, object]] = []
+
+    async def fake_execute(
+        self: SkillRegistry,
+        skill_name: str,
+        params: dict,
+    ) -> SkillResult:
+        calls.append({"skill_name": skill_name, "params": params})
+        if skill_name == "media-quality-audit-skill":
+            return SkillResult(success=True, data={"overall_status": "PASS"})
+        return SkillResult(
+            success=True,
+            data={
+                "video_path": f"/tmp/{params['output_label']}.mp4",
+                "duration_seconds": params["duration"],
+                "file_size_bytes": 2048,
+                "is_stub": False,
+                "verification": {"all_ok": True},
+                "prompt_used": params["prompt"],
+            },
+        )
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+
+    result = await S1ProductDirectPipeline()._step_seedance_clips(
+        reg=SkillRegistry(),
+        video_prompts=[
+            {
+                "segment_prompt": "clip one",
+                "segment_type": "clip_group",
+                "shot_type": "wide_to_medium",
+                "duration_seconds": 4,
+                "clip_index": 1,
+                "transition_to_next": "match cut",
+                "transition_type": "match_cut",
+            },
+            {
+                "segment_prompt": "clip two",
+                "segment_type": "clip_group",
+                "shot_type": "medium_to_detail",
+                "duration_seconds": 6,
+                "clip_index": 2,
+                "transition_type": "action_cut",
+            },
+        ],
+        product_name="Momcozy Nutri Bottle Warmer",
+        label="test_label",
+        errors=[],
+        video_duration=10,
+        keyframe_images=[],
+        continuity_mode="standard",
+    )
+
+    seedance_calls = [
+        call for call in calls if call["skill_name"] == "seedance-video-generate-skill"
+    ]
+    assert len(result["clip_paths"]) == 2
+    assert result["clip_details"][0]["clip_index"] == 1
+    assert result["clip_details"][0]["transition_to_next"] == "match cut"
+    assert result["clip_details"][0]["transition_type"] == "match_cut"
+    assert result["clip_details"][0]["segment_type"] == "clip_group"
+    assert result["clip_details"][0]["shot_type"] == "wide_to_medium"
+    assert result["clip_details"][0]["continuity_frame"] is False
+    assert result["clip_details"][1]["clip_index"] == 2
+    assert result["clip_details"][1]["transition_to_next"] == ""
+    assert result["clip_details"][1]["transition_type"] == "action_cut"
+    assert seedance_calls[0]["params"]["duration"] == 4
+    assert seedance_calls[1]["params"]["duration"] == 6
+
+
+@pytest.mark.asyncio
+async def test_seedance_high_quality_passes_continuity_frame_to_next_clip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    calls: list[dict[str, object]] = []
+
+    async def fake_execute(
+        self: SkillRegistry,
+        skill_name: str,
+        params: dict,
+    ) -> SkillResult:
+        calls.append({"skill_name": skill_name, "params": params})
+        if skill_name == "media-quality-audit-skill":
+            return SkillResult(success=True, data={"overall_status": "PASS"})
+        return SkillResult(
+            success=True,
+            data={
+                "video_path": f"/tmp/{params['output_label']}.mp4",
+                "duration_seconds": params["duration"],
+                "file_size_bytes": 2048,
+                "is_stub": False,
+                "verification": {"all_ok": True},
+                "prompt_used": params["prompt"],
+            },
+        )
+
+    def fake_extract(video_path: str, output_dir: str) -> str | None:
+        return f"/tmp/frame_for_{video_path.rsplit('/', maxsplit=1)[-1]}.jpg"
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+    monkeypatch.setattr(
+        S1ProductDirectPipeline,
+        "_extract_clip_last_frame",
+        staticmethod(fake_extract),
+    )
+
+    result = await S1ProductDirectPipeline()._step_seedance_clips(
+        reg=SkillRegistry(),
+        video_prompts=[
+            {
+                "segment_prompt": "clip one",
+                "duration_seconds": 4,
+                "clip_index": 1,
+            },
+            {
+                "segment_prompt": "clip two",
+                "duration_seconds": 4,
+                "clip_index": 2,
+            },
+        ],
+        product_name="Momcozy Nutri Bottle Warmer",
+        label="test_hq",
+        errors=[],
+        video_duration=8,
+        keyframe_images=[],
+        continuity_mode="high_quality",
+    )
+
+    seedance_calls = [
+        call for call in calls if call["skill_name"] == "seedance-video-generate-skill"
+    ]
+    assert "continuity_frame_path" not in seedance_calls[0]["params"]
+    assert seedance_calls[1]["params"]["continuity_frame_path"] == (
+        "/tmp/frame_for_test_hq_seg_0.mp4.jpg"
+    )
+    assert result["clip_details"][0]["continuity_frame"] is False
+    assert result["clip_details"][1]["continuity_frame"] is True
+
+
+def test_continuity_generation_mode_preserves_false_skip_contract() -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+
+    disabled = S1ProductDirectPipeline._normalize_continuity_config(
+        {"continuity_mode": False}
+    )
+    disabled_string = S1ProductDirectPipeline._normalize_continuity_config(
+        {"continuity_mode": "off", "continuity_generation_mode": "high_quality"}
+    )
+    high_quality = S1ProductDirectPipeline._normalize_continuity_config(
+        {"continuity_mode": "high_quality"}
+    )
+    explicit_generation = S1ProductDirectPipeline._normalize_continuity_config(
+        {"continuity_mode": True, "continuity_generation_mode": "high_quality"}
+    )
+
+    assert disabled["continuity_mode"] is False
+    assert disabled["continuity_generation_mode"] == "standard"
+    assert disabled_string["continuity_mode"] is False
+    assert disabled_string["continuity_generation_mode"] == "standard"
+    assert high_quality["continuity_mode"] is True
+    assert high_quality["continuity_generation_mode"] == "high_quality"
+    assert explicit_generation["continuity_mode"] is True
+    assert explicit_generation["continuity_generation_mode"] == "high_quality"
