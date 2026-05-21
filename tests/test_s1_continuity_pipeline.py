@@ -37,6 +37,42 @@ def test_s1_config_defaults_for_continuity() -> None:
     assert runner_config["clip_group_size"] == 3
 
 
+def test_remotion_payload_contains_transitions() -> None:
+    from src.skills.remotion_assemble import RemotionAssembleSkill
+
+    skill = RemotionAssembleSkill()
+    payload = skill._build_render_payload(
+        shots=[
+            {"id": 1, "start_time": 0, "end_time": 4, "visual": "a"},
+            {"id": 2, "start_time": 4, "end_time": 10, "visual": "b"},
+        ],
+        captions=[],
+        audio_paths=[],
+        lyrics_text="",
+        brand_guidelines={},
+        total_duration=10,
+        label="test",
+        clip_paths=["/tmp/a.mp4", "/tmp/b.mp4"],
+        transitions=[
+            {
+                "from_clip": 1,
+                "to_clip": 2,
+                "type": "match_cut",
+                "duration_frames": 8,
+            }
+        ],
+    )
+
+    assert payload["transitions"] == [
+        {
+            "from_clip": 1,
+            "to_clip": 2,
+            "type": "match_cut",
+            "duration_frames": 8,
+        }
+    ]
+
+
 def _sample_continuity_grid() -> dict:
     return {
         "product_name": "Momcozy Nutri Bottle Warmer",
@@ -823,6 +859,87 @@ async def test_seedance_grouped_prompts_keep_transition_metadata(
     assert result["clip_details"][1]["transition_type"] == "action_cut"
     assert seedance_calls[0]["params"]["duration"] == 4
     assert seedance_calls[1]["params"]["duration"] == 6
+
+
+@pytest.mark.asyncio
+async def test_assemble_final_passes_clip_transitions_to_remotion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    captured: dict[str, object] = {}
+
+    async def fake_execute(
+        self: SkillRegistry,
+        skill_name: str,
+        params: dict,
+    ) -> SkillResult:
+        captured["skill_name"] = skill_name
+        captured["params"] = params
+        return SkillResult(
+            success=True,
+            data={
+                "video_path": "/tmp/final.mp4",
+                "render_json_path": "/tmp/final_input.json",
+            },
+        )
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+
+    result = await S1ProductDirectPipeline()._step_assemble_final(
+        reg=SkillRegistry(),
+        storyboards=[
+            {
+                "shots": [
+                    {"id": 1, "start_time": 0, "end_time": 4, "visual": "a"},
+                    {"id": 2, "start_time": 4, "end_time": 8, "visual": "b"},
+                    {"id": 3, "start_time": 8, "end_time": 12, "visual": "c"},
+                ],
+            }
+        ],
+        scripts=[],
+        audio_paths=[],
+        lyrics_paths=[],
+        clip_paths=["/tmp/a.mp4", "/tmp/b.mp4", "/tmp/c.mp4"],
+        clip_details=[
+            {
+                "transition_to_next": "soft crossfade to product closeup",
+                "transition_type": "soft_crossfade",
+            },
+            {
+                "transition_to_next": "action cut to final hero",
+                "transition_type": "action_cut",
+            },
+            {
+                "transition_to_next": "ignored because last clip",
+                "transition_type": "match_cut",
+            },
+        ],
+        brand_guidelines={},
+        label="test_label",
+        errors=[],
+    )
+
+    assert result == ("/tmp/final.mp4", "/tmp/final_input.json")
+    assert captured["skill_name"] == "remotion-assemble-skill"
+    assert captured["params"]["transitions"] == [
+        {
+            "from_clip": 1,
+            "to_clip": 2,
+            "type": "soft_crossfade",
+            "duration_frames": 12,
+            "description": "soft crossfade to product closeup",
+        },
+        {
+            "from_clip": 2,
+            "to_clip": 3,
+            "type": "action_cut",
+            "duration_frames": 8,
+            "description": "action cut to final hero",
+        },
+    ]
 
 
 @pytest.mark.asyncio

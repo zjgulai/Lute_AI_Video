@@ -9,6 +9,14 @@ import {
   Video,
 } from "remotion";
 
+interface Transition {
+  from_clip: number;
+  to_clip: number;
+  type: "clean" | "match_cut" | "action_cut" | "soft_crossfade";
+  duration_frames: number;
+  description?: string;
+}
+
 interface Shot {
   id: number;
   start_time: number;
@@ -17,6 +25,7 @@ interface Shot {
   voiceover?: string;
   visual?: string;
   videoSrc?: string;
+  transition?: Transition;
 }
 
 interface Caption {
@@ -31,6 +40,7 @@ interface VideoCompositionProps {
     total_duration: number;
     shots: Shot[];
     captions?: Caption[];
+    transitions?: Transition[];
     brand_name?: string;
   };
   audioSrc: string | null;
@@ -51,6 +61,18 @@ const ShotSegment: React.FC<{
   const shotStartFrame = shot.start_time * fps;
   const shotDurationFrames = (shot.end_time - shot.start_time) * fps;
   const localFrame = frame - shotStartFrame;
+  const fadeFrames =
+    shot.transition?.type === "soft_crossfade"
+      ? shot.transition.duration_frames
+      : 0;
+  const fadeStartFrame = Math.max(0, shotDurationFrames - fadeFrames);
+  const fadeOut =
+    fadeFrames > 0 && shotDurationFrames > 0
+      ? interpolate(localFrame, [fadeStartFrame, shotDurationFrames], [1, 0], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        })
+      : 1;
 
   // Entrance animation
   const entrance = spring({
@@ -73,6 +95,7 @@ const ShotSegment: React.FC<{
     <AbsoluteFill
       style={{
         transform: `scale(${zoom})`,
+        opacity: fadeOut,
         backgroundColor: "#FFF5F7",
         justifyContent: "center",
         alignItems: "center",
@@ -200,13 +223,14 @@ const CaptionOverlay: React.FC<{
   );
 };
 
-export const VideoComposition: React.FC<VideoCompositionProps> = ({
-  data,
-  audioSrc,
-  backgroundColor,
-  primaryColor,
-  textColor,
-}) => {
+export const VideoComposition: React.FC<Record<string, unknown>> = (props) => {
+  const {
+    data,
+    audioSrc,
+    backgroundColor,
+    primaryColor,
+    textColor,
+  } = props as unknown as VideoCompositionProps;
   const frame = useCurrentFrame();
   const currentTime = frame / fps;
 
@@ -218,22 +242,29 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
       }}
     >
       {/* Render each shot */}
-      {data.shots.map((shot) => (
-        <Sequence
-          key={shot.id}
-          from={Math.floor(shot.start_time * fps)}
-          durationInFrames={Math.ceil((shot.end_time - shot.start_time) * fps)}
-        >
-          <ShotSegment
-            shot={shot}
-            isActive={
-              currentTime >= shot.start_time && currentTime < shot.end_time
-            }
-            primaryColor={primaryColor}
-            textColor={textColor}
-          />
-        </Sequence>
-      ))}
+      {data.shots.map((shot, index) => {
+        const transition = data.transitions?.find(
+          (item) => item.from_clip === index + 1
+        );
+        const shotWithTransition = { ...shot, transition };
+
+        return (
+          <Sequence
+            key={shot.id}
+            from={Math.floor(shot.start_time * fps)}
+            durationInFrames={Math.ceil((shot.end_time - shot.start_time) * fps)}
+          >
+            <ShotSegment
+              shot={shotWithTransition}
+              isActive={
+                currentTime >= shot.start_time && currentTime < shot.end_time
+              }
+              primaryColor={primaryColor}
+              textColor={textColor}
+            />
+          </Sequence>
+        );
+      })}
 
       {/* Caption overlay */}
       {data.captions && data.captions.length > 0 && (

@@ -497,6 +497,7 @@ class S1ProductDirectPipeline:
                 audio_paths=audio_paths,
                 lyrics_paths=lyrics_paths,
                 clip_paths=clip_paths,
+                clip_details=clip_details,
                 brand_guidelines=config.get("brand_guidelines") or {},
                 label=config.get("output_label", "s1"),
                 errors=media_errors,
@@ -1299,6 +1300,7 @@ class S1ProductDirectPipeline:
         brand_guidelines: dict[str, Any],
         label: str,
         errors: list[str],
+        clip_details: list[dict[str, Any]] | None = None,
     ) -> tuple[str, str]:
         # Flatten storyboards into a single shot list. If no storyboards, derive from scripts.
         shots = self._collect_shots(storyboards, scripts)
@@ -1307,6 +1309,19 @@ class S1ProductDirectPipeline:
             (float(s.get("end_time", 0)) for s in shots),
             default=30.0,
         )
+        transitions = []
+        for idx, detail in enumerate(clip_details or []):
+            transition_to_next = detail.get("transition_to_next", "")
+            if idx >= len(clip_paths) - 1 or not transition_to_next:
+                continue
+            transition_type = detail.get("transition_type", "clean")
+            transitions.append({
+                "from_clip": idx + 1,
+                "to_clip": idx + 2,
+                "type": transition_type,
+                "duration_frames": 12 if transition_type == "soft_crossfade" else 8,
+                "description": transition_to_next,
+            })
 
         res = await reg.execute("remotion-assemble-skill", {
             "shots": shots,
@@ -1317,6 +1332,7 @@ class S1ProductDirectPipeline:
             "brand_guidelines": brand_guidelines,
             "output_label": label,
             "total_duration": total_duration,
+            "transitions": transitions,
         })
         if res.success and res.data:
             return res.data.get("video_path", ""), res.data.get("render_json_path", "")
