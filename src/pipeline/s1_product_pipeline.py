@@ -404,11 +404,13 @@ class S1ProductDirectPipeline:
 
         if step_name == "video_prompts":
             scripts = self._get_step_output(steps, "scripts") or []
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
             return await self._step_video_prompts(
                 reg=reg,
                 scripts=scripts,
                 product_name=config.get("product_name", "Product"),
                 errors=errors,
+                continuity_storyboard_grid=continuity_grid,
             )
 
         if step_name == "thumbnail_prompts":
@@ -789,12 +791,31 @@ class S1ProductDirectPipeline:
         scripts: list[dict[str, Any]],
         product_name: str,
         errors: list[str],
+        continuity_storyboard_grid: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate per-segment structured video prompts (narrative shot architecture).
 
         Each script segment produces one prompt dict with shot_type, camera,
         action, lighting, and full visual_description — never a concatenated string.
         """
+        if continuity_storyboard_grid and continuity_storyboard_grid.get("clip_groups"):
+            res = await reg.execute(
+                "seedance-video-prompt",
+                {
+                    "continuity_storyboard_grid": continuity_storyboard_grid,
+                    "product_name": product_name,
+                },
+            )
+            if res.success and res.data and isinstance(res.data, list):
+                if not res.metadata.get("is_fallback"):
+                    return res.data
+            reason = (
+                res.error
+                or res.metadata.get("fallback_reason")
+                or "fallback_result"
+            )
+            errors.append(f"video_prompts_continuity_failed: {reason}")
+
         all_prompts: list[dict[str, Any]] = []
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
             segments = script.get("segments", [])

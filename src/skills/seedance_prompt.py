@@ -123,6 +123,49 @@ def _shot_type_from_segment(seg_type: str, description: str, index: int, total: 
     return "mid-shot"
 
 
+def _validate_continuity_grid_params(continuity_grid: Any) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(continuity_grid, dict):
+        return ["continuity_storyboard_grid must be a dict"]
+
+    clip_groups = continuity_grid.get("clip_groups")
+    if not isinstance(clip_groups, list) or not clip_groups:
+        return ["continuity_storyboard_grid.clip_groups must be a non-empty list"]
+
+    for index, group in enumerate(clip_groups):
+        if not isinstance(group, dict):
+            errors.append(f"clip_groups[{index}] must be a dict")
+            continue
+
+        seedance_prompt = group.get("seedance_prompt")
+        if not isinstance(seedance_prompt, str) or len(seedance_prompt.strip()) < 10:
+            errors.append(
+                f"clip_groups[{index}].seedance_prompt must be a non-empty string"
+            )
+
+        for field_name in ("duration", "duration_seconds"):
+            if field_name not in group or group.get(field_name) is None:
+                continue
+            try:
+                value = float(group[field_name])
+            except (TypeError, ValueError):
+                errors.append(f"clip_groups[{index}].{field_name} must be numeric")
+                continue
+            if value <= 0:
+                errors.append(f"clip_groups[{index}].{field_name} must be positive")
+
+        if "clip_index" in group and group.get("clip_index") is not None:
+            try:
+                clip_index = int(group["clip_index"])
+            except (TypeError, ValueError):
+                errors.append(f"clip_groups[{index}].clip_index must be numeric")
+                continue
+            if clip_index <= 0:
+                errors.append(f"clip_groups[{index}].clip_index must be positive")
+
+    return errors
+
+
 class SeedancePromptSkill(SkillCallable):
     """Generates per-segment structured video prompts for Sora 2 Pro / Seedance 2.0.
 
@@ -136,6 +179,29 @@ class SeedancePromptSkill(SkillCallable):
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         """Build one prompt per script segment using the narrative_shot template."""
+        continuity_grid = params.get("continuity_storyboard_grid") or {}
+        if isinstance(continuity_grid, dict) and continuity_grid.get("clip_groups"):
+            prompts = self._build_prompts_from_clip_groups(
+                continuity_grid=continuity_grid,
+                product_name=params.get("product_name", "Product"),
+            )
+            quality_scores = [float(prompt.get("quality_score", 0.0)) for prompt in prompts]
+            overall_quality = (
+                round(sum(quality_scores) / len(quality_scores), 2)
+                if quality_scores
+                else 0.5
+            )
+            return SkillResult(
+                success=True,
+                data=prompts,
+                metadata={
+                    "prompt_count": len(prompts),
+                    "source": "continuity_storyboard_grid",
+                    "overall_quality_score": overall_quality,
+                    "avg_quality_score": overall_quality,
+                },
+            )
+
         segments = params.get("script_segments", [])
         product_name = params.get("product_name", "Product")
 
@@ -189,6 +255,88 @@ class SeedancePromptSkill(SkillCallable):
                 "avg_quality_score": overall_quality,
             },
         )
+
+    def _build_prompts_from_clip_groups(
+        self,
+        continuity_grid: dict[str, Any],
+        product_name: str,
+    ) -> list[dict[str, Any]]:
+        visual_identity = continuity_grid.get("visual_identity") or {}
+        if not isinstance(visual_identity, dict):
+            visual_identity = {}
+
+        product_anchor = str(
+            visual_identity.get("product_anchor") or f"same {product_name} product"
+        )
+        location = str(visual_identity.get("location") or "same home setting")
+        lighting = str(visual_identity.get("lighting") or "consistent warm natural light")
+
+        prompts: list[dict[str, Any]] = []
+        clip_groups = continuity_grid.get("clip_groups", [])
+        if not isinstance(clip_groups, list):
+            return prompts
+
+        for group in clip_groups:
+            if not isinstance(group, dict):
+                continue
+
+            try:
+                duration = float(group.get("duration") or group.get("duration_seconds") or 5)
+            except (TypeError, ValueError):
+                duration = 5.0
+            if duration <= 0:
+                duration = 5.0
+
+            base_prompt = str(group.get("seedance_prompt") or "").strip()
+            if not base_prompt:
+                continue
+            purpose = str(group.get("product_angle") or group.get("purpose") or "")
+            camera = str(group.get("camera") or "smooth continuity handheld")
+            prompt_text = (
+                f"{base_prompt} Maintain continuity: {product_anchor}; "
+                f"same location: {location}; lighting: {lighting}. "
+                "Keep the same product, scene, and light across the whole clip. "
+                "Use one continuous action chain inside this clip. "
+                "Avoid infant face close-ups, medical claims, and distress-heavy imagery."
+            )
+
+            prompt_lower = prompt_text.lower()
+            hits = [word for word in FORBIDDEN_PATTERNS if word in prompt_lower]
+            if hits:
+                logger.warning(
+                    "seedance_prompt: forbidden pattern detected in continuity prompt",
+                    extra={
+                        "hits": hits,
+                        "clip_index": group.get("clip_index", len(prompts) + 1),
+                    },
+                )
+
+            prompt = {
+                "segment_prompt": prompt_text,
+                "segment_type": "clip_group",
+                "clip_index": self._safe_clip_index(group.get("clip_index"), len(prompts) + 1),
+                "duration_seconds": duration,
+                "shot_type": "continuity_group",
+                "camera": camera,
+                "lighting": lighting,
+                "has_forbidden_words": len(hits) > 0,
+                "forbidden_hits": hits,
+                "product_angle": purpose,
+                "transition_to_next": group.get("transition_to_next", ""),
+                "transition_type": group.get("transition_type", "match_cut"),
+            }
+            prompt["quality_score"] = self._score_prompt_quality(prompt)
+            prompts.append(prompt)
+
+        return prompts
+
+    @staticmethod
+    def _safe_clip_index(value: Any, fallback: int) -> int:
+        try:
+            clip_index = int(value)
+        except (TypeError, ValueError):
+            return fallback
+        return clip_index if clip_index > 0 else fallback
 
     def _build_single_fallback(self, product_name: str) -> dict[str, Any]:
         """Safe fallback: structured prompt without rotation keywords."""
@@ -256,6 +404,8 @@ class SeedancePromptSkill(SkillCallable):
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = []
+        if "continuity_storyboard_grid" in params:
+            return _validate_continuity_grid_params(params.get("continuity_storyboard_grid"))
         if not params.get("script_segments"):
             errors.append("missing or empty 'script_segments'")
         return errors

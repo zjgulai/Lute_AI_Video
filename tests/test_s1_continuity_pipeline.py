@@ -37,6 +37,305 @@ def test_s1_config_defaults_for_continuity() -> None:
     assert runner_config["clip_group_size"] == 3
 
 
+def _sample_continuity_grid() -> dict:
+    return {
+        "product_name": "Momcozy Nutri Bottle Warmer",
+        "visual_identity": {
+            "location": "warm night kitchen and nursery doorway",
+            "lighting": "soft warm low-light",
+            "product_anchor": "same bottle warmer on the same countertop",
+        },
+        "clip_groups": [
+            {
+                "clip_index": 1,
+                "shot_indices": [1, 2, 3],
+                "duration": 4,
+                "purpose": "pain setup",
+                "seedance_prompt": "Clock, cold bottle, parent approaches warmer.",
+                "transition_to_next": (
+                    "match cut from cold bottle movement to bottle placement"
+                ),
+                "transition_type": "match_cut",
+            },
+            {
+                "clip_index": 2,
+                "shot_indices": [4, 5, 6],
+                "duration": 6,
+                "purpose": "product action",
+                "seedance_prompt": (
+                    "Bottle placed into warmer, button press, indicator light."
+                ),
+                "transition_to_next": "action cut from indicator to bottle removal",
+                "transition_type": "action_cut",
+            },
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_seedance_prompt_uses_continuity_clip_groups() -> None:
+    import src.skills.seedance_prompt  # noqa: F401
+    from src.skills.registry import SkillRegistry
+
+    result = await SkillRegistry().execute(
+        "seedance-video-prompt",
+        {
+            "continuity_storyboard_grid": _sample_continuity_grid(),
+            "product_name": "Momcozy Nutri Bottle Warmer",
+        },
+    )
+
+    assert result.success is True
+    assert result.metadata["source"] == "continuity_storyboard_grid"
+    prompts = result.data
+    assert len(prompts) == 2
+    assert prompts[0]["segment_type"] == "clip_group"
+    assert prompts[0]["clip_index"] == 1
+    assert prompts[0]["duration_seconds"] == 4
+    assert prompts[0]["transition_to_next"] == (
+        "match cut from cold bottle movement to bottle placement"
+    )
+    assert prompts[0]["transition_type"] == "match_cut"
+    assert prompts[1]["clip_index"] == 2
+    assert prompts[1]["duration_seconds"] == 6
+    assert prompts[1]["transition_to_next"] == (
+        "action cut from indicator to bottle removal"
+    )
+    assert "same bottle warmer on the same countertop" in prompts[0]["segment_prompt"]
+    assert all(prompt["has_forbidden_words"] is False for prompt in prompts)
+    assert all(prompt["forbidden_hits"] == [] for prompt in prompts)
+
+
+@pytest.mark.asyncio
+async def test_seedance_prompt_rejects_invalid_continuity_clip_groups() -> None:
+    import src.skills.seedance_prompt  # noqa: F401
+    from src.skills.registry import SkillRegistry
+
+    non_dict_group_grid = _sample_continuity_grid()
+    non_dict_group_grid["clip_groups"] = ["bad group"]
+
+    non_dict_result = await SkillRegistry().execute(
+        "seedance-video-prompt",
+        {
+            "continuity_storyboard_grid": non_dict_group_grid,
+            "product_name": "Momcozy Nutri Bottle Warmer",
+        },
+    )
+
+    assert non_dict_result.success is False
+    assert "clip_groups[0] must be a dict" in (non_dict_result.error or "")
+
+    invalid_number_grid = _sample_continuity_grid()
+    invalid_number_grid["clip_groups"][0]["duration"] = "not-a-number"
+    invalid_number_grid["clip_groups"][0]["clip_index"] = "not-a-number"
+
+    invalid_number_result = await SkillRegistry().execute(
+        "seedance-video-prompt",
+        {
+            "continuity_storyboard_grid": invalid_number_grid,
+            "product_name": "Momcozy Nutri Bottle Warmer",
+        },
+    )
+
+    assert invalid_number_result.success is False
+    assert "clip_groups[0].duration must be numeric" in (
+        invalid_number_result.error or ""
+    )
+    assert "clip_groups[0].clip_index must be numeric" in (
+        invalid_number_result.error or ""
+    )
+
+
+@pytest.mark.asyncio
+async def test_video_prompts_empty_continuity_prompt_falls_back_to_script_segments() -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.registry import SkillRegistry
+
+    continuity_grid = _sample_continuity_grid()
+    continuity_grid["clip_groups"][0]["seedance_prompt"] = "   "
+
+    errors: list[str] = []
+    result = await S1ProductDirectPipeline()._step_video_prompts(
+        reg=SkillRegistry(),
+        scripts=[
+            {
+                "id": "script-1",
+                "product_name": "Momcozy Nutri Bottle Warmer",
+                "segments": [
+                    {
+                        "segment_type": "hook",
+                        "visual_description": "parent reaches for bottle warmer",
+                        "voiceover": "Warm the bottle quickly.",
+                        "start_time": 0,
+                        "end_time": 5,
+                    }
+                ],
+            }
+        ],
+        product_name="Momcozy Nutri Bottle Warmer",
+        errors=errors,
+        continuity_storyboard_grid=continuity_grid,
+    )
+
+    assert len(result) == 1
+    assert result[0]["segment_type"] == "hook"
+    assert result[0]["script_id"] == "script-1"
+    assert result[0]["product_name"] == "Momcozy Nutri Bottle Warmer"
+    assert result[0]["segment_prompt"] != "fallback prompt"
+    assert len(errors) == 1
+    assert errors[0].startswith("video_prompts_continuity_failed: ")
+    assert "seedance_prompt" in errors[0]
+
+
+@pytest.mark.asyncio
+async def test_video_prompts_step_prefers_continuity_clip_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    captured: dict[str, object] = {}
+    expected_prompts = [
+        {
+            "segment_prompt": "clip one",
+            "segment_type": "clip_group",
+            "clip_index": 1,
+            "duration_seconds": 4,
+        },
+        {
+            "segment_prompt": "clip two",
+            "segment_type": "clip_group",
+            "clip_index": 2,
+            "duration_seconds": 6,
+        },
+    ]
+
+    async def fake_execute(self: SkillRegistry, skill_name: str, params: dict) -> SkillResult:
+        captured["skill_name"] = skill_name
+        captured["params"] = params
+        return SkillResult(success=True, data=expected_prompts)
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+
+    pipeline = S1ProductDirectPipeline()
+    result = await pipeline.run_step(
+        "video_prompts",
+        {
+            "config": {
+                "product_name": "Momcozy Nutri Bottle Warmer",
+                "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
+            },
+            "errors": [],
+            "media_synthesis_errors": [],
+            "steps": {
+                "scripts": {
+                    "output": [
+                        {
+                            "id": "script-1",
+                            "segments": [
+                                {
+                                    "segment_type": "hook",
+                                    "visual_description": "old script segment",
+                                }
+                            ],
+                        }
+                    ],
+                    "edited": False,
+                    "edited_output": None,
+                },
+                "continuity_storyboard_grid": {
+                    "output": _sample_continuity_grid(),
+                    "edited": False,
+                    "edited_output": None,
+                },
+            },
+        },
+    )
+
+    assert result == expected_prompts
+    assert captured["skill_name"] == "seedance-video-prompt"
+    assert captured["params"]["product_name"] == "Momcozy Nutri Bottle Warmer"
+    assert "continuity_storyboard_grid" in captured["params"]
+    assert "script_segments" not in captured["params"]
+
+
+@pytest.mark.asyncio
+async def test_video_prompts_continuity_fallback_uses_script_segments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    calls: list[dict[str, object]] = []
+    segment_prompts = [
+        {
+            "segment_prompt": "segment prompt",
+            "segment_type": "hook",
+            "duration_seconds": 5,
+        }
+    ]
+
+    async def fake_execute(self: SkillRegistry, skill_name: str, params: dict) -> SkillResult:
+        calls.append({"skill_name": skill_name, "params": params})
+        if "continuity_storyboard_grid" in params:
+            return SkillResult(
+                success=True,
+                data=[
+                    {
+                        "segment_prompt": "fallback prompt",
+                        "segment_type": "body",
+                        "_fallback": True,
+                    }
+                ],
+                metadata={
+                    "is_fallback": True,
+                    "fallback_reason": "continuity builder failed",
+                },
+            )
+        return SkillResult(success=True, data=segment_prompts)
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+
+    errors: list[str] = []
+    result = await S1ProductDirectPipeline()._step_video_prompts(
+        reg=SkillRegistry(),
+        scripts=[
+            {
+                "id": "script-1",
+                "product_name": "Momcozy Nutri Bottle Warmer",
+                "segments": [
+                    {
+                        "segment_type": "hook",
+                        "visual_description": "parent reaches for bottle warmer",
+                        "voiceover": "Warm the bottle quickly.",
+                        "start_time": 0,
+                        "end_time": 5,
+                    }
+                ],
+            }
+        ],
+        product_name="Momcozy Nutri Bottle Warmer",
+        errors=errors,
+        continuity_storyboard_grid=_sample_continuity_grid(),
+    )
+
+    assert result == [
+        {
+            **segment_prompts[0],
+            "script_id": "script-1",
+            "product_name": "Momcozy Nutri Bottle Warmer",
+        }
+    ]
+    assert len(calls) == 2
+    assert "continuity_storyboard_grid" in calls[0]["params"]
+    assert "script_segments" in calls[1]["params"]
+    assert errors == [
+        "video_prompts_continuity_failed: continuity builder failed"
+    ]
+
+
 @pytest.mark.asyncio
 async def test_run_step_continuity_storyboard_grid_calls_skill(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
