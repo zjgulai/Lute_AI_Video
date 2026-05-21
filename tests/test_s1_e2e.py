@@ -12,14 +12,11 @@ Uses fallback/mock mode — no real LLM calls.
 from __future__ import annotations
 
 import asyncio
-import json
-from pathlib import Path
 
 import pytest
 
-from src.skills.base import SkillResult
-from src.skills.registry import SkillRegistry
 from src.skills.product_strategy import ProductStrategySkill
+from src.skills.registry import SkillRegistry
 from src.skills.seedance_prompt import SeedancePromptSkill
 from src.skills.thumbnail_prompt import ThumbnailPromptSkill
 
@@ -133,21 +130,29 @@ class TestS1E2EVideoPrompt:
             {
                 "voiceover": "Meet the LactFit X1 — the pump that fits your life, not the other way around.",
                 "visual_description": "Product slowly rotating on clean white background",
+                "start_time": 0,
+                "end_time": 4,
                 "duration_seconds": 4,
             },
             {
                 "voiceover": "With its ultra-silent motor, you can pump during meetings without anyone knowing.",
                 "visual_description": "Woman in office using pump discreetly",
+                "start_time": 4,
+                "end_time": 10,
                 "duration_seconds": 6,
             },
             {
                 "voiceover": "Just 3 parts to clean — it's that simple.",
                 "visual_description": "Hands disassembling pump for cleaning",
+                "start_time": 10,
+                "end_time": 14,
                 "duration_seconds": 4,
             },
             {
                 "voiceover": "Get yours at the link below and start pumping on your terms.",
                 "visual_description": "Product with call-to-action overlay",
+                "start_time": 14,
+                "end_time": 17,
                 "duration_seconds": 3,
             },
         ]
@@ -159,18 +164,32 @@ class TestS1E2EVideoPrompt:
         }))
 
         assert result.success is True
-        data = result.data
-        assert "seedance_prompt" in data
-        prompt = data["seedance_prompt"]
+        prompts = result.data
+        assert isinstance(prompts, list)
+        assert len(prompts) == len(script_segments)
+        assert result.metadata["prompt_count"] == len(prompts)
 
-        # Prompt should contain @image references
-        assert "@image1" in prompt
+        for prompt in prompts:
+            assert isinstance(prompt, dict)
+            assert isinstance(prompt["segment_prompt"], str)
+            assert prompt["segment_prompt"].strip()
+            assert "duration_seconds" in prompt
+            assert prompt["duration_seconds"] > 0
+            assert "has_forbidden_words" in prompt
+            assert prompt["has_forbidden_words"] is False
+            assert isinstance(prompt["segment_type"], str)
+            assert prompt["segment_type"]
+            assert isinstance(prompt["shot_type"], str)
+            assert prompt["shot_type"]
+            assert isinstance(prompt["camera"], str)
+            assert prompt["camera"]
+            assert isinstance(prompt["lighting"], str)
+            assert prompt["lighting"]
 
-        # Prompt should contain timing
-        assert "0-4s" in prompt or "[0" in prompt
+        for segment, prompt in zip(script_segments, prompts, strict=True):
+            assert segment["visual_description"] in prompt["segment_prompt"]
 
-        # Total duration should match segments
-        assert data["total_duration_seconds"] == 17
+        assert [prompt["duration_seconds"] for prompt in prompts] == [4, 6, 4, 3]
 
 
 class TestS1E2EThumbnailPrompt:
@@ -235,15 +254,19 @@ class TestS1E2EIntegration:
 
         # Step 2: Video prompt (using brief info)
         sample_segments = [
-            {"voiceover": topic[:100], "duration_seconds": 4},
-            {"voiceover": f"Featuring {usp}", "duration_seconds": 5},
+            {"voiceover": topic[:100], "start_time": 0, "end_time": 4, "duration_seconds": 4},
+            {"voiceover": f"Featuring {usp}", "start_time": 4, "end_time": 9, "duration_seconds": 5},
         ]
         video_result = asyncio.run(SkillRegistry().execute("seedance-video-prompt", {
             "script_segments": sample_segments,
             "product_name": PRODUCT_FIXTURE["product_catalog"]["product_name"],
         }))
         assert video_result.success is True
-        assert video_result.data["total_duration_seconds"] == 9
+        video_prompts = video_result.data
+        assert isinstance(video_prompts, list)
+        assert len(video_prompts) == len(sample_segments)
+        assert video_result.metadata["prompt_count"] == len(sample_segments)
+        assert sum(prompt["duration_seconds"] for prompt in video_prompts) == 9
 
         # Step 3: Thumbnail from topic
         thumb_result = asyncio.run(SkillRegistry().execute("gpt-image-thumbnail-prompt", {
@@ -257,10 +280,10 @@ class TestS1E2EIntegration:
         assert len(thumb_result.data["variants"]) == 4
 
         # Summary
-        print(f"\n=== S1 E2E Pipeline Summary ===")
+        print("\n=== S1 E2E Pipeline Summary ===")
         print(f"Strategy: {len(briefs)} briefs generated")
         print(f"  First brief topic: {briefs[0].get('topic', 'N/A')[:80]}")
-        print(f"Video prompt: {len(video_result.data['seedance_prompt'])} chars, {video_result.data['total_duration_seconds']}s")
+        print(f"Video prompts: {len(video_prompts)} segments")
         print(f"Thumbnail variants: {len(thumb_result.data['variants'])}")
 
     def test_s1_with_minimal_input(self):
