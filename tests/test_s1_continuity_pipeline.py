@@ -1039,3 +1039,221 @@ def test_continuity_generation_mode_preserves_false_skip_contract() -> None:
     assert high_quality["continuity_generation_mode"] == "high_quality"
     assert explicit_generation["continuity_mode"] is True
     assert explicit_generation["continuity_generation_mode"] == "high_quality"
+
+
+def test_continuity_audit_split_marks_asset_ready_when_publish_warns() -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+
+    pipeline = S1ProductDirectPipeline()
+    report = pipeline._build_continuity_audit_summary(
+        base_audit={
+            "overall_status": "FAIL",
+            "overall_score": 0.741,
+            "criteria": [
+                {"name": "final_video_present", "status": "WARN"},
+                {"name": "thumbnail_count", "status": "WARN"},
+                {"name": "product_mention", "status": "FAIL"},
+            ],
+        },
+        clip_details=[
+            {
+                "is_stub": False,
+                "transition_to_next": "match cut",
+                "verification": {"all_ok": True},
+            },
+            {
+                "is_stub": False,
+                "transition_to_next": "action cut",
+                "verification": {"all_ok": True},
+            },
+            {
+                "is_stub": False,
+                "transition_to_next": "soft crossfade",
+                "verification": {"all_ok": True},
+            },
+            {"is_stub": False, "verification": {"all_ok": True}},
+        ],
+        continuity_grid={
+            "micro_shots": [
+                {"continuity_in": "in", "continuity_out": "out"}
+                for _ in range(12)
+            ],
+            "clip_groups": [
+                {"transition_to_next": "match cut"},
+                {"transition_to_next": "action cut"},
+                {"transition_to_next": "soft crossfade"},
+                {},
+            ],
+        },
+        final_video_path="/tmp/final.mp4",
+    )
+
+    assert report["asset_ready_audit"]["status"] == "PASS"
+    assert report["publish_ready_audit"]["status"] == "FAIL"
+    assert report["publish_ready_audit"]["overall_status"] == "FAIL"
+    assert report["publish_ready_audit"]["overall_score"] == 0.741
+    assert report["publish_ready_audit"]["base_score"] == 0.741
+    assert report["continuity_score"] >= 0.8
+
+
+def test_continuity_audit_split_fails_asset_when_final_video_missing() -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+
+    pipeline = S1ProductDirectPipeline()
+    report = pipeline._build_continuity_audit_summary(
+        base_audit={
+            "overall_status": "PASS",
+            "overall_score": 0.94,
+            "criteria": [{"name": "product_mention", "status": "PASS"}],
+        },
+        clip_details=[
+            {"is_stub": False, "transition_to_next": "match cut"},
+            {"is_stub": False, "transition_to_next": "action cut"},
+            {"is_stub": False, "transition_to_next": "soft crossfade"},
+            {"is_stub": False},
+        ],
+        continuity_grid={
+            "micro_shots": [
+                {"continuity_in": "in", "continuity_out": "out"}
+                for _ in range(12)
+            ],
+        },
+        final_video_path="",
+    )
+
+    assert report["asset_ready_audit"]["status"] == "FAIL"
+    assert report["asset_ready_audit"]["checks"]["final_video_present"] is False
+    assert report["publish_ready_audit"]["status"] == "PASS"
+    assert report["continuity_score"] == 0.75
+
+
+def test_continuity_audit_split_fails_asset_when_clip_is_stub() -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+
+    pipeline = S1ProductDirectPipeline()
+    report = pipeline._build_continuity_audit_summary(
+        base_audit={
+            "overall_status": "PASS",
+            "overall_score": 0.94,
+            "criteria": [{"name": "product_mention", "status": "PASS"}],
+        },
+        clip_details=[
+            {"is_stub": False, "transition_to_next": "match cut"},
+            {"is_stub": True, "transition_to_next": "action cut"},
+            {"is_stub": False, "transition_to_next": "soft crossfade"},
+            {"is_stub": False},
+        ],
+        continuity_grid={
+            "micro_shots": [
+                {"continuity_in": "in", "continuity_out": "out"}
+                for _ in range(12)
+            ],
+        },
+        final_video_path="/tmp/final.mp4",
+    )
+
+    assert report["asset_ready_audit"]["status"] == "FAIL"
+    assert report["asset_ready_audit"]["checks"]["non_stub_clips"] is False
+    assert report["publish_ready_audit"]["status"] == "PASS"
+    assert report["continuity_score"] == 0.75
+
+
+def test_continuity_audit_split_handles_invalid_clip_and_micro_shot() -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+
+    pipeline = S1ProductDirectPipeline()
+    report = pipeline._build_continuity_audit_summary(
+        base_audit={},
+        clip_details=[
+            {"is_stub": False, "transition_to_next": "match cut"},
+            "invalid clip detail",
+            {"is_stub": False},
+        ],
+        continuity_grid={
+            "micro_shots": [
+                {"continuity_in": "in", "continuity_out": "out"},
+                "invalid micro shot",
+                {"continuity_in": "in"},
+            ],
+        },
+        final_video_path="/tmp/final.mp4",
+    )
+
+    assert report["asset_ready_audit"]["status"] == "FAIL"
+    assert report["asset_ready_audit"]["checks"]["non_stub_clips"] is False
+    assert report["asset_ready_audit"]["checks"]["micro_shot_continuity"] is False
+    assert report["publish_ready_audit"]["status"] == "WARN"
+
+
+@pytest.mark.asyncio
+async def test_audit_run_step_handles_invalid_clip_detail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    async def fake_execute(
+        self: SkillRegistry,
+        skill_name: str,
+        params: dict,
+    ) -> SkillResult:
+        assert skill_name == "media-quality-audit-skill"
+        return SkillResult(
+            success=True,
+            data={
+                "overall_status": "PASS",
+                "overall_score": 0.93,
+                "criteria": [{"name": "product_mention", "status": "PASS"}],
+            },
+        )
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+
+    state = {
+        "config": {"product_name": "Momcozy Nutri Bottle Warmer", "target_language": "en"},
+        "errors": [],
+        "media_synthesis_errors": [],
+        "steps": {
+            "assemble_final": {"output": {"video_path": "/tmp/final.mp4"}},
+            "tts_audio": {"output": {"audio_paths": ["/tmp/audio.mp3"]}},
+            "thumbnail_images": {"output": ["/tmp/thumb.png"]},
+            "continuity_storyboard_grid": {
+                "output": {
+                    "micro_shots": [
+                        {"continuity_in": "in", "continuity_out": "out"}
+                        for _ in range(12)
+                    ],
+                },
+            },
+            "seedance_clips": {
+                "output": {
+                    "clip_paths": ["/tmp/clip-one.mp4", "/tmp/clip-two.mp4"],
+                    "clip_details": [
+                        "invalid clip detail",
+                        {"is_stub": False, "transition_to_next": "match cut"},
+                    ],
+                },
+            },
+            "scripts": {
+                "output": [
+                    {
+                        "segments": [
+                            {
+                                "voiceover": "Warm the bottle quickly.",
+                                "start_time": 0,
+                                "end_time": 3,
+                            },
+                        ],
+                    },
+                ],
+            },
+            "thumbnail_prompts": {"output": [{"variants": [{"prompt": "thumb"}]}]},
+        },
+    }
+
+    result = await S1ProductDirectPipeline().run_step("audit", state)
+
+    assert result["asset_ready_audit"]["status"] == "FAIL"
+    assert result["asset_ready_audit"]["checks"]["non_stub_clips"] is False
+    assert result["publish_ready_audit"]["status"] == "PASS"
