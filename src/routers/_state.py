@@ -85,9 +85,12 @@ class S1StartRequest(BaseModel):
     video_duration: int = 30
     mode: str = "auto"
     brand_mode: bool = False
-    continuity_mode: bool = True
+    enable_media_synthesis: bool = True
+    continuity_mode: bool | str = True
+    continuity_generation_mode: str = "standard"
     storyboard_grid: int = 12
     clip_group_size: int = 3
+    transition_style: str = "match_cut"
     api_keys: dict[str, str] = {}
 
 

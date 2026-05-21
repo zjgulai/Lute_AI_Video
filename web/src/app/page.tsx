@@ -82,6 +82,12 @@ type SceneConfig = UnknownRecord & {
   scene_id?: string;
   selected_models?: unknown[];
   story_description?: string;
+  enable_media_synthesis?: boolean;
+  continuity_mode?: boolean | string;
+  continuity_generation_mode?: string;
+  storyboard_grid?: number | string;
+  clip_group_size?: number;
+  transition_style?: string;
 };
 
 type GalleryResult = {
@@ -103,6 +109,22 @@ function asAuditReport(value: unknown): AuditReport | null {
     return value as AuditReport;
   }
   return null;
+}
+
+function withS1ContinuityConfig<T extends UnknownRecord>(config: SceneConfig, payload: T): T {
+  const continuityMode = config.continuity_mode;
+  const continuityGenerationMode = config.continuity_generation_mode
+    || (continuityMode === "high_quality" ? "high_quality" : "standard");
+
+  return {
+    ...payload,
+    enable_media_synthesis: config.enable_media_synthesis ?? true,
+    continuity_mode: continuityMode ?? true,
+    continuity_generation_mode: continuityGenerationMode,
+    storyboard_grid: config.storyboard_grid ?? 12,
+    clip_group_size: config.clip_group_size ?? 3,
+    transition_style: config.transition_style || "match_cut",
+  };
 }
 
 function extractVersions(state: PipelineStateLike): Version[] {
@@ -524,17 +546,18 @@ export default function Home() {
     setShowStageProgress(true);
     startGenerating(t("exec.narrative.analyzing"));
     try {
+      const submitPayload = {
+        product_catalog: config.product_catalog,
+        brand_guidelines: config.brand_guidelines,
+        target_platforms: config.target_platforms,
+        target_languages: config.target_languages || ["en"],
+        week: config.content_calendar_week || "",
+        video_duration: config.video_duration || 30,
+      };
       // Phase 1B: Unified async submit — returns label immediately, pipeline runs in background
       const submitResult = await submitScenario(
         scenarioId,
-        {
-          product_catalog: config.product_catalog,
-          brand_guidelines: config.brand_guidelines,
-          target_platforms: config.target_platforms,
-          target_languages: config.target_languages || ["en"],
-          week: config.content_calendar_week || "",
-          video_duration: config.video_duration || 30,
-        },
+        scenarioId === "s1" ? withS1ContinuityConfig(config, submitPayload) : submitPayload,
         { signal: abortRef.current?.signal }
       );
       setSmartCreateLabel(submitResult.label);
@@ -549,14 +572,17 @@ export default function Home() {
       // Fallback: legacy blocking endpoint for s1 only
       if (scenarioId === "s1") {
         try {
-          const result = await runS1ProductDirect({
-            product_catalog: config.product_catalog,
-            brand_guidelines: config.brand_guidelines,
-            target_platforms: config.target_platforms,
-            target_languages: config.target_languages || ["en"],
-            week: config.content_calendar_week || "",
-            video_duration: config.video_duration || 30,
-          }, { signal: abortRef.current?.signal });
+          const result = await runS1ProductDirect(
+            withS1ContinuityConfig(config, {
+              product_catalog: config.product_catalog,
+              brand_guidelines: config.brand_guidelines,
+              target_platforms: config.target_platforms,
+              target_languages: config.target_languages || ["en"],
+              week: config.content_calendar_week || "",
+              video_duration: config.video_duration || 30,
+            }),
+            { signal: abortRef.current?.signal }
+          );
           const label = result?.label || `s1_${Date.now()}`;
           setSmartCreateLabel(label);
           startActivePipeline({
@@ -657,19 +683,22 @@ export default function Home() {
       // Auto mode: run all steps in one shot
       setLoadingText(t("app.loading"));
       try {
-        const result = await runS1ProductDirect({
-          product_catalog: {
-            name: config.product_catalog?.products?.[0]?.name
-              || config.product_catalog?.name
-              || "Product",
-            ...(config.product_catalog || {}),
-          },
-          brand_guidelines: config.brand_guidelines,
-          target_platforms: config.target_platforms || ["tiktok", "shopify"],
-          target_languages: config.target_languages || ["en"],
-          week: config.content_calendar_week || "",
-          video_duration: config.video_duration || videoDuration,
-        }, { signal: abortRef.current?.signal });
+        const result = await runS1ProductDirect(
+          withS1ContinuityConfig(config, {
+            product_catalog: {
+              name: config.product_catalog?.products?.[0]?.name
+                || config.product_catalog?.name
+                || "Product",
+              ...(config.product_catalog || {}),
+            },
+            brand_guidelines: config.brand_guidelines,
+            target_platforms: config.target_platforms || ["tiktok", "shopify"],
+            target_languages: config.target_languages || ["en"],
+            week: config.content_calendar_week || "",
+            video_duration: config.video_duration || videoDuration,
+          }),
+          { signal: abortRef.current?.signal }
+        );
 
         setOneshotResult(result);
         setOneshotScenario(scenario);
@@ -685,24 +714,27 @@ export default function Home() {
     // Step-by-step mode
     try {
       setLoadingText(t("app.loading"));
-      const result = await startS1StepByStep({
-        product_catalog: {
-          name: config.product_catalog?.products?.[0]?.name
-            || config.product_catalog?.name
-            || "Product",
-          brand_name: config.brand_guidelines?.brand_name || "",
-          usps: config.product_catalog?.products?.[0]?.usps
-            || config.product_catalog?.usps
-            || [],
-          // Preserve all product context fields from SceneForm
-          ...(config.product_catalog?.products?.[0] || {}),
-        },
-        brand_guidelines: config.brand_guidelines,
-        target_platforms: config.target_platforms || ["tiktok", "shopify"],
-        target_languages: config.target_languages || ["en"],
-        week: config.content_calendar_week || "",
-        video_duration: config.video_duration || videoDuration,
-      }, { signal: abortRef.current?.signal });
+      const result = await startS1StepByStep(
+        withS1ContinuityConfig(config, {
+          product_catalog: {
+            name: config.product_catalog?.products?.[0]?.name
+              || config.product_catalog?.name
+              || "Product",
+            brand_name: config.brand_guidelines?.brand_name || "",
+            usps: config.product_catalog?.products?.[0]?.usps
+              || config.product_catalog?.usps
+              || [],
+            // Preserve all product context fields from SceneForm
+            ...(config.product_catalog?.products?.[0] || {}),
+          },
+          brand_guidelines: config.brand_guidelines,
+          target_platforms: config.target_platforms || ["tiktok", "shopify"],
+          target_languages: config.target_languages || ["en"],
+          week: config.content_calendar_week || "",
+          video_duration: config.video_duration || videoDuration,
+        }),
+        { signal: abortRef.current?.signal }
+      );
       if (!result || !result.label) {
         showToast(t("toast.abnormalData"), "error");
         setLoading(false);

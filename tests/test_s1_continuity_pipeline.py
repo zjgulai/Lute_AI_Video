@@ -37,6 +37,27 @@ def test_s1_config_defaults_for_continuity() -> None:
     assert runner_config["clip_group_size"] == 3
 
 
+def test_s1_start_request_accepts_frontend_continuity_options() -> None:
+    from src.routers._state import S1StartRequest
+
+    request = S1StartRequest(
+        product_catalog={"product_name": "Momcozy Nutri Bottle Warmer"},
+        continuity_mode="high_quality",
+        continuity_generation_mode="high_quality",
+        storyboard_grid=24,
+        clip_group_size=4,
+        transition_style="soft_crossfade",
+        enable_media_synthesis=True,
+    )
+
+    assert request.continuity_mode == "high_quality"
+    assert request.continuity_generation_mode == "high_quality"
+    assert request.storyboard_grid == 24
+    assert request.clip_group_size == 4
+    assert request.transition_style == "soft_crossfade"
+    assert request.enable_media_synthesis is True
+
+
 def test_remotion_payload_contains_transitions() -> None:
     from src.skills.remotion_assemble import RemotionAssembleSkill
 
