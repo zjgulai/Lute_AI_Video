@@ -91,6 +91,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     "duration.mediumLong": "中长",
     "duration.long": "长片",
 
+    // Continuity
+    "continuity.label": "视频连贯性",
+    "continuity.standard": "标准",
+    "continuity.standardDesc": "12格导演分镜，平衡速度和质量",
+    "continuity.highQuality": "高质量",
+    "continuity.highQualityDesc": "12格分镜加上一段末帧连续，耗时更长",
+    "sceneForm.categoryStandard": "标准",
+    "sceneForm.categoryHigh_quality": "高质量",
+
     // Product form
     "product.title": "产品信息",
     "product.name": "产品名称",
@@ -1548,6 +1557,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     "duration.extended": "Extended",
     "duration.mediumLong": "Medium Long",
     "duration.long": "Long",
+
+    // Continuity
+    "continuity.label": "Video continuity",
+    "continuity.standard": "Standard",
+    "continuity.standardDesc": "12-grid director storyboard, balanced speed and quality",
+    "continuity.highQuality": "High quality",
+    "continuity.highQualityDesc": "12-grid storyboard plus previous-clip end-frame continuity, slower",
+    "sceneForm.categoryStandard": "Standard",
+    "sceneForm.categoryHigh_quality": "High quality",
 
     // Product form
     "product.title": "Product Info",

@@ -45,12 +45,27 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
     );
   }, [scene, selectedVideoType]);
 
-  const cards = cardSequence.cards;
+  const cards = useMemo(
+    () =>
+      cardSequence.cards.map((card) =>
+        card.fieldKey === "continuity_mode"
+          ? {
+              ...card,
+              stepName: t("continuity.label"),
+              question: t("continuity.label"),
+              reason: t("continuity.standardDesc"),
+              connectionText: t("continuity.standardDesc"),
+            }
+          : card
+      ),
+    [cardSequence.cards, t]
+  );
 
   // 表单值状态
   const [values, setValues] = useState<Record<string, string>>({
     brand_name: "Momcozy",
     brand_id: "momcozy",
+    continuity_mode: "standard",
   });
   const [focusedIndex, setFocusedIndex] = useState(0);
 
@@ -84,6 +99,10 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
 
     // 根据场景组装数据
     if (scene === "product_direct") {
+      config.storyboard_grid = "12";
+      config.transition_style = "match_cut";
+      config.continuity_mode =
+        values.continuity_mode === "high_quality" ? "high_quality" : "standard";
       config.product_catalog = {
         products: [
           {
@@ -240,7 +259,7 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
                 aria-checked={selectedVideoType === vt.id}
                 onClick={() => {
                   setSelectedVideoType(vt.id);
-                  setValues({});
+                  setValues(scene === "product_direct" ? { continuity_mode: "standard" } : {});
                   setFocusedIndex(0);
                 }}
                 className={`text-left px-3 py-2.5 rounded-xl border transition-all ${

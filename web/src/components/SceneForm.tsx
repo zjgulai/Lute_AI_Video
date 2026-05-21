@@ -51,6 +51,7 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
   const [brandName, setBrandName] = useState("Momcozy");
   const [keyFeatures, setKeyFeatures] = useState("Quick-grab access, no digging through trunk\n5 clear compartments for diapers, wipes, snacks, clothes, toys\nStays stable in car, no rolling or tipping\nCollapsible when not in use\nBoth parents can find everything instantly");
   const [category, setCategory] = useState("Baby");
+  const [continuityMode, setContinuityMode] = useState("standard");
 
   // S1 Product Details (expandable)
   const [usageScenario, setUsageScenario] = useState("Car trunk, family outings — daycare drop-offs, park trips, grocery runs, weekend road trips. Keeps baby essentials permanently organized so you never repack.");
@@ -119,6 +120,9 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
 
     if (scene === "product_direct") {
       if (!productName) return;
+      config.storyboard_grid = "12";
+      config.transition_style = "match_cut";
+      config.continuity_mode = continuityMode === "high_quality" ? "high_quality" : "standard";
       config.product_catalog = {
         products: [{
           name: productName,
@@ -276,6 +280,24 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
+                {t("continuity.label")}
+              </label>
+              <select
+                value={continuityMode}
+                onChange={(e) => setContinuityMode(e.target.value)}
+                className="apple-input text-sm"
+              >
+                <option value="standard">{t("continuity.standard")}</option>
+                <option value="high_quality">{t("continuity.highQuality")}</option>
+              </select>
+              <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+                {continuityMode === "high_quality"
+                  ? t("continuity.highQualityDesc")
+                  : t("continuity.standardDesc")}
+              </p>
             </div>
 
             {/* Product Details (expandable) */}

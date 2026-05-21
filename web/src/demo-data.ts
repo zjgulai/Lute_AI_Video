@@ -1138,6 +1138,17 @@ export const GUIDED_CARD_SEQUENCES: CardSequence[] = [
         placeholder: "例如：温暖、专业、像闺蜜一样分享",
       },
       {
+        priority: "recommended",
+        stepName: "连贯性",
+        stepIcon: "🎞️",
+        question: "视频连贯性选哪档？",
+        reason: "连贯性会影响分镜密度和生成耗时。",
+        connectionText: "连贯性决定分镜密度",
+        fieldKey: "continuity_mode",
+        inputType: "select",
+        options: ["standard", "high_quality"],
+      },
+      {
         priority: "optional",
         stepName: "找差异",
         stepIcon: "🔍",
