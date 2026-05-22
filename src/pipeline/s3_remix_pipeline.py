@@ -18,7 +18,6 @@ Self-verification runs inside each media skill; cross-artifact audit runs at the
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -38,6 +37,7 @@ import src.skills.thumbnail_prompt  # noqa: F401 — auto-register
 import src.skills.video_analysis  # noqa: F401 — auto-register
 from src.config import OUTPUT_DIR, S3_VIRAL_EXTRACT_DISABLED
 from src.pipeline.artifact_paths import extract_assemble_paths
+from src.pipeline.continuity_utils import extract_clip_last_frame
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -615,47 +615,6 @@ class S3InfluencerRemixPipeline:
 
     # ═══ Step 8-12: NEW media-producing steps ═══
 
-    @staticmethod
-    def _extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
-        """Extract the last frame of a video clip as a JPEG for continuity.
-
-        Uses ffmpeg to seek to the last frame: ffmpeg -sseof -1 -i {video_path}
-        -frames:v 1 -q:v 2 {output_path}.
-
-        Args:
-            video_path: Absolute path to the source .mp4 clip.
-            output_dir: Directory to write the extracted frame into.
-
-        Returns:
-            Absolute path to the extracted JPEG, or None on any failure (missing
-            ffmpeg, corrupt file, etc.).
-        """
-        src = Path(video_path)
-        if not src.exists() or src.stat().st_size < 100:
-            return None
-
-        out_dir = Path(output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        frame_path = out_dir / f"last_frame_{src.stem}.jpg"
-
-        try:
-            cmd = [
-                "ffmpeg", "-y",
-                "-sseof", "-1",
-                "-i", str(src),
-                "-frames:v", "1",
-                "-q:v", "2",
-                str(frame_path),
-            ]
-            subprocess.run(cmd, capture_output=True, timeout=15, check=True)
-            if frame_path.exists() and frame_path.stat().st_size > 100:
-                return str(frame_path)
-        except (FileNotFoundError, subprocess.TimeoutExpired,
-                subprocess.CalledProcessError, Exception) as e:
-            logger.warning("s3: _extract_clip_last_frame ffmpeg failed",
-                           video_path=str(video_path), error=str(e)[:200])
-        return None
-
     async def _step_seedance_clips(
         self,
         video_prompts: list[dict[str, Any]],
@@ -732,7 +691,7 @@ class S3InfluencerRemixPipeline:
                 if res.success and res.data:
                     path = res.data.get("video_path", "")
                     if path:
-                        frame = self._extract_clip_last_frame(
+                        frame = extract_clip_last_frame(
                             video_path=path,
                             output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
                         )

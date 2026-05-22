@@ -18,11 +18,11 @@ def test_s1_step_order_includes_continuity_before_keyframes() -> None:
 
 
 def test_s1_config_defaults_for_continuity() -> None:
-    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.pipeline.continuity_utils import normalize_continuity_config
     from src.pipeline.step_runner import _with_continuity_defaults
     from src.routers._state import S1StartRequest
 
-    config = S1ProductDirectPipeline._normalize_continuity_config({})
+    config = normalize_continuity_config({})
     request = S1StartRequest(product_catalog={"product_name": "Test"})
     runner_config = _with_continuity_defaults({"product_catalog": {}}, "s1")
 
@@ -1193,12 +1193,9 @@ async def test_seedance_high_quality_passes_continuity_frame_to_next_clip(
     def fake_extract(video_path: str, output_dir: str) -> str | None:
         return f"/tmp/frame_for_{video_path.rsplit('/', maxsplit=1)[-1]}.jpg"
 
+    import src.pipeline.s1_product_pipeline as s1_module
     monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
-    monkeypatch.setattr(
-        S1ProductDirectPipeline,
-        "_extract_clip_last_frame",
-        staticmethod(fake_extract),
-    )
+    monkeypatch.setattr(s1_module, "extract_clip_last_frame", fake_extract)
 
     result = await S1ProductDirectPipeline()._step_seedance_clips(
         reg=SkillRegistry(),
@@ -1234,18 +1231,19 @@ async def test_seedance_high_quality_passes_continuity_frame_to_next_clip(
 
 
 def test_continuity_generation_mode_preserves_false_skip_contract() -> None:
-    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 
-    disabled = S1ProductDirectPipeline._normalize_continuity_config(
+    from src.pipeline.continuity_utils import normalize_continuity_config
+
+    disabled = normalize_continuity_config(
         {"continuity_mode": False}
     )
-    disabled_string = S1ProductDirectPipeline._normalize_continuity_config(
+    disabled_string = normalize_continuity_config(
         {"continuity_mode": "off", "continuity_generation_mode": "high_quality"}
     )
-    high_quality = S1ProductDirectPipeline._normalize_continuity_config(
+    high_quality = normalize_continuity_config(
         {"continuity_mode": "high_quality"}
     )
-    explicit_generation = S1ProductDirectPipeline._normalize_continuity_config(
+    explicit_generation = normalize_continuity_config(
         {"continuity_mode": True, "continuity_generation_mode": "high_quality"}
     )
 
@@ -1260,10 +1258,11 @@ def test_continuity_generation_mode_preserves_false_skip_contract() -> None:
 
 
 def test_continuity_audit_split_marks_asset_ready_when_publish_warns() -> None:
+    from src.pipeline.continuity_utils import build_continuity_audit_summary
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 
     pipeline = S1ProductDirectPipeline()
-    report = pipeline._build_continuity_audit_summary(
+    report = build_continuity_audit_summary(
         base_audit={
             "overall_status": "FAIL",
             "overall_score": 0.741,
@@ -1315,10 +1314,11 @@ def test_continuity_audit_split_marks_asset_ready_when_publish_warns() -> None:
 
 
 def test_continuity_audit_split_fails_asset_when_final_video_missing() -> None:
+    from src.pipeline.continuity_utils import build_continuity_audit_summary
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 
     pipeline = S1ProductDirectPipeline()
-    report = pipeline._build_continuity_audit_summary(
+    report = build_continuity_audit_summary(
         base_audit={
             "overall_status": "PASS",
             "overall_score": 0.94,
@@ -1346,10 +1346,11 @@ def test_continuity_audit_split_fails_asset_when_final_video_missing() -> None:
 
 
 def test_continuity_audit_split_fails_asset_when_clip_is_stub() -> None:
+    from src.pipeline.continuity_utils import build_continuity_audit_summary
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 
     pipeline = S1ProductDirectPipeline()
-    report = pipeline._build_continuity_audit_summary(
+    report = build_continuity_audit_summary(
         base_audit={
             "overall_status": "PASS",
             "overall_score": 0.94,
@@ -1377,10 +1378,11 @@ def test_continuity_audit_split_fails_asset_when_clip_is_stub() -> None:
 
 
 def test_continuity_audit_split_handles_invalid_clip_and_micro_shot() -> None:
+    from src.pipeline.continuity_utils import build_continuity_audit_summary
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 
     pipeline = S1ProductDirectPipeline()
-    report = pipeline._build_continuity_audit_summary(
+    report = build_continuity_audit_summary(
         base_audit={},
         clip_details=[
             {"is_stub": False, "transition_to_next": "match cut"},

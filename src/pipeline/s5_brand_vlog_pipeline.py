@@ -20,6 +20,7 @@ import src.skills.remotion_assemble  # noqa: F401
 import src.skills.seedance_prompt  # noqa: F401
 import src.skills.seedance_video_generate  # noqa: F401
 from src.pipeline.artifact_paths import extract_assemble_paths
+from src.pipeline.continuity_utils import all_clips_are_stubs
 from src.skills.registry import SkillRegistry
 from src.telemetry import generate_trace_id, pipeline_metrics
 
@@ -53,20 +54,6 @@ SCENE_MAP = {
 
 class S5BrandVlogPipeline:
     """品牌VLOG — 素材装配驱动的叙事视频生成管道 (auto mode)."""
-
-    @staticmethod
-    def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict[str, Any]] | None = None) -> bool:
-        """Detect whether every clip is a stub file.
-
-        Uses explicit is_stub metadata from clip_details when available,
-        falling back to filename-based detection (stub files start with 'stub_').
-        """
-        if not clip_paths:
-            return True
-        if clip_details and len(clip_details) == len(clip_paths):
-            return all(d.get("is_stub", False) for d in clip_details)
-        import os
-        return all(os.path.basename(str(p)).lower().startswith("stub_") for p in clip_paths)
 
     # ═══ StepRunner interface ═══
 
@@ -117,7 +104,7 @@ class S5BrandVlogPipeline:
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
             clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
-            if not clip_paths or self._all_clips_are_stubs(clip_paths, clip_details):
+            if not clip_paths or all_clips_are_stubs(clip_paths, clip_details):
                 errors.append("all_seedance_clips_are_stubs; skipping assembly")
                 return "", ""
             return await self._step_assemble_final(
@@ -135,7 +122,7 @@ class S5BrandVlogPipeline:
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
             clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
 
-            if not clip_paths or self._all_clips_are_stubs(clip_paths, clip_details):
+            if not clip_paths or all_clips_are_stubs(clip_paths, clip_details):
                 errors.append("all_seedance_clips_are_stubs; skipping audit")
                 return {}
 
@@ -538,7 +525,7 @@ class S5BrandVlogPipeline:
             if i < len(video_prompts) - 1:
                 await asyncio.sleep(3.0)
 
-        all_stubs = bool(clip_paths) and self._all_clips_are_stubs(clip_paths, clip_details)
+        all_stubs = bool(clip_paths) and all_clips_are_stubs(clip_paths, clip_details)
         return {
             "clip_paths": clip_paths,
             "clip_details": clip_details,

@@ -16,9 +16,7 @@ Steps (7):
 
 from __future__ import annotations
 
-import subprocess
 import time
-from pathlib import Path
 from typing import Any
 
 import structlog
@@ -28,6 +26,7 @@ import src.skills.seedance_prompt  # noqa: F401
 import src.skills.thumbnail_prompt  # noqa: F401
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.pipeline.artifact_paths import extract_assemble_paths
+from src.pipeline.continuity_utils import extract_clip_last_frame
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.skills.registry import SkillRegistry
@@ -357,40 +356,6 @@ class S4LiveShootPipeline:
 
     # ═══ Video synthesis steps (added to complete the video pipeline) ═══
 
-    @staticmethod
-    def _extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
-        src = Path(video_path)
-        if not src.exists() or src.stat().st_size < 100:
-            return None
-
-        out_dir = Path(output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        frame_path = out_dir / f"last_frame_{src.stem}.jpg"
-
-        try:
-            subprocess.run(
-                [
-                    "ffmpeg", "-y",
-                    "-sseof", "-1",
-                    "-i", str(src),
-                    "-frames:v", "1",
-                    "-q:v", "2",
-                    str(frame_path),
-                ],
-                capture_output=True,
-                timeout=15,
-                check=True,
-            )
-            if frame_path.exists() and frame_path.stat().st_size > 100:
-                return str(frame_path)
-        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
-            logger.warning(
-                "s4: _extract_clip_last_frame ffmpeg failed",
-                video_path=str(video_path),
-                error=str(exc)[:200],
-            )
-        return None
-
     async def _step_seedance_clips(
         self,
         reg: SkillRegistry,
@@ -440,7 +405,7 @@ class S4LiveShootPipeline:
             if res.success and res.data:
                 path = res.data.get("video_path", "")
                 if path:
-                    next_frame = self._extract_clip_last_frame(
+                    next_frame = extract_clip_last_frame(
                         video_path=path,
                         output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
                     )

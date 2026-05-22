@@ -215,7 +215,8 @@ async def test_s4_seedance_clips_chain_last_frame_continuity(monkeypatch):
         return f"/tmp/last-frame-{len(extracted_from)}.jpg"
 
     pipeline = S4LiveShootPipeline()
-    monkeypatch.setattr(pipeline, "_extract_clip_last_frame", _fake_extract)
+    import src.pipeline.s4_live_shoot_pipeline as s4_module
+    monkeypatch.setattr(s4_module, "extract_clip_last_frame", _fake_extract)
 
     result = await pipeline._step_seedance_clips(
         reg=FakeRegistry(),
