@@ -125,6 +125,28 @@ class TestS2RunResultShape:
         ]:
             assert key in result, f"missing media key: {key}"
 
+    def test_build_result_preserves_persisted_assemble_list_paths(self):
+        result = S2BrandCampaignPipeline()._build_result(
+            final_state={
+                "steps": {
+                    "assemble_final": {
+                        "output": ["/tmp/s2-final.mp4", "/tmp/s2-render.json"],
+                    },
+                },
+                "errors": [],
+                "media_synthesis_errors": [],
+            },
+            brand_name="MomCozy",
+            brand_package=BRAND_PACKAGE_FIXTURE,
+            video_duration=15,
+            enable_media_synthesis=True,
+            model_id="kling-3-0/pro",
+            label="s2-test",
+        )
+
+        assert result["final_video_path"] == "/tmp/s2-final.mp4"
+        assert result["render_json_path"] == "/tmp/s2-render.json"
+
 
 class TestS2ExtremeInputs:
     @pytest.mark.asyncio

@@ -37,6 +37,7 @@ import src.skills.seedance_video_generate  # noqa: F401 — auto-register (NEW)
 import src.skills.thumbnail_prompt  # noqa: F401 — auto-register
 import src.skills.video_analysis  # noqa: F401 — auto-register
 from src.config import OUTPUT_DIR, S3_VIRAL_EXTRACT_DISABLED
+from src.pipeline.artifact_paths import extract_assemble_paths
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -63,6 +64,7 @@ class S3Result:
         self.audio_paths: list[str] = []
         self.thumbnail_image_paths: list[str] = []
         self.final_video_path: str = ""
+        self.render_json_path: str = ""
         self.audit_report: dict[str, Any] | None = None
         self.media_synthesis_errors: list[str] = []
         self.errors: list[str] = []
@@ -90,6 +92,7 @@ class S3Result:
             "audio_paths": self.audio_paths,
             "thumbnail_image_paths": self.thumbnail_image_paths,
             "final_video_path": self.final_video_path,
+            "render_json_path": self.render_json_path,
             "audit_report": self.audit_report,
             "media_synthesis_errors": self.media_synthesis_errors,
             "errors": self.errors,
@@ -236,7 +239,7 @@ class S3InfluencerRemixPipeline:
         if step_name == "audit":
             script = self._get_step_output(steps, "remix_script") or {}
             assemble = self._get_step_output(steps, "assemble_final") or {}
-            video_path = assemble.get("video_path", "") if isinstance(assemble, dict) else ""
+            video_path, _ = extract_assemble_paths(assemble)
             audio = self._get_step_output(steps, "tts_audio") or []
             audio_paths = audio if isinstance(audio, list) else []
             thumbnails = self._get_step_output(steps, "thumbnail_images") or []
@@ -340,8 +343,7 @@ class S3InfluencerRemixPipeline:
             thumbs = self._get_step_output(steps, "thumbnail_images") or []
             result.thumbnail_image_paths = thumbs if isinstance(thumbs, list) else []
             assemble = self._get_step_output(steps, "assemble_final") or {}
-            if isinstance(assemble, dict):
-                result.final_video_path = assemble.get("video_path", "")
+            result.final_video_path, result.render_json_path = extract_assemble_paths(assemble)
             result.audit_report = self._get_step_output(steps, "audit")
             result.media_synthesis_errors = final_state.get("media_synthesis_errors", [])
 
@@ -1057,4 +1059,3 @@ class S3InfluencerRemixPipeline:
         # Fallback: if we can't extract frames, return empty
         logger.warning("extract_frames: no frames extracted")
         return []
-

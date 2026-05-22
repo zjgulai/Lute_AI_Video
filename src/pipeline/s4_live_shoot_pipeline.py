@@ -25,6 +25,7 @@ import src.skills.script_writer  # noqa: F401
 import src.skills.seedance_prompt  # noqa: F401
 import src.skills.thumbnail_prompt  # noqa: F401
 from src.config import DEFAULT_LANGUAGES
+from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.skills.registry import SkillRegistry
@@ -148,12 +149,8 @@ class S4LiveShootPipeline:
             )
 
         if step_name == "audit":
-            final_video = ""
             assemble_output = self._get_step_output(steps, "assemble_final")
-            if isinstance(assemble_output, tuple) and len(assemble_output) > 0:
-                final_video = assemble_output[0]
-            elif isinstance(assemble_output, dict):
-                final_video = assemble_output.get("video_path", "")
+            final_video, _ = extract_assemble_paths(assemble_output)
             tts_output = self._get_step_output(steps, "tts_audio") or {}
             audio_paths = tts_output.get("audio_paths", []) if isinstance(tts_output, dict) else []
             thumbnail_sets = self._get_step_output(steps, "thumbnails") or []
@@ -253,6 +250,7 @@ class S4LiveShootPipeline:
             "briefs": [brief_data],
             "brand_guidelines": {"footage_available": len(footage_assets_used)},
             "target_languages": DEFAULT_LANGUAGES,
+            "video_duration": config.get("video_duration", 30),
         })
         if scr.success and scr.data:
             scripts = scr.data.get("scripts", [])
@@ -598,11 +596,7 @@ class S4LiveShootPipeline:
         steps = final_state.get("steps", {})
         seedance_out = self._get_step_output(steps, "seedance_clips") or {}
         assemble_out = self._get_step_output(steps, "assemble_final")
-        final_video = ""
-        if isinstance(assemble_out, tuple) and len(assemble_out) > 0:
-            final_video = assemble_out[0]
-        elif isinstance(assemble_out, dict):
-            final_video = assemble_out.get("video_path", "")
+        final_video, render_json_path = extract_assemble_paths(assemble_out)
 
         result: dict[str, Any] = {
             "success": True,
@@ -612,6 +606,7 @@ class S4LiveShootPipeline:
             "thumbnail_sets": self._get_step_output(steps, "thumbnails") or [],
             "seedance_clips": seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else [],
             "final_video_path": final_video,
+            "render_json_path": render_json_path,
             "steps_completed": 7,
             "errors": final_state.get("errors", []),
         }

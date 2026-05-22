@@ -6,11 +6,45 @@ All skills run in stub mode (no real API calls).
 
 from __future__ import annotations
 
-import asyncio
+import importlib
 
 import pytest
 
+import src.skills.character_identity as character_identity_skill
+import src.skills.elevenlabs_tts as elevenlabs_tts_skill
+import src.skills.gpt_image_generate as gpt_image_generate_skill
+import src.skills.keyframe_images as keyframe_images_skill
+import src.skills.media_quality_audit as media_quality_audit_skill
+import src.skills.remix_script as remix_script_skill
+import src.skills.remotion_assemble as remotion_assemble_skill
+import src.skills.seedance_prompt as seedance_prompt_skill
+import src.skills.seedance_video_generate as seedance_video_generate_skill
+import src.skills.thumbnail_prompt as thumbnail_prompt_skill
+import src.skills.video_analysis as video_analysis_skill
 from src.pipeline.s3_remix_pipeline import S3InfluencerRemixPipeline, S3Result
+from src.skills.base import SkillResult
+from src.skills.registry import SkillRegistry
+
+
+@pytest.fixture(autouse=True)
+def _reload_s3_skills():
+    SkillRegistry.clear_global()
+    for module in (
+        character_identity_skill,
+        elevenlabs_tts_skill,
+        gpt_image_generate_skill,
+        keyframe_images_skill,
+        media_quality_audit_skill,
+        remix_script_skill,
+        remotion_assemble_skill,
+        seedance_prompt_skill,
+        seedance_video_generate_skill,
+        thumbnail_prompt_skill,
+        video_analysis_skill,
+    ):
+        importlib.reload(module)
+    yield
+    SkillRegistry.clear_global()
 
 
 class TestS3Pipeline:
@@ -172,6 +206,42 @@ class TestS3Pipeline:
         assert isinstance(d["video_prompts"], list)
         assert isinstance(d["thumbnail_prompts"], list)
         assert isinstance(d["errors"], list)
+
+    @pytest.mark.asyncio
+    async def test_audit_reads_persisted_assemble_list_path(self, monkeypatch):
+        """JSON persistence can turn tuple assemble output into list."""
+        pipeline = S3InfluencerRemixPipeline()
+        captured: dict[str, str] = {}
+
+        async def _fake_audit(**kwargs):
+            captured["video_path"] = kwargs["video_path"]
+            return SkillResult(success=True, data={"overall_status": "pass"})
+
+        monkeypatch.setattr(pipeline, "_step_audit", _fake_audit)
+
+        result = await pipeline.run_step(
+            "audit",
+            {
+                "config": {
+                    "product": {"name": "X1 Pump"},
+                    "target_language": "en",
+                    "video_duration": 15,
+                },
+                "steps": {
+                    "remix_script": {"output": {"segments": []}},
+                    "assemble_final": {"output": ["/tmp/s3-final.mp4", "/tmp/s3-render.json"]},
+                    "tts_audio": {"output": []},
+                    "thumbnail_images": {"output": []},
+                    "seedance_clips": {"output": {"clip_paths": ["/tmp/s3-clip.mp4"]}},
+                    "thumbnail_prompts": {"output": []},
+                },
+                "errors": [],
+                "media_synthesis_errors": [],
+            },
+        )
+
+        assert captured["video_path"] == "/tmp/s3-final.mp4"
+        assert result == {"overall_status": "pass"}
 
     @pytest.mark.asyncio
     async def test_pipeline_steps_ordered(self):

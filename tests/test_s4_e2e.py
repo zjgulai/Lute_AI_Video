@@ -10,23 +10,23 @@ Uses fallback/mock mode — no real LLM calls.
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
+import src.skills.script_writer as script_writer_skill
+import src.skills.seedance_prompt as seedance_prompt_skill
+import src.skills.thumbnail_prompt as thumbnail_prompt_skill
 from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
+from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
-
-import src.skills.script_writer  # noqa: F401
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.thumbnail_prompt  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
 def _clear_registry():
     SkillRegistry.clear_global()
-    # Re-import to re-register
-    import src.skills.script_writer  # noqa: F401
-    import src.skills.seedance_prompt  # noqa: F401
-    import src.skills.thumbnail_prompt  # noqa: F401
+    for module in (script_writer_skill, seedance_prompt_skill, thumbnail_prompt_skill):
+        importlib.reload(module)
     yield
     SkillRegistry.clear_global()
 
@@ -59,14 +59,14 @@ async def test_s4_full_pipeline_mock():
     assert isinstance(result.get("scripts"), list)
     assert isinstance(result.get("video_prompts"), list)
     assert isinstance(result.get("thumbnail_sets"), list)
-    assert result.get("steps_completed") == 3
+    assert result.get("steps_completed") == 7
 
 
 @pytest.mark.asyncio
 async def test_s4_step_runner_init_and_resume():
     """S4 via StepRunner: init_state + resume produces valid state."""
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
 
     config = {
         "footage_assets": FOOTAGE_FIXTURE,
@@ -91,3 +91,67 @@ async def test_s4_step_runner_init_and_resume():
     # All steps should be done (mock mode is fast)
     for step_name in ["scripts", "video_prompts", "thumbnails"]:
         assert steps[step_name]["status"] == "done", f"Step {step_name} not done"
+
+
+@pytest.mark.asyncio
+async def test_s4_scripts_forwards_configured_video_duration():
+    """S4 script generation must honor the caller's target duration."""
+    captured: dict[str, int] = {}
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            assert name == "script-writer-skill"
+            captured["video_duration"] = params["video_duration"]
+            return SkillResult(
+                success=True,
+                data={"scripts": [{"id": "s4-script", "segments": []}]},
+            )
+
+    result = await S4LiveShootPipeline()._step_scripts(
+        reg=FakeRegistry(),
+        config={
+            "footage_assets": FOOTAGE_FIXTURE,
+            "product_info": PRODUCT_INFO_FIXTURE,
+            "product_name": PRODUCT_INFO_FIXTURE["name"],
+            "video_duration": 15,
+        },
+        steps={},
+        errors=[],
+    )
+
+    assert captured["video_duration"] == 15
+    assert result[0]["id"] == "s4-script"
+
+
+@pytest.mark.asyncio
+async def test_s4_audit_reads_persisted_assemble_list_path(monkeypatch):
+    pipeline = S4LiveShootPipeline()
+    captured: dict[str, str] = {}
+
+    async def _fake_audit(**kwargs):
+        captured["video_path"] = kwargs["video_path"]
+        return {"overall_status": "pass"}
+
+    monkeypatch.setattr(pipeline, "_step_audit", _fake_audit)
+
+    result = await pipeline.run_step(
+        "audit",
+        {
+            "config": {
+                "product_name": "X1 Pump",
+                "target_language": "en",
+                "video_duration": 15,
+            },
+            "steps": {
+                "assemble_final": {"output": ["/tmp/s4-final.mp4", "/tmp/s4-render.json"]},
+                "tts_audio": {"output": {"audio_paths": ["/tmp/s4.mp3"]}},
+                "thumbnails": {"output": []},
+                "scripts": {"output": []},
+                "seedance_clips": {"output": {"clip_paths": ["/tmp/s4-clip.mp4"]}},
+            },
+            "errors": [],
+        },
+    )
+
+    assert captured["video_path"] == "/tmp/s4-final.mp4"
+    assert result == {"overall_status": "pass"}

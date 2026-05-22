@@ -35,6 +35,7 @@ from typing import Any
 import structlog
 
 from src.config import DEFAULT_LANGUAGES
+from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.model_router import select_model
 from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 from src.pipeline.state_manager import PipelineStateManager
@@ -214,15 +215,9 @@ class S2BrandCampaignPipeline:
         result["thumbnail_image_paths"] = get(steps, "thumbnail_images") or []
 
         assemble_output = get(steps, "assemble_final") or {}
-        if isinstance(assemble_output, dict):
-            result["final_video_path"] = assemble_output.get("video_path", "")
-            result["render_json_path"] = assemble_output.get("render_json_path", "")
-        elif isinstance(assemble_output, tuple):
-            result["final_video_path"] = assemble_output[0] if assemble_output else ""
-            result["render_json_path"] = assemble_output[1] if len(assemble_output) > 1 else ""
-        else:
-            result["final_video_path"] = ""
-            result["render_json_path"] = ""
+        final_video_path, render_json_path = extract_assemble_paths(assemble_output)
+        result["final_video_path"] = final_video_path
+        result["render_json_path"] = render_json_path
 
         result["audit_report"] = get(steps, "audit") or {}
         result["steps_completed"] = 12

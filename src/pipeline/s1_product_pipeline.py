@@ -47,6 +47,7 @@ import src.skills.seedance_video_generate  # noqa: F401  ← NEW media
 import src.skills.storyboard  # noqa: F401  (best-effort; may not exist in repo)
 import src.skills.thumbnail_prompt  # noqa: F401
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
+from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.skills.registry import SkillRegistry
@@ -229,16 +230,7 @@ class S1ProductDirectPipeline:
 
     @staticmethod
     def _extract_assemble_paths(output: Any) -> tuple[str, str]:
-        if isinstance(output, dict):
-            return (
-                str(output.get("video_path") or ""),
-                str(output.get("render_json_path") or ""),
-            )
-        if isinstance(output, (list, tuple)):
-            video_path = str(output[0] or "") if len(output) > 0 else ""
-            render_json_path = str(output[1] or "") if len(output) > 1 else ""
-            return video_path, render_json_path
-        return "", ""
+        return extract_assemble_paths(output)
 
     @staticmethod
     def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict[str, Any]] | None = None) -> bool:

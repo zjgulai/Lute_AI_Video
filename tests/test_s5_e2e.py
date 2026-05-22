@@ -13,26 +13,30 @@ Uses fallback/mock mode — no real LLM calls.
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
+import src.skills.elevenlabs_tts as elevenlabs_tts_skill
+import src.skills.media_quality_audit as media_quality_audit_skill
+import src.skills.remotion_assemble as remotion_assemble_skill
+import src.skills.seedance_prompt as seedance_prompt_skill
+import src.skills.seedance_video_generate as seedance_video_generate_skill
 from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
 from src.skills.registry import SkillRegistry
-
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.seedance_video_generate  # noqa: F401
-import src.skills.elevenlabs_tts  # noqa: F401
-import src.skills.remotion_assemble  # noqa: F401
-import src.skills.media_quality_audit  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
 def _clear_registry():
     SkillRegistry.clear_global()
-    import src.skills.seedance_prompt  # noqa: F401
-    import src.skills.seedance_video_generate  # noqa: F401
-    import src.skills.elevenlabs_tts  # noqa: F401
-    import src.skills.remotion_assemble  # noqa: F401
-    import src.skills.media_quality_audit  # noqa: F401
+    for module in (
+        elevenlabs_tts_skill,
+        media_quality_audit_skill,
+        remotion_assemble_skill,
+        seedance_prompt_skill,
+        seedance_video_generate_skill,
+    ):
+        importlib.reload(module)
     yield
     SkillRegistry.clear_global()
 
@@ -80,8 +84,8 @@ async def test_s5_full_pipeline_mock():
 @pytest.mark.asyncio
 async def test_s5_step_runner_init_and_resume():
     """S5 via StepRunner: init_state + resume produces valid state."""
-    from src.pipeline.step_runner import StepRunner
     from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.step_runner import StepRunner
 
     config = {
         "brand_id": "lactfit",
@@ -96,7 +100,7 @@ async def test_s5_step_runner_init_and_resume():
 
     runner = StepRunner(PipelineStateManager())
     label = await runner.init_state(config=config, mode="auto", scenario="s5")
-    assert label.startswith("vlog_")
+    assert label.startswith("s5_")
 
     final_state = await runner.resume(label)
     assert final_state.get("scenario") == "s5"
@@ -110,3 +114,81 @@ async def test_s5_step_runner_init_and_resume():
     for step_name in ["vlog_strategy", "video_prompts", "seedance_clips", "tts_audio", "assemble_final", "audit"]:
         step_data = steps.get(step_name, {})
         assert step_data.get("status") in ("done", "pending"), f"Step {step_name} unexpected status"
+
+
+@pytest.mark.asyncio
+async def test_s5_audit_reads_persisted_assemble_list_path(monkeypatch):
+    pipeline = S5BrandVlogPipeline()
+    captured: dict[str, str] = {}
+
+    async def _fake_audit(reg, video_path, audio_paths, thumbnail_paths, clip_paths, errors):
+        captured["video_path"] = video_path
+        return {"overall_status": "pass"}
+
+    monkeypatch.setattr(pipeline, "_step_audit", _fake_audit)
+
+    result = await pipeline.run_step(
+        "audit",
+        {
+            "config": {
+                "product_name": "X1 Pump",
+                "video_duration": 15,
+            },
+            "steps": {
+                "assemble_final": {"output": ["/tmp/s5-final.mp4", "/tmp/s5-render.json"]},
+                "tts_audio": {"output": ["/tmp/s5.mp3"]},
+                "seedance_clips": {
+                    "output": {
+                        "clip_paths": ["/tmp/s5-clip.mp4"],
+                        "clip_details": [{"is_stub": False}],
+                    },
+                },
+            },
+            "errors": [],
+        },
+    )
+
+    assert captured["video_path"] == "/tmp/s5-final.mp4"
+    assert result == {"overall_status": "pass"}
+
+
+@pytest.mark.asyncio
+async def test_s5_run_preserves_persisted_assemble_list_paths(monkeypatch):
+    class FakeRunner:
+        def __init__(self, state_manager):
+            pass
+
+        async def init_state(self, *, config, mode, label, scenario):
+            return label
+
+        async def resume(self, label):
+            return {
+                "steps": {
+                    "vlog_strategy": {"output": {"scripts": []}},
+                    "video_prompts": {"output": []},
+                    "seedance_clips": {
+                        "output": {
+                            "clip_paths": ["/tmp/s5-clip.mp4"],
+                            "clip_details": [{"is_stub": False}],
+                        },
+                    },
+                    "tts_audio": {"output": ["/tmp/s5.mp3"]},
+                    "assemble_final": {"output": ["/tmp/s5-final.mp4", "/tmp/s5-render.json"]},
+                    "audit": {"output": {}},
+                },
+                "errors": [],
+            }
+
+    monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeRunner)
+
+    result = await S5BrandVlogPipeline().run(
+        brand_id="lactfit",
+        product_sku=PRODUCT_SKU_FIXTURE,
+        scene_id="living-room",
+        selected_models=SELECTED_MODELS_FIXTURE,
+        story_description="Test story",
+        video_duration=15,
+    )
+
+    assert result["final_video_path"] == "/tmp/s5-final.mp4"
+    assert result["render_json_path"] == "/tmp/s5-render.json"

@@ -19,6 +19,7 @@ import src.skills.remotion_assemble  # noqa: F401
 # Import-time skill auto-registration
 import src.skills.seedance_prompt  # noqa: F401
 import src.skills.seedance_video_generate  # noqa: F401
+from src.pipeline.artifact_paths import extract_assemble_paths
 from src.skills.registry import SkillRegistry
 from src.telemetry import generate_trace_id, pipeline_metrics
 
@@ -126,11 +127,7 @@ class S5BrandVlogPipeline:
 
         if step_name == "audit":
             assemble_out = self._get_step_output(steps, "assemble_final")
-            final_video = ""
-            if isinstance(assemble_out, tuple) and len(assemble_out) > 0:
-                final_video = assemble_out[0]
-            elif isinstance(assemble_out, dict):
-                final_video = assemble_out.get("video_path", "")
+            final_video, _ = extract_assemble_paths(assemble_out)
 
             tts_out = self._get_step_output(steps, "tts_audio") or []
             audio_paths = tts_out if isinstance(tts_out, list) else []
@@ -224,11 +221,7 @@ class S5BrandVlogPipeline:
         clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
         audio_paths = self._get_step_output(steps, "tts_audio") or []
         assemble_out = self._get_step_output(steps, "assemble_final")
-        final_video = ""
-        if isinstance(assemble_out, tuple) and len(assemble_out) > 0:
-            final_video = assemble_out[0]
-        elif isinstance(assemble_out, dict):
-            final_video = assemble_out.get("video_path", "")
+        final_video, render_json_path = extract_assemble_paths(assemble_out)
         audit_report = self._get_step_output(steps, "audit") or {}
 
         pipeline_metrics.record_pipeline(
@@ -250,7 +243,7 @@ class S5BrandVlogPipeline:
             "clip_paths": clip_paths,
             "audio_paths": audio_paths if isinstance(audio_paths, list) else [],
             "final_video_path": final_video,
-            "render_json_path": "",
+            "render_json_path": render_json_path,
             "thumbnail_sets": [],
             "thumbnail_image_paths": [],
             "audit_report": audit_report,
