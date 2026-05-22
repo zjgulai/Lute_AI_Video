@@ -16,7 +16,9 @@ Steps (7):
 
 from __future__ import annotations
 
+import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -24,7 +26,7 @@ import structlog
 import src.skills.script_writer  # noqa: F401
 import src.skills.seedance_prompt  # noqa: F401
 import src.skills.thumbnail_prompt  # noqa: F401
-from src.config import DEFAULT_LANGUAGES
+from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
@@ -355,6 +357,40 @@ class S4LiveShootPipeline:
 
     # ═══ Video synthesis steps (added to complete the video pipeline) ═══
 
+    @staticmethod
+    def _extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
+        src = Path(video_path)
+        if not src.exists() or src.stat().st_size < 100:
+            return None
+
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        frame_path = out_dir / f"last_frame_{src.stem}.jpg"
+
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-sseof", "-1",
+                    "-i", str(src),
+                    "-frames:v", "1",
+                    "-q:v", "2",
+                    str(frame_path),
+                ],
+                capture_output=True,
+                timeout=15,
+                check=True,
+            )
+            if frame_path.exists() and frame_path.stat().st_size > 100:
+                return str(frame_path)
+        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+            logger.warning(
+                "s4: _extract_clip_last_frame ffmpeg failed",
+                video_path=str(video_path),
+                error=str(exc)[:200],
+            )
+        return None
+
     async def _step_seedance_clips(
         self,
         reg: SkillRegistry,
@@ -370,48 +406,55 @@ class S4LiveShootPipeline:
         Phase 2 prereq (Oracle review #4): route through ModelRouter.
         Default S4 model is seedance-2-fast (cheap turbo for live-shoot iteration).
         """
-        import asyncio
-
         from src.pipeline.model_router import select_model
 
         s4_model = select_model("s4")
         clip_paths: list[str] = []
         clip_details: list[dict[str, Any]] = []
-        _sem = asyncio.Semaphore(2)
 
-        async def _gen(i: int, vp: dict[str, Any]) -> tuple[int, Any]:
-            async with _sem:
-                prompt_text = vp.get("prompt", "") or vp.get("segment_prompt", "")
-                if isinstance(prompt_text, dict):
-                    prompt_text = prompt_text.get("prompt", "")
-                if not prompt_text:
-                    prompt_text = f"{product_name} in natural usage scene"
-                raw_duration = vp.get("duration_seconds", 5)
-                try:
-                    duration = int(float(raw_duration))
-                except (TypeError, ValueError):
-                    duration = 5
-                duration = max(4, min(duration, 15))
-                res = await reg.execute("seedance-video-generate-skill", {
+        async def _gen(i: int, vp: dict[str, Any], last_frame: str | None) -> tuple[int, Any, str | None, str | None]:
+            prompt_text = vp.get("prompt", "") or vp.get("segment_prompt", "")
+            if isinstance(prompt_text, dict):
+                prompt_text = prompt_text.get("prompt", "")
+            if not prompt_text:
+                prompt_text = f"{product_name} in natural usage scene"
+            raw_duration = vp.get("duration_seconds", 5)
+            try:
+                duration = int(float(raw_duration))
+            except (TypeError, ValueError):
+                duration = 5
+            duration = max(4, min(duration, 15))
+            params: dict[str, Any] = {
                     "prompt": prompt_text,
                     "duration": duration,
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
                     "model": s4_model,
-                })
-                return i, res
+            }
+            if last_frame:
+                params["continuity_frame_path"] = last_frame
 
-        tasks = [_gen(i, vp) for i, vp in enumerate(video_prompts)]
-        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+            res = await reg.execute("seedance-video-generate-skill", params)
 
-        for raw in raw_results:
-            if isinstance(raw, Exception):
-                errors.append(f"clip_failed_with_exception: {raw}")
+            next_frame: str | None = None
+            if res.success and res.data:
+                path = res.data.get("video_path", "")
+                if path:
+                    next_frame = self._extract_clip_last_frame(
+                        video_path=path,
+                        output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
+                    )
+            return i, res, next_frame, last_frame
 
-        for i, skill_result in sorted(
-            [r for r in raw_results if isinstance(r, tuple)],
-            key=lambda x: x[0],
-        ):
+        last_frame_path: str | None = None
+        for i, vp in enumerate(video_prompts):
+            try:
+                i, skill_result, next_frame, continuity_frame_used = await _gen(i, vp, last_frame_path)
+            except Exception as exc:
+                errors.append(f"clip_failed_with_exception: {exc}")
+                last_frame_path = None
+                continue
+
             if skill_result.success and skill_result.data:
                 p = skill_result.data.get("video_path", "")
                 if p:
@@ -421,9 +464,12 @@ class S4LiveShootPipeline:
                         "duration": skill_result.data.get("duration_seconds", 0),
                         "is_stub": skill_result.data.get("is_stub", False),
                         "verification": skill_result.data.get("verification", {}),
+                        "continuity_frame_used": continuity_frame_used,
                     })
+                    last_frame_path = next_frame
             else:
                 errors.append(f"clip_{i}_failed: {skill_result.error}")
+                last_frame_path = None
 
         return {
             "clip_paths": clip_paths,

@@ -189,3 +189,54 @@ async def test_s4_seedance_clips_use_prompt_durations():
 
     assert captured_durations == [4, 7, 9]
     assert result["total_duration"] == 20
+
+
+@pytest.mark.asyncio
+async def test_s4_seedance_clips_chain_last_frame_continuity(monkeypatch):
+    captured_continuity_frames: list[str | None] = []
+    extracted_from: list[str] = []
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            assert name == "seedance-video-generate-skill"
+            captured_continuity_frames.append(params.get("continuity_frame_path"))
+            index = len(captured_continuity_frames)
+            return SkillResult(
+                success=True,
+                data={
+                    "video_path": f"/tmp/s4-continuity-clip-{index}.mp4",
+                    "duration_seconds": params["duration"],
+                    "verification": {"all_ok": True},
+                },
+            )
+
+    def _fake_extract(video_path: str, output_dir: str) -> str:
+        extracted_from.append(video_path)
+        return f"/tmp/last-frame-{len(extracted_from)}.jpg"
+
+    pipeline = S4LiveShootPipeline()
+    monkeypatch.setattr(pipeline, "_extract_clip_last_frame", _fake_extract)
+
+    result = await pipeline._step_seedance_clips(
+        reg=FakeRegistry(),
+        video_prompts=[
+            {"prompt": "first scene", "duration_seconds": 4},
+            {"prompt": "second scene", "duration_seconds": 7},
+            {"prompt": "third scene", "duration_seconds": 9},
+        ],
+        product_name="X1 Pump",
+        label="s4-continuity-test",
+        errors=[],
+    )
+
+    assert captured_continuity_frames == [
+        None,
+        "/tmp/last-frame-1.jpg",
+        "/tmp/last-frame-2.jpg",
+    ]
+    assert extracted_from == [
+        "/tmp/s4-continuity-clip-1.mp4",
+        "/tmp/s4-continuity-clip-2.mp4",
+        "/tmp/s4-continuity-clip-3.mp4",
+    ]
+    assert result["clip_details"][1]["continuity_frame_used"] == "/tmp/last-frame-1.jpg"
