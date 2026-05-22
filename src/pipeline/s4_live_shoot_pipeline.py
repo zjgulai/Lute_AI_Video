@@ -386,9 +386,15 @@ class S4LiveShootPipeline:
                     prompt_text = prompt_text.get("prompt", "")
                 if not prompt_text:
                     prompt_text = f"{product_name} in natural usage scene"
+                raw_duration = vp.get("duration_seconds", 5)
+                try:
+                    duration = int(float(raw_duration))
+                except (TypeError, ValueError):
+                    duration = 5
+                duration = max(4, min(duration, 15))
                 res = await reg.execute("seedance-video-generate-skill", {
                     "prompt": prompt_text,
-                    "duration": 5,
+                    "duration": duration,
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
                     "model": s4_model,
@@ -412,6 +418,7 @@ class S4LiveShootPipeline:
                     clip_paths.append(p)
                     clip_details.append({
                         "path": p,
+                        "duration": skill_result.data.get("duration_seconds", 0),
                         "is_stub": skill_result.data.get("is_stub", False),
                         "verification": skill_result.data.get("verification", {}),
                     })

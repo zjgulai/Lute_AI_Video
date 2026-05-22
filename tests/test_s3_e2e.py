@@ -244,6 +244,46 @@ class TestS3Pipeline:
         assert result == {"overall_status": "pass"}
 
     @pytest.mark.asyncio
+    async def test_seedance_clips_use_prompt_durations(self, monkeypatch):
+        pipeline = S3InfluencerRemixPipeline()
+        pipeline._video_duration = 30
+        captured_durations: list[int] = []
+
+        def _skip_last_frame(video_path: str, output_dir: str):
+            return None
+
+        class FakeRegistry:
+            async def execute(self, name, params):
+                assert name == "seedance-video-generate-skill"
+                captured_durations.append(params["duration"])
+                index = len(captured_durations)
+                return SkillResult(
+                    success=True,
+                    data={
+                        "video_path": f"/tmp/s3-clip-{index}.mp4",
+                        "duration_seconds": params["duration"],
+                        "verification": {"all_ok": True},
+                    },
+                )
+
+        pipeline._registry = FakeRegistry()
+        monkeypatch.setattr(pipeline, "_extract_clip_last_frame", _skip_last_frame)
+
+        result = await pipeline._step_seedance_clips(
+            video_prompts=[
+                {"prompt": "hook scene", "duration_seconds": 4},
+                {"prompt": "body scene", "duration_seconds": 6},
+                {"prompt": "cta scene", "duration_seconds": 8},
+            ],
+            product={"name": "X1 Pump"},
+            label="s3-duration-test",
+            errors=[],
+        )
+
+        assert captured_durations == [4, 6, 8]
+        assert result["total_duration"] == 18
+
+    @pytest.mark.asyncio
     async def test_pipeline_steps_ordered(self):
         """Pipeline should run steps in order and stop on first failure."""
         pipeline = S3InfluencerRemixPipeline()

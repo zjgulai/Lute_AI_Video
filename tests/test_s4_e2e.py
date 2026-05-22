@@ -155,3 +155,37 @@ async def test_s4_audit_reads_persisted_assemble_list_path(monkeypatch):
 
     assert captured["video_path"] == "/tmp/s4-final.mp4"
     assert result == {"overall_status": "pass"}
+
+
+@pytest.mark.asyncio
+async def test_s4_seedance_clips_use_prompt_durations():
+    captured_durations: list[int] = []
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            assert name == "seedance-video-generate-skill"
+            captured_durations.append(params["duration"])
+            index = len(captured_durations)
+            return SkillResult(
+                success=True,
+                data={
+                    "video_path": f"/tmp/s4-clip-{index}.mp4",
+                    "duration_seconds": params["duration"],
+                    "verification": {"all_ok": True},
+                },
+            )
+
+    result = await S4LiveShootPipeline()._step_seedance_clips(
+        reg=FakeRegistry(),
+        video_prompts=[
+            {"prompt": "first scene", "duration_seconds": 4},
+            {"prompt": "second scene", "duration_seconds": 7},
+            {"prompt": "third scene", "duration_seconds": 9},
+        ],
+        product_name="X1 Pump",
+        label="s4-duration-test",
+        errors=[],
+    )
+
+    assert captured_durations == [4, 7, 9]
+    assert result["total_duration"] == 20

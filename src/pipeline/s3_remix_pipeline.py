@@ -699,14 +699,20 @@ class S3InfluencerRemixPipeline:
                     kf_image_paths.append(path)
 
         capped = video_prompts[:MAX_CLIPS_PER_DEMO]
-        VIDEO_MAX_DURATION = 15
-        clip_duration = min(VIDEO_MAX_DURATION, max(4, self._video_duration // max(len(capped), 1)))
+        video_max_duration = 15
+        fallback_clip_duration = min(video_max_duration, max(4, self._video_duration // max(len(capped), 1)))
 
         _sem = asyncio.Semaphore(4)
 
         async def _gen_single(i: int, vp: dict[str, Any], last_frame: str | None) -> tuple[int, Any, str | None]:
             async with _sem:
                 prompt = vp.get("segment_prompt", "") or vp.get("prompt", "") or f"{product_name} in natural usage scene, authentic real-world context"
+                raw_duration = vp.get("duration_seconds", fallback_clip_duration)
+                try:
+                    clip_duration = int(float(raw_duration))
+                except (TypeError, ValueError):
+                    clip_duration = fallback_clip_duration
+                clip_duration = max(4, min(clip_duration, video_max_duration))
                 gen_params: dict[str, Any] = {
                     "prompt": prompt,
                     "duration": clip_duration,
@@ -747,7 +753,7 @@ class S3InfluencerRemixPipeline:
                     clip_paths.append(path)
                     clip_details.append({
                         "path": path,
-                        "duration": res.data.get("duration_seconds", clip_duration),
+                        "duration": res.data.get("duration_seconds", fallback_clip_duration),
                         "is_stub": res.data.get("is_stub", False),
                         "verification": res.data.get("verification", {}),
                         "prompt_used": res.data.get("prompt_used", ""),
@@ -760,7 +766,7 @@ class S3InfluencerRemixPipeline:
                 errors.append(f"clip_{i}_failed: {res.error}")
                 last_frame_path = None
 
-        total_duration = sum(d.get("duration", clip_duration) for d in clip_details)
+        total_duration = sum(d.get("duration", fallback_clip_duration) for d in clip_details)
         logger.info("s3: step 8 done", produced=len(clip_paths), capped_to=MAX_CLIPS_PER_DEMO)
         return {"clip_paths": clip_paths, "clip_details": clip_details, "total_duration": total_duration}
 
