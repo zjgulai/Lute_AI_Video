@@ -37,6 +37,17 @@ def test_s1_config_defaults_for_continuity() -> None:
     assert runner_config["clip_group_size"] == 3
 
 
+def test_s1_pipeline_run_accepts_router_continuity_kwargs() -> None:
+    import inspect
+
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+
+    params = inspect.signature(S1ProductDirectPipeline.run).parameters
+
+    assert "continuity_generation_mode" in params
+    assert "transition_style" in params
+
+
 def test_s1_start_request_accepts_frontend_continuity_options() -> None:
     from src.routers._state import S1StartRequest
 
@@ -56,6 +67,128 @@ def test_s1_start_request_accepts_frontend_continuity_options() -> None:
     assert request.clip_group_size == 4
     assert request.transition_style == "soft_crossfade"
     assert request.enable_media_synthesis is True
+
+
+def test_script_writer_fallback_respects_requested_video_duration() -> None:
+    from src.skills.script_writer import ScriptWriterSkill
+
+    script = ScriptWriterSkill()._gen_fallback(
+        {
+            "id": "BRIEF-001",
+            "product_name": "Momcozy Nutri Bottle Warmer",
+            "usp_priority": ["fast warming", "night feeding"],
+        },
+        "en",
+        video_duration=15,
+    )
+
+    assert script["total_duration"] == 15
+    assert script["segments"][-1]["end_time"] == 15
+    assert sum(
+        segment["end_time"] - segment["start_time"]
+        for segment in script["segments"]
+    ) == 15
+
+
+@pytest.mark.asyncio
+async def test_s1_run_step_scripts_forwards_video_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    async def fake_execute(
+        self: SkillRegistry,
+        skill_name: str,
+        params: dict,
+    ) -> SkillResult:
+        assert skill_name == "script-writer-skill"
+        assert params["video_duration"] == 15
+        return SkillResult(success=True, data={"scripts": []})
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+
+    state = {
+        "config": {
+            "brand_guidelines": {},
+            "target_languages": ["en"],
+            "video_duration": 15,
+        },
+        "errors": [],
+        "media_synthesis_errors": [],
+        "steps": {"strategy": {"output": [{"id": "BRIEF-001"}]}},
+    }
+
+    assert await S1ProductDirectPipeline().run_step("scripts", state) == []
+
+
+@pytest.mark.asyncio
+async def test_s1_quality_gate_uses_configured_video_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.skills.base import SkillResult
+    from src.skills.registry import SkillRegistry
+
+    async def fake_execute(
+        self: SkillRegistry,
+        skill_name: str,
+        params: dict,
+    ) -> SkillResult:
+        assert skill_name == "media-quality-audit-skill"
+        assert params["expected_duration_seconds"] == 15
+        return SkillResult(
+            success=True,
+            data={"overall_status": "PASS", "criteria": []},
+        )
+
+    monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
+
+    report = await S1ProductDirectPipeline()._step_quality_gate(
+        reg=SkillRegistry(),
+        video_path="",
+        clip_paths=["/tmp/clip.mp4"],
+        storyboards=[],
+        product_name="Momcozy Nutri Bottle Warmer",
+        errors=[],
+        video_duration=15,
+    )
+
+    assert report["overall_status"] == "PASS"
+
+
+def test_s1_assemble_output_paths_support_persisted_list() -> None:
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+
+    video_path, render_json_path = S1ProductDirectPipeline._extract_assemble_paths(
+        ["/tmp/final.mp4", "/tmp/input.json"],
+    )
+
+    assert video_path == "/tmp/final.mp4"
+    assert render_json_path == "/tmp/input.json"
+
+
+@pytest.mark.asyncio
+async def test_continuity_grid_scales_clip_group_durations_to_requested_duration() -> None:
+    import src.skills.continuity_storyboard_grid  # noqa: F401
+    from src.skills.registry import SkillRegistry
+
+    result = await SkillRegistry().execute(
+        "continuity-storyboard-grid",
+        {
+            "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
+            "storyboard_grid": 12,
+            "clip_group_size": 3,
+            "transition_style": "match_cut",
+            "video_duration": 15,
+        },
+    )
+
+    assert result.success is True
+    durations = [group["duration"] for group in result.data["clip_groups"]]
+    assert durations == [4, 4, 4, 4]
+    assert sum(durations) == 16
 
 
 def test_remotion_payload_contains_transitions() -> None:
@@ -159,6 +292,7 @@ async def test_seedance_prompt_uses_continuity_clip_groups() -> None:
         "action cut from indicator to bottle removal"
     )
     assert "same bottle warmer on the same countertop" in prompts[0]["segment_prompt"]
+    assert "Do not change the product shape" in prompts[0]["segment_prompt"]
     assert all(prompt["has_forbidden_words"] is False for prompt in prompts)
     assert all(prompt["forbidden_hits"] == [] for prompt in prompts)
 
@@ -641,6 +775,61 @@ async def test_scenario_s1_dict_entry_preserves_explicit_continuity_false(
     assert config["continuity_mode"] is False
     assert config["storyboard_grid"] == 12
     assert config["clip_group_size"] == 3
+
+
+@pytest.mark.asyncio
+async def test_scenario_s1_response_extracts_persisted_assemble_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.routers import scenario
+    from src.tools import translate
+
+    async def fake_translate_catalog(product_catalog: dict) -> dict:
+        return product_catalog
+
+    class FakeStepRunner:
+        def __init__(self, state_manager: object) -> None:
+            self.state_manager = state_manager
+
+        async def init_state(
+            self,
+            config: dict,
+            mode: str = "auto",
+            label: str | None = None,
+            scenario: str = "s1",
+        ) -> str:
+            return "s1_response_contract_test"
+
+        async def resume(self, label: str) -> dict:
+            return {
+                "label": label,
+                "scenario": "s1",
+                "steps": {
+                    "seedance_clips": {
+                        "output": {
+                            "clip_paths": ["/tmp/clip-1.mp4"],
+                            "clip_details": [{"is_stub": False}],
+                        },
+                    },
+                    "assemble_final": {
+                        "output": ["/tmp/final.mp4", "/tmp/final_input.json"],
+                    },
+                },
+                "errors": [],
+                "media_synthesis_errors": [],
+            }
+
+    monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
+    monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
+    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
+
+    result = await scenario.run_s1_product_direct(
+        {"product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"}}
+    )
+
+    assert result["clip_paths"] == ["/tmp/clip-1.mp4"]
+    assert result["final_video_path"] == "/tmp/final.mp4"
+    assert result["render_json_path"] == "/tmp/final_input.json"
 
 
 @pytest.mark.asyncio

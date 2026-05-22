@@ -10,6 +10,7 @@ Every public method has asyncio.timeout() protection (120s default).
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,14 @@ logger = structlog.get_logger()
 
 GPT_IMAGE_TIMEOUT_SECONDS = 120.0
 MAX_RETRIES = 3
+
+
+def _poyo_image_max_polls() -> int:
+    try:
+        value = int(os.getenv("POYO_IMAGE_MAX_POLLS", "72"))
+    except ValueError:
+        value = 72
+    return max(40, value)
 
 
 class GPTImageTimeoutError(asyncio.TimeoutError):
@@ -138,7 +147,7 @@ class GPTImageClient:
                 input_payload=input_payload,
                 output_path=filepath,
                 poll_interval=5.0,
-                max_polls=40,  # 200s max — image gen can take 2-3min
+                max_polls=_poyo_image_max_polls(),
             )
             logger.info("gpt_image: poyo generated", image_id=image_id, file=filename)
             return {

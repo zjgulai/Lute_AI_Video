@@ -296,6 +296,7 @@ class SeedancePromptSkill(SkillCallable):
                 f"{base_prompt} Maintain continuity: {product_anchor}; "
                 f"same location: {location}; lighting: {lighting}. "
                 "Keep the same product, scene, and light across the whole clip. "
+                "Do not change the product shape, control panel, color, scale, or countertop position. "
                 "Use one continuous action chain inside this clip. "
                 "Avoid infant face close-ups, medical claims, and distress-heavy imagery."
             )

@@ -30,10 +30,12 @@ class ContinuityStoryboardGridSkill(SkillCallable):
 
         product_name = _extract_product_name(params.get("product_catalog"))
         transition_style = str(params.get("transition_style") or "match_cut")
+        video_duration = _coerce_video_duration(params.get("video_duration"))
         micro_shots = _build_bottle_warmer_micro_shots()
         clip_groups = _build_clip_groups(
             product_name=product_name,
             transition_style=transition_style,
+            video_duration=video_duration,
         )
 
         return SkillResult(
@@ -105,6 +107,7 @@ class ContinuityStoryboardGridSkill(SkillCallable):
 
     def fallback(self, params: dict[str, Any]) -> SkillResult:
         product_name = _extract_product_name(params.get("product_catalog"))
+        video_duration = _coerce_video_duration(params.get("video_duration"))
         return SkillResult(
             success=True,
             data={
@@ -124,6 +127,7 @@ class ContinuityStoryboardGridSkill(SkillCallable):
                 "clip_groups": _build_clip_groups(
                     product_name=product_name,
                     transition_style=str(params.get("transition_style") or "match_cut"),
+                    video_duration=video_duration,
                 ),
             },
             metadata={
@@ -162,6 +166,14 @@ def _extract_product_name(product_catalog: Any) -> str:
                 return product_name
 
     return "Product"
+
+
+def _coerce_video_duration(value: Any) -> int:
+    try:
+        duration = int(value)
+    except (TypeError, ValueError):
+        return 30
+    return duration if duration in {15, 30, 45, 60, 90} else 30
 
 
 def _missing_micro_shot_fields(shot: Any) -> bool:
@@ -336,15 +348,20 @@ def _build_bottle_warmer_micro_shots() -> list[dict[str, Any]]:
     ]
 
 
-def _build_clip_groups(product_name: str, transition_style: str) -> list[dict[str, Any]]:
+def _build_clip_groups(
+    product_name: str,
+    transition_style: str,
+    video_duration: int = 30,
+) -> list[dict[str, Any]]:
     first_transition_type = (
         "match_cut" if transition_style == "match_cut" else transition_style
     )
+    durations = _clip_group_durations(video_duration)
     return [
         {
             "clip_index": 1,
             "shot_indices": [1, 2, 3],
-            "duration": 4,
+            "duration": durations[0],
             "purpose": "pain setup",
             "seedance_prompt": (
                 f"{product_name} night-feed setup: a continuous 2 AM kitchen "
@@ -360,7 +377,7 @@ def _build_clip_groups(product_name: str, transition_style: str) -> list[dict[st
         {
             "clip_index": 2,
             "shot_indices": [4, 5, 6],
-            "duration": 6,
+            "duration": durations[1],
             "purpose": "product action",
             "seedance_prompt": (
                 f"{product_name} product action: parent opens the warmer, places "
@@ -374,7 +391,7 @@ def _build_clip_groups(product_name: str, transition_style: str) -> list[dict[st
         {
             "clip_index": 3,
             "shot_indices": [7, 8, 9],
-            "duration": 6,
+            "duration": durations[2],
             "purpose": "result proof",
             "seedance_prompt": (
                 f"{product_name} result proof: parent waits calmly, removes the "
@@ -389,7 +406,7 @@ def _build_clip_groups(product_name: str, transition_style: str) -> list[dict[st
         {
             "clip_index": 4,
             "shot_indices": [10, 11, 12],
-            "duration": 5,
+            "duration": durations[3],
             "purpose": "emotional close and CTA",
             "seedance_prompt": (
                 f"{product_name} closing CTA: parent pauses near a warm nursery "
@@ -399,6 +416,25 @@ def _build_clip_groups(product_name: str, transition_style: str) -> list[dict[st
             "transition_type": "soft_crossfade",
         },
     ]
+
+
+def _clip_group_durations(video_duration: int) -> list[int]:
+    base = [4, 6, 6, 5]
+    if video_duration >= sum(base):
+        return base
+    clip_count = len(base)
+    min_duration = 4
+    if video_duration <= min_duration * clip_count:
+        return [min_duration] * clip_count
+
+    remaining = video_duration - min_duration * clip_count
+    durations = [min_duration] * clip_count
+    index = 0
+    while remaining > 0:
+        durations[index % clip_count] += 1
+        remaining -= 1
+        index += 1
+    return durations
 
 
 SkillRegistry.register(ContinuityStoryboardGridSkill())

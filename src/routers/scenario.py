@@ -157,12 +157,11 @@ async def run_s1_product_direct(body: dict[str, Any]):
         return final_state
 
     # Convert back to the result dict format expected by frontend
-    steps = final_state.get("steps", {})
-    seedance_raw = _get_step_output(steps, "seedance_clips") or {}
+    seedance_raw = _get_step_output(final_state, "seedance_clips") or {}
     seedance_output = seedance_raw if isinstance(seedance_raw, dict) else {}
     clip_paths = seedance_output.get("clip_paths", []) if isinstance(seedance_raw, dict) else (seedance_raw if isinstance(seedance_raw, list) else [])
 
-    tts_raw = _get_step_output(steps, "tts_audio") or {}
+    tts_raw = _get_step_output(final_state, "tts_audio") or {}
     if isinstance(tts_raw, dict):
         audio_paths = tts_raw.get("audio_paths", [])
         lyrics_paths = tts_raw.get("lyrics_paths", [])
@@ -177,23 +176,23 @@ async def run_s1_product_direct(body: dict[str, Any]):
         "video_duration": config["video_duration"],
         "errors": final_state.get("errors", []),
         "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
-        "briefs": _get_step_output(steps, "strategy") or [],
-        "scripts": _get_step_output(steps, "scripts") or [],
-        "storyboards": _get_step_output(steps, "storyboards") or [],
-        "keyframe_images": _get_step_output(steps, "keyframe_images") or [],
-        "video_prompts": _get_step_output(steps, "video_prompts") or [],
-        "thumbnail_sets": _get_step_output(steps, "thumbnail_prompts") or [],
+        "briefs": _get_step_output(final_state, "strategy") or [],
+        "scripts": _get_step_output(final_state, "scripts") or [],
+        "storyboards": _get_step_output(final_state, "storyboards") or [],
+        "keyframe_images": _get_step_output(final_state, "keyframe_images") or [],
+        "video_prompts": _get_step_output(final_state, "video_prompts") or [],
+        "thumbnail_sets": _get_step_output(final_state, "thumbnail_prompts") or [],
         "seedance_output": seedance_output,
         "clip_paths": clip_paths,
         "audio_paths": audio_paths,
         "lyrics_paths": lyrics_paths,
-        "thumbnail_image_paths": _get_step_output(steps, "thumbnail_images") or [],
+        "thumbnail_image_paths": _get_step_output(final_state, "thumbnail_images") or [],
         "steps_completed": len(_SCENARIO_STEP_ORDER.get("s1", [])),
     }
 
     # Extract assemble_final output (may be tuple or dict)
-    assemble = _get_step_output(steps, "assemble_final")
-    if isinstance(assemble, tuple):
+    assemble = _get_step_output(final_state, "assemble_final")
+    if isinstance(assemble, (list, tuple)):
         result["final_video_path"] = assemble[0] if len(assemble) > 0 else ""
         result["render_json_path"] = assemble[1] if len(assemble) > 1 else ""
     elif isinstance(assemble, dict):
@@ -203,7 +202,7 @@ async def run_s1_product_direct(body: dict[str, Any]):
         result["final_video_path"] = ""
         result["render_json_path"] = ""
 
-    result["audit_report"] = _get_step_output(steps, "audit") or {}
+    result["audit_report"] = _get_step_output(final_state, "audit") or {}
     return result
 
 

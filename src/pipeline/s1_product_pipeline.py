@@ -85,8 +85,10 @@ class S1ProductDirectPipeline:
         output_label: str | None = None,
         video_duration: int = 30,
         continuity_mode: bool = True,
+        continuity_generation_mode: str = "standard",
         storyboard_grid: int | str = 12,
         clip_group_size: int = 3,
+        transition_style: str = "match_cut",
     ) -> dict[str, Any]:
         """Run the full S1 pipeline end-to-end.
 
@@ -121,9 +123,10 @@ class S1ProductDirectPipeline:
             "brand_name": brand_name,
             "target_language": target_language,
             "continuity_mode": continuity_mode,
+            "continuity_generation_mode": continuity_generation_mode,
             "storyboard_grid": storyboard_grid,
             "clip_group_size": clip_group_size,
-            "transition_style": "match_cut",
+            "transition_style": transition_style,
         }
 
         state_manager = PipelineStateManager()
@@ -169,15 +172,9 @@ class S1ProductDirectPipeline:
         result["thumbnail_image_paths"] = self._get_step_output(steps, "thumbnail_images") or []
 
         assemble_output = self._get_step_output(steps, "assemble_final") or {}
-        if isinstance(assemble_output, tuple):
-            result["final_video_path"] = assemble_output[0] if len(assemble_output) > 0 else ""
-            result["render_json_path"] = assemble_output[1] if len(assemble_output) > 1 else ""
-        elif isinstance(assemble_output, dict):
-            result["final_video_path"] = assemble_output.get("video_path", "")
-            result["render_json_path"] = assemble_output.get("render_json_path", "")
-        else:
-            result["final_video_path"] = ""
-            result["render_json_path"] = ""
+        final_video_path, render_json_path = self._extract_assemble_paths(assemble_output)
+        result["final_video_path"] = final_video_path
+        result["render_json_path"] = render_json_path
 
         result["audit_report"] = self._get_step_output(steps, "audit") or {}
         result["steps_completed"] = 12
@@ -229,6 +226,19 @@ class S1ProductDirectPipeline:
         if step_data.get("edited") and step_data.get("edited_output") is not None:
             return step_data["edited_output"]
         return step_data.get("output")
+
+    @staticmethod
+    def _extract_assemble_paths(output: Any) -> tuple[str, str]:
+        if isinstance(output, dict):
+            return (
+                str(output.get("video_path") or ""),
+                str(output.get("render_json_path") or ""),
+            )
+        if isinstance(output, (list, tuple)):
+            video_path = str(output[0] or "") if len(output) > 0 else ""
+            render_json_path = str(output[1] or "") if len(output) > 1 else ""
+            return video_path, render_json_path
+        return "", ""
 
     @staticmethod
     def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict[str, Any]] | None = None) -> bool:
@@ -373,8 +383,10 @@ class S1ProductDirectPipeline:
             return await self._step_scripts(
                 reg=reg,
                 briefs=briefs,
+                product_name=config.get("product_name", "Product"),
                 brand_guidelines=config.get("brand_guidelines"),
                 languages=config["target_languages"],
+                video_duration=config.get("video_duration", 30),
                 errors=errors,
             )
 
@@ -409,6 +421,7 @@ class S1ProductDirectPipeline:
                 storyboard_grid=continuity_config["storyboard_grid"],
                 clip_group_size=continuity_config["clip_group_size"],
                 transition_style=continuity_config["transition_style"],
+                video_duration=config.get("video_duration", 30),
             )
 
         if step_name == "keyframe_images":
@@ -509,10 +522,7 @@ class S1ProductDirectPipeline:
         if step_name == "audit":
             final_video = ""
             assemble_output = self._get_step_output(steps, "assemble_final")
-            if isinstance(assemble_output, tuple) and len(assemble_output) > 0:
-                final_video = assemble_output[0]
-            elif isinstance(assemble_output, dict):
-                final_video = assemble_output.get("video_path", "")
+            final_video, _ = self._extract_assemble_paths(assemble_output)
 
             # tts_audio 返回 {"audio_paths": [...], "lyrics_paths": [...]};
             # 直接传 dict 给 audit 会被 isinstance 检查拒掉 → audio_coverage 误报 FAIL
@@ -543,6 +553,7 @@ class S1ProductDirectPipeline:
                 scripts=scripts,
                 thumbnail_sets=thumbnails,
                 language=config.get("target_language", "en"),
+                expected_duration_seconds=float(config.get("video_duration", 30)),
                 errors=errors,
             )
             return self._build_continuity_audit_summary(
@@ -567,6 +578,7 @@ class S1ProductDirectPipeline:
         storyboard_grid: int,
         clip_group_size: int,
         transition_style: str,
+        video_duration: int,
     ) -> dict[str, Any]:
         if not continuity_mode:
             product_name = product_catalog.get("product_name") or product_catalog.get("name") or "Product"
@@ -599,6 +611,7 @@ class S1ProductDirectPipeline:
                 "clip_group_size": clip_group_size,
                 "continuity_mode": continuity_mode,
                 "transition_style": transition_style,
+                "video_duration": video_duration,
             },
         )
         if res.success and isinstance(res.data, dict):
@@ -671,14 +684,25 @@ class S1ProductDirectPipeline:
         self,
         reg: SkillRegistry,
         briefs: list[dict[str, Any]],
+        product_name: str,
         brand_guidelines: dict[str, Any] | None,
         languages: list[str],
+        video_duration: int,
         errors: list[str],
     ) -> list[dict[str, Any]]:
+        enriched_briefs = []
+        for brief in briefs:
+            if isinstance(brief, dict):
+                enriched = dict(brief)
+                enriched.setdefault("product_name", product_name)
+                enriched_briefs.append(enriched)
+            else:
+                enriched_briefs.append(brief)
         res = await reg.execute("script-writer-skill", {
-            "briefs": briefs,
+            "briefs": enriched_briefs,
             "brand_guidelines": brand_guidelines or {},
             "target_languages": languages,
+            "video_duration": video_duration,
         })
         if res.success and res.data:
             return res.data.get("scripts", [])
@@ -783,6 +807,7 @@ class S1ProductDirectPipeline:
         storyboards: list[dict[str, Any]],
         product_name: str,
         errors: list[str],
+        video_duration: int,
     ) -> dict[str, Any]:
         """Run quality gate on generated clips AFTER seedance step.
 
@@ -798,7 +823,7 @@ class S1ProductDirectPipeline:
             "clip_paths": clip_paths,
             "clip_video_paths": clip_video_paths,
             "expected_product_name": product_name,
-            "expected_duration_seconds": 30.0,
+            "expected_duration_seconds": float(video_duration),
             "expected_language": "en",
             "script_text": "",
             "thumbnail_prompts": [],
@@ -1171,6 +1196,7 @@ class S1ProductDirectPipeline:
             storyboards=keyframe_images or [],
             product_name=product_name,
             errors=errors,
+            video_duration=video_duration,
         )
         if quality_report:
             status = quality_report.get("overall_status", "N/A")
@@ -1360,6 +1386,7 @@ class S1ProductDirectPipeline:
         scripts: list[dict[str, Any]],
         thumbnail_sets: list[dict[str, Any]],
         language: str,
+        expected_duration_seconds: float,
         errors: list[str],
     ) -> dict[str, Any]:
         # Compose a flat script_text for content checks
@@ -1375,7 +1402,7 @@ class S1ProductDirectPipeline:
                 if isinstance(v, dict):
                     flat_thumb_prompts.append(v)
 
-        expected_duration = self._compute_expected_duration(scripts)
+        expected_duration = expected_duration_seconds or self._compute_expected_duration(scripts)
 
         res = await reg.execute("media-quality-audit-skill", {
             "video_path": video_path,
