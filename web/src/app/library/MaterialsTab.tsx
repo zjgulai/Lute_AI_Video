@@ -33,10 +33,19 @@ interface MaterialAsset {
 
 type TypeFilter = "all" | "video" | "image" | "audio";
 const TYPE_FILTER_IDS: TypeFilter[] = ["all", "video", "image", "audio"];
+const AI_GENERATED_CATEGORIES = new Set([
+  "audio",
+  "character_identity",
+  "gpt_images",
+  "keyframes",
+  "seedance",
+  "thumbnails",
+]);
 
 function isVideoMime(m: string) { return m.startsWith("video/"); }
 function isImageMime(m: string) { return m.startsWith("image/"); }
 function isAudioMime(m: string) { return m.startsWith("audio/"); }
+function isAiGeneratedCategory(category: string) { return AI_GENERATED_CATEGORIES.has(category); }
 
 function formatSize(bytes: number): string {
   if (!bytes) return "";
@@ -60,7 +69,7 @@ export default function MaterialsTab() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 24;
 
-  const fetchAssets = useCallback(async () => {
+  const fetchAssets = useCallback(async (shouldCommit: () => boolean = () => true) => {
     setLoading(true);
     setError(null);
 
@@ -79,11 +88,13 @@ export default function MaterialsTab() {
           producedAt: ((a.metadata as Record<string, unknown> | undefined)?.uploaded_at as string) || new Date().toISOString(),
           isAiGenerated: ((a.tags as string[]) || []).some((tg: string) => tg.includes("ai-") || tg.includes("seedance")),
         }));
-        setAssets(mapped.filter((m) => !isVideoMime(m.mimeType) || m.sizeBytes === 0 || m.tags.every((t) => t !== "renders")));
+        if (shouldCommit()) {
+          setAssets(mapped.filter((m) => !isVideoMime(m.mimeType) || m.sizeBytes === 0 || m.tags.every((t) => t !== "renders")));
+        }
       } catch (e: unknown) {
-        setError(errorMessage(e, t("common.fetchFailed")));
+        if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
       } finally {
-        setLoading(false);
+        if (shouldCommit()) setLoading(false);
       }
       return;
     }
@@ -106,9 +117,9 @@ export default function MaterialsTab() {
             thumbnailPath: f.thumbnail_path as string | null,
             tags: [f.category as string],
             producedAt: f.produced_at as string,
-            isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category as string),
+            isAiGenerated: isAiGeneratedCategory(f.category as string),
           }));
-        setAssets(mapped);
+        if (shouldCommit()) setAssets(mapped);
         return;
       }
       const data = await res.json();
@@ -122,18 +133,22 @@ export default function MaterialsTab() {
         thumbnailPath: f.thumbnail_path as string | null,
         tags: [f.category as string],
         producedAt: f.produced_at as string,
-        isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category as string),
+        isAiGenerated: isAiGeneratedCategory(f.category as string),
       }));
-      setAssets(mapped);
+      if (shouldCommit()) setAssets(mapped);
     } catch (e: unknown) {
-      setError(errorMessage(e, t("common.fetchFailed")));
+      if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
     } finally {
-      setLoading(false);
+      if (shouldCommit()) setLoading(false);
     }
   }, [t]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchAssets(); }, [fetchAssets]);
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchAssets(() => !cancelled);
+    return () => { cancelled = true; };
+  }, [fetchAssets]);
 
   const filteredAssets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

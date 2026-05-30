@@ -37,17 +37,17 @@ export default function InfluencersTab() {
   const [formNotes, setFormNotes] = useState("");
   const [formIsActive, setFormIsActive] = useState(true);
 
-  const fetchInfluencers = useCallback(async () => {
+  const fetchInfluencers = useCallback(async (shouldCommit: () => boolean = () => true) => {
     setLoading(true);
     setError(null);
     if (isDemoMode()) {
       try {
         const { DEMO_INFLUENCERS } = await import("@/demo-data");
-        setInfluencers(DEMO_INFLUENCERS || []);
+        if (shouldCommit()) setInfluencers(DEMO_INFLUENCERS || []);
       } catch (e: unknown) {
-        setError(errorMessage(e, t("common.fetchFailed")));
+        if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
       } finally {
-        setLoading(false);
+        if (shouldCommit()) setLoading(false);
       }
       return;
     }
@@ -55,16 +55,20 @@ export default function InfluencersTab() {
       const res = await apiFetch("/api/assets/influencers");
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
-      setInfluencers(data.influencers || []);
+      if (shouldCommit()) setInfluencers(data.influencers || []);
     } catch (e: unknown) {
-      setError(errorMessage(e, t("common.fetchFailed")));
+      if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
     } finally {
-      setLoading(false);
+      if (shouldCommit()) setLoading(false);
     }
   }, [t]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchInfluencers(); }, [fetchInfluencers]);
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchInfluencers(() => !cancelled);
+    return () => { cancelled = true; };
+  }, [fetchInfluencers]);
 
   const openCreateForm = () => {
     setEditingId(null);

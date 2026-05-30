@@ -65,6 +65,10 @@ function prettifySlug(slug: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function productGroupKey(group: Pick<ProductGroup, "brand" | "slug">): string {
+  return `${group.brand}/${group.slug}`;
+}
+
 function groupByProduct(files: PortfolioFile[]): ProductGroup[] {
   const map = new Map<string, ProductGroup>();
   for (const f of files) {
@@ -110,7 +114,7 @@ export default function BrandKitTab() {
   const [files, setFiles] = useState<PortfolioFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
+  const [expandedProductKey, setExpandedProductKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,8 +141,8 @@ export default function BrandKitTab() {
   const productGroups = useMemo(() => groupByProduct(files), [files]);
   const totalImages = files.length;
 
-  const expandedGroup = expandedSlug
-    ? productGroups.find((g) => g.slug === expandedSlug)
+  const expandedGroup = expandedProductKey
+    ? productGroups.find((g) => productGroupKey(g) === expandedProductKey)
     : null;
 
   return (
@@ -257,7 +261,7 @@ export default function BrandKitTab() {
                 data-kind="brand_kit"
                 data-brand={g.brand}
                 data-slug={g.slug}
-                onClick={() => setExpandedSlug(g.slug)}
+                onClick={() => setExpandedProductKey(productGroupKey(g))}
                 className="apple-card overflow-hidden hover:shadow-md transition-all duration-200 text-left cursor-pointer"
               >
                 <div className="aspect-square bg-[var(--bg-panel)] overflow-hidden">
@@ -292,7 +296,7 @@ export default function BrandKitTab() {
       {expandedGroup && (
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setExpandedSlug(null)}
+          onClick={() => setExpandedProductKey(null)}
         >
           <div
             className="apple-card max-w-5xl max-h-[90vh] overflow-y-auto"
@@ -336,7 +340,7 @@ export default function BrandKitTab() {
                     </a>
                   )}
                   <button
-                    onClick={() => setExpandedSlug(null)}
+                    onClick={() => setExpandedProductKey(null)}
                     className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] px-2 py-1"
                     aria-label={t("guide.back")}
                   >
