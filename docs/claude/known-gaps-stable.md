@@ -11,15 +11,24 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-5 文档漂移清理：`docs/claude/known-gaps-stable.md` 固化为当前技术债与下一步 TODO 的唯一入口；旧路线图、风险评估、部署计划和早期架构设计已标注历史语境，不再作为当前执行计划来源。未触发真实 POYO token 消耗。
+最近一次盘点：**2026-05-31** — 已完成 P1-6 全站 UI/UX 无 token 审计与首轮修复：S1-S5/Library 路由白屏 fallback、Home 顶栏移动端挤压、Works/AssetPicker/Admin Logs 弹层可访问性已收口；新增 [`docs/analysis/site-ui-ux-audit-plan-stable-20260531.md`](../analysis/site-ui-ux-audit-plan-stable-20260531.md)。未触发真实 POYO token 消耗。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-4 类型边界热区收口：新增运行时 `TypedDict` 契约，覆盖 Fast Mode result、Seedance video result、telemetry endpoint response 与 continuity audit summary。
+> 上一次盘点：2026-05-31 — 已完成 P1-5 文档漂移清理：`docs/claude/known-gaps-stable.md` 固化为当前技术债与下一步 TODO 的唯一入口；旧路线图、风险评估、部署计划和早期架构设计已标注历史语境，不再作为当前执行计划来源。
 
 ## 当前执行入口
 
 - **唯一当前 TODO 来源**：本文件的“完整 TODO list”。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
+
+## 0.18 2026-05-31 P1-6 全站 UI/UX 无 token 审计与首轮修复
+
+- **页面加载反馈** — `/s1`-`/s5` 和 `/library` 不再使用 `Suspense fallback={null}`，统一改为 `RoutePageSkeleton`，避免慢设备或 hydration 阻塞时出现无反馈白屏。
+- **移动端顶栏** — Home 顶栏对齐 `TopHeader` 的响应式策略：移动端隐藏长标题、压缩间距、保留主导航和管理入口，降低小屏横向挤压。
+- **弹层可访问性** — `/works` 预览、`AssetPickerModal`、`Admin Logs` 详情弹层补 `role="dialog"`、`aria-modal`、Escape 关闭和初始焦点；Admin Logs 行补键盘 Enter/Space 打开。
+- **关闭按钮语义** — `MaterialsTab`、`InfluencersTab`、`ConfirmModal`、`AssetLibrary` 等关闭按钮改为本地化或更具体 aria label，减少屏幕阅读器中的硬编码英文噪音。
+- **审计文档** — 新增 UI/UX 专项方案，记录 5 个 loop 的发现、已完成项、保留债务和后续无 token / 充值后测试边界。
+- **验证边界** — 本轮只允许静态页面、只读页面、lint/type/build 与 UI-only 测试；不调用真实生成、Gate candidate 或 POYO 相关接口。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -119,6 +128,9 @@ source: human+ai
 - [x] **P1-3：确认 S2 deprecated wrapper 去留** — 检索调用面与文档引用，已冻结为 warning-only alias；删除前需要外部迁移窗口与单独确认。
 - [x] **P1-4：类型边界热区收口** — 已补运行时 `TypedDict` 契约，覆盖 `fast_mode` result、telemetry endpoint、continuity audit、Seedance result，不做全仓 `Any` 大重构。
 - [x] **P1-5：文档漂移清理** — 已将当前执行入口固定到本文件，历史探索/路线图/部署计划文档已标注历史语境，不再作为当前计划来源。
+- [x] **P1-6：全站 UI/UX 无 token 审计与首轮修复** — 完成 5 loop 审计，修复路由白屏 fallback、Home 顶栏移动端挤压和关键弹层可访问性。
+- [ ] **P1-7：前端布局与弹层单一化** — 抽象 Home header/`TopHeader`，统一 `QuickTemplate`、`AssetLibrary` 与 Library/Works 的弹层键盘行为。
+- [ ] **P1-8：UI-only Playwright 视觉回归** — 基于已恢复 Chromium 补桌面/移动端截图和交互 smoke，确保默认不触发真实生成接口。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。

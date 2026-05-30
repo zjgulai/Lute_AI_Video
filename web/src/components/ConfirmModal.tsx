@@ -10,6 +10,7 @@ interface Props {
   confirmLabel: ReactNode;
   confirmVariant?: "danger" | "primary";
   cancelLabel: ReactNode;
+  closeLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -21,6 +22,7 @@ export function ConfirmModal({
   confirmLabel,
   confirmVariant = "danger",
   cancelLabel,
+  closeLabel,
   onConfirm,
   onCancel,
 }: Props) {
@@ -44,7 +46,7 @@ export function ConfirmModal({
           </h2>
           <button
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={closeLabel || "Close"}
             className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-[var(--bg-panel)] transition-colors"
           >
             <X size={16} weight="bold" className="text-[var(--text-muted)]" />

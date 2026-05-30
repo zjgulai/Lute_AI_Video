@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAppStore } from "@/stores/useAppStore";
+import { RoutePageSkeleton } from "@/components/Skeleton";
 import Home from "../page";
 
 function S1Inner() {
@@ -22,7 +23,7 @@ function S1Inner() {
 
 export default function S1Page() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<RoutePageSkeleton />}>
       <S1Inner />
     </Suspense>
   );

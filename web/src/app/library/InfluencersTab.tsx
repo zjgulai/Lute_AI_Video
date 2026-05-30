@@ -338,7 +338,7 @@ export default function InfluencersTab() {
                 ref={formCloseRef}
                 onClick={closeForm}
                 className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[var(--bg-panel)] transition-all cursor-pointer"
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X className="w-4 h-4" />
               </button>

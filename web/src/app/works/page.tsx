@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FilmSlate, MagnifyingGlass, WarningCircle, X } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -8,6 +8,7 @@ import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import TopHeader from "@/components/TopHeader";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 import { errorMessage } from "@/lib/errors";
 interface FinalWork {
@@ -132,6 +133,7 @@ export default function WorksPage() {
   const [sceneFilter, setSceneFilter] = useState<SceneFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [preview, setPreview] = useState<FinalWork | null>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 24;
 
@@ -259,6 +261,13 @@ export default function WorksPage() {
     setSearchQuery(q);
     setPage(1);
   };
+  const closePreview = () => setPreview(null);
+
+  useModalBehavior({
+    open: Boolean(preview),
+    onClose: closePreview,
+    initialFocusRef: previewCloseRef,
+  });
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] overflow-x-hidden">
@@ -437,14 +446,18 @@ export default function WorksPage() {
 
       {preview && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={preview.label || humanizeFilename(preview.filename)}
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 backdrop-blur-sm"
-          onClick={() => setPreview(null)}
+          onClick={closePreview}
         >
           <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setPreview(null)}
+              ref={previewCloseRef}
+              onClick={closePreview}
               className="absolute -top-10 right-0 p-2 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all cursor-pointer z-10"
-              aria-label="Close"
+              aria-label={t("common.close")}
             >
               <X size={20} weight="fill" />
             </button>

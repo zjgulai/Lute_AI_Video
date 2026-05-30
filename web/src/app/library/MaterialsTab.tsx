@@ -511,7 +511,7 @@ export default function MaterialsTab() {
               ref={previewCloseRef}
               onClick={closePreview}
               className="absolute -top-10 right-0 p-2 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all cursor-pointer z-10"
-              aria-label="Close"
+              aria-label={t("common.close")}
             >
               <X size={20} weight="fill" />
             </button>

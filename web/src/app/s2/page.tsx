@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAppStore } from "@/stores/useAppStore";
 import GateDirectAccess from "@/components/GateDirectAccess";
+import { RoutePageSkeleton } from "@/components/Skeleton";
 import Home from "../page";
 
 function S2Inner() {
@@ -32,7 +33,7 @@ function S2Inner() {
 
 export default function S2Page() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<RoutePageSkeleton />}>
       <S2Inner />
     </Suspense>
   );

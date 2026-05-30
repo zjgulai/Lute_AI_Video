@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl } from "./api";
 import { MagnifyingGlass, X, Check, FilmSlate, ImageSquare, MusicNote } from "@phosphor-icons/react";
 import RuntimeMediaImage from "./RuntimeMediaImage";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 export type AcceptKind = "image" | "video" | "audio" | "all";
 
@@ -46,6 +47,7 @@ function humanSize(bytes: number): string {
 
 export default function AssetPickerModal({ acceptKind, multiple = false, onPick, onClose }: Props) {
   const { t } = useI18n();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<PortfolioFile[]>([]);
@@ -117,12 +119,23 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
           ? t("picker.kind.audio")
           : t("picker.kind.all");
 
+  useModalBehavior({
+    open: true,
+    onClose,
+    initialFocusRef: closeButtonRef,
+  });
+
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="asset-picker-title"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+    >
       <div className="apple-card w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
         <header className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-default)]">
           <div className="flex items-center gap-3 min-w-0">
-            <h3 className="text-sm font-semibold text-[var(--text-h1)] shrink-0">
+            <h3 id="asset-picker-title" className="text-sm font-semibold text-[var(--text-h1)] shrink-0">
               {t("picker.title")}
             </h3>
             <span className="text-[11px] text-[var(--text-muted)] px-2 py-0.5 rounded-full bg-[var(--bg-panel)] shrink-0">
@@ -130,9 +143,10 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
             </span>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
             className="p-1.5 rounded-lg hover:bg-[var(--bg-panel)] text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors"
           >
             <X size={16} weight="bold" />

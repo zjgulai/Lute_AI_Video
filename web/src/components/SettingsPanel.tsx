@@ -576,6 +576,7 @@ export default function SettingsPanel({ onClose }: Props) {
         confirmLabel={t("confirm.resetSettings.yes", "Reset")}
         confirmVariant="danger"
         cancelLabel={cancelLabel}
+        closeLabel={t("common.close")}
         onConfirm={confirmReset}
         onCancel={() => setShowResetConfirm(false)}
       />

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminFetchJson } from "@/components/api";
 import { X } from "@phosphor-icons/react";
 import { TableRowSkeleton } from "@/components/Skeleton";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface LogEntry {
   id: string;
@@ -38,6 +39,7 @@ export default function AdminLogsPage() {
   const [appliedTenantFilter, setAppliedTenantFilter] = useState("");
   const [timeRange, setTimeRange] = useState("24h");
   const [detail, setDetail] = useState<LogDetail | null>(null);
+  const detailCloseRef = useRef<HTMLButtonElement>(null);
 
   const getTimeFrom = (range: string): string => {
     const now = new Date();
@@ -88,6 +90,13 @@ export default function AdminLogsPage() {
       setError("Failed to load log detail");
     }
   };
+  const closeDetail = () => setDetail(null);
+
+  useModalBehavior({
+    open: Boolean(detail),
+    onClose: closeDetail,
+    initialFocusRef: detailCloseRef,
+  });
 
   return (
     <div className="space-y-4">
@@ -192,7 +201,14 @@ export default function AdminLogsPage() {
                     <tr
                       key={log.id}
                       onClick={() => void openDetail(log.id)}
-                      className="border-b border-[var(--divider-light)] last:border-0 hover:bg-[var(--bg-panel)] transition-colors cursor-pointer"
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          void openDetail(log.id);
+                        }
+                      }}
+                      tabIndex={0}
+                      className="border-b border-[var(--divider-light)] last:border-0 hover:bg-[var(--bg-panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--fortune-red)] focus-visible:outline-offset-[-2px] transition-colors cursor-pointer"
                     >
                       <td className="p-3 text-[var(--text-muted)] whitespace-nowrap">
                         {log.created_at
@@ -244,16 +260,27 @@ export default function AdminLogsPage() {
 
       {/* Detail modal */}
       {detail && (
-        <div className="apple-modal-overlay" onClick={() => setDetail(null)}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-log-detail-title"
+          className="apple-modal-overlay"
+          onClick={closeDetail}
+        >
           <div
             className="apple-card w-full max-w-lg mx-4 p-4 animate-scale-in max-h-[80vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">
+              <h2 id="admin-log-detail-title" className="text-sm font-semibold text-[var(--text-h1)]">
                 Error Detail
               </h2>
-              <button onClick={() => setDetail(null)} className="cursor-pointer">
+              <button
+                ref={detailCloseRef}
+                onClick={closeDetail}
+                className="cursor-pointer"
+                aria-label="Close log detail"
+              >
                 <X size={16} weight="fill" className="text-[var(--text-muted)]" />
               </button>
             </div>
