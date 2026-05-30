@@ -17,6 +17,7 @@ import { errorMessage } from "@/lib/errors";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
 import RuntimeMediaImage from "@/components/RuntimeMediaImage";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface MaterialAsset {
   id: string;
@@ -66,6 +67,8 @@ export default function MaterialsTab() {
   const [failedUploads, setFailedUploads] = useState<{ file: File; error: string }[]>([]);
   const [preview, setPreview] = useState<MaterialAsset | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 24;
 
@@ -150,6 +153,18 @@ export default function MaterialsTab() {
     return () => { cancelled = true; };
   }, [fetchAssets]);
 
+  useEffect(() => () => {
+    uploadAbortRef.current?.abort();
+  }, []);
+
+  const closePreview = () => setPreview(null);
+
+  useModalBehavior({
+    open: Boolean(preview),
+    onClose: closePreview,
+    initialFocusRef: previewCloseRef,
+  });
+
   const filteredAssets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return assets.filter((a) => {
@@ -182,33 +197,46 @@ export default function MaterialsTab() {
   };
 
   const uploadFiles = async (files: File[]) => {
+    if (uploading) return;
     if (isDemoMode()) {
       setError(t("library.demoModeUploadDisabled"));
       return;
     }
     setUploading(true);
     setError(null);
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
     const newFailures: { file: File; error: string }[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      setUploadProgress(`${t("footage.uploading")} (${i + 1}${t("footage.of")}${files.length}): ${file.name}`);
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("tags", "materials,user_upload");
-        formData.append("metadata", JSON.stringify({ source: "library-materials" }));
-        const res = await apiFetch("/api/upload", { method: "POST", body: formData });
-        if (!res.ok) throw new Error(`${t("footage.uploadFailed")} (${res.status})`);
-      } catch (e: unknown) {
-        newFailures.push({ file, error: errorMessage(e, t("footage.uploadFailed")) });
+    let completedCount = 0;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        if (controller.signal.aborted) break;
+        const file = files[i];
+        setUploadProgress(`${t("footage.uploading")} (${i + 1}${t("footage.of")}${files.length}): ${file.name}`);
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("tags", "materials,user_upload");
+          formData.append("metadata", JSON.stringify({ source: "library-materials" }));
+          const res = await apiFetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
+          if (!res.ok) throw new Error(`${t("footage.uploadFailed")} (${res.status})`);
+          completedCount += 1;
+        } catch (e: unknown) {
+          if (controller.signal.aborted) break;
+          newFailures.push({ file, error: errorMessage(e, t("footage.uploadFailed")) });
+        }
       }
+    } finally {
+      if (uploadAbortRef.current === controller) uploadAbortRef.current = null;
+      setUploadProgress(null);
+      setUploading(false);
     }
-    setUploadProgress(null);
-    setUploading(false);
     if (newFailures.length > 0) {
       setFailedUploads((prev) => [...prev, ...newFailures]);
     }
-    await fetchAssets();
+    if (!controller.signal.aborted || completedCount > 0) {
+      await fetchAssets();
+    }
   };
 
   const retryFailedUploads = async () => {
@@ -219,6 +247,10 @@ export default function MaterialsTab() {
 
   const dismissFailedUploads = () => {
     setFailedUploads([]);
+  };
+
+  const cancelUpload = () => {
+    uploadAbortRef.current?.abort();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -298,7 +330,14 @@ export default function MaterialsTab() {
       {(uploading || uploadProgress) && (
         <div className="apple-card p-3 border-l-4 border-[var(--fortune-red)] bg-[var(--bg-panel)] flex items-center gap-2">
           <Spinner size={16} weight="fill" className="text-[var(--fortune-red)] animate-spin shrink-0" />
-          <span className="text-xs text-[var(--jade-accent)] font-medium">{uploadProgress || t("footage.uploadProgress")}</span>
+          <span className="text-xs text-[var(--jade-accent)] font-medium flex-1">{uploadProgress || t("footage.uploadProgress")}</span>
+          <button
+            type="button"
+            onClick={cancelUpload}
+            className="apple-btn text-xs py-1 px-2 border border-[var(--border-default)]"
+          >
+            {t("upload.cancel", "取消上传")}
+          </button>
         </div>
       )}
 
@@ -461,12 +500,16 @@ export default function MaterialsTab() {
 
       {preview && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={preview.originalName}
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 backdrop-blur-sm"
-          onClick={() => setPreview(null)}
+          onClick={closePreview}
         >
           <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setPreview(null)}
+              ref={previewCloseRef}
+              onClick={closePreview}
               className="absolute -top-10 right-0 p-2 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all cursor-pointer z-10"
               aria-label="Close"
             >
