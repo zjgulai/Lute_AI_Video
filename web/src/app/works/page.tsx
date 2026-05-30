@@ -54,23 +54,39 @@ type PortfolioResponse = {
   files?: PortfolioFile[];
 };
 
-const SCENE_FILTER_IDS = ["all", "product_direct", "brand_campaign", "influencer_remix", "brand_vlog"] as const;
+const SCENE_FILTER_IDS = ["all", "product_direct", "brand_campaign", "influencer_remix", "live_shoot", "brand_vlog"] as const;
 type SceneFilter = typeof SCENE_FILTER_IDS[number];
 
-const SCENE_ID_BY_PREFIX: Record<string, SceneFilter> = {
+const SCENE_FILTER_BY_SCENARIO: Record<string, SceneFilter> = {
+  s1: "product_direct",
+  product_direct: "product_direct",
+  s2: "brand_campaign",
+  brand_campaign: "brand_campaign",
+  s3: "influencer_remix",
+  influencer_remix: "influencer_remix",
+  s4: "live_shoot",
+  live_shoot: "live_shoot",
+  live_shoot_to_video: "live_shoot",
+  s5: "brand_vlog",
+  brand_vlog: "brand_vlog",
+};
+
+const SCENE_FILTER_BY_FILENAME_PREFIX: Record<string, SceneFilter> = {
   s1: "product_direct",
   s2: "brand_campaign",
   s3: "influencer_remix",
+  s4: "live_shoot",
   s5: "brand_vlog",
 };
 
 function inferSceneFilter(work: FinalWork): SceneFilter | "other" {
-  if (work.scenario && work.scenario in SCENE_ID_BY_PREFIX) {
-    return SCENE_ID_BY_PREFIX[work.scenario];
+  const scenario = work.scenario?.toLowerCase();
+  if (scenario && scenario in SCENE_FILTER_BY_SCENARIO) {
+    return SCENE_FILTER_BY_SCENARIO[scenario];
   }
   const stem = work.filename.toLowerCase();
   if (stem.startsWith("vlog")) return "brand_vlog";
-  for (const [prefix, scene] of Object.entries(SCENE_ID_BY_PREFIX)) {
+  for (const [prefix, scene] of Object.entries(SCENE_FILTER_BY_FILENAME_PREFIX)) {
     if (stem.startsWith(prefix + "_") || stem.startsWith(prefix + ".")) return scene;
   }
   return "other";
@@ -206,6 +222,7 @@ export default function WorksPage() {
       product_direct: 0,
       brand_campaign: 0,
       influencer_remix: 0,
+      live_shoot: 0,
       brand_vlog: 0,
     };
     for (const { scene } of enrichedWorks) {

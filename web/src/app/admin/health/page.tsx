@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { adminFetchJson } from "@/components/api";
 import {
   CheckCircle,
@@ -62,6 +62,18 @@ export default function AdminHealthPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
+
+  const historyServiceKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const entry of history) {
+      for (const key of Object.keys(entry.services)) {
+        keys.add(key);
+      }
+    }
+    return Array.from(keys);
+  }, [history]);
+
+  const recentHistory = useMemo(() => history.slice(-20).reverse(), [history]);
 
   const StatusIcon = ({ status }: { status: string }) => {
     switch (status) {
@@ -184,7 +196,7 @@ export default function AdminHealthPage() {
               <thead>
                 <tr className="border-b border-[var(--divider-light)]">
                   <th className="text-left p-2 text-[var(--text-muted)] font-medium">Time</th>
-                  {Object.keys(history[0]?.services || {}).map((svc) => (
+                  {historyServiceKeys.map((svc) => (
                     <th key={svc} className="text-left p-2 text-[var(--text-muted)] font-medium">
                       {SERVICE_LABELS[svc] || svc}
                     </th>
@@ -192,27 +204,34 @@ export default function AdminHealthPage() {
                 </tr>
               </thead>
               <tbody>
-                {history.slice(-20).reverse().map((entry, i) => (
+                {recentHistory.map((entry) => (
                   <tr
-                    key={i}
+                    key={entry.checked_at}
                     className="border-b border-[var(--divider-light)] last:border-0 hover:bg-[var(--bg-panel)]"
                   >
                     <td className="p-2 text-[var(--text-muted)] whitespace-nowrap">
                       {new Date(entry.checked_at).toLocaleTimeString()}
                     </td>
-                    {Object.entries(entry.services).map(([svcKey, svc]) => (
-                      <td key={svcKey} className="p-2">
-                        <span
-                          className={`inline-block w-2 h-2 rounded-full ${
-                            svc.status === "healthy"
-                              ? "bg-[var(--jade-accent)]"
-                              : svc.status === "degraded"
-                              ? "bg-[var(--gold-foil)]"
-                              : "bg-[var(--crimson-mist)]"
-                          }`}
-                        />
-                      </td>
-                    ))}
+                    {historyServiceKeys.map((svcKey) => {
+                      const svc = entry.services[svcKey];
+                      return (
+                        <td key={svcKey} className="p-2">
+                          {svc ? (
+                            <span
+                              className={`inline-block w-2 h-2 rounded-full ${
+                                svc.status === "healthy"
+                                  ? "bg-[var(--jade-accent)]"
+                                  : svc.status === "degraded"
+                                  ? "bg-[var(--gold-foil)]"
+                                  : "bg-[var(--crimson-mist)]"
+                              }`}
+                            />
+                          ) : (
+                            <span className="text-[var(--text-muted)]">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

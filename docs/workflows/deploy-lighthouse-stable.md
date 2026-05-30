@@ -4,7 +4,7 @@ doc_type: workflow
 module: deploy
 status: stable
 created: 2026-05-08
-updated: 2026-05-27
+updated: 2026-05-31
 owner: self
 source: human+ai
 ---
@@ -13,8 +13,9 @@ source: human+ai
 
 The project ships three deploy targets, in priority order:
 
-1. **Tencent Lighthouse (canonical)** — current production at `https://101.34.52.232`.
-   `deploy/lighthouse/` contains `docker-compose.prod.yml` (backend + frontend + nginx +
+1. **Tencent Lighthouse (canonical)** — current production at `https://video.lute-tlz-dddd.top`.
+   IP fallback is `https://101.34.52.232`. `deploy/lighthouse/` contains
+   `docker-compose.prod.yml` (backend + frontend + nginx +
    rendering), `nginx.conf` (with 1500s `proxy_read_timeout` for long-running pipelines),
    `.env.prod` (live secrets — gitignored), `rsync-excludes.txt` (single source of truth for
    safe sync exclusions), `build-and-deploy.sh` (local safe sync wrapper), and `deploy.sh`
@@ -45,6 +46,12 @@ The project ships three deploy targets, in priority order:
    pem、根层 `node_modules`、缓存目录、测试报告、`web/dist`、`web/.next`、`output` 和
    `*.bak*`。`deploy.sh` 的 backend health check 改为最多 120 秒轮询，避免启动窗口内的
    502 误报。
+   **2026-05-31 部署安全更新**: `deploy.sh` 和 `smoke.sh` 默认不调用
+   `/api/fast/generate`，避免未充值或不希望消耗外部额度时触发真实生成。充值后如需验证
+   真实生成链路，显式执行
+   `RUN_TOKEN_SMOKE=1 API_KEY=... BASE=https://video.lute-tlz-dddd.top bash smoke.sh`。
+   最近一次部署验证：`/` 200、`/api/health` 200、`persistence.backend=postgresql`、
+   `POST /api/pipeline/start` 无 key 返回 401。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
   `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.

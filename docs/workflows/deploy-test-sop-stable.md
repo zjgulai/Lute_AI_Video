@@ -4,7 +4,7 @@ doc_type: workflow
 module: deploy
 status: stable
 created: 2026-05-09
-updated: 2026-05-27
+updated: 2026-05-31
 owner: self
 source: human+ai
 ---
@@ -72,7 +72,7 @@ deploy.sh 五阶段：
 | Phase 2 | 容器重启/重建 | backend --force-recreate, frontend --force-recreate, nginx --force-recreate |
 | Phase 3 | 健康检查 | `/api/health` 最多等待 120 秒到 200, persistence=postgresql |
 | Phase 4 | 清理 | `docker system prune -f` |
-| Phase 5 | smoke 验证 | `smoke OK — non-demo production verified` |
+| Phase 5 | smoke 验证 | `smoke OK — non-demo production verified`；默认跳过真实生成 |
 
 > **注意：** nginx 配置变更（新增 location、volume mount）必须用 `--force-recreate`，`docker restart` 会复用旧容器，忽略新 volume 声明。
 
@@ -89,8 +89,15 @@ cd /opt/ai-video/deploy/lighthouse && bash smoke.sh
 4 个检查点：
 1. `GET /api/health` → 200, `persistence.backend=postgresql`
 2. `GET /api/health` 无 API key → 200（健康检查免认证）
-3. `POST /api/fast/generate` 无 key → 401
-4. `POST /api/fast/generate` 有 key → 路径可达（可能 500，但非 404/502）
+3. `POST /api/pipeline/start` 无 key → 401
+4. `POST /api/fast/generate` 默认跳过，避免部署 smoke 消耗 poyo.ai / LLM 额度
+
+充值后需要验证真实生成链路时，显式开启 token smoke：
+
+```bash
+cd /opt/ai-video/deploy/lighthouse
+RUN_TOKEN_SMOKE=1 BASE=https://video.lute-tlz-dddd.top bash smoke.sh
+```
 
 ### 3.2 前端路由 200 检查
 
@@ -300,7 +307,8 @@ ssh ubuntu@101.34.52.232 "docker stop ai_video_backend"
 - [ ] **rsync 命令**：包含 `--chmod=F644,D755`
 - [ ] **rsync 命令**：包含 `--exclude='deploy/lighthouse/server.crt' --exclude='deploy/lighthouse/server.key' --exclude='deploy/lighthouse/*.pem'`
 - [ ] deploy.sh Phase 0-3 全绿
-- [ ] smoke.sh 4/4 PASS
+- [ ] smoke.sh 4/4 PASS（默认不执行真实生成）
+- [ ] 如需真实生成验证：充值后显式设置 `RUN_TOKEN_SMOKE=1`
 - [ ] 前端 12 个路由 200
 - [ ] volume 可写测试通过
 - [ ] Admin Panel 登录 → dashboard 链通过
@@ -310,6 +318,14 @@ ssh ubuntu@101.34.52.232 "docker stop ai_video_backend"
 ---
 
 ## 8. 历史部署事故
+
+### 2026-05-31：部署 smoke 默认触发真实生成
+
+- **症状**：部署后 `smoke.sh` 自动调用 `POST /api/fast/generate`，在未准备好 poyo.ai 充值测试时仍触发一次真实生成。
+- **根因**：`deploy.sh` 已改为跳过 Fast Mode token smoke，但 Phase 5 调用的 `smoke.sh` 仍保留默认真实生成检查。
+- **修复**：`deploy.sh` 和 `smoke.sh` 均改为仅在 `RUN_TOKEN_SMOKE=1` 时调用 `/api/fast/generate`。
+- **影响**：发生一次非预期真实生成请求；第二次部署验证已确认默认跳过。
+- **预防**：所有部署 smoke 的 token-consuming 检查必须使用显式 opt-in 环境变量。
 
 ### 2026-05-09：ruff over-fix 删除 re-export，backend 启动 ImportError
 
@@ -350,4 +366,4 @@ ssh ubuntu@101.34.52.232 "docker stop ai_video_backend"
 
 ---
 
-*本文档随每次部署迭代更新。最后验证日期：2026-05-09。*
+*本文档随每次部署迭代更新。最后验证日期：2026-05-31。*

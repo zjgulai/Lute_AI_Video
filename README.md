@@ -5,7 +5,7 @@ Automates the full content production workflow: strategy → script → complian
 
 Built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints.
 
-**Live:** [https://101.34.52.232](https://101.34.52.232) (Tencent Lighthouse)
+**Live:** [https://video.lute-tlz-dddd.top](https://video.lute-tlz-dddd.top) (Tencent Lighthouse canonical domain). IP fallback: [https://101.34.52.232](https://101.34.52.232).
 
 ---
 
@@ -166,7 +166,8 @@ pnpm e2e:prod       # Playwright production
 ## Project Status
 
 - **v0.2.7** — Brand assets Phase 2-4, portfolio API, quick templates
-- 6 scenarios (Fast Mode + S1-S5) verified end-to-end in production
+- **2026-05-31 production deploy** — Lighthouse live at `https://video.lute-tlz-dddd.top`; latest deployed commits include `306b86f`, `95c2925`, and `d62a3ac`
+- 6 scenarios (Fast Mode + S1-S5) verified end-to-end in production; real token-consuming generation smoke is opt-in via `RUN_TOKEN_SMOKE=1`
 - Quality system in observe mode (frame variance, AV sync, video specs)
 - Admin Panel Phase 1 operational (tenants, logs, health, auth)
 - 380+ tests, CI/CD via GitHub Actions

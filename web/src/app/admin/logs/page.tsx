@@ -85,7 +85,7 @@ export default function AdminLogsPage() {
       const data = await adminFetchJson<LogDetail>(`/api/admin/logs/${logId}`);
       setDetail(data);
     } catch {
-      // silently fail
+      setError("Failed to load log detail");
     }
   };
 
@@ -191,7 +191,7 @@ export default function AdminLogsPage() {
                   {logs.map((log) => (
                     <tr
                       key={log.id}
-                      onClick={() => openDetail(log.id)}
+                      onClick={() => void openDetail(log.id)}
                       className="border-b border-[var(--divider-light)] last:border-0 hover:bg-[var(--bg-panel)] transition-colors cursor-pointer"
                     >
                       <td className="p-3 text-[var(--text-muted)] whitespace-nowrap">
