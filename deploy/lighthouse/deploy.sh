@@ -181,16 +181,22 @@ else
   echo "  ❌ Frontend /: $FRONTEND_STATUS"
 fi
 
-# Check Fast Mode API
-FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $DEPLOY_API_KEY" \
-  -d '{"user_prompt":"test","duration":10}' \
-  https://localhost/api/fast/generate || echo "000")
-if [ "$FAST_STATUS" = "200" ]; then
-  echo "  Fast Mode API: 200"
+# Check Fast Mode API only when explicitly requested.
+# The generate endpoint can consume external provider credits, so deployment
+# defaults to non-token health checks.
+if [ "${RUN_TOKEN_SMOKE:-0}" = "1" ]; then
+  FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: $DEPLOY_API_KEY" \
+    -d '{"user_prompt":"test","duration":10}' \
+    https://localhost/api/fast/generate || echo "000")
+  if [ "$FAST_STATUS" = "200" ]; then
+    echo "  Fast Mode API: 200"
+  else
+    echo "  ⚠ Fast Mode API: $FAST_STATUS (200/500 都可,500 = LLM 不可用但路径通)"
+  fi
 else
-  echo "  ⚠ Fast Mode API: $FAST_STATUS (200/500 都可,500 = LLM 不可用但路径通)"
+  echo "  Fast Mode API: skipped (set RUN_TOKEN_SMOKE=1 to run token smoke)"
 fi
 echo ""
 
