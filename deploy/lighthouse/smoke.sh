@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # P0-F: Lighthouse 部署后 smoke 验证 — 确认 NEXT_PUBLIC_IS_DEMO=false 真生效,
-# 前端不会走 DEMO_RESULT_*,后端真实路由 /api/scenario/s1 / /api/fast/generate
-# 都 reachable + 用真 API key 鉴权通过。
+# 前端不会走 DEMO_RESULT_*,后端基础路由 reachable + 用真 API key 鉴权通过。
+# 会消耗外部额度的真实生成验证必须显式设置 RUN_TOKEN_SMOKE=1。
 #
 # Usage:
-#   ./smoke.sh                         # 默认探 https://101.34.52.232
-#   BASE=http://localhost ./smoke.sh   # 本地 docker compose 起来后探本机
-#   API_KEY=xxx ./smoke.sh             # 覆盖 API key
+#   ./smoke.sh                                 # 默认探 https://101.34.52.232
+#   BASE=http://localhost ./smoke.sh           # 本地 docker compose 起来后探本机
+#   API_KEY=xxx ./smoke.sh                     # 覆盖 API key
+#   RUN_TOKEN_SMOKE=1 API_KEY=xxx ./smoke.sh   # 显式运行真实生成验证
 #
 # Exit code 0 = 全过 / 1 = 任一失败 / 2 = 配置错误
 
@@ -62,23 +63,27 @@ status=$($CURL -X POST -H "Content-Type: application/json" \
   "$BASE/api/pipeline/start")
 check "POST /api/pipeline/start without key" "401" "$status"
 
-# 4. 真链路:有 key 走非 demo 流程,/api/fast/generate 应该 200(mock 模式即可)
+# 4. 真链路生成会消耗外部额度,默认跳过;充值后用 RUN_TOKEN_SMOKE=1 显式开启。
 echo "[4/4] Real path: /api/fast/generate with valid API key"
-status=$($CURL -X POST \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $API_KEY" \
-  -d '{"user_prompt":"smoke test","duration":5,"enable_tts":false}' \
-  "$BASE/api/fast/generate")
-# 200 = 全程跑通; 500 = 内部错(可能 LLM key 不可用,但路径已通); 401 = key 错
-case "$status" in
-  200|500)
-    echo "  [OK]   POST /api/fast/generate → $status (路径可达)"
-    ;;
-  *)
-    echo "  [FAIL] POST /api/fast/generate → expected 200/500, got $status"
-    FAILED=$((FAILED + 1))
-    ;;
-esac
+if [ "${RUN_TOKEN_SMOKE:-0}" = "1" ]; then
+  status=$($CURL -X POST \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: $API_KEY" \
+    -d '{"user_prompt":"smoke test","duration":5,"enable_tts":false}' \
+    "$BASE/api/fast/generate")
+  # 200 = 全程跑通; 500 = 内部错(可能 LLM key 不可用,但路径已通); 401 = key 错
+  case "$status" in
+    200|500)
+      echo "  [OK]   POST /api/fast/generate → $status (路径可达)"
+      ;;
+    *)
+      echo "  [FAIL] POST /api/fast/generate → expected 200/500, got $status"
+      FAILED=$((FAILED + 1))
+      ;;
+  esac
+else
+  echo "  [SKIP] POST /api/fast/generate (set RUN_TOKEN_SMOKE=1 to run token smoke)"
+fi
 
 echo ""
 echo "========================================"
