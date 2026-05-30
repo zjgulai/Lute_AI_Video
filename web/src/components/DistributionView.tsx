@@ -17,21 +17,58 @@ const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   youtube_shorts: VideoCamera,
 };
 
+type DistributionPost = Record<string, unknown> & {
+  platform: string;
+  cta_type?: string;
+  video_format?: string;
+  product_link_placeholder?: string;
+  post_body?: string;
+};
+
+type DistributionPlan = Record<string, unknown> & {
+  brief_id?: string;
+  script_id?: string;
+  title?: string;
+  caption?: string;
+  description?: string;
+  video_url?: string;
+  tags?: string[];
+  thumbnail_url?: string;
+  posts?: DistributionPost[];
+};
+
+type PublishResult = Record<string, unknown> & {
+  success: boolean;
+  error?: string;
+  post_id?: string;
+  url?: string;
+};
+
+type PublishStatus = Record<string, unknown> & {
+  error?: string;
+  platform?: string;
+  status?: string;
+  views?: number;
+  likes?: number;
+  sales?: number;
+  published_at?: string;
+};
+
 interface Props {
   threadId: string;
   onRestart: () => void;
 }
 
 export default function DistributionView({ threadId, onRestart }: Props) {
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<DistributionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedBrief, setExpandedBrief] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
   const { t, locale } = useI18n();
-  const [publishResults, setPublishResults] = useState<Record<string, any>>({});
+  const [publishResults, setPublishResults] = useState<Record<string, PublishResult>>({});
   const [publishing, setPublishing] = useState<Record<string, boolean>>({});
   const [statusPopup, setStatusPopup] = useState<{ platform: string; postId: string } | null>(null);
-  const [statusData, setStatusData] = useState<any>(null);
+  const [statusData, setStatusData] = useState<PublishStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
 
   useEffect(() => {
@@ -48,7 +85,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
   }, [threadId]);
 
   // Group plans by brief_id
-  const groups: Record<string, any[]> = {};
+  const groups: Record<string, DistributionPlan[]> = {};
   for (const plan of plans) {
     const bid = plan.brief_id || "unknown";
     if (!groups[bid]) groups[bid] = [];
@@ -65,7 +102,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
     }
   };
 
-  const handlePublish = async (plan: any, platform: string) => {
+  const handlePublish = async (plan: DistributionPlan, platform: string) => {
     const key = `${plan.script_id || plan.brief_id}-${platform}`;
     setPublishing((prev) => ({ ...prev, [key]: true }));
     try {
@@ -100,7 +137,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
     }
   };
 
-  const getKey = (plan: any, platform: string) => `${plan.script_id || plan.brief_id}-${platform}`;
+  const getKey = (plan: DistributionPlan, platform: string) => `${plan.script_id || plan.brief_id}-${platform}`;
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -123,7 +160,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
           {[
             { label: t("dist.contentCount"), value: Object.keys(groups).length, color: "text-[var(--fortune-red)]" },
             { label: t("dist.versionCount"), value: plans.length, color: "text-[var(--fortune-red)]" },
-            { label: t("dist.platformCount"), value: new Set(plans.flatMap((p) => (p.posts || []).map((pp: any) => pp.platform))).size, color: "text-[var(--gold-foil)]" },
+            { label: t("dist.platformCount"), value: new Set(plans.flatMap((p) => (p.posts || []).map((pp) => pp.platform))).size, color: "text-[var(--gold-foil)]" },
           ].map((stat) => (
             <div key={stat.label} className="apple-card p-3 text-center">
               <div className={`text-xl font-bold ${stat.color}`}>{stat.value}</div>
@@ -179,7 +216,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                         <div className="p-3 rounded-xl bg-[var(--bg-card)] border border-[rgba(215,92,112,0.18)] space-y-2">
                           <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("dist.publishToPlatform")}</p>
                           <div className="grid grid-cols-2 gap-2">
-                            {(plan.posts || []).map((post: any) => {
+                            {(plan.posts || []).map((post) => {
                               const key = getKey(plan, post.platform);
                               const pub = publishResults[key];
                               const isPub = publishing[key];
@@ -226,12 +263,14 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                                           {pub.url}
                                         </a>
                                       )}
-                                      <button
-                                        onClick={() => handleCheckStatus(post.platform, pub.post_id)}
-                                        className="text-[12px] text-[var(--text-body)] hover:text-[var(--text-h1)] underline cursor-pointer"
-                                      >
-                                        {t("dist.viewStatus")}
-                                      </button>
+                                      {pub.post_id && (
+                                        <button
+                                          onClick={() => handleCheckStatus(post.platform, pub.post_id ?? "")}
+                                          className="text-[12px] text-[var(--text-body)] hover:text-[var(--text-h1)] underline cursor-pointer"
+                                        >
+                                          {t("dist.viewStatus")}
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                   {pub && !pub.success && (
@@ -256,7 +295,7 @@ export default function DistributionView({ threadId, onRestart }: Props) {
                         </div>
                         {/* Existing posts display */}
                         <div className="grid grid-cols-2 gap-2">
-                          {(plan.posts || []).map((post: any) => (
+                          {(plan.posts || []).map((post) => (
                             <div
                               key={post.platform}
                               className="p-3 rounded-xl bg-[var(--bg-panel)] border border-[rgba(215,92,112,0.18)] space-y-1.5"

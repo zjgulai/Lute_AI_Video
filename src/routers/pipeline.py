@@ -39,6 +39,38 @@ from src.routers._state import (
 
 router = APIRouter()
 
+LEGACY_PROXY_STEP_OUTPUT_MAP = {
+    "strategy": "briefs",
+    "scripts": "scripts",
+    "compliance": "compliance_report",
+    "storyboards": "storyboards",
+    "keyframe_images": "keyframe_images",
+    "video_prompts": "video_prompts",
+    "thumbnail_prompts": "thumbnail_sets",
+    "seedance_clips": "seedance_output",
+    "tts_audio": "audio_paths",
+    "thumbnail_images": "thumbnail_image_paths",
+    "assemble_final": "final_video_path",
+    "audit": "audit_report",
+}
+
+LEGACY_PROXY_REQUIRED_STATE_FIELDS = (
+    "product_catalog",
+    "brand_guidelines",
+    "target_platforms",
+    "target_languages",
+    "content_calendar_week",
+    "content_scenario",
+    "current_step",
+    "errors",
+    "structured_errors",
+    "pipeline_complete",
+    "human_reviews",
+    "distribution_plans",
+    "analytics_reports",
+    *LEGACY_PROXY_STEP_OUTPUT_MAP.values(),
+)
+
 
 # ── State conversion helpers ──
 
@@ -69,22 +101,8 @@ def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dic
         "pipeline_complete": False,
     }
 
-    # Map step outputs to legacy field names
-    step_output_map = {
-        "strategy": "briefs",
-        "scripts": "scripts",
-        "compliance": "compliance_report",
-        "storyboards": "storyboards",
-        "keyframe_images": "keyframe_images",
-        "video_prompts": "video_prompts",
-        "thumbnail_prompts": "thumbnail_sets",
-        "seedance_clips": "seedance_output",
-        "tts_audio": "audio_paths",
-        "thumbnail_images": "thumbnail_image_paths",
-        "assemble_final": "final_video_path",
-        "audit": "audit_report",
-    }
-    for step_name, legacy_key in step_output_map.items():
+    # Map StepRunner step outputs to the historical /pipeline/* field names.
+    for step_name, legacy_key in LEGACY_PROXY_STEP_OUTPUT_MAP.items():
         step_data = steps.get(step_name, {})
         if isinstance(step_data, dict):
             legacy_state[legacy_key] = step_data.get("output")
@@ -92,6 +110,7 @@ def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dic
             legacy_state[legacy_key] = step_data
 
     # Distribution plans (may be in assemble_final or a separate step)
+    legacy_state["distribution_plans"] = []
     assemble = steps.get("assemble_final", {})
     if isinstance(assemble, dict):
         legacy_state["distribution_plans"] = assemble.get("output", {}).get("distribution_plans", []) if isinstance(assemble.get("output"), dict) else []

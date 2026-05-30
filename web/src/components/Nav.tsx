@@ -54,7 +54,6 @@ export default function Nav() {
       resetApp();
     }
     if (typeof window !== "undefined") {
-      // eslint-disable-next-line no-console
       console.log("[HERMES:UI] NAV Home", hasActiveRun ? "preserve activeRun" : "→ resetAll stage=home");
     }
   };

@@ -5,12 +5,41 @@ import { useI18n } from "@/i18n/I18nProvider";
 import GatePanel from "@/components/GatePanel";
 import { apiFetch } from "@/components/api";
 
-const GATE_INDEX_TO_DEF = (t: (key: string, fallback?: string) => string) => [
-  { gateId: "gate_1_script", gateLabel: t("gate.selectScript"), maxSelections: 2 },
-  { gateId: "gate_2_keyframe", gateLabel: t("gate.reviewKeyframes"), maxSelections: 1 },
-  { gateId: "gate_3_clips", gateLabel: t("gate.selectClips"), maxSelections: 1 },
-  { gateId: "gate_4_final", gateLabel: t("gate.finalReview"), maxSelections: 1 },
-];
+function getGateSequence(
+  scene: "s1" | "s2" | "s3" | "s4" | "s5",
+  t: (key: string, fallback?: string) => string,
+) {
+  switch (scene) {
+    case "s3":
+      return [
+        { gateId: "gate_1_script", gateLabel: t("gate.selectScript"), maxSelections: 2 },
+        { gateId: "gate_2_keyframe", gateLabel: t("gate.reviewKeyframes"), maxSelections: 1 },
+        { gateId: "gate_3_clips", gateLabel: t("gate.selectClips"), maxSelections: 1 },
+        { gateId: "gate_4_final", gateLabel: t("gate.finalReview"), maxSelections: 1 },
+      ];
+    case "s4":
+      return [
+        { gateId: "gate_1_script", gateLabel: t("gate.selectScript"), maxSelections: 2 },
+        { gateId: "gate_2_prompts", gateLabel: t("gate.reviewKeyframes", "Review Video Prompts"), maxSelections: 1 },
+        { gateId: "gate_3_thumbnails", gateLabel: t("gate.finalReview", "Review Thumbnails"), maxSelections: 1 },
+      ];
+    case "s5":
+      return [
+        { gateId: "gate_1_strategy", gateLabel: t("gate.selectScript", "Select Strategy"), maxSelections: 2 },
+        { gateId: "gate_2_clips", gateLabel: t("gate.selectClips"), maxSelections: 1 },
+        { gateId: "gate_3_final", gateLabel: t("gate.finalReview"), maxSelections: 1 },
+      ];
+    case "s1":
+    case "s2":
+    default:
+      return [
+        { gateId: "gate_1_script", gateLabel: t("gate.selectScript"), maxSelections: 2 },
+        { gateId: "gate_2_keyframe", gateLabel: t("gate.reviewKeyframes"), maxSelections: 1 },
+        { gateId: "gate_3_clips", gateLabel: t("gate.selectClips"), maxSelections: 1 },
+        { gateId: "gate_4_final", gateLabel: t("gate.finalReview"), maxSelections: 1 },
+      ];
+  }
+}
 
 interface Props {
   scene: "s1" | "s2" | "s3" | "s4" | "s5";
@@ -21,7 +50,7 @@ interface Props {
 export default function GateDirectAccess({ scene, label, gateNumber }: Props) {
   const { t } = useI18n();
   const router = useRouter();
-  const sequence = GATE_INDEX_TO_DEF(t);
+  const sequence = getGateSequence(scene, t);
   const def = sequence[gateNumber - 1];
 
   if (!def) {
@@ -40,7 +69,7 @@ export default function GateDirectAccess({ scene, label, gateNumber }: Props) {
       await apiFetch(`/scenario/${scene}/gate/${label}/${def.gateId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selected_candidate_ids: selectedIds }),
+        body: JSON.stringify({ selected_ids: selectedIds }),
       });
       router.push(`/${scene}?label=${encodeURIComponent(label)}`);
     } catch (e) {

@@ -9,13 +9,15 @@ import { ShieldCheck } from "@phosphor-icons/react";
 import type { AuditReport, ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import { errorMessage } from "@/lib/errors";
+import { handleSmartCreateStageError } from "@/lib/smartCreateError";
+import { withScenarioContinuityConfig } from "@/lib/scenarioContinuity";
+import { sceneToPath, sceneToScenarioId } from "@/lib/scenarioRouting";
 import {
   fetchState,
   submitReview,
   runS1ProductDirect,
   runS5BrandVlog,
   startS1StepByStep,
-  resumeS1,
   fetchS1State,
   getMediaUrl,
   isDemoMode,
@@ -111,20 +113,8 @@ function asAuditReport(value: unknown): AuditReport | null {
   return null;
 }
 
-function withS1ContinuityConfig<T extends UnknownRecord>(config: SceneConfig, payload: T): T {
-  const continuityMode = config.continuity_mode;
-  const continuityGenerationMode = config.continuity_generation_mode
-    || (continuityMode === "high_quality" ? "high_quality" : "standard");
-
-  return {
-    ...payload,
-    enable_media_synthesis: config.enable_media_synthesis ?? true,
-    continuity_mode: continuityMode ?? true,
-    continuity_generation_mode: continuityGenerationMode,
-    storyboard_grid: config.storyboard_grid ?? 12,
-    clip_group_size: config.clip_group_size ?? 3,
-    transition_style: config.transition_style || "match_cut",
-  };
+function supportsStepByStep(contentScenario: string): boolean {
+  return contentScenario === "product_direct";
 }
 
 function extractVersions(state: PipelineStateLike): Version[] {
@@ -268,15 +258,15 @@ export default function Home() {
     workflowLabel, setWorkflowLabel,
     workflowState, setWorkflowState,
     showWorkflow, setShowWorkflow,
-    currentStepIdx, setCurrentStepIdx,
-    showSteps, setShowSteps,
+    currentStepIdx,
+    showSteps,
     startActivePipeline,
     clearActivePipeline,
   } = usePipelineStore();
 
   const {
     currentGate, setCurrentGate,
-    showStageProgress, setShowStageProgress,
+    setShowStageProgress,
     compareVersions, setCompareVersions,
     showCompare, setShowCompare,
   } = useExpertStore();
@@ -362,7 +352,15 @@ export default function Home() {
         if (partial) { setStepByStepState(partial); setShowStepByStep(true); }
       } catch { showToast(t("toast.cancelNoPartial"), "info"); }
     }
-  }, [stepByStepLabel, t]);
+  }, [
+    setLoading,
+    setShowStageProgress,
+    setShowStepByStep,
+    setStepByStepState,
+    showToast,
+    stepByStepLabel,
+    t,
+  ]);
 
   const S1_STEPS = [
     { label: t("wstep.strategy"), duration: 5000 },
@@ -435,7 +433,16 @@ export default function Home() {
         localStorage.removeItem("ai_video_expert_session");
       }
     }
-  }, []);
+  }, [
+    setCurrentGate,
+    setMode,
+    setReviewState,
+    setShowWorkflow,
+    setStage,
+    setThreadId,
+    setWorkflowLabel,
+    setWorkflowState,
+  ]);
 
   // showToast is now useAppStore.getState().showToast
 
@@ -471,7 +478,7 @@ export default function Home() {
         setDisconnected(true);
       }
     }
-  }, [threadId]);
+  }, [setDisconnected, setReviewState, setThreadId, threadId]);
 
   // P3-2: Adaptive polling — active 3s, complete 10s, disconnected 30s
   const getPollInterval = useCallback((): number => {
@@ -510,23 +517,11 @@ export default function Home() {
       setMode(sceneConfig.mode);
     }
     setStage("recommend");
-  }, []);
-
-  // Map frontend content_scenario to backend scenario ID
-  const scenarioToId = (scenario: string): string => {
-    const map: Record<string, string> = {
-      product_direct: "s1",
-      brand_campaign: "s2",
-      influencer_remix: "s3",
-      live_shoot: "s4",
-      brand_vlog: "s5",
-    };
-    return map[scenario] || "s1";
-  };
+  }, [setMode, setStage]);
 
   const startSmartCreate = (config: SceneConfig) => wrapStart(async () => {
     const scenario = config.content_scenario || "product_direct";
-    const scenarioId = scenarioToId(scenario);
+    const scenarioId = sceneToScenarioId(scenario);
     setFieldErrors({});
 
     // Demo mode: skip API calls, serve mock data instantly
@@ -557,7 +552,7 @@ export default function Home() {
       // Phase 1B: Unified async submit — returns label immediately, pipeline runs in background
       const submitResult = await submitScenario(
         scenarioId,
-        scenarioId === "s1" ? withS1ContinuityConfig(config, submitPayload) : submitPayload,
+        withScenarioContinuityConfig(config, submitPayload),
         { signal: abortRef.current?.signal }
       );
       setSmartCreateLabel(submitResult.label);
@@ -573,7 +568,7 @@ export default function Home() {
       if (scenarioId === "s1") {
         try {
           const result = await runS1ProductDirect(
-            withS1ContinuityConfig(config, {
+            withScenarioContinuityConfig(config, {
               product_catalog: config.product_catalog,
               brand_guidelines: config.brand_guidelines,
               target_platforms: config.target_platforms,
@@ -604,6 +599,15 @@ export default function Home() {
       }
     }
   });
+
+  const handleSmartCreateError = useCallback((errors: string[]) => {
+    handleSmartCreateStageError(errors, {
+      stopGenerating,
+      clearActivePipeline,
+      showToast,
+      t,
+    });
+  }, [clearActivePipeline, showToast, stopGenerating, t]);
 
   const handleStart = (config: SceneConfig) => wrapStart(async () => {
     setFieldErrors({});
@@ -655,7 +659,11 @@ export default function Home() {
     setLoading(true);
     const scenario = config.content_scenario || "product_direct";
 
-    const effectiveMode = config.mode || pipelineMode;
+    const effectiveModeRaw = config.mode || pipelineMode;
+    const effectiveMode = supportsStepByStep(scenario) ? effectiveModeRaw : "auto";
+    if (effectiveModeRaw === "step_by_step" && !supportsStepByStep(scenario)) {
+      showToast(t("toast.stepByStepS1Only"), "info");
+    }
     if (scenario === "brand_vlog") {
       // S5 Brand VLOG — dedicated endpoint
       setLoadingText(t("app.loading"));
@@ -667,6 +675,7 @@ export default function Home() {
           selected_models: config.selected_models || [],
           story_description: config.story_description || "",
           video_duration: config.video_duration || 30,
+          ...withScenarioContinuityConfig(config, {}),
         }, { signal: abortRef.current?.signal });
         setOneshotResult(result);
         setOneshotScenario(scenario);
@@ -684,7 +693,7 @@ export default function Home() {
       setLoadingText(t("app.loading"));
       try {
         const result = await runS1ProductDirect(
-          withS1ContinuityConfig(config, {
+          withScenarioContinuityConfig(config, {
             product_catalog: {
               name: config.product_catalog?.products?.[0]?.name
                 || config.product_catalog?.name
@@ -715,7 +724,7 @@ export default function Home() {
     try {
       setLoadingText(t("app.loading"));
       const result = await startS1StepByStep(
-        withS1ContinuityConfig(config, {
+        withScenarioContinuityConfig(config, {
           product_catalog: {
             name: config.product_catalog?.products?.[0]?.name
               || config.product_catalog?.name
@@ -1136,7 +1145,8 @@ export default function Home() {
           {stage === "generate" && mode === "smart" && smartCreateLabel !== null ? (
             <StageProgress
               label={smartCreateLabel}
-              scenario={scenarioToId(activeScene || "product_direct")}
+              scenario={sceneToScenarioId(activeScene || "product_direct")}
+              onError={handleSmartCreateError}
               onComplete={(result) => {
                 setOneshotResult(result);
                 setOneshotScenario(activeScene || "product_direct");
@@ -1317,15 +1327,7 @@ function URLSync({
 
   useEffect(() => {
     if (showSplash) return;
-    const sceneToPath: Record<string, string> = {
-      product_direct: "/s1",
-      brand_campaign: "/s2",
-      influencer_remix: "/s3",
-      live_shoot: "/s4",
-      brand_vlog: "/s5",
-      fast_mode: "/fast",
-    };
-    const targetPath = sceneToPath[activeScene];
+    const targetPath = sceneToPath(activeScene);
     if (targetPath && pathname !== targetPath) {
       const params = new URLSearchParams(searchParams.toString());
       if (mode) params.set("mode", mode);

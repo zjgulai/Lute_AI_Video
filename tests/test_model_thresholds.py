@@ -2,8 +2,6 @@
 
 import os
 
-import pytest
-
 from src.pipeline.model_thresholds import (
     _DEFAULT_THRESHOLD,
     _LLM_STEP_THRESHOLD,

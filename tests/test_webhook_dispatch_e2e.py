@@ -56,7 +56,7 @@ async def test_dispatch_audit_completed_to_real_url():
     # 用户去 webhook.site 看 POST 是否到达 + payload 是否正确
     print(f"\n[e2e] 已 POST audit.completed 到 {url}")
     print(f"      payload={payload}")
-    print(f"      去 webhook.site 验证")
+    print("      去 webhook.site 验证")
 
 
 @pytest.mark.asyncio

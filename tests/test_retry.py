@@ -1,12 +1,11 @@
 """Tests for retry_with_backoff utility — GAP-1 proof."""
 
-import asyncio
 import pytest
 
 from src.tools.retry import (
-    retry_with_backoff,
     MaxRetriesExceededError,
     is_retryable,
+    retry_with_backoff,
 )
 
 

@@ -51,6 +51,7 @@ class TestThresholdConfigurability:
         monkeypatch.setenv(env_var, override_value)
         # Force re-import by clearing cache
         import importlib
+
         import src.config as config_mod
 
         importlib.reload(config_mod)
@@ -66,8 +67,8 @@ class TestEnforceModeBehavior:
     def _patch_mode(monkeypatch, mode: str):
         """Patch QUALITY_MODE on imported modules without full reload."""
         import src.config as config_mod
-        import src.skills.seedance_video_generate as sdg_mod
         import src.skills.remotion_assemble as ra_mod
+        import src.skills.seedance_video_generate as sdg_mod
 
         monkeypatch.setattr(config_mod, "QUALITY_MODE", mode)
         monkeypatch.setattr(sdg_mod, "QUALITY_MODE", mode)

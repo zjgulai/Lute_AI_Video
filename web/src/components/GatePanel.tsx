@@ -2,10 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import CandidateSelector, { type Candidate } from "@/components/CandidateSelector";
+import InlineTooltip from "@/components/InlineTooltip";
 import { useI18n } from "@/i18n/I18nProvider";
-import { isDemoMode, fetchS1State, apiFetch } from "./api";
-
-
+import { isDemoMode, fetchS1State, apiFetch, fetchGateState } from "./api";
+import {
+  getContinuityDiagnosticsSummary,
+  hasContinuityDiagnostics,
+  normalizeContinuityDiagnostics,
+  type ContinuityDiagnosticsPayload,
+} from "@/lib/continuityDiagnostics";
+import { truncateDiagnosticText } from "@/lib/diagnosticText";
 import { errorMessage } from "@/lib/errors";
 // P1-A: 删除本地 getHeaders + 硬编码 demo key,
 // 全部走 apiFetch() 自动注入 X-API-Key + 自动拼 base URL,
@@ -112,10 +118,17 @@ export default function GatePanel({
   const [approved, setApproved] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [editCandidateId, setEditCandidateId] = useState<string | null>(null);
+  const [continuityDiagnostics, setContinuityDiagnostics] = useState<ContinuityDiagnosticsPayload | null>(null);
   const hasGenerated = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scenario = label.startsWith("s") ? label.charAt(0) + label.charAt(1) : "s1";
+
+  const loadGateState = useCallback(async () => {
+    const stateData = await fetchGateState(scenario, label, gateId);
+    setCandidates((stateData.candidates || []) as Candidate[]);
+    setContinuityDiagnostics(stateData.continuity_diagnostics || null);
+  }, [scenario, label, gateId]);
 
   // Generate candidates on mount
   const generateCandidates = useCallback(async () => {
@@ -129,6 +142,7 @@ export default function GatePanel({
       try {
         const demoCandidates = await generateDemoCandidates(gateId);
         setCandidates(demoCandidates);
+        setContinuityDiagnostics(null);
       } catch (e: unknown) {
         console.error("GatePanel demo generate error:", e);
         setError(errorMessage(e));
@@ -147,15 +161,14 @@ export default function GatePanel({
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody?.detail || `Generate failed (${res.status})`);
       }
-      const data = await res.json();
-      setCandidates(data.candidates || []);
+      await loadGateState();
     } catch (e: unknown) {
       console.error("GatePanel generate error:", e);
       setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [scenario, label, gateId, t]);
+  }, [gateId, loadGateState, scenario, label, t]);
 
   useEffect(() => {
     if (!hasGenerated.current) {
@@ -192,6 +205,7 @@ export default function GatePanel({
             },
           }))
         );
+        setContinuityDiagnostics(null);
       } catch (e: unknown) {
         console.error("GatePanel demo regenerate error:", e);
         setError(errorMessage(e));
@@ -210,14 +224,7 @@ export default function GatePanel({
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody?.detail || `Regenerate failed (${res.status})`);
       }
-      // Refresh all candidates after regeneration
-      const stateRes = await apiFetch(
-        `/scenario/${scenario}/gate/${label}/${gateId}`,
-      );
-      if (stateRes.ok) {
-        const stateData = await stateRes.json();
-        setCandidates(stateData.candidates || []);
-      }
+      await loadGateState();
     } catch (e: unknown) {
       console.error("GatePanel regenerate error:", e);
       setError(errorMessage(e));
@@ -360,6 +367,9 @@ export default function GatePanel({
   // ── Progress indicator ──
 
   const progressLabel = `${t("app.step")} ${currentStep} / ${totalSteps}`;
+  const continuityDisplay = normalizeContinuityDiagnostics(continuityDiagnostics);
+  const showContinuityDiagnostics = hasContinuityDiagnostics(continuityDiagnostics);
+  const continuitySummary = getContinuityDiagnosticsSummary(continuityDisplay, t);
 
   // ── Gate-specific label keys ──
   const gateLabelKey = (() => {
@@ -413,6 +423,54 @@ export default function GatePanel({
             </div>
           </div>
         </div>
+        {showContinuityDiagnostics && (
+          <div className="mt-3 rounded-lg border border-[rgba(122,150,187,0.28)] bg-[rgba(122,150,187,0.10)] p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                {t("continuity.diagnosticsTitle")}
+              </span>
+              {continuitySummary && (
+                <span className="text-[11px] text-[var(--text-body)]">{continuitySummary}</span>
+              )}
+            </div>
+            {continuityDisplay.clipDirections.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {continuityDisplay.clipDirections.slice(0, 2).map((direction, index) => (
+                  <div
+                    key={`${direction.sceneBeat}-${direction.transitionIntent}-${index}`}
+                    className="rounded-md bg-white/60 px-2.5 py-2 text-[11px] text-[var(--text-body)]"
+                  >
+                    <div className="font-medium text-[var(--text-h1)]">
+                      {t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}
+                    </div>
+                    {direction.beatSummary && (
+                      <div className="mt-0.5">
+                        {t("continuity.beatSummaryLabel")}{" "}
+                        <InlineTooltip
+                          label={truncateDiagnosticText(direction.beatSummary)}
+                          tooltip={direction.beatSummary}
+                          className="max-w-[280px] align-top"
+                          tooltipClassName="w-72"
+                        />
+                      </div>
+                    )}
+                    {direction.transitionIntent && (
+                      <div className="mt-0.5">
+                        {t("continuity.transitionIntentLabel")}{" "}
+                        <InlineTooltip
+                          label={truncateDiagnosticText(direction.transitionIntent)}
+                          tooltip={direction.transitionIntent}
+                          className="max-w-[280px] align-top"
+                          tooltipClassName="w-72"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Loading state */}

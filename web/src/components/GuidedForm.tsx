@@ -14,6 +14,7 @@ import LiveSummary from "./LiveSummary";
 import QuickTemplate from "./QuickTemplate";
 import StickyActionBar from "./StickyActionBar";
 import { CaretRight, Play } from "@phosphor-icons/react";
+import { applyGuidedContinuityDefaults } from "@/lib/guidedScenarioConfig";
 
 interface Props {
   scene: string;
@@ -96,13 +97,10 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
       target_platforms: ["tiktok"],
       target_languages: ["en"],
     };
+    Object.assign(config, applyGuidedContinuityDefaults(config, scene, values));
 
     // 根据场景组装数据
     if (scene === "product_direct") {
-      config.storyboard_grid = "12";
-      config.transition_style = "match_cut";
-      config.continuity_mode =
-        values.continuity_mode === "high_quality" ? "high_quality" : "standard";
       config.product_catalog = {
         products: [
           {

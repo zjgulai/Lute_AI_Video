@@ -292,13 +292,19 @@ class SeedancePromptSkill(SkillCallable):
                 continue
             purpose = str(group.get("product_angle") or group.get("purpose") or "")
             camera = str(group.get("camera") or "smooth continuity handheld")
+            scene_beat = str(group.get("scene_beat") or "")
+            beat_summary = str(group.get("beat_summary") or "")
+            transition_intent = str(group.get("transition_intent") or "")
             prompt_text = (
                 f"{base_prompt} Maintain continuity: {product_anchor}; "
                 f"same location: {location}; lighting: {lighting}. "
                 "Keep the same product, scene, and light across the whole clip. "
                 "Do not change the product shape, control panel, color, scale, or countertop position. "
                 "Use one continuous action chain inside this clip. "
-                "Avoid infant face close-ups, medical claims, and distress-heavy imagery."
+                f"{f' Narrative beat: {scene_beat}.' if scene_beat else ''}"
+                f"{f' Beat summary: {beat_summary}.' if beat_summary else ''}"
+                f"{f' Transition intent: {transition_intent}.' if transition_intent else ''}"
+                " Avoid infant face close-ups, medical claims, and distress-heavy imagery."
             )
 
             prompt_lower = prompt_text.lower()
@@ -323,6 +329,9 @@ class SeedancePromptSkill(SkillCallable):
                 "has_forbidden_words": len(hits) > 0,
                 "forbidden_hits": hits,
                 "product_angle": purpose,
+                "scene_beat": scene_beat,
+                "beat_summary": beat_summary,
+                "transition_intent": transition_intent,
                 "transition_to_next": group.get("transition_to_next", ""),
                 "transition_type": group.get("transition_type", "match_cut"),
             }

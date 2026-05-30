@@ -13,9 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from src.tools.video_downloader import VideoDownloader, TranscribeSegment, VideoMetadata
-from src.tools.asset_storage import AssetStorage, AssetRecord
-
+from src.tools.asset_storage import AssetStorage
+from src.tools.video_downloader import TranscribeSegment, VideoDownloader, VideoMetadata
 
 # ==============================================================================
 # VideoDownloader Tests

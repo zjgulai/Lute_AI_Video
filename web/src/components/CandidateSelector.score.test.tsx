@@ -113,6 +113,78 @@ describe("CandidateSelector — score rendering (D3)", () => {
     cleanup();
   });
 
+  it("prioritizes director_intent inside explanation text when present", () => {
+    const cand: Candidate = {
+      id: "explain",
+      variant: "standard",
+      data: {
+        continuity_direction_summary: {
+          clip_directions: [
+            {
+              scene_beat: "context_setup",
+              transition_intent: "bridge setup into product interaction",
+            },
+          ],
+        },
+      },
+      score: {
+        overall: 0.88,
+        explanation:
+          "Heuristic clip scoring: prompt=0.81, duration=0.95, file=1.00, continuity=1.00, director_intent=0.92",
+        breakdown: { director_intent: 0.92 },
+      },
+      recommended: false,
+    };
+    const { container, cleanup } = renderSelector({
+      candidates: [cand],
+      maxSelections: 1,
+      selectedIds: [],
+      onSelectionChange: () => {},
+      onEdit: () => {},
+    });
+    const text = container.textContent || "";
+    expect(text).toContain(
+      "Heuristic clip scoring: director_intent=0.92, prompt=0.81, duration=0.95, file=1.00, continuity=1.00",
+    );
+    cleanup();
+  });
+
+  it("renders continuity diagnostics summary when candidate carries clip directions", () => {
+    const cand: Candidate = {
+      id: "continuity",
+      variant: "standard",
+      data: {
+        continuity_direction_summary: {
+          clip_directions: [
+            {
+              scene_beat: "context_setup",
+              beat_summary: "context_setup -> product_intro",
+              transition_intent: "bridge setup into product interaction",
+            },
+          ],
+        },
+      },
+      score: {
+        overall: 0.88,
+        explanation: "continuity ok",
+        breakdown: { director_intent: 0.92 },
+      },
+      recommended: false,
+    };
+    const { container, cleanup } = renderSelector({
+      candidates: [cand],
+      maxSelections: 1,
+      selectedIds: [],
+      onSelectionChange: () => {},
+      onEdit: () => {},
+    });
+    const text = container.textContent || "";
+    expect(text).toContain("context_setup");
+    expect(text).toContain("bridge setup into product interaction");
+    expect(text).toContain("92%");
+    cleanup();
+  });
+
   it("renders recommended badge when candidate.recommended is true", () => {
     const candidates = [makeCandidate("a", 0.85, true), makeCandidate("b", 0.85, false)];
     const { container, cleanup } = renderSelector({

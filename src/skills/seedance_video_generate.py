@@ -299,10 +299,14 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             pass
 
         # Frame variance check — detect static images and black screens
-        variance_result = self._check_frame_variance(local_path)
-        variance_ok = variance_result["variance_ok"]
-        if not variance_ok and QUALITY_MODE == "enforce":
-            failures.extend(variance_result["failures"])
+        if QUALITY_MODE == "enforce":
+            variance_result = self._check_frame_variance(local_path)
+            variance_ok = variance_result["variance_ok"]
+            if not variance_ok:
+                failures.extend(variance_result["failures"])
+        else:
+            variance_result = None
+            variance_ok = True
 
         # all_ok: enforce mode requires variance_ok; observe/off mode keeps original logic
         if QUALITY_MODE == "enforce":

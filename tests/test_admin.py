@@ -9,7 +9,7 @@ Covers (CLAUDE.md D task — Admin Panel verification):
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -28,6 +28,7 @@ class TestLoginRateLimiter:
 
     def test_exceeding_limit_raises_429(self):
         from fastapi import HTTPException
+
         from src.routers._admin_deps import _check_login_rate_limit, _record_login_attempt
 
         for _ in range(5):
@@ -56,6 +57,7 @@ class TestVerifyAdminSession:
     @pytest.mark.asyncio
     async def test_missing_cookie_raises_401(self):
         from fastapi import HTTPException
+
         from src.routers._admin_deps import verify_admin_session
 
         mock_request = AsyncMock()
@@ -67,6 +69,7 @@ class TestVerifyAdminSession:
     @pytest.mark.asyncio
     async def test_invalid_token_raises_401(self):
         from fastapi import HTTPException
+
         from src.routers._admin_deps import verify_admin_session
 
         mock_request = AsyncMock()
@@ -94,10 +97,11 @@ class TestVerifyAdminSession:
     @pytest.mark.asyncio
     async def test_expired_session_raises_401(self):
         from fastapi import HTTPException
+
         from src.routers._admin_deps import verify_admin_session
 
         mock_request = AsyncMock()
-        expired_time = datetime.now(timezone.utc) - timedelta(hours=1)
+        expired_time = datetime.now(UTC) - timedelta(hours=1)
 
         with patch("src.storage.db.is_pg_available", return_value=True):
             with patch("src.storage.db.get_pool") as mock_get_pool:
@@ -135,6 +139,7 @@ class TestTenantIdValidation:
 
     def test_invalid_tenant_id_too_short(self):
         from fastapi import HTTPException
+
         from src.routers.admin import _validate_tenant_id
 
         with pytest.raises(HTTPException) as exc_info:
@@ -143,6 +148,7 @@ class TestTenantIdValidation:
 
     def test_invalid_tenant_id_bad_chars(self):
         from fastapi import HTTPException
+
         from src.routers.admin import _validate_tenant_id
 
         with pytest.raises(HTTPException) as exc_info:
@@ -151,6 +157,7 @@ class TestTenantIdValidation:
 
     def test_invalid_tenant_id_underscore(self):
         from fastapi import HTTPException
+
         from src.routers.admin import _validate_tenant_id
 
         with pytest.raises(HTTPException) as exc_info:
@@ -159,6 +166,7 @@ class TestTenantIdValidation:
 
     def test_invalid_tenant_id_leading_hyphen(self):
         from fastapi import HTTPException
+
         from src.routers.admin import _validate_tenant_id
 
         with pytest.raises(HTTPException) as exc_info:
@@ -185,14 +193,14 @@ class TestAdminHelpers:
     def test_serialize_datetime(self):
         from src.routers._admin_deps import _serialize
 
-        dt = datetime(2026, 5, 7, 12, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2026, 5, 7, 12, 0, 0, tzinfo=UTC)
         result = _serialize(dt)
         assert "2026-05-07T12:00:00" in result
 
     def test_serialize_nested_dict(self):
         from src.routers._admin_deps import _serialize
 
-        data = {"user": {"name": "test", "created": datetime(2026, 1, 1, tzinfo=timezone.utc)}}
+        data = {"user": {"name": "test", "created": datetime(2026, 1, 1, tzinfo=UTC)}}
         result = _serialize(data)
         assert result["user"]["name"] == "test"
         assert "2026-01-01" in result["user"]["created"]

@@ -12,14 +12,10 @@ All tests use stub/mock mode — no real API calls.
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 
-from src.tools.seedance_client import SeedanceClient
 from src.tools.gpt_image_client import GPTImageClient
-
+from src.tools.seedance_client import SeedanceClient
 
 # ==============================================================================
 # Seedance 2.0 Client Tests

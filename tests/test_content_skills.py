@@ -16,7 +16,6 @@ from src.skills.product_strategy import ProductStrategySkill
 from src.skills.seedance_prompt import SeedancePromptSkill
 from src.skills.thumbnail_prompt import ThumbnailPromptSkill
 
-
 # ==============================================================================
 # ProductStrategySkill Tests
 # ==============================================================================

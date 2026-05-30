@@ -5,10 +5,17 @@ in the generated scripts — the foundational inter-node feature pipeline.
 """
 
 import pytest
+
 from src.agents.script_writer import ScriptWriterAgent
 from src.models import (
-    AuditReport, AuditCriterion, AuditCriterionStatus, AuditCheckpoint,
-    Brief, VideoType, Platform, Language,
+    AuditCheckpoint,
+    AuditCriterion,
+    AuditCriterionStatus,
+    AuditReport,
+    Brief,
+    Language,
+    Platform,
+    VideoType,
 )
 
 

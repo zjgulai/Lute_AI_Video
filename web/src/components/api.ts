@@ -2,11 +2,88 @@
 // Runtime-configurable via localStorage (with cookie fallback) or build-time env vars.
 
 import { errorMessage } from "@/lib/errors";
+import type { ContinuityDiagnosticsPayload } from "@/lib/continuityDiagnostics";
+import type { ReviewState } from "@/components/types";
 
 const STORAGE_KEYS = {
   apiBase: "ai_video_api_base",
   apiKey: "ai_video_api_key",
   demoMode: "ai_video_demo_mode",
+};
+
+// Direct references are required for Next.js client-side build-time inlining.
+const BUILD_TIME_API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+
+type ScenarioRunResult = {
+  label?: string;
+  briefs?: Record<string, unknown>[];
+  scripts?: Record<string, unknown>[];
+  thumbnail_image_paths?: string[];
+  final_video_path?: string;
+  video_duration?: number;
+  audit_report?: { overall_score?: number };
+};
+
+type PipelineStepState = Record<string, unknown> & {
+  status?: string;
+  output?: unknown;
+};
+
+type StepRunnerState = Record<string, unknown> & {
+  current_step?: string | null;
+  gates?: Record<string, Record<string, unknown> & { status?: string }>;
+  steps?: Record<string, PipelineStepState>;
+};
+
+type StepRunnerResponse = Record<string, unknown> & {
+  label: string;
+  state?: StepRunnerState;
+  data?: unknown;
+  steps?: Record<string, PipelineStepState>;
+};
+
+type PublishResult = Record<string, unknown> & {
+  platform: string;
+  success: boolean;
+  post_id?: string;
+  post_url?: string;
+  error?: string;
+};
+
+type DistributionResponse = {
+  distribution_plans?: Array<Record<string, unknown>>;
+};
+
+type DashboardOverview = {
+  videos: Array<{
+    video_id: string;
+    title: string;
+    scenario: string;
+    platform: string;
+    ctr: number;
+    cvr: number;
+    watch_rate: number;
+    followers_gained: number;
+    sales: number;
+    views: number;
+    history?: { pulled_at: string; ctr: number; watch_rate: number }[];
+  }>;
+  scenarios: Array<{
+    scenario: string;
+    avg_watch_rate: number;
+    avg_ctr: number;
+    avg_cvr: number;
+    total_videos: number;
+    total_sales: number;
+  }>;
+  platforms: Array<{
+    platform: string;
+    avg_ctr: number;
+    avg_cvr: number;
+    avg_watch_rate: number;
+    total_views: number;
+    scenario_breakdown: Record<string, { avg_ctr: number; avg_cvr: number; avg_watch_rate: number }>;
+  }>;
 };
 
 // ── P3-5: Cookie fallback for privacy / incognito mode ──
@@ -35,7 +112,7 @@ function storageGet(key: string): string | null {
   try {
     const val = localStorage.getItem(key);
     if (val !== null) return val;
-  } catch (_) { /* localStorage unavailable (privacy mode) */ }
+  } catch { /* localStorage unavailable (privacy mode) */ }
   return getCookie(key) ?? null;
 }
 
@@ -43,13 +120,13 @@ function storageSet(key: string, value: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(key, value);
-  } catch (_) { /* fall through to cookie */ }
+  } catch { /* fall through to cookie */ }
   setCookie(key, value);
 }
 
 function storageRemove(key: string): void {
   if (typeof window === "undefined") return;
-  try { localStorage.removeItem(key); } catch (_) {}
+  try { localStorage.removeItem(key); } catch {}
   removeCookie(key);
 }
 
@@ -90,7 +167,7 @@ export function getApiKey(): string {
     const stored = storageGet(STORAGE_KEYS.apiKey);
     if (stored) return stored;
   }
-  return readEnv("NEXT_PUBLIC_API_KEY") || "";
+  return BUILD_TIME_API_KEY;
 }
 
 export function hasApiKey(): boolean {
@@ -557,7 +634,7 @@ export function isApiError(e: unknown): e is ApiError {
 // ── Core pipeline APIs ──
 
 /** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
-export async function startPipeline(body: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function startPipeline(body: unknown, options?: { signal?: AbortSignal }): Promise<unknown> {
   const res = await apiFetch("/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
@@ -569,7 +646,7 @@ export async function startPipeline(body: unknown, options?: { signal?: AbortSig
 }
 
 /** @deprecated StepRunner pipelines do not use LangGraph checkpoint state. */
-export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<ReviewState> {
   const res = await apiFetch("/pipeline/" + threadId + "/state", {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -585,7 +662,7 @@ export async function submitReview(
   action: string,
   reviewerNotes: string,
   options?: { signal?: AbortSignal }
-): Promise<any> {
+): Promise<ReviewState> {
   const res = await apiFetch("/pipeline/" + threadId + "/review/" + reviewNode, {
     method: "POST",
     headers: getHeaders(),
@@ -597,7 +674,7 @@ export async function submitReview(
 }
 
 /** @deprecated Use /scenario/{s}/state/{label} instead. */
-export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<DistributionResponse> {
   const res = await apiFetch("/pipeline/" + threadId + "/distribution", {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -607,7 +684,7 @@ export async function fetchDistribution(threadId: string, options?: { signal?: A
 }
 
 /** @deprecated Use /scenario/{s}/state/{label} instead. */
-export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<unknown> {
   const res = await apiFetch("/pipeline/" + threadId + "/output", {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -618,7 +695,7 @@ export async function fetchOutput(threadId: string, options?: { signal?: AbortSi
 
 // ── Scenario pipelines (skill-based, no LangGraph) ──
 
-export async function runS1ProductDirect(config: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function runS1ProductDirect(config: unknown, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
@@ -635,7 +712,7 @@ export async function runS2BrandCampaign(body: {
   target_platforms?: string[];
   target_languages?: string[];
   week?: string;
-}, options?: { signal?: AbortSignal }): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s2", {
     method: "POST",
     headers: getHeaders(),
@@ -653,7 +730,7 @@ export async function runS3InfluencerRemix(body: {
   influencer_name?: string;
   brief_id?: string;
   video_duration?: number;
-}, options?: { signal?: AbortSignal }): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s3", {
     method: "POST",
     headers: getHeaders(),
@@ -669,7 +746,7 @@ export async function runS4LiveShoot(body: {
   product_info: unknown;
   topic?: string;
   target_platforms?: string[];
-}, options?: { signal?: AbortSignal }): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s4", {
     method: "POST",
     headers: getHeaders(),
@@ -682,7 +759,7 @@ export async function runS4LiveShoot(body: {
 
 // ── S1 Step-by-step pipeline APIs ──
 
-export async function startS1StepByStep(config: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function startS1StepByStep(config: unknown, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
@@ -693,7 +770,7 @@ export async function startS1StepByStep(config: unknown, options?: { signal?: Ab
   return res.json();
 }
 
-export async function runS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function runS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/step/" + stepName, {
     method: "POST",
     headers: getHeaders(),
@@ -704,7 +781,7 @@ export async function runS1Step(label: string, stepName: string, options?: { sig
   return res.json();
 }
 
-export async function regenerateS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function regenerateS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/regenerate", {
     method: "POST",
     headers: getHeaders(),
@@ -715,7 +792,7 @@ export async function regenerateS1Step(label: string, stepName: string, options?
   return res.json();
 }
 
-export async function resumeS1(label: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function resumeS1(label: string, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/resume", {
     method: "POST",
     headers: getHeaders(),
@@ -726,7 +803,7 @@ export async function resumeS1(label: string, options?: { signal?: AbortSignal }
   return res.json();
 }
 
-export async function fetchS1State(label: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchS1State(label: string, options?: { signal?: AbortSignal }): Promise<StepRunnerState> {
   const res = await apiFetch("/scenario/s1/state/" + label, {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -735,7 +812,7 @@ export async function fetchS1State(label: string, options?: { signal?: AbortSign
   return res.json();
 }
 
-export async function updateS1State(label: string, updates: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function updateS1State(label: string, updates: unknown, options?: { signal?: AbortSignal }): Promise<StepRunnerState> {
   const res = await apiFetch("/scenario/s1/state/" + label, {
     method: "PUT",
     headers: getHeaders(),
@@ -951,7 +1028,13 @@ export async function runS5BrandVlog(body: {
   selected_models: unknown[];
   story_description: string;
   video_duration: number;
-}, options?: { signal?: AbortSignal }): Promise<any> {
+  enable_media_synthesis?: unknown;
+  continuity_mode?: unknown;
+  continuity_generation_mode?: string;
+  storyboard_grid?: string | number;
+  clip_group_size?: number;
+  transition_style?: string;
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s5", {
     method: "POST",
     headers: getHeaders(),
@@ -999,6 +1082,8 @@ export async function getScenarioStatus(
   current_step: string | null;
   progress: number;
   pipeline_degraded: boolean;
+  soft_degraded_reasons?: Array<{ step?: string; reason?: string; detail?: string }>;
+  continuity_diagnostics?: ContinuityDiagnosticsPayload;
   gate_status: string | null;
   errors: string[];
   steps?: Record<string, unknown>;
@@ -1009,6 +1094,33 @@ export async function getScenarioStatus(
     signal: options?.signal,
   });
   if (!res.ok) throw new Error(`Status check failed (${res.status})`);
+  return res.json();
+}
+
+export async function fetchGateState(
+  scenario: string,
+  label: string,
+  gateId: string,
+  options?: { signal?: AbortSignal },
+): Promise<{
+  gate_id: string;
+  label: string;
+  status: string;
+  candidates: unknown[];
+  selected_ids: string[];
+  approved: boolean;
+  max_selections: number;
+  after_step: string;
+  continuity_diagnostics?: ContinuityDiagnosticsPayload;
+}> {
+  const res = await apiFetch(
+    `/scenario/${scenario}/gate/${encodeURIComponent(label)}/${gateId}`,
+    {
+      headers: getHeaders(false),
+      signal: options?.signal,
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch gate state (${res.status})`);
   return res.json();
 }
 
@@ -1024,7 +1136,7 @@ export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promis
   return data.platforms || [];
 }
 
-export async function publishContent(platform: string, content: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function publishContent(platform: string, content: unknown, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
   const res = await apiFetch("/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
@@ -1035,7 +1147,7 @@ export async function publishContent(platform: string, content: unknown, options
   return res.json();
 }
 
-export async function fetchPublishStatus(platform: string, postId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchPublishStatus(platform: string, postId: string, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
   const res = await apiFetch(
     getApiBase() + "/distribution/status/" + encodeURIComponent(platform) + "/" + encodeURIComponent(postId),
     { headers: getHeaders(false), signal: options?.signal }
@@ -1046,7 +1158,7 @@ export async function fetchPublishStatus(platform: string, postId: string, optio
 
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
-export async function publishVideo(videoId: string, platforms: string[], metadata: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function publishVideo(videoId: string, platforms: string[], metadata: unknown, options?: { signal?: AbortSignal }): Promise<PublishResult | PublishResult[]> {
   const res = await apiFetch("/publish/" + videoId, {
     method: "POST", headers: getHeaders(),
     body: JSON.stringify({ platforms, metadata }),
@@ -1056,14 +1168,14 @@ export async function publishVideo(videoId: string, platforms: string[], metadat
   return res.json();
 }
 
-export async function fetchVideoMetrics(videoId: string, platform?: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchVideoMetrics(videoId: string, platform?: string, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
   const params = platform ? "?platform=" + platform : "";
   const res = await apiFetch("/metrics/" + videoId + params, { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch metrics");
   return res.json();
 }
 
-export async function fetchDashboardOverview(scenario?: string, platform?: string, days?: number, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchDashboardOverview(scenario?: string, platform?: string, days?: number, options?: { signal?: AbortSignal }): Promise<DashboardOverview> {
   const params = new URLSearchParams();
   if (scenario) params.set("scenario", scenario);
   if (platform) params.set("platform", platform);
@@ -1215,7 +1327,7 @@ export function logStateChange(store: string, key: string, oldVal: unknown, newV
 }
 
 /** 辅助：生成 bug 检测日志（用于断言失败时） */
-export function logBug(assertion: string, expected: string, actual: string, context?: Record<string, any>) {
+export function logBug(assertion: string, expected: string, actual: string, context?: Record<string, unknown>) {
   const traceId = genTraceId();
    
   console.error(

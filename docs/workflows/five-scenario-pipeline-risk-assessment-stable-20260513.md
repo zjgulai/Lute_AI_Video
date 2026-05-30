@@ -5,12 +5,14 @@ module: ai-video
 topic: pipeline-risk-assessment
 status: stable
 created: 2026-05-13
-updated: 2026-05-13
+updated: 2026-05-31
 owner: Cindy
 source: ai
 ---
 
 # S1-S5 视频生成Pipeline深度风险评估与改善优化计划
+
+> **历史语境（2026-05-31）**：本文是 2026-05-13 的深度风险评估快照，保留用于追溯 S1-S5 技术债来源。Top 风险、代码证据和改进建议不代表当前状态；当前关闭项、未闭项和下一步 TODO 以 [`docs/claude/known-gaps-stable.md`](../claude/known-gaps-stable.md) 为准。
 
 > 评估范围：S1 商品直拍 / S2 品牌宣传 / S3 网红二创 / S4 直播拍摄 / S5 品牌VLOG
 > 评估依据：`multi-agent-video-system-design.md` + `product-architecture.md` + 当前AI视频生成现状
@@ -537,7 +539,10 @@ Layer 5: 发布后监控 — 平台投诉/下架/账号健康追踪
 | 视觉层 | 构图、光线、色彩一致性 | **低** | **人工必审，AI评分仅供参考** |
 | 转化层 | CTA清晰度、紧迫感、路径 friction | **中** | AI评分+人工复核 |
 
-**立即行动建议**：
+**历史立即行动建议**：
+
+> 这些建议保留为 2026-05-13 审计输出。当前执行顺序以 [`docs/claude/known-gaps-stable.md`](../claude/known-gaps-stable.md) 为准。
+
 - Gate 1/3取消AI推荐默认选中，强制人工确认
 - candidate_scorer增加`heuristic`标识暴露到前端，提示用户当前评分为算法估算
 - 7 criteria扩展为「7+5双层审计」：7项基础存在性检查 + 5项质量评估（3项AI+2项人工）
@@ -654,11 +659,13 @@ Layer 5: 发布后监控 — 平台投诉/下架/账号健康追踪
 | @Creative | 5 | 内容质量评分框架 | ✅ 已纳入 |
 | @EcomOps | 6 | 运营策略平台适配 | ✅ 已纳入 |
 
-### B. 代码证据索引
+### B. 历史代码证据索引
+
+> 本索引保留原始审计证据，不保证与当前工作树完全一致。当前边界状态请先查 [`docs/claude/known-gaps-stable.md`](../claude/known-gaps-stable.md)。
 
 | 文件 | 关键行号 | 问题 |
 |:---|:---|:---|
-| `s2_brand_pipeline.py` | 全文件60行 | DEPRECATED wrapper |
+| `s2_brand_pipeline.py` | 全文件 | 冻结兼容 shim；warning-only alias to S2 v2 |
 | `s5_brand_vlog_pipeline.py` | VIDEO_MAX_DURATION=15 | 15s硬限制 |
 | `candidate_scorer.py` | 454行6函数 | 零测试+heuristic缺陷 |
 | `gate_manager.py` | L369 | retry逻辑bug |

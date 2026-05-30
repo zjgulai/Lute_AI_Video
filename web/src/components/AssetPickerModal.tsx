@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl } from "./api";
 import { MagnifyingGlass, X, Check, FilmSlate, ImageSquare, MusicNote } from "@phosphor-icons/react";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 
 export type AcceptKind = "image" | "video" | "audio" | "all";
 
@@ -203,11 +204,10 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
                   >
                     <div className="aspect-video bg-[var(--cinema-black)] relative flex items-center justify-center overflow-hidden">
                       {previewUrl ? (
-                        <img
+                        <RuntimeMediaImage
                           src={previewUrl}
                           alt={file.filename}
                           className="w-full h-full object-cover"
-                          loading="lazy"
                         />
                       ) : (
                         <div className="w-full h-full bg-[var(--bg-panel)] flex items-center justify-center">

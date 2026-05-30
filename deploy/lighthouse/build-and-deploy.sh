@@ -1,75 +1,80 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-# ═══════════════════════════════════════════════════════════════
-# AI Video - 本地构建 + 上传到服务器部署
-# 在本地 Mac 上执行
-# ═══════════════════════════════════════════════════════════════
+# AI Video — safe Lighthouse sync + deploy wrapper.
+# Run from the local repository root. The remote host performs the frontend
+# build and container restart via deploy/lighthouse/deploy.sh.
 
-SERVER_IP="101.34.52.232"
-SSH_KEY="/Users/pray/Downloads/ai_video.pem"
-SSH_USER="root"
-REMOTE_DIR="/opt/ai-video"
+SERVER_IP="${SERVER_IP:-101.34.52.232}"
+SSH_USER="${SSH_USER:-ubuntu}"
+REMOTE_DIR="${REMOTE_DIR:-/opt/ai-video}"
+DRY_RUN="${DRY_RUN:-0}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+EXCLUDE_FILE="${EXCLUDE_FILE:-$SCRIPT_DIR/rsync-excludes.txt}"
+
+if [ -z "${SSH_KEY:-}" ]; then
+  for candidate in \
+    "$REPO_ROOT/ai_video.pem" \
+    "$HOME/Downloads/ai_video.pem" \
+    "$HOME/ai_video.pem"
+  do
+    if [ -f "$candidate" ]; then
+      SSH_KEY="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "${SSH_KEY:-}" ] || [ ! -f "$SSH_KEY" ]; then
+  echo "ERROR: SSH_KEY not set and ai_video.pem not found in repo root, ~/Downloads, or ~/" >&2
+  echo "Usage: SSH_KEY=/path/to/ai_video.pem $0" >&2
+  exit 1
+fi
+
+if [ ! -f "$EXCLUDE_FILE" ]; then
+  echo "ERROR: rsync exclude file not found: $EXCLUDE_FILE" >&2
+  exit 1
+fi
+
+RSYNC_ARGS=(
+  -avz
+  --delete
+  --chmod=F644,D755
+  -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
+  --exclude-from="$EXCLUDE_FILE"
+)
+
+if [ "$DRY_RUN" = "1" ]; then
+  RSYNC_ARGS+=(--dry-run)
+fi
 
 echo "========================================"
-echo "  AI Video 本地构建 + 上传部署"
+echo "  AI Video Lighthouse Sync + Deploy"
 echo "========================================"
+echo "server:     $SSH_USER@$SERVER_IP"
+echo "remote dir: $REMOTE_DIR"
+echo "ssh key:    $SSH_KEY"
+echo "excludes:   $EXCLUDE_FILE"
+echo "dry run:    $DRY_RUN"
 echo ""
-echo "服务器: $SERVER_IP"
-echo "用户:   $SSH_USER"
-echo ""
 
-# ── 1. 构建后端镜像 ──
-echo "[1/5] 构建后端 Docker 镜像..."
-docker build -f Dockerfile.backend -t ai-video-backend:latest .
+cd "$REPO_ROOT"
 
-# ── 2. 构建前端镜像 ──
-echo "[2/5] 构建前端 Docker 镜像..."
-docker build \
-  --build-arg NEXT_PUBLIC_API_BASE_URL=http://$SERVER_IP/api \
-  -f web/Dockerfile \
-  -t ai-video-frontend:latest \
-  web/
+echo "[1/2] Syncing repository to Lighthouse..."
+rsync "${RSYNC_ARGS[@]}" ./ "$SSH_USER@$SERVER_IP:$REMOTE_DIR/"
 
-# ── 3. 保存镜像为 tar ──
-echo "[3/5] 导出镜像..."
-docker save ai-video-backend:latest | gzip > /tmp/ai-video-backend.tar.gz
-docker save ai-video-frontend:latest | gzip > /tmp/ai-video-frontend.tar.gz
-
-# ── 4. 上传到服务器 ──
-echo "[4/5] 上传镜像到服务器..."
-ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$SSH_USER@$SERVER_IP" "mkdir -p $REMOTE_DIR/deploy/lighthouse"
-
-scp -o StrictHostKeyChecking=no -i "$SSH_KEY" \
-  /tmp/ai-video-backend.tar.gz \
-  /tmp/ai-video-frontend.tar.gz \
-  deploy/lighthouse/docker-compose.prod.yml \
-  deploy/lighthouse/.env.prod \
-  deploy/lighthouse/nginx.conf \
-  deploy/lighthouse/deploy.sh \
-  "$SSH_USER@$SERVER_IP:$REMOTE_DIR/"
-
-# ── 5. 在服务器上加载镜像并启动 ──
-echo "[5/5] 在服务器上加载并启动..."
-ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$SSH_USER@$SERVER_IP" bash <> 'SCRIPT'
-cd $REMOTE_DIR
-docker load < ai-video-backend.tar.gz
-docker load < ai-video-frontend.tar.gz
-mv docker-compose.prod.yml deploy/lighthouse/
-mv .env.prod deploy/lighthouse/
-mv nginx.conf deploy/lighthouse/
-chmod +x deploy.sh
-bash deploy.sh
-SCRIPT
-
-# ── 清理 ──
-rm -f /tmp/ai-video-backend.tar.gz /tmp/ai-video-frontend.tar.gz
+if [ "$DRY_RUN" = "1" ]; then
+  echo ""
+  echo "Dry run complete; remote deploy skipped."
+  exit 0
+fi
 
 echo ""
-echo "========================================"
-echo "  部署完成！"
-echo "========================================"
+echo "[2/2] Running remote deploy.sh..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SERVER_IP" \
+  "cd '$REMOTE_DIR/deploy/lighthouse' && bash deploy.sh"
+
 echo ""
-echo "访问地址:"
-echo "  http://$SERVER_IP"
-echo ""
+echo "Deploy complete: https://video.lute-tlz-dddd.top"

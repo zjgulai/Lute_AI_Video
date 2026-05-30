@@ -14,9 +14,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from src.pipeline.gate_manager import (
@@ -30,7 +27,6 @@ from src.pipeline.gate_manager import (
     regenerate_candidate,
 )
 from src.pipeline.state_manager import PipelineStateManager
-
 
 # ── GATE_DEFINITIONS 静态契约 ──
 
@@ -71,9 +67,9 @@ class TestGateDefinitionsContract:
 # ── STEP_ORDER 不变量 ──
 
 class TestStepOrderInvariants:
-    def test_step_order_has_12_steps(self):
+    def test_step_order_has_13_steps(self):
         # 与 step_runner.py 必须保持同步
-        assert len(STEP_ORDER) == 12
+        assert len(STEP_ORDER) == 13
 
     def test_strategy_is_first(self):
         assert STEP_ORDER[0] == "strategy"
@@ -88,7 +84,8 @@ class TestStepOrderInvariants:
         ("strategy", "scripts"),
         ("scripts", "compliance"),
         ("compliance", "storyboards"),
-        ("storyboards", "keyframe_images"),
+        ("storyboards", "continuity_storyboard_grid"),
+        ("continuity_storyboard_grid", "keyframe_images"),
         ("keyframe_images", "video_prompts"),
         ("video_prompts", "thumbnail_prompts"),
         ("thumbnail_prompts", "seedance_clips"),
@@ -146,7 +143,28 @@ class TestGateStateLifecycle:
         sm = PipelineStateManager()
         await sm.save("test-label-2", {
             "label": "test-label-2",
-            "steps": {},
+            "steps": {
+                "audit": {
+                    "output": {
+                        "continuity_score": 0.8,
+                        "asset_ready_audit": {
+                            "status": "PASS",
+                            "checks": {"director_intent_metadata": True},
+                        },
+                        "continuity_direction_summary": {
+                            "clip_directions": [
+                                {
+                                    "scene_beat": "context_setup",
+                                    "beat_summary": "context_setup -> product_intro",
+                                    "transition_intent": "bridge setup into product interaction",
+                                }
+                            ],
+                            "scene_beats": ["context_setup"],
+                            "transition_intents": ["bridge setup into product interaction"],
+                        },
+                    }
+                }
+            },
             "gates": {
                 "gate_1_script": {
                     "status": "awaiting_approval",
@@ -160,6 +178,8 @@ class TestGateStateLifecycle:
         assert result["status"] == "awaiting_approval"
         assert result["candidates"] == [{"id": "c1", "variant": "standard"}]
         assert result["selected_ids"] == ["c1"]
+        assert result["continuity_diagnostics"]["director_intent_metadata"] is True
+        assert result["continuity_diagnostics"]["clip_directions"][0]["scene_beat"] == "context_setup"
 
 
 # ── gate_4_final 候选组装(不依赖 LLM,验证拼装逻辑) ──
@@ -469,6 +489,7 @@ class TestStepRunnerGatePause:
     async def test_step_by_step_pauses_at_gate_after_scripts(self, isolated_state_dir):
         """mode=step_by_step 时,scripts step 完成后应触发 gate_1 暂停。"""
         from unittest.mock import AsyncMock, patch
+
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
@@ -512,6 +533,7 @@ class TestStepRunnerGatePause:
     async def test_auto_mode_skips_gate_pause(self, isolated_state_dir):
         """mode=auto 时,scripts step 完成后不应触发 gate 暂停。"""
         from unittest.mock import AsyncMock, patch
+
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
@@ -536,7 +558,6 @@ class TestStepRunnerGatePause:
     @pytest.mark.asyncio
     async def test_resume_pauses_at_pre_step_gate(self, isolated_state_dir):
         """resume 遇到 awaiting_approval 的 gate 时在 pre-step 检查点暂停。"""
-        from unittest.mock import AsyncMock, patch
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
@@ -586,6 +607,7 @@ class TestStepRunnerGatePause:
     async def test_resume_pauses_at_post_step_gate(self, isolated_state_dir):
         """resume 执行完 step 后,如果 step 触发了 gate,在 post-step 检查点暂停。"""
         from unittest.mock import AsyncMock, patch
+
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
@@ -621,15 +643,16 @@ class TestStepRunnerGatePause:
         await sm.save(label, state)
 
         # 用 step_by_step 模式 resume(从 storyboards 开始)
-        # storyboards → keyframe_images(gate_2) → 暂停
+        # storyboards → continuity_storyboard_grid → keyframe_images(gate_2) → 暂停
         with patch("src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"storyboards": "mock"}
             final_state = await step_runner.resume(label)
 
-        # 验证 storyboards 和 keyframe_images 都被执行了
-        assert mock_run.call_count == 2
+        # 验证 storyboards / continuity_storyboard_grid / keyframe_images 都被执行了
+        assert mock_run.call_count == 3
         assert mock_run.call_args_list[0][0][0] == "storyboards"
-        assert mock_run.call_args_list[1][0][0] == "keyframe_images"
+        assert mock_run.call_args_list[1][0][0] == "continuity_storyboard_grid"
+        assert mock_run.call_args_list[2][0][0] == "keyframe_images"
 
         # 验证在 keyframe_images 处暂停(gate_2 触发)
         assert final_state["current_step"] == "keyframe_images"

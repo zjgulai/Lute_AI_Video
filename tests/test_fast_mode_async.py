@@ -155,6 +155,7 @@ class TestFastSubmitEndpoint:
         Production uvicorn keeps the loop alive across requests.
         """
         import asyncio
+
         from src.tasks.fast_task_registry import (
             get_fast_task,
             register_fast_task,
@@ -183,6 +184,7 @@ class TestFastSubmitEndpoint:
         Same TestClient limitation as above — test registry directly.
         """
         import asyncio
+
         from src.tasks.fast_task_registry import (
             get_fast_task,
             register_fast_task,

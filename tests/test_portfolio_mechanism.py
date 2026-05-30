@@ -10,11 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
-
-import pytest
 from typing import Any
 
+import pytest
 
 # ── Scanner: synthetic output/ tree ──
 

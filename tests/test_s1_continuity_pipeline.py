@@ -241,6 +241,9 @@ def _sample_continuity_grid() -> dict:
                 "shot_indices": [1, 2, 3],
                 "duration": 4,
                 "purpose": "pain setup",
+                "scene_beat": "context_setup",
+                "beat_summary": "context_setup -> product_intro",
+                "transition_intent": "bridge the setup into first product contact",
                 "seedance_prompt": "Clock, cold bottle, parent approaches warmer.",
                 "transition_to_next": (
                     "match cut from cold bottle movement to bottle placement"
@@ -252,6 +255,9 @@ def _sample_continuity_grid() -> dict:
                 "shot_indices": [4, 5, 6],
                 "duration": 6,
                 "purpose": "product action",
+                "scene_beat": "product_interaction",
+                "beat_summary": "product_action -> result_proof",
+                "transition_intent": "carry feature interaction into visible user payoff",
                 "seedance_prompt": (
                     "Bottle placed into warmer, button press, indicator light."
                 ),
@@ -286,12 +292,18 @@ async def test_seedance_prompt_uses_continuity_clip_groups() -> None:
         "match cut from cold bottle movement to bottle placement"
     )
     assert prompts[0]["transition_type"] == "match_cut"
+    assert prompts[0]["scene_beat"] == "context_setup"
+    assert prompts[0]["beat_summary"] == "context_setup -> product_intro"
+    assert prompts[0]["transition_intent"] == "bridge the setup into first product contact"
     assert prompts[1]["clip_index"] == 2
     assert prompts[1]["duration_seconds"] == 6
     assert prompts[1]["transition_to_next"] == (
         "action cut from indicator to bottle removal"
     )
+    assert prompts[1]["scene_beat"] == "product_interaction"
     assert "same bottle warmer on the same countertop" in prompts[0]["segment_prompt"]
+    assert "Narrative beat: context_setup." in prompts[0]["segment_prompt"]
+    assert "Transition intent: bridge the setup into first product contact." in prompts[0]["segment_prompt"]
     assert "Do not change the product shape" in prompts[0]["segment_prompt"]
     assert all(prompt["has_forbidden_words"] is False for prompt in prompts)
     assert all(prompt["forbidden_hits"] == [] for prompt in prompts)
@@ -569,6 +581,14 @@ async def test_run_step_continuity_storyboard_grid_calls_skill(monkeypatch: pyte
     state = {
         "config": {
             "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
+            "brand_guidelines": {
+                "brand_name": "Momcozy",
+                "tone": "warm, reassuring, practical",
+                "primary_color": "#A3B18A",
+                "secondary_color": "#F6F1E9",
+                "target_audience": "new parents",
+            },
+            "target_platforms": ["tiktok", "amazon"],
             "storyboard_grid": 12,
             "clip_group_size": 3,
             "continuity_mode": True,
@@ -590,6 +610,11 @@ async def test_run_step_continuity_storyboard_grid_calls_skill(monkeypatch: pyte
 
     assert captured["skill_name"] == "continuity-storyboard-grid"
     assert captured["params"]["product_catalog"]["product_name"] == "Momcozy Nutri Bottle Warmer"
+    assert captured["params"]["product_catalog"]["brand_name"] == "Momcozy"
+    assert captured["params"]["product_catalog"]["distribution_platforms"] == ["tiktok", "amazon"]
+    assert captured["params"]["product_catalog"]["tone_of_voice"] == "warm, reassuring, practical"
+    assert captured["params"]["product_catalog"]["target_audience"] == "new parents"
+    assert captured["params"]["product_catalog"]["color_palette"] == ["#A3B18A", "#F6F1E9"]
     assert captured["params"]["storyboard_grid"] == 12
     assert result["continuity_storyboard_grid"]["grid_type"] == "12-grid"
     assert result["continuity_micro_shots"]
@@ -1044,6 +1069,9 @@ async def test_seedance_grouped_prompts_keep_transition_metadata(
                 "clip_index": 1,
                 "transition_to_next": "match cut",
                 "transition_type": "match_cut",
+                "scene_beat": "introduce_problem",
+                "beat_summary": "wide hero into medium usage",
+                "transition_intent": "carry curiosity into the product reveal",
             },
             {
                 "segment_prompt": "clip two",
@@ -1052,6 +1080,9 @@ async def test_seedance_grouped_prompts_keep_transition_metadata(
                 "duration_seconds": 6,
                 "clip_index": 2,
                 "transition_type": "action_cut",
+                "scene_beat": "product_reveal",
+                "beat_summary": "medium usage into detail finish",
+                "transition_intent": "tighten focus around the product payoff",
             },
         ],
         product_name="Momcozy Nutri Bottle Warmer",
@@ -1071,10 +1102,16 @@ async def test_seedance_grouped_prompts_keep_transition_metadata(
     assert result["clip_details"][0]["transition_type"] == "match_cut"
     assert result["clip_details"][0]["segment_type"] == "clip_group"
     assert result["clip_details"][0]["shot_type"] == "wide_to_medium"
+    assert result["clip_details"][0]["scene_beat"] == "introduce_problem"
+    assert result["clip_details"][0]["beat_summary"] == "wide hero into medium usage"
+    assert result["clip_details"][0]["transition_intent"] == "carry curiosity into the product reveal"
     assert result["clip_details"][0]["continuity_frame"] is False
     assert result["clip_details"][1]["clip_index"] == 2
     assert result["clip_details"][1]["transition_to_next"] == ""
     assert result["clip_details"][1]["transition_type"] == "action_cut"
+    assert result["clip_details"][1]["scene_beat"] == "product_reveal"
+    assert result["clip_details"][1]["beat_summary"] == "medium usage into detail finish"
+    assert result["clip_details"][1]["transition_intent"] == "tighten focus around the product payoff"
     assert seedance_calls[0]["params"]["duration"] == 4
     assert seedance_calls[1]["params"]["duration"] == 6
 
@@ -1296,10 +1333,29 @@ def test_continuity_audit_split_marks_asset_ready_when_publish_warns() -> None:
                 for _ in range(12)
             ],
             "clip_groups": [
-                {"transition_to_next": "match cut"},
-                {"transition_to_next": "action cut"},
-                {"transition_to_next": "soft crossfade"},
-                {},
+                {
+                    "transition_to_next": "match cut",
+                    "scene_beat": "context_setup",
+                    "beat_summary": "context_setup -> product_intro",
+                    "transition_intent": "bridge setup into product interaction",
+                },
+                {
+                    "transition_to_next": "action cut",
+                    "scene_beat": "product_interaction",
+                    "beat_summary": "product_action -> proof",
+                    "transition_intent": "carry feature interaction into payoff",
+                },
+                {
+                    "transition_to_next": "soft crossfade",
+                    "scene_beat": "proof_payoff",
+                    "beat_summary": "result_proof -> hero close",
+                    "transition_intent": "resolve proof into brand close",
+                },
+                {
+                    "scene_beat": "cta_close",
+                    "beat_summary": "hero close -> cta",
+                    "transition_intent": "hold final memory without reset",
+                },
             ],
         },
         final_video_path="/tmp/final.mp4",
@@ -1310,6 +1366,11 @@ def test_continuity_audit_split_marks_asset_ready_when_publish_warns() -> None:
     assert report["publish_ready_audit"]["overall_status"] == "FAIL"
     assert report["publish_ready_audit"]["overall_score"] == 0.741
     assert report["publish_ready_audit"]["base_score"] == 0.741
+    assert report["asset_ready_audit"]["checks"]["director_intent_metadata"] is True
+    assert report["continuity_direction_summary"]["scene_beats"][0] == "context_setup"
+    assert report["continuity_direction_summary"]["clip_directions"][0]["scene_beat"] == "context_setup"
+    assert report["continuity_direction_summary"]["clip_directions"][0]["beat_summary"] == "context_setup -> product_intro"
+    assert report["continuity_direction_summary"]["clip_directions"][0]["transition_intent"] == "bridge setup into product interaction"
     assert report["continuity_score"] >= 0.8
 
 
@@ -1335,6 +1396,28 @@ def test_continuity_audit_split_fails_asset_when_final_video_missing() -> None:
                 {"continuity_in": "in", "continuity_out": "out"}
                 for _ in range(12)
             ],
+            "clip_groups": [
+                {
+                    "scene_beat": "context_setup",
+                    "beat_summary": "context_setup -> product_intro",
+                    "transition_intent": "bridge setup into product interaction",
+                },
+                {
+                    "scene_beat": "product_interaction",
+                    "beat_summary": "product_action -> proof",
+                    "transition_intent": "carry feature interaction into payoff",
+                },
+                {
+                    "scene_beat": "proof_payoff",
+                    "beat_summary": "result_proof -> hero close",
+                    "transition_intent": "resolve proof into brand close",
+                },
+                {
+                    "scene_beat": "cta_close",
+                    "beat_summary": "hero close -> cta",
+                    "transition_intent": "hold final memory without reset",
+                },
+            ],
         },
         final_video_path="",
     )
@@ -1342,7 +1425,7 @@ def test_continuity_audit_split_fails_asset_when_final_video_missing() -> None:
     assert report["asset_ready_audit"]["status"] == "FAIL"
     assert report["asset_ready_audit"]["checks"]["final_video_present"] is False
     assert report["publish_ready_audit"]["status"] == "PASS"
-    assert report["continuity_score"] == 0.75
+    assert report["continuity_score"] == 0.8
 
 
 def test_continuity_audit_split_fails_asset_when_clip_is_stub() -> None:
@@ -1367,6 +1450,28 @@ def test_continuity_audit_split_fails_asset_when_clip_is_stub() -> None:
                 {"continuity_in": "in", "continuity_out": "out"}
                 for _ in range(12)
             ],
+            "clip_groups": [
+                {
+                    "scene_beat": "context_setup",
+                    "beat_summary": "context_setup -> product_intro",
+                    "transition_intent": "bridge setup into product interaction",
+                },
+                {
+                    "scene_beat": "product_interaction",
+                    "beat_summary": "product_action -> proof",
+                    "transition_intent": "carry feature interaction into payoff",
+                },
+                {
+                    "scene_beat": "proof_payoff",
+                    "beat_summary": "result_proof -> hero close",
+                    "transition_intent": "resolve proof into brand close",
+                },
+                {
+                    "scene_beat": "cta_close",
+                    "beat_summary": "hero close -> cta",
+                    "transition_intent": "hold final memory without reset",
+                },
+            ],
         },
         final_video_path="/tmp/final.mp4",
     )
@@ -1374,7 +1479,7 @@ def test_continuity_audit_split_fails_asset_when_clip_is_stub() -> None:
     assert report["asset_ready_audit"]["status"] == "FAIL"
     assert report["asset_ready_audit"]["checks"]["non_stub_clips"] is False
     assert report["publish_ready_audit"]["status"] == "PASS"
-    assert report["continuity_score"] == 0.75
+    assert report["continuity_score"] == 0.8
 
 
 def test_continuity_audit_split_handles_invalid_clip_and_micro_shot() -> None:
@@ -1402,6 +1507,7 @@ def test_continuity_audit_split_handles_invalid_clip_and_micro_shot() -> None:
     assert report["asset_ready_audit"]["status"] == "FAIL"
     assert report["asset_ready_audit"]["checks"]["non_stub_clips"] is False
     assert report["asset_ready_audit"]["checks"]["micro_shot_continuity"] is False
+    assert report["asset_ready_audit"]["checks"]["director_intent_metadata"] is False
     assert report["publish_ready_audit"]["status"] == "WARN"
 
 

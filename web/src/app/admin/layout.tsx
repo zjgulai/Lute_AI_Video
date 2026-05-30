@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { adminFetchJson } from "@/components/api";
 import { SignOut } from "@phosphor-icons/react";

@@ -801,20 +801,16 @@ async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
                 "data": output,
             }
 
-        # For S1, use StepRunner; other scenarios can be extended
-        if scenario == "s1":
-            step_runner = StepRunner(state_manager)
-            updated_state = await step_runner.run_step(label, step_name)
-            updated_step = updated_state.get("steps", {}).get(step_name, {})
-            output = updated_step.get("edited_output") if updated_step.get("edited") else updated_step.get("output")
-            step_status = updated_step.get("status", "failed")
-            return {
-                "step": step_name,
-                "status": "completed" if step_status == "done" else "failed",
-                "data": output,
-            }
-
-        raise HTTPException(status_code=501, detail=f"Step execution not implemented for scenario: {scenario}")
+        step_runner = StepRunner(state_manager)
+        updated_state = await step_runner.run_step(label, step_name)
+        updated_step = updated_state.get("steps", {}).get(step_name, {})
+        output = updated_step.get("edited_output") if updated_step.get("edited") else updated_step.get("output")
+        step_status = updated_step.get("status", "failed")
+        return {
+            "step": step_name,
+            "status": "completed" if step_status == "done" else "failed",
+            "data": output,
+        }
 
     except HTTPException:
         raise
@@ -897,15 +893,11 @@ async def regenerate_step(scenario: str, label: str, step_name: str):
 
         downstream = order[step_idx + 1:]
 
-        # For S1, use StepRunner's regenerate_step
-        if scenario == "s1":
-            step_runner = StepRunner(state_manager)
-            # invalidate_downstream marks steps as pending
-            await invalidate_downstream(label, step_name, state_manager)
-            # Then regenerate the specified step
-            await step_runner.regenerate_step(label, step_name)
-        else:
-            raise HTTPException(status_code=501, detail=f"Regeneration not implemented for scenario: {scenario}")
+        step_runner = StepRunner(state_manager)
+        # invalidate_downstream marks steps as pending
+        await invalidate_downstream(label, step_name, state_manager)
+        # Then regenerate the specified step
+        await step_runner.regenerate_step(label, step_name)
 
         return {
             "label": label,
@@ -1237,6 +1229,7 @@ async def get_scenario_status(scenario: str, label: str):
             gate_status, result, errors
         }
     """
+    from src.pipeline.continuity_utils import extract_continuity_diagnostics
     from src.pipeline.state_manager import PipelineStateManager
 
     _validate_scenario(scenario)
@@ -1250,6 +1243,7 @@ async def get_scenario_status(scenario: str, label: str):
         step_order = _SCENARIO_STEP_ORDER.get(scenario, [])
         current_step = state.get("current_step", "")
         steps = state.get("steps", {})
+        audit_report = steps.get("audit", {}).get("output") or {}
 
         # Calculate progress: done steps / total steps
         done_count = sum(1 for s in steps.values() if s.get("status") == "done")
@@ -1277,6 +1271,8 @@ async def get_scenario_status(scenario: str, label: str):
             "current_step": current_step,
             "progress": progress,
             "pipeline_degraded": state.get("pipeline_degraded", False),
+            "soft_degraded_reasons": state.get("soft_degraded_reasons", []),
+            "continuity_diagnostics": extract_continuity_diagnostics(audit_report),
             "gate_status": state.get("gate_status"),
             "errors": state.get("errors", []),
             "result": state.get("result"),

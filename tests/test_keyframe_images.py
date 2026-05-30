@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 from src.skills.keyframe_images import KeyframeImagesSkill
 from src.skills.registry import SkillRegistry
 
-
 SAMPLE_STORYBOARD = {
     "script_id": "S1-001",
     "total_duration": 15.0,

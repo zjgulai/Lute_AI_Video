@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.tools.poyo_safety import sanitize_for_poyo
 
 

@@ -10,7 +10,6 @@ import BrandKitTab from "./BrandKitTab";
 import InfluencersTab from "./InfluencersTab";
 
 type TabId = "materials" | "brand_kit" | "influencers";
-const TAB_IDS: TabId[] = ["materials", "brand_kit", "influencers"];
 const DEFAULT_TAB: TabId = "materials";
 
 function isTabId(v: string | null): v is TabId {

@@ -13,10 +13,11 @@ from src.pipeline.gate_manager import (
     SCENARIO_STEP_ORDERS,
     STEP_TO_SKILL_NAME,
     _build_skill_params,
+    approve_gate,
+    generate_candidates,
 )
-from src.pipeline.step_runner import _get_gate_after_steps, _get_gate_id_for_step
 from src.pipeline.state_manager import PipelineStateManager
-
+from src.pipeline.step_runner import _get_gate_after_steps, _get_gate_id_for_step
 
 # ── 静态配置验证 ──
 
@@ -116,7 +117,7 @@ class TestS4SpecificGates:
 
     def test_s4_step_order_matches(self):
         s4_order = SCENARIO_STEP_ORDERS["s4"]
-        assert s4_order == ["scripts", "video_prompts", "thumbnails"]
+        assert s4_order == ["scripts", "continuity_storyboard_grid", "video_prompts", "thumbnails", "seedance_clips", "tts_audio", "assemble_final", "audit"]
 
 
 class TestS5SpecificGates:
@@ -143,6 +144,7 @@ class TestS5SpecificGates:
     def test_s5_step_order_matches(self):
         s5_order = SCENARIO_STEP_ORDERS["s5"]
         assert s5_order[0] == "vlog_strategy"
+        assert "continuity_storyboard_grid" in s5_order
         assert "seedance_clips" in s5_order
         assert "assemble_final" in s5_order
 
@@ -194,6 +196,95 @@ class TestGetGateIdForStep:
     def test_non_gate_step_returns_empty(self):
         assert _get_gate_id_for_step("strategy", "s1") == ""
         assert _get_gate_id_for_step("compliance", "s1") == ""
+
+
+class TestScenarioGateLifecycle:
+    @pytest.mark.asyncio
+    async def test_s4_gate_1_approval_advances_to_continuity_step(self, isolated_state_dir):
+        state = {
+            "label": "s4-gate-advance",
+            "scenario": "s4",
+            "current_step": "scripts",
+            "config": {"product_catalog": {"name": "X1"}},
+            "steps": {
+                "scripts": {"output": [], "edited": False},
+            },
+            "gates": {
+                "gate_1_script": {
+                    "status": "awaiting_approval",
+                    "approved": False,
+                    "selected_ids": [],
+                    "candidates": [
+                        {"id": "s4_c0", "variant": "standard", "data": {"scripts": []}, "score": {"overall": 0.9}},
+                    ],
+                },
+            },
+        }
+        await PipelineStateManager().save("s4-gate-advance", state)
+
+        result = await approve_gate("s4-gate-advance", "gate_1_script", ["s4_c0"])
+        assert result["next_step"] == "continuity_storyboard_grid"
+
+    @pytest.mark.asyncio
+    async def test_s5_gate_1_approval_advances_to_continuity_step(self, isolated_state_dir):
+        state = {
+            "label": "s5-gate-advance",
+            "scenario": "s5",
+            "current_step": "vlog_strategy",
+            "config": {"product_sku": {"name": "X1"}},
+            "steps": {
+                "vlog_strategy": {"output": {"shots": [], "scripts": []}, "edited": False},
+            },
+            "gates": {
+                "gate_1_strategy": {
+                    "status": "awaiting_approval",
+                    "approved": False,
+                    "selected_ids": [],
+                    "candidates": [
+                        {"id": "s5_c0", "variant": "standard", "data": {"product_catalog": {"name": "X1"}}, "score": {"overall": 0.9}},
+                    ],
+                },
+            },
+        }
+        await PipelineStateManager().save("s5-gate-advance", state)
+
+        result = await approve_gate("s5-gate-advance", "gate_1_strategy", ["s5_c0"])
+        assert result["next_step"] == "continuity_storyboard_grid"
+
+    @pytest.mark.asyncio
+    async def test_s4_final_gate_generates_state_assembled_candidate(self, isolated_state_dir):
+        state = {
+            "label": "s4-final-gate",
+            "scenario": "s4",
+            "config": {},
+            "steps": {
+                "thumbnails": {"output": [{"script_id": "s1", "variants": [{"prompt": "thumb"}]}]},
+                "scripts": {"output": [{"id": "s1"}]},
+            },
+        }
+        await PipelineStateManager().save("s4-final-gate", state)
+
+        result = await generate_candidates("s4-final-gate", "gate_3_thumbnails")
+        assert result["gate_id"] == "gate_3_thumbnails"
+        assert result["candidates"][0]["data"]["script_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_s5_final_gate_generates_state_assembled_candidate(self, isolated_state_dir):
+        state = {
+            "label": "s5-final-gate",
+            "scenario": "s5",
+            "config": {},
+            "steps": {
+                "assemble_final": {"output": ["/tmp/final.mp4", "/tmp/render.json"]},
+                "audit": {"output": {"duration_seconds": 15}},
+                "seedance_clips": {"output": {"total_duration": 15}},
+            },
+        }
+        await PipelineStateManager().save("s5-final-gate", state)
+
+        result = await generate_candidates("s5-final-gate", "gate_3_final")
+        assert result["gate_id"] == "gate_3_final"
+        assert result["candidates"][0]["data"]["final_video_path"] == "/tmp/final.mp4"
 
 
 # ── _build_skill_params 验证 ──
@@ -293,6 +384,7 @@ class TestStepRunnerGatePauseForScenarios:
     @pytest.mark.asyncio
     async def test_s3_step_by_step_pauses_at_remix_script_gate(self, isolated_state_dir):
         from unittest.mock import AsyncMock, patch
+
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
@@ -323,6 +415,7 @@ class TestStepRunnerGatePauseForScenarios:
     @pytest.mark.asyncio
     async def test_s4_step_by_step_pauses_at_scripts_gate(self, isolated_state_dir):
         from unittest.mock import AsyncMock, patch
+
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
@@ -346,6 +439,7 @@ class TestStepRunnerGatePauseForScenarios:
     @pytest.mark.asyncio
     async def test_s5_step_by_step_pauses_at_vlog_strategy_gate(self, isolated_state_dir):
         from unittest.mock import AsyncMock, patch
+
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
@@ -369,6 +463,7 @@ class TestStepRunnerGatePauseForScenarios:
     @pytest.mark.asyncio
     async def test_s3_auto_mode_skips_gate(self, isolated_state_dir):
         from unittest.mock import AsyncMock, patch
+
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()

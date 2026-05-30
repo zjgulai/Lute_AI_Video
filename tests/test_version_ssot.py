@@ -26,9 +26,10 @@ def test_app_version_matches_pyproject():
 
 
 def test_health_endpoint_uses_dynamic_version():
+    import inspect
+
     from src import _version
     from src.routers import health
-    import inspect
 
     src = inspect.getsource(health)
     assert '"version": APP_VERSION' in src, "health.py should use APP_VERSION, not literal"
@@ -36,8 +37,9 @@ def test_health_endpoint_uses_dynamic_version():
 
 
 def test_api_response_meta_uses_dynamic_version():
-    from src import api
     import inspect
+
+    from src import api
 
     src = inspect.getsource(api)
     assert "APP_VERSION" in src, "api.py should reference APP_VERSION"

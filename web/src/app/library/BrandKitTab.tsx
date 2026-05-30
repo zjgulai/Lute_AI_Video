@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { UploadSimple, Image as ImageIcon, WarningCircle, ArrowSquareOut } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import EmptyState from "@/components/EmptyState";
+import RuntimeMediaImage from "@/components/RuntimeMediaImage";
 
 interface BrandPreset {
   id: string;
@@ -160,7 +162,13 @@ export default function BrandKitTab() {
             >
               <div className="aspect-square bg-[var(--bg-panel)] flex items-center justify-center overflow-hidden">
                 {item.type === "logo" && item.preview ? (
-                  <img src={item.preview} alt={item.title} className="max-w-[60%] max-h-[60%] object-contain" />
+                  <Image
+                    src={item.preview}
+                    alt={item.title}
+                    width={160}
+                    height={160}
+                    className="max-w-[60%] max-h-[60%] object-contain"
+                  />
                 ) : (
                   <div className="w-full h-full flex flex-col">
                     <div className="flex-1" style={{ background: "#6A2B3A" }} />
@@ -253,11 +261,10 @@ export default function BrandKitTab() {
                 className="apple-card overflow-hidden hover:shadow-md transition-all duration-200 text-left cursor-pointer"
               >
                 <div className="aspect-square bg-[var(--bg-panel)] overflow-hidden">
-                  <img
+                  <RuntimeMediaImage
                     src={getMediaUrl(g.coverPath)}
                     alt={g.prettyName}
                     className="w-full h-full object-cover"
-                    loading="lazy"
                   />
                 </div>
                 <div className="p-3">
@@ -348,11 +355,10 @@ export default function BrandKitTab() {
                   className="apple-card overflow-hidden hover:shadow-md transition-all"
                 >
                   <div className="aspect-square bg-[var(--bg-panel)]">
-                    <img
+                    <RuntimeMediaImage
                       src={getMediaUrl(f.path)}
                       alt={f.filename}
                       className="w-full h-full object-cover"
-                      loading="lazy"
                     />
                   </div>
                   <div className="px-2 py-1.5 flex items-center justify-between">

@@ -112,7 +112,6 @@ export default function PublishPanel({ videoPath, metadata, onPublished, onClose
 
   const isPublishing = Object.values(progress).some((p) => p.state === "uploading" || p.state === "processing");
   const isComplete = Object.values(progress).length > 0 && Object.values(progress).every((p) => p.state === "done");
-  const hasError = Object.values(progress).some((p) => p.state === "error") || !!overallError;
 
   return (
     <div className="apple-card p-4 bg-[var(--bg-card)] border border-[rgba(215,92,112,0.18)]">

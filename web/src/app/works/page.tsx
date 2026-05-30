@@ -7,7 +7,6 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import TopHeader from "@/components/TopHeader";
 import EmptyState from "@/components/EmptyState";
-import { ListSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
 
 import { errorMessage } from "@/lib/errors";
@@ -22,6 +21,38 @@ interface FinalWork {
   mimeType: string;
   thumbnailPath: string | null;
 }
+
+type DemoFootageAsset = {
+  original_name?: string;
+  filename?: string;
+  file_path: string;
+  file_size?: number;
+  mime_type?: string;
+  thumbnail_path?: string | null;
+  metadata?: {
+    scenario?: string;
+    label?: string;
+    produced_at?: string;
+    uploaded_at?: string;
+  };
+};
+
+type PortfolioFile = {
+  id: string;
+  filename: string;
+  path: string;
+  category?: string;
+  scenario?: string | null;
+  label?: string | null;
+  produced_at?: string;
+  size_bytes?: number;
+  mime_type?: string;
+  thumbnail_path?: string | null;
+};
+
+type PortfolioResponse = {
+  files?: PortfolioFile[];
+};
 
 const SCENE_FILTER_IDS = ["all", "product_direct", "brand_campaign", "influencer_remix", "brand_vlog"] as const;
 type SceneFilter = typeof SCENE_FILTER_IDS[number];
@@ -95,9 +126,9 @@ export default function WorksPage() {
     if (isDemoMode()) {
       try {
         const { DEMO_FOOTAGE_ASSETS } = await import("@/demo-data");
-        const demoFinals: FinalWork[] = (DEMO_FOOTAGE_ASSETS || [])
-          .filter((a: any) => a.mime_type?.startsWith("video/"))
-          .map((a: any, i: number) => ({
+        const demoFinals: FinalWork[] = ((DEMO_FOOTAGE_ASSETS || []) as DemoFootageAsset[])
+          .filter((a) => a.mime_type?.startsWith("video/"))
+          .map((a, i) => ({
             id: `demo-${i}`,
             filename: a.original_name || a.filename || `demo_${i}.mp4`,
             path: a.file_path,
@@ -122,34 +153,34 @@ export default function WorksPage() {
       if (!res.ok) {
         const res2 = await apiFetch("/portfolio/?limit=500&sort=size_desc");
         if (!res2.ok) throw new Error(`${t("common.fetchFailed")} (${res2.status})`);
-        const data = await res2.json();
+        const data = await res2.json() as PortfolioResponse;
         const mapped: FinalWork[] = (data.files || [])
-          .filter((f: any) => f.category === "renders" || f.category === "fast_mode")
-          .map((f: any) => ({
+          .filter((f) => f.category === "renders" || f.category === "fast_mode")
+          .map((f) => ({
             id: f.id,
             filename: f.filename,
             path: f.path,
-            scenario: f.scenario,
-            label: f.label,
-            producedAt: f.produced_at,
-            sizeBytes: f.size_bytes,
-            mimeType: f.mime_type,
-            thumbnailPath: f.thumbnail_path,
+            scenario: f.scenario || null,
+            label: f.label || null,
+            producedAt: f.produced_at || "",
+            sizeBytes: f.size_bytes || 0,
+            mimeType: f.mime_type || "video/mp4",
+            thumbnailPath: f.thumbnail_path || null,
           }));
         setWorks(mapped);
         return;
       }
-      const data = await res.json();
-      const mapped: FinalWork[] = (data.files || []).map((f: any) => ({
+      const data = await res.json() as PortfolioResponse;
+      const mapped: FinalWork[] = (data.files || []).map((f) => ({
         id: f.id,
         filename: f.filename,
         path: f.path,
-        scenario: f.scenario,
-        label: f.label,
-        producedAt: f.produced_at,
-        sizeBytes: f.size_bytes,
-        mimeType: f.mime_type,
-        thumbnailPath: f.thumbnail_path,
+        scenario: f.scenario || null,
+        label: f.label || null,
+        producedAt: f.produced_at || "",
+        sizeBytes: f.size_bytes || 0,
+        mimeType: f.mime_type || "video/mp4",
+        thumbnailPath: f.thumbnail_path || null,
       }));
       setWorks(mapped);
     } catch (e: unknown) {
@@ -334,6 +365,8 @@ export default function WorksPage() {
                 >
                   <div className="aspect-video bg-[var(--cinema-black)] relative flex items-center justify-center overflow-hidden">
                     {thumbUrl ? (
+                      // Portfolio thumbnails are backend-runtime media paths; native img avoids Next image loader allowlist drift.
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={thumbUrl}
                         alt={title}

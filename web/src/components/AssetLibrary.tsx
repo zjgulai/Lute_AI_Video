@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getMediaUrl, apiFetch } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 
 interface Asset {
   filename: string;
@@ -185,7 +186,7 @@ export default function AssetLibrary({ onClose }: Props) {
                   <div className="aspect-video bg-[var(--bg-panel)] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom relative">
                     {asset.type === "image" ? (
                       asset.mediaUrl ? (
-                        <img
+                        <RuntimeMediaImage
                           src={asset.mediaUrl}
                           alt={asset.filename}
                           className="w-full h-full object-cover pointer-events-none select-none"
@@ -201,7 +202,7 @@ export default function AssetLibrary({ onClose }: Props) {
                     ) : asset.type === "video" ? (
                       asset.thumbnailUrl ? (
                         <>
-                          <img
+                          <RuntimeMediaImage
                             src={asset.thumbnailUrl}
                             alt={asset.filename}
                             className="w-full h-full object-cover pointer-events-none select-none"
@@ -303,7 +304,7 @@ export default function AssetLibrary({ onClose }: Props) {
                 />
               )}
               {preview.type === "image" && (
-                <img
+                <RuntimeMediaImage
                   src={preview.mediaUrl}
                   alt={preview.filename}
                   className="max-h-[75vh] max-w-full object-contain"

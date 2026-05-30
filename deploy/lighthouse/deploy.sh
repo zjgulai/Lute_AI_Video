@@ -18,14 +18,11 @@
 # --- Sync from laptop (run on your local machine) ---
 #   rsync -avz --delete --chmod=F644,D755 \
 #     -e "ssh -i ~/Downloads/ai_video.pem" \
-#     --exclude='.git' --exclude='web/node_modules' --exclude='web/.next' \
-#     --exclude='rendering/node_modules' --exclude='.venv' \
-#     --exclude='output' --exclude='tmp' --exclude='__pycache__' \
-#     --exclude='deploy/lighthouse/.env.prod' \
-#     --exclude='deploy/lighthouse/server.crt' \
-#     --exclude='deploy/lighthouse/server.key' \
-#     --exclude='deploy/lighthouse/*.pem' \
+#     --exclude-from='deploy/lighthouse/rsync-excludes.txt' \
 #     ./ ubuntu@101.34.52.232:/opt/ai-video/
+#   Or use the canonical wrapper:
+#     SSH_KEY=~/Downloads/ai_video.pem DRY_RUN=1 deploy/lighthouse/build-and-deploy.sh
+#     SSH_KEY=~/Downloads/ai_video.pem deploy/lighthouse/build-and-deploy.sh
 #
 # IMPORTANT: --chmod=F644 forces world-readable perms on rsync. Without it,
 # any local file with mode 0600 (e.g. src/routers/admin.py historically) gets
@@ -115,6 +112,14 @@ export NEXT_PUBLIC_API_BASE_URL=/api
 # 与已验证的 5 场景非 demo 端到端结果冲突。
 # GitHub Pages demo 部署单独构建脚本里设 true。
 export NEXT_PUBLIC_IS_DEMO=false
+if [ -n "$DEPLOY_API_KEY" ]; then
+  # Convenience for manual production testing: Next.js inlines NEXT_PUBLIC_*
+  # at build time, so source it from the server-only .env.prod API_KEY.
+  # This exposes the key to browser users; keep this only for controlled access.
+  export NEXT_PUBLIC_API_KEY="$DEPLOY_API_KEY"
+else
+  echo "  ⚠ API_KEY not found; frontend will not prefill X-API-Key"
+fi
 npm run build 2>&1 | tail -5
 
 # Verify build succeeded — critical files must exist
@@ -146,13 +151,20 @@ echo ""
 
 # -- Phase 3: Health checks --
 echo "[3/5] Health checks..."
-sleep 5
 
 # Check backend
-BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/api/health || echo "000")
-if [ "$BACKEND_STATUS" = "200" ]; then
-  echo "  Backend /api/health: 200"
-else
+BACKEND_STATUS="000"
+for attempt in $(seq 1 24); do
+  BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/api/health || echo "000")
+  if [ "$BACKEND_STATUS" = "200" ]; then
+    echo "  Backend /api/health: 200 (attempt $attempt/24)"
+    break
+  fi
+  if [ "$attempt" != "24" ]; then
+    sleep 5
+  fi
+done
+if [ "$BACKEND_STATUS" != "200" ]; then
   echo "  ❌ Backend /api/health: $BACKEND_STATUS"
   echo "  --- 最近 30 行 backend logs (定位启动失败原因) ---"
   sudo docker logs --tail 30 ai_video_backend 2>&1 | tail -30

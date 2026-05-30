@@ -13,11 +13,12 @@ import asyncio
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 import structlog
 
 from src.config import DEFAULT_LLM_PROVIDER, OUTPUT_DIR
+from src.models.runtime_contracts import FastModeModelInfo, FastModeResult, SeedanceVideoResult
 from src.pipeline.model_router import select_model
 from src.tools.cosyvoice_client import CosyVoiceClient
 from src.tools.llm_client import LLMClient
@@ -119,7 +120,7 @@ class FastModeService:
         duration: int = 15,
         enable_tts: bool = False,
         on_stage: Callable[[str], object] | None = None,
-    ) -> dict[str, Any]:
+    ) -> FastModeResult:
         """Generate a short video from simple text input.
 
         Args:
@@ -228,9 +229,14 @@ class FastModeService:
             logger.error("fast_mode: video generation failed", error=str(video_result))
             raise RuntimeError(f"Video generation failed: {video_result}") from video_result
 
-        local_path = video_result.get("local_path", "")  # type: ignore[union-attr]
-        video_url = video_result.get("video_url", "")  # type: ignore[union-attr]
-        is_stub = bool(video_result.get("_stub_mode"))  # type: ignore[union-attr]
+        if not isinstance(video_result, dict):
+            logger.error("fast_mode: video generation returned invalid result", result_type=type(video_result).__name__)
+            raise RuntimeError("Video generation failed: invalid result shape")
+
+        video_data = cast(SeedanceVideoResult, video_result)
+        local_path = video_data.get("local_path", "")
+        video_url = video_data.get("video_url", "")
+        is_stub = bool(video_data.get("_stub_mode"))
 
         # Get file info
         file_size = 0
@@ -250,7 +256,7 @@ class FastModeService:
         # Extract filename for media serving
         filename = Path(local_path).name if local_path else ""
 
-        model_info = {
+        model_info: FastModeModelInfo = {
             "llm": DEFAULT_LLM_PROVIDER,
             "llm_model": self._llm_model,
             "video": self._video_model,
@@ -260,7 +266,7 @@ class FastModeService:
         # If stub mode (video generation failed), mark as failure and do not
         # return a non-existent filename that would cause a 404 on media fetch.
         if is_stub:
-            stub_mode = video_result.get("_stub_mode", "unknown")  # type: ignore[union-attr]
+            stub_mode = video_data.get("_stub_mode", "unknown")
             logger.warning(
                 "fast_mode: video generation failed (stub mode)",
                 mode=stub_mode,
@@ -288,7 +294,7 @@ class FastModeService:
                 "tts_path": None,
             }
 
-        result = {
+        result: FastModeResult = {
             "success": True,
             "video_path": local_path,
             "video_url": video_url,

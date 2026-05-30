@@ -22,6 +22,8 @@ from typing import Any
 
 import structlog
 
+from src.models.runtime_contracts import TelemetryErrorEntry, TelemetryStepStats, TelemetrySummary
+
 logger = structlog.get_logger()
 
 # ── Trace ID generation ──
@@ -142,7 +144,7 @@ class PipelineMetrics:
                 error=str(exc)[:200],
             )
 
-    def get_summary(self) -> dict[str, Any]:
+    def get_summary(self) -> TelemetrySummary:
         """Return aggregated stats for all recorded metrics.
 
         Returns:
@@ -165,7 +167,7 @@ class PipelineMetrics:
         success_rate = total_success / total_runs if total_runs > 0 else 0.0
 
         # Per-step stats
-        per_step_stats: dict[str, dict[str, Any]] = {}
+        per_step_stats: dict[str, TelemetryStepStats] = {}
         for label, steps in self._step_metrics.items():
             for s in steps:
                 if s.step_name not in per_step_stats:
@@ -213,7 +215,8 @@ def _persist_error_to_db(
     try:
         import asyncio
 
-        asyncio.ensure_future(
+        loop = asyncio.get_running_loop()
+        loop.create_task(
             _persist_error_async(label, step, error, context)
         )
     except Exception as exc:
@@ -279,7 +282,7 @@ class ErrorCollector:
     _MAX_ERRORS = 100
 
     def __init__(self) -> None:
-        self._errors: deque[dict[str, Any]] = deque(maxlen=self._MAX_ERRORS)
+        self._errors: deque[TelemetryErrorEntry] = deque(maxlen=self._MAX_ERRORS)
 
     def collect(
         self,
@@ -312,7 +315,7 @@ class ErrorCollector:
         # Persist to admin error_logs table (fire-and-forget, never blocks)
         _persist_error_to_db(label, step, error, dict(context))
 
-    def get_errors(self, label: str | None = None) -> list[dict[str, Any]]:
+    def get_errors(self, label: str | None = None) -> list[TelemetryErrorEntry]:
         """Return filtered errors.
 
         Args:

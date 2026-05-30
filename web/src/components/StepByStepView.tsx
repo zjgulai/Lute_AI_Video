@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
+import { getSoftDegradedSummary } from "@/lib/softDegraded";
 
 interface Props {
   label: string;
@@ -42,20 +43,55 @@ const STEP_LABELS: Record<string, string> = {
   audit: "step.audit",
 };
 
-const STEP_DESCRIPTIONS: Record<string, string> = {
-  strategy: "stepDesc.strategy",
-  scripts: "stepDesc.scripts",
-  compliance: "stepDesc.compliance",
-  storyboards: "stepDesc.storyboards",
-  keyframe_images: "stepDesc.keyframe_images",
-  video_prompts: "stepDesc.video_prompts",
-  thumbnail_prompts: "stepDesc.thumbnail_prompts",
-  seedance_clips: "stepDesc.seedance_clips",
-  tts_audio: "stepDesc.tts_audio",
-  thumbnail_images: "stepDesc.thumbnail_images",
-  assemble_final: "stepDesc.assemble_final",
-  audit: "stepDesc.audit",
+type StepItem = Record<string, unknown> & {
+  platform?: string;
+  hook_type?: string;
+  product_name?: string;
+  brand_name?: string;
+  description?: string;
+  key_message?: string;
+  id?: string;
+  script_id?: string;
+  prompt?: string;
 };
+
+type ScriptSegment = Record<string, unknown> & {
+  segment_type?: string;
+  start_time?: number;
+  end_time?: number;
+  voiceover?: string;
+  description?: string;
+  visual_description?: string;
+};
+
+type ScriptItem = StepItem & {
+  segments?: ScriptSegment[];
+};
+
+type StoryboardItem = Record<string, unknown> & {
+  script_id?: string;
+  total_duration?: number;
+  shots?: unknown[];
+};
+
+type ClipDetail = {
+  duration?: number;
+  is_stub?: boolean;
+  is_filler?: boolean;
+};
+
+type AuditCriterion = {
+  name?: string;
+  status?: string;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
 
 export default function StepByStepView({ label, state, onStepComplete, onResume, onError, loading }: Props) {
   const { t } = useI18n();
@@ -66,6 +102,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
   const steps = (state?.steps as Record<string, Record<string, unknown>>) || {};
   const stepOrder: string[] = (state?.meta as Record<string, unknown>)?.step_order as string[] || _FALLBACK_STEP_ORDER;
+  const softDegradedReasons: Array<{ step?: string; reason?: string; detail?: string }> =
+    (state?.soft_degraded_reasons as Array<{ step?: string; reason?: string; detail?: string }>) || [];
+  const softDegradedSummary = softDegradedReasons[0];
+  const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
 
   const getCurrentStep = (): string | null => {
     for (const step of stepOrder) {
@@ -146,7 +186,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     const { updateS1State } = await import("./api");
     try {
       // Parse the edit value — try JSON first, fallback to plain text
-      let parsed: any;
+      let parsed: unknown;
       try {
         parsed = JSON.parse(editValue);
       } catch {
@@ -216,6 +256,19 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
             </span>
           </div>
         </div>
+
+        {softDegradedReasons.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+            <p className="text-[12px] font-medium text-amber-800">
+              {t("degraded.softTitle")}
+              {softDegradedDisplay.stepLabel ? ` · ${softDegradedDisplay.stepLabel}` : ""}
+              {softDegradedDisplay.reasonLabel ? ` · ${softDegradedDisplay.reasonLabel}` : ""}
+            </p>
+            {softDegradedDisplay.detail ? (
+              <p className="mt-1 text-[12px] text-amber-700">{softDegradedDisplay.detail}</p>
+            ) : null}
+          </div>
+        )}
 
         {/* Step list */}
         <div className="space-y-1 mt-3">
@@ -438,16 +491,19 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
 // ── Step Output Renderer ──
 
-function StepOutput({ stepName, output }: { stepName: string; output: any }) {
+function StepOutput({ stepName, output }: { stepName: string; output: unknown }) {
   const { t } = useI18n();
   if (!output) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noOutput")}</p>;
+  const outputRecord = asRecord(output);
 
   if (stepName === "strategy" || stepName === "compliance") {
-    const briefs = Array.isArray(output) ? output : output.briefs || output.reports || [];
+    const briefs = Array.isArray(output)
+      ? asArray<StepItem>(output)
+      : asArray<StepItem>(outputRecord.briefs || outputRecord.reports);
     if (briefs.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noData")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {briefs.map((b: any, i: number) => (
+        {briefs.map((b, i) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-start gap-2 mb-1">
               {b.platform && (
@@ -471,11 +527,11 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "scripts") {
-    const scripts = Array.isArray(output) ? output : output.scripts || [];
+    const scripts = Array.isArray(output) ? asArray<ScriptItem>(output) : asArray<ScriptItem>(outputRecord.scripts);
     if (scripts.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noScript")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {scripts.map((s: any, i: number) => (
+        {scripts.map((s, i) => (
           <details key={i} className="apple-card overflow-hidden">
             <summary className="p-3 cursor-pointer flex items-center gap-2 list-none">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">{s.id || `S${i + 1}`}</span>
@@ -483,7 +539,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
               <span className="text-[12px] text-[var(--text-muted)]">{(s.segments || []).length}{t("step.segments")}</span>
             </summary>
             <div className="px-3 pb-3 space-y-2 border-t border-[var(--border-default)] pt-2">
-              {(s.segments || []).map((seg: any, j: number) => (
+              {(s.segments || []).map((seg, j) => (
                 <div key={j} className="pl-3 border-l-2 border-[var(--border-default)]">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
@@ -505,11 +561,11 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "storyboards") {
-    const boards = Array.isArray(output) ? output : output.storyboards || [];
+    const boards = Array.isArray(output) ? asArray<StoryboardItem>(output) : asArray<StoryboardItem>(outputRecord.storyboards);
     if (boards.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noStoryboard")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {boards.map((board: any, i: number) => (
+        {boards.map((board, i) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">{board.script_id || `Board ${i + 1}`}</span>
@@ -523,11 +579,13 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "video_prompts" || stepName === "thumbnail_prompts") {
-    const items = Array.isArray(output) ? output : output.prompts || output.variants || [];
+    const items = Array.isArray(output)
+      ? asArray<StepItem>(output)
+      : asArray<StepItem>(outputRecord.prompts || outputRecord.variants);
     if (items.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noData")}</p>;
     return (
       <div className="space-y-1 p-2">
-        {items.map((item: any, i: number) => (
+        {items.map((item, i) => (
           <div key={i} className="apple-card p-2 bg-[var(--bg-card)]">
             <p className="text-[12px] font-mono text-[var(--text-muted)] mb-1">{item.script_id || `Item ${i + 1}`}</p>
             <p className="text-[12px] text-[var(--text-h1)] font-mono whitespace-pre-wrap break-all">
@@ -540,20 +598,21 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "seedance_clips") {
-    const isNewFormat = output && !Array.isArray(output) && output.clip_paths;
-    const paths = isNewFormat ? output.clip_paths : (Array.isArray(output) ? output : []);
-    const details = isNewFormat ? (output.clip_details || []) : [];
+    const isNewFormat = !Array.isArray(output) && Array.isArray(outputRecord.clip_paths);
+    const paths = isNewFormat ? asArray<string>(outputRecord.clip_paths) : asArray<string>(output);
+    const details = isNewFormat ? asArray<ClipDetail>(outputRecord.clip_details) : [];
     if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2 space-y-1">
         {paths.map((path: string, i: number) => {
           const meta = details[i] || {};
+          const duration = meta.duration;
           const name = path.split("/").pop() || path;
           return (
             <div key={i} className="flex items-center gap-2 text-[12px] font-mono text-[var(--text-body)]">
               <span className="w-1 h-1 rounded-full bg-[var(--fortune-red)] shrink-0" />
               <span className="truncate">{name}</span>
-              {meta.duration > 0 && <span className="text-[var(--text-muted)] shrink-0">{meta.duration.toFixed(1)}s</span>}
+              {typeof duration === "number" && duration > 0 && <span className="text-[var(--text-muted)] shrink-0">{duration.toFixed(1)}s</span>}
               {meta.is_stub && <span className="text-[var(--gold-foil)] shrink-0">[stub]</span>}
               {meta.is_filler && <span className="text-[var(--cinema-azure)] shrink-0">[filler]</span>}
             </div>
@@ -565,8 +624,8 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
 
   if (stepName === "tts_audio") {
     const paths = Array.isArray(output)
-      ? output
-      : (output.audio_paths || []);
+      ? asArray<string>(output)
+      : asArray<string>(outputRecord.audio_paths);
     if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2">
@@ -584,7 +643,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "thumbnail_images") {
-    const paths = Array.isArray(output) ? output : [];
+    const paths = asArray<string>(output);
     if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2">
@@ -611,11 +670,11 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
     return (
       <div className="p-2">
         <p className="text-xs text-[var(--text-body)]">
-          {output.video_path || output[0] || "N/A"}
+          {typeof outputRecord.video_path === "string" ? outputRecord.video_path : "N/A"}
         </p>
-        {output.render_json_path && (
+        {typeof outputRecord.render_json_path === "string" && (
           <p className="text-xs text-[var(--text-body)] mt-1">
-            {output.render_json_path}
+            {outputRecord.render_json_path}
           </p>
         )}
       </div>
@@ -623,7 +682,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "audit") {
-    const report = typeof output === "object" ? output : {};
+    const report = asRecord(output);
     return (
       <div className="p-2 space-y-1">
         <div className="flex items-center gap-2">
@@ -634,18 +693,18 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
               ? "bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)]"
               : "bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)]"
           }`}>
-            {report.overall_status || "UNKNOWN"}
+            {typeof report.overall_status === "string" ? report.overall_status : "UNKNOWN"}
           </span>
-          {report.overall_score != null && (
+          {typeof report.overall_score === "number" && (
             <span className="text-[12px] text-[var(--text-body)]">
               {(report.overall_score * 100).toFixed(0)}%
             </span>
           )}
         </div>
-        {report.summary && <p className="text-xs text-[var(--text-body)]">{report.summary}</p>}
-        {report.criteria && (
+        {typeof report.summary === "string" && <p className="text-xs text-[var(--text-body)]">{report.summary}</p>}
+        {Array.isArray(report.criteria) && (
           <div className="space-y-0.5 mt-1">
-            {report.criteria.map((c: any, i: number) => (
+            {asArray<AuditCriterion>(report.criteria).map((c, i) => (
               <div key={i} className="flex items-center gap-1.5">
                 <span className={`w-1 h-1 rounded-full ${
                   c.status === "PASS" ? "bg-[var(--jade-accent)]" : c.status === "WARN" ? "bg-[var(--gold-foil)]" : "bg-[var(--crimson-mist)]"

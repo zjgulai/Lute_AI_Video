@@ -25,6 +25,7 @@ from src.config import (
     SEEDANCE_API_BASE_URL,
     SEEDANCE_API_KEY,
 )
+from src.models.runtime_contracts import SeedanceVideoResult
 from src.tools.llm_client import get_request_api_key
 
 logger = structlog.get_logger()
@@ -141,7 +142,7 @@ class SeedanceClient:
         duration: int = 10,
         resolution: str = "720p",
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> SeedanceVideoResult:
         if not self.api_key:
             logger.warning("seedance: no API key — returning stub")
             return self._stub_result(prompt=prompt, mode="text_to_video")
@@ -191,7 +192,7 @@ class SeedanceClient:
         duration: int = 10,
         style_preserve: bool = True,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> SeedanceVideoResult:
         if not self.api_key:
             return self._stub_result(prompt=prompt, mode="image_to_video")
 
@@ -235,7 +236,7 @@ class SeedanceClient:
         duration: int = 10,
         resolution: str = "720p",
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> SeedanceVideoResult:
         """poyo.ai flow: submit → poll → download with retry + backoff.
 
         Retries up to 3 times on submit failure or task failure to handle
@@ -293,7 +294,7 @@ class SeedanceClient:
         resolution: str,
         attempt: int,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> SeedanceVideoResult:
         """Single attempt: submit → poll → download via poyo.ai.
 
         Model selection (Sprint 1 P1-2):
@@ -303,6 +304,12 @@ class SeedanceClient:
           on poyo.ai's OpenAI-compatible proxy.
         """
         active_model = model or POYO_MODEL_NAME
+
+        # Hailuo models have strict parameter constraints.
+        if active_model.startswith("hailuo-"):
+            resolution = "1080p" if resolution not in ("768p", "1080p") else resolution
+            duration = 6 if duration < 6 else 10 if duration > 10 else max(6, min(10, duration))
+
         # POYO hard limit on prompt length (2500 chars). Truncate at word
         # boundary with safety buffer to avoid upstream 400 errors.
         POYO_PROMPT_HARD_LIMIT = 2400
@@ -329,7 +336,12 @@ class SeedanceClient:
                 substitutions=_safety_subs,
             )
 
-        aspect_ratio = "9:16"
+        # Wan models use pixel-dimension aspect_ratio (e.g. 1080*1920);
+        # Kling/Seedance use ratio format (e.g. 9:16).
+        if active_model.startswith("wan"):
+            aspect_ratio = "1080*1920"
+        else:
+            aspect_ratio = "9:16"
 
         # Happy Horse input schema:
         #   prompt, image_urls (single first-frame), reference_image_urls,
@@ -340,6 +352,9 @@ class SeedanceClient:
             "resolution": resolution,
             "duration": int(duration),
         }
+        # Kling models require the 'sound' parameter.
+        if active_model.startswith("kling-"):
+            input_payload["sound"] = True
         if image_refs:
             # Single first-frame guidance: poyo accepts image_urls (typically
             # max 1 item depending on model). Local paths get base64-inlined;
@@ -424,7 +439,7 @@ class SeedanceClient:
         logger.error("poyo: polling timed out", task_id=task_id)
         return self._stub_result(prompt=prompt, mode="poyo_poll_timeout")
 
-    async def _download_video(self, video_url: str, task_id: str, prompt: str) -> dict[str, Any]:
+    async def _download_video(self, video_url: str, task_id: str, prompt: str) -> SeedanceVideoResult:
         """Download video from URL and save locally."""
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as dl_client:
             dl_resp = await dl_client.get(video_url)
@@ -443,7 +458,7 @@ class SeedanceClient:
 
     # ═══ Native Seedance polling ═══
 
-    async def _poll_and_download(self, task_id: str, prompt: str) -> dict[str, Any]:
+    async def _poll_and_download(self, task_id: str, prompt: str) -> SeedanceVideoResult:
         """Native Seedance: poll until complete, then download."""
         poll_interval = 2.0
         max_polls = 30  # 60s max
@@ -465,7 +480,7 @@ class SeedanceClient:
 
     # ═══ Retry + fallback ═══
 
-    async def _execute_with_retry(self, fn, mode: str, prompt: str) -> dict[str, Any]:
+    async def _execute_with_retry(self, fn, mode: str, prompt: str) -> SeedanceVideoResult:
         last_error = None
         for attempt in range(MAX_RETRIES):
             try:
@@ -488,7 +503,7 @@ class SeedanceClient:
         logger.warning("seedance: all retries exhausted, returning stub", mode=mode, error=last_error)
         return self._stub_result(prompt=prompt, mode=mode)
 
-    def _stub_result(self, prompt: str, mode: str = "unknown") -> dict[str, Any]:
+    def _stub_result(self, prompt: str, mode: str = "unknown") -> SeedanceVideoResult:
         return {
             "video_url": "[SEEDANCE_STUB — add API key]",
             "local_path": str(self.output_dir / f"stub_{mode}_{hash(prompt) & 0xFFFF:04x}.mp4"),

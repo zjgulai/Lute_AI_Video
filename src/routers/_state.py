@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.graph.pipeline import compile_pipeline
+from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS
 
 # ── Pipeline state ──
 # P0-E: Pass DATABASE_URL so /pipeline/* uses PostgresSaver in production.
@@ -39,9 +40,6 @@ def get_pipeline():
 _active_threads: dict[str, dict[str, Any]] = {}
 _THREAD_INDEX_PATH = OUTPUT_DIR / ".thread_index.json"
 _pipeline_semaphore = asyncio.Semaphore(10)  # P3-4: Max 10 concurrent pipelines
-
-# Background task registry
-_background_tasks: dict[str, dict[str, Any]] = {}
 
 # Thread cache TTL
 _THREAD_CACHE_TTL_SEC = 24 * 3600  # 24 hours
@@ -196,32 +194,7 @@ from src.tasks.bg_registry import register_background_task as _register_backgrou
 # ── Scenario helpers ──
 
 _SCENARIO_STEP_ORDER: dict[str, list[str]] = {
-    "s1": [
-        "strategy", "scripts", "compliance", "storyboards",
-        "continuity_storyboard_grid", "keyframe_images", "video_prompts",
-        "thumbnail_prompts", "seedance_clips", "tts_audio",
-        "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s2": [  # S2 is S1 with brand_mode=True
-        "strategy", "scripts", "compliance", "storyboards",
-        "continuity_storyboard_grid", "keyframe_images", "video_prompts",
-        "thumbnail_prompts", "seedance_clips", "tts_audio",
-        "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s3": [
-        "video_analysis", "character_identity", "remix_script",
-        "storyboards", "keyframe_images", "video_prompts",
-        "thumbnail_prompts", "seedance_clips", "tts_audio",
-        "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s4": [
-        "scripts", "video_prompts", "thumbnails",
-        "seedance_clips", "tts_audio", "assemble_final", "audit",
-    ],
-    "s5": [
-        "vlog_strategy", "video_prompts", "seedance_clips",
-        "tts_audio", "assemble_final", "audit",
-    ],
+    scenario: list(order) for scenario, order in SCENARIO_STEP_ORDERS.items()
 }
 
 _STEP_DURATIONS: dict[str, str] = {

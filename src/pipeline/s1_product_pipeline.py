@@ -344,6 +344,8 @@ class S1ProductDirectPipeline:
             return await self._step_continuity_storyboard_grid(
                 reg=reg,
                 product_catalog=config.get("product_catalog", {}),
+                brand_guidelines=config.get("brand_guidelines") or {},
+                target_platforms=config.get("target_platforms") or [],
                 scripts=scripts,
                 storyboards=storyboards,
                 errors=errors,
@@ -363,6 +365,7 @@ class S1ProductDirectPipeline:
                 reg=reg,
                 storyboards=storyboards,
                 errors=errors,
+                config=config,
             )
 
         if step_name == "video_prompts":
@@ -501,6 +504,8 @@ class S1ProductDirectPipeline:
         self,
         reg: SkillRegistry,
         product_catalog: dict[str, Any],
+        brand_guidelines: dict[str, Any],
+        target_platforms: list[str],
         scripts: list[dict[str, Any]],
         storyboards: list[dict[str, Any]],
         errors: list[str],
@@ -531,10 +536,16 @@ class S1ProductDirectPipeline:
                 },
             )
 
+        continuity_catalog = self._build_continuity_product_context(
+            product_catalog=product_catalog,
+            brand_guidelines=brand_guidelines,
+            target_platforms=target_platforms,
+        )
+
         res = await reg.execute(
             "continuity-storyboard-grid",
             {
-                "product_catalog": product_catalog,
+                "product_catalog": continuity_catalog,
                 "scripts": scripts,
                 "storyboards": storyboards,
                 "storyboard_grid": storyboard_grid,
@@ -572,6 +583,46 @@ class S1ProductDirectPipeline:
                 "continuity_mode": continuity_mode,
             },
         )
+
+    @staticmethod
+    def _build_continuity_product_context(
+        product_catalog: dict[str, Any],
+        brand_guidelines: dict[str, Any],
+        target_platforms: list[str],
+    ) -> dict[str, Any]:
+        catalog = dict(product_catalog)
+
+        if brand_guidelines.get("brand_name") and not catalog.get("brand_name"):
+            catalog["brand_name"] = brand_guidelines["brand_name"]
+
+        tone = brand_guidelines.get("tone")
+        if isinstance(tone, str) and tone.strip():
+            catalog.setdefault("tone_of_voice", tone.strip())
+            catalog.setdefault("voice_guidelines", tone.strip())
+
+        target_audience = brand_guidelines.get("target_audience")
+        if isinstance(target_audience, str) and target_audience.strip():
+            catalog.setdefault("target_audience", target_audience.strip())
+
+        primary_color = brand_guidelines.get("primary_color")
+        secondary_color = brand_guidelines.get("secondary_color")
+        palette = [
+            color.strip()
+            for color in (primary_color, secondary_color)
+            if isinstance(color, str) and color.strip()
+        ]
+        if palette and "color_palette" not in catalog:
+            catalog["color_palette"] = palette
+
+        distribution_platforms = [
+            platform.strip().lower()
+            for platform in target_platforms
+            if isinstance(platform, str) and platform.strip()
+        ]
+        if distribution_platforms:
+            catalog["distribution_platforms"] = distribution_platforms[:3]
+
+        return catalog
 
     async def _step_strategy(
         self,
@@ -683,6 +734,7 @@ class S1ProductDirectPipeline:
         reg: SkillRegistry,
         storyboards: list[dict[str, Any]],
         errors: list[str],
+        config: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate keyframe images for each storyboard's shots.
 
@@ -695,12 +747,15 @@ class S1ProductDirectPipeline:
         """
         keyframe_results: list[dict[str, Any]] = []
         regenerate_signal: dict[str, Any] | None = None
+        # P2-1: Estimate needed keyframes from video_duration (~10s per clip)
+        estimated_clips = max(3, (config or {}).get("video_duration", 30) // 10)
         for sb in storyboards[:MAX_CLIPS_PER_DEMO]:
             res = await reg.execute("keyframe-images", {
                 "storyboard": sb,
                 "size": "1024x1792",
                 "quality": "high",
                 "_quality_attempt": sb.get("_quality_attempt", 0),
+                "_max_shots": estimated_clips,
             })
             if (
                 not res.success
@@ -1007,6 +1062,9 @@ class S1ProductDirectPipeline:
                         "clip_index": video_prompts[i].get("clip_index", i + 1),
                         "transition_to_next": video_prompts[i].get("transition_to_next", ""),
                         "transition_type": video_prompts[i].get("transition_type", "clean"),
+                        "scene_beat": video_prompts[i].get("scene_beat", ""),
+                        "beat_summary": video_prompts[i].get("beat_summary", ""),
+                        "transition_intent": video_prompts[i].get("transition_intent", ""),
                         "continuity_frame": continuity_frame_by_index.get(i, False),
                     })
 
@@ -1067,6 +1125,9 @@ class S1ProductDirectPipeline:
                         "file_size": res.data.get("file_size_bytes", 0),
                         "verification": res.data.get("verification", {}),
                         "prompt_used": res.data.get("prompt_used", ""),
+                        "scene_beat": "",
+                        "beat_summary": "",
+                        "transition_intent": "",
                         "continuity_frame": bool(last_frame_path),
                         "is_filler": True,
                     })

@@ -86,10 +86,12 @@ class KeyframeImagesSkill(SkillCallable):
         reg = SkillRegistry()
 
         # Safety cap: process at most MAX_SHOTS_PER_STORYBOARD shots
-        capped_shots = shots[:self.MAX_SHOTS_PER_STORYBOARD]
-        if len(shots) > self.MAX_SHOTS_PER_STORYBOARD:
+        # P2-1: Allow caller to override cap when clips count is known upfront
+        cap = params.get("_max_shots", self.MAX_SHOTS_PER_STORYBOARD)
+        capped_shots = shots[:cap]
+        if len(shots) > cap:
             logger.warning("keyframe: capping shots",
-                           total=len(shots), cap=self.MAX_SHOTS_PER_STORYBOARD)
+                           total=len(shots), cap=cap)
 
         import asyncio
 

@@ -16,6 +16,7 @@ import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import { errorMessage } from "@/lib/errors";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
+import RuntimeMediaImage from "@/components/RuntimeMediaImage";
 
 interface MaterialAsset {
   id: string;
@@ -395,10 +396,10 @@ export default function MaterialsTab() {
               >
                 <div className="aspect-video bg-[var(--cinema-black)] relative flex items-center justify-center overflow-hidden">
                   {isImage && url ? (
-                    <img src={url} alt={asset.originalName} className="w-full h-full object-cover" loading="lazy" />
+                    <RuntimeMediaImage src={url} alt={asset.originalName} className="w-full h-full object-cover" />
                   ) : isVideo ? (
                     thumb ? (
-                      <img src={thumb} alt={asset.originalName} className="w-full h-full object-cover" loading="lazy" />
+                      <RuntimeMediaImage src={thumb} alt={asset.originalName} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-[var(--bg-panel)] flex items-center justify-center">
                         <Video size={28} weight="fill" className="text-[var(--text-muted)]" />
@@ -469,7 +470,7 @@ export default function MaterialsTab() {
                   className="max-w-[85vw] max-h-[75vh] object-contain"
                 />
               ) : isImageMime(preview.mimeType) ? (
-                <img src={getMediaUrl(preview.filePath)} alt={preview.originalName} className="max-w-[85vw] max-h-[75vh] object-contain" />
+                <RuntimeMediaImage src={getMediaUrl(preview.filePath)} alt={preview.originalName} className="max-w-[85vw] max-h-[75vh] object-contain" />
               ) : (
                 <div className="px-12 py-16 text-center">
                   <MusicNotes size={48} weight="fill" className="text-white/40 mx-auto mb-4" />

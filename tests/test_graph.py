@@ -1,6 +1,5 @@
 """Test LangGraph pipeline compilation and structure."""
 
-import pytest
 from src.graph.pipeline import build_pipeline, compile_pipeline
 from src.models.state import VideoPipelineState
 
@@ -73,7 +72,7 @@ class TestRouting:
 
     def test_route_asset_gaps(self):
         from src.graph.routing import route_after_asset_sourcing
-        from src.models import AssetPlan, ShotAssetPlan, AssetCandidate
+        from src.models import AssetCandidate, AssetPlan, ShotAssetPlan
 
         # Has gaps → go to media generation
         plan_with_gaps = AssetPlan(
@@ -122,7 +121,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_strategy_approved(self):
         from src.graph.routing import route_after_strategy
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         # Approved → proceeds to script
         state = {
@@ -139,7 +138,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_strategy_changes_requested(self):
         from src.graph.routing import route_after_strategy
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         # Changes requested → back to strategy_node
         state = {
@@ -155,7 +154,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_script_approved(self):
         from src.graph.routing import route_after_script
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -172,7 +171,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_script_changes_requested(self):
         from src.graph.routing import route_after_script
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -187,7 +186,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_editing_approved(self):
         from src.graph.routing import route_after_editing
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -203,7 +202,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_editing_changes_requested(self):
         from src.graph.routing import route_after_editing
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -218,7 +217,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_thumbnail_approved(self):
         from src.graph.routing import route_after_thumbnail
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -234,7 +233,7 @@ class TestRoutingHumanReview:
 
     def test_route_after_thumbnail_changes_requested(self):
         from src.graph.routing import route_after_thumbnail
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -249,7 +248,7 @@ class TestRoutingHumanReview:
 
     def test_retry_exhausted_thumbnail_changes_requested_overrides_to_approved(self):
         from src.graph.routing import route_after_thumbnail
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -268,7 +267,7 @@ class TestRoutingHumanReview:
     def test_audit_high_score_auto_approves_strategy(self):
         """Score > 0.90 should skip human review and auto-approve."""
         from src.graph.routing import route_after_strategy
-        from src.models import AuditReport, AuditCriterionStatus, AuditCheckpoint
+        from src.models import AuditCheckpoint, AuditCriterionStatus, AuditReport
 
         state = {
             "audit_reports": {
@@ -288,7 +287,7 @@ class TestRoutingHumanReview:
 
     def test_audit_high_score_auto_approves_script(self):
         from src.graph.routing import route_after_script
-        from src.models import AuditReport, AuditCriterionStatus, AuditCheckpoint
+        from src.models import AuditCheckpoint, AuditCriterionStatus, AuditReport
 
         state = {
             "audit_reports": {
@@ -309,7 +308,7 @@ class TestRoutingHumanReview:
     def test_audit_low_score_auto_rejects_strategy(self):
         """Score < 0.60 should shut down the pipeline."""
         from src.graph.routing import route_after_strategy
-        from src.models import AuditReport, AuditCriterionStatus, AuditCheckpoint
+        from src.models import AuditCheckpoint, AuditCriterionStatus, AuditReport
 
         state = {
             "audit_reports": {
@@ -329,7 +328,7 @@ class TestRoutingHumanReview:
 
     def test_audit_low_score_auto_rejects_thumbnail(self):
         from src.graph.routing import route_after_thumbnail
-        from src.models import AuditReport, AuditCriterionStatus, AuditCheckpoint
+        from src.models import AuditCheckpoint, AuditCriterionStatus, AuditReport
 
         state = {
             "audit_reports": {
@@ -350,7 +349,7 @@ class TestRoutingHumanReview:
     def test_audit_mid_score_falls_through_to_human_review(self):
         """Score in 0.60-0.90 range should use normal human review."""
         from src.graph.routing import route_after_strategy
-        from src.models import AuditReport, AuditCriterionStatus, AuditCheckpoint, HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, AuditCheckpoint, AuditCriterionStatus, AuditReport, HumanReview
 
         state = {
             "audit_reports": {
@@ -377,7 +376,7 @@ class TestRoutingHumanReview:
     def test_audit_mid_score_changes_requested_returns_to_node(self):
         """Mid score + CHANGES_REQUESTED should send back to content node."""
         from src.graph.routing import route_after_editing
-        from src.models import AuditReport, AuditCriterionStatus, AuditCheckpoint, HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, AuditCheckpoint, AuditCriterionStatus, AuditReport, HumanReview
 
         state = {
             "audit_reports": {
@@ -404,7 +403,7 @@ class TestRoutingHumanReview:
     def test_no_audit_report_falls_through_gracefully(self):
         """Missing audit report should not cause errors — fall through to human review."""
         from src.graph.routing import route_after_editing
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -435,7 +434,7 @@ class TestRetryGuard:
 
     def test_strategy_retries_exhausted_forces_approval(self):
         from src.graph.routing import route_after_strategy
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         # retry_counts["strategy"] = 3 (exhausted) + CHANGES_REQUESTED
         # → should route to script_node (override), NOT strategy_node
@@ -456,7 +455,7 @@ class TestRetryGuard:
 
     def test_script_retries_exhausted_forces_approval(self):
         from src.graph.routing import route_after_script
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -473,7 +472,7 @@ class TestRetryGuard:
 
     def test_edit_retries_exhausted_forces_approval(self):
         from src.graph.routing import route_after_editing
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -490,7 +489,7 @@ class TestRetryGuard:
 
     def test_thumbnail_retries_exhausted_forces_approval(self):
         from src.graph.routing import route_after_thumbnail
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {
@@ -508,7 +507,7 @@ class TestRetryGuard:
     def test_retry_below_limit_still_loops_back(self):
         """2 retries < 3 max → CHANGES_REQUESTED still goes back to content node."""
         from src.graph.routing import route_after_script
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         state = {
             "human_reviews": {

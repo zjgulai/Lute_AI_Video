@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/api", () => ({
   hasApiKey: () => false,
   isDemoMode: () => true,
-  isApiError: (_e: unknown) => false,
+  isApiError: () => false,
   getMediaUrl: (p: string) => p,
   fetchState: vi.fn(),
   submitReview: vi.fn(),

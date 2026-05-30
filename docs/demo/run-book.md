@@ -242,7 +242,7 @@ python scripts/test_s1_unified_e2e.py
 
 ```
 src/pipeline/s1_product_pipeline.py   ← 统一S1∪S2 (11步)
-src/pipeline/s2_brand_pipeline.py     ← 兼容包装器 (delegate to S1)
+src/pipeline/s2_brand_pipeline.py     ← 兼容包装器 (warning-only alias to S2 v2)
 src/pipeline/s3_remix_pipeline.py     ← 网红二创 (9步)
 src/api.py                             ← FastAPI + /api/media/{filename}
 web/src/components/OneShotResultView.tsx ← Media Tab + Video Player

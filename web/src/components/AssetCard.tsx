@@ -3,7 +3,7 @@
 import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMediaUrl } from "./api";
-import { Play, Article, MusicNotes, Image, VideoCamera, FileImage } from "@phosphor-icons/react";
+import { Play, Article, MusicNotes, VideoCamera, FileImage } from "@phosphor-icons/react";
 
 export type AssetType = "video" | "image" | "audio" | "text";
 export type AssetSource = "ai" | "manual" | "imported";
@@ -18,7 +18,7 @@ export interface AssetItem {
   duration?: number;
   textContent?: string;
   createdAt: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 interface Props {
@@ -67,6 +67,8 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Thumbnail — 3:2 ratio */}
       <div className="relative aspect-[3/2] bg-black overflow-hidden">
         {asset.thumbnail && !posterFailed ? (
+          // Asset thumbnails are backend-runtime media paths; native img avoids Next image loader allowlist drift.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={getMediaUrl(asset.thumbnail)}
             alt={asset.title}
@@ -123,6 +125,8 @@ function ImageCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Square thumbnail */}
       <div className="relative aspect-square bg-[var(--color-bg-secondary)] overflow-hidden">
         {asset.thumbnail || asset.filePath ? (
+          // Asset images are backend-runtime media paths; native img avoids Next image loader allowlist drift.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={(() => {
               const raw = asset.thumbnail || asset.filePath || "";
@@ -181,7 +185,7 @@ function AudioCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Waveform placeholder */}
       <div className="mt-2 h-6 flex items-end gap-[2px]">
         {Array.from({ length: 24 }).map((_, i) => {
-          const h = 30 + Math.sin(i * 0.8) * 20 + Math.random() * 30;
+          const h = 30 + Math.sin(i * 0.8) * 20 + ((i * 37) % 30);
           return (
             <div
               key={i}

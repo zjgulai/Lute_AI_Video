@@ -19,6 +19,10 @@ def bottle_warmer_params() -> dict:
                 "precise temperature control",
                 "gentle keep-warm mode",
             ],
+            "colors": {
+                "primary": "sage green",
+                "secondary": "warm white",
+            },
         },
         "storyboards": [
             {
@@ -99,12 +103,10 @@ async def test_output_includes_visual_identity(bottle_warmer_params):
     result = await skill.execute(bottle_warmer_params)
 
     visual_identity = result.data["visual_identity"]
-    assert visual_identity["location"] == "warm night kitchen and nursery doorway"
+    assert visual_identity["location"] == "2 AM night feeds at home"
     assert visual_identity["lighting"] == "soft warm low-light"
-    assert visual_identity["product_anchor"] == (
-        "same bottle warmer on the same countertop"
-    )
-    assert "soft green indicator" in visual_identity["color_palette"]
+    assert "Momcozy Nutri Bottle Warmer" in visual_identity["product_anchor"]
+    assert "sage green" in visual_identity["color_palette"]
 
 
 @pytest.mark.asyncio
@@ -141,19 +143,204 @@ async def test_clip_groups_cover_all_micro_shots_once(bottle_warmer_params):
     assert len(groups) == 4
     covered = [idx for group in groups for idx in group["shot_indices"]]
     assert covered == list(range(1, 13))
-    assert (
-        groups[0]["transition_to_next"]
-        == "match cut from cold bottle movement to bottle placement"
-    )
-    assert (
-        groups[1]["transition_to_next"]
-        == "action cut from indicator light to bottle removal"
-    )
-    assert (
-        groups[2]["transition_to_next"]
-        == "soft crossfade from temperature check to product beauty shot"
-    )
+    assert groups[0]["transition_to_next"] == "match cut from setup to first product interaction"
+    assert groups[1]["transition_to_next"] == "action cut from feature interaction to user payoff"
+    assert groups[2]["transition_to_next"] == "soft crossfade from proof detail to hero close"
     assert "transition_to_next" not in groups[3]
+    assert groups[0]["scene_beat"] == "context_setup"
+    assert groups[1]["scene_beat"] == "product_interaction"
+    assert groups[2]["scene_beat"] == "proof_payoff"
+    assert groups[3]["scene_beat"] == "cta_close"
+    assert groups[0]["beat_summary"] == "context_setup -> context_setup -> product_intro"
+    assert groups[0]["transition_intent"].startswith("bridge the setup into first hands-on product contact")
+    assert "resolve the viewer's 2 AM night feeds at home need" in groups[0]["transition_intent"]
+    assert groups[0]["director_profile"]["brand_promise"] == "quick night-feed warming"
+    assert "Momcozy Nutri Bottle Warmer" in groups[0]["seedance_prompt"]
+    assert "2 AM night feeds at home" in groups[0]["seedance_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_semantics_follow_usage_scenario_and_usps():
+    skill = ContinuityStoryboardGridSkill()
+    result = await skill.execute(
+        {
+            "product_catalog": {
+                "product_name": "LactFit Wearable Breast Pump X1",
+                "brand_name": "LactFit",
+                "category": "wearable breast pump",
+                "usage_scenario": "office commute and desk pumping routine",
+                "usps": ["hands-free pumping", "quiet operation"],
+                "colors": ["soft ivory", "muted rose"],
+            },
+            "storyboards": [
+                {
+                    "shots": [
+                        {
+                            "id": 1,
+                            "start_time": 0,
+                            "end_time": 3,
+                            "visual": "A mother adjusts the pump under a blazer at her desk.",
+                        }
+                    ]
+                }
+            ],
+            "storyboard_grid": "12",
+            "transition_style": "match_cut",
+        }
+    )
+
+    assert result.success is True
+    assert result.data["visual_identity"]["location"] == "office commute and desk pumping routine"
+    assert result.data["visual_identity"]["lighting"] == "clean daylight with soft contrast"
+    assert "soft ivory" in result.data["visual_identity"]["color_palette"]
+    assert "hands-free pumping" in result.data["micro_shots"][2]["visual"]
+    assert "office commute and desk pumping routine" in result.data["clip_groups"][0]["seedance_prompt"]
+    assert "quiet operation" in result.data["clip_groups"][1]["seedance_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_brand_campaign_semantics_follow_brand_package():
+    skill = ContinuityStoryboardGridSkill()
+    result = await skill.execute(
+        {
+            "product_catalog": {
+                "product_name": "MomCozy",
+                "brand_name": "MomCozy",
+                "category": "brand_campaign",
+                "usage_scenario": "living room family routine",
+                "values": ["safety", "comfort", "modern motherhood"],
+                "voice_guidelines": "warm, supportive, never preachy",
+                "visual_constraints": "soft natural light; pastel palette",
+                "colors": ["pastel peach", "warm white"],
+            },
+            "storyboards": [
+                {
+                    "shots": [
+                        {
+                            "id": 1,
+                            "start_time": 0,
+                            "end_time": 3,
+                            "visual": "A calm family moment around the sofa with product nearby.",
+                        }
+                    ]
+                }
+            ],
+            "storyboard_grid": "12",
+            "transition_style": "match_cut",
+        }
+    )
+
+    assert result.success is True
+    identity = result.data["visual_identity"]
+    prompt = result.data["clip_groups"][0]["seedance_prompt"]
+
+    assert identity["tone"] == "warm, supportive, never preachy"
+    assert "soft natural light" in identity["constraints"]
+    assert "pastel palette" in identity["constraints"]
+    assert "pastel peach" in identity["color_palette"]
+    assert identity["director_profile"]["brand_promise"] == "safety"
+    assert "Brand tone: warm, supportive, never preachy." in prompt
+    assert "Brand values to preserve: safety, comfort, modern motherhood." in prompt
+    assert "Visual constraints: soft natural light, pastel palette." in prompt
+    assert "Director story arc: living room family routine need -> hands-on MomCozy use -> visible proof -> CTA memory." in prompt
+    assert "Brand promise: safety." in prompt
+
+
+@pytest.mark.asyncio
+async def test_influencer_remix_semantics_follow_creator_platform_and_style():
+    skill = ContinuityStoryboardGridSkill()
+    result = await skill.execute(
+        {
+            "product_catalog": {
+                "product_name": "LactFit X1",
+                "brand_name": "LactFit",
+                "category": "influencer_remix",
+                "usage_scenario": "desk-side wearable pump demo",
+                "usps": ["quiet pumping"],
+                "creator_name": "Jess",
+                "source_platform": "instagram",
+                "distribution_platforms": ["instagram", "tiktok"],
+                "creator_style": "Kept energetic style and direct creator pacing",
+                "voice_guidelines": "Keep creator reaction rhythm and short punchlines",
+            },
+            "storyboards": [
+                {
+                    "shots": [
+                        {
+                            "id": 1,
+                            "start_time": 0,
+                            "end_time": 3,
+                            "visual": "Creator points at the pump while leaning toward the camera.",
+                        }
+                    ]
+                }
+            ],
+            "storyboard_grid": "12",
+            "transition_style": "match_cut",
+        }
+    )
+
+    assert result.success is True
+    identity = result.data["visual_identity"]
+    prompt = result.data["clip_groups"][0]["seedance_prompt"]
+
+    assert identity["creator_reference"] == "Jess"
+    assert identity["platform"] == "instagram"
+    assert identity["director_profile"]["platform_pacing"] == "vertical short-form pacing with a fast hook and readable proof beat"
+    assert identity["director_profile"]["creator_cadence"] == "Kept energetic style and direct creator pacing"
+    assert "Brand tone: Keep creator reaction rhythm and short punchlines." in prompt
+    assert "Keep Jess's creator-facing delivery authentic." in prompt
+    assert "Native to instagram vertical short-form pacing." in prompt
+    assert "Final continuity should still travel well to instagram, tiktok." in prompt
+    assert "Preserve creator style: Kept energetic style and direct creator pacing." in prompt
+    assert "Platform pacing: vertical short-form pacing with a fast hook and readable proof beat." in prompt
+    assert "Creator cadence: Kept energetic style and direct creator pacing." in prompt
+
+
+@pytest.mark.asyncio
+async def test_product_direct_semantics_follow_platform_tone_and_audience():
+    skill = ContinuityStoryboardGridSkill()
+    result = await skill.execute(
+        {
+            "product_catalog": {
+                "product_name": "LactFit X1",
+                "brand_name": "LactFit",
+                "category": "breast_pumps",
+                "usage_scenario": "morning desk-side pumping routine",
+                "usps": ["hands-free pumping"],
+                "distribution_platforms": ["tiktok", "amazon"],
+                "tone_of_voice": "warm, empowering, practical",
+                "target_audience": "working mothers 25-40",
+                "color_palette": ["sage green", "warm cream"],
+            },
+            "storyboards": [
+                {
+                    "shots": [
+                        {
+                            "id": 1,
+                            "start_time": 0,
+                            "end_time": 3,
+                            "visual": "A mother reaches for the pump beside a laptop and coffee.",
+                        }
+                    ]
+                }
+            ],
+            "storyboard_grid": "12",
+            "transition_style": "match_cut",
+        }
+    )
+
+    assert result.success is True
+    identity = result.data["visual_identity"]
+    prompt = result.data["clip_groups"][0]["seedance_prompt"]
+
+    assert identity["audience"] == "working mothers 25-40"
+    assert "sage green" in identity["color_palette"]
+    assert identity["director_profile"]["audience_tension"] == "resolve working mothers 25-40's morning desk-side pumping routine need"
+    assert "Brand tone: warm, empowering, practical." in prompt
+    assert "Final continuity should still travel well to tiktok, amazon." in prompt
+    assert "Keep the lifestyle cues relevant to working mothers 25-40." in prompt
+    assert "Audience tension: resolve working mothers 25-40's morning desk-side pumping routine need." in prompt
 
 
 @pytest.mark.asyncio
@@ -169,10 +356,17 @@ async def test_illegal_grid_returns_error(bottle_warmer_params):
 
 @pytest.mark.asyncio
 async def test_registry_execute_uses_safe_execute_path(bottle_warmer_params):
-    result = await SkillRegistry().execute(
-        "continuity-storyboard-grid",
-        bottle_warmer_params,
-    )
+    previous_global_skills = dict(SkillRegistry._global_skills)
+    try:
+        SkillRegistry.clear_global()
+        SkillRegistry.register(ContinuityStoryboardGridSkill())
+
+        result = await SkillRegistry().execute(
+            "continuity-storyboard-grid",
+            bottle_warmer_params,
+        )
+    finally:
+        SkillRegistry._global_skills = previous_global_skills
 
     assert result.success is True
     assert result.metadata["requested_grid"] == "12"

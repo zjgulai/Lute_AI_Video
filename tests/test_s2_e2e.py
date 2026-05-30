@@ -87,7 +87,7 @@ class TestS2RunContract:
             brand_package=BRAND_PACKAGE_FIXTURE,
             enable_media_synthesis=False,
         )
-        assert result["model_id"] == "kling-3-0/pro"
+        assert result["model_id"] == "kling-3.0/pro"
 
     @pytest.mark.asyncio
     async def test_run_brand_package_threaded_through(self):

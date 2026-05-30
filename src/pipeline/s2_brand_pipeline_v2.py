@@ -7,7 +7,7 @@ pipeline class with its own:
 - Public contract: takes ``brand_package``, returns brand-campaign-shaped
   result with always-populated ``compliance_reports``.
 - Model selection: routes through ``ModelRouter.select_model("s2")`` →
-  ``kling-3-0/pro`` (15s @ 1080p + 3-person character consistency)
+  ``kling-3.0/pro`` (15s @ 1080p + 3-person character consistency)
   instead of S1's seedance-2.
 - Pipeline scenario tag: "brand_campaign", driving gate_manager's
   scenario-specific gate definitions and candidate_scorer's S2-weighted
@@ -57,6 +57,11 @@ class S2BrandCampaignPipeline:
 
     SCENARIO_TAG = "s2"
     MODEL_PROVIDER = "model_router"
+
+    async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
+        """Execute a single step via S1 (brand_mode=True already in config)."""
+        s1 = S1ProductDirectPipeline()
+        return await s1.run_step(step_name, state)
 
     async def run(
         self,

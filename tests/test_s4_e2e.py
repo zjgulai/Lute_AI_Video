@@ -11,9 +11,11 @@ Uses fallback/mock mode — no real LLM calls.
 from __future__ import annotations
 
 import importlib
+from typing import Any
 
 import pytest
 
+import src.skills.continuity_storyboard_grid as continuity_storyboard_grid_skill
 import src.skills.script_writer as script_writer_skill
 import src.skills.seedance_prompt as seedance_prompt_skill
 import src.skills.thumbnail_prompt as thumbnail_prompt_skill
@@ -25,7 +27,12 @@ from src.skills.registry import SkillRegistry
 @pytest.fixture(autouse=True)
 def _clear_registry():
     SkillRegistry.clear_global()
-    for module in (script_writer_skill, seedance_prompt_skill, thumbnail_prompt_skill):
+    for module in (
+        continuity_storyboard_grid_skill,
+        script_writer_skill,
+        seedance_prompt_skill,
+        thumbnail_prompt_skill,
+    ):
         importlib.reload(module)
     yield
     SkillRegistry.clear_global()
@@ -63,6 +70,7 @@ async def test_s4_full_pipeline_mock():
 
 
 @pytest.mark.asyncio
+@pytest.mark.hermetic_slow
 async def test_s4_step_runner_init_and_resume():
     """S4 via StepRunner: init_state + resume produces valid state."""
     from src.pipeline.state_manager import PipelineStateManager
@@ -178,9 +186,27 @@ async def test_s4_seedance_clips_use_prompt_durations():
     result = await S4LiveShootPipeline()._step_seedance_clips(
         reg=FakeRegistry(),
         video_prompts=[
-            {"prompt": "first scene", "duration_seconds": 4},
-            {"prompt": "second scene", "duration_seconds": 7},
-            {"prompt": "third scene", "duration_seconds": 9},
+            {
+                "prompt": "first scene",
+                "duration_seconds": 4,
+                "scene_beat": "setup_context",
+                "beat_summary": "establish live-shoot scene",
+                "transition_intent": "lead into the hands-on usage",
+            },
+            {
+                "prompt": "second scene",
+                "duration_seconds": 7,
+                "scene_beat": "usage_demo",
+                "beat_summary": "capture product use in motion",
+                "transition_intent": "carry action into proof detail",
+            },
+            {
+                "prompt": "third scene",
+                "duration_seconds": 9,
+                "scene_beat": "proof_detail",
+                "beat_summary": "close with tactile result shot",
+                "transition_intent": "resolve into a grounded finish",
+            },
         ],
         product_name="X1 Pump",
         label="s4-duration-test",
@@ -189,35 +215,30 @@ async def test_s4_seedance_clips_use_prompt_durations():
 
     assert captured_durations == [4, 7, 9]
     assert result["total_duration"] == 20
+    assert result["clip_details"][0]["scene_beat"] == "setup_context"
+    assert result["clip_details"][1]["beat_summary"] == "capture product use in motion"
+    assert result["clip_details"][2]["transition_intent"] == "resolve into a grounded finish"
 
 
 @pytest.mark.asyncio
-async def test_s4_seedance_clips_chain_last_frame_continuity(monkeypatch):
-    captured_continuity_frames: list[str | None] = []
-    extracted_from: list[str] = []
+async def test_s4_seedance_clips_concurrent_generation():
+    """P0-2: S4 clips are generated concurrently with no continuity chain."""
+    call_log: list[dict[str, Any]] = []
 
     class FakeRegistry:
         async def execute(self, name, params):
             assert name == "seedance-video-generate-skill"
-            captured_continuity_frames.append(params.get("continuity_frame_path"))
-            index = len(captured_continuity_frames)
+            call_log.append({"name": name, "params": params})
             return SkillResult(
                 success=True,
                 data={
-                    "video_path": f"/tmp/s4-continuity-clip-{index}.mp4",
+                    "video_path": f"/tmp/s4-concurrent-{params['output_label']}.mp4",
                     "duration_seconds": params["duration"],
                     "verification": {"all_ok": True},
                 },
             )
 
-    def _fake_extract(video_path: str, output_dir: str) -> str:
-        extracted_from.append(video_path)
-        return f"/tmp/last-frame-{len(extracted_from)}.jpg"
-
     pipeline = S4LiveShootPipeline()
-    import src.pipeline.s4_live_shoot_pipeline as s4_module
-    monkeypatch.setattr(s4_module, "extract_clip_last_frame", _fake_extract)
-
     result = await pipeline._step_seedance_clips(
         reg=FakeRegistry(),
         video_prompts=[
@@ -226,18 +247,112 @@ async def test_s4_seedance_clips_chain_last_frame_continuity(monkeypatch):
             {"prompt": "third scene", "duration_seconds": 9},
         ],
         product_name="X1 Pump",
-        label="s4-continuity-test",
+        label="s4-concurrent-test",
         errors=[],
     )
 
-    assert captured_continuity_frames == [
-        None,
-        "/tmp/last-frame-1.jpg",
-        "/tmp/last-frame-2.jpg",
-    ]
-    assert extracted_from == [
-        "/tmp/s4-continuity-clip-1.mp4",
-        "/tmp/s4-continuity-clip-2.mp4",
-        "/tmp/s4-continuity-clip-3.mp4",
-    ]
-    assert result["clip_details"][1]["continuity_frame_used"] == "/tmp/last-frame-1.jpg"
+    # All 3 clips generated (concurrent, no continuity_frame_path)
+    assert len(call_log) == 3
+    for call in call_log:
+        assert "continuity_frame_path" not in call["params"]
+
+    # clip_details populated correctly with continuity_frame_used=None
+    assert len(result["clip_paths"]) == 3
+    assert len(result["clip_details"]) == 3
+    assert result["clip_details"][0]["continuity_frame_used"] is None
+    assert result["total_duration"] == 20
+
+
+@pytest.mark.asyncio
+async def test_s4_continuity_skill_fallback_marks_soft_degraded():
+    pipeline = S4LiveShootPipeline()
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            assert name == "continuity-storyboard-grid"
+            return SkillResult(
+                success=True,
+                data={"clip_groups": [{"clip_index": 1}]},
+                metadata={"is_fallback": True, "fallback_reason": "mock_fallback"},
+            )
+
+    result = await pipeline._step_continuity_storyboard_grid(
+        reg=FakeRegistry(),
+        scripts=[{"segments": [{"start_time": 0, "end_time": 5, "visual_description": "demo"}]}],
+        product_name="X1 Pump",
+        topic="demo topic",
+        product_info={},
+        brand_guidelines={},
+        errors=[],
+    )
+
+    assert result["_soft_degraded"] is True
+    assert result["_degraded_reason"] == "continuity_skill_fallback"
+    assert result["degraded"] is True
+
+
+@pytest.mark.asyncio
+async def test_s4_continuity_threads_topic_brand_and_stock_context():
+    pipeline = S4LiveShootPipeline()
+    captured: dict[str, Any] = {}
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            assert name == "continuity-storyboard-grid"
+            captured["params"] = params
+            return SkillResult(
+                success=True,
+                data={
+                    "grid_type": "12-grid",
+                    "product_name": "X1 Pump",
+                    "visual_identity": {},
+                    "micro_shots": [],
+                    "clip_groups": [{"clip_index": 1, "shot_indices": [1, 2, 3], "duration": 5}],
+                },
+            )
+
+    await pipeline._step_continuity_storyboard_grid(
+        reg=FakeRegistry(),
+        scripts=[{
+            "segments": [
+                {"start_time": 0, "end_time": 5, "visual_description": "Mother uses the pump at her desk."},
+            ]
+        }],
+        product_name="X1 Pump",
+        topic="Working mom desk routine",
+        product_info={"brand_name": "LactFit", "usps": ["hands-free", "quiet"]},
+        brand_guidelines={
+            "voice_guidelines": "warm, supportive",
+            "values": ["comfort", "confidence"],
+            "visual_constraints": "natural window light; authentic work setting",
+            "stock_footage_urls": ["https://example.com/stock-a.mp4", "https://example.com/stock-b.mp4"],
+        },
+        errors=[],
+    )
+
+    product_catalog = captured["params"]["product_catalog"]
+    assert product_catalog["brand_name"] == "LactFit"
+    assert product_catalog["usage_scenario"] == "Working mom desk routine"
+    assert product_catalog["usps"] == ["hands-free", "quiet"]
+    assert product_catalog["values"] == ["comfort", "confidence"]
+    assert product_catalog["voice_guidelines"] == "warm, supportive"
+    assert "natural window light" in product_catalog["visual_constraints"]
+    assert any("2 approved stock footage" in item for item in product_catalog["visual_constraints"])
+
+
+def test_s4_fallback_clip_groups_include_topic_and_stock_context():
+    groups = S4LiveShootPipeline._s4_fallback_clip_groups(
+        shots=[{
+            "start_time": 0,
+            "end_time": 4,
+            "visual": "Close-up of product on desk",
+            "text_overlay": "Desk demo",
+        }],
+        product_name="X1 Pump",
+        topic="Working mom desk routine",
+        stock_footage_count=2,
+    )
+
+    prompt = groups[0]["seedance_prompt"]
+    assert "Working mom desk routine" in prompt
+    assert "2 approved stock/live reference asset" in prompt

@@ -55,6 +55,47 @@ const AUDIT_CHECKPOINT: Record<string, string> = {
   thumbnail_review: "thumbnail",
 };
 
+type ReviewBrief = {
+  id: string;
+  video_type?: string;
+  topic?: string;
+  key_message?: string;
+  usp_priority?: string[];
+  target_audience?: string;
+};
+
+type ReviewScriptSegment = {
+  segment_type?: string;
+  start_time?: number;
+  end_time?: number;
+  voiceover?: string;
+  visual_description?: string;
+};
+
+type ReviewScript = {
+  id?: string;
+  platform?: string;
+  total_duration?: number;
+  segments?: ReviewScriptSegment[];
+};
+
+type ThumbnailVariant = {
+  variant_id: string;
+  concept?: string;
+};
+
+type ThumbnailSet = {
+  script_id: string;
+  variants?: ThumbnailVariant[];
+};
+
+type ReviewPayload = {
+  audit_reports?: Record<string, AuditReport>;
+  weekly_calendar?: { briefs?: ReviewBrief[] };
+  scripts?: ReviewScript[];
+  thumbnail_sets?: ThumbnailSet[];
+};
+
 const getTypeLabel = (key: string, t: (k: string) => string) => {
   const map: Record<string, string> = {
     tutorial: "reviewType.tutorial",
@@ -76,14 +117,15 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
   const [selectedThumbnails, setSelectedThumbnails] = useState<Record<string, string>>({});
 
   const config = REVIEW_CONFIG[currentReview];
-  const s = reviewState.state;
+  const s = reviewState.state as ReviewPayload | undefined;
   const checkpointKey = AUDIT_CHECKPOINT[currentReview];
   const auditReport: AuditReport | null = checkpointKey ? s?.audit_reports?.[checkpointKey] || null : null;
 
   const toggleBrief = (id: string) => {
     setExpandedBriefs((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -91,7 +133,8 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
   const toggleScript = (id: string) => {
     setExpandedScripts((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -104,16 +147,18 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
           <p className="text-[12px] text-[var(--text-body)] mb-3">
             {s.weekly_calendar.briefs.length}{t("review.briefs")}
           </p>
-          {s.weekly_calendar.briefs.map((brief: any) => {
+          {s.weekly_calendar.briefs.map((brief) => {
+            const videoType = brief.video_type || "";
+            const uspPriority = brief.usp_priority || [];
             const exp = expandedBriefs.has(brief.id);
             return (
               <div key={brief.id} className="apple-card overflow-hidden">
                 <button
                   onClick={() => toggleBrief(brief.id)}
                   className="w-full flex items-center gap-2 p-3 cursor-pointer text-left"
-                >
-                  <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] shrink-0">
-                    {getTypeLabel(brief.video_type, t) || brief.video_type}
+                  >
+                    <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] shrink-0">
+                    {getTypeLabel(videoType, t) || videoType}
                   </span>
                   <span className="text-[13px] font-medium text-[var(--text-h1)] truncate">
                     {brief.topic}
@@ -128,9 +173,9 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
                 {exp && (
                   <div className="px-3 pb-3 space-y-2 animate-slide-down">
                     <p className="text-xs text-[var(--text-body)]">{brief.key_message}</p>
-                    {brief.usp_priority?.length > 0 && (
+                    {uspPriority.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {brief.usp_priority.map((usp: string, i: number) => (
+                        {uspPriority.map((usp, i) => (
                           <span key={i} className="text-[12px] px-2 py-0.5 rounded-full bg-[var(--bg-panel)] text-[var(--text-body)] border border-[var(--border-default)]">
                             {usp}
                           </span>
@@ -154,7 +199,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
       return (
         <div className="space-y-2">
           <p className="text-[12px] text-[var(--text-body)] mb-3">{t("review.scripts")} {s.scripts.length}{t("review.scriptsCount")}</p>
-          {s.scripts.map((script: any, i: number) => {
+          {s.scripts.map((script, i) => {
             const key = `${script.id}-${script.platform}-${i}`;
             const exp = expandedScripts.has(key);
             return (
@@ -175,7 +220,7 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
                     <path d="M2.5 3.5L5 6.5L7.5 3.5" stroke="var(--text-muted)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
-                {exp && script.segments?.map((seg: any, i: number) => (
+                {exp && script.segments?.map((seg, i) => (
                   <div key={i} className="px-3 pb-2 last:pb-3">
                     <div className="pl-3 border-l-2 border-[var(--border-default)]">
                       <div className="flex items-center gap-2 mb-1">
@@ -211,11 +256,11 @@ export default function ReviewPanel({ reviewState, currentReview, onAction, load
     if (currentReview === "thumbnail_review" && s?.thumbnail_sets) {
       return (
         <div className="space-y-3">
-          {s.thumbnail_sets.map((ts: any, idx: number) => (
+          {s.thumbnail_sets.map((ts, idx) => (
             <div key={`ts-${idx}`} className="apple-card p-3 space-y-2">
               <p className="text-[12px] font-semibold text-[var(--text-body)]">{ts.script_id}</p>
               <div className="grid grid-cols-2 gap-2">
-                {(ts.variants || []).map((v: any) => {
+                {(ts.variants || []).map((v) => {
                   const selected = selectedThumbnails[ts.script_id] === v.variant_id;
                   return (
                     <button

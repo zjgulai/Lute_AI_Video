@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
 from src.tools.webhook_manager import (
+    ALL_EVENTS,
     WebhookManager,
     get_webhook_manager,
     reset_webhook_manager,
-    ALL_EVENTS,
-    WEBHOOK_TIMEOUT_SECONDS,
 )
 
 

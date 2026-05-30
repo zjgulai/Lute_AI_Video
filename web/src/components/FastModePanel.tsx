@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Lightning, Clock, SpeakerHigh, CaretDown, CaretUp, Copy, ArrowCounterClockwise, Play, Article, Cpu, Timer, HardDrives } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { submitFastMode, pollFastStatus, getMediaUrl, isDemoMode, isApiError, type FastModeResult, type FastStatusResponse } from "./api";
+import { submitFastMode, pollFastStatus, isDemoMode, isApiError, type FastModeResult, type FastStatusResponse } from "./api";
 import { DEMO_FAST_MODE_RESULT } from "@/demo-data";
 import { useSubmitting } from "@/hooks/useSubmitting";
 

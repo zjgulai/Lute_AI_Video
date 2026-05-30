@@ -6,6 +6,7 @@ S1ProductDirectPipeline methods, and persists the updated state back to disk.
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from datetime import datetime
@@ -14,6 +15,7 @@ from typing import Any
 import structlog
 
 from src.pipeline.gate_manager import SCENARIO_GATE_DEFINITIONS
+from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.state_manager import PipelineStateManager
 from src.telemetry import error_collector, generate_trace_id, pipeline_metrics
 
@@ -140,52 +142,24 @@ STEP_METHOD_MAP = {
 # ── Scenario configurations ──
 _SCENARIO_CONFIGS: dict[str, dict[str, Any]] = {
     "s1": {
-        "step_order": STEP_ORDER,
+        "step_order": get_scenario_step_order("s1"),
         "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
     },
     "s2": {
         # S2 Brand Campaign is an S1 wrapper (brand_mode=True) — same steps, same class
-        "step_order": STEP_ORDER,
+        "step_order": get_scenario_step_order("s2"),
         "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
     },
     "s4": {
-        "step_order": [
-            "scripts",
-            "video_prompts",
-            "thumbnails",
-            "seedance_clips",
-            "tts_audio",
-            "assemble_final",
-            "audit",
-        ],
+        "step_order": get_scenario_step_order("s4"),
         "pipeline_class": "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
     },
     "s3": {
-        "step_order": [
-            "video_analysis",
-            "character_identity",
-            "remix_script",
-            "storyboards",
-            "keyframe_images",
-            "video_prompts",
-            "thumbnail_prompts",
-            "seedance_clips",
-            "tts_audio",
-            "thumbnail_images",
-            "assemble_final",
-            "audit",
-        ],
+        "step_order": get_scenario_step_order("s3"),
         "pipeline_class": "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
     },
     "s5": {
-        "step_order": [
-            "vlog_strategy",
-            "video_prompts",
-            "seedance_clips",
-            "tts_audio",
-            "assemble_final",
-            "audit",
-        ],
+        "step_order": get_scenario_step_order("s5"),
         "pipeline_class": "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline",
     },
 }
@@ -438,10 +412,32 @@ class StepRunner:
             await self.state_manager.save(state["label"], state)
             return state
 
+        # P1-2: In auto mode, thumbnail generation is a sidecar artifact.
+        # Skip it when SKIP_THUMBNAIL_IN_AUTO env is set to reduce pipeline latency.
+        # Thumbnails can be regenerated later without affecting the video.
+        _skip_thumbnail = (
+            step_name == "thumbnail_images"
+            and state.get("mode") == "auto"
+            and os.environ.get("SKIP_THUMBNAIL_IN_AUTO", "").lower() in ("1", "true", "yes")
+        )
+        if _skip_thumbnail:
+            logger.info("step_runner: skipping thumbnail_images in auto mode (SKIP_THUMBNAIL_IN_AUTO)")
+            step_data["status"] = "done"
+            step_data["output"] = []
+            step_data["completed_at"] = datetime.now().isoformat()
+            next_step = _get_next_step(step_name, step_order)
+            state["current_step"] = next_step
+            await self.state_manager.save(state["label"], state)
+            return state
+
         # Mark step as started
         step_data["status"] = "pending"
         step_data["started_at"] = datetime.now().isoformat()
-        await self.state_manager.save(state["label"], state)
+        # P1-1: In auto mode, skip intermediate save to reduce I/O.
+        # The final save on step completion is sufficient for recovery.
+        # step_by_step mode still saves so human review sees the latest state.
+        if state.get("mode") != "auto":
+            await self.state_manager.save(state["label"], state)
 
         # Instantiate pipeline and run the step (lazy import to avoid circular dep)
         pipeline_module, pipeline_class_name = scenario_cfg["pipeline_class"].rsplit(".", 1)

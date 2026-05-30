@@ -20,7 +20,11 @@ import src.skills.remotion_assemble  # noqa: F401
 import src.skills.seedance_prompt  # noqa: F401
 import src.skills.seedance_video_generate  # noqa: F401
 from src.pipeline.artifact_paths import extract_assemble_paths
-from src.pipeline.continuity_utils import all_clips_are_stubs
+from src.pipeline.continuity_utils import (
+    all_clips_are_stubs,
+    build_continuity_audit_summary,
+    build_transitions_from_clip_details,
+)
 from src.skills.registry import SkillRegistry
 from src.telemetry import generate_trace_id, pipeline_metrics
 
@@ -76,11 +80,28 @@ class S5BrandVlogPipeline:
             scripts = self._vlog_shots_to_scripts(shots)
             return {"shots": shots, "scripts": scripts}
 
+        if step_name == "continuity_storyboard_grid":
+            strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
+            shots = strategy_out.get("shots", [])
+            product_name = config.get("product_name", "Product")
+            scene_id = config.get("scene_id", "living-room")
+            scene_info = SCENE_MAP.get(scene_id, {"name": scene_id, "desc": ""})
+            return self._vlog_shots_to_clip_groups(
+                shots,
+                product_name,
+                scene_name=scene_info.get("name", scene_id),
+                scene_desc=scene_info.get("desc", ""),
+                story_description=config.get("story_description", ""),
+                selected_models=config.get("selected_models", []),
+            )
+
         if step_name == "video_prompts":
             strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
             scripts = strategy_out.get("scripts", [])
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
             return await self._step_video_prompts(
                 reg, scripts, config.get("product_name", "Product"), errors,
+                continuity_storyboard_grid=continuity_grid,
             )
 
         if step_name == "seedance_clips":
@@ -108,7 +129,7 @@ class S5BrandVlogPipeline:
                 errors.append("all_seedance_clips_are_stubs; skipping assembly")
                 return "", ""
             return await self._step_assemble_final(
-                reg, [], scripts, audio_paths, [], clip_paths, {},
+                reg, [], scripts, audio_paths, [], clip_paths, clip_details, {},
                 config.get("output_label", "vlog"), errors,
             )
 
@@ -121,13 +142,15 @@ class S5BrandVlogPipeline:
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
             clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
 
             if not clip_paths or all_clips_are_stubs(clip_paths, clip_details):
                 errors.append("all_seedance_clips_are_stubs; skipping audit")
                 return {}
 
             return await self._step_audit(
-                reg, final_video, audio_paths, [], clip_paths, errors,
+                reg, final_video, audio_paths, [], clip_paths, clip_details,
+                errors, continuity_grid=continuity_grid,
             )
 
         raise ValueError(f"Unknown step name: {step_name}")
@@ -396,8 +419,132 @@ class S5BrandVlogPipeline:
 
     # ═══ Steps ③-⑦: Reused from S1 pattern ═══
 
-    async def _step_video_prompts(self, reg, scripts, product_name, errors):
+    @staticmethod
+    def _vlog_shots_to_clip_groups(
+        shots: list[dict[str, Any]],
+        product_name: str,
+        scene_name: str = "",
+        scene_desc: str = "",
+        story_description: str = "",
+        selected_models: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Convert vlog strategy shots to continuity clip_groups."""
+        groups: list[dict[str, Any]] = []
+        selected_models = selected_models or []
+        persona_parts = []
+        for model in selected_models:
+            if not isinstance(model, dict):
+                continue
+            name = str(model.get("name", "")).strip()
+            role = str(model.get("role", "")).strip()
+            description = str(model.get("description", "")).strip()
+            fragments = [part for part in (name, role, description) if part]
+            if fragments:
+                persona_parts.append(" | ".join(fragments))
+        persona_summary = "; ".join(persona_parts[:2])
+
+        group_size = 3
+        for idx in range(0, len(shots), group_size):
+            chunk = shots[idx:idx + group_size]
+            group_idx = len(groups) + 1
+            shot_indices = list(range(idx + 1, idx + len(chunk) + 1))
+            scene_beat = S5BrandVlogPipeline._scene_beat_for_group(group_idx - 1)
+            beat_summary = S5BrandVlogPipeline._summarize_vlog_group(chunk)
+            transition_intent = S5BrandVlogPipeline._transition_intent_for_group(
+                group_idx=group_idx - 1,
+                scene_beat=scene_beat,
+            )
+            prompt_parts = []
+            for shot in chunk:
+                visual = (shot.get("visual", "") or shot.get("description", "")).strip()
+                shot_type = str(shot.get("shot_type", "")).strip()
+                product_angle = str(shot.get("product_angle", "")).strip()
+                model_name = str(shot.get("model_in_shot", "")).strip()
+                fragments = [part for part in (shot_type, product_angle, model_name, visual[:80]) if part]
+                if fragments:
+                    prompt_parts.append(" | ".join(fragments))
+            group = {
+                "clip_index": group_idx,
+                "shot_indices": shot_indices,
+                "duration": sum(s.get("duration_seconds", 5) for s in chunk) or 5.0,
+                "purpose": f"group_{group_idx}",
+                "scene_beat": scene_beat,
+                "beat_summary": beat_summary,
+                "transition_intent": transition_intent,
+                "seedance_prompt": (
+                    f"{product_name} brand vlog scene in {scene_name or 'lifestyle setting'}"
+                    f"{f' ({scene_desc})' if scene_desc else ''}: {'; '.join(prompt_parts)}. "
+                    f"{f'Story arc: {story_description}. ' if story_description else ''}"
+                    f"{f'On-camera persona: {persona_summary}. ' if persona_summary else ''}"
+                    f"Narrative beat: {scene_beat}. "
+                    f"Beat summary: {beat_summary}. "
+                    f"Transition intent: {transition_intent}. "
+                    "Warm natural lighting, lifestyle aesthetic, consistent product framing."
+                ),
+                "transition_type": "soft_crossfade",
+            }
+            if idx + group_size < len(shots):
+                group["transition_to_next"] = "soft crossfade to next scene"
+            groups.append(group)
+        return {
+            "grid_type": "vlog-shots",
+            "product_name": product_name,
+            "visual_identity": {
+                "location": scene_name or "",
+                "scene_desc": scene_desc,
+                "story_arc": story_description,
+                "persona": persona_summary,
+            },
+            "micro_shots": [],
+            "clip_groups": groups,
+        }
+
+    @staticmethod
+    def _scene_beat_for_group(group_idx: int) -> str:
+        beats = [
+            "vlog_intro",
+            "lifestyle_demo",
+            "emotional_payoff",
+            "cta_close",
+        ]
+        return beats[group_idx] if group_idx < len(beats) else "vlog_progression"
+
+    @staticmethod
+    def _summarize_vlog_group(chunk: list[dict[str, Any]]) -> str:
+        fragments: list[str] = []
+        for shot in chunk:
+            shot_type = str(shot.get("shot_type", "")).strip()
+            product_angle = str(shot.get("product_angle", "")).strip()
+            model_name = str(shot.get("model_in_shot", "")).strip()
+            summary_bits = [part for part in (shot_type, product_angle, model_name) if part]
+            if summary_bits:
+                fragments.append(" / ".join(summary_bits))
+        return " -> ".join(fragments) if fragments else "vlog continuity progression"
+
+    @staticmethod
+    def _transition_intent_for_group(*, group_idx: int, scene_beat: str) -> str:
+        intents = [
+            "bridge the opening product introduction into lived-in usage",
+            "carry lifestyle usage into a warmer emotional payoff",
+            "resolve the emotional payoff into a calm brand close",
+            "hold the final vlog memory and CTA without visual reset",
+        ]
+        if group_idx < len(intents):
+            return intents[group_idx]
+        return f"preserve {scene_beat} continuity through the next vlog beat"
+
+    async def _step_video_prompts(self, reg, scripts, product_name, errors, continuity_storyboard_grid: dict[str, Any] | None = None):
         """Generate per-segment structured video prompts (narrative_shot architecture)."""
+        # Priority: continuity_grid clip_groups > segment-based fallback
+        if continuity_storyboard_grid and continuity_storyboard_grid.get("clip_groups"):
+            result = await reg.execute("seedance-video-prompt", {
+                "continuity_storyboard_grid": continuity_storyboard_grid,
+                "product_name": product_name,
+            })
+            if result.success and result.data and isinstance(result.data, list):
+                return result.data
+            logger.warning("s5: continuity video_prompts failed, falling back", error=result.error)
+
         all_prompts = []
         for script in scripts[:3]:
             segments = script.get("segments", [])
@@ -461,69 +608,150 @@ class S5BrandVlogPipeline:
             if keyframe_map:
                 logger.info("s5_vlog: keyframe map built", angles=list(keyframe_map.keys()))
 
-        for i, vp in enumerate(video_prompts[:5]):
-            prompt_text = vp.get("segment_prompt", "") or vp.get("prompt", "")
-            if isinstance(prompt_text, dict):
-                prompt_text = prompt_text.get("segment_prompt", "") or str(prompt_text)
-            if not prompt_text:
-                prompt_text = f"{product_name} in natural usage scene"
+        # P0-1: 检测是否所有 clips 都有 keyframe 覆盖
+        _all_have_keyframe = all(
+            keyframe_map.get(vp.get("product_angle", ""), "")
+            for vp in video_prompts[:5]
+        )
 
-            seg_dur = float(vp.get("duration_seconds", per_clip))
-            seg_dur = max(4, min(seg_dur, VIDEO_MAX_DURATION))
+        if _all_have_keyframe:
+            # ── 并发模式：所有 clip 独立生成（keyframe 已覆盖，无需 last-frame 链）──
+            _seedance_sem = asyncio.Semaphore(4)
 
-            final_prompt = str(prompt_text) + S5_ABSTRACTION_GUARD
+            async def _gen_one_s5(i: int, vp: dict[str, Any]) -> tuple[int, Any]:
+                async with _seedance_sem:
+                    prompt_text = vp.get("segment_prompt", "") or vp.get("prompt", "")
+                    if isinstance(prompt_text, dict):
+                        prompt_text = prompt_text.get("segment_prompt", "") or str(prompt_text)
+                    if not prompt_text:
+                        prompt_text = f"{product_name} in natural usage scene"
 
-            gen_params: dict[str, Any] = {
-                "prompt": final_prompt,
-                "duration": int(seg_dur),
-                "resolution": "720p",
-                "output_label": f"{label}_seg_{i}",
-                "model": s5_model,
-            }
+                    seg_dur = float(vp.get("duration_seconds", per_clip))
+                    seg_dur = max(4, min(seg_dur, VIDEO_MAX_DURATION))
 
-            # P3: Keyframe anchoring — use product view image if available
-            product_angle = vp.get("product_angle", "")
-            kf_path = keyframe_map.get(product_angle, "") if product_angle else ""
-            if kf_path:
-                gen_params["keyframe_image_path"] = kf_path
-                logger.info("s5_vlog: keyframe anchored", seg=i, angle=product_angle)
-            elif last_frame:
-                gen_params["continuity_frame_path"] = last_frame
+                    final_prompt = str(prompt_text) + S5_ABSTRACTION_GUARD
 
-            res = await reg.execute("seedance-video-generate-skill", gen_params)
-            if res.success and res.data:
-                path = res.data.get("video_path", "")
-                if path:
-                    clip_paths.append(path)
-                    clip_details.append({
-                        "path": path,
-                        "duration": res.data.get("duration_seconds", 0),
-                        "is_stub": res.data.get("is_stub", False),
-                        "file_size": res.data.get("file_size_bytes", 0),
-                        "verification": res.data.get("verification", {}),
-                        "segment_type": vp.get("segment_type", "body"),
-                        "shot_type": vp.get("shot_type", ""),
-                        "product_angle": product_angle,
-                        "keyframe_used": bool(kf_path),
+                    gen_params: dict[str, Any] = {
+                        "prompt": final_prompt,
+                        "duration": int(seg_dur),
+                        "resolution": "720p",
+                        "output_label": f"{label}_seg_{i}",
                         "model": s5_model,
-                    })
-                    # P1-4: delegate last-frame extraction to skill for
-                    # consistent async handling + fallback semantics.
-                    cm_params = {
-                        "video_path": path,
-                        "output_dir": str(OUTPUT_DIR / "seedance" / "continuity_frames"),
                     }
-                    cm_res = await reg.execute("video-continuity-manager-skill", cm_params)
-                    if cm_res.success and cm_res.data:
-                        last_frame = cm_res.data.get("continuity_frame_path")
-                    else:
-                        last_frame = None
-            else:
-                errors.append(f"clip_{i}_failed: {res.error}")
-                last_frame = None
 
-            if i < len(video_prompts) - 1:
-                await asyncio.sleep(3.0)
+                    product_angle = vp.get("product_angle", "")
+                    kf_path = keyframe_map.get(product_angle, "") if product_angle else ""
+                    if kf_path:
+                        gen_params["keyframe_image_path"] = kf_path
+                        logger.info("s5_vlog: keyframe anchored", seg=i, angle=product_angle)
+
+                    res = await reg.execute("seedance-video-generate-skill", gen_params)
+                    return i, res
+
+            tasks = [_gen_one_s5(i, vp) for i, vp in enumerate(video_prompts[:5])]
+            raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for raw in raw_results:
+                if isinstance(raw, Exception):
+                    errors.append(f"clip_failed_with_exception: {raw}")
+                    continue
+                i, res = raw
+                if res.success and res.data:
+                    path = res.data.get("video_path", "")
+                    if path:
+                        clip_paths.append(path)
+                        vp = video_prompts[i]
+                        product_angle = vp.get("product_angle", "")
+                        kf_path = keyframe_map.get(product_angle, "") if product_angle else ""
+                        clip_details.append({
+                            "path": path,
+                            "duration": res.data.get("duration_seconds", 0),
+                            "is_stub": res.data.get("is_stub", False),
+                            "file_size": res.data.get("file_size_bytes", 0),
+                            "verification": res.data.get("verification", {}),
+                            "segment_type": vp.get("segment_type", "body"),
+                            "shot_type": vp.get("shot_type", ""),
+                            "product_angle": product_angle,
+                            "keyframe_used": bool(kf_path),
+                            "model": s5_model,
+                            "transition_to_next": vp.get("transition_to_next", ""),
+                            "transition_type": vp.get("transition_type", "clean"),
+                            "scene_beat": vp.get("scene_beat", ""),
+                            "beat_summary": vp.get("beat_summary", ""),
+                            "transition_intent": vp.get("transition_intent", ""),
+                            "clip_index": vp.get("clip_index", i + 1),
+                        })
+                else:
+                    errors.append(f"clip_{i}_failed: {res.error}")
+
+        else:
+            # ── 串行 fallback：保留 last-frame 链 ──
+            for i, vp in enumerate(video_prompts[:5]):
+                prompt_text = vp.get("segment_prompt", "") or vp.get("prompt", "")
+                if isinstance(prompt_text, dict):
+                    prompt_text = prompt_text.get("segment_prompt", "") or str(prompt_text)
+                if not prompt_text:
+                    prompt_text = f"{product_name} in natural usage scene"
+
+                seg_dur = float(vp.get("duration_seconds", per_clip))
+                seg_dur = max(4, min(seg_dur, VIDEO_MAX_DURATION))
+
+                final_prompt = str(prompt_text) + S5_ABSTRACTION_GUARD
+
+                gen_params: dict[str, Any] = {
+                    "prompt": final_prompt,
+                    "duration": int(seg_dur),
+                    "resolution": "720p",
+                    "output_label": f"{label}_seg_{i}",
+                    "model": s5_model,
+                }
+
+                # P3: Keyframe anchoring — use product view image if available
+                product_angle = vp.get("product_angle", "")
+                kf_path = keyframe_map.get(product_angle, "") if product_angle else ""
+                if kf_path:
+                    gen_params["keyframe_image_path"] = kf_path
+                    logger.info("s5_vlog: keyframe anchored", seg=i, angle=product_angle)
+                elif last_frame:
+                    gen_params["continuity_frame_path"] = last_frame
+
+                res = await reg.execute("seedance-video-generate-skill", gen_params)
+                if res.success and res.data:
+                    path = res.data.get("video_path", "")
+                    if path:
+                        clip_paths.append(path)
+                        clip_details.append({
+                            "path": path,
+                            "duration": res.data.get("duration_seconds", 0),
+                            "is_stub": res.data.get("is_stub", False),
+                            "file_size": res.data.get("file_size_bytes", 0),
+                            "verification": res.data.get("verification", {}),
+                            "segment_type": vp.get("segment_type", "body"),
+                            "shot_type": vp.get("shot_type", ""),
+                            "product_angle": product_angle,
+                            "keyframe_used": bool(kf_path),
+                            "model": s5_model,
+                            "transition_to_next": vp.get("transition_to_next", ""),
+                            "transition_type": vp.get("transition_type", "clean"),
+                            "scene_beat": vp.get("scene_beat", ""),
+                            "beat_summary": vp.get("beat_summary", ""),
+                            "transition_intent": vp.get("transition_intent", ""),
+                            "clip_index": vp.get("clip_index", i + 1),
+                        })
+                        # P1-4: delegate last-frame extraction to skill for
+                        # consistent async handling + fallback semantics.
+                        cm_params = {
+                            "video_path": path,
+                            "output_dir": str(OUTPUT_DIR / "seedance" / "continuity_frames"),
+                        }
+                        cm_res = await reg.execute("video-continuity-manager-skill", cm_params)
+                        if cm_res.success and cm_res.data:
+                            last_frame = cm_res.data.get("continuity_frame_path")
+                        else:
+                            last_frame = None
+                else:
+                    errors.append(f"clip_{i}_failed: {res.error}")
+                    last_frame = None
 
         all_stubs = bool(clip_paths) and all_clips_are_stubs(clip_paths, clip_details)
         return {
@@ -559,7 +787,7 @@ class S5BrandVlogPipeline:
         errors.append(f"tts_failed: {res.error}")
         return []
 
-    async def _step_assemble_final(self, reg, storyboards, scripts, audio_paths, lyrics_paths, clip_paths, brand_guidelines, label, errors):
+    async def _step_assemble_final(self, reg, storyboards, scripts, audio_paths, lyrics_paths, clip_paths, clip_details, brand_guidelines, label, errors):
         """Assemble final video via Remotion (REUSE)."""
         shots = []
         for script in scripts:
@@ -585,18 +813,24 @@ class S5BrandVlogPipeline:
                 })
         total_dur = max((s.get("end_time", 30) for s in shots), default=30.0)
 
+        transitions = build_transitions_from_clip_details(clip_details or [])
+
         res = await reg.execute("remotion-assemble-skill", {
             "shots": shots, "captions": captions,
             "audio_paths": audio_paths, "lyrics_paths": lyrics_paths,
             "clip_paths": clip_paths, "brand_guidelines": brand_guidelines,
             "output_label": label, "total_duration": total_dur,
+            "transitions": transitions,
         })
         if res.success and res.data:
             return res.data.get("video_path", ""), res.data.get("render_json_path", "")
         errors.append(f"assemble_failed: {res.error}")
         return "", ""
 
-    async def _step_audit(self, reg, video_path, audio_paths, thumbnail_paths, clip_paths, errors):
+    async def _step_audit(
+        self, reg, video_path, audio_paths, thumbnail_paths, clip_paths,
+        clip_details, errors, continuity_grid: dict[str, Any] | None = None,
+    ):
         """Quality audit (REUSE)."""
         res = await reg.execute("media-quality-audit-skill", {
             "video_path": video_path,
@@ -605,6 +839,12 @@ class S5BrandVlogPipeline:
             "clip_paths": clip_paths,
         })
         if res.success and res.data:
-            return res.data if isinstance(res.data, dict) else {}
+            base_audit = res.data if isinstance(res.data, dict) else {}
+            return build_continuity_audit_summary(
+                base_audit=base_audit,
+                clip_details=clip_details or [],
+                continuity_grid=continuity_grid,
+                final_video_path=video_path or "",
+            )
         errors.append(f"audit_failed: {res.error}")
         return {}

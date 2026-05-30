@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { adminFetchJson } from "@/components/api";
 import { Plus, MagnifyingGlass, Circle, X } from "@phosphor-icons/react";
@@ -23,6 +23,7 @@ export default function AdminTenantsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -32,14 +33,14 @@ export default function AdminTenantsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async (pageOverride = page) => {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
-      params.set("page", String(page));
+      params.set("page", String(pageOverride));
       params.set("limit", "20");
-      if (q) params.set("q", q);
+      if (appliedQ) params.set("q", appliedQ);
       const data = await adminFetchJson<{
         items: Tenant[];
         total: number;
@@ -51,12 +52,12 @@ export default function AdminTenantsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, appliedQ]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [page]);
+    void load();
+  }, [load]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +77,7 @@ export default function AdminTenantsPage() {
       setNewTenantId("");
       setNewDisplayName("");
       setNewContactEmail("");
-      load();
+      void load();
     } catch (err: unknown) {
       setCreateError(errorMessage(err, "Failed to create tenant"));
     } finally {
@@ -109,13 +110,18 @@ export default function AdminTenantsPage() {
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setPage(1);
+                setAppliedQ(q);
+              }
+            }}
             placeholder="Search tenants..."
             className="apple-input text-xs pl-7 w-full"
           />
         </div>
         <button
-          onClick={() => { setPage(1); load(); }}
+          onClick={() => { setPage(1); setAppliedQ(q); }}
           className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
         >
           Search
@@ -181,7 +187,7 @@ export default function AdminTenantsPage() {
       {error && (
         <div className="text-center py-8">
           <p className="text-xs text-[var(--text-muted)] mb-2">{error}</p>
-          <button onClick={load} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
+          <button onClick={() => void load()} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
             Retry
           </button>
         </div>

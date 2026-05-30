@@ -18,6 +18,12 @@ from typing import Any
 
 import structlog
 
+from src.models.runtime_contracts import (
+    ClipDetail,
+    ContinuityAuditSummary,
+    TransitionMetadata,
+)
+
 logger = structlog.get_logger()
 
 # Default cap for clips per run — matches S1's MAX_CLIPS_PER_DEMO
@@ -124,14 +130,14 @@ def extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
 
 def build_transitions_from_clip_details(
     clip_details: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+) -> list[TransitionMetadata]:
     """Build Remotion transitions list from clip_details metadata.
 
     Input: [{"transition_to_next": "...", "transition_type": "match_cut", ...}, ...]
     Output: [{"from_clip": 1, "to_clip": 2, "type": "match_cut",
               "duration_frames": 8, "description": "..."}, ...]
     """
-    transitions: list[dict[str, Any]] = []
+    transitions: list[TransitionMetadata] = []
     for idx, detail in enumerate(clip_details):
         transition_to_next = detail.get("transition_to_next", "")
         if idx >= len(clip_details) - 1 or not transition_to_next:
@@ -152,7 +158,7 @@ def build_continuity_audit_summary(
     clip_details: list[dict[str, Any]],
     continuity_grid: dict[str, Any] | None,
     final_video_path: str,
-) -> dict[str, Any]:
+) -> ContinuityAuditSummary:
     """Build a continuity-aware audit summary with asset/publish split.
 
     When continuity_grid is None (S4/S5 scenarios without micro_shots),
@@ -161,7 +167,7 @@ def build_continuity_audit_summary(
     """
     base_audit = base_audit if isinstance(base_audit, dict) else {}
     clip_details = clip_details if isinstance(clip_details, list) else []
-    valid_clip_details = [
+    valid_clip_details: list[ClipDetail] = [
         detail for detail in clip_details if isinstance(detail, dict)
     ]
     clips_are_valid = bool(clip_details) and len(valid_clip_details) == len(clip_details)
@@ -182,8 +188,13 @@ def build_continuity_audit_summary(
     continuity_grid = continuity_grid if isinstance(continuity_grid, dict) else {}
     micro_shots = continuity_grid.get("micro_shots") or []
     micro_shots = micro_shots if isinstance(micro_shots, list) else []
+    clip_groups = continuity_grid.get("clip_groups") or []
+    clip_groups = clip_groups if isinstance(clip_groups, list) else []
     valid_micro_shots = [
         shot for shot in micro_shots if isinstance(shot, dict)
+    ]
+    valid_clip_groups = [
+        group for group in clip_groups if isinstance(group, dict)
     ]
     # When no micro_shots available (S4/S5), score this check as True
     # so the overall score isn't unfairly penalized.
@@ -198,12 +209,30 @@ def build_continuity_audit_summary(
                 for shot in valid_micro_shots
             )
         )
+    if not clip_groups and continuity_grid_is_none:
+        director_intent_ok = True
+    elif not clip_groups:
+        # Legacy grids predate clip_groups. Do not penalize a valid micro-shot
+        # grid solely because director metadata did not exist yet.
+        director_intent_ok = micro_continuity_ok
+    else:
+        director_intent_ok = (
+            bool(clip_groups)
+            and len(valid_clip_groups) == len(clip_groups)
+            and all(
+                group.get("scene_beat")
+                and group.get("beat_summary")
+                and group.get("transition_intent")
+                for group in valid_clip_groups
+            )
+        )
     final_video_ok = bool(final_video_path)
 
     score_parts = [
         1.0 if non_stub_ok else 0.0,
         1.0 if transition_ok else 0.0,
         1.0 if micro_continuity_ok else 0.0,
+        1.0 if director_intent_ok else 0.0,
         1.0 if final_video_ok else 0.0,
     ]
     continuity_score = round(sum(score_parts) / len(score_parts), 3)
@@ -223,6 +252,7 @@ def build_continuity_audit_summary(
                 "non_stub_clips": non_stub_ok,
                 "transition_metadata": transition_ok,
                 "micro_shot_continuity": micro_continuity_ok,
+                "director_intent_metadata": director_intent_ok,
                 "final_video_present": final_video_ok,
             },
         },
@@ -233,7 +263,51 @@ def build_continuity_audit_summary(
             "base_score": publish_score,
             "criteria": base_audit.get("criteria", []),
         },
+        "continuity_direction_summary": {
+            "clip_directions": [
+                {
+                    "scene_beat": group.get("scene_beat", ""),
+                    "beat_summary": group.get("beat_summary", ""),
+                    "transition_intent": group.get("transition_intent", ""),
+                }
+                for group in valid_clip_groups
+                if group.get("scene_beat")
+                or group.get("beat_summary")
+                or group.get("transition_intent")
+            ],
+            "scene_beats": [
+                group.get("scene_beat") for group in valid_clip_groups
+                if group.get("scene_beat")
+            ],
+            "transition_intents": [
+                group.get("transition_intent") for group in valid_clip_groups
+                if group.get("transition_intent")
+            ],
+        },
         "continuity_score": continuity_score,
+    }
+
+
+def extract_continuity_diagnostics(audit_report: dict[str, Any] | None) -> dict[str, Any]:
+    """Extract compact continuity diagnostics for status/gate responses."""
+    audit_report = audit_report if isinstance(audit_report, dict) else {}
+    asset_ready = audit_report.get("asset_ready_audit") or {}
+    asset_ready = asset_ready if isinstance(asset_ready, dict) else {}
+    checks = asset_ready.get("checks") or {}
+    checks = checks if isinstance(checks, dict) else {}
+    direction_summary = audit_report.get("continuity_direction_summary") or {}
+    direction_summary = direction_summary if isinstance(direction_summary, dict) else {}
+    clip_directions = direction_summary.get("clip_directions") or []
+    if not isinstance(clip_directions, list):
+        clip_directions = []
+
+    return {
+        "continuity_score": audit_report.get("continuity_score"),
+        "asset_ready_status": asset_ready.get("status"),
+        "director_intent_metadata": checks.get("director_intent_metadata"),
+        "clip_directions": clip_directions,
+        "scene_beats": direction_summary.get("scene_beats", []),
+        "transition_intents": direction_summary.get("transition_intents", []),
     }
 
 

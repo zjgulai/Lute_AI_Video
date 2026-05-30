@@ -1,4 +1,4 @@
-.PHONY: install test lint coverage clean ci portfolio portfolio-sync
+.PHONY: install test test-hermetic-full lint coverage clean ci portfolio portfolio-sync
 
 # ── Setup ──
 
@@ -9,6 +9,9 @@ install:
 
 test:
 	python -m pytest tests/ --tb=short -v
+
+test-hermetic-full:
+	PYTEST_INCLUDE_HERMETIC_SLOW=1 python -m pytest tests/test_s3_e2e.py tests/test_s4_e2e.py tests/test_s5_e2e.py --tb=short -q
 
 coverage:
 	python -m pytest tests/ --tb=short --cov=src --cov-report=html --cov-report=xml

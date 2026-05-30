@@ -1,8 +1,9 @@
 """Test Compliance Agent — rule engine + edge cases."""
 
 import pytest
+
 from src.agents.compliance import ComplianceAgent, load_rules
-from src.models import Script, ScriptSegment, Platform, Language, ComplianceStatus
+from src.models import ComplianceStatus, Language, Platform, Script, ScriptSegment
 
 
 class TestComplianceRules:

@@ -16,6 +16,18 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    """Default to the fast hermetic subset unless the caller opts into slow tests.
+
+    `PYTEST_INCLUDE_HERMETIC_SLOW=1` keeps historical behavior for full local
+    regression runs. An explicit `-m ...` also wins over this default.
+    """
+    if os.getenv("PYTEST_INCLUDE_HERMETIC_SLOW") == "1":
+        return
+    if not config.option.markexpr:
+        config.option.markexpr = "not hermetic_slow"
+
+
 @pytest.fixture
 def auth_headers() -> dict[str, str]:
     """X-API-Key 请求头,所有需要鉴权的测试用这个 fixture。"""

@@ -25,6 +25,7 @@ import pytest
 def admin_client():
     """TestClient with verify_admin_session bypassed."""
     from fastapi.testclient import TestClient
+
     from src.api import app
     from src.routers._admin_deps import verify_admin_session
 
@@ -41,6 +42,7 @@ class TestAdminAuthGate:
 
     def test_dashboard_summary_requires_auth(self):
         from fastapi.testclient import TestClient
+
         from src.api import app
 
         with TestClient(app) as client:
@@ -49,6 +51,7 @@ class TestAdminAuthGate:
 
     def test_logs_list_requires_auth(self):
         from fastapi.testclient import TestClient
+
         from src.api import app
 
         with TestClient(app) as client:
@@ -57,6 +60,7 @@ class TestAdminAuthGate:
 
     def test_health_status_requires_auth(self):
         from fastapi.testclient import TestClient
+
         from src.api import app
 
         with TestClient(app) as client:

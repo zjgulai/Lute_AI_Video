@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from src.skills.seedance_video_generate import SeedanceVideoGenerateSkill
 from src.config import QUALITY_MODE
+from src.skills.seedance_video_generate import SeedanceVideoGenerateSkill
 
 
 class TestFrameVariance:
@@ -49,8 +49,6 @@ class TestFrameVariance:
 
     def test_performance_logged(self, sample_videos, caplog):
         """Frame variance check should log duration."""
-        import structlog
-        from unittest.mock import MagicMock
 
         SeedanceVideoGenerateSkill._check_frame_variance(sample_videos["normal"])
         # The debug log is sent via structlog, not stdlib logging,

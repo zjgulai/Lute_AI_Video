@@ -34,12 +34,6 @@ const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   youtube_shorts: VideoCamera,
 };
 
-const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
-  product_direct: Package,
-  brand_campaign: Megaphone,
-  influencer_remix: Users,
-};
-
 export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Props) {
   const { t } = useI18n();
   const [mode, setMode] = useState<"expert" | "smart">("expert");
@@ -158,6 +152,9 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
         competitor_campaigns: competitorCampaigns.split("\n").filter(Boolean),
       };
       config.product_catalog = { products: [] };
+      config.storyboard_grid = "12";
+      config.transition_style = "match_cut";
+      config.continuity_mode = continuityMode === "high_quality" ? "high_quality" : "standard";
     } else if (scene === "influencer_remix") {
       if (!videoUrl || !productToFeature) return;
       config.video_url = videoUrl;
@@ -174,6 +171,9 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
       config.influencer_name = influencerName || "";
       config.keep_original_audio = keepOriginalAudio;
       config.brand_guidelines = { brand_name: "", tone_of_voice: {} };
+      config.storyboard_grid = "12";
+      config.transition_style = "match_cut";
+      config.continuity_mode = continuityMode === "high_quality" ? "high_quality" : "standard";
     } else if (scene === "brand_vlog") {
       const brand = VLOG_BRANDS.find(b => b.id === vlogBrandId);
       const productSku = brand?.products.find(p => p.id === vlogProductId);
@@ -186,6 +186,9 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
       config.selected_models = models;
       config.story_description = vlogStory;
       config.video_duration = duration?.seconds || 30;
+      config.storyboard_grid = "12";
+      config.transition_style = "soft_crossfade";
+      config.continuity_mode = continuityMode === "high_quality" ? "high_quality" : "standard";
     }
 
     onSubmit(config);
@@ -559,6 +562,25 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
                 </div>
               )}
             </div>
+            {/* Continuity Mode */}
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
+                {t("continuity.label")}
+              </label>
+              <select
+                value={continuityMode}
+                onChange={(e) => setContinuityMode(e.target.value)}
+                className="apple-input text-sm"
+              >
+                <option value="standard">{t("continuity.standard")}</option>
+                <option value="high_quality">{t("continuity.highQuality")}</option>
+              </select>
+              <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+                {continuityMode === "high_quality"
+                  ? t("continuity.highQualityDesc")
+                  : t("continuity.standardDesc")}
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -626,6 +648,24 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
               <label htmlFor="keep-original-audio" className="text-[12px] font-medium text-[var(--text-body)] cursor-pointer">
                 {t("sceneForm.keepOriginalAudio")}
               </label>
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
+                {t("continuity.label")}
+              </label>
+              <select
+                value={continuityMode}
+                onChange={(e) => setContinuityMode(e.target.value)}
+                className="apple-input text-sm"
+              >
+                <option value="standard">{t("continuity.standard")}</option>
+                <option value="high_quality">{t("continuity.highQuality")}</option>
+              </select>
+              <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+                {continuityMode === "high_quality"
+                  ? t("continuity.highQualityDesc")
+                  : t("continuity.standardDesc")}
+              </p>
             </div>
 
             {/* Product Details (expandable) — reused from S1 */}
@@ -810,6 +850,26 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Continuity Mode */}
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--text-body)] mb-1">
+                {t("continuity.label")}
+              </label>
+              <select
+                value={continuityMode}
+                onChange={(e) => setContinuityMode(e.target.value)}
+                className="apple-input text-sm"
+              >
+                <option value="standard">{t("continuity.standard")}</option>
+                <option value="high_quality">{t("continuity.highQuality")}</option>
+              </select>
+              <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+                {continuityMode === "high_quality"
+                  ? t("continuity.highQualityDesc")
+                  : t("continuity.standardDesc")}
+              </p>
             </div>
           </div>
         </div>

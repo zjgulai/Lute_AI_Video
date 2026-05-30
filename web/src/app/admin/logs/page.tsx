@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { adminFetchJson } from "@/components/api";
 import { X } from "@phosphor-icons/react";
 import { TableRowSkeleton } from "@/components/Skeleton";
@@ -34,9 +34,10 @@ export default function AdminLogsPage() {
   const [error, setError] = useState("");
   const [scenario, setScenario] = useState("");
   const [tenantFilter, setTenantFilter] = useState("");
+  const [appliedScenario, setAppliedScenario] = useState("");
+  const [appliedTenantFilter, setAppliedTenantFilter] = useState("");
   const [timeRange, setTimeRange] = useState("24h");
   const [detail, setDetail] = useState<LogDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   const getTimeFrom = (range: string): string => {
     const now = new Date();
@@ -49,15 +50,15 @@ export default function AdminLogsPage() {
     }
   };
 
-  const load = async () => {
+  const load = useCallback(async (pageOverride = page) => {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
-      params.set("page", String(page));
+      params.set("page", String(pageOverride));
       params.set("limit", "50");
-      if (scenario) params.set("scenario", scenario);
-      if (tenantFilter) params.set("tenant_id", tenantFilter);
+      if (appliedScenario) params.set("scenario", appliedScenario);
+      if (appliedTenantFilter) params.set("tenant_id", appliedTenantFilter);
       const from = getTimeFrom(timeRange);
       if (from) params.set("from", from);
 
@@ -72,22 +73,19 @@ export default function AdminLogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, appliedScenario, appliedTenantFilter, timeRange]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [page, timeRange]);
+    void load();
+  }, [load]);
 
   const openDetail = async (logId: string) => {
-    setDetailLoading(true);
     try {
       const data = await adminFetchJson<LogDetail>(`/api/admin/logs/${logId}`);
       setDetail(data);
     } catch {
       // silently fail
-    } finally {
-      setDetailLoading(false);
     }
   };
 
@@ -129,7 +127,11 @@ export default function AdminLogsPage() {
           ))}
         </div>
         <button
-          onClick={() => { setPage(1); load(); }}
+          onClick={() => {
+            setPage(1);
+            setAppliedScenario(scenario);
+            setAppliedTenantFilter(tenantFilter);
+          }}
           className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
         >
           Apply Filters
@@ -140,7 +142,7 @@ export default function AdminLogsPage() {
       {error && (
         <div className="text-center py-8">
           <p className="text-xs text-[var(--text-muted)] mb-2">{error}</p>
-          <button onClick={load} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
+          <button onClick={() => void load()} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
             Retry
           </button>
         </div>

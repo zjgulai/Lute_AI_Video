@@ -14,37 +14,27 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.state_manager import PipelineStateManager
 
 logger = logging.getLogger(__name__)
 
-# Ordered list matching STEP_ORDER in step_runner.py
-STEP_ORDER = [
-    "strategy",
-    "scripts",
-    "compliance",
-    "storyboards",
-    "keyframe_images",
-    "video_prompts",
-    "thumbnail_prompts",
-    "seedance_clips",
-    "tts_audio",
-    "thumbnail_images",
-    "assemble_final",
-    "audit",
-]
+# Backward-compatible default for callers/tests that still read this module-level
+# constant directly. Real invalidation now reads the persisted state's scenario.
+STEP_ORDER = get_scenario_step_order("s1")
 
 
-def _get_step_order() -> list[str]:
-    """Return the canonical step order."""
-    return list(STEP_ORDER)
+def _get_step_order(scenario: str) -> list[str]:
+    """Return the canonical step order for a scenario."""
+    return get_scenario_step_order(scenario)
 
 
-def _get_downstream_steps(step_name: str) -> list[str]:
+def _get_downstream_steps(step_name: str, scenario: str) -> list[str]:
     """Return all step names after the given step in the pipeline order."""
+    order = _get_step_order(scenario)
     try:
-        idx = STEP_ORDER.index(step_name)
-        return STEP_ORDER[idx + 1:]
+        idx = order.index(step_name)
+        return order[idx + 1:]
     except ValueError:
         raise ValueError(f"Unknown step name: {step_name}")
 
@@ -77,8 +67,9 @@ async def invalidate_downstream(
     if state is None:
         raise ValueError(f"State not found for label: {label}")
 
+    scenario = state.get("scenario", "s1")
     steps = state.get("steps", {})
-    downstream = _get_downstream_steps(step_name)
+    downstream = _get_downstream_steps(step_name, scenario)
 
     for ds in downstream:
         if ds in steps:
@@ -106,7 +97,7 @@ async def invalidate_downstream(
     current = state.get("current_step")
     if current and current in downstream:
         # Find the first pending step to be the new current_step
-        for s in STEP_ORDER:
+        for s in _get_step_order(scenario):
             sd = steps.get(s, {})
             if sd.get("status") == "pending":
                 state["current_step"] = s

@@ -5,14 +5,19 @@ emphasis signals (highlighted text, CTA phrases, key phrases) into the
 DALL-E prompts it generates.
 """
 
-import pytest
-from src.models import (
-    Script, ScriptSegment, Platform, Language,
-    CaptionPlan, CaptionEntry,
-)
-from src.agents.thumbnail import _propagate_caption_signals
 from typing import Any
 
+import pytest
+
+from src.agents.thumbnail import _propagate_caption_signals
+from src.models import (
+    CaptionEntry,
+    CaptionPlan,
+    Language,
+    Platform,
+    Script,
+    ScriptSegment,
+)
 
 # ── Unit: _propagate_caption_signals ──
 

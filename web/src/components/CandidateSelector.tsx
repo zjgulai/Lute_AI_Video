@@ -63,6 +63,100 @@ function getDataPreview(data: unknown): string {
   return str.slice(0, 100);
 }
 
+function extractContinuityDirections(data: unknown): Array<{
+  sceneBeat: string;
+  beatSummary: string;
+  transitionIntent: string;
+}> {
+  if (!data || typeof data !== "object") return [];
+
+  const record = data as Record<string, unknown>;
+  const candidates: unknown[] = [];
+
+  if (Array.isArray(record.clip_details)) candidates.push(record.clip_details);
+  if (Array.isArray(record.clip_directions)) candidates.push(record.clip_directions);
+
+  const continuitySummary = record.continuity_direction_summary;
+  if (continuitySummary && typeof continuitySummary === "object") {
+    const summaryRecord = continuitySummary as Record<string, unknown>;
+    if (Array.isArray(summaryRecord.clip_directions)) candidates.push(summaryRecord.clip_directions);
+  }
+
+  const auditReport = record.audit_report;
+  if (auditReport && typeof auditReport === "object") {
+    const auditRecord = auditReport as Record<string, unknown>;
+    const auditSummary = auditRecord.continuity_direction_summary;
+    if (auditSummary && typeof auditSummary === "object") {
+      const summaryRecord = auditSummary as Record<string, unknown>;
+      if (Array.isArray(summaryRecord.clip_directions)) candidates.push(summaryRecord.clip_directions);
+    }
+  }
+
+  if (
+    typeof record.scene_beat === "string" ||
+    typeof record.beat_summary === "string" ||
+    typeof record.transition_intent === "string"
+  ) {
+    candidates.push([record]);
+  }
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    const normalized = candidate
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"))
+      .map((entry) => ({
+        sceneBeat: String(entry.scene_beat || "").trim(),
+        beatSummary: String(entry.beat_summary || "").trim(),
+        transitionIntent: String(entry.transition_intent || "").trim(),
+      }))
+      .filter((entry) => entry.sceneBeat || entry.beatSummary || entry.transitionIntent);
+    if (normalized.length > 0) return normalized;
+  }
+
+  return [];
+}
+
+function extractDirectorIntentScore(score: Score | undefined): number | null {
+  const value = score?.breakdown?.director_intent;
+  return typeof value === "number" ? value : null;
+}
+
+function prioritizeDirectorIntentExplanation(
+  explanation: string | undefined,
+  directorIntentScore: number | null,
+): string {
+  const text = String(explanation || "").trim();
+  if (!text) return "";
+
+  const colonIndex = text.indexOf(":");
+  const prefix = colonIndex >= 0 ? text.slice(0, colonIndex + 1) : "";
+  const body = colonIndex >= 0 ? text.slice(colonIndex + 1) : text;
+  const segments = body
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  const directorIntentIndex = segments.findIndex((segment) =>
+    segment.includes("director_intent="),
+  );
+  if (directorIntentIndex >= 0) {
+    const prioritized = [
+      segments[directorIntentIndex],
+      ...segments.filter((_, index) => index !== directorIntentIndex),
+    ].join(", ");
+    return prefix ? `${prefix} ${prioritized}` : prioritized;
+  }
+
+  if (directorIntentScore !== null) {
+    const directorIntentLead = `director_intent=${directorIntentScore.toFixed(2)}`;
+    return prefix
+      ? `${prefix} ${directorIntentLead}, ${segments.join(", ")}`
+      : `${directorIntentLead}, ${segments.join(", ")}`;
+  }
+
+  return text;
+}
+
 function SkeletonCard() {
   return (
     <div className="flex-1 min-w-[200px] max-w-[260px] animate-pulse">
@@ -136,6 +230,12 @@ export default function CandidateSelector({
         const score = candidate.score?.overall ?? 0;
         const scorePct = Math.round(score * 100);
         const preview = getDataPreview(candidate.data);
+        const continuityDirections = extractContinuityDirections(candidate.data);
+        const directorIntentScore = extractDirectorIntentScore(candidate.score);
+        const prioritizedExplanation = prioritizeDirectorIntentExplanation(
+          candidate.score?.explanation,
+          directorIntentScore,
+        );
 
         let borderClass = "border-[rgba(215,92,112,0.18)]";
         if (isSelected) borderClass = "border-[var(--fortune-red)]";
@@ -212,10 +312,40 @@ export default function CandidateSelector({
             </div>
 
             {/* Score explanation */}
-            {candidate.score?.explanation && (
+            {prioritizedExplanation && (
               <p className="text-[12px] text-[var(--text-muted)] mb-2 leading-relaxed line-clamp-2">
-                {candidate.score.explanation}
+                {prioritizedExplanation}
               </p>
+            )}
+
+            {continuityDirections.length > 0 && (
+              <div className="mb-3 rounded-lg bg-[rgba(122,150,187,0.10)] border border-[rgba(122,150,187,0.22)] p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                    {t("continuity.diagnosticsTitle")}
+                  </p>
+                  {directorIntentScore !== null && (
+                    <span className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                      {t("continuity.directorIntentScoreLabel")} {Math.round(directorIntentScore * 100)}%
+                    </span>
+                  )}
+                </div>
+                {continuityDirections.slice(0, 2).map((direction, index) => (
+                  <div
+                    key={`${direction.sceneBeat}-${direction.transitionIntent}-${index}`}
+                    className="text-[11px] text-[var(--text-body)] leading-relaxed"
+                  >
+                    <div>
+                      {t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}
+                    </div>
+                    {direction.transitionIntent && (
+                      <div>
+                        {t("continuity.transitionIntentLabel")} {direction.transitionIntent}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
             {/* Select button */}

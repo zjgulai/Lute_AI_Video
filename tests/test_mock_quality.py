@@ -18,17 +18,15 @@ import pytest
 from src.agents.auditor import AuditorAgent
 from src.data.mock_quality import (
     QualityLevel,
-    degrade_strategy,
-    degrade_scripts,
-    degrade_thumbnails,
     degrade_edits,
+    degrade_scripts,
+    degrade_strategy,
+    degrade_thumbnails,
 )
 from src.models import (
     AuditCheckpoint,
-    AuditCriterionStatus,
     AuditReport,
 )
-
 
 # ── Shared fixture ──
 

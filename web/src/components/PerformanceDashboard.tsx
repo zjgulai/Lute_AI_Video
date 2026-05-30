@@ -224,7 +224,6 @@ export default function PerformanceDashboard({ scenario: initialScenario, onClos
 // ── View 1: Video Performance List ──
 
 function VideoListView({ videos }: { videos: VideoRow[] }) {
-  const { t } = useI18n();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (

@@ -1,10 +1,13 @@
+export type PipelineStateRecord = Record<string, unknown> & {
+  human_reviews?: Record<string, { status?: string }>;
+};
+
 export interface ReviewState {
   thread_id: string;
   status: string;
   current_review: string | null;
   pipeline_complete: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  state: any;
+  state: PipelineStateRecord;
 }
 
 export interface AuditCriterion {

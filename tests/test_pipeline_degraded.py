@@ -28,7 +28,6 @@ import pytest
 from src.connectors.registry import get_connector
 from src.telemetry import ErrorCollector
 
-
 # ── connector registry ──
 
 class TestConnectorRegistry:
@@ -161,7 +160,7 @@ class TestTimedNodeErrorPath:
     """
 
     def test_decorator_collects_error_on_exception(self):
-        from src.telemetry import timed_node, error_collector
+        from src.telemetry import error_collector, timed_node
 
         # 清空 collector 避免被其他 test 污染断言
         error_collector._errors.clear()

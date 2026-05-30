@@ -192,6 +192,8 @@ async def score_candidate(
         return await _score_character_identity_candidate(candidate_data, params)
     elif step_name == "vlog_strategy":
         return await _score_vlog_strategy_candidate(candidate_data, params)
+    elif step_name == "video_prompts":
+        return await _score_video_prompts_candidate(candidate_data, params)
     elif step_name == "keyframe_images":
         return await _score_keyframe_candidate(candidate_data, params)
     elif step_name == "seedance_clips":
@@ -566,9 +568,10 @@ async def _score_keyframe_candidate(data: dict[str, Any], params: dict[str, Any]
 async def _score_clip_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a video clip candidate with multi-dimensional heuristics.
 
-    Dimensions: prompt quality (30%), duration match (25%), file presence (25%), continuity (20%).
+    Dimensions: prompt quality (25%), duration match (20%), file presence (20%),
+    continuity (20%), director intent metadata (15%).
     """
-    prompt = str(data.get("prompt", "")).lower()
+    prompt = str(data.get("prompt", "") or data.get("prompt_used", "")).lower()
     duration = data.get("duration", 0)
     target_duration = data.get("target_duration", duration)
     file_size = data.get("file_size", 0)
@@ -592,7 +595,15 @@ async def _score_clip_candidate(data: dict[str, Any], params: dict[str, Any] | N
     # Continuity: presence of continuity frame reference
     continuity_score = 1.0 if data.get("continuity_frame") else 0.6
 
-    overall = prompt_score * 0.30 + duration_score * 0.25 + file_score * 0.25 + continuity_score * 0.20
+    director_intent_score = _director_intent_score_from_clip_data(data, prompt)
+
+    overall = (
+        prompt_score * 0.25
+        + duration_score * 0.20
+        + file_score * 0.20
+        + continuity_score * 0.20
+        + director_intent_score * 0.15
+    )
     return {
         "overall": round(overall, 4),
         "breakdown": {
@@ -600,8 +611,14 @@ async def _score_clip_candidate(data: dict[str, Any], params: dict[str, Any] | N
             "duration_match": round(duration_score, 4),
             "file_presence": round(file_score, 4),
             "continuity": round(continuity_score, 4),
+            "director_intent": round(director_intent_score, 4),
         },
-        "explanation": f"Heuristic clip scoring: prompt={prompt_score:.2f}, duration={duration_score:.2f}, file={file_score:.2f}",
+        "explanation": (
+            "Heuristic clip scoring: "
+            f"prompt={prompt_score:.2f}, duration={duration_score:.2f}, "
+            f"file={file_score:.2f}, continuity={continuity_score:.2f}, "
+            f"director_intent={director_intent_score:.2f}"
+        ),
         "heuristic": True,
     }
 
@@ -653,15 +670,19 @@ async def _score_character_identity_candidate(data: dict[str, Any], params: dict
 async def _score_vlog_strategy_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a VLOG strategy candidate for S5 Brand VLOG.
 
-    Dimensions: structure (35%), hook quality (30%), brand alignment (20%), platform fit (15%).
+    Dimensions: structure (25%), hook quality (20%), brand alignment (20%),
+    platform fit (15%), director intent (20%).
     """
     title = str(data.get("title", "")).strip()
     hook = str(data.get("hook", "")).strip()
     segments = data.get("segments", [])
+    shots = data.get("shots", [])
     if isinstance(segments, list):
         segment_count = len(segments)
     else:
         segment_count = 0
+    if not isinstance(shots, list):
+        shots = []
 
     structure = 0.0
     if title:
@@ -669,6 +690,8 @@ async def _score_vlog_strategy_candidate(data: dict[str, Any], params: dict[str,
     if hook:
         structure += 0.2
     structure += min(0.4, segment_count * 0.1)
+    if shots:
+        structure = max(structure, min(1.0, 0.4 + len(shots) * 0.1))
 
     hook_quality = 0.5
     hook_keywords = ["why", "how", "secret", "truth", "behind", "day", "life", "journey"]
@@ -692,7 +715,32 @@ async def _score_vlog_strategy_candidate(data: dict[str, Any], params: dict[str,
     if matched > 0:
         platform_fit = min(1.0, 0.6 + matched * 0.1)
 
-    overall = structure * 0.35 + hook_quality * 0.30 + brand_alignment * 0.20 + platform_fit * 0.15
+    director_intent = 0.4
+    if shots:
+        shot_completeness: list[float] = []
+        for shot in shots:
+            if not isinstance(shot, dict):
+                continue
+            completeness = 0.0
+            if str(shot.get("shot_type", "")).strip():
+                completeness += 0.3
+            if str(shot.get("visual_description", "") or shot.get("visual", "")).strip():
+                completeness += 0.3
+            if str(shot.get("product_angle", "")).strip():
+                completeness += 0.2
+            if str(shot.get("voiceover", "")).strip():
+                completeness += 0.2
+            shot_completeness.append(completeness)
+        if shot_completeness:
+            director_intent = round(sum(shot_completeness) / len(shot_completeness), 4)
+
+    overall = (
+        structure * 0.25
+        + hook_quality * 0.20
+        + brand_alignment * 0.20
+        + platform_fit * 0.15
+        + director_intent * 0.20
+    )
     return {
         "overall": round(overall, 4),
         "breakdown": {
@@ -700,8 +748,120 @@ async def _score_vlog_strategy_candidate(data: dict[str, Any], params: dict[str,
             "hook_quality": round(hook_quality, 4),
             "brand_alignment": round(brand_alignment, 4),
             "platform_fit": round(platform_fit, 4),
+            "director_intent": round(director_intent, 4),
         },
-        "explanation": f"VLOG strategy: structure={structure:.2f}, hook={hook_quality:.2f}, brand={brand_alignment:.2f}, platform={platform_fit:.2f}",
+        "explanation": (
+            "VLOG strategy: "
+            f"structure={structure:.2f}, hook={hook_quality:.2f}, "
+            f"brand={brand_alignment:.2f}, platform={platform_fit:.2f}, "
+            f"director_intent={director_intent:.2f}"
+        ),
+        "heuristic": True,
+    }
+
+
+def _director_intent_score_from_prompt_text(prompt_text: str) -> float:
+    prompt_lower = prompt_text.lower()
+    has_scene_beat = "narrative beat:" in prompt_lower
+    has_beat_summary = "beat summary:" in prompt_lower
+    has_transition_intent = "transition intent:" in prompt_lower
+    director_intent_hits = sum((has_scene_beat, has_beat_summary, has_transition_intent))
+    if director_intent_hits == 3:
+        return 1.0
+    if director_intent_hits == 2:
+        return 0.8
+    if director_intent_hits == 1:
+        return 0.65
+    return 0.4
+
+
+def _director_intent_score_from_clip_data(
+    clip_data: dict[str, Any],
+    prompt_text: str = "",
+) -> float:
+    scene_beat = str(clip_data.get("scene_beat", "")).strip()
+    beat_summary = str(clip_data.get("beat_summary", "")).strip()
+    transition_intent = str(clip_data.get("transition_intent", "")).strip()
+    structured_hits = sum(bool(value) for value in (scene_beat, beat_summary, transition_intent))
+    if structured_hits == 3:
+        return 1.0
+    if structured_hits == 2:
+        return 0.8
+    if structured_hits == 1:
+        return 0.65
+    return _director_intent_score_from_prompt_text(prompt_text)
+
+
+async def _score_video_prompts_candidate(data: Any, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Score structured video prompts, especially continuity-rich grouped prompts.
+
+    Dimensions: prompt completeness (35%), transition metadata (25%),
+    director intent (25%), duration metadata (15%).
+    """
+    prompts = data if isinstance(data, list) else [data] if isinstance(data, dict) else []
+    valid_prompts = [item for item in prompts if isinstance(item, dict)]
+    if not valid_prompts:
+        return _heuristic_generic({}, default=0.0)
+
+    prompt_completeness_scores: list[float] = []
+    transition_scores: list[float] = []
+    director_intent_scores: list[float] = []
+    duration_scores: list[float] = []
+
+    for prompt in valid_prompts:
+        text = str(prompt.get("segment_prompt", "") or prompt.get("prompt", "")).strip()
+        completeness = 0.0
+        if text:
+            completeness += 0.5
+        if str(prompt.get("shot_type", "")).strip():
+            completeness += 0.2
+        if str(prompt.get("camera", "")).strip():
+            completeness += 0.15
+        if str(prompt.get("lighting", "")).strip():
+            completeness += 0.15
+        prompt_completeness_scores.append(completeness)
+
+        transition_scores.append(
+            1.0
+            if str(prompt.get("transition_type", "")).strip()
+            and (
+                str(prompt.get("transition_to_next", "")).strip()
+                or prompt.get("clip_index") == len(valid_prompts)
+            )
+            else 0.5
+        )
+        director_intent_scores.append(_director_intent_score_from_clip_data(prompt, text))
+
+        try:
+            duration = float(prompt.get("duration_seconds", 0))
+        except (TypeError, ValueError):
+            duration = 0.0
+        duration_scores.append(1.0 if duration > 0 else 0.4)
+
+    prompt_completeness = sum(prompt_completeness_scores) / len(prompt_completeness_scores)
+    transition_metadata = sum(transition_scores) / len(transition_scores)
+    director_intent = sum(director_intent_scores) / len(director_intent_scores)
+    duration_metadata = sum(duration_scores) / len(duration_scores)
+
+    overall = (
+        prompt_completeness * 0.35
+        + transition_metadata * 0.25
+        + director_intent * 0.25
+        + duration_metadata * 0.15
+    )
+    return {
+        "overall": round(overall, 4),
+        "breakdown": {
+            "prompt_completeness": round(prompt_completeness, 4),
+            "transition_metadata": round(transition_metadata, 4),
+            "director_intent": round(director_intent, 4),
+            "duration_metadata": round(duration_metadata, 4),
+        },
+        "explanation": (
+            "Video prompts: "
+            f"prompt={prompt_completeness:.2f}, transition={transition_metadata:.2f}, "
+            f"director_intent={director_intent:.2f}, duration={duration_metadata:.2f}"
+        ),
         "heuristic": True,
     }
 

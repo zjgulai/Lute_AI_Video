@@ -4,7 +4,7 @@ doc_type: workflow
 module: deploy
 status: stable
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-27
 owner: self
 source: human+ai
 ---
@@ -38,21 +38,15 @@ source: human+ai
 
 ```bash
 # 在本地项目根目录执行
-rsync -avz --delete \
-  -e "ssh -i ai_video.pem -o StrictHostKeyChecking=no" \
-  --exclude='.git' --exclude='web/node_modules' \
-  --exclude='web/.next' \
-  --exclude='rendering/node_modules' --exclude='.venv' \
-  --exclude='output' --exclude='tmp' --exclude='__pycache__' \
-  --exclude='deploy/lighthouse/server.crt' \
-  --exclude='deploy/lighthouse/server.key' \
-  --exclude='deploy/lighthouse/*.pem' \
-  --chmod=F644,D755 \
-  ./ ubuntu@101.34.52.232:/opt/ai-video/
+SSH_KEY=/path/to/ai_video.pem DRY_RUN=1 deploy/lighthouse/build-and-deploy.sh
+SSH_KEY=/path/to/ai_video.pem deploy/lighthouse/build-and-deploy.sh
 ```
 
-> **关键：`--chmod=F644,D755`**
-> rsync `-p` 会保留源文件权限。macOS 本地文件可能为 600，同步到服务器后容器非 root 用户无法读取，导致 `PermissionError` 启动失败。`--chmod=F644,D755` 强制目标文件 644、目录 755，不受源权限影响。
+> **关键：先跑 `DRY_RUN=1`**
+> dry-run 输出里不允许出现 `deleting deploy/lighthouse/*.bak*`、`.env.prod`、证书、`web/node_modules`、`web/.next`、`output` 等生产资产。若出现，先修 exclude，不允许继续部署。
+
+> **关键：使用 `deploy/lighthouse/build-and-deploy.sh`**
+> 该脚本是 canonical 同步入口，内置 `--chmod=F644,D755`，并从 `deploy/lighthouse/rsync-excludes.txt` 读取生产 secret/cert、缓存、依赖、测试产物和回滚备份排除规则。同步后自动调用远端 `deploy.sh`。不要复制旧的手写 rsync 命令。
 
 > **关键：`--exclude='deploy/lighthouse/server.{crt,key}'`**
 > `--delete` 会清理服务器上不存在于本地的文件。SSL 证书 (`server.crt` / `server.key`) 故意 gitignore，**只存在于服务器上**——若不 exclude，rsync 会删掉证书并创建同名空目录，导致 nginx 启动失败、HTTPS 不可达。证书文件 + 任何 `*.pem` 都必须 exclude。见 §8 的 "2026-05-09 SSL cert wipe" 事故。
@@ -60,22 +54,25 @@ rsync -avz --delete \
 > **关键：使用 GNU rsync (3.x)，不是 macOS 自带 openrsync**
 > macOS 默认 rsync 是 `openrsync 2.6.9` 兼容层，不支持 `--chmod`。需要 `brew install rsync` 后用 `/opt/homebrew/bin/rsync`（Apple Silicon）或 `/usr/local/bin/rsync`（Intel）。
 
-### 2.2 执行 deploy.sh
+### 2.2 手动补跑 deploy.sh
 
 ```bash
 ssh -i ai_video.pem ubuntu@101.34.52.232 \
   "cd /opt/ai-video/deploy/lighthouse && bash deploy.sh"
 ```
 
-deploy.sh 四阶段：
+`build-and-deploy.sh` 默认已经在同步后执行远端 `deploy.sh`。本节只用于排障、已完成同步后补跑部署，或在服务器上直接验证 deploy 脚本。
+
+deploy.sh 五阶段：
 
 | 阶段 | 内容 | 预期输出 |
 |---|---|---|
 | Phase 0 | requirements.txt sha256 hash 比对 | "requirements changed, will rebuild" 或 "requirements unchanged" |
 | Phase 1 | 前端构建 | `standalone/server.js` 和 `static/chunks/` 存在 |
 | Phase 2 | 容器重启/重建 | backend --force-recreate, frontend --force-recreate, nginx --force-recreate |
-| Phase 3 | 健康检查 | `/api/health` 200, persistence=postgresql |
+| Phase 3 | 健康检查 | `/api/health` 最多等待 120 秒到 200, persistence=postgresql |
 | Phase 4 | 清理 | `docker system prune -f` |
+| Phase 5 | smoke 验证 | `smoke OK — non-demo production verified` |
 
 > **注意：** nginx 配置变更（新增 location、volume mount）必须用 `--force-recreate`，`docker restart` 会复用旧容器，忽略新 volume 声明。
 

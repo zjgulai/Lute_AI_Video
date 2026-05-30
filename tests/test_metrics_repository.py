@@ -1,15 +1,14 @@
 """Tests for MetricsRepository — JSON and SQLite backends."""
 from __future__ import annotations
 
-import json
-import sqlite3
 from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from src.tools.metrics_repository import MetricsRepository, SummaryReport, HealthStatus
+from src.tools.metrics_repository import HealthStatus, MetricsRepository
+
 
 # ── Sample run data ──
 # 用相对当前时间的 timestamp,避免硬编码 "2026-04-25" 落到 48h 窗口外。

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.models import Shot, Storyboard, AssetCandidate
-from src.tools.asset_library import AssetLibraryClient
 from src.agents.asset_sourcing import AssetSourcingAgent
-
+from src.models import AssetCandidate, Shot, Storyboard
+from src.tools.asset_library import AssetLibraryClient
 
 # ═══════════════════════════════════════════
 # AssetLibraryClient unit tests

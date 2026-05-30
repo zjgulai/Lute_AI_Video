@@ -428,7 +428,7 @@ Re-run a specific step after the user edited its input. Invalidates all downstre
 **Headers:** `X-API-Key`
 
 **Path parameters:**
-- `scenario` -- Currently only `"s1"`.
+- `scenario` -- `"s1"` / `"s2"` / `"s3"` / `"s4"` / `"s5"`.
 - `label` -- Pipeline run label.
 - `step_name` -- Step to regenerate.
 
@@ -444,6 +444,10 @@ Re-run a specific step after the user edited its input. Invalidates all downstre
 **Key fields:**
 - `regenerated_step` -- The step that was re-executed.
 - `invalidated` -- Array of downstream steps that were reset to `"pending"`.
+
+Notes:
+- Downstream invalidation now follows the persisted state's scenario-specific step order.
+- For `s4` / `s5`, this includes `continuity_storyboard_grid` where applicable instead of using the legacy S1-only chain.
 
 ---
 
@@ -568,9 +572,16 @@ Run the S4 Live Shoot to Video pipeline. Produces a video from raw footage asset
 
 ## 5. Legacy Pipeline
 
+`/pipeline/*` is a compatibility layer. New UI flows use `/scenario/*` and
+StepRunner directly; legacy callers can keep using `/pipeline/*`, but the
+router now proxies to StepRunner instead of resuming the original LangGraph
+checkpoint graph.
+
 ### POST /pipeline/start
 
-Start a new legacy pipeline run. Returns a `thread_id` for tracking. Translates Chinese product inputs to English. Runs until the first human-review interrupt.
+Start a StepRunner-backed legacy pipeline run. Returns a synthetic `thread_id`
+for tracking and starts execution in the background. Chinese product inputs are
+translated to English before state initialization.
 
 **Headers:** `X-API-Key`
 
@@ -602,15 +613,17 @@ Start a new legacy pipeline run. Returns a `thread_id` for tracking. Translates 
 **Response:**
 ```json
 {
-  "thread_id": "a1b2c3d4",
-  "status": "interrupted",
-  "events": [{"event1": "..."}]
+  "thread_id": "c02687fa-ea8e-4d0e-94c4-dde4ab2a4b1d",
+  "status": "started",
+  "label": "s1_20260531_010000",
+  "events": []
 }
 ```
 
 **Key fields:**
-- `thread_id` -- Unique 8-char hex identifier for this pipeline run.
-- `status` -- `"interrupted"` (waiting for human review) or `"complete"`.
+- `thread_id` -- Synthetic UUID used by legacy callers.
+- `label` -- StepRunner state label mapped to the synthetic thread.
+- `status` -- `"started"` after the background StepRunner resume task is registered.
 
 ---
 
@@ -633,14 +646,17 @@ Get the current state of a legacy pipeline run.
 
 **Key fields:**
 - `status` -- `"interrupted"` (awaiting review), `"complete"`, `"not_found"`, or `"error"`.
-- `current_review` -- The review node name if pipeline is interrupted (`"strategy_review"`, `"script_review"`, `"edit_review"`, `"thumbnail_review"`), or `null`.
-- `state` -- Full pipeline state dict.
+- `current_review` -- Best-effort compatibility value. StepRunner does not use LangGraph checkpoint reviews.
+- `state` -- StepRunner state converted to legacy field names. The pinned compatibility fields are `product_catalog`, `brand_guidelines`, `target_platforms`, `target_languages`, `content_calendar_week`, `content_scenario`, `current_step`, `errors`, `structured_errors`, `pipeline_complete`, `human_reviews`, `distribution_plans`, `analytics_reports`, `briefs`, `scripts`, `compliance_report`, `storyboards`, `keyframe_images`, `video_prompts`, `thumbnail_sets`, `seedance_output`, `audio_paths`, `thumbnail_image_paths`, `final_video_path`, and `audit_report`.
 
 ---
 
 ### POST /pipeline/{thread_id}/review/{review_node}
 
-Submit a human review decision for a pipeline checkpoint and resume execution. Includes double-click guard (idempotent) -- if the review was already processed, returns `"idempotent_skip"`.
+Submit a legacy human review decision. In the current StepRunner architecture
+this endpoint is a no-op kept for backwards compatibility; all actions return
+`"idempotent_skip"`. Use `/scenario/{s}/gate/{label}/{gate_id}/approve` for
+the live gate approval path.
 
 **Headers:** `X-API-Key`
 
@@ -660,43 +676,21 @@ Submit a human review decision for a pipeline checkpoint and resume execution. I
 | `action` | string | `"approve"`, `"reject"`, or `"request_changes"` |
 | `reviewer_notes` | string | Optional notes from the reviewer |
 
-**Response (approved):**
+**Response:**
 ```json
 {
-  "thread_id": "a1b2c3d4",
-  "review_node": "strategy_review",
-  "action": "approve",
-  "status": "resumed",
-  "events": [{"step": "scripting", "result": {...}}]
-}
-```
-
-**Response (rejected):** Pipeline terminates.
-```json
-{
-  "thread_id": "a1b2c3d4",
-  "review_node": "strategy_review",
-  "action": "reject",
-  "status": "rejected",
-  "events": []
-}
-```
-
-**Response (double-click guard):**
-```json
-{
-  "thread_id": "a1b2c3d4",
+  "thread_id": "c02687fa-ea8e-4d0e-94c4-dde4ab2a4b1d",
   "review_node": "strategy_review",
   "action": "approve",
   "status": "idempotent_skip",
-  "message": "Review already processed",
+  "message": "StepRunner pipelines do not use checkpoint reviews. Use /scenario/{s}/gate/{label}/{gate_id}/approve for gate approval.",
   "events": []
 }
 ```
 
 **Key fields:**
-- `status` -- `"resumed"` (execution continues), `"rejected"` (pipeline terminated), or `"idempotent_skip"` (no-op).
-- If the reviewed node is `thumbnail_review` and action is `"approve"`, the pipeline is marked complete.
+- `status` -- Always `"idempotent_skip"` in StepRunner-backed `/pipeline/*` proxy mode.
+- `action` -- Echoes the submitted action, including unknown legacy values.
 
 ---
 
@@ -724,7 +718,8 @@ Get distribution plans from a completed or in-progress legacy pipeline run.
 }
 ```
 
-Returns `404` if thread not found.
+Returns `404` if thread not found. Returns an empty list when the StepRunner
+state has not produced `assemble_final.output.distribution_plans`.
 
 ---
 
