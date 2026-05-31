@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-18 README package-manager drift cleanup：README 前端命令已从 `pnpm` 对齐为当前仓库实际使用的 `npm` / `package-lock.json`。
+最近一次盘点：**2026-05-31** — 已完成 P1-19 e2e-prod secret/runbook coverage：生产 Playwright token smoke 的 `PROD_DEMO_API_KEY`、`run_token_smoke`、`RUN_TOKEN_SMOKE=1` 和 `@token-smoke` 已有 runbook 与静态测试覆盖。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-17 Python dev dependency parity：`pyproject.toml`、`requirements.txt` 和 `uv.lock` 的 Python 测试工具依赖已建立静态一致性检查。
+> 上一次盘点：2026-05-31 — 已完成 P1-18 README package-manager drift cleanup：README 前端命令已从 `pnpm` 对齐为当前仓库实际使用的 `npm` / `package-lock.json`。
 
 ## 当前执行入口
 
@@ -111,6 +111,12 @@ source: human+ai
 - **README 对齐 npm** — README 前端 prerequisites、install、dev、test、lint 和 E2E 命令已从 `pnpm` 改为 `npm`，与 `web/package-lock.json` 和 GitHub Actions `npm ci` 保持一致。
 - **防回归测试** — 新增 `tests/test_readme_frontend_tooling.py`，静态检查 README 不再出现 `pnpm`，且保留 `npm ci`、`npm run dev`、`npm test -- --run`、`npm run e2e:ui`、`npm run e2e:prod` 等当前命令。
 - **边界** — 本轮只修当前 README；历史 research / archived 文档中的旧命令暂不清理，避免破坏历史语境。
+
+## 0.31 2026-05-31 P1-19 e2e-prod secret/runbook coverage
+
+- **新增 runbook** — 新增 `docs/runbooks/production-e2e-token-smoke.md`，明确 `e2e-prod` 默认跳过 `@token-smoke`，充值后才允许配置 `PROD_DEMO_API_KEY` 并手动设置 `run_token_smoke=true`。
+- **显式失败条件** — runbook 记录：如果 `run_token_smoke=true` 但仍使用 `ai_video_demo_2026`，workflow 会失败，避免误以为已经跑通真实生成 smoke。
+- **防回归测试** — `prodE2eTokenGuard.test.ts` 已检查 runbook 必须包含 `PROD_DEMO_API_KEY`、`run_token_smoke`、`RUN_TOKEN_SMOKE=1`、`@token-smoke` 和充值前置说明。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -223,7 +229,7 @@ source: human+ai
 - [x] **P1-16：CI hermetic env guard** — 已固化 CI 中外部 provider key 的空值或测试值，避免 GitHub runner 继承真实生成凭证。
 - [x] **P1-17：Python dev dependency parity** — 已建立 `pyproject.toml`、`requirements.txt`、`uv.lock` 的测试工具依赖一致性检查。
 - [x] **P1-18：README package-manager drift cleanup** — 已修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
-- [ ] **P1-19：e2e-prod secret/runbook coverage** — 补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
+- [x] **P1-19：e2e-prod secret/runbook coverage** — 已补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
 - [ ] **P1-20：production Playwright no-mutation scan** — 增强静态扫描，默认 prod E2E 不允许新增未标记的 mutating endpoint 请求。
 - [ ] **P1-21：deploy rsync exclude parity** — 对齐 GitHub deploy rsync excludes 与 Lighthouse `rsync-excludes.txt`，减少部署上下文漂移。
 - [ ] **P1-22：smoke script token guard tests** — 为 `deploy/lighthouse/deploy.sh` 和 `smoke.sh` 增加静态测试，锁定所有生成接口必须受 `RUN_TOKEN_SMOKE=1` 保护。

@@ -28,6 +28,22 @@ describe("Production E2E token smoke guardrails", () => {
     expect(workflow).toContain("non-demo production key");
   });
 
+  it("documents production token-smoke secret and manual opt-in", () => {
+    const runbook = readRepoFileFromWeb("docs/runbooks/production-e2e-token-smoke.md");
+    const demoKey = ["ai", "video", "demo", "2026"].join("_");
+
+    for (const token of [
+      "PROD_DEMO_API_KEY",
+      "run_token_smoke",
+      "RUN_TOKEN_SMOKE=1",
+      "@token-smoke",
+      demoKey,
+      "only after recharge",
+    ]) {
+      expect(runbook).toContain(token);
+    }
+  });
+
   it("tags known production specs that create real backend tasks", () => {
     const expectedTaggedTests: Record<string, string[]> = {
       "e2e/production/fast-mode-submit.prod.spec.ts": [
