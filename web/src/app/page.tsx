@@ -28,7 +28,6 @@ import {
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
 import PipelineMonitor from "@/components/PipelineMonitor";
-import PipelineStatusBar from "@/components/PipelineStatusBar";
 import ReviewPanel from "@/components/ReviewPanel";
 import DistributionView from "@/components/DistributionView";
 import OneShotResultView from "@/components/OneShotResultView";
@@ -42,7 +41,7 @@ import SplashScreen from "@/components/SplashScreen";
 import ApiKeyGate from "@/components/ApiKeyGate";
 import RecommendPanel from "@/components/RecommendPanel";
 import FastModePanel from "@/components/FastModePanel";
-import Nav from "@/components/Nav";
+import TopHeader from "@/components/TopHeader";
 import SettingsPanel from "@/components/SettingsPanel";
 import ExecutionBar from "@/components/ExecutionBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -956,23 +955,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* Header */}
-        <header className="sticky top-0 z-40 bg-[var(--bg-page)]/85 backdrop-blur-xl border-b border-[var(--divider-subtle)]">
-          <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <Link href="/" className="flex items-center gap-2 sm:gap-3 shrink-0" aria-label={t("app.title")}>
-                <div className="w-7 h-7 rounded-lg bg-[var(--fortune-red)] flex items-center justify-center">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <path d="M8 5v14l11-7z" fill="white" />
-                  </svg>
-                </div>
-                <span className="hidden lg:inline text-sm font-semibold text-[var(--text-h1)] tracking-tight">
-                  {t("app.title")}
-                </span>
-              </Link>
-              <Nav />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <TopHeader
+          actions={
+            <>
               <Link
                 href="/admin/dashboard"
                 aria-label={t("nav.admin")}
@@ -983,16 +968,16 @@ export default function Home() {
               </Link>
               {Boolean(threadId || oneshotResult) && (
                 <button
+                  type="button"
                   onClick={requestAbandon}
                   className="text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(53,20,26,0.06)] cursor-pointer"
                 >
                   {t("app.abandon")}
                 </button>
               )}
-            </div>
-          </div>
-          <PipelineStatusBar />
-        </header>
+            </>
+          }
+        />
 
         <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 overflow-x-hidden">
           <div key={stage + (activeScene || "")}>

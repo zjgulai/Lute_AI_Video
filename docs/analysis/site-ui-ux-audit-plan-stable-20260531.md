@@ -58,9 +58,9 @@ source: human+ai
 - [x] 修复 Home 顶栏移动端布局挤压风险。
 - [x] 补 Works、AssetPicker、Admin Logs 关键弹层的 dialog/focus/Escape 行为。
 - [x] 关闭按钮 aria label 本地化或语义化。
-- [ ] 抽象 Home header 与 `TopHeader`，消除双实现漂移。
-- [ ] 给 `QuickTemplate` 下拉菜单补 Escape 关闭、焦点恢复和键盘选择。
-- [ ] 给 `AssetLibrary` 旧预览弹层补 `useModalBehavior`，和 Library/Works 预览行为统一。
+- [x] 抽象 Home header 与 `TopHeader`，消除双实现漂移。
+- [x] 给 `QuickTemplate` 下拉菜单补 Escape 关闭、焦点恢复和键盘选择。
+- [x] 给 `AssetLibrary` 旧预览弹层补 `useModalBehavior`，和 Library/Works 预览行为统一。
 - [ ] 补桌面与移动端截图测试。
 - [ ] 增加 UI-only production e2e 标签，确保默认不运行任何真实生成接口。
 - [ ] 充值后再跑真实 S1-S5 生成链路和 Gate 交互闭环。

@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-6 全站 UI/UX 无 token 审计与首轮修复：S1-S5/Library 路由白屏 fallback、Home 顶栏移动端挤压、Works/AssetPicker/Admin Logs 弹层可访问性已收口；新增 [`docs/analysis/site-ui-ux-audit-plan-stable-20260531.md`](../analysis/site-ui-ux-audit-plan-stable-20260531.md)。未触发真实 POYO token 消耗。
+最近一次盘点：**2026-05-31** — 已完成 P1-7 前端布局与弹层单一化：Home header 复用 `TopHeader`，`QuickTemplate` 补键盘菜单行为，`AssetLibrary` 旧弹层补 dialog/focus/Escape。未触发真实 POYO token 消耗。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-5 文档漂移清理：`docs/claude/known-gaps-stable.md` 固化为当前技术债与下一步 TODO 的唯一入口；旧路线图、风险评估、部署计划和早期架构设计已标注历史语境，不再作为当前执行计划来源。
+> 上一次盘点：2026-05-31 — 已完成 P1-6 全站 UI/UX 无 token 审计与首轮修复：S1-S5/Library 路由白屏 fallback、Home 顶栏移动端挤压、Works/AssetPicker/Admin Logs 弹层可访问性已收口；新增 [`docs/analysis/site-ui-ux-audit-plan-stable-20260531.md`](../analysis/site-ui-ux-audit-plan-stable-20260531.md)。
 
 ## 当前执行入口
 
@@ -29,6 +29,13 @@ source: human+ai
 - **关闭按钮语义** — `MaterialsTab`、`InfluencersTab`、`ConfirmModal`、`AssetLibrary` 等关闭按钮改为本地化或更具体 aria label，减少屏幕阅读器中的硬编码英文噪音。
 - **审计文档** — 新增 UI/UX 专项方案，记录 5 个 loop 的发现、已完成项、保留债务和后续无 token / 充值后测试边界。
 - **验证边界** — 本轮只允许静态页面、只读页面、lint/type/build 与 UI-only 测试；不调用真实生成、Gate candidate 或 POYO 相关接口。
+
+## 0.19 2026-05-31 P1-7 前端布局与弹层单一化
+
+- **Header 单一化** — `TopHeader` 增加 `actions` 插槽，Home 删除内联 header 复制实现，后续导航视觉和 `PipelineStatusBar` 只从 `TopHeader` 演进。
+- **QuickTemplate 键盘菜单** — 快捷模板下拉补 `aria-haspopup/menu/menuitem`、Escape 关闭、打开后聚焦首项、Arrow/Home/End 选择和关闭后焦点恢复。
+- **AssetLibrary 弹层统一** — 旧作品集弹层补 `role="dialog"`、`aria-modal`、标题关联、Escape 关闭和初始焦点；预览层补独立 dialog/focus/Escape，不再使用 `role="presentation"`。
+- **验证边界** — 仍只做前端 UI 行为和静态验证，不触发 `/api/fast/*`、`/scenario/*/submit` 或 Gate candidate 生成接口。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -129,7 +136,7 @@ source: human+ai
 - [x] **P1-4：类型边界热区收口** — 已补运行时 `TypedDict` 契约，覆盖 `fast_mode` result、telemetry endpoint、continuity audit、Seedance result，不做全仓 `Any` 大重构。
 - [x] **P1-5：文档漂移清理** — 已将当前执行入口固定到本文件，历史探索/路线图/部署计划文档已标注历史语境，不再作为当前计划来源。
 - [x] **P1-6：全站 UI/UX 无 token 审计与首轮修复** — 完成 5 loop 审计，修复路由白屏 fallback、Home 顶栏移动端挤压和关键弹层可访问性。
-- [ ] **P1-7：前端布局与弹层单一化** — 抽象 Home header/`TopHeader`，统一 `QuickTemplate`、`AssetLibrary` 与 Library/Works 的弹层键盘行为。
+- [x] **P1-7：前端布局与弹层单一化** — Home header 已复用 `TopHeader`，`QuickTemplate` 与 `AssetLibrary` 旧弹层键盘/焦点行为已收口。
 - [ ] **P1-8：UI-only Playwright 视觉回归** — 基于已恢复 Chromium 补桌面/移动端截图和交互 smoke，确保默认不触发真实生成接口。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
