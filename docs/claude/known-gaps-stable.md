@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-9 UI-only 视觉回归 CI 接入：新增 `.github/workflows/e2e-ui.yml`，在 macOS Chromium 上运行 `npm run e2e:ui`，保留 darwin 截图基线一致性；不需要生产 API key 或 POYO 余额。
+最近一次盘点：**2026-05-31** — 已完成 P1-10 UI-only 无 token 护栏测试：新增 Vitest 静态检查，锁定 `e2e:ui` 配置、生成接口拦截规则和 CI 不读取生产 secret，防止后续维护时把真实生成依赖混入 UI-only 回归。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-8 UI-only Playwright 视觉回归：新增独立 `playwright.ui.config.ts`、桌面/移动端截图基线和 QuickTemplate 键盘交互 smoke；测试会 mock 只读接口并硬拦截生成/上传/发布类请求。
+> 上一次盘点：2026-05-31 — 已完成 P1-9 UI-only 视觉回归 CI 接入：新增 `.github/workflows/e2e-ui.yml`，在 macOS Chromium 上运行 `npm run e2e:ui`，保留 darwin 截图基线一致性；不需要生产 API key 或 POYO 余额。
 
 ## 当前执行入口
 
@@ -51,6 +51,13 @@ source: human+ai
 - **macOS runner 选择** — UI 截图基线当前为 `darwin` 后缀；CI 使用 `macos-latest` + Chromium，避免 Ubuntu 字体/平台后缀造成非产品问题的假失败。
 - **无 token 边界** — workflow 不读取任何生产 secret；运行 `NEXT_PUBLIC_IS_DEMO=true npm run e2e:ui`，测试自身仍会 mock 只读接口并拦截生成、上传、发布类请求。
 - **失败证据** — CI 失败时上传 Playwright HTML report 与 `web/test-results/ui-only/` trace，便于定位布局差异或误触发 token-consuming endpoint。
+
+## 0.22 2026-05-31 P1-10 UI-only 无 token 护栏测试
+
+- **配置护栏** — 新增 `web/src/lib/uiOnlyE2eGuard.test.ts`，用 Vitest 锁定 `npm run e2e:ui` 必须指向 `playwright.ui.config.ts`，且 UI config 不允许依赖 `PLAYWRIGHT_PROD_URL` / `PLAYWRIGHT_API_KEY`。
+- **请求护栏** — 静态检查 `web/e2e/ui-only/site-ui.visual.spec.ts` 必须保留 `GENERATION_ENDPOINT_PATTERNS`、451 拦截、fake API key 和 demo mode。
+- **CI 护栏** — 静态检查 `.github/workflows/e2e-ui.yml` 不引用 `secrets.`、`PLAYWRIGHT_API_KEY`、`PLAYWRIGHT_PROD_URL` 或 `e2e:prod`，确保无余额阶段的 UI-only CI 不漂移到生产 smoke。
+- **Vitest 稳定性** — `web/vitest.config.ts` 默认 `testTimeout` 提高到 15s，和此前 page smoke 手工验证命令一致，避免模块导入 smoke 在 CI 机器上因 5s 默认值误失败。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -154,6 +161,7 @@ source: human+ai
 - [x] **P1-7：前端布局与弹层单一化** — Home header 已复用 `TopHeader`，`QuickTemplate` 与 `AssetLibrary` 旧弹层键盘/焦点行为已收口。
 - [x] **P1-8：UI-only Playwright 视觉回归** — 已补桌面/移动端截图基线、QuickTemplate 交互 smoke 和 token-consuming request 硬拦截。
 - [x] **P1-9：UI-only 视觉回归 CI 接入** — 已新增 macOS Chromium workflow，避免无余额阶段的前端布局回归只能靠本地手动跑。
+- [x] **P1-10：UI-only 无 token 护栏测试** — 已新增 Vitest 静态检查，防止 `e2e:ui` 配置、请求拦截或 CI workflow 漂移到真实生成路径。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。

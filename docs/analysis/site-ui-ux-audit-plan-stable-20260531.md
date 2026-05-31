@@ -64,6 +64,7 @@ source: human+ai
 - [x] 补桌面与移动端截图测试。
 - [x] 增加 UI-only Playwright 配置和请求拦截，确保默认不运行任何真实生成接口。
 - [x] 接入 UI-only Playwright GitHub Actions，默认 CI 也能防住前端布局和交互回归。
+- [x] 增加 UI-only 无 token 护栏单测，防止后续配置漂移到生产 API key 或真实生成路径。
 - [ ] 充值后再跑真实 S1-S5 生成链路和 Gate 交互闭环。
 
 ## 不立即处理的取舍
