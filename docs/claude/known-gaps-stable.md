@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-37 health endpoint no-secret guard：公开 `/health` 已加递归脱敏，避免泄露 provider key、DSN、token 或内部绝对路径。
+最近一次盘点：**2026-05-31** — 已完成 P1-38 admin CSRF doc/test parity：admin 写操作、CSRF cookie path、前端 `adminFetch` 和 runbook 已由跨层契约锁定。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-36 rate-limit config/test parity：FastAPI fallback rate-limit 的阈值、skip path 和 429 响应结构已由 YAML 契约、runbook 和 ASGI 单测锁定。
+> 上一次盘点：2026-05-31 — 已完成 P1-37 health endpoint no-secret guard：公开 `/health` 已加递归脱敏，避免泄露 provider key、DSN、token 或内部绝对路径。
 
 ## 当前执行入口
 
@@ -244,6 +244,14 @@ source: human+ai
 - **响应边界保持** — `/health` 继续跳过 `_meta`，但保留 `status`、`version`、`remotion`、`persistence`、`media_tools` 能力状态。
 - **Runbook 固化** — 新增 `docs/runbooks/health-endpoint-no-secret.md` 并纳入 docs link-check scope，后续新增健康探针字段必须先跑该守卫。
 
+## 0.50 2026-05-31 P1-38 admin CSRF doc/test parity
+
+- **跨层契约固化** — 新增 `configs/admin-csrf-contract.yaml`，锁定 admin CSRF cookie/header、只读方法、写操作方法、login 豁免和前端 helper 规则。
+- **cookie path 修复** — `admin_csrf` cookie 从 `path=/api/admin` 改为 `path=/`，保证 `/admin/*` 前端页面能读取 cookie 并为 `/api/admin/*` mutating request 附加 `X-CSRF-Token`；`admin_session` 仍保持 `HttpOnly` + `path=/api/admin`。
+- **后端静态守卫** — 新增 `tests/test_admin_csrf_contract.py`，确认 admin 写操作除 login 外必须依赖 `verify_admin_session` 和 `verify_csrf_token`，login 必须设置浏览器可读 CSRF cookie。
+- **前端行为守卫** — 新增 `web/src/components/adminCsrfContract.test.ts`，确认 `adminFetch` 对 POST 附加 `X-CSRF-Token`、删除 `X-API-Key`、对 GET 不附加 CSRF header。
+- **Runbook 固化** — 新增 `docs/runbooks/admin-csrf-contract.md` 并纳入 docs link-check scope，后续改 admin auth、cookie 或前端调用约定时先跑该守卫。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -374,7 +382,7 @@ source: human+ai
 - [x] **P1-35：API response metadata guard** — 已锁定 JSON response `_meta`、`X-Trace-Id` 和错误响应 shape，防止前端错误追踪失效。
 - [x] **P1-36：rate-limit config/test parity** — 已静态和单测确认 `/health` skip、业务路由限流、429 响应呈现保持一致。
 - [x] **P1-37：health endpoint no-secret guard** — 已确认 `/health` 只暴露能力状态，不泄露 provider key、数据库 URL 或内部路径。
-- [ ] **P1-38：admin CSRF doc/test parity** — 对齐 admin CSRF 测试、runbook 和前端调用约定。
+- [x] **P1-38：admin CSRF doc/test parity** — 已对齐 admin CSRF 测试、runbook 和前端调用约定。
 - [ ] **P1-39：background task registry leak guard** — 扩展 snapshot 测试，确认失败任务、取消任务和完成任务都不会长期残留。
 - [ ] **P1-40：scenario state persistence schema guard** — 为 S1-S5 state JSON 关键字段增加 hermetic schema 断言。
 - [ ] **P1-41：gate approve idempotency guard** — 无 token 测试 gate approve 重复调用不会重复恢复或破坏状态。

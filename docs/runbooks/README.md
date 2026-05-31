@@ -23,6 +23,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 
 | 文件 | 故障模式 | 预期 MTTR |
 |---|---|---|
+| [admin-csrf-contract.md](./admin-csrf-contract.md) | Admin 写操作 CSRF、cookie path、前端 `adminFetch` 契约漂移 | 2-5 min |
 | [deepseek-timeout.md](./deepseek-timeout.md) | DeepSeek LLM API 超时 / 不可用 / 限速 | 5-15 min |
 | [api-rate-limit-contract.md](./api-rate-limit-contract.md) | FastAPI fallback rate-limit、skip path、429 响应契约漂移 | 2-5 min |
 | [api-response-metadata-contract.md](./api-response-metadata-contract.md) | JSON API `_meta` / `X-Trace-Id` / 错误响应契约漂移 | 2-5 min |
