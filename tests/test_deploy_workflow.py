@@ -108,6 +108,14 @@ class TestDeployWorkflow:
         assert "pytest" in step_text, "preflight must run pytest"
         assert "npm test -- --run" in step_text, "preflight must run frontend Vitest"
 
+    def test_preflight_lints_src_and_tests(self, workflow):
+        preflight = workflow["jobs"]["preflight"]
+        steps = preflight.get("steps") or []
+        step_text = " ".join((s.get("run") or "") for s in steps)
+        assert "ruff check src tests" in step_text, (
+            "deploy preflight must lint tests as well as src to prevent hidden test debt"
+        )
+
     def test_preflight_pytest_timeout_dependency_is_declared(self, workflow):
         preflight = workflow["jobs"]["preflight"]
         steps = preflight.get("steps") or []
@@ -181,3 +189,9 @@ class TestCIWorkflow:
         with open(CI_YML) as f:
             wf = yaml.safe_load(f)
         assert "jobs" in wf
+
+    def test_ci_lints_src_and_tests(self):
+        text = CI_YML.read_text()
+        assert "ruff check src tests" in text, (
+            "main CI must lint tests as well as src to keep repo-wide ruff trustworthy"
+        )

@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-14 deploy pytest timeout 依赖闭环，并建立 P1-14~P1-33 的 20-loop 充值前迭代队列；`deploy.yml` 的 `pytest --timeout=60` 现在有 `pytest-timeout` 依赖和静态测试保护。
+最近一次盘点：**2026-05-31** — 已完成 P1-15 CI Python lint parity：主 CI 和 production deploy preflight 的 ruff 口径已统一到 `src tests`，避免测试代码重新积累隐藏 lint 债。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-13 production deploy preflight 对齐：`deploy.yml` 的前端 preflight 已对齐主 CI，部署前必须通过 eslint、TypeScript、Vitest 和 `next build`；远程部署显式 `RUN_TOKEN_SMOKE=0`，避免 GitHub 部署误触发真实生成 smoke。
+> 上一次盘点：2026-05-31 — 已完成 P1-14 deploy pytest timeout 依赖闭环，并建立 P1-14~P1-33 的 20-loop 充值前迭代队列；`deploy.yml` 的 `pytest --timeout=60` 现在有 `pytest-timeout` 依赖和静态测试保护。
 
 ## 当前执行入口
 
@@ -87,6 +87,12 @@ source: human+ai
 - **依赖修复** — `pyproject.toml` 的 `dev` extra、`requirements.txt` development 区和 `uv.lock` 已加入 `pytest-timeout`，使 `python -m pytest ... --timeout=60` 在 CI 安装路径中可用。
 - **防回归测试** — `tests/test_deploy_workflow.py` 新增静态检查：只要 deploy preflight 保留 `--timeout=60`，就必须在 `pyproject.toml` 和 `requirements.txt` 中声明 `pytest-timeout`。
 - **20-loop 队列起点** — 本轮把 P1-14~P1-33 定义为充值前 20 个可执行 loop；每个 loop 必须能通过本地静态、unit、lint 或文档验证闭环，不依赖真实 POYO 余额。
+
+## 0.27 2026-05-31 P1-15 CI Python lint parity
+
+- **ruff 口径统一** — `.github/workflows/ci.yml` 和 `.github/workflows/deploy.yml` 已从 `ruff check src/` 改为 `ruff check src tests`，让测试目录继续受主 CI 和 deploy preflight 保护。
+- **防回归测试** — `tests/test_deploy_workflow.py` 新增 CI / deploy workflow 静态检查，锁定 `ruff check src tests` 口径，避免后续只 lint `src`。
+- **本地证据** — `.venv/bin/ruff check src tests --statistics` 通过，说明当前把 `tests` 纳入 CI 不会制造红灯。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -195,7 +201,7 @@ source: human+ai
 - [x] **P1-12：production E2E token smoke 隔离** — 已让 `e2e:prod` 默认跳过 `@token-smoke`，真实任务创建和 gate candidate 生成只能显式 opt-in。
 - [x] **P1-13：production deploy preflight 对齐** — 已让 GitHub deploy preflight 跑完整前端质量门，并显式保持远程部署 `RUN_TOKEN_SMOKE=0`。
 - [x] **P1-14：deploy pytest timeout 依赖闭环** — 已为 deploy preflight 的 `pytest --timeout=60` 补齐 `pytest-timeout` 依赖、lockfile 和静态防回归测试。
-- [ ] **P1-15：CI Python lint parity** — 将主 CI / deploy preflight 的 ruff 口径统一到 `src tests`，避免测试代码重新积累 lint 债。
+- [x] **P1-15：CI Python lint parity** — 已将主 CI / deploy preflight 的 ruff 口径统一到 `src tests`，避免测试代码重新积累 lint 债。
 - [ ] **P1-16：CI hermetic env guard** — 固化 CI 中外部 provider key 的空值或测试值，避免 GitHub runner 继承真实生成凭证。
 - [ ] **P1-17：Python dev dependency parity** — 建立 `pyproject.toml`、`requirements.txt`、`uv.lock` 的测试工具依赖一致性检查。
 - [ ] **P1-18：README package-manager drift cleanup** — 修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
