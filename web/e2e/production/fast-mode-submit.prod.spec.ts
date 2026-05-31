@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
 
 test.describe("Production smoke — Fast Mode async submit", () => {
-  test("POST /api/fast/submit returns task_id quickly (~2-5s)", async ({ request }) => {
+  test("POST /api/fast/submit returns task_id quickly (~2-5s) @token-smoke", async ({ request }) => {
     const start = Date.now();
     const r = await request.post("/api/fast/submit", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
@@ -31,7 +31,7 @@ test.describe("Production smoke — Fast Mode async submit", () => {
     expect(r.status()).toBe(404);
   });
 
-  test("submit + status round-trip — task is queryable + has stage field", async ({ request }) => {
+  test("submit + status round-trip — task is queryable + has stage field @token-smoke", async ({ request }) => {
     const r1 = await request.post("/api/fast/submit", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
       data: { user_prompt: "blue ocean wave", duration: 10, enable_tts: false },

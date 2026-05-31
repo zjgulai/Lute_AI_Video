@@ -40,7 +40,7 @@ test.describe("P4-1 — End-to-end user journey", () => {
     await expect(page.locator("body")).toBeVisible();
   });
 
-  test("step 4: backend submits async task and returns task_id < 5s", async ({ request }) => {
+  test("step 4: backend submits async task and returns task_id < 5s @token-smoke", async ({ request }) => {
     const start = Date.now();
     const resp = await request.post("/api/fast/submit", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
@@ -57,7 +57,7 @@ test.describe("P4-1 — End-to-end user journey", () => {
     expect(body.status).toBe("queued");
   });
 
-  test("step 5: status endpoint reflects progress", async ({ request }) => {
+  test("step 5: status endpoint reflects progress @token-smoke", async ({ request }) => {
     const submit = await request.post("/api/fast/submit", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
       data: { user_prompt: "P4-1 status probe", duration: 15 },

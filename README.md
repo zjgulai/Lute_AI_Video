@@ -159,7 +159,8 @@ pnpm lint           # eslint
 cd web
 pnpm e2e            # Playwright local
 pnpm e2e:ui         # UI-only visual/interaction regression, no poyo.ai token usage
-pnpm e2e:prod       # Playwright production
+pnpm e2e:prod       # Playwright production, skips @token-smoke by default
+RUN_TOKEN_SMOKE=1 pnpm e2e:prod  # Explicit real task / provider-credit smoke
 ```
 
 ---

@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-11 前端 CI 硬门禁对齐：`ci.yml` 不再允许 TypeScript 软失败，前端主 CI 现在必须通过 eslint、`tsc --noEmit`、Vitest 和 `next build`，且构建阶段只使用 demo mode，不读取生产 token。
+最近一次盘点：**2026-05-31** — 已完成 P1-12 production E2E token smoke 隔离：`e2e:prod` 默认跳过 `@token-smoke`，会创建真实任务或触发 S1/gate 编排的生产 Playwright spec 只能通过 `RUN_TOKEN_SMOKE=1` 或 workflow 手动 input 显式开启。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-10 UI-only 无 token 护栏测试：新增 Vitest 静态检查，锁定 `e2e:ui` 配置、生成接口拦截规则和 CI 不读取生产 secret，防止后续维护时把真实生成依赖混入 UI-only 回归。
+> 上一次盘点：2026-05-31 — 已完成 P1-11 前端 CI 硬门禁对齐：`ci.yml` 不再允许 TypeScript 软失败，前端主 CI 现在必须通过 eslint、`tsc --noEmit`、Vitest 和 `next build`，且构建阶段只使用 demo mode，不读取生产 token。
 
 ## 当前执行入口
 
@@ -62,9 +62,16 @@ source: human+ai
 ## 0.23 2026-05-31 P1-11 前端 CI 硬门禁对齐
 
 - **TypeScript 不再软失败** — `.github/workflows/ci.yml` 已移除 `continue-on-error: true`，`npx tsc --noEmit -p tsconfig.json` 失败会阻断主 CI。
-- **前端主质量门闭环** — `frontend-test` job 升级为 `Frontend quality gate`，顺序执行 `npx eslint src e2e playwright.ui.config.ts`、TypeScript、`npm test -- --run` 和 `npm run build`。
+- **前端主质量门闭环** — `frontend-test` job 升级为 `Frontend quality gate`，顺序执行 `npx eslint src e2e playwright.ui.config.ts playwright.prod.config.ts`、TypeScript、`npm test -- --run` 和 `npm run build`。
 - **无 token 边界** — `next build` 只设置 `NEXT_PUBLIC_IS_DEMO=true`，不读取生产 API key、POYO key 或 `PLAYWRIGHT_*` 生产 smoke 变量。
 - **职责边界** — UI-only Playwright 视觉回归仍由 `.github/workflows/e2e-ui.yml` 独立负责；主 CI 负责更快的静态、单测和构建失败前置。
+
+## 0.24 2026-05-31 P1-12 production E2E token smoke 隔离
+
+- **默认跳过真实任务** — `web/playwright.prod.config.ts` 默认 `grepInvert: /@token-smoke/`，本地和 CI 的 `e2e:prod` 不再默认执行会创建真实后台任务、启动 S1 step 或触发 gate candidate 的生产 spec。
+- **显式开启条件** — `.github/workflows/e2e-prod.yml` 新增 `run_token_smoke` 手动 input，并把结果传入 `RUN_TOKEN_SMOKE`；当显式开启但仍使用 `ai_video_demo_2026` fallback key 时直接失败，避免误以为已经跑通真实 smoke。
+- **生产 spec 标记** — `fast-mode-submit`、`user-journey`、`s1-gate`、`s1-step-by-step` 中的真实任务创建/编排测试已标记 `@token-smoke`；只读页面、i18n、portfolio、health 和 422/401 错误路径继续默认可跑。
+- **防回归测试** — 新增 `prodE2eTokenGuard.test.ts`，静态检查 prod config、workflow input 和已知 token-smoke 测试标题，防止生产 E2E 默认 CI 再漂移到真实生成路径。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -170,6 +177,7 @@ source: human+ai
 - [x] **P1-9：UI-only 视觉回归 CI 接入** — 已新增 macOS Chromium workflow，避免无余额阶段的前端布局回归只能靠本地手动跑。
 - [x] **P1-10：UI-only 无 token 护栏测试** — 已新增 Vitest 静态检查，防止 `e2e:ui` 配置、请求拦截或 CI workflow 漂移到真实生成路径。
 - [x] **P1-11：前端 CI 硬门禁对齐** — 已移除 TypeScript 软失败，并把 eslint、TypeScript、Vitest、Next build 收口到主前端 CI。
+- [x] **P1-12：production E2E token smoke 隔离** — 已让 `e2e:prod` 默认跳过 `@token-smoke`，真实任务创建和 gate candidate 生成只能显式 opt-in。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。

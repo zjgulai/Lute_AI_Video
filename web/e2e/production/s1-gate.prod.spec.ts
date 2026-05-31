@@ -29,7 +29,7 @@ const S1_PAYLOAD = {
 };
 
 test.describe("P4-2 — S1 Gate panel flow", () => {
-  test("step 1: start S1 and run strategy step without INTEGRATION-3 regression", async ({ request }) => {
+  test("step 1: start S1 and run strategy step without INTEGRATION-3 regression @token-smoke", async ({ request }) => {
     const initR = await request.post("/api/scenario/s1/start", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
       data: S1_PAYLOAD,
@@ -52,7 +52,7 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
     expect(integ3, "INTEGRATION-3 regression: nested products[].name not accepted").toBeUndefined();
   });
 
-  test("step 2: gate exists after strategy and exposes 3 candidates", async ({ request }) => {
+  test("step 2: gate exists after strategy and exposes 3 candidates @token-smoke", async ({ request }) => {
     const initR = await request.post("/api/scenario/s1/start", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
       data: S1_PAYLOAD,

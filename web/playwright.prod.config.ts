@@ -1,7 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const runTokenSmoke = ["1", "true", "yes"].includes((process.env.RUN_TOKEN_SMOKE || "").toLowerCase());
+
 export default defineConfig({
   testDir: "./e2e/production",
+  ...(runTokenSmoke ? {} : { grepInvert: /@token-smoke/ }),
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 1,

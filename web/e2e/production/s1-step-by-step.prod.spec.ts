@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
 
 test.describe("Production smoke — S1 step_by_step", () => {
-  test("POST /api/scenario/s1/start returns label", async ({ request }) => {
+  test("POST /api/scenario/s1/start returns label @token-smoke", async ({ request }) => {
     const r = await request.post("/api/scenario/s1/start", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
       data: {
@@ -30,7 +30,7 @@ test.describe("Production smoke — S1 step_by_step", () => {
     expect(body.mode).toBe("step_by_step");
   });
 
-  test("POST /api/scenario/s1/step/strategy completes successfully (no missing-name error)", async ({ request }) => {
+  test("POST /api/scenario/s1/step/strategy completes successfully (no missing-name error) @token-smoke", async ({ request }) => {
     const initR = await request.post("/api/scenario/s1/start", {
       headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
       data: {
