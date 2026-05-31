@@ -115,6 +115,17 @@ async function primeUiState(page: Page) {
     localStorage.setItem("ai_video_api_key", "ui_only_fake_key");
     localStorage.setItem("ai_video_demo_mode", "true");
     localStorage.setItem("app-locale", "zh");
+    localStorage.setItem("ai-video-app-store", JSON.stringify({
+      state: {
+        activeScene: "product_direct",
+        mode: "expert",
+        pipelineMode: "step_by_step",
+        showSplash: false,
+        stage: "home",
+        videoDuration: 30,
+      },
+      version: 0,
+    }));
   });
 }
 
@@ -122,10 +133,14 @@ async function openApp(page: Page, path: string) {
   await primeUiState(page);
   await page.goto(path, { waitUntil: "domcontentloaded" });
 
-  const enter = page.getByRole("button", { name: /开始创作|Get Started|进入|Enter/i });
-  if (await enter.isVisible().catch(() => false)) {
-    await enter.click();
-    await expect(enter).toBeHidden({ timeout: 10_000 });
+  const nav = page.locator("nav").first();
+  await nav.waitFor({ state: "visible", timeout: 2_000 }).catch(() => { /* fallback to explicit splash dismissal */ });
+  if (!await nav.isVisible().catch(() => false)) {
+    const enter = page.getByRole("button", { name: /开始创作|Get Started|进入|Enter/i }).first();
+    if (await enter.isVisible().catch(() => false)) {
+      await enter.evaluate((node) => (node as HTMLButtonElement).click());
+    }
+    await nav.waitFor({ state: "visible", timeout: 10_000 });
   }
 
   await page.addStyleTag({
@@ -143,7 +158,7 @@ async function openApp(page: Page, path: string) {
 
   await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => { /* UI-only pages may keep probes alive. */ });
   await expect(page.locator("body")).toBeVisible();
-  await expect(page.locator("nav").first()).toBeVisible();
+  await expect(nav).toBeVisible();
 }
 
 test.describe("P1-8 UI-only visual baselines", () => {

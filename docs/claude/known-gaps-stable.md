@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-8 UI-only Playwright 视觉回归：新增独立 `playwright.ui.config.ts`、桌面/移动端截图基线和 QuickTemplate 键盘交互 smoke；测试会 mock 只读接口并硬拦截生成/上传/发布类请求。未触发真实 POYO token 消耗。
+最近一次盘点：**2026-05-31** — 已完成 P1-9 UI-only 视觉回归 CI 接入：新增 `.github/workflows/e2e-ui.yml`，在 macOS Chromium 上运行 `npm run e2e:ui`，保留 darwin 截图基线一致性；不需要生产 API key 或 POYO 余额。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-7 前端布局与弹层单一化：Home header 复用 `TopHeader`，`QuickTemplate` 补键盘菜单行为，`AssetLibrary` 旧弹层补 dialog/focus/Escape。
+> 上一次盘点：2026-05-31 — 已完成 P1-8 UI-only Playwright 视觉回归：新增独立 `playwright.ui.config.ts`、桌面/移动端截图基线和 QuickTemplate 键盘交互 smoke；测试会 mock 只读接口并硬拦截生成/上传/发布类请求。
 
 ## 当前执行入口
 
@@ -44,6 +44,13 @@ source: human+ai
 - **交互 smoke** — `QuickTemplate` 覆盖打开、首项聚焦、Arrow/Home 键导航、Escape 关闭和焦点恢复。
 - **Token 防护** — 测试运行时写入 fake API key + demo mode，只 mock `/health`、admin session、portfolio 等只读接口；任何 `/fast/*` 生成、`/scenario/*` 生成/Gate、`/pipeline/*` mutating、上传、发布类请求都会被 451 拦截并使测试失败。
 - **稳定性取舍** — 视觉基线使用固定 viewport 而非 full-page；full-page 在 S1 长表单下存在 3px 高度抖动，容易把无意义排版噪声变成误报。
+
+## 0.21 2026-05-31 P1-9 UI-only 视觉回归 CI 接入
+
+- **独立 workflow** — 新增 `.github/workflows/e2e-ui.yml`，只在 `web/src/**`、`web/e2e/ui-only/**`、`web/playwright.ui.config.ts`、`web/package*.json` 或 workflow 自身变更时触发。
+- **macOS runner 选择** — UI 截图基线当前为 `darwin` 后缀；CI 使用 `macos-latest` + Chromium，避免 Ubuntu 字体/平台后缀造成非产品问题的假失败。
+- **无 token 边界** — workflow 不读取任何生产 secret；运行 `NEXT_PUBLIC_IS_DEMO=true npm run e2e:ui`，测试自身仍会 mock 只读接口并拦截生成、上传、发布类请求。
+- **失败证据** — CI 失败时上传 Playwright HTML report 与 `web/test-results/ui-only/` trace，便于定位布局差异或误触发 token-consuming endpoint。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -146,6 +153,7 @@ source: human+ai
 - [x] **P1-6：全站 UI/UX 无 token 审计与首轮修复** — 完成 5 loop 审计，修复路由白屏 fallback、Home 顶栏移动端挤压和关键弹层可访问性。
 - [x] **P1-7：前端布局与弹层单一化** — Home header 已复用 `TopHeader`，`QuickTemplate` 与 `AssetLibrary` 旧弹层键盘/焦点行为已收口。
 - [x] **P1-8：UI-only Playwright 视觉回归** — 已补桌面/移动端截图基线、QuickTemplate 交互 smoke 和 token-consuming request 硬拦截。
+- [x] **P1-9：UI-only 视觉回归 CI 接入** — 已新增 macOS Chromium workflow，避免无余额阶段的前端布局回归只能靠本地手动跑。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。

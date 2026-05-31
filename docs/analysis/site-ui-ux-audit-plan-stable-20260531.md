@@ -63,6 +63,7 @@ source: human+ai
 - [x] 给 `AssetLibrary` 旧预览弹层补 `useModalBehavior`，和 Library/Works 预览行为统一。
 - [x] 补桌面与移动端截图测试。
 - [x] 增加 UI-only Playwright 配置和请求拦截，确保默认不运行任何真实生成接口。
+- [x] 接入 UI-only Playwright GitHub Actions，默认 CI 也能防住前端布局和交互回归。
 - [ ] 充值后再跑真实 S1-S5 生成链路和 Gate 交互闭环。
 
 ## 不立即处理的取舍

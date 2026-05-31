@@ -158,6 +158,7 @@ pnpm lint           # eslint
 # E2E
 cd web
 pnpm e2e            # Playwright local
+pnpm e2e:ui         # UI-only visual/interaction regression, no poyo.ai token usage
 pnpm e2e:prod       # Playwright production
 ```
 
