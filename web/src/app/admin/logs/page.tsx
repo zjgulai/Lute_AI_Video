@@ -105,6 +105,7 @@ export default function AdminLogsPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <select
+          aria-label="Filter logs by scenario"
           value={scenario}
           onChange={(e) => { setScenario(e.target.value); setPage(1); }}
           className="apple-input text-xs py-1.5"
@@ -115,6 +116,7 @@ export default function AdminLogsPage() {
         </select>
         <input
           type="text"
+          aria-label="Filter logs by tenant ID"
           value={tenantFilter}
           onChange={(e) => setTenantFilter(e.target.value)}
           placeholder="Tenant ID"
@@ -125,6 +127,7 @@ export default function AdminLogsPage() {
             <button
               key={tr.value}
               onClick={() => { setTimeRange(tr.value); setPage(1); }}
+              aria-pressed={timeRange === tr.value}
               className={`text-xs px-2.5 py-1.5 transition-colors ${
                 timeRange === tr.value
                   ? "bg-[var(--fortune-red)] text-white"

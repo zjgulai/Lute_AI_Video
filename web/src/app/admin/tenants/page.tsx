@@ -108,6 +108,7 @@ export default function AdminTenantsPage() {
           />
           <input
             type="text"
+            aria-label="Search tenants"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
@@ -132,19 +133,30 @@ export default function AdminTenantsPage() {
       {showCreate && (
         <div className="apple-modal-overlay" onClick={() => setShowCreate(false)}>
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-new-tenant-title"
             className="apple-card w-full max-w-sm mx-4 p-4 animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">
+              <h2 id="admin-new-tenant-title" className="text-sm font-semibold text-[var(--text-h1)]">
                 New Tenant
               </h2>
-              <button onClick={() => setShowCreate(false)} className="cursor-pointer">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="cursor-pointer"
+                aria-label="Close new tenant dialog"
+              >
                 <X size={16} weight="fill" className="text-[var(--text-muted)]" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="space-y-3">
+              <label htmlFor="admin-new-tenant-id" className="sr-only">
+                Tenant ID
+              </label>
               <input
+                id="admin-new-tenant-id"
                 type="text"
                 value={newTenantId}
                 onChange={(e) => setNewTenantId(e.target.value)}
@@ -153,7 +165,11 @@ export default function AdminTenantsPage() {
                 pattern="^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$"
                 className="apple-input text-xs w-full"
               />
+              <label htmlFor="admin-new-display-name" className="sr-only">
+                Display name
+              </label>
               <input
+                id="admin-new-display-name"
                 type="text"
                 value={newDisplayName}
                 onChange={(e) => setNewDisplayName(e.target.value)}
@@ -161,7 +177,11 @@ export default function AdminTenantsPage() {
                 required
                 className="apple-input text-xs w-full"
               />
+              <label htmlFor="admin-new-contact-email" className="sr-only">
+                Contact email
+              </label>
               <input
+                id="admin-new-contact-email"
                 type="email"
                 value={newContactEmail}
                 onChange={(e) => setNewContactEmail(e.target.value)}
@@ -169,7 +189,7 @@ export default function AdminTenantsPage() {
                 className="apple-input text-xs w-full"
               />
               {createError && (
-                <p className="text-xs text-[var(--crimson-mist)]">{createError}</p>
+                <p role="alert" className="text-xs text-[var(--crimson-mist)]">{createError}</p>
               )}
               <button
                 type="submit"

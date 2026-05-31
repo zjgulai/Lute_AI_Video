@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-26 Runtime media image guard 扩展：运行时媒体图片已统一收口到 `RuntimeMediaImage`，并有 Vitest 静态测试防止新增裸 `<img>` / `no-img-element` 例外。
+最近一次盘点：**2026-05-31** — 已完成 P1-27 admin 页面可访问性 smoke：admin 登录、layout、sidebar、dashboard、logs、health、tenants 已有无后端依赖的语义 smoke，覆盖 label、alert、nav、landmark 和 dialog 关键结构。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-25 UI visual baseline SOP：UI-only 截图基线更新已有正式 SOP，并由 `uiOnlyE2eGuard.test.ts` 锁定更新命令、diff 审查和无 token 边界。
+> 上一次盘点：2026-05-31 — 已完成 P1-26 Runtime media image guard 扩展：运行时媒体图片已统一收口到 `RuntimeMediaImage`，并有 Vitest 静态测试防止新增裸 `<img>` / `no-img-element` 例外。
 
 ## 当前执行入口
 
@@ -160,6 +160,13 @@ source: human+ai
 - **单一例外点** — `web/src` 中唯一允许的 `<img>` 和 `@next/next/no-img-element` 例外保留在 `RuntimeMediaImage.tsx`，用于后端 / 用户资产 URL，避免把动态媒体路径塞进 Next image allowlist。
 - **防回归测试** — 新增 `runtimeMediaImageGuard.test.ts`，递归扫描 `web/src/**/*.tsx`，除 `RuntimeMediaImage.tsx` 外不允许出现裸 `<img>` 或 `@next/next/no-img-element`，并锁定已知运行时媒体消费者必须继续使用该组件。
 
+## 0.39 2026-05-31 P1-27 admin 页面可访问性 smoke
+
+- **统一 smoke** — 新增 `admin-accessibility-smoke.test.tsx`，用 mocked `adminFetchJson` / `adminFetch` 覆盖 admin login、layout、sidebar、dashboard、logs、health、tenants 的本地渲染，不访问真实后端。
+- **语义修复** — `AdminLoginPage` 补 `label`、`role="alert"`、`aria-describedby`；`AdminSidebar` 补 `aria-label` 与 active link `aria-current`；`AdminLayout` 补 loading `role="status"` 与 logout `aria-label`。
+- **表单与弹层语义** — logs 筛选补 `aria-label` / `aria-pressed`；tenants 搜索和创建弹层补 labeled fields、dialog 语义、关闭按钮 aria label 与创建错误 alert。
+- **测试环境收口** — `vitest.setup.ts` 显式设置 React 19 `IS_REACT_ACT_ENVIRONMENT`，避免 createRoot 单测刷屏 `act(...)` 环境警告，降低 CI 输出噪音。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -279,7 +286,7 @@ source: human+ai
 - [x] **P1-24：POYO diagnostic script gating** — 已审计已跟踪的 `scripts/*poyo*`、`probe_*`，确保直连 POYO 的脚本有显式 key/用途提示，且不被 CI 默认调用。
 - [x] **P1-25：UI visual baseline SOP** — 已补 UI-only 截图基线更新 SOP，避免随手更新 snapshot 掩盖真实布局回归。
 - [x] **P1-26：Runtime media image guard 扩展** — 已扩大前端静态测试，防止运行时媒体又绕过 `RuntimeMediaImage`。
-- [ ] **P1-27：admin 页面可访问性 smoke** — 为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
+- [x] **P1-27：admin 页面可访问性 smoke** — 已为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
 - [ ] **P1-28：i18n translation completeness guard** — 补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
 - [ ] **P1-29：apiFetch error normalization tests** — 覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。
 - [ ] **P1-30：env config SSOT drift guard** — 锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
