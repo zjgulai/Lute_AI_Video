@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-21 deploy rsync exclude parity：GitHub deploy 同步步骤已改为复用 Lighthouse `rsync-excludes.txt`，并用静态测试锁定部署排除清单。
+最近一次盘点：**2026-05-31** — 已完成 P1-22 smoke script token guard tests：Lighthouse deploy/smoke 脚本的真实生成 curl 调用已被静态测试锁定在 `RUN_TOKEN_SMOKE=1` 显式开关内。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-20 production Playwright no-mutation scan：生产 Playwright spec 中高风险 mutating endpoint 现在必须标记 `@token-smoke`，或进入显式负向错误路径 allowlist。
+> 上一次盘点：2026-05-31 — 已完成 P1-21 deploy rsync exclude parity：GitHub deploy 同步步骤已改为复用 Lighthouse `rsync-excludes.txt`，并用静态测试锁定部署排除清单。
 
 ## 当前执行入口
 
@@ -130,6 +130,12 @@ source: human+ai
 - **排除项覆盖** — 静态测试锁定 `.git`、`.env`、`.venv`、`output`、`tmp`、frontend build/report artifacts、`rendering/node_modules` 和 Lighthouse 生产 secret/cert/pem 文件必须在 excludes 清单中。
 - **维护边界** — 后续新增部署排除项只改 `deploy/lighthouse/rsync-excludes.txt`；GitHub Actions 不再复制一份容易漂移的列表。
 
+## 0.34 2026-05-31 P1-22 smoke script token guard tests
+
+- **脚本静态守卫** — 新增 `tests/test_lighthouse_smoke_token_guard.py`，只读 `deploy/lighthouse/deploy.sh` 和 `deploy/lighthouse/smoke.sh`，不执行部署、不发 HTTP 请求。
+- **真实生成 curl 约束** — 测试会合并 bash 续行并扫描 `curl` / `$CURL` 命令；命中 `/api/fast/generate`、`/api/fast/submit`、`/api/scenario/`、`/api/pipeline/start` 或 `/gate/` 的调用必须位于 `RUN_TOKEN_SMOKE=1` guard 内。
+- **默认 smoke 边界** — 注释、echo 和无 `X-API-Key` 的 401 鉴权负向探针不算真实生成风险；只有带鉴权的真实 curl 命令受约束，避免误伤文档化提示，同时防止默认部署 smoke 偷跑生成链路。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -244,7 +250,7 @@ source: human+ai
 - [x] **P1-19：e2e-prod secret/runbook coverage** — 已补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
 - [x] **P1-20：production Playwright no-mutation scan** — 已增强静态扫描，默认 prod E2E 不允许新增未标记的高风险 mutating endpoint 请求。
 - [x] **P1-21：deploy rsync exclude parity** — 已对齐 GitHub deploy rsync excludes 与 Lighthouse `rsync-excludes.txt`，减少部署上下文漂移。
-- [ ] **P1-22：smoke script token guard tests** — 为 `deploy/lighthouse/deploy.sh` 和 `smoke.sh` 增加静态测试，锁定所有生成接口必须受 `RUN_TOKEN_SMOKE=1` 保护。
+- [x] **P1-22：smoke script token guard tests** — 已为 `deploy/lighthouse/deploy.sh` 和 `smoke.sh` 增加静态测试，锁定所有生成接口必须受 `RUN_TOKEN_SMOKE=1` 保护。
 - [ ] **P1-23：S1-S5 hermetic regression command** — 固化一条无 token 的 S1-S5 hermetic 回归命令和文档入口。
 - [ ] **P1-24：POYO diagnostic script gating** — 审计 `scripts/*poyo*`、`probe_*`，确保直连 POYO 的脚本有显式 key/用途提示，且不被 CI 默认调用。
 - [ ] **P1-25：UI visual baseline SOP** — 补 UI-only 截图基线更新 SOP，避免随手更新 snapshot 掩盖真实布局回归。
