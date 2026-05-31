@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-34 backend route auth contract scan：FastAPI route 鉴权边界已由 YAML 契约、runbook 和静态测试锁定。
+最近一次盘点：**2026-05-31** — 已完成 P1-35 API response metadata guard：JSON response `_meta`、`X-Trace-Id` 和错误响应 shape 已由 YAML 契约、runbook 和 ASGI 单测锁定。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-33 P2 recharge smoke checklist dry-run：充值后真实 smoke 已有默认 dry-run 脚本和 runbook，真实执行必须双确认并拒绝 demo key。
+> 上一次盘点：2026-05-31 — 已完成 P1-34 backend route auth contract scan：FastAPI route 鉴权边界已由 YAML 契约、runbook 和静态测试锁定。
 
 ## 当前执行入口
 
@@ -220,6 +220,14 @@ source: human+ai
 - **公开面防漂移** — 任何新增未记录公开 route 都会失败；要新增公开 route 必须先更新 contract 并写 reason。
 - **Runbook 固化** — 新增 `docs/runbooks/backend-route-auth-contract.md` 并纳入 docs link-check scope，作为后续新增 backend route 的审查入口。
 
+## 0.47 2026-05-31 P1-35 API response metadata guard
+
+- **响应元信息契约** — 新增 `configs/api-response-metadata-contract.yaml`，锁定非 `/health` JSON response 必须包含 `_meta.trace_id`、`duration_ms`、`version` 和 `timestamp`。
+- **Trace header 守卫** — 新增 `tests/test_api_response_metadata_contract.py`，用本地 ASGI app 覆盖 `X-Client-Trace-Id` 回显到 `X-Trace-Id`，并确认 `_meta.trace_id` 与 header 一致。
+- **错误响应 shape** — 同一测试覆盖缺失 API key 的 401 响应，要求保留 `detail` 并注入 `_meta`；契约文件同时要求 429 继续保留 `retry_after_sec`。
+- **`/health` 边界** — `/health` 仍返回 `X-Trace-Id`，但不注入 `_meta`，避免健康检查 body 被通用 wrapper 扩写。
+- **Runbook 固化** — 新增 `docs/runbooks/api-response-metadata-contract.md` 并纳入 docs link-check scope，后续改 middleware、rate limit、错误 handler 或前端 `ApiError` 解析时先跑该守卫。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -347,7 +355,7 @@ source: human+ai
 - [x] **P1-32：Docker build no-token preflight** — 已为 Docker build / compose 校验补不触发外部 provider 的验证说明和静态测试。
 - [x] **P1-33：P2 recharge smoke checklist dry-run** — 已在充值前完成 P2 真 smoke checklist 的 dry-run 脚本和操作清单，充值后填 key 并双确认执行。
 - [x] **P1-34：backend route auth contract scan** — 已静态检查需要鉴权和无需鉴权的 FastAPI router 边界，避免新增敏感路由漏挂 `verify_api_key`。
-- [ ] **P1-35：API response metadata guard** — 锁定 JSON response `_meta`、`X-Trace-Id` 和错误响应 shape，防止前端错误追踪失效。
+- [x] **P1-35：API response metadata guard** — 已锁定 JSON response `_meta`、`X-Trace-Id` 和错误响应 shape，防止前端错误追踪失效。
 - [ ] **P1-36：rate-limit config/test parity** — 静态和单测确认 `/health` skip、业务路由限流、429 响应呈现保持一致。
 - [ ] **P1-37：health endpoint no-secret guard** — 确认 `/health` 只暴露能力状态，不泄露 provider key、数据库 URL 或内部路径。
 - [ ] **P1-38：admin CSRF doc/test parity** — 对齐 admin CSRF 测试、runbook 和前端调用约定。

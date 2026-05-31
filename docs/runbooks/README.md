@@ -24,6 +24,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | 文件 | 故障模式 | 预期 MTTR |
 |---|---|---|
 | [deepseek-timeout.md](./deepseek-timeout.md) | DeepSeek LLM API 超时 / 不可用 / 限速 | 5-15 min |
+| [api-response-metadata-contract.md](./api-response-metadata-contract.md) | JSON API `_meta` / `X-Trace-Id` / 错误响应契约漂移 | 2-5 min |
 | [backend-route-auth-contract.md](./backend-route-auth-contract.md) | FastAPI 路由鉴权边界、公开 route allowlist、admin session/CSRF 契约 | 2-5 min |
 | [poyo-rejection.md](./poyo-rejection.md) | POYO 图片/视频生成内容审核拒绝 | 5-10 min |
 | [pipeline-stuck.md](./pipeline-stuck.md) | Pipeline 卡在 running 状态超阈值 | 10-20 min |
