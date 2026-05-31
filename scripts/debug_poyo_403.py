@@ -1,30 +1,57 @@
 #!/usr/bin/env python3
-"""Debug why httpx gets 403 but curl works."""
-import asyncio, sys, json, os, subprocess
+"""Debug why httpx gets 403 but curl works.
+
+This submits real poyo.ai generation requests and may consume credits.
+Run only after recharge with CONFIRM_POYO_PROBE=1 and POYO_API_KEY set.
+"""
+
+import asyncio
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 API_KEY = os.getenv("POYO_API_KEY")
+CONFIRM_ENV = "CONFIRM_POYO_PROBE"
 BODY = {"model": "seedance-2", "input": {"prompt": "test", "duration": 5}}
+
+
+def require_probe_confirmation() -> None:
+    if os.getenv(CONFIRM_ENV) != "1":
+        raise SystemExit(
+            f"{CONFIRM_ENV}=1 is required because this script submits real poyo.ai generation requests "
+            "and may consume credits."
+        )
+
 
 def test_curl():
     print("=== Test 1: subprocess curl ===")
-    result = subprocess.run([
-        "curl", "-s", "-w", "\nHTTP_CODE:%{http_code}\n",
-        "-X", "POST", "https://api.poyo.ai/api/generate/submit",
-        "-H", f"Authorization: Bearer {API_KEY}",
-        "-H", "Content-Type: application/json",
-        "-d", json.dumps(BODY),
-    ], capture_output=True, text=True)
+    result = subprocess.run(
+        [
+            "curl", "-s", "-w", "\nHTTP_CODE:%{http_code}\n",
+            "-X", "POST", "https://api.poyo.ai/api/generate/submit",
+            "-H", f"Authorization: Bearer {API_KEY}",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps(BODY),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     print(result.stdout[-200:])
     print("---")
+
 
 async def test_httpx_plain():
     print("=== Test 2: httpx with no extras ===")
     import httpx
+
     async with httpx.AsyncClient() as c:
-        r = await c.post("https://api.poyo.ai/api/generate/submit",
+        r = await c.post(
+            "https://api.poyo.ai/api/generate/submit",
             headers={
                 "Authorization": f"Bearer {API_KEY}",
                 "Content-Type": "application/json",
@@ -36,11 +63,14 @@ async def test_httpx_plain():
         print(f"headers sent: {dict(r.request.headers)}")
     print("---")
 
+
 async def test_httpx_with_ua():
     print("=== Test 3: httpx with curl-like User-Agent ===")
     import httpx
+
     async with httpx.AsyncClient() as c:
-        r = await c.post("https://api.poyo.ai/api/generate/submit",
+        r = await c.post(
+            "https://api.poyo.ai/api/generate/submit",
             headers={
                 "Authorization": f"Bearer {API_KEY}",
                 "Content-Type": "application/json",
@@ -53,12 +83,15 @@ async def test_httpx_with_ua():
         print(f"body: {r.text[:200]}")
     print("---")
 
+
 async def test_httpx_http1():
     print("=== Test 4: httpx forcing HTTP/1.1 ===")
     import httpx
+
     limits = httpx.Limits(max_keepalive_connections=0)
     async with httpx.AsyncClient(http2=False, limits=limits) as c:
-        r = await c.post("https://api.poyo.ai/api/generate/submit",
+        r = await c.post(
+            "https://api.poyo.ai/api/generate/submit",
             headers={
                 "Authorization": f"Bearer {API_KEY}",
                 "Content-Type": "application/json",
@@ -69,12 +102,15 @@ async def test_httpx_http1():
         print(f"body: {r.text[:200]}")
     print("---")
 
+
 async def main():
     if not API_KEY:
         raise SystemExit("POYO_API_KEY is required")
+    require_probe_confirmation()
     test_curl()
     await test_httpx_plain()
     await test_httpx_with_ua()
     await test_httpx_http1()
+
 
 asyncio.run(main())
