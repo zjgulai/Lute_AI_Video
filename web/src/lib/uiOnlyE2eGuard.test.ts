@@ -6,6 +6,10 @@ function readProjectFile(path: string): string {
   return readFileSync(join(process.cwd(), path), "utf8");
 }
 
+function readRepoFile(path: string): string {
+  return readFileSync(join(process.cwd(), "..", path), "utf8");
+}
+
 describe("UI-only Playwright guardrails", () => {
   it("keeps the e2e:ui script isolated from production smoke", () => {
     const packageJson = JSON.parse(readProjectFile("package.json")) as {
@@ -40,7 +44,7 @@ describe("UI-only Playwright guardrails", () => {
   });
 
   it("runs UI-only CI without production secrets", () => {
-    const workflow = readFileSync(join(process.cwd(), "../.github/workflows/e2e-ui.yml"), "utf8");
+    const workflow = readRepoFile(".github/workflows/e2e-ui.yml");
 
     expect(workflow).toContain("runs-on: macos-latest");
     expect(workflow).toContain('NEXT_PUBLIC_IS_DEMO: "true"');
@@ -49,5 +53,22 @@ describe("UI-only Playwright guardrails", () => {
     expect(workflow).not.toContain("PLAYWRIGHT_API_KEY");
     expect(workflow).not.toContain("PLAYWRIGHT_PROD_URL");
     expect(workflow).not.toContain("e2e:prod");
+  });
+
+  it("documents the visual baseline update procedure", () => {
+    const runbook = readRepoFile("docs/runbooks/ui-visual-baseline-sop.md");
+
+    for (const token of [
+      "npm run e2e:ui -- --update-snapshots",
+      "GENERATION_ENDPOINT_PATTERNS",
+      "status: stable",
+      "RUN_TOKEN_SMOKE=1",
+      "PLAYWRIGHT_API_KEY",
+      "git diff -- web/e2e/ui-only",
+      "npm test -- --run src/lib/uiOnlyE2eGuard.test.ts",
+      "Do not update baselines",
+    ]) {
+      expect(runbook).toContain(token);
+    }
   });
 });

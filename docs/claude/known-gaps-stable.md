@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-24 POYO diagnostic script gating：已跟踪的 POYO/probe 脚本现在必须同时设置 `POYO_API_KEY` 与 `CONFIRM_POYO_PROBE=1`，并有静态测试防止默认入口调用。
+最近一次盘点：**2026-05-31** — 已完成 P1-25 UI visual baseline SOP：UI-only 截图基线更新已有正式 SOP，并由 `uiOnlyE2eGuard.test.ts` 锁定更新命令、diff 审查和无 token 边界。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-23 S1-S5 hermetic regression command：S1-S5 无 token 回归已固定为 `make test-hermetic-scenarios` / `scripts/run_s1_s5_hermetic_regression.sh`，并有 runbook 与静态测试保护。
+> 上一次盘点：2026-05-31 — 已完成 P1-24 POYO diagnostic script gating：已跟踪的 POYO/probe 脚本现在必须同时设置 `POYO_API_KEY` 与 `CONFIRM_POYO_PROBE=1`，并有静态测试防止默认入口调用。
 
 ## 当前执行入口
 
@@ -148,6 +148,12 @@ source: human+ai
 - **消耗提示** — 4 个脚本的 docstring / 错误信息都明确说明会提交真实 poyo.ai generation request，可能消耗 credits；这类脚本只允许充值后人工运行。
 - **默认入口隔离** — 新增 `tests/test_poyo_probe_script_guard.py`，确认 Makefile、CI、deploy、e2e-prod 和 S1-S5 hermetic 脚本不会默认调用 POYO probe；同时收紧 `diagnose_poyo.py` 的 key 打印为短 mask。
 
+## 0.37 2026-05-31 P1-25 UI visual baseline SOP
+
+- **新增 SOP** — 新增 `docs/runbooks/ui-visual-baseline-sop.md`，明确 UI-only snapshot 更新必须先复现失败、确认 UI/source 变更、再执行 `npm run e2e:ui -- --update-snapshots`。
+- **防止随手更新** — SOP 要求更新后审查 `git diff -- web/e2e/ui-only`，并复跑 `npm run e2e:ui` 与 `npm test -- --run src/lib/uiOnlyE2eGuard.test.ts`。
+- **无 token 边界** — `uiOnlyE2eGuard.test.ts` 现在检查 SOP 必须保留 `GENERATION_ENDPOINT_PATTERNS`、`PLAYWRIGHT_API_KEY`、`RUN_TOKEN_SMOKE=1` 和 “Do not update baselines” 等约束文本。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -265,7 +271,7 @@ source: human+ai
 - [x] **P1-22：smoke script token guard tests** — 已为 `deploy/lighthouse/deploy.sh` 和 `smoke.sh` 增加静态测试，锁定所有生成接口必须受 `RUN_TOKEN_SMOKE=1` 保护。
 - [x] **P1-23：S1-S5 hermetic regression command** — 已固化无 token 的 S1-S5 hermetic 回归命令和文档入口。
 - [x] **P1-24：POYO diagnostic script gating** — 已审计已跟踪的 `scripts/*poyo*`、`probe_*`，确保直连 POYO 的脚本有显式 key/用途提示，且不被 CI 默认调用。
-- [ ] **P1-25：UI visual baseline SOP** — 补 UI-only 截图基线更新 SOP，避免随手更新 snapshot 掩盖真实布局回归。
+- [x] **P1-25：UI visual baseline SOP** — 已补 UI-only 截图基线更新 SOP，避免随手更新 snapshot 掩盖真实布局回归。
 - [ ] **P1-26：Runtime media image guard 扩展** — 扩大前端静态测试，防止运行时媒体又绕过 `RuntimeMediaImage`。
 - [ ] **P1-27：admin 页面可访问性 smoke** — 为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
 - [ ] **P1-28：i18n translation completeness guard** — 补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
