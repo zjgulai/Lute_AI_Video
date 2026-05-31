@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-16 CI hermetic env guard，并把当前充值前迭代队列扩展为 P1-16~P1-65 的 50-loop；主 CI 和 deploy preflight 的 pytest env 已显式置空真实 provider / 发布凭证。
+最近一次盘点：**2026-05-31** — 已完成 P1-17 Python dev dependency parity：`pyproject.toml`、`requirements.txt` 和 `uv.lock` 的 Python 测试工具依赖已建立静态一致性检查。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-15 CI Python lint parity：主 CI 和 production deploy preflight 的 ruff 口径已统一到 `src tests`，避免测试代码重新积累隐藏 lint 债。
+> 上一次盘点：2026-05-31 — 已完成 P1-16 CI hermetic env guard，并把当前充值前迭代队列扩展为 P1-16~P1-65 的 50-loop；主 CI 和 deploy preflight 的 pytest env 已显式置空真实 provider / 发布凭证。
 
 ## 当前执行入口
 
@@ -99,6 +99,12 @@ source: human+ai
 - **pytest env 显式化** — `.github/workflows/ci.yml` 和 `.github/workflows/deploy.yml` 的 Python test step 已显式设置 `API_KEY` 为测试值，并把 `DEEPSEEK_API_KEY`、`POYO_API_KEY`、`SEEDANCE_API_KEY`、`SILICONFLOW_API_KEY`、`ELEVENLABS_API_KEY`、TikTok、Shopify、Supabase 等外部凭证置空。
 - **防 secrets 漂移** — `tests/test_deploy_workflow.py` 新增 hermetic env 静态检查，断言 CI / deploy pytest env 不引用 `secrets.*`，且所有外部 provider / 发布平台 key 都只能是空值或测试值。
 - **50-loop 队列扩展** — 当前充值前队列扩展到 P1-16~P1-65，覆盖 CI、防护、文档治理、无 token hermetic 回归、前端错误路径和部署脚本静态守卫。
+
+## 0.29 2026-05-31 P1-17 Python dev dependency parity
+
+- **requirements 补齐** — `requirements.txt` development 区补 `pytest-mock>=3.12` 和 `pytest-cov>=4.1`，与 `pyproject.toml` 的 `dev` extra 对齐。
+- **一致性守卫** — 新增 `tests/test_python_dependency_parity.py`，静态检查 `pyproject.toml` dev dependencies 必须同时出现在 `requirements.txt` 和 `uv.lock`。
+- **目的边界** — 该检查只覆盖 Python developer tooling 依赖一致性，不改变 runtime dependency，不触发外部服务。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -209,7 +215,7 @@ source: human+ai
 - [x] **P1-14：deploy pytest timeout 依赖闭环** — 已为 deploy preflight 的 `pytest --timeout=60` 补齐 `pytest-timeout` 依赖、lockfile 和静态防回归测试。
 - [x] **P1-15：CI Python lint parity** — 已将主 CI / deploy preflight 的 ruff 口径统一到 `src tests`，避免测试代码重新积累 lint 债。
 - [x] **P1-16：CI hermetic env guard** — 已固化 CI 中外部 provider key 的空值或测试值，避免 GitHub runner 继承真实生成凭证。
-- [ ] **P1-17：Python dev dependency parity** — 建立 `pyproject.toml`、`requirements.txt`、`uv.lock` 的测试工具依赖一致性检查。
+- [x] **P1-17：Python dev dependency parity** — 已建立 `pyproject.toml`、`requirements.txt`、`uv.lock` 的测试工具依赖一致性检查。
 - [ ] **P1-18：README package-manager drift cleanup** — 修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
 - [ ] **P1-19：e2e-prod secret/runbook coverage** — 补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
 - [ ] **P1-20：production Playwright no-mutation scan** — 增强静态扫描，默认 prod E2E 不允许新增未标记的 mutating endpoint 请求。
