@@ -13,6 +13,7 @@ Does NOT exercise GitHub Actions runtime — that requires a real PR/push.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEPLOY_YML = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
+REQUIREMENTS = REPO_ROOT / "requirements.txt"
 
 
 class TestDeployWorkflow:
@@ -104,6 +107,23 @@ class TestDeployWorkflow:
         step_text = " ".join((s.get("run") or "") for s in steps)
         assert "pytest" in step_text, "preflight must run pytest"
         assert "npm test -- --run" in step_text, "preflight must run frontend Vitest"
+
+    def test_preflight_pytest_timeout_dependency_is_declared(self, workflow):
+        preflight = workflow["jobs"]["preflight"]
+        steps = preflight.get("steps") or []
+        step_text = " ".join((s.get("run") or "") for s in steps)
+        assert "--timeout=60" in step_text, "deploy preflight should keep a pytest timeout guard"
+
+        pyproject = tomllib.loads(PYPROJECT.read_text())
+        dev_deps = pyproject["project"]["optional-dependencies"]["dev"]
+        assert any(dep.startswith("pytest-timeout") for dep in dev_deps), (
+            "deploy preflight uses pytest --timeout, so pytest-timeout must be in project dev deps"
+        )
+
+        requirements = REQUIREMENTS.read_text().splitlines()
+        assert any(line.startswith("pytest-timeout") for line in requirements), (
+            "requirements.txt development install path must also include pytest-timeout"
+        )
 
     def test_preflight_frontend_matches_ci_quality_gate(self, workflow):
         preflight = workflow["jobs"]["preflight"]

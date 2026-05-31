@@ -11,15 +11,16 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-13 production deploy preflight 对齐：`deploy.yml` 的前端 preflight 已对齐主 CI，部署前必须通过 eslint、TypeScript、Vitest 和 `next build`；远程部署显式 `RUN_TOKEN_SMOKE=0`，避免 GitHub 部署误触发真实生成 smoke。
+最近一次盘点：**2026-05-31** — 已完成 P1-14 deploy pytest timeout 依赖闭环，并建立 P1-14~P1-33 的 20-loop 充值前迭代队列；`deploy.yml` 的 `pytest --timeout=60` 现在有 `pytest-timeout` 依赖和静态测试保护。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-12 production E2E token smoke 隔离：`e2e:prod` 默认跳过 `@token-smoke`，会创建真实任务或触发 S1/gate 编排的生产 Playwright spec 只能通过 `RUN_TOKEN_SMOKE=1` 或 workflow 手动 input 显式开启。
+> 上一次盘点：2026-05-31 — 已完成 P1-13 production deploy preflight 对齐：`deploy.yml` 的前端 preflight 已对齐主 CI，部署前必须通过 eslint、TypeScript、Vitest 和 `next build`；远程部署显式 `RUN_TOKEN_SMOKE=0`，避免 GitHub 部署误触发真实生成 smoke。
 
 ## 当前执行入口
 
 - **唯一当前 TODO 来源**：本文件的“完整 TODO list”。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
+- **20-loop 迭代边界**：P1-14~P1-33 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。
 
 ## 0.18 2026-05-31 P1-6 全站 UI/UX 无 token 审计与首轮修复
 
@@ -79,6 +80,13 @@ source: human+ai
 - **构建不依赖生产 token** — deploy preflight 的 frontend build 设置 `NEXT_PUBLIC_IS_DEMO=true`，只验证 Next 构建完整性，不读取生产 API key 或 POYO key。
 - **远程部署默认无真实 smoke** — GitHub Actions 调用 Lighthouse deploy 时显式传入 `RUN_TOKEN_SMOKE=0`；真实生成 smoke 仍只能在充值后手动显式开启。
 - **防回归测试** — `tests/test_deploy_workflow.py` 已补静态检查，锁定 deploy preflight 前端质量门和 `RUN_TOKEN_SMOKE=0` 默认值。
+
+## 0.26 2026-05-31 P1-14 deploy pytest timeout 依赖闭环
+
+- **失败证据** — 本地复现 `.venv/bin/python -m pytest tests/test_deploy_workflow.py --timeout=60 -q` 失败，错误为 `unrecognized arguments: --timeout=60`；说明 GitHub deploy preflight 依赖 `pytest-timeout` 但 dev 依赖未声明。
+- **依赖修复** — `pyproject.toml` 的 `dev` extra、`requirements.txt` development 区和 `uv.lock` 已加入 `pytest-timeout`，使 `python -m pytest ... --timeout=60` 在 CI 安装路径中可用。
+- **防回归测试** — `tests/test_deploy_workflow.py` 新增静态检查：只要 deploy preflight 保留 `--timeout=60`，就必须在 `pyproject.toml` 和 `requirements.txt` 中声明 `pytest-timeout`。
+- **20-loop 队列起点** — 本轮把 P1-14~P1-33 定义为充值前 20 个可执行 loop；每个 loop 必须能通过本地静态、unit、lint 或文档验证闭环，不依赖真实 POYO 余额。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -186,6 +194,26 @@ source: human+ai
 - [x] **P1-11：前端 CI 硬门禁对齐** — 已移除 TypeScript 软失败，并把 eslint、TypeScript、Vitest、Next build 收口到主前端 CI。
 - [x] **P1-12：production E2E token smoke 隔离** — 已让 `e2e:prod` 默认跳过 `@token-smoke`，真实任务创建和 gate candidate 生成只能显式 opt-in。
 - [x] **P1-13：production deploy preflight 对齐** — 已让 GitHub deploy preflight 跑完整前端质量门，并显式保持远程部署 `RUN_TOKEN_SMOKE=0`。
+- [x] **P1-14：deploy pytest timeout 依赖闭环** — 已为 deploy preflight 的 `pytest --timeout=60` 补齐 `pytest-timeout` 依赖、lockfile 和静态防回归测试。
+- [ ] **P1-15：CI Python lint parity** — 将主 CI / deploy preflight 的 ruff 口径统一到 `src tests`，避免测试代码重新积累 lint 债。
+- [ ] **P1-16：CI hermetic env guard** — 固化 CI 中外部 provider key 的空值或测试值，避免 GitHub runner 继承真实生成凭证。
+- [ ] **P1-17：Python dev dependency parity** — 建立 `pyproject.toml`、`requirements.txt`、`uv.lock` 的测试工具依赖一致性检查。
+- [ ] **P1-18：README package-manager drift cleanup** — 修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
+- [ ] **P1-19：e2e-prod secret/runbook coverage** — 补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
+- [ ] **P1-20：production Playwright no-mutation scan** — 增强静态扫描，默认 prod E2E 不允许新增未标记的 mutating endpoint 请求。
+- [ ] **P1-21：deploy rsync exclude parity** — 对齐 GitHub deploy rsync excludes 与 Lighthouse `rsync-excludes.txt`，减少部署上下文漂移。
+- [ ] **P1-22：smoke script token guard tests** — 为 `deploy/lighthouse/deploy.sh` 和 `smoke.sh` 增加静态测试，锁定所有生成接口必须受 `RUN_TOKEN_SMOKE=1` 保护。
+- [ ] **P1-23：S1-S5 hermetic regression command** — 固化一条无 token 的 S1-S5 hermetic 回归命令和文档入口。
+- [ ] **P1-24：POYO diagnostic script gating** — 审计 `scripts/*poyo*`、`probe_*`，确保直连 POYO 的脚本有显式 key/用途提示，且不被 CI 默认调用。
+- [ ] **P1-25：UI visual baseline SOP** — 补 UI-only 截图基线更新 SOP，避免随手更新 snapshot 掩盖真实布局回归。
+- [ ] **P1-26：Runtime media image guard 扩展** — 扩大前端静态测试，防止运行时媒体又绕过 `RuntimeMediaImage`。
+- [ ] **P1-27：admin 页面可访问性 smoke** — 为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
+- [ ] **P1-28：i18n translation completeness guard** — 补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
+- [ ] **P1-29：apiFetch error normalization tests** — 覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。
+- [ ] **P1-30：env config SSOT drift guard** — 锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
+- [ ] **P1-31：docs link-check scope hardening** — 收紧 docs link check 的离线范围和允许失败边界，避免文档链接债继续隐藏。
+- [ ] **P1-32：Docker build no-token preflight** — 为 Docker build / compose 校验补不触发外部 provider 的验证说明或静态测试。
+- [ ] **P1-33：P2 recharge smoke checklist dry-run** — 在充值前完成 P2 真 smoke checklist 的 dry-run 脚本或操作清单，充值后只填 key 并执行。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。
