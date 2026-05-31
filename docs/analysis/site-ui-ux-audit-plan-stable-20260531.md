@@ -61,8 +61,8 @@ source: human+ai
 - [x] 抽象 Home header 与 `TopHeader`，消除双实现漂移。
 - [x] 给 `QuickTemplate` 下拉菜单补 Escape 关闭、焦点恢复和键盘选择。
 - [x] 给 `AssetLibrary` 旧预览弹层补 `useModalBehavior`，和 Library/Works 预览行为统一。
-- [ ] 补桌面与移动端截图测试。
-- [ ] 增加 UI-only production e2e 标签，确保默认不运行任何真实生成接口。
+- [x] 补桌面与移动端截图测试。
+- [x] 增加 UI-only Playwright 配置和请求拦截，确保默认不运行任何真实生成接口。
 - [ ] 充值后再跑真实 S1-S5 生成链路和 Gate 交互闭环。
 
 ## 不立即处理的取舍

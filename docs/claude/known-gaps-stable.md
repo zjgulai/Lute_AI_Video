@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-7 前端布局与弹层单一化：Home header 复用 `TopHeader`，`QuickTemplate` 补键盘菜单行为，`AssetLibrary` 旧弹层补 dialog/focus/Escape。未触发真实 POYO token 消耗。
+最近一次盘点：**2026-05-31** — 已完成 P1-8 UI-only Playwright 视觉回归：新增独立 `playwright.ui.config.ts`、桌面/移动端截图基线和 QuickTemplate 键盘交互 smoke；测试会 mock 只读接口并硬拦截生成/上传/发布类请求。未触发真实 POYO token 消耗。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-6 全站 UI/UX 无 token 审计与首轮修复：S1-S5/Library 路由白屏 fallback、Home 顶栏移动端挤压、Works/AssetPicker/Admin Logs 弹层可访问性已收口；新增 [`docs/analysis/site-ui-ux-audit-plan-stable-20260531.md`](../analysis/site-ui-ux-audit-plan-stable-20260531.md)。
+> 上一次盘点：2026-05-31 — 已完成 P1-7 前端布局与弹层单一化：Home header 复用 `TopHeader`，`QuickTemplate` 补键盘菜单行为，`AssetLibrary` 旧弹层补 dialog/focus/Escape。
 
 ## 当前执行入口
 
@@ -36,6 +36,14 @@ source: human+ai
 - **QuickTemplate 键盘菜单** — 快捷模板下拉补 `aria-haspopup/menu/menuitem`、Escape 关闭、打开后聚焦首项、Arrow/Home/End 选择和关闭后焦点恢复。
 - **AssetLibrary 弹层统一** — 旧作品集弹层补 `role="dialog"`、`aria-modal`、标题关联、Escape 关闭和初始焦点；预览层补独立 dialog/focus/Escape，不再使用 `role="presentation"`。
 - **验证边界** — 仍只做前端 UI 行为和静态验证，不触发 `/api/fast/*`、`/scenario/*/submit` 或 Gate candidate 生成接口。
+
+## 0.20 2026-05-31 P1-8 UI-only Playwright 视觉回归
+
+- **独立配置** — 新增 `web/playwright.ui.config.ts` 和 `npm run e2e:ui`，默认只运行 `web/e2e/ui-only/`，不复用会触发真实 API key 依赖的生产 smoke。
+- **视觉基线** — 为 `/`、`/s1?mode=expert`、`/works`、`/library` 建立 desktop/mobile Chromium viewport 截图基线，覆盖核心导航、S1 表单、作品页和资产库布局。
+- **交互 smoke** — `QuickTemplate` 覆盖打开、首项聚焦、Arrow/Home 键导航、Escape 关闭和焦点恢复。
+- **Token 防护** — 测试运行时写入 fake API key + demo mode，只 mock `/health`、admin session、portfolio 等只读接口；任何 `/fast/*` 生成、`/scenario/*` 生成/Gate、`/pipeline/*` mutating、上传、发布类请求都会被 451 拦截并使测试失败。
+- **稳定性取舍** — 视觉基线使用固定 viewport 而非 full-page；full-page 在 S1 长表单下存在 3px 高度抖动，容易把无意义排版噪声变成误报。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -137,7 +145,7 @@ source: human+ai
 - [x] **P1-5：文档漂移清理** — 已将当前执行入口固定到本文件，历史探索/路线图/部署计划文档已标注历史语境，不再作为当前计划来源。
 - [x] **P1-6：全站 UI/UX 无 token 审计与首轮修复** — 完成 5 loop 审计，修复路由白屏 fallback、Home 顶栏移动端挤压和关键弹层可访问性。
 - [x] **P1-7：前端布局与弹层单一化** — Home header 已复用 `TopHeader`，`QuickTemplate` 与 `AssetLibrary` 旧弹层键盘/焦点行为已收口。
-- [ ] **P1-8：UI-only Playwright 视觉回归** — 基于已恢复 Chromium 补桌面/移动端截图和交互 smoke，确保默认不触发真实生成接口。
+- [x] **P1-8：UI-only Playwright 视觉回归** — 已补桌面/移动端截图基线、QuickTemplate 交互 smoke 和 token-consuming request 硬拦截。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。
