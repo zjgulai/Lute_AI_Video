@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-10 UI-only 无 token 护栏测试：新增 Vitest 静态检查，锁定 `e2e:ui` 配置、生成接口拦截规则和 CI 不读取生产 secret，防止后续维护时把真实生成依赖混入 UI-only 回归。
+最近一次盘点：**2026-05-31** — 已完成 P1-11 前端 CI 硬门禁对齐：`ci.yml` 不再允许 TypeScript 软失败，前端主 CI 现在必须通过 eslint、`tsc --noEmit`、Vitest 和 `next build`，且构建阶段只使用 demo mode，不读取生产 token。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-9 UI-only 视觉回归 CI 接入：新增 `.github/workflows/e2e-ui.yml`，在 macOS Chromium 上运行 `npm run e2e:ui`，保留 darwin 截图基线一致性；不需要生产 API key 或 POYO 余额。
+> 上一次盘点：2026-05-31 — 已完成 P1-10 UI-only 无 token 护栏测试：新增 Vitest 静态检查，锁定 `e2e:ui` 配置、生成接口拦截规则和 CI 不读取生产 secret，防止后续维护时把真实生成依赖混入 UI-only 回归。
 
 ## 当前执行入口
 
@@ -58,6 +58,13 @@ source: human+ai
 - **请求护栏** — 静态检查 `web/e2e/ui-only/site-ui.visual.spec.ts` 必须保留 `GENERATION_ENDPOINT_PATTERNS`、451 拦截、fake API key 和 demo mode。
 - **CI 护栏** — 静态检查 `.github/workflows/e2e-ui.yml` 不引用 `secrets.`、`PLAYWRIGHT_API_KEY`、`PLAYWRIGHT_PROD_URL` 或 `e2e:prod`，确保无余额阶段的 UI-only CI 不漂移到生产 smoke。
 - **Vitest 稳定性** — `web/vitest.config.ts` 默认 `testTimeout` 提高到 15s，和此前 page smoke 手工验证命令一致，避免模块导入 smoke 在 CI 机器上因 5s 默认值误失败。
+
+## 0.23 2026-05-31 P1-11 前端 CI 硬门禁对齐
+
+- **TypeScript 不再软失败** — `.github/workflows/ci.yml` 已移除 `continue-on-error: true`，`npx tsc --noEmit -p tsconfig.json` 失败会阻断主 CI。
+- **前端主质量门闭环** — `frontend-test` job 升级为 `Frontend quality gate`，顺序执行 `npx eslint src e2e playwright.ui.config.ts`、TypeScript、`npm test -- --run` 和 `npm run build`。
+- **无 token 边界** — `next build` 只设置 `NEXT_PUBLIC_IS_DEMO=true`，不读取生产 API key、POYO key 或 `PLAYWRIGHT_*` 生产 smoke 变量。
+- **职责边界** — UI-only Playwright 视觉回归仍由 `.github/workflows/e2e-ui.yml` 独立负责；主 CI 负责更快的静态、单测和构建失败前置。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -162,6 +169,7 @@ source: human+ai
 - [x] **P1-8：UI-only Playwright 视觉回归** — 已补桌面/移动端截图基线、QuickTemplate 交互 smoke 和 token-consuming request 硬拦截。
 - [x] **P1-9：UI-only 视觉回归 CI 接入** — 已新增 macOS Chromium workflow，避免无余额阶段的前端布局回归只能靠本地手动跑。
 - [x] **P1-10：UI-only 无 token 护栏测试** — 已新增 Vitest 静态检查，防止 `e2e:ui` 配置、请求拦截或 CI workflow 漂移到真实生成路径。
+- [x] **P1-11：前端 CI 硬门禁对齐** — 已移除 TypeScript 软失败，并把 eslint、TypeScript、Vitest、Next build 收口到主前端 CI。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。
