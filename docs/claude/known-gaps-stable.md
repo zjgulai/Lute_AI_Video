@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-32 Docker build no-token preflight：Docker build/cache 与 compose config 校验已固定为不启动容器、不读取生产 secret、不触发 provider 的静态门禁。
+最近一次盘点：**2026-05-31** — 已完成 P1-33 P2 recharge smoke checklist dry-run：充值后真实 smoke 已有默认 dry-run 脚本和 runbook，真实执行必须双确认并拒绝 demo key。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-31 docs link-check scope hardening：主 CI 的 lychee 检查从宽范围软失败改为当前正式文档 allowlist 硬门禁，并由静态测试防止漂移。
+> 上一次盘点：2026-05-31 — 已完成 P1-32 Docker build no-token preflight：Docker build/cache 与 compose config 校验已固定为不启动容器、不读取生产 secret、不触发 provider 的静态门禁。
 
 ## 当前执行入口
 
@@ -204,6 +204,14 @@ source: human+ai
 - **Runbook 固化** — 新增 `docs/runbooks/docker-no-token-preflight.md` 并纳入 `configs/docs-link-check-scope.txt`，说明 Docker 预检只验证配置和构建上下文，不读取生产 secret、不触发 provider。
 - **无 token 边界** — 本轮没有运行 Docker compose、没有请求 `/health`、没有调用 DeepSeek/POYO/SiliconFlow 等外部服务。
 
+## 0.45 2026-05-31 P1-33 P2 recharge smoke checklist dry-run
+
+- **默认 dry-run 入口** — 新增 `scripts/p2_recharge_smoke_checklist.py`，默认只输出充值后真实 smoke 的 checklist 和将要执行的命令，不访问生产、不触发 provider。
+- **双确认执行** — `--execute` 必须同时设置 `CONFIRM_P2_TOKEN_SMOKE=1` 与 `RUN_TOKEN_SMOKE=1`，缺任一开关都会以配置错误退出。
+- **demo key 拒绝** — 脚本拒绝使用 `ai_video_demo_2026` 作为 `API_KEY` 或 `PLAYWRIGHT_API_KEY` 执行真实 smoke，避免误以为已经跑通非 demo 生产路径。
+- **Runbook 固化** — 新增 `docs/runbooks/p2-recharge-smoke-checklist.md` 并纳入 docs link-check scope，明确充值前只跑 dry-run，充值后再执行 `deploy/lighthouse/smoke.sh` token path 与 `npm run e2e:prod`。
+- **防回归测试** — 新增 `tests/test_p2_recharge_smoke_checklist.py`，覆盖默认 dry-run、双确认、demo key 拒绝、runbook 与 link-check scope。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -329,7 +337,7 @@ source: human+ai
 - [x] **P1-30：env config SSOT drift guard** — 已锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
 - [x] **P1-31：docs link-check scope hardening** — 已收紧 docs link check 的离线范围和允许失败边界，避免文档链接债继续隐藏。
 - [x] **P1-32：Docker build no-token preflight** — 已为 Docker build / compose 校验补不触发外部 provider 的验证说明和静态测试。
-- [ ] **P1-33：P2 recharge smoke checklist dry-run** — 在充值前完成 P2 真 smoke checklist 的 dry-run 脚本或操作清单，充值后只填 key 并执行。
+- [x] **P1-33：P2 recharge smoke checklist dry-run** — 已在充值前完成 P2 真 smoke checklist 的 dry-run 脚本和操作清单，充值后填 key 并双确认执行。
 - [ ] **P1-34：backend route auth contract scan** — 静态检查需要鉴权和无需鉴权的 FastAPI router 边界，避免新增敏感路由漏挂 `verify_api_key`。
 - [ ] **P1-35：API response metadata guard** — 锁定 JSON response `_meta`、`X-Trace-Id` 和错误响应 shape，防止前端错误追踪失效。
 - [ ] **P1-36：rate-limit config/test parity** — 静态和单测确认 `/health` skip、业务路由限流、429 响应呈现保持一致。

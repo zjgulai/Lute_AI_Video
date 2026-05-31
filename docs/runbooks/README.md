@@ -30,6 +30,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | [brand-assets-refresh.md](./brand-assets-refresh.md) | 品牌资产抓取刷新 / 新增产品 / 灾难恢复 | 2-5 min |
 | [docker-no-token-preflight.md](./docker-no-token-preflight.md) | Docker build / compose 预检必须保持无 token、无外部 provider 调用 | 2-5 min |
 | [key-rotation.md](./key-rotation.md) | API key rotation（泄露/定期/授权变更） | 30-45 min |
+| [p2-recharge-smoke-checklist.md](./p2-recharge-smoke-checklist.md) | poyo.ai 充值后真实 smoke 的 dry-run 与双确认执行入口 | 5-15 min |
 | [thumbnail-missing.md](./thumbnail-missing.md) | /works 或 /library 视频卡片黑底无缩略图 | 5-15 min |
 
 ## 灾难恢复
