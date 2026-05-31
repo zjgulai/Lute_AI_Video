@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-20 production Playwright no-mutation scan：生产 Playwright spec 中高风险 mutating endpoint 现在必须标记 `@token-smoke`，或进入显式负向错误路径 allowlist。
+最近一次盘点：**2026-05-31** — 已完成 P1-21 deploy rsync exclude parity：GitHub deploy 同步步骤已改为复用 Lighthouse `rsync-excludes.txt`，并用静态测试锁定部署排除清单。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-19 e2e-prod secret/runbook coverage：生产 Playwright token smoke 的 `PROD_DEMO_API_KEY`、`run_token_smoke`、`RUN_TOKEN_SMOKE=1` 和 `@token-smoke` 已有 runbook 与静态测试覆盖。
+> 上一次盘点：2026-05-31 — 已完成 P1-20 production Playwright no-mutation scan：生产 Playwright spec 中高风险 mutating endpoint 现在必须标记 `@token-smoke`，或进入显式负向错误路径 allowlist。
 
 ## 当前执行入口
 
@@ -123,6 +123,12 @@ source: human+ai
 - **风险请求扫描** — `prodE2eTokenGuard.test.ts` 会遍历 `web/e2e/production/*.prod.spec.ts`，扫描 `request.post/put/patch/delete` 指向 `/api/fast/submit`、`/api/scenario/`、`/api/pipeline/`、上传、发布、分发等高风险 endpoint 的调用。
 - **默认不新增真实生成** — 未标记 `@token-smoke` 的高风险 mutating request 会使测试失败，防止 production E2E 默认集合重新混入真实任务创建、gate candidate 生成或发布类动作。
 - **负向路径显式 allowlist** — 现有 422/401 错误路径保留默认可跑，但必须在 `SAFE_NEGATIVE_MUTATION_TEST_TITLES` 中逐条列名，避免把“不会消耗 token”的判断隐藏在测试正文里。
+
+## 0.33 2026-05-31 P1-21 deploy rsync exclude parity
+
+- **部署同步 SSOT** — `.github/workflows/deploy.yml` 的 `Rsync to server` 步骤不再维护 inline `--exclude` 列表，改为 `--exclude-from='deploy/lighthouse/rsync-excludes.txt'`。
+- **排除项覆盖** — 静态测试锁定 `.git`、`.env`、`.venv`、`output`、`tmp`、frontend build/report artifacts、`rendering/node_modules` 和 Lighthouse 生产 secret/cert/pem 文件必须在 excludes 清单中。
+- **维护边界** — 后续新增部署排除项只改 `deploy/lighthouse/rsync-excludes.txt`；GitHub Actions 不再复制一份容易漂移的列表。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -237,7 +243,7 @@ source: human+ai
 - [x] **P1-18：README package-manager drift cleanup** — 已修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
 - [x] **P1-19：e2e-prod secret/runbook coverage** — 已补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
 - [x] **P1-20：production Playwright no-mutation scan** — 已增强静态扫描，默认 prod E2E 不允许新增未标记的高风险 mutating endpoint 请求。
-- [ ] **P1-21：deploy rsync exclude parity** — 对齐 GitHub deploy rsync excludes 与 Lighthouse `rsync-excludes.txt`，减少部署上下文漂移。
+- [x] **P1-21：deploy rsync exclude parity** — 已对齐 GitHub deploy rsync excludes 与 Lighthouse `rsync-excludes.txt`，减少部署上下文漂移。
 - [ ] **P1-22：smoke script token guard tests** — 为 `deploy/lighthouse/deploy.sh` 和 `smoke.sh` 增加静态测试，锁定所有生成接口必须受 `RUN_TOKEN_SMOKE=1` 保护。
 - [ ] **P1-23：S1-S5 hermetic regression command** — 固化一条无 token 的 S1-S5 hermetic 回归命令和文档入口。
 - [ ] **P1-24：POYO diagnostic script gating** — 审计 `scripts/*poyo*`、`probe_*`，确保直连 POYO 的脚本有显式 key/用途提示，且不被 CI 默认调用。

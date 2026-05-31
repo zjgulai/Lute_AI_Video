@@ -24,6 +24,7 @@ DEPLOY_YML = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
+RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 
 HERMETIC_PYTEST_ENV = {
     "API_KEY": "test-api-key-for-pytest",
@@ -202,6 +203,44 @@ class TestDeployWorkflow:
         assert "RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh" in run, (
             "GitHub deploy must explicitly keep token-consuming smoke disabled by default"
         )
+
+    def test_rsync_uses_lighthouse_exclude_file(self, workflow):
+        deploy = workflow["jobs"]["deploy"]
+        steps = deploy.get("steps") or []
+        rsync_step = _step_by_name(steps, "Rsync to server")
+
+        run = rsync_step.get("run") or ""
+        assert "--exclude-from='deploy/lighthouse/rsync-excludes.txt'" in run, (
+            "GitHub deploy must reuse the Lighthouse rsync exclude SSOT"
+        )
+        assert "--exclude='.next'" not in run
+        assert "--exclude='output'" not in run
+        assert "--exclude='.pytest_cache'" not in run
+
+    def test_lighthouse_rsync_exclude_file_covers_generated_and_secret_artifacts(self):
+        excludes = set(RSYNC_EXCLUDES.read_text().splitlines())
+        required_excludes = {
+            ".env",
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "node_modules",
+            "output",
+            "tmp",
+            "web/.next",
+            "web/.next.old",
+            "web/node_modules",
+            "web/playwright-report",
+            "web/test-results",
+            "rendering/node_modules",
+            "deploy/lighthouse/.env.prod",
+            "deploy/lighthouse/server.crt",
+            "deploy/lighthouse/server.key",
+            "deploy/lighthouse/*.pem",
+        }
+
+        assert required_excludes.issubset(excludes)
 
     def test_no_inline_plaintext_secrets(self, workflow):
         text = DEPLOY_YML.read_text()
