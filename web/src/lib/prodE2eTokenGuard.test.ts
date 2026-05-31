@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 function readWebFile(path: string): string {
@@ -8,6 +8,56 @@ function readWebFile(path: string): string {
 
 function readRepoFileFromWeb(path: string): string {
   return readFileSync(join(process.cwd(), "..", path), "utf8");
+}
+
+const MUTATING_ENDPOINT_PATTERNS = [
+  "/api/fast/submit",
+  "/api/scenario/",
+  "/api/pipeline/",
+  "/api/distribution/",
+  "/api/assets/upload",
+  "/api/upload",
+  "/api/files/upload",
+  "/api/publish",
+];
+
+const SAFE_NEGATIVE_MUTATION_TEST_TITLES = new Set([
+  "invalid video_duration string returns 422 with field-level detail",
+  "fast/submit missing user_prompt returns 422",
+  "fast/submit invalid duration type returns 422",
+  "missing X-API-Key returns 401",
+  "invalid X-API-Key returns 401",
+  "malformed JSON body returns 422",
+]);
+
+function getProductionSpecFiles(): string[] {
+  const productionDir = join(process.cwd(), "e2e/production");
+  return readdirSync(productionDir)
+    .filter((fileName) => fileName.endsWith(".prod.spec.ts"))
+    .sort()
+    .map((fileName) => `e2e/production/${fileName}`);
+}
+
+function extractTestBlocks(source: string): Array<{ title: string; body: string }> {
+  const testPattern = /(?:^|\n)\s*test\(\s*(["'`])([^"'`]+)\1\s*,/g;
+  const matches = Array.from(source.matchAll(testPattern));
+
+  return matches.map((match, index) => {
+    const nextMatch = matches[index + 1];
+    return {
+      title: match[2],
+      body: source.slice(match.index ?? 0, nextMatch?.index ?? source.length),
+    };
+  });
+}
+
+function findRiskyMutatingRequests(body: string): string[] {
+  const requestPattern = /request\.(post|put|patch|delete)\(\s*([`'"])(.*?)\2/gs;
+  return Array.from(body.matchAll(requestPattern))
+    .map((match) => `${match[1].toUpperCase()} ${match[3]}`)
+    .filter((requestCall) =>
+      MUTATING_ENDPOINT_PATTERNS.some((endpointPattern) => requestCall.includes(endpointPattern)),
+    );
 }
 
 describe("Production E2E token smoke guardrails", () => {
@@ -70,5 +120,33 @@ describe("Production E2E token smoke guardrails", () => {
         expect(spec).toContain(title);
       }
     }
+  });
+
+  it("requires risky production mutations to be token-smoke or explicit negative tests", () => {
+    const failures: string[] = [];
+    const seenSafeNegativeTitles = new Set<string>();
+
+    for (const specPath of getProductionSpecFiles()) {
+      const source = readWebFile(specPath);
+
+      for (const block of extractTestBlocks(source)) {
+        const riskyRequests = findRiskyMutatingRequests(block.body);
+        if (riskyRequests.length === 0 || block.title.includes("@token-smoke")) {
+          continue;
+        }
+
+        if (SAFE_NEGATIVE_MUTATION_TEST_TITLES.has(block.title)) {
+          seenSafeNegativeTitles.add(block.title);
+          continue;
+        }
+
+        failures.push(`${specPath} :: "${block.title}" :: ${riskyRequests.join(", ")}`);
+      }
+    }
+
+    expect(failures).toEqual([]);
+    expect(
+      Array.from(SAFE_NEGATIVE_MUTATION_TEST_TITLES).filter((title) => !seenSafeNegativeTitles.has(title)),
+    ).toEqual([]);
   });
 });
