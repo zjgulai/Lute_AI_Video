@@ -3,6 +3,7 @@
 import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMediaUrl } from "./api";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 import { Play, Article, MusicNotes, VideoCamera, FileImage } from "@phosphor-icons/react";
 
 export type AssetType = "video" | "image" | "audio" | "text";
@@ -67,9 +68,7 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Thumbnail — 3:2 ratio */}
       <div className="relative aspect-[3/2] bg-black overflow-hidden">
         {asset.thumbnail && !posterFailed ? (
-          // Asset thumbnails are backend-runtime media paths; native img avoids Next image loader allowlist drift.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <RuntimeMediaImage
             src={getMediaUrl(asset.thumbnail)}
             alt={asset.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -125,9 +124,7 @@ function ImageCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Square thumbnail */}
       <div className="relative aspect-square bg-[var(--color-bg-secondary)] overflow-hidden">
         {asset.thumbnail || asset.filePath ? (
-          // Asset images are backend-runtime media paths; native img avoids Next image loader allowlist drift.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <RuntimeMediaImage
             src={(() => {
               const raw = asset.thumbnail || asset.filePath || "";
               return raw.startsWith("/") && !raw.startsWith("/api/")

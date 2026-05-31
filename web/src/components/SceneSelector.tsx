@@ -14,6 +14,7 @@ import {
 import type { IconProps } from "@phosphor-icons/react";
 import AssetUploader from "./AssetUploader";
 import { setApiKey, getMediaUrl } from "./api";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 import { useI18n } from "@/i18n/I18nProvider";
 
 const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
@@ -441,16 +442,12 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                     >
                       <div className="aspect-[4/3] relative">
                         {Boolean(item.thumbnail) ? (
-                          <>
-                            {/* Recent works thumbnails are backend runtime media paths; native img avoids Next image allowlist drift. */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
+                          <RuntimeMediaImage
                             src={getMediaUrl(item.thumbnail as string)}
-                            alt={item.title as string | undefined}
+                            alt={typeof item.title === "string" ? item.title : ""}
                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                             loading="lazy"
                           />
-                          </>
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4E3A3D" strokeWidth="1.5">

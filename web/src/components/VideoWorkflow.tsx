@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { getMediaUrl } from "./api";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
@@ -1009,9 +1010,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
       <div className="grid grid-cols-2 gap-2 p-2">
         {urls.map((url: string, i: number) => (
           <div key={i} className="apple-card overflow-hidden">
-            {/* Generated thumbnails are backend-runtime paths; native img avoids Next image loader allowlist drift. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt={`Asset ${i + 1}`} className="w-full h-32 object-cover" />
+            <RuntimeMediaImage src={url} alt={`Asset ${i + 1}`} className="w-full h-32 object-cover" />
             <p className="text-[12px] text-[var(--text-muted)] p-2 truncate">{url}</p>
           </div>
         ))}

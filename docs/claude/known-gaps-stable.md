@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-25 UI visual baseline SOP：UI-only 截图基线更新已有正式 SOP，并由 `uiOnlyE2eGuard.test.ts` 锁定更新命令、diff 审查和无 token 边界。
+最近一次盘点：**2026-05-31** — 已完成 P1-26 Runtime media image guard 扩展：运行时媒体图片已统一收口到 `RuntimeMediaImage`，并有 Vitest 静态测试防止新增裸 `<img>` / `no-img-element` 例外。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-24 POYO diagnostic script gating：已跟踪的 POYO/probe 脚本现在必须同时设置 `POYO_API_KEY` 与 `CONFIRM_POYO_PROBE=1`，并有静态测试防止默认入口调用。
+> 上一次盘点：2026-05-31 — 已完成 P1-25 UI visual baseline SOP：UI-only 截图基线更新已有正式 SOP，并由 `uiOnlyE2eGuard.test.ts` 锁定更新命令、diff 审查和无 token 边界。
 
 ## 当前执行入口
 
@@ -154,6 +154,12 @@ source: human+ai
 - **防止随手更新** — SOP 要求更新后审查 `git diff -- web/e2e/ui-only`，并复跑 `npm run e2e:ui` 与 `npm test -- --run src/lib/uiOnlyE2eGuard.test.ts`。
 - **无 token 边界** — `uiOnlyE2eGuard.test.ts` 现在检查 SOP 必须保留 `GENERATION_ENDPOINT_PATTERNS`、`PLAYWRIGHT_API_KEY`、`RUN_TOKEN_SMOKE=1` 和 “Do not update baselines” 等约束文本。
 
+## 0.38 2026-05-31 P1-26 Runtime media image guard 扩展
+
+- **裸 img 收口** — `SceneSelector`、`works`、`OneShotResultView`、`VideoWorkflow`、`AssetCard` 的后端运行时缩略图 / 生成图已改用 `RuntimeMediaImage`。
+- **单一例外点** — `web/src` 中唯一允许的 `<img>` 和 `@next/next/no-img-element` 例外保留在 `RuntimeMediaImage.tsx`，用于后端 / 用户资产 URL，避免把动态媒体路径塞进 Next image allowlist。
+- **防回归测试** — 新增 `runtimeMediaImageGuard.test.ts`，递归扫描 `web/src/**/*.tsx`，除 `RuntimeMediaImage.tsx` 外不允许出现裸 `<img>` 或 `@next/next/no-img-element`，并锁定已知运行时媒体消费者必须继续使用该组件。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -272,7 +278,7 @@ source: human+ai
 - [x] **P1-23：S1-S5 hermetic regression command** — 已固化无 token 的 S1-S5 hermetic 回归命令和文档入口。
 - [x] **P1-24：POYO diagnostic script gating** — 已审计已跟踪的 `scripts/*poyo*`、`probe_*`，确保直连 POYO 的脚本有显式 key/用途提示，且不被 CI 默认调用。
 - [x] **P1-25：UI visual baseline SOP** — 已补 UI-only 截图基线更新 SOP，避免随手更新 snapshot 掩盖真实布局回归。
-- [ ] **P1-26：Runtime media image guard 扩展** — 扩大前端静态测试，防止运行时媒体又绕过 `RuntimeMediaImage`。
+- [x] **P1-26：Runtime media image guard 扩展** — 已扩大前端静态测试，防止运行时媒体又绕过 `RuntimeMediaImage`。
 - [ ] **P1-27：admin 页面可访问性 smoke** — 为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
 - [ ] **P1-28：i18n translation completeness guard** — 补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
 - [ ] **P1-29：apiFetch error normalization tests** — 覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。

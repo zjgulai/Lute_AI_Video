@@ -52,7 +52,7 @@ function extractTestBlocks(source: string): Array<{ title: string; body: string 
 }
 
 function findRiskyMutatingRequests(body: string): string[] {
-  const requestPattern = /request\.(post|put|patch|delete)\(\s*([`'"])(.*?)\2/gs;
+  const requestPattern = /request\.(post|put|patch|delete)\(\s*([`'"])([\s\S]*?)\2/g;
   return Array.from(body.matchAll(requestPattern))
     .map((match) => `${match[1].toUpperCase()} ${match[3]}`)
     .filter((requestCall) =>

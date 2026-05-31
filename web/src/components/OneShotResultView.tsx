@@ -13,6 +13,7 @@ import QualityDashboard from "./QualityDashboard";
 import PerformanceDashboard from "./PerformanceDashboard";
 import PublishPanel from "./PublishPanel";
 import DirectorPlayback from "./DirectorPlayback";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 
 import { errorMessage } from "@/lib/errors";
 const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
@@ -505,9 +506,7 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: ThumbnailSe
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-lg overflow-hidden aspect-[9/16]">
                 {getMediaUrl(p) ? (
-                  // Generated media URLs are backend-runtime paths; keep native img to avoid Next image loader allowlist drift.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <RuntimeMediaImage
                     src={getMediaUrl(p)}
                     alt={`thumbnail-${i}`}
                     className="w-full h-full object-cover"
@@ -708,9 +707,7 @@ function MediaView({
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-xl overflow-hidden aspect-[9/16] group">
                 {getMediaUrl(p) ? (
-                  // Generated media URLs are backend-runtime paths; keep native img to avoid Next image loader allowlist drift.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <RuntimeMediaImage
                     src={getMediaUrl(p)}
                     alt={`thumbnail-${i}`}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"

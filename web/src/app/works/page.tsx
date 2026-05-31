@@ -8,6 +8,7 @@ import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import TopHeader from "@/components/TopHeader";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
+import RuntimeMediaImage from "@/components/RuntimeMediaImage";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 import { errorMessage } from "@/lib/errors";
@@ -391,9 +392,7 @@ export default function WorksPage() {
                 >
                   <div className="aspect-video bg-[var(--cinema-black)] relative flex items-center justify-center overflow-hidden">
                     {thumbUrl ? (
-                      // Portfolio thumbnails are backend-runtime media paths; native img avoids Next image loader allowlist drift.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <RuntimeMediaImage
                         src={thumbUrl}
                         alt={title}
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
