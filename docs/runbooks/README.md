@@ -27,6 +27,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | [api-rate-limit-contract.md](./api-rate-limit-contract.md) | FastAPI fallback rate-limit、skip path、429 响应契约漂移 | 2-5 min |
 | [api-response-metadata-contract.md](./api-response-metadata-contract.md) | JSON API `_meta` / `X-Trace-Id` / 错误响应契约漂移 | 2-5 min |
 | [backend-route-auth-contract.md](./backend-route-auth-contract.md) | FastAPI 路由鉴权边界、公开 route allowlist、admin session/CSRF 契约 | 2-5 min |
+| [health-endpoint-no-secret.md](./health-endpoint-no-secret.md) | 公开 `/health` 泄露 provider key、DSN、token 或内部路径 | 2-5 min |
 | [poyo-rejection.md](./poyo-rejection.md) | POYO 图片/视频生成内容审核拒绝 | 5-10 min |
 | [pipeline-stuck.md](./pipeline-stuck.md) | Pipeline 卡在 running 状态超阈值 | 10-20 min |
 | [db-pool-exhausted.md](./db-pool-exhausted.md) | asyncpg 连接池耗尽 | 5-10 min |

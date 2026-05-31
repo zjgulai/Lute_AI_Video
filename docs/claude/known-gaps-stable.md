@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-36 rate-limit config/test parity：FastAPI fallback rate-limit 的阈值、skip path 和 429 响应结构已由 YAML 契约、runbook 和 ASGI 单测锁定。
+最近一次盘点：**2026-05-31** — 已完成 P1-37 health endpoint no-secret guard：公开 `/health` 已加递归脱敏，避免泄露 provider key、DSN、token 或内部绝对路径。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-35 API response metadata guard：JSON response `_meta`、`X-Trace-Id` 和错误响应 shape 已由 YAML 契约、runbook 和 ASGI 单测锁定。
+> 上一次盘点：2026-05-31 — 已完成 P1-36 rate-limit config/test parity：FastAPI fallback rate-limit 的阈值、skip path 和 429 响应结构已由 YAML 契约、runbook 和 ASGI 单测锁定。
 
 ## 当前执行入口
 
@@ -236,6 +236,14 @@ source: human+ai
 - **无 token 边界** — 429 行为测试只触发 401/429 本地路径，不访问 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或任何外部 provider。
 - **Runbook 固化** — 新增 `docs/runbooks/api-rate-limit-contract.md` 并纳入 docs link-check scope，后续改 nginx / FastAPI 限流或 429 呈现时先跑该守卫。
 
+## 0.49 2026-05-31 P1-37 health endpoint no-secret guard
+
+- **公开健康检查脱敏** — `src/routers/health.py` 在返回前递归清洗健康 payload，替换 provider key、DSN、password、token、signing secret 和服务器绝对路径。
+- **错误字符串防泄漏** — 新增 `tests/test_health_endpoint_no_secret_guard.py`，mock 数据库和 Remotion 探针返回含 `DATABASE_URL`、`POYO_API_KEY`、`DEEPSEEK_API_KEY`、`MEDIA_SIGN_SECRET` 与本地绝对路径的错误，确认 `/health` 只暴露 `[redacted]` / `[internal-path]`。
+- **契约固化** — 新增 `configs/health-endpoint-no-secret-contract.yaml`，锁定 `/health` 允许的顶层字段和禁止值类型。
+- **响应边界保持** — `/health` 继续跳过 `_meta`，但保留 `status`、`version`、`remotion`、`persistence`、`media_tools` 能力状态。
+- **Runbook 固化** — 新增 `docs/runbooks/health-endpoint-no-secret.md` 并纳入 docs link-check scope，后续新增健康探针字段必须先跑该守卫。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -365,7 +373,7 @@ source: human+ai
 - [x] **P1-34：backend route auth contract scan** — 已静态检查需要鉴权和无需鉴权的 FastAPI router 边界，避免新增敏感路由漏挂 `verify_api_key`。
 - [x] **P1-35：API response metadata guard** — 已锁定 JSON response `_meta`、`X-Trace-Id` 和错误响应 shape，防止前端错误追踪失效。
 - [x] **P1-36：rate-limit config/test parity** — 已静态和单测确认 `/health` skip、业务路由限流、429 响应呈现保持一致。
-- [ ] **P1-37：health endpoint no-secret guard** — 确认 `/health` 只暴露能力状态，不泄露 provider key、数据库 URL 或内部路径。
+- [x] **P1-37：health endpoint no-secret guard** — 已确认 `/health` 只暴露能力状态，不泄露 provider key、数据库 URL 或内部路径。
 - [ ] **P1-38：admin CSRF doc/test parity** — 对齐 admin CSRF 测试、runbook 和前端调用约定。
 - [ ] **P1-39：background task registry leak guard** — 扩展 snapshot 测试，确认失败任务、取消任务和完成任务都不会长期残留。
 - [ ] **P1-40：scenario state persistence schema guard** — 为 S1-S5 state JSON 关键字段增加 hermetic schema 断言。

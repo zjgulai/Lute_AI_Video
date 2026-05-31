@@ -1,6 +1,7 @@
 """health router — extracted from api.py (P1-11)."""
 
 import os
+import re
 from typing import Any
 
 from fastapi import APIRouter
@@ -18,6 +19,32 @@ except ImportError:
 
 
 router = APIRouter()
+
+
+_SENSITIVE_ENV_NAME_PARTS = (
+    "API_KEY",
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "DATABASE_URL",
+    "DSN",
+)
+_DATABASE_URL_RE = re.compile(
+    r"\b(?:postgres(?:ql)?|mysql|mariadb|redis|mongodb|sqlite)://[^\s\"'`,;]+",
+    re.IGNORECASE,
+)
+_CREDENTIAL_URL_RE = re.compile(
+    r"\b([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^@\s/]+)@",
+    re.IGNORECASE,
+)
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"\b([A-Z0-9_]*(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD|DATABASE_URL|DSN)[A-Z0-9_]*)"
+    r"\s*[:=]\s*([^\s,;\"']+)",
+    re.IGNORECASE,
+)
+_INTERNAL_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9])/(?:Users|home|root|app|workspace|var|tmp|opt|srv|mnt)/[^\s\"'`,;]+"
+)
 
 
 async def _probe_rendering_service(url: str, timeout: float = 3.0) -> dict[str, Any]:
@@ -69,6 +96,39 @@ async def _probe_rendering_service(url: str, timeout: float = 3.0) -> dict[str, 
     return info
 
 
+def _sensitive_env_values() -> list[str]:
+    values: set[str] = set()
+    for key, value in os.environ.items():
+        if not value or len(value) < 6:
+            continue
+        key_upper = key.upper()
+        if any(part in key_upper for part in _SENSITIVE_ENV_NAME_PARTS):
+            values.add(value)
+    return sorted(values, key=len, reverse=True)
+
+
+def _sanitize_health_text(value: str) -> str:
+    sanitized = value
+    for secret_value in _sensitive_env_values():
+        sanitized = sanitized.replace(secret_value, "[redacted]")
+    sanitized = _DATABASE_URL_RE.sub("[redacted]", sanitized)
+    sanitized = _CREDENTIAL_URL_RE.sub(r"\1[redacted]@", sanitized)
+    sanitized = _SECRET_ASSIGNMENT_RE.sub(lambda m: f"{m.group(1)}=[redacted]", sanitized)
+    return _INTERNAL_PATH_RE.sub("[internal-path]", sanitized)
+
+
+def _sanitize_health_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _sanitize_health_payload(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_health_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_health_payload(item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_health_text(value)
+    return value
+
+
 @router.get("/health")
 async def health():
     """Health check with persistence and Remotion status."""
@@ -106,13 +166,13 @@ async def health():
     except Exception:
         media_tools["clip_available"] = False
 
-    return {
+    return _sanitize_health_payload({
         "status": "ok",
         "version": APP_VERSION,
         "remotion": remotion_env,
         "persistence": persistence_status,
         "media_tools": media_tools,
-    }
+    })
 
 
 def _check_clip_imports_only() -> bool:

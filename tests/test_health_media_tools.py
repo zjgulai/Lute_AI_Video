@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from src._version import APP_VERSION
 from src.routers.health import health
 
 
@@ -27,4 +28,4 @@ async def test_health_exposes_media_tools():
 @pytest.mark.asyncio
 async def test_health_version_bumped():
     result = await health()
-    assert result["version"] == "0.2.5"
+    assert result["version"] == APP_VERSION
