@@ -218,6 +218,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "pipeline.selfAudited": "已自审",
     "pipeline.allDone": "全部 12 个节点执行完成",
     "pipeline.abandon": "放弃",
+    "pipeline.paused": "已暂停",
+    "pipeline.error": "出错",
     "pipeline.runningHeadline": "正在生成视频",
     "pipeline.remaining": "预计还需",
     "pipeline.remainingHint": "基于历史中位耗时估算，仅供参考",
@@ -436,6 +438,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "upload.hint": "支持视频、图片、音频、文档",
     "upload.saved": "已保存",
     "upload.uploaded": "已上传",
+    "upload.cancel": "取消上传",
     "upload.clear": "清除",
     "upload.count": "个",
     "picker.title": "从资产库选择",
@@ -812,6 +815,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gate.variant.conservative": "保守",
     "gate.score": "评分",
     "gate.selectHint": "选择 1 至 2 个方案",
+    "gate.awaitingApproval": "等待审批",
     "gate.approved": "已审批通过，继续执行...",
     "gate.processing": "后台处理中，请稍候...",
 
@@ -1736,6 +1740,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "pipeline.selfAudited": "Self-audited",
     "pipeline.allDone": "All 12 nodes executed",
     "pipeline.abandon": "Abandon",
+    "pipeline.paused": "Paused",
+    "pipeline.error": "Error",
 
     // Video Workflow
     "workflow.title": "Video Workflow",
@@ -1797,7 +1803,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "review.thumbnail.subtitle": "Select best thumbnail option",
     "review.thumbnail.desc": "Evaluate thumbnail effectiveness and select the option with optimal CTR",
     "review.briefs": " video content strategies",
-    "review.scripts": "",
+    "review.scripts": "Total",
     "review.scriptsCount": " scripts",
     "review.noAudit": "No AI audit report yet",
     "review.notes": "Review notes (optional)",
@@ -1932,7 +1938,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "asset.download": "Click to download",
     "asset.openInNewTab": "Open in new tab",
     "asset.preview": "Preview",
-    "asset.count": "",
+    "asset.count": " item(s)",
 
     // Asset Uploader
     "upload.title": "Asset Upload",
@@ -1942,8 +1948,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "upload.hint": "Supports video, image, audio, document",
     "upload.saved": "Saved",
     "upload.uploaded": "Uploaded",
+    "upload.cancel": "Cancel upload",
     "upload.clear": "Clear",
-    "upload.count": "",
+    "upload.count": " asset(s)",
     "picker.title": "Pick from Asset Library",
     "picker.searchPlaceholder": "Search by filename / label / scene",
     "picker.fromLibrary": "Pick from library",
@@ -2086,6 +2093,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gate.variant.conservative": "Conservative",
     "gate.score": "Score",
     "gate.selectHint": "Select 1 to 2 candidates",
+    "gate.awaitingApproval": "Awaiting approval",
     "gate.approved": "Approved, continuing...",
     "gate.processing": "Processing in background...",
 

@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-27 admin 页面可访问性 smoke：admin 登录、layout、sidebar、dashboard、logs、health、tenants 已有无后端依赖的语义 smoke，覆盖 label、alert、nav、landmark 和 dialog 关键结构。
+最近一次盘点：**2026-05-31** — 已完成 P1-28 i18n translation completeness guard：前端翻译表已有静态完整性测试，锁定 zh/en key 集合、源码静态 `t("...")` 引用和空翻译值。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-26 Runtime media image guard 扩展：运行时媒体图片已统一收口到 `RuntimeMediaImage`，并有 Vitest 静态测试防止新增裸 `<img>` / `no-img-element` 例外。
+> 上一次盘点：2026-05-31 — 已完成 P1-27 admin 页面可访问性 smoke：admin 登录、layout、sidebar、dashboard、logs、health、tenants 已有无后端依赖的语义 smoke，覆盖 label、alert、nav、landmark 和 dialog 关键结构。
 
 ## 当前执行入口
 
@@ -167,6 +167,13 @@ source: human+ai
 - **表单与弹层语义** — logs 筛选补 `aria-label` / `aria-pressed`；tenants 搜索和创建弹层补 labeled fields、dialog 语义、关闭按钮 aria label 与创建错误 alert。
 - **测试环境收口** — `vitest.setup.ts` 显式设置 React 19 `IS_REACT_ACT_ENVIRONMENT`，避免 createRoot 单测刷屏 `act(...)` 环境警告，降低 CI 输出噪音。
 
+## 0.40 2026-05-31 P1-28 i18n translation completeness guard
+
+- **完整性 guard** — 新增 `translationCompleteness.test.ts`，锁定 `translations.zh` / `translations.en` key 集合必须一致，防止只补一端语言。
+- **源码引用扫描** — 测试递归扫描 `web/src` 非测试源码中的静态 `t("...")` 调用；动态前缀如 `t("platform." + id)` 不误判，但明确写死的 key 必须存在。
+- **空值收口** — EN 侧 `upload.count`、`review.scripts`、`asset.count` 不再为空；同步补齐 `upload.cancel`、`pipeline.error`、`pipeline.paused`、`gate.awaitingApproval`。
+- **无 token 边界** — 该 guard 只读取本地源码和翻译表，不访问后端、不触发生成接口。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -287,7 +294,7 @@ source: human+ai
 - [x] **P1-25：UI visual baseline SOP** — 已补 UI-only 截图基线更新 SOP，避免随手更新 snapshot 掩盖真实布局回归。
 - [x] **P1-26：Runtime media image guard 扩展** — 已扩大前端静态测试，防止运行时媒体又绕过 `RuntimeMediaImage`。
 - [x] **P1-27：admin 页面可访问性 smoke** — 已为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
-- [ ] **P1-28：i18n translation completeness guard** — 补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
+- [x] **P1-28：i18n translation completeness guard** — 已补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
 - [ ] **P1-29：apiFetch error normalization tests** — 覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。
 - [ ] **P1-30：env config SSOT drift guard** — 锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
 - [ ] **P1-31：docs link-check scope hardening** — 收紧 docs link check 的离线范围和允许失败边界，避免文档链接债继续隐藏。
