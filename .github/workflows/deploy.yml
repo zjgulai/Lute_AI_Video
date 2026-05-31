@@ -41,8 +41,20 @@ jobs:
       - name: Test
         run: python -m pytest tests/ --tb=short -q --timeout=60
         env:
+          API_KEY: "test-api-key-for-pytest"
           OPENAI_API_KEY: "sk-test"
           ANTHROPIC_API_KEY: "sk-ant-test"
+          DEEPSEEK_API_KEY: ""
+          POYO_API_KEY: ""
+          SEEDANCE_API_KEY: ""
+          SILICONFLOW_API_KEY: ""
+          ELEVENLABS_API_KEY: ""
+          TIKTOK_ACCESS_TOKEN: ""
+          TIKTOK_OPEN_ID: ""
+          SHOPIFY_STORE_URL: ""
+          SHOPIFY_ADMIN_TOKEN: ""
+          SUPABASE_URL: ""
+          SUPABASE_SERVICE_KEY: ""
 
       - uses: actions/setup-node@v4
         with:

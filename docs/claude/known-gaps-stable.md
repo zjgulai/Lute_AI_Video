@@ -11,16 +11,16 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-15 CI Python lint parity：主 CI 和 production deploy preflight 的 ruff 口径已统一到 `src tests`，避免测试代码重新积累隐藏 lint 债。
+最近一次盘点：**2026-05-31** — 已完成 P1-16 CI hermetic env guard，并把当前充值前迭代队列扩展为 P1-16~P1-65 的 50-loop；主 CI 和 deploy preflight 的 pytest env 已显式置空真实 provider / 发布凭证。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-14 deploy pytest timeout 依赖闭环，并建立 P1-14~P1-33 的 20-loop 充值前迭代队列；`deploy.yml` 的 `pytest --timeout=60` 现在有 `pytest-timeout` 依赖和静态测试保护。
+> 上一次盘点：2026-05-31 — 已完成 P1-15 CI Python lint parity：主 CI 和 production deploy preflight 的 ruff 口径已统一到 `src tests`，避免测试代码重新积累隐藏 lint 债。
 
 ## 当前执行入口
 
 - **唯一当前 TODO 来源**：本文件的“完整 TODO list”。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
-- **20-loop 迭代边界**：P1-14~P1-33 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。
+- **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。
 
 ## 0.18 2026-05-31 P1-6 全站 UI/UX 无 token 审计与首轮修复
 
@@ -93,6 +93,12 @@ source: human+ai
 - **ruff 口径统一** — `.github/workflows/ci.yml` 和 `.github/workflows/deploy.yml` 已从 `ruff check src/` 改为 `ruff check src tests`，让测试目录继续受主 CI 和 deploy preflight 保护。
 - **防回归测试** — `tests/test_deploy_workflow.py` 新增 CI / deploy workflow 静态检查，锁定 `ruff check src tests` 口径，避免后续只 lint `src`。
 - **本地证据** — `.venv/bin/ruff check src tests --statistics` 通过，说明当前把 `tests` 纳入 CI 不会制造红灯。
+
+## 0.28 2026-05-31 P1-16 CI hermetic env guard
+
+- **pytest env 显式化** — `.github/workflows/ci.yml` 和 `.github/workflows/deploy.yml` 的 Python test step 已显式设置 `API_KEY` 为测试值，并把 `DEEPSEEK_API_KEY`、`POYO_API_KEY`、`SEEDANCE_API_KEY`、`SILICONFLOW_API_KEY`、`ELEVENLABS_API_KEY`、TikTok、Shopify、Supabase 等外部凭证置空。
+- **防 secrets 漂移** — `tests/test_deploy_workflow.py` 新增 hermetic env 静态检查，断言 CI / deploy pytest env 不引用 `secrets.*`，且所有外部 provider / 发布平台 key 都只能是空值或测试值。
+- **50-loop 队列扩展** — 当前充值前队列扩展到 P1-16~P1-65，覆盖 CI、防护、文档治理、无 token hermetic 回归、前端错误路径和部署脚本静态守卫。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -202,7 +208,7 @@ source: human+ai
 - [x] **P1-13：production deploy preflight 对齐** — 已让 GitHub deploy preflight 跑完整前端质量门，并显式保持远程部署 `RUN_TOKEN_SMOKE=0`。
 - [x] **P1-14：deploy pytest timeout 依赖闭环** — 已为 deploy preflight 的 `pytest --timeout=60` 补齐 `pytest-timeout` 依赖、lockfile 和静态防回归测试。
 - [x] **P1-15：CI Python lint parity** — 已将主 CI / deploy preflight 的 ruff 口径统一到 `src tests`，避免测试代码重新积累 lint 债。
-- [ ] **P1-16：CI hermetic env guard** — 固化 CI 中外部 provider key 的空值或测试值，避免 GitHub runner 继承真实生成凭证。
+- [x] **P1-16：CI hermetic env guard** — 已固化 CI 中外部 provider key 的空值或测试值，避免 GitHub runner 继承真实生成凭证。
 - [ ] **P1-17：Python dev dependency parity** — 建立 `pyproject.toml`、`requirements.txt`、`uv.lock` 的测试工具依赖一致性检查。
 - [ ] **P1-18：README package-manager drift cleanup** — 修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
 - [ ] **P1-19：e2e-prod secret/runbook coverage** — 补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
@@ -220,6 +226,38 @@ source: human+ai
 - [ ] **P1-31：docs link-check scope hardening** — 收紧 docs link check 的离线范围和允许失败边界，避免文档链接债继续隐藏。
 - [ ] **P1-32：Docker build no-token preflight** — 为 Docker build / compose 校验补不触发外部 provider 的验证说明或静态测试。
 - [ ] **P1-33：P2 recharge smoke checklist dry-run** — 在充值前完成 P2 真 smoke checklist 的 dry-run 脚本或操作清单，充值后只填 key 并执行。
+- [ ] **P1-34：backend route auth contract scan** — 静态检查需要鉴权和无需鉴权的 FastAPI router 边界，避免新增敏感路由漏挂 `verify_api_key`。
+- [ ] **P1-35：API response metadata guard** — 锁定 JSON response `_meta`、`X-Trace-Id` 和错误响应 shape，防止前端错误追踪失效。
+- [ ] **P1-36：rate-limit config/test parity** — 静态和单测确认 `/health` skip、业务路由限流、429 响应呈现保持一致。
+- [ ] **P1-37：health endpoint no-secret guard** — 确认 `/health` 只暴露能力状态，不泄露 provider key、数据库 URL 或内部路径。
+- [ ] **P1-38：admin CSRF doc/test parity** — 对齐 admin CSRF 测试、runbook 和前端调用约定。
+- [ ] **P1-39：background task registry leak guard** — 扩展 snapshot 测试，确认失败任务、取消任务和完成任务都不会长期残留。
+- [ ] **P1-40：scenario state persistence schema guard** — 为 S1-S5 state JSON 关键字段增加 hermetic schema 断言。
+- [ ] **P1-41：gate approve idempotency guard** — 无 token 测试 gate approve 重复调用不会重复恢复或破坏状态。
+- [ ] **P1-42：regenerate downstream invalidation guard** — 锁定 step regenerate 后下游步骤和 gate 状态的失效规则。
+- [ ] **P1-43：S4 footage asset filtering regression** — 为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补静态或单测证据。
+- [ ] **P1-44：media URL sanitizer guard** — 检查 portfolio、thumbnail、upload preview 的媒体 URL 不产生开放重定向或危险 scheme。
+- [ ] **P1-45：thumbnail coverage dry-run** — 无 token 检查作品集缩略图覆盖率统计逻辑，不重新生成媒体。
+- [ ] **P1-46：OpenAPI generated types drift guard** — 建立前端 `api.generated.ts` 与后端 OpenAPI 的漂移检查策略，不访问生产。
+- [ ] **P1-47：frontend store persistence migration guard** — 覆盖 Zustand/localStorage 版本迁移和坏数据恢复路径。
+- [ ] **P1-48：API key storage fallback guard** — 测试 localStorage/cookie fallback、masking 和清除逻辑，不暴露真实 key。
+- [ ] **P1-49：Settings API key accessibility guard** — 为 Settings key 输入、保存、错误提示补可访问性和状态回归。
+- [ ] **P1-50：admin logs keyboard navigation guard** — 锁定 Admin Logs 行键盘打开、关闭和焦点恢复行为。
+- [ ] **P1-51：AssetPicker request boundary guard** — 确认素材选择器只调用只读资产接口，不触发上传或生成。
+- [ ] **P1-52：env example no-secret drift guard** — 检查 `.env.example`、deploy env 文档和配置默认值不包含真实 secret。
+- [ ] **P1-53：Lighthouse nginx timeout parity** — 静态检查 nginx 长任务 timeout 与部署文档一致。
+- [ ] **P1-54：rsync exclude artifact guard** — 防止 `.next`、报告、截图、tmp 输出等本地产物进入远程部署同步。
+- [ ] **P1-55：script naming/location governance audit** — 审计 `scripts/` 中一次性或危险脚本的命名、提示和归档状态。
+- [ ] **P1-56：root directory pollution guard** — 建立根目录允许清单，防止临时文件和截图直接落根目录。
+- [ ] **P1-57：Markdown frontmatter compliance scan** — 扫描正式区 / 草稿区 Markdown frontmatter 完整性。
+- [ ] **P1-58：archive/draft link drift scan** — 检查历史文档和当前入口之间的链接是否误导执行计划。
+- [ ] **P1-59：poyo model matrix stale warning guard** — 锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
+- [ ] **P1-60：release smoke token opt-in guard** — 审计 release smoke 脚本，确认生成接口不会默认执行。
+- [ ] **P1-61：workflow trigger path audit** — 检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
+- [ ] **P1-62：Dockerfile dev-tool parity guard** — 确认 Docker/CI 需要的测试工具和 lockfile 一致。
+- [ ] **P1-63：Remotion no-provider-key guard** — 确认 rendering build/test 不读取 provider API key。
+- [ ] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
+- [ ] **P1-65：50-loop checkpoint review** — 对 P1-16~P1-64 执行结果做一次技术债重新排序，决定充值前是否继续扩展 P1。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。

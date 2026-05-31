@@ -25,6 +25,37 @@ CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
 
+HERMETIC_PYTEST_ENV = {
+    "API_KEY": "test-api-key-for-pytest",
+    "OPENAI_API_KEY": "sk-test",
+    "ANTHROPIC_API_KEY": "sk-ant-test",
+    "DEEPSEEK_API_KEY": "",
+    "POYO_API_KEY": "",
+    "SEEDANCE_API_KEY": "",
+    "SILICONFLOW_API_KEY": "",
+    "ELEVENLABS_API_KEY": "",
+    "TIKTOK_ACCESS_TOKEN": "",
+    "TIKTOK_OPEN_ID": "",
+    "SHOPIFY_STORE_URL": "",
+    "SHOPIFY_ADMIN_TOKEN": "",
+    "SUPABASE_URL": "",
+    "SUPABASE_SERVICE_KEY": "",
+}
+
+
+def _step_by_name(steps: list[dict], name: str) -> dict:
+    matches = [step for step in steps if step.get("name") == name]
+    assert matches, f"missing workflow step: {name}"
+    return matches[0]
+
+
+def _assert_hermetic_pytest_env(env: dict[str, str]) -> None:
+    for key, expected in HERMETIC_PYTEST_ENV.items():
+        assert env.get(key) == expected, f"{key} must be hermetic in CI pytest env"
+
+    for key, value in env.items():
+        assert "secrets." not in str(value), f"{key} must not read GitHub secrets in pytest env"
+
 
 class TestDeployWorkflow:
 
@@ -107,6 +138,13 @@ class TestDeployWorkflow:
         step_text = " ".join((s.get("run") or "") for s in steps)
         assert "pytest" in step_text, "preflight must run pytest"
         assert "npm test -- --run" in step_text, "preflight must run frontend Vitest"
+
+    def test_preflight_pytest_env_is_hermetic(self, workflow):
+        preflight = workflow["jobs"]["preflight"]
+        steps = preflight.get("steps") or []
+        test_step = _step_by_name(steps, "Test")
+
+        _assert_hermetic_pytest_env(test_step.get("env") or {})
 
     def test_preflight_lints_src_and_tests(self, workflow):
         preflight = workflow["jobs"]["preflight"]
@@ -195,3 +233,11 @@ class TestCIWorkflow:
         assert "ruff check src tests" in text, (
             "main CI must lint tests as well as src to keep repo-wide ruff trustworthy"
         )
+
+    def test_ci_pytest_env_is_hermetic(self):
+        with open(CI_YML) as f:
+            wf = yaml.safe_load(f)
+        steps = wf["jobs"]["test"].get("steps") or []
+        test_step = _step_by_name(steps, "Run tests with coverage")
+
+        _assert_hermetic_pytest_env(test_step.get("env") or {})
