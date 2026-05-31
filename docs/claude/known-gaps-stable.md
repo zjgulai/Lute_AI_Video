@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-29 apiFetch error normalization tests：S1 step-by-step 前端 API 在 401/422/429 下统一抛 `ApiError`，保留 message、fieldErrors 和 retryAfterSec。
+最近一次盘点：**2026-05-31** — 已完成 P1-30 env config SSOT drift guard：`DEFAULT_LLM_PROVIDER`、DeepSeek、POYO 非 secret 默认值已由静态测试锁定，覆盖 `src/config.py`、`.env.example`、`render.yaml` 和 CloudBase 部署文档。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-28 i18n translation completeness guard：前端翻译表已有静态完整性测试，锁定 zh/en key 集合、源码静态 `t("...")` 引用和空翻译值。
+> 上一次盘点：2026-05-31 — 已完成 P1-29 apiFetch error normalization tests：S1 step-by-step 前端 API 在 401/422/429 下统一抛 `ApiError`，保留 message、fieldErrors 和 retryAfterSec。
 
 ## 当前执行入口
 
@@ -181,6 +181,13 @@ source: human+ai
 - **实现边界** — 仅收口活跃 S1 手动执行 API；旧 LangGraph proxy、deprecated S2/S3 wrapper 是否迁移到 `ApiError` 留给后续单独任务，避免扩大本轮行为变更。
 - **无 token 边界** — 测试全程使用 mocked `fetch`，不访问后端、不触发 `/scenario/*` 真实生成。
 
+## 0.42 2026-05-31 P1-30 env config SSOT drift guard
+
+- **静态 SSOT guard** — 新增 `tests/test_env_config_ssot.py`，锁定 `DEFAULT_LLM_PROVIDER=deepseek`、`DEEPSEEK_API_BASE=https://api.deepseek.com`、`DEEPSEEK_MODEL=deepseek-v4-pro`、`POYO_API_BASE_URL=https://api.poyo.ai`、`POYO_IMAGE_MODEL=gpt-image-2`、`POYO_VIDEO_MODEL=seedance-2`。
+- **覆盖范围** — guard 同时检查 `src/config.py` fallback、`.env.example`、`render.yaml` 和两篇 CloudBase 部署文档；不读取 gitignored `deploy/lighthouse/.env.prod`，避免接触真实 secret。
+- **配置补齐** — `render.yaml` 增加 DeepSeek/POYO 非 secret 默认值，并补 `DEEPSEEK_API_KEY` 空占位；CloudBase 文档补齐同一组默认值。
+- **历史边界** — `docs/research`、旧 Sprint 计划和已标注历史快照的 poyo 模型矩阵不参与本 guard，避免把历史研究文档误当当前部署真相。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -303,7 +310,7 @@ source: human+ai
 - [x] **P1-27：admin 页面可访问性 smoke** — 已为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
 - [x] **P1-28：i18n translation completeness guard** — 已补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
 - [x] **P1-29：apiFetch error normalization tests** — 已覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。
-- [ ] **P1-30：env config SSOT drift guard** — 锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
+- [x] **P1-30：env config SSOT drift guard** — 已锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
 - [ ] **P1-31：docs link-check scope hardening** — 收紧 docs link check 的离线范围和允许失败边界，避免文档链接债继续隐藏。
 - [ ] **P1-32：Docker build no-token preflight** — 为 Docker build / compose 校验补不触发外部 provider 的验证说明或静态测试。
 - [ ] **P1-33：P2 recharge smoke checklist dry-run** — 在充值前完成 P2 真 smoke checklist 的 dry-run 脚本或操作清单，充值后只填 key 并执行。
