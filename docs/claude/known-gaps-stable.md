@@ -4,16 +4,16 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-05-31
+updated: 2026-06-01
 owner: self
 source: human+ai
 ---
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-39 background task registry leak guard：后台 task 正常完成、失败、外部取消后的 registry 自动清理已由契约和单测锁定。
+最近一次盘点：**2026-06-01** — 已完成 P1-40 scenario state persistence schema guard：S1-S5 初始 state JSON 关键字段已由契约和本地单测锁定。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-38 admin CSRF doc/test parity：admin 写操作、CSRF cookie path、前端 `adminFetch` 和 runbook 已由跨层契约锁定。
+> 上一次盘点：2026-05-31 — 已完成 P1-39 background task registry leak guard：后台 task 正常完成、失败、外部取消后的 registry 自动清理已由契约和单测锁定。
 
 ## 当前执行入口
 
@@ -260,6 +260,15 @@ source: human+ai
 - **无 token 边界** — 测试只创建本地 asyncio task，不访问 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 - **Runbook 固化** — 新增 `docs/runbooks/background-task-registry-leak.md` 并纳入 docs link-check scope，后续新增 fire-and-forget task 先跑该守卫。
 
+## 0.52 2026-06-01 P1-40 scenario state persistence schema guard
+
+- **初始化 shape 锁定** — 新增 `tests/test_scenario_state_persistence_schema_contract.py`，逐一初始化 S1-S5 state，并读取 pytest 临时目录中的 filesystem JSON，断言 `schema_version`、`label`、`scenario`、`tenant_id`、`config`、`steps`、`current_step`、`mode`、`trace_id`、`errors`、`media_synthesis_errors`、`gates`、`pipeline_degraded`、`degraded_reason`、`structured_errors` 全部存在。
+- **FS / PG shape 对齐** — `StepRunner.init_state()` 初始化时显式写入 `gates={}`、`pipeline_degraded=false`、`degraded_reason=null`、`structured_errors=[]`，避免 filesystem fallback 与 PG load 默认字段不一致。
+- **契约固化** — 新增 `configs/scenario-state-persistence-contract.yaml`，锁定 S1-S5、允许 mode、顶层字段、JSON object/list 字段和每个 step record 的 required keys。
+- **无 token 边界** — 测试只调用 `StepRunner.init_state()`，不访问 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+- **Runbook 固化** — 新增 `docs/runbooks/scenario-state-persistence-schema.md` 并纳入 docs link-check scope，后续改 state persistence、step order、gate state 或 PG projection 先跑该守卫。
+- **验证闭环** — `pytest tests/test_scenario_state_persistence_schema_contract.py tests/test_docs_link_check_scope.py -q` 通过，结果 `12 passed`；`pytest tests/test_s1_gate_full_flow.py tests/test_gate_scenario_configs.py tests/test_phase0_regression.py -q` 通过，结果 `110 passed`；`ruff check src tests --statistics` 和 `git diff --check` 通过。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -392,7 +401,7 @@ source: human+ai
 - [x] **P1-37：health endpoint no-secret guard** — 已确认 `/health` 只暴露能力状态，不泄露 provider key、数据库 URL 或内部路径。
 - [x] **P1-38：admin CSRF doc/test parity** — 已对齐 admin CSRF 测试、runbook 和前端调用约定。
 - [x] **P1-39：background task registry leak guard** — 已扩展 snapshot 测试，确认失败任务、取消任务和完成任务都不会长期残留。
-- [ ] **P1-40：scenario state persistence schema guard** — 为 S1-S5 state JSON 关键字段增加 hermetic schema 断言。
+- [x] **P1-40：scenario state persistence schema guard** — 已为 S1-S5 state JSON 关键字段增加 hermetic schema 断言，并补齐 filesystem 初始字段默认值。
 - [ ] **P1-41：gate approve idempotency guard** — 无 token 测试 gate approve 重复调用不会重复恢复或破坏状态。
 - [ ] **P1-42：regenerate downstream invalidation guard** — 锁定 step regenerate 后下游步骤和 gate 状态的失效规则。
 - [ ] **P1-43：S4 footage asset filtering regression** — 为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补静态或单测证据。

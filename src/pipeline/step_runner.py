@@ -271,6 +271,10 @@ class StepRunner:
             "trace_id": trace_id,
             "errors": [],
             "media_synthesis_errors": [],
+            "gates": {},
+            "pipeline_degraded": False,
+            "degraded_reason": None,
+            "structured_errors": [],
         }
 
         await self.state_manager.save(label, state)

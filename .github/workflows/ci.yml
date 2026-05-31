@@ -127,6 +127,7 @@ jobs:
             docs/runbooks/poyo-rejection.md
             docs/runbooks/production-e2e-token-smoke.md
             docs/runbooks/s1-s5-hermetic-regression.md
+            docs/runbooks/scenario-state-persistence-schema.md
             docs/runbooks/thumbnail-missing.md
             docs/runbooks/ui-visual-baseline-sop.md
             docs/architecture/adr/README.md
