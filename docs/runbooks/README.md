@@ -28,6 +28,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | [pipeline-stuck.md](./pipeline-stuck.md) | Pipeline 卡在 running 状态超阈值 | 10-20 min |
 | [db-pool-exhausted.md](./db-pool-exhausted.md) | asyncpg 连接池耗尽 | 5-10 min |
 | [brand-assets-refresh.md](./brand-assets-refresh.md) | 品牌资产抓取刷新 / 新增产品 / 灾难恢复 | 2-5 min |
+| [docker-no-token-preflight.md](./docker-no-token-preflight.md) | Docker build / compose 预检必须保持无 token、无外部 provider 调用 | 2-5 min |
 | [key-rotation.md](./key-rotation.md) | API key rotation（泄露/定期/授权变更） | 30-45 min |
 | [thumbnail-missing.md](./thumbnail-missing.md) | /works 或 /library 视频卡片黑底无缩略图 | 5-15 min |
 

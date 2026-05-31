@@ -84,6 +84,13 @@ jobs:
         env:
           NEXT_PUBLIC_IS_DEMO: "true"
 
+      - name: Docker compose config validation (no start)
+        run: |
+          : > .env
+          : > deploy/lighthouse/.env.prod
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f deploy/lighthouse/docker-compose.prod.yml config --quiet
+
   build-images:
     name: Build + cache backend image
     needs: preflight

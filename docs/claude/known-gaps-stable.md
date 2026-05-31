@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-31 docs link-check scope hardening：主 CI 的 lychee 检查从宽范围软失败改为当前正式文档 allowlist 硬门禁，并由静态测试防止漂移。
+最近一次盘点：**2026-05-31** — 已完成 P1-32 Docker build no-token preflight：Docker build/cache 与 compose config 校验已固定为不启动容器、不读取生产 secret、不触发 provider 的静态门禁。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-30 env config SSOT drift guard：`DEFAULT_LLM_PROVIDER`、DeepSeek、POYO 非 secret 默认值已由静态测试锁定，覆盖 `src/config.py`、`.env.example`、`render.yaml` 和 CloudBase 部署文档。
+> 上一次盘点：2026-05-31 — 已完成 P1-31 docs link-check scope hardening：主 CI 的 lychee 检查从宽范围软失败改为当前正式文档 allowlist 硬门禁，并由静态测试防止漂移。
 
 ## 当前执行入口
 
@@ -196,6 +196,14 @@ source: human+ai
 - **防回归测试** — 新增 `tests/test_docs_link_check_scope.py`，锁定 lychee 的 offline/local exclude、禁止宽 glob、要求 CI 参数与 scope 清单完全一致。
 - **无 token 边界** — 本轮只改 GitHub Actions 文档检查和静态测试，不访问网络、不触发真实生成、不读取 provider secret。
 
+## 0.44 2026-05-31 P1-32 Docker build no-token preflight
+
+- **compose config-only 预检** — `.github/workflows/ci.yml` 与 `.github/workflows/deploy.yml` 新增 `Docker compose config validation (no start)`，只创建空 `.env` / `.env.prod` 并执行 `docker compose ... config --quiet`。
+- **Docker build secret 边界** — `tests/test_docker_no_token_preflight.py` 锁定 CI/deploy 的 `docker/build-push-action@v5` 只能 `push: false`、`load: false`，且 build args 只能是 `APT_MIRROR`、`PIP_INDEX_URL`。
+- **禁止误触发 runtime smoke** — 同一测试禁止 compose 预检步骤出现启动容器、`curl`、`/api/fast`、`/api/scenario`、`/api/pipeline`、Gate 或 `RUN_TOKEN_SMOKE=1`。
+- **Runbook 固化** — 新增 `docs/runbooks/docker-no-token-preflight.md` 并纳入 `configs/docs-link-check-scope.txt`，说明 Docker 预检只验证配置和构建上下文，不读取生产 secret、不触发 provider。
+- **无 token 边界** — 本轮没有运行 Docker compose、没有请求 `/health`、没有调用 DeepSeek/POYO/SiliconFlow 等外部服务。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -320,7 +328,7 @@ source: human+ai
 - [x] **P1-29：apiFetch error normalization tests** — 已覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。
 - [x] **P1-30：env config SSOT drift guard** — 已锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
 - [x] **P1-31：docs link-check scope hardening** — 已收紧 docs link check 的离线范围和允许失败边界，避免文档链接债继续隐藏。
-- [ ] **P1-32：Docker build no-token preflight** — 为 Docker build / compose 校验补不触发外部 provider 的验证说明或静态测试。
+- [x] **P1-32：Docker build no-token preflight** — 已为 Docker build / compose 校验补不触发外部 provider 的验证说明和静态测试。
 - [ ] **P1-33：P2 recharge smoke checklist dry-run** — 在充值前完成 P2 真 smoke checklist 的 dry-run 脚本或操作清单，充值后只填 key 并执行。
 - [ ] **P1-34：backend route auth contract scan** — 静态检查需要鉴权和无需鉴权的 FastAPI router 边界，避免新增敏感路由漏挂 `verify_api_key`。
 - [ ] **P1-35：API response metadata guard** — 锁定 JSON response `_meta`、`X-Trace-Id` 和错误响应 shape，防止前端错误追踪失效。

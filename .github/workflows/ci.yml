@@ -111,6 +111,7 @@ jobs:
             docs/runbooks/c2pa-cert-application.md
             docs/runbooks/db-pool-exhausted.md
             docs/runbooks/deepseek-timeout.md
+            docs/runbooks/docker-no-token-preflight.md
             docs/runbooks/github-actions-deploy-secrets.md
             docs/runbooks/github-deploy-secrets-setup.md
             docs/runbooks/key-rotation.md
@@ -190,6 +191,13 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Docker compose config validation (no start)
+        run: |
+          : > .env
+          : > deploy/lighthouse/.env.prod
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f deploy/lighthouse/docker-compose.prod.yml config --quiet
 
       - name: Build backend image (validate, no push)
         uses: docker/build-push-action@v5
