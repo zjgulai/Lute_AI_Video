@@ -35,6 +35,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | [db-pool-exhausted.md](./db-pool-exhausted.md) | asyncpg 连接池耗尽 | 5-10 min |
 | [brand-assets-refresh.md](./brand-assets-refresh.md) | 品牌资产抓取刷新 / 新增产品 / 灾难恢复 | 2-5 min |
 | [docker-no-token-preflight.md](./docker-no-token-preflight.md) | Docker build / compose 预检必须保持无 token、无外部 provider 调用 | 2-5 min |
+| [gate-approve-idempotency.md](./gate-approve-idempotency.md) | Gate approve 重复提交、网络重试、background resume 重复启动 | 5-10 min |
 | [key-rotation.md](./key-rotation.md) | API key rotation（泄露/定期/授权变更） | 30-45 min |
 | [p2-recharge-smoke-checklist.md](./p2-recharge-smoke-checklist.md) | poyo.ai 充值后真实 smoke 的 dry-run 与双确认执行入口 | 5-15 min |
 | [scenario-state-persistence-schema.md](./scenario-state-persistence-schema.md) | S1-S5 state JSON 初始化、filesystem fallback、PG projection 字段契约漂移 | 5-10 min |

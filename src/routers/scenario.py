@@ -1016,6 +1016,10 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
             if "already approved" in result.get("error", ""):
                 status_code = 409
             raise HTTPException(status_code=status_code, detail=result["error"])
+        if result.get("idempotent") is True:
+            result["resumed"] = False
+            result["resuming"] = False
+            return result
 
         # Auto-resume pipeline after gate approval (step-by-step mode)
         # Resume runs from current_step until the next gate or completion.

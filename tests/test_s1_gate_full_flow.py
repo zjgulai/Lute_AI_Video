@@ -456,18 +456,21 @@ class TestApproveGateSuccess:
         assert "Maximum 2" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_approve_gate_already_approved_returns_error(self, isolated_state_dir):
-        """重复 approve 已 approved 的 gate 应返回错误。"""
+    async def test_approve_gate_already_approved_same_selection_is_idempotent(self, isolated_state_dir):
+        """重复 approve 相同选择应幂等成功。"""
         sm = PipelineStateManager()
         state = {
             "label": "approve-test-4",
             "scenario": "s1",
             "config": {"product_catalog": {"product_name": "Test"}, "brand_guidelines": {}},
+            "current_step": "compliance",
             "steps": {},
             "gates": {
                 "gate_1_script": {
                     "status": "approved",
-                    "candidates": [],
+                    "candidates": [
+                        {"id": "c0", "variant": "standard", "data": {}, "score": {"overall": 0.8}},
+                    ],
                     "selected_ids": ["c0"],
                     "approved": True,
                 }
@@ -476,8 +479,40 @@ class TestApproveGateSuccess:
         await sm.save("approve-test-4", state)
 
         result = await approve_gate("approve-test-4", "gate_1_script", ["c0"])
+        assert "error" not in result
+        assert result["approved"] is True
+        assert result["idempotent"] is True
+        assert result["selected_ids"] == ["c0"]
+        assert result["selected_variants"] == ["standard"]
+        assert result["next_step"] == "compliance"
+
+    @pytest.mark.asyncio
+    async def test_approve_gate_already_approved_different_selection_returns_error(self, isolated_state_dir):
+        """已 approved 的 gate 不允许用不同 candidate 重写选择。"""
+        sm = PipelineStateManager()
+        state = {
+            "label": "approve-test-5",
+            "scenario": "s1",
+            "config": {"product_catalog": {"product_name": "Test"}, "brand_guidelines": {}},
+            "current_step": "compliance",
+            "steps": {},
+            "gates": {
+                "gate_1_script": {
+                    "status": "approved",
+                    "candidates": [
+                        {"id": "c0", "variant": "standard", "data": {}, "score": {"overall": 0.8}},
+                        {"id": "c1", "variant": "creative", "data": {}, "score": {"overall": 0.9}},
+                    ],
+                    "selected_ids": ["c0"],
+                    "approved": True,
+                }
+            },
+        }
+        await sm.save("approve-test-5", state)
+
+        result = await approve_gate("approve-test-5", "gate_1_script", ["c1"])
         assert "error" in result
-        assert "already approved" in result["error"]
+        assert "already approved with different selected_ids" in result["error"]
 
 
 # ── step_runner gate 暂停/恢复 ──

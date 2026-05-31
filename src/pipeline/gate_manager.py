@@ -473,11 +473,30 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
 
     gates_state = dict(state.get("gates", {}))
     gate_state = gates_state.get(gate_id, {})
+    candidates = gate_state.get("candidates", [])
+    candidate_map = {c["id"]: c for c in candidates}
 
-    # Verify gate is awaiting approval
+    # Treat identical retries as idempotent: network retries or double-clicks
+    # must not re-write approval timestamps or trigger another resume.
     if gate_state.get("approved", False):
+        existing_selected_ids = gate_state.get("selected_ids", [])
+        if selected_ids == existing_selected_ids:
+            selected_variants = [
+                candidate_map[cid].get("variant", "unknown")
+                for cid in existing_selected_ids
+                if cid in candidate_map
+            ]
+            return {
+                "gate_id": gate_id,
+                "label": label,
+                "approved": True,
+                "idempotent": True,
+                "selected_ids": existing_selected_ids,
+                "selected_variants": selected_variants,
+                "next_step": state.get("current_step"),
+            }
         return {
-            "error": f"Gate {gate_id} is already approved",
+            "error": f"Gate {gate_id} is already approved with different selected_ids",
             "gate_id": gate_id,
             "label": label,
             "approved": True,
@@ -490,9 +509,6 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
             "label": label,
             "status": gate_state.get("status", "unknown"),
         }
-
-    candidates = gate_state.get("candidates", [])
-    candidate_map = {c["id"]: c for c in candidates}
 
     # Validate selected IDs
     invalid_ids = [cid for cid in selected_ids if cid not in candidate_map]
@@ -619,6 +635,7 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
         "gate_id": gate_id,
         "label": label,
         "approved": True,
+        "idempotent": False,
         "selected_ids": selected_ids,
         "selected_variants": [c["variant"] for c in selected_candidates],
         "next_step": state.get("current_step"),

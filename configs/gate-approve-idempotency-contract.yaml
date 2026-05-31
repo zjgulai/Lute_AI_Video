@@ -1,0 +1,29 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-06-01"
+
+route: /scenario/{scenario}/gate/{label}/{gate_id}/approve
+implementation:
+  approve_function: src.pipeline.gate_manager.approve_gate
+  router_function: src.routers.scenario.approve_gate_decision
+
+retry_same_selection:
+  result: idempotent_success
+  approved: true
+  idempotent: true
+  preserve_state: true
+  start_background_resume: false
+
+retry_different_selection:
+  result: conflict_error
+  preserve_state: true
+  start_background_resume: false
+
+first_approval:
+  result: approval_success
+  approved: true
+  idempotent: false
+  start_background_resume: true
+
+no_token_boundary: true

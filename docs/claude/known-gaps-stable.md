@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-40 scenario state persistence schema guard：S1-S5 初始 state JSON 关键字段已由契约和本地单测锁定。
+最近一次盘点：**2026-06-01** — 已完成 P1-41 gate approve idempotency guard：重复 approve 相同选择返回幂等成功，不再重复启动 background resume。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-39 background task registry leak guard：后台 task 正常完成、失败、外部取消后的 registry 自动清理已由契约和单测锁定。
+> 上一次盘点：2026-06-01 — 已完成 P1-40 scenario state persistence schema guard：S1-S5 初始 state JSON 关键字段已由契约和本地单测锁定。
 
 ## 当前执行入口
 
@@ -269,6 +269,15 @@ source: human+ai
 - **Runbook 固化** — 新增 `docs/runbooks/scenario-state-persistence-schema.md` 并纳入 docs link-check scope，后续改 state persistence、step order、gate state 或 PG projection 先跑该守卫。
 - **验证闭环** — `pytest tests/test_scenario_state_persistence_schema_contract.py tests/test_docs_link_check_scope.py -q` 通过，结果 `12 passed`；`pytest tests/test_s1_gate_full_flow.py tests/test_gate_scenario_configs.py tests/test_phase0_regression.py -q` 通过，结果 `110 passed`；`ruff check src tests --statistics` 和 `git diff --check` 通过。
 
+## 0.53 2026-06-01 P1-41 gate approve idempotency guard
+
+- **重复提交幂等化** — `approve_gate()` 对已 approved 且 `selected_ids` 完全一致的重复请求返回 `approved=true`、`idempotent=true`，不再返回 error，也不重写 `approved_at` 或 step output。
+- **冲突提交保护** — 已 approved gate 收到不同 `selected_ids` 时仍返回 conflict/error，避免 silent overwrite 既有人工选择。
+- **背景恢复去重** — `approve_gate_decision()` 收到 `idempotent=true` 时直接返回 `resumed=false`、`resuming=false`，不创建 background task，不重复调用 `StepRunner.resume()`。
+- **契约固化** — 新增 `configs/gate-approve-idempotency-contract.yaml` 和 `tests/test_gate_approve_idempotency_contract.py`，覆盖底层 state 不变与 router 不重复 resume。
+- **Runbook 固化** — 新增 `docs/runbooks/gate-approve-idempotency.md` 并纳入 docs link-check scope，后续改 gate approve、前端重试或 background resume 先跑该守卫。
+- **验证闭环** — `pytest tests/test_gate_approve_idempotency_contract.py tests/test_s1_gate_full_flow.py tests/test_docs_link_check_scope.py -q` 通过，结果 `50 passed`；`pytest tests/test_gate23_lifecycle.py tests/test_gate_scenario_configs.py -q` 通过，结果 `65 passed`；`ruff check src tests --statistics` 和 `git diff --check` 通过。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -402,7 +411,7 @@ source: human+ai
 - [x] **P1-38：admin CSRF doc/test parity** — 已对齐 admin CSRF 测试、runbook 和前端调用约定。
 - [x] **P1-39：background task registry leak guard** — 已扩展 snapshot 测试，确认失败任务、取消任务和完成任务都不会长期残留。
 - [x] **P1-40：scenario state persistence schema guard** — 已为 S1-S5 state JSON 关键字段增加 hermetic schema 断言，并补齐 filesystem 初始字段默认值。
-- [ ] **P1-41：gate approve idempotency guard** — 无 token 测试 gate approve 重复调用不会重复恢复或破坏状态。
+- [x] **P1-41：gate approve idempotency guard** — 已用无 token 测试确认相同选择重复 approve 不重复恢复、不破坏状态，不同选择保持 conflict。
 - [ ] **P1-42：regenerate downstream invalidation guard** — 锁定 step regenerate 后下游步骤和 gate 状态的失效规则。
 - [ ] **P1-43：S4 footage asset filtering regression** — 为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补静态或单测证据。
 - [ ] **P1-44：media URL sanitizer guard** — 检查 portfolio、thumbnail、upload preview 的媒体 URL 不产生开放重定向或危险 scheme。
