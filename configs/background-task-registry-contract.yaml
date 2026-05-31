@@ -1,0 +1,34 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-05-31"
+
+registry_module: src.tasks.bg_registry
+register_function: register_background_task
+shutdown_function: cancel_background_tasks
+snapshot_function: get_background_task_snapshot
+
+auto_remove_on:
+  - completed
+  - failed
+  - cancelled
+
+snapshot_fields:
+  - label
+  - started_at
+  - done
+  - cancelled
+
+snapshot_excludes_task_objects: true
+callback_observability:
+  completed: background_task_completed
+  failed: background_task_failed
+  cancelled: background task callback cancelled
+
+shutdown_behavior:
+  cancel_pending: true
+  gather_return_exceptions: true
+  timeout_sec_default: 5.0
+  remove_done_after_shutdown: true
+
+no_token_boundary: true
