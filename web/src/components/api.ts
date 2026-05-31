@@ -631,6 +631,10 @@ export function isApiError(e: unknown): e is ApiError {
   return e instanceof ApiError;
 }
 
+async function throwApiError(res: Response): Promise<never> {
+  throw new ApiError(await parseApiError(res));
+}
+
 // ── Core pipeline APIs ──
 
 /** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
@@ -766,7 +770,7 @@ export async function startS1StepByStep(config: unknown, options?: { signal?: Ab
     body: JSON.stringify({ ...(config as Record<string, unknown>), mode: "step_by_step" }),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 step-by-step start failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
@@ -777,7 +781,7 @@ export async function runS1Step(label: string, stepName: string, options?: { sig
     body: JSON.stringify({ label }),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 step " + stepName + " failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
@@ -788,7 +792,7 @@ export async function regenerateS1Step(label: string, stepName: string, options?
     body: JSON.stringify({ label, step: stepName }),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 regenerate " + stepName + " failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
@@ -799,7 +803,7 @@ export async function resumeS1(label: string, options?: { signal?: AbortSignal }
     body: JSON.stringify({ label }),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 resume failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
@@ -808,7 +812,7 @@ export async function fetchS1State(label: string, options?: { signal?: AbortSign
     headers: getHeaders(false),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 fetch state failed (" + res.status + ")");
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
@@ -819,7 +823,7 @@ export async function updateS1State(label: string, updates: unknown, options?: {
     body: JSON.stringify(updates),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 update state failed (" + res.status + ")");
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 

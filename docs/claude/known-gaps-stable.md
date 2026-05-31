@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-28 i18n translation completeness guard：前端翻译表已有静态完整性测试，锁定 zh/en key 集合、源码静态 `t("...")` 引用和空翻译值。
+最近一次盘点：**2026-05-31** — 已完成 P1-29 apiFetch error normalization tests：S1 step-by-step 前端 API 在 401/422/429 下统一抛 `ApiError`，保留 message、fieldErrors 和 retryAfterSec。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-27 admin 页面可访问性 smoke：admin 登录、layout、sidebar、dashboard、logs、health、tenants 已有无后端依赖的语义 smoke，覆盖 label、alert、nav、landmark 和 dialog 关键结构。
+> 上一次盘点：2026-05-31 — 已完成 P1-28 i18n translation completeness guard：前端翻译表已有静态完整性测试，锁定 zh/en key 集合、源码静态 `t("...")` 引用和空翻译值。
 
 ## 当前执行入口
 
@@ -174,6 +174,13 @@ source: human+ai
 - **空值收口** — EN 侧 `upload.count`、`review.scripts`、`asset.count` 不再为空；同步补齐 `upload.cancel`、`pipeline.error`、`pipeline.paused`、`gate.awaitingApproval`。
 - **无 token 边界** — 该 guard 只读取本地源码和翻译表，不访问后端、不触发生成接口。
 
+## 0.41 2026-05-31 P1-29 apiFetch error normalization tests
+
+- **S1 step-by-step 错误标准化** — `startS1StepByStep`、`runS1Step`、`regenerateS1Step`、`resumeS1`、`fetchS1State`、`updateS1State` 的非 2xx 分支统一抛 `ApiError`，不再降级为只含 statusText 的普通 `Error`。
+- **401/422/429 契约测试** — 新增 `apiFetchErrorNormalization.test.ts`，mock `fetch` 覆盖 401 API key 错误、422 field errors、429 retry metadata，防止前端 toast / 表单错误丢结构化信息。
+- **实现边界** — 仅收口活跃 S1 手动执行 API；旧 LangGraph proxy、deprecated S2/S3 wrapper 是否迁移到 `ApiError` 留给后续单独任务，避免扩大本轮行为变更。
+- **无 token 边界** — 测试全程使用 mocked `fetch`，不访问后端、不触发 `/scenario/*` 真实生成。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -295,7 +302,7 @@ source: human+ai
 - [x] **P1-26：Runtime media image guard 扩展** — 已扩大前端静态测试，防止运行时媒体又绕过 `RuntimeMediaImage`。
 - [x] **P1-27：admin 页面可访问性 smoke** — 已为 admin 关键页面补无后端依赖的可访问性/渲染 smoke。
 - [x] **P1-28：i18n translation completeness guard** — 已补翻译 key 完整性检查，减少 EN/ZH 页面复制漂移。
-- [ ] **P1-29：apiFetch error normalization tests** — 覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。
+- [x] **P1-29：apiFetch error normalization tests** — 已覆盖 401/422/429 的前端错误呈现，避免异常路径 silent failure。
 - [ ] **P1-30：env config SSOT drift guard** — 锁定 `DEFAULT_LLM_PROVIDER`、POYO/DeepSeek 配置默认值与文档一致性。
 - [ ] **P1-31：docs link-check scope hardening** — 收紧 docs link check 的离线范围和允许失败边界，避免文档链接债继续隐藏。
 - [ ] **P1-32：Docker build no-token preflight** — 为 Docker build / compose 校验补不触发外部 provider 的验证说明或静态测试。
