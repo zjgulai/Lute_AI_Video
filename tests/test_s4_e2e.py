@@ -26,6 +26,7 @@ from src.skills.registry import SkillRegistry
 
 @pytest.fixture(autouse=True)
 def _clear_registry():
+    original_global_skills = dict(SkillRegistry._global_skills)
     SkillRegistry.clear_global()
     for module in (
         continuity_storyboard_grid_skill,
@@ -35,7 +36,7 @@ def _clear_registry():
     ):
         importlib.reload(module)
     yield
-    SkillRegistry.clear_global()
+    SkillRegistry._global_skills = original_global_skills
 
 
 FOOTAGE_FIXTURE = [

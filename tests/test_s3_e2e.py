@@ -42,6 +42,7 @@ _STANDARD_RUN_KWARGS = {
 
 @pytest.fixture(autouse=True)
 def _reload_s3_skills():
+    original_global_skills = dict(SkillRegistry._global_skills)
     SkillRegistry.clear_global()
     for module in (
         character_identity_skill,
@@ -59,7 +60,7 @@ def _reload_s3_skills():
     ):
         importlib.reload(module)
     yield
-    SkillRegistry.clear_global()
+    SkillRegistry._global_skills = original_global_skills
 
 
 def _write_fake_mp4(path: Path) -> None:

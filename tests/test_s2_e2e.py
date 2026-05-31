@@ -15,36 +15,41 @@ Coverage areas (per diagnostic P0-3 requirement):
 
 from __future__ import annotations
 
+import importlib
 import warnings
 from typing import Any
 
 import pytest
 
-import src.skills.brand_compliance  # noqa: F401
-import src.skills.elevenlabs_tts  # noqa: F401
-import src.skills.media_quality_audit  # noqa: F401
-import src.skills.remotion_assemble  # noqa: F401
-import src.skills.script_writer  # noqa: F401
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.seedance_video_generate  # noqa: F401
-import src.skills.storyboard  # noqa: F401
+import src.skills.brand_compliance as brand_compliance_skill
+import src.skills.elevenlabs_tts as elevenlabs_tts_skill
+import src.skills.media_quality_audit as media_quality_audit_skill
+import src.skills.remotion_assemble as remotion_assemble_skill
+import src.skills.script_writer as script_writer_skill
+import src.skills.seedance_prompt as seedance_prompt_skill
+import src.skills.seedance_video_generate as seedance_video_generate_skill
+import src.skills.storyboard as storyboard_skill
 from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
 from src.skills.registry import SkillRegistry
 
 
 @pytest.fixture(autouse=True)
 def _clear_registry():
+    original_global_skills = dict(SkillRegistry._global_skills)
     SkillRegistry.clear_global()
-    import src.skills.brand_compliance  # noqa: F401
-    import src.skills.elevenlabs_tts  # noqa: F401
-    import src.skills.media_quality_audit  # noqa: F401
-    import src.skills.remotion_assemble  # noqa: F401
-    import src.skills.script_writer  # noqa: F401
-    import src.skills.seedance_prompt  # noqa: F401
-    import src.skills.seedance_video_generate  # noqa: F401
-    import src.skills.storyboard  # noqa: F401
+    for module in (
+        brand_compliance_skill,
+        elevenlabs_tts_skill,
+        media_quality_audit_skill,
+        remotion_assemble_skill,
+        script_writer_skill,
+        seedance_prompt_skill,
+        seedance_video_generate_skill,
+        storyboard_skill,
+    ):
+        importlib.reload(module)
     yield
-    SkillRegistry.clear_global()
+    SkillRegistry._global_skills = original_global_skills
 
 
 BRAND_PACKAGE_FIXTURE: dict[str, Any] = {

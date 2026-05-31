@@ -24,12 +24,12 @@ from src.skills.thumbnail_prompt import ThumbnailPromptSkill
 # Ensure skills are registered
 @pytest.fixture(autouse=True, scope="session")
 def register_skills():
-    SkillRegistry.clear_global()
+    original_global_skills = dict(SkillRegistry._global_skills)
     SkillRegistry.register(ProductStrategySkill())
     SkillRegistry.register(SeedancePromptSkill())
     SkillRegistry.register(ThumbnailPromptSkill())
     yield
-    SkillRegistry.clear_global()
+    SkillRegistry._global_skills = original_global_skills
 
 
 # A realistic product fixture matching the LactFit brand
