@@ -50,15 +50,27 @@ jobs:
           cache: "npm"
           cache-dependency-path: web/package-lock.json
 
+      - name: Install frontend deps
+        working-directory: web
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: web
+        run: npx eslint src e2e playwright.ui.config.ts playwright.prod.config.ts
+
       - name: Frontend type check
         working-directory: web
-        run: |
-          npm ci
-          npx tsc --noEmit
+        run: npx tsc --noEmit -p tsconfig.json
 
       - name: Frontend test
         working-directory: web
-        run: npx vitest run
+        run: npm test -- --run
+
+      - name: Frontend build
+        working-directory: web
+        run: npm run build
+        env:
+          NEXT_PUBLIC_IS_DEMO: "true"
 
   build-images:
     name: Build + cache backend image
@@ -138,7 +150,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd ${{ secrets.DEPLOY_TARGET_DIR }} && bash deploy/lighthouse/deploy.sh"
+            "cd ${{ secrets.DEPLOY_TARGET_DIR }} && RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh"
 
       - name: Smoke test /health
         run: |

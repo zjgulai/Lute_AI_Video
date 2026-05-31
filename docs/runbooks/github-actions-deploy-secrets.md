@@ -6,7 +6,7 @@ module: ci-cd
 topic: deploy-secrets
 status: stable
 created: 2026-05-17
-updated: 2026-05-17
+updated: 2026-05-31
 owner: Sisyphus
 ---
 
@@ -45,14 +45,18 @@ owner: Sisyphus
 
 `deploy.yml` 在执行 `deploy` job 前会跑：
 
-- `preflight`: ruff check + pytest + tsc --noEmit + vitest
+- `preflight`: ruff check + pytest + frontend `eslint` + `tsc --noEmit` + Vitest + `next build`
 - `build-images`: Docker build (cache only, no push)
 
 只要 preflight + build-images 任意 fail，deploy job 不会启动且 GitHub UI 显示明确失败原因。
 
+前端 build 使用 `NEXT_PUBLIC_IS_DEMO=true`，只验证构建完整性，不读取生产 API key 或 POYO key。
+
 ## Smoke Test
 
 deploy job 末尾自动 curl `https://${DEPLOY_HOST}/health` 验证 `"status":"ok"`。失败会标记整体 workflow 失败但不会回滚（需要人工处理）。
+
+远程 `deploy/lighthouse/deploy.sh` 由 GitHub Actions 显式以 `RUN_TOKEN_SMOKE=0` 调用。真实生成 smoke 只能在充值后人工 SSH 到服务器或手动运行脚本时显式设置 `RUN_TOKEN_SMOKE=1`。
 
 ## Failure Recovery
 

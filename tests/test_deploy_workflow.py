@@ -103,7 +103,39 @@ class TestDeployWorkflow:
         steps = preflight.get("steps") or []
         step_text = " ".join((s.get("run") or "") for s in steps)
         assert "pytest" in step_text, "preflight must run pytest"
-        assert "vitest" in step_text, "preflight must run vitest"
+        assert "npm test -- --run" in step_text, "preflight must run frontend Vitest"
+
+    def test_preflight_frontend_matches_ci_quality_gate(self, workflow):
+        preflight = workflow["jobs"]["preflight"]
+        steps = preflight.get("steps") or []
+        step_text = "\n".join((s.get("run") or "") for s in steps)
+
+        required_commands = [
+            "npm ci",
+            "npx eslint src e2e playwright.ui.config.ts playwright.prod.config.ts",
+            "npx tsc --noEmit -p tsconfig.json",
+            "npm test -- --run",
+            "npm run build",
+        ]
+        for command in required_commands:
+            assert command in step_text, f"deploy preflight must run frontend quality gate: {command}"
+
+        build_steps = [s for s in steps if s.get("name") == "Frontend build"]
+        assert build_steps, "deploy preflight must build the frontend"
+        assert build_steps[0].get("env", {}).get("NEXT_PUBLIC_IS_DEMO") == "true", (
+            "frontend deploy preflight build must not depend on production token state"
+        )
+
+    def test_remote_deploy_disables_token_smoke_by_default(self, workflow):
+        deploy = workflow["jobs"]["deploy"]
+        steps = deploy.get("steps") or []
+        remote_steps = [s for s in steps if s.get("name") == "Trigger remote deploy"]
+        assert remote_steps, "deploy must trigger remote Lighthouse deploy"
+
+        run = remote_steps[0].get("run") or ""
+        assert "RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh" in run, (
+            "GitHub deploy must explicitly keep token-consuming smoke disabled by default"
+        )
 
     def test_no_inline_plaintext_secrets(self, workflow):
         text = DEPLOY_YML.read_text()
