@@ -12,12 +12,12 @@ Built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-t
 ## Prerequisites
 
 - **Python 3.12+**
-- **Node.js 22+** with pnpm (for WebUI + Remotion rendering)
+- **Node.js 22+** with npm (for WebUI + Remotion rendering)
 
 ```bash
 python3 --version  # >= 3.12
 node --version     # >= 22
-pnpm --version
+npm --version
 ```
 
 ---
@@ -37,7 +37,7 @@ pip install -r requirements.txt
 
 # Frontend
 cd web
-pnpm install
+npm ci
 ```
 
 ### 2. Environment
@@ -57,7 +57,7 @@ uvicorn src.api:app --reload --port 8001
 
 # Terminal 2: Frontend
 cd web
-pnpm dev
+npm run dev
 ```
 
 Backend: http://localhost:8001<br>
@@ -152,15 +152,15 @@ make ci             # lint + test
 
 # Frontend
 cd web
-pnpm test           # vitest
-pnpm lint           # eslint
+npm test -- --run   # vitest
+npm run lint        # eslint
 
 # E2E
 cd web
-pnpm e2e            # Playwright local
-pnpm e2e:ui         # UI-only visual/interaction regression, no poyo.ai token usage
-pnpm e2e:prod       # Playwright production, skips @token-smoke by default
-RUN_TOKEN_SMOKE=1 pnpm e2e:prod  # Explicit real task / provider-credit smoke
+npm run e2e         # Playwright local
+npm run e2e:ui      # UI-only visual/interaction regression, no poyo.ai token usage
+npm run e2e:prod    # Playwright production, skips @token-smoke by default
+RUN_TOKEN_SMOKE=1 npm run e2e:prod  # Explicit real task / provider-credit smoke
 ```
 
 ---

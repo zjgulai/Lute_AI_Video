@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-05-31** — 已完成 P1-17 Python dev dependency parity：`pyproject.toml`、`requirements.txt` 和 `uv.lock` 的 Python 测试工具依赖已建立静态一致性检查。
+最近一次盘点：**2026-05-31** — 已完成 P1-18 README package-manager drift cleanup：README 前端命令已从 `pnpm` 对齐为当前仓库实际使用的 `npm` / `package-lock.json`。
 
-> 上一次盘点：2026-05-31 — 已完成 P1-16 CI hermetic env guard，并把当前充值前迭代队列扩展为 P1-16~P1-65 的 50-loop；主 CI 和 deploy preflight 的 pytest env 已显式置空真实 provider / 发布凭证。
+> 上一次盘点：2026-05-31 — 已完成 P1-17 Python dev dependency parity：`pyproject.toml`、`requirements.txt` 和 `uv.lock` 的 Python 测试工具依赖已建立静态一致性检查。
 
 ## 当前执行入口
 
@@ -105,6 +105,12 @@ source: human+ai
 - **requirements 补齐** — `requirements.txt` development 区补 `pytest-mock>=3.12` 和 `pytest-cov>=4.1`，与 `pyproject.toml` 的 `dev` extra 对齐。
 - **一致性守卫** — 新增 `tests/test_python_dependency_parity.py`，静态检查 `pyproject.toml` dev dependencies 必须同时出现在 `requirements.txt` 和 `uv.lock`。
 - **目的边界** — 该检查只覆盖 Python developer tooling 依赖一致性，不改变 runtime dependency，不触发外部服务。
+
+## 0.30 2026-05-31 P1-18 README package-manager drift cleanup
+
+- **README 对齐 npm** — README 前端 prerequisites、install、dev、test、lint 和 E2E 命令已从 `pnpm` 改为 `npm`，与 `web/package-lock.json` 和 GitHub Actions `npm ci` 保持一致。
+- **防回归测试** — 新增 `tests/test_readme_frontend_tooling.py`，静态检查 README 不再出现 `pnpm`，且保留 `npm ci`、`npm run dev`、`npm test -- --run`、`npm run e2e:ui`、`npm run e2e:prod` 等当前命令。
+- **边界** — 本轮只修当前 README；历史 research / archived 文档中的旧命令暂不清理，避免破坏历史语境。
 
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
@@ -216,7 +222,7 @@ source: human+ai
 - [x] **P1-15：CI Python lint parity** — 已将主 CI / deploy preflight 的 ruff 口径统一到 `src tests`，避免测试代码重新积累 lint 债。
 - [x] **P1-16：CI hermetic env guard** — 已固化 CI 中外部 provider key 的空值或测试值，避免 GitHub runner 继承真实生成凭证。
 - [x] **P1-17：Python dev dependency parity** — 已建立 `pyproject.toml`、`requirements.txt`、`uv.lock` 的测试工具依赖一致性检查。
-- [ ] **P1-18：README package-manager drift cleanup** — 修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
+- [x] **P1-18：README package-manager drift cleanup** — 已修正 README 中 `pnpm` 与当前 `package-lock.json` / GitHub Actions `npm` 的漂移。
 - [ ] **P1-19：e2e-prod secret/runbook coverage** — 补 `PROD_DEMO_API_KEY`、`run_token_smoke` 和 `@token-smoke` 的 GitHub Actions runbook。
 - [ ] **P1-20：production Playwright no-mutation scan** — 增强静态扫描，默认 prod E2E 不允许新增未标记的 mutating endpoint 请求。
 - [ ] **P1-21：deploy rsync exclude parity** — 对齐 GitHub deploy rsync excludes 与 Lighthouse `rsync-excludes.txt`，减少部署上下文漂移。
