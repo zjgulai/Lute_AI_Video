@@ -1,0 +1,41 @@
+# Current FastAPI route authentication contract.
+# Any new public route must be added here with an explicit reason and reviewed.
+
+public_routes:
+  - method: GET
+    path: /health
+    reason: Load balancer and deploy smoke health check.
+  - method: GET
+    path: /metrics
+    reason: Prometheus scrape endpoint; production exposure is controlled at nginx/network layer.
+  - method: GET
+    path: /api/media/{media_path:path}
+    reason: Runtime media delivery; path validation and optional signed tokens are handled in media.py.
+  - method: POST
+    path: /api/admin/auth/login
+    reason: Admin credential login entrypoint; uses rate limiting and password verification instead of session auth.
+
+api_key_router_mounts:
+  - pipeline.router
+  - scenario.router
+  - distribution.router
+  - metrics.router
+  - assets.router
+  - portfolio.router
+  - api_assets.router
+  - telemetry_endpoint.router
+
+public_router_mounts:
+  - health.router
+  - prometheus.router
+
+mixed_router_mounts:
+  - media.router
+
+admin_session_router_mounts:
+  - admin_router
+
+admin_csrf_exempt_routes:
+  - method: POST
+    path: /api/admin/auth/login
+    reason: Login has no session yet; it creates admin_session and admin_csrf cookies.

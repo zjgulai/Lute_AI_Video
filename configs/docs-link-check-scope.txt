@@ -8,6 +8,7 @@ docs/claude/project-standard-stable.md
 docs/claude/updates/project-updates-202605-stable.md
 docs/reference/api-endpoints.md
 docs/runbooks/README.md
+docs/runbooks/backend-route-auth-contract.md
 docs/runbooks/brand-assets-refresh.md
 docs/runbooks/c2pa-cert-application.md
 docs/runbooks/db-pool-exhausted.md
