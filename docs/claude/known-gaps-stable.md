@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-45 thumbnail coverage dry-run：作品集缩略图覆盖率已有只读统计脚本和契约，不会生成媒体。
+最近一次盘点：**2026-06-01** — 已完成 P1-46 OpenAPI generated types drift guard：前端生成类型已改为本地 schema 漂移检查，不访问生产或 localhost schema。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-44 media URL sanitizer guard：前后端媒体 URL builder / signer 已拒绝危险 scheme、绝对 URL 和编码 traversal。
+> 上一次盘点：2026-06-01 — 已完成 P1-45 thumbnail coverage dry-run：作品集缩略图覆盖率已有只读统计脚本和契约，不会生成媒体。
 
 ## 当前执行入口
 
@@ -311,6 +311,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/thumbnail-coverage-dry-run-contract.yaml`，锁定 dry-run 检查范围、最小视频体积、禁止生成和阈值检查命令。
 - **无 token 边界** — 本轮只读本地 `output/` 或 pytest 临时目录，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.58 2026-06-01 P1-46 OpenAPI generated types drift guard
+
+- **本地 schema 生成** — 新增 `scripts/check_openapi_types_drift.py`，直接导出本地 `src.api.app.openapi()`，不再要求先启动 `localhost:8001`。
+- **漂移检查默认只读** — `.venv/bin/python scripts/check_openapi_types_drift.py` 只在临时目录生成类型并比较 `web/src/types/api.generated.ts`，只有 `--write` 才改写生成文件。
+- **生成器版本锁定** — `web/package.json` 新增 `check:api-types`，`typegen:api` 改为本地 guard，`openapi-typescript` 固定为 `7.13.0` 并进入 `package-lock.json`。
+- **契约固化** — 新增 `configs/openapi-generated-types-drift-contract.yaml` 和 `docs/runbooks/openapi-generated-types-drift.md`，明确 no remote schema、no localhost schema、no provider calls。
+- **无 token 边界** — 本轮只导入本地 FastAPI app、生成 OpenAPI schema 和 TypeScript 类型，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -449,7 +457,7 @@ source: human+ai
 - [x] **P1-43：S4 footage asset filtering regression** — 已为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补前后端无 token 回归证据。
 - [x] **P1-44：media URL sanitizer guard** — 已锁定 portfolio、thumbnail、upload preview 的媒体 URL 不接受绝对 URL、危险 scheme 或 traversal 输入。
 - [x] **P1-45：thumbnail coverage dry-run** — 已新增只读覆盖率脚本和契约，检查作品集缩略图覆盖率时不重新生成媒体。
-- [ ] **P1-46：OpenAPI generated types drift guard** — 建立前端 `api.generated.ts` 与后端 OpenAPI 的漂移检查策略，不访问生产。
+- [x] **P1-46：OpenAPI generated types drift guard** — 已建立本地 schema → `api.generated.ts` 的漂移检查和显式写入流程，不访问生产或 localhost schema。
 - [ ] **P1-47：frontend store persistence migration guard** — 覆盖 Zustand/localStorage 版本迁移和坏数据恢复路径。
 - [ ] **P1-48：API key storage fallback guard** — 测试 localStorage/cookie fallback、masking 和清除逻辑，不暴露真实 key。
 - [ ] **P1-49：Settings API key accessibility guard** — 为 Settings key 输入、保存、错误提示补可访问性和状态回归。
