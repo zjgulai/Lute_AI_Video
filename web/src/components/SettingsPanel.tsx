@@ -7,6 +7,7 @@ import {
   getApiBase,
   getApiKey,
   isDemoMode,
+  maskApiKeyForDisplay,
   setApiBase,
   setApiKey,
   setDemoMode,
@@ -67,13 +68,6 @@ const PROVIDERS = [
   { label: "Video", value: "poyo.ai Seedance", icon: VideoCamera },
   { label: "Voice", value: "SiliconFlow CosyVoice", icon: ShieldCheck },
 ] as const;
-
-function maskSecret(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "Not set";
-  if (trimmed.length <= 8) return "Set";
-  return `${trimmed.slice(0, 4)}····${trimmed.slice(-3)}`;
-}
 
 function safeHostname(value: string): string {
   const trimmed = value.trim();
@@ -309,7 +303,7 @@ export default function SettingsPanel({ onClose }: Props) {
             </div>
             <div className="rounded-xl border border-[var(--divider-light)] bg-white/80 px-3 py-2">
               <p className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">{t("settings.snapshot.apiKey", "API Key")}</p>
-              <p className="mt-1 truncate text-[12px] font-medium text-[var(--text-h1)]">{maskSecret(key)}</p>
+              <p className="mt-1 truncate text-[12px] font-medium text-[var(--text-h1)]">{maskApiKeyForDisplay(key)}</p>
             </div>
             <div className="rounded-xl border border-[var(--divider-light)] bg-white/80 px-3 py-2">
               <p className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">{t("settings.snapshot.storage", "Storage")}</p>

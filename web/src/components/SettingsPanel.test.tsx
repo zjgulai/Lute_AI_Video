@@ -9,6 +9,7 @@ vi.mock("./api", () => ({
   getApiBase: () => "http://localhost:8001",
   getApiKey: () => "test-key",
   isDemoMode: () => false,
+  maskApiKeyForDisplay: (value: string) => (value ? "Set" : "Not set"),
   setApiBase: vi.fn(),
   setApiKey: vi.fn(),
   setDemoMode: vi.fn(),

@@ -120,6 +120,8 @@ function storageSet(key: string, value: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(key, value);
+    removeCookie(key);
+    return;
   } catch { /* fall through to cookie */ }
   setCookie(key, value);
 }
@@ -176,8 +178,20 @@ export function hasApiKey(): boolean {
 
 export function setApiKey(key: string) {
   if (typeof window !== "undefined") {
-    storageSet(STORAGE_KEYS.apiKey, key);
+    const trimmed = key.trim();
+    if (!trimmed) {
+      storageRemove(STORAGE_KEYS.apiKey);
+      return;
+    }
+    storageSet(STORAGE_KEYS.apiKey, trimmed);
   }
+}
+
+export function maskApiKeyForDisplay(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "Not set";
+  if (trimmed.length <= 8) return "Set";
+  return `${trimmed.slice(0, 4)}····${trimmed.slice(-3)}`;
 }
 
 /** Demo mode detection.

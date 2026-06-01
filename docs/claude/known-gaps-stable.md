@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-47 frontend store persistence migration guard：Zustand 持久化已有版本迁移、坏 JSON 清理和非法 payload 恢复。
+最近一次盘点：**2026-06-01** — 已完成 P1-48 API key storage fallback guard：浏览器 API key 存储已锁定 localStorage primary、cookie fallback、清除和 mask 契约。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-46 OpenAPI generated types drift guard：前端生成类型已改为本地 schema 漂移检查，不访问生产或 localhost schema。
+> 上一次盘点：2026-06-01 — 已完成 P1-47 frontend store persistence migration guard：Zustand 持久化已有版本迁移、坏 JSON 清理和非法 payload 恢复。
 
 ## 当前执行入口
 
@@ -327,6 +327,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/frontend-store-persistence-migration-contract.yaml` 和 `docs/runbooks/frontend-store-persistence-migration.md`，后续改 store 持久化字段必须同步 migration 和 focused test。
 - **无 token 边界** — 本轮只运行 Vitest / TypeScript / 静态文档检查，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.60 2026-06-01 P1-48 API key storage fallback guard
+
+- **存储边界收口** — `setApiKey()` 现在 localStorage 可用时只写 localStorage，并清理旧 cookie fallback；只有 localStorage 不可用时才写 cookie fallback。
+- **清除逻辑修复** — `setApiKey("")` 或空白字符串会清除 localStorage 与 cookie fallback，不再把空白 key 持久化。
+- **展示脱敏集中化** — 新增 `maskApiKeyForDisplay()`，Settings snapshot 复用该 helper，短 key 只显示 `Set`，长 key 只显示极短 prefix/suffix。
+- **契约固化** — 新增 `configs/api-key-storage-fallback-contract.yaml`、`docs/runbooks/api-key-storage-fallback.md` 和 `web/src/components/apiKeyStorage.test.ts`，后续改 API key 存储、清除或展示规则先跑 focused test。
+- **无 token 边界** — 本轮只操作 jsdom localStorage/cookie 和静态文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -467,7 +475,7 @@ source: human+ai
 - [x] **P1-45：thumbnail coverage dry-run** — 已新增只读覆盖率脚本和契约，检查作品集缩略图覆盖率时不重新生成媒体。
 - [x] **P1-46：OpenAPI generated types drift guard** — 已建立本地 schema → `api.generated.ts` 的漂移检查和显式写入流程，不访问生产或 localhost schema。
 - [x] **P1-47：frontend store persistence migration guard** — 已覆盖 Zustand/localStorage 版本迁移、坏 JSON 清理、非法 payload 恢复和运行时状态隔离。
-- [ ] **P1-48：API key storage fallback guard** — 测试 localStorage/cookie fallback、masking 和清除逻辑，不暴露真实 key。
+- [x] **P1-48：API key storage fallback guard** — 已覆盖 localStorage primary、cookie fallback、masking 和清除逻辑，不暴露完整 key。
 - [ ] **P1-49：Settings API key accessibility guard** — 为 Settings key 输入、保存、错误提示补可访问性和状态回归。
 - [ ] **P1-50：admin logs keyboard navigation guard** — 锁定 Admin Logs 行键盘打开、关闭和焦点恢复行为。
 - [ ] **P1-51：AssetPicker request boundary guard** — 确认素材选择器只调用只读资产接口，不触发上传或生成。
