@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-44 media URL sanitizer guard：前后端媒体 URL builder / signer 已拒绝危险 scheme、绝对 URL 和编码 traversal。
+最近一次盘点：**2026-06-01** — 已完成 P1-45 thumbnail coverage dry-run：作品集缩略图覆盖率已有只读统计脚本和契约，不会生成媒体。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-43 S4 footage asset filtering regression：S4 Live Shoot 成品与中间素材筛选分层已由前后端无 token 测试锁定。
+> 上一次盘点：2026-06-01 — 已完成 P1-44 media URL sanitizer guard：前后端媒体 URL builder / signer 已拒绝危险 scheme、绝对 URL 和编码 traversal。
 
 ## 当前执行入口
 
@@ -303,6 +303,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/media-url-sanitizer-contract.yaml` 和 `docs/runbooks/media-url-sanitizer.md`，后续改 portfolio thumbnail、upload preview、media signer 或 runtime media component 先跑该守卫。
 - **无 token 边界** — 本轮只用字符串单测、mocked fetch 和 pytest 临时目录文件，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.57 2026-06-01 P1-45 thumbnail coverage dry-run
+
+- **只读覆盖率脚本** — 新增 `scripts/portfolio_thumbnail_coverage.py`，按 portfolio 分类扫描 `output/` 下有效视频和既有 `thumbnails/portfolio_posters/*.jpg`，输出 text / JSON 覆盖率。
+- **无生成防护** — 新增 `tests/test_thumbnail_coverage_dry_run.py`，确认 dry-run 不调用 `ensure_poster()`、不创建 poster 目录、不触发 `ffmpeg` 或 provider。
+- **文档漂移修正** — `docs/runbooks/thumbnail-missing.md` 明确 `/api/portfolio/` request path 当前是 `generate_missing=False` 只读 listing，不再描述为会自动批量补图；历史缺图修复必须显式运行 `scripts/generate_portfolio_thumbnails.py`。
+- **契约固化** — 新增 `configs/thumbnail-coverage-dry-run-contract.yaml`，锁定 dry-run 检查范围、最小视频体积、禁止生成和阈值检查命令。
+- **无 token 边界** — 本轮只读本地 `output/` 或 pytest 临时目录，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -440,7 +448,7 @@ source: human+ai
 - [x] **P1-42：regenerate downstream invalidation guard** — 已锁定 step regenerate 后下游步骤和当前/下游 gate 状态的失效规则。
 - [x] **P1-43：S4 footage asset filtering regression** — 已为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补前后端无 token 回归证据。
 - [x] **P1-44：media URL sanitizer guard** — 已锁定 portfolio、thumbnail、upload preview 的媒体 URL 不接受绝对 URL、危险 scheme 或 traversal 输入。
-- [ ] **P1-45：thumbnail coverage dry-run** — 无 token 检查作品集缩略图覆盖率统计逻辑，不重新生成媒体。
+- [x] **P1-45：thumbnail coverage dry-run** — 已新增只读覆盖率脚本和契约，检查作品集缩略图覆盖率时不重新生成媒体。
 - [ ] **P1-46：OpenAPI generated types drift guard** — 建立前端 `api.generated.ts` 与后端 OpenAPI 的漂移检查策略，不访问生产。
 - [ ] **P1-47：frontend store persistence migration guard** — 覆盖 Zustand/localStorage 版本迁移和坏数据恢复路径。
 - [ ] **P1-48：API key storage fallback guard** — 测试 localStorage/cookie fallback、masking 和清除逻辑，不暴露真实 key。

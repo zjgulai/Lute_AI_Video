@@ -5,7 +5,7 @@ doc_type: runbook
 module: portfolio
 status: stable
 created: 2026-05-17
-updated: 2026-05-17
+updated: 2026-06-01
 owner: Sisyphus
 source: ai
 ---
@@ -29,20 +29,35 @@ source: ai
 
 ## 相关代码
 
+- [scripts/portfolio_thumbnail_coverage.py](../../scripts/portfolio_thumbnail_coverage.py) — 只读覆盖率 dry-run，不会生成 poster
 - [src/tools/poster_extractor.py](file:///Users/pray/project/hermes_evo/AI_vedio/src/tools/poster_extractor.py) — `ensure_poster()` SSOT
 - [src/routers/portfolio.py](file:///Users/pray/project/hermes_evo/AI_vedio/src/routers/portfolio.py) — `_thumbnail_path_for` backstop
 - [src/skills/seedance_video_generate.py](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/seedance_video_generate.py) — Seedance 生产入口
 - [src/skills/remotion_assemble.py](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/remotion_assemble.py) — Remotion 生产入口
 - [src/services/fast_mode.py](file:///Users/pray/project/hermes_evo/AI_vedio/src/services/fast_mode.py) — Fast Mode 生产入口
+- [configs/thumbnail-coverage-dry-run-contract.yaml](../../configs/thumbnail-coverage-dry-run-contract.yaml) — dry-run 覆盖率契约
 - [ADR-005](../architecture/adr/005-poster-extraction-everywhere.md) — 设计决策
 
 ## 立即诊断
+
+本地或生产修复前先跑 DRY RUN。该命令只读 `output/` 和已有 poster 文件，不会生成 poster、不调用 `ffmpeg`、不触发 provider：
+
+```bash
+python scripts/portfolio_thumbnail_coverage.py --output-dir output
+python scripts/portfolio_thumbnail_coverage.py --output-dir output --format json
+```
+
+生产容器内同样先 dry-run：
+
+```bash
+sudo docker exec ai_video_backend python scripts/portfolio_thumbnail_coverage.py --output-dir /app/output
+```
 
 ```bash
 # 1. 远程登陆生产
 ssh -i ai_video.pem ubuntu@101.34.52.232
 
-# 2. 抓覆盖率
+# 2. 通过 API 抓只读覆盖率（portfolio listing 只读取已有 poster，generate_missing=False）
 sudo docker exec ai_video_backend python -c "
 import json, urllib.request
 req = urllib.request.Request('http://localhost:8001/api/portfolio/?kind=final_work&limit=500',
@@ -144,8 +159,7 @@ except Exception:
     pass
 ```
 
-`portfolio.py::_thumbnail_path_for` 的 backstop 会兜底，但**生产路径自带 poster
-仍然是首选**，避免 listing 接口偶发延迟（ffmpeg 抽帧 200-500ms）。
+`portfolio.py::_thumbnail_path_for(..., generate_missing=True)` 仍可被后台 hook 或脚本显式使用，但 request handler 当前保持 `generate_missing=False`，所以 listing 本身不生成 poster。
 
 ### 场景 E：批量历史视频缺图
 
@@ -153,30 +167,29 @@ except Exception:
 
 **根因**：v0.2.6 之前生产环境的视频，从未触发过任何 poster 入口。
 
-**修复（推荐）**：让 router backstop 自然消化：
+**修复（推荐）**：先 dry-run 确认缺口，再显式运行批量生成脚本：
 
 ```bash
-# 触发一次全量扫描，backstop 会把缺图的都补上
-sudo docker exec ai_video_backend python -c "
-from src.routers.portfolio import _scan_portfolio
-files = _scan_portfolio()
-print(f'scanned {len(files)} files')
-print('posters now:')
-import subprocess
-subprocess.run(['ls', '/app/output/thumbnails/portfolio_posters/'])
-" | tail -10
+sudo docker exec ai_video_backend python scripts/portfolio_thumbnail_coverage.py --output-dir /app/output
+sudo docker exec ai_video_backend python scripts/generate_portfolio_thumbnails.py
+sudo docker exec ai_video_backend python scripts/portfolio_thumbnail_coverage.py --output-dir /app/output
 ```
 
-**修复（粗暴）**：跑遗留的批量脚本：
+不要依赖 `/api/portfolio/` listing 自动补图。当前 request path 是只读的 `generate_missing=False`，这是为了避免列表接口在用户请求中触发 `ffmpeg`。
+
+**修复（局部）**：只针对单个视频测试 `ensure_poster()`：
 
 ```bash
-sudo docker exec ai_video_backend python scripts/generate_portfolio_thumbnails.py
+sudo docker exec ai_video_backend python -c "
+from src.tools.poster_extractor import ensure_poster
+ensure_poster('/app/output/renders/example.mp4')
+"
 ```
 
 ## 永久 fix（已落地）
 
-- ADR-005（2026-05-17）将 poster 生成从「单一 LangGraph 钩子」改为「4 入口 + 1
-  router backstop」。详见 [ADR-005](../architecture/adr/005-poster-extraction-everywhere.md)。
+- ADR-005（2026-05-17）将 poster 生成从「单一 LangGraph 钩子」改为「4 入口 + opt-in backstop」。详见 [ADR-005](../architecture/adr/005-poster-extraction-everywhere.md)。
+- 覆盖率统计走 `scripts/portfolio_thumbnail_coverage.py`；它是 DRY RUN，只读扫描，不生成文件。
 - 任何新增的 video-producing skill，**必须**在写完 `.mp4` 后调用
   `ensure_poster()`。这条规则会在 PR review 检查表里。
 
