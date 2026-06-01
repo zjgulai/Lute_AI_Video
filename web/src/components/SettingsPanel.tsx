@@ -195,6 +195,11 @@ export default function SettingsPanel({ onClose }: Props) {
   );
   const cancelLabel = t("settings.footer.cancel", t("common.cancel", "Cancel"));
   const saveLabel = t("settings.footer.save", t("common.save", "Save"));
+  const dialogDescriptionId = "settings-dialog-description";
+  const urlInputId = "settings-api-base-url";
+  const urlHintId = "settings-api-base-url-hint";
+  const apiKeyInputId = "settings-api-key";
+  const apiKeyHintId = "settings-api-key-hint";
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -269,6 +274,10 @@ export default function SettingsPanel({ onClose }: Props) {
   return (
     <div className="apple-modal-overlay" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-dialog-title"
+        aria-describedby={dialogDescriptionId}
         className="apple-card w-full max-w-2xl mx-4 flex max-h-[90vh] flex-col overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
@@ -280,16 +289,18 @@ export default function SettingsPanel({ onClose }: Props) {
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-[18px] font-semibold text-[var(--text-h1)]">{title}</h2>
+                  <h2 id="settings-dialog-title" className="text-[18px] font-semibold text-[var(--text-h1)]">{title}</h2>
                   <span className="rounded-full border border-[rgba(215,92,112,0.14)] bg-[rgba(215,92,112,0.06)] px-2 py-0.5 text-[11px] font-medium text-[var(--fortune-red)]">
                     {demoBadge}
                   </span>
                 </div>
-                <p className="mt-1 max-w-[38rem] text-[13px] leading-5 text-[var(--text-body)]">{summaryDescription}</p>
+                <p id={dialogDescriptionId} className="mt-1 max-w-[38rem] text-[13px] leading-5 text-[var(--text-body)]">{summaryDescription}</p>
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
+              aria-label={t("common.close", "Close")}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-panel)] hover:text-[var(--text-h1)]"
             >
               <X size={16} weight="bold" />
@@ -347,40 +358,45 @@ export default function SettingsPanel({ onClose }: Props) {
                 >
                   <div className="space-y-4">
                     <div>
-                      <label className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-body)]">
+                      <label htmlFor={urlInputId} className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-body)]">
                         <HardDrives size={12} weight="fill" />
                         {accessUrlLabel}
                       </label>
                       <input
+                        id={urlInputId}
                         type="text"
                         value={baseUrl}
                         onChange={(e) => setBaseUrl(e.target.value)}
                         placeholder="https://video.lute-tlz-dddd.top"
+                        aria-describedby={urlHintId}
                         className="apple-input text-sm"
                       />
-                      <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{accessUrlHint}</p>
+                      <p id={urlHintId} className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{accessUrlHint}</p>
                     </div>
 
                     <div>
-                      <label className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-body)]">
+                      <label htmlFor={apiKeyInputId} className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-body)]">
                         <Key size={12} weight="fill" />
                         {accessKeyLabel}
                       </label>
                       <input
+                        id={apiKeyInputId}
                         type="password"
                         value={key}
                         onChange={(e) => setKey(e.target.value)}
                         placeholder="ai_video_demo_2026"
                         className="apple-input text-sm"
-                        autoComplete="off"
+                        autoComplete="current-password"
+                        aria-describedby={apiKeyHintId}
                       />
-                      <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{accessKeyHint}</p>
+                      <p id={apiKeyHintId} className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{accessKeyHint}</p>
                     </div>
                   </div>
                 </PanelCard>
 
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
                   <button
+                    type="button"
                     onClick={handleTest}
                     disabled={testing || !baseUrl.trim()}
                     className="apple-btn apple-btn-primary inline-flex items-center justify-center gap-2 text-xs py-2.5 disabled:cursor-not-allowed disabled:opacity-50"
@@ -398,6 +414,7 @@ export default function SettingsPanel({ onClose }: Props) {
                     )}
                   </button>
                   <button
+                    type="button"
                     onClick={handleReset}
                     className="apple-btn inline-flex items-center justify-center gap-2 border border-[rgba(208,78,90,0.25)] text-xs py-2.5 text-[var(--crimson-mist)] hover:bg-[rgba(208,78,90,0.06)]"
                   >
@@ -408,6 +425,8 @@ export default function SettingsPanel({ onClose }: Props) {
 
                 {testResult && (
                   <div
+                    role={testResult.ok ? "status" : "alert"}
+                    aria-live={testResult.ok ? "polite" : "assertive"}
                     className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
                       testResult.ok
                         ? "border-[rgba(120,175,140,0.18)] bg-[rgba(120,175,140,0.10)] text-[var(--jade-accent)]"
@@ -535,6 +554,7 @@ export default function SettingsPanel({ onClose }: Props) {
               </PanelCard>
 
               <button
+                type="button"
                 onClick={handleReset}
                 className="apple-btn inline-flex items-center justify-center gap-2 border border-[rgba(208,78,90,0.35)] px-4 py-3 text-xs text-[var(--crimson-mist)] hover:bg-[rgba(208,78,90,0.08)]"
               >
@@ -548,12 +568,13 @@ export default function SettingsPanel({ onClose }: Props) {
         <div className="border-t border-[var(--divider-light)] bg-[var(--bg-card)] px-5 py-4">
           <div className="flex items-center justify-end gap-2">
             <button
+              type="button"
               onClick={onClose}
               className="apple-btn border border-[var(--border-default)] bg-[var(--bg-panel)] px-3 py-2 text-xs text-[var(--text-body)]"
             >
               {cancelLabel}
             </button>
-            <button onClick={handleSave} className="apple-btn apple-btn-primary px-4 py-2 text-xs">
+            <button type="button" onClick={handleSave} className="apple-btn apple-btn-primary px-4 py-2 text-xs">
               {saveLabel}
             </button>
           </div>
