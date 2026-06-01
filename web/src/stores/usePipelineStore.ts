@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ReviewState } from "@/components/types";
+import {
+  PIPELINE_STORE_PERSIST_VERSION,
+  createSafeJSONStorage,
+  migratePipelineStorePersistence,
+  partializePipelineStorePersistence,
+} from "./persistence";
+import type { PersistedPipelineState } from "./persistence";
 
 export interface ActivePipeline {
   label: string;
@@ -51,7 +58,7 @@ interface PipelineState {
 }
 
 export const usePipelineStore = create<PipelineState>()(
-  persist(
+  persist<PipelineState, [], [], PersistedPipelineState>(
     (set) => ({
       threadId: null,
       reviewState: null,
@@ -123,10 +130,10 @@ export const usePipelineStore = create<PipelineState>()(
     }),
     {
       name: "ai-video-pipeline-store",
-      partialize: (state) => ({
-        activePipeline: state.activePipeline,
-        dismissedPipelineLabels: state.dismissedPipelineLabels,
-      }),
+      storage: createSafeJSONStorage<PersistedPipelineState>(() => localStorage),
+      version: PIPELINE_STORE_PERSIST_VERSION,
+      migrate: migratePipelineStorePersistence,
+      partialize: partializePipelineStorePersistence,
     },
   ),
 );

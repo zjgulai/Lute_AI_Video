@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-46 OpenAPI generated types drift guard：前端生成类型已改为本地 schema 漂移检查，不访问生产或 localhost schema。
+最近一次盘点：**2026-06-01** — 已完成 P1-47 frontend store persistence migration guard：Zustand 持久化已有版本迁移、坏 JSON 清理和非法 payload 恢复。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-45 thumbnail coverage dry-run：作品集缩略图覆盖率已有只读统计脚本和契约，不会生成媒体。
+> 上一次盘点：2026-06-01 — 已完成 P1-46 OpenAPI generated types drift guard：前端生成类型已改为本地 schema 漂移检查，不访问生产或 localhost schema。
 
 ## 当前执行入口
 
@@ -319,6 +319,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/openapi-generated-types-drift-contract.yaml` 和 `docs/runbooks/openapi-generated-types-drift.md`，明确 no remote schema、no localhost schema、no provider calls。
 - **无 token 边界** — 本轮只导入本地 FastAPI app、生成 OpenAPI schema 和 TypeScript 类型，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.59 2026-06-01 P1-47 frontend store persistence migration guard
+
+- **持久化契约集中化** — 新增 `web/src/stores/persistence.ts`，统一 `APP_STORE_PERSIST_VERSION`、`PIPELINE_STORE_PERSIST_VERSION`、partialize、migrate 和 safe storage。
+- **坏数据恢复** — `createSafeJSONStorage()` 遇到坏 JSON 会清理对应 localStorage key 并返回空状态；非法 `mode`、`pipelineMode`、`videoDuration`、`activePipeline` 会回到安全默认值。
+- **运行时状态隔离** — `ai-video-app-store` 只保留用户偏好，`ai-video-pipeline-store` 只保留 active pipeline 和 dismissed labels，避免 `loading`、`workflowState`、`reviewState` 等运行时状态跨会话污染。
+- **契约固化** — 新增 `configs/frontend-store-persistence-migration-contract.yaml` 和 `docs/runbooks/frontend-store-persistence-migration.md`，后续改 store 持久化字段必须同步 migration 和 focused test。
+- **无 token 边界** — 本轮只运行 Vitest / TypeScript / 静态文档检查，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -458,7 +466,7 @@ source: human+ai
 - [x] **P1-44：media URL sanitizer guard** — 已锁定 portfolio、thumbnail、upload preview 的媒体 URL 不接受绝对 URL、危险 scheme 或 traversal 输入。
 - [x] **P1-45：thumbnail coverage dry-run** — 已新增只读覆盖率脚本和契约，检查作品集缩略图覆盖率时不重新生成媒体。
 - [x] **P1-46：OpenAPI generated types drift guard** — 已建立本地 schema → `api.generated.ts` 的漂移检查和显式写入流程，不访问生产或 localhost schema。
-- [ ] **P1-47：frontend store persistence migration guard** — 覆盖 Zustand/localStorage 版本迁移和坏数据恢复路径。
+- [x] **P1-47：frontend store persistence migration guard** — 已覆盖 Zustand/localStorage 版本迁移、坏 JSON 清理、非法 payload 恢复和运行时状态隔离。
 - [ ] **P1-48：API key storage fallback guard** — 测试 localStorage/cookie fallback、masking 和清除逻辑，不暴露真实 key。
 - [ ] **P1-49：Settings API key accessibility guard** — 为 Settings key 输入、保存、错误提示补可访问性和状态回归。
 - [ ] **P1-50：admin logs keyboard navigation guard** — 锁定 Admin Logs 行键盘打开、关闭和焦点恢复行为。
