@@ -27,6 +27,10 @@ const TIME_RANGES = [
   { label: "7d", value: "7d" },
 ];
 
+function getLogRowLabel(log: LogEntry): string {
+  return `Open log detail for ${log.error_code || log.id}`;
+}
+
 export default function AdminLogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -203,6 +207,8 @@ export default function AdminLogsPage() {
                   {logs.map((log) => (
                     <tr
                       key={log.id}
+                      role="button"
+                      aria-label={getLogRowLabel(log)}
                       onClick={() => void openDetail(log.id)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
@@ -267,6 +273,7 @@ export default function AdminLogsPage() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="admin-log-detail-title"
+          aria-describedby="admin-log-detail-description"
           className="apple-modal-overlay"
           onClick={closeDetail}
         >
@@ -279,6 +286,7 @@ export default function AdminLogsPage() {
                 Error Detail
               </h2>
               <button
+                type="button"
                 ref={detailCloseRef}
                 onClick={closeDetail}
                 className="cursor-pointer"
@@ -316,6 +324,9 @@ export default function AdminLogsPage() {
                   </pre>
                 </div>
               )}
+              <p id="admin-log-detail-description" className="sr-only">
+                Log detail for {detail.error_code}: {detail.message}
+              </p>
             </div>
           </div>
         </div>

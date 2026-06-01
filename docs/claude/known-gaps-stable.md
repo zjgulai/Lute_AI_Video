@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-49 Settings API key accessibility guard：Settings key 输入、连接测试状态和保存动作已有可访问性回归守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-50 admin logs keyboard navigation guard：Admin Logs 行键盘打开、详情弹层关闭和焦点恢复已有回归守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-48 API key storage fallback guard：浏览器 API key 存储已锁定 localStorage primary、cookie fallback、清除和 mask 契约。
+> 上一次盘点：2026-06-01 — 已完成 P1-49 Settings API key accessibility guard：Settings key 输入、连接测试状态和保存动作已有可访问性回归守卫。
 
 ## 当前执行入口
 
@@ -343,6 +343,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/settings-api-key-accessibility-contract.yaml`、`docs/runbooks/settings-api-key-accessibility.md`，并扩展 `SettingsPanel.test.tsx`，后续改 Settings key 输入区先跑 focused test。
 - **无 token 边界** — 本轮只运行 jsdom UI 测试、TypeScript、lint 和静态文档检查，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.62 2026-06-01 P1-50 admin logs keyboard navigation guard
+
+- **日志行键盘入口固化** — `/admin/logs` 日志行保留 `tabIndex={0}`，新增 `role="button"` 和 `aria-label`，并用测试锁定 `Enter` / `Space` 打开详情。
+- **详情弹层焦点闭环** — 详情弹层保留 `role="dialog"` / `aria-modal` / `aria-labelledby` / `aria-describedby`；打开后聚焦关闭按钮，`Escape` 关闭后焦点恢复到触发行。
+- **关闭按钮语义补齐** — 详情关闭按钮新增显式 `type="button"`，避免未来表格筛选区或弹层重构时变成隐式 submit。
+- **契约固化** — 新增 `configs/admin-logs-keyboard-navigation-contract.yaml`、`docs/runbooks/admin-logs-keyboard-navigation.md`，并扩展 `web/src/app/admin/logs/page.test.tsx`。
+- **无 token 边界** — 本轮只使用 mocked `adminFetchJson` 和 jsdom UI 测试，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -485,7 +493,7 @@ source: human+ai
 - [x] **P1-47：frontend store persistence migration guard** — 已覆盖 Zustand/localStorage 版本迁移、坏 JSON 清理、非法 payload 恢复和运行时状态隔离。
 - [x] **P1-48：API key storage fallback guard** — 已覆盖 localStorage primary、cookie fallback、masking 和清除逻辑，不暴露完整 key。
 - [x] **P1-49：Settings API key accessibility guard** — 已为 Settings key 输入、保存、连接测试成功/失败状态补可访问性和回归测试。
-- [ ] **P1-50：admin logs keyboard navigation guard** — 锁定 Admin Logs 行键盘打开、关闭和焦点恢复行为。
+- [x] **P1-50：admin logs keyboard navigation guard** — 已锁定 Admin Logs 行键盘打开、详情弹层关闭和焦点恢复行为。
 - [ ] **P1-51：AssetPicker request boundary guard** — 确认素材选择器只调用只读资产接口，不触发上传或生成。
 - [ ] **P1-52：env example no-secret drift guard** — 检查 `.env.example`、deploy env 文档和配置默认值不包含真实 secret。
 - [ ] **P1-53：Lighthouse nginx timeout parity** — 静态检查 nginx 长任务 timeout 与部署文档一致。
