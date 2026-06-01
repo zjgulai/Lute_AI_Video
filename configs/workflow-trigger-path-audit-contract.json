@@ -1,0 +1,51 @@
+{
+  "status": "stable",
+  "no_token_boundary": true,
+  "path_filtered_workflows": [
+    {
+      "path": ".github/workflows/e2e-ui.yml",
+      "events": ["push", "pull_request"],
+      "required_paths": [
+        "web/src/**",
+        "web/e2e/ui-only/**",
+        "web/playwright.ui.config.ts",
+        "web/package.json",
+        "web/package-lock.json",
+        ".github/workflows/e2e-ui.yml"
+      ],
+      "forbidden_paths": [
+        "web/**",
+        "**"
+      ],
+      "reason": "UI-only visual regression should run on UI source, UI specs, Playwright UI config and dependency lock changes without broad noisy triggers."
+    },
+    {
+      "path": ".github/workflows/e2e-prod.yml",
+      "events": ["push"],
+      "required_paths": [
+        "web/e2e/production/**",
+        "web/playwright.prod.config.ts",
+        "web/package.json",
+        "web/package-lock.json",
+        ".github/workflows/e2e-prod.yml"
+      ],
+      "forbidden_paths": [
+        "web/**",
+        "**"
+      ],
+      "reason": "Production E2E is a remote no-token smoke by default, so it should run on production specs, prod Playwright config and dependency lock changes only."
+    }
+  ],
+  "unfiltered_workflows": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "events": ["push", "pull_request"],
+      "reason": "Main CI is the broad quality gate and must not hide code/test/config changes behind path filters."
+    },
+    {
+      "path": ".github/workflows/deploy-gh-pages.yml",
+      "events": ["push"],
+      "reason": "Static GitHub Pages deploy intentionally follows all main/master pushes."
+    }
+  ]
+}

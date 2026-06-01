@@ -143,6 +143,7 @@ jobs:
             docs/runbooks/scenario-state-persistence-schema.md
             docs/runbooks/thumbnail-missing.md
             docs/runbooks/ui-visual-baseline-sop.md
+            docs/runbooks/workflow-trigger-path-audit.md
             docs/architecture/adr/README.md
             docs/architecture/adr/001-dual-runtime.md
             docs/architecture/adr/002-two-layer-auth.md

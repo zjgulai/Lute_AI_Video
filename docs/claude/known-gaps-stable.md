@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-60 release smoke token opt-in guard：历史 release smoke 中的生成 endpoint 已强制放入 `RUN_TOKEN_SMOKE=1` 显式分支。
+最近一次盘点：**2026-06-01** — 已完成 P1-61 workflow trigger path audit：path-filtered workflow 的 source/config/lockfile 触发范围已有合同守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-59 poyo model matrix stale warning guard：poyo 模型矩阵的快照边界、充值前重验提示和 link-check 纳入项已有静态守卫。
+> 上一次盘点：2026-06-01 — 已完成 P1-60 release smoke token opt-in guard：历史 release smoke 中的生成 endpoint 已强制放入 `RUN_TOKEN_SMOKE=1` 显式分支。
 
 ## 当前执行入口
 
@@ -429,6 +429,13 @@ source: human+ai
 - **契约与 runbook** — 新增 `configs/release-smoke-token-opt-in-contract.json` 和 `docs/runbooks/release-smoke-token-opt-in.md`，并纳入 docs link-check scope。
 - **无 token 边界** — 本轮只做本地静态扫描和脚本文本调整，不执行 release smoke、不 SSH、不 curl 生产、不触发 provider。
 
+## 0.73 2026-06-01 P1-61 workflow trigger path audit
+
+- **path filter 合同** — 新增 `configs/workflow-trigger-path-audit-contract.json` 和 `tests/test_workflow_trigger_path_audit.py`，锁定 path-filtered workflow 必须覆盖对应 source/spec/config/lockfile。
+- **生产 E2E 触发修复** — `.github/workflows/e2e-prod.yml` 新增 `web/package-lock.json` path，避免依赖锁变化后 production E2E 不触发。
+- **主 CI 边界** — 测试确认 `.github/workflows/ci.yml` 不使用 `paths` / `paths-ignore`，继续作为 broad quality gate。
+- **无 token 边界** — 本轮只读取本地 YAML/JSON/Markdown，不触发 GitHub Actions、不运行 Playwright、不访问生产、不消耗 provider token。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -582,7 +589,7 @@ source: human+ai
 - [x] **P1-58：archive/draft link drift scan** — 已固化当前文档范围内历史/临时链接 allowlist、非当前入口语境检查和新增漂移守卫。
 - [x] **P1-59：poyo model matrix stale warning guard** — 已锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
 - [x] **P1-60：release smoke token opt-in guard** — 已审计 release smoke 脚本，确认生成接口不会默认执行。
-- [ ] **P1-61：workflow trigger path audit** — 检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
+- [x] **P1-61：workflow trigger path audit** — 已检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
 - [ ] **P1-62：Dockerfile dev-tool parity guard** — 确认 Docker/CI 需要的测试工具和 lockfile 一致。
 - [ ] **P1-63：Remotion no-provider-key guard** — 确认 rendering build/test 不读取 provider API key。
 - [ ] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
