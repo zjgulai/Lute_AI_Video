@@ -1,0 +1,35 @@
+{
+  "status": "stable",
+  "matrix_path": "docs/architecture/poyo-model-matrix-stable.md",
+  "code_counterpart": "src/pipeline/model_thresholds.py",
+  "runbook": "docs/runbooks/poyo-model-matrix-stale-warning.md",
+  "snapshot_date": "2026-05-31",
+  "snapshot_catalog": "2026-05",
+  "must_not_claim_latest": true,
+  "pre_recharge_revalidation_required": true,
+  "no_token_boundary": true,
+  "required_matrix_phrases": [
+    "快照边界（2026-05-31）",
+    "2026-05 的 poyo.ai 模型目录",
+    "不保证代表 poyo.ai 当前最新目录、价格或审核规则",
+    "任何真实 token 消耗",
+    "部署默认模型切换",
+    "成本测算前",
+    "重新核对 poyo.ai 当前产品页面/API 文档",
+    "同步 `src/pipeline/model_thresholds.py` 与本表",
+    "2026-05 snapshot"
+  ],
+  "revalidation_required_before": [
+    "real_poyo_token_smoke",
+    "RUN_TOKEN_SMOKE=1",
+    "production_default_model_change",
+    "cost_estimation",
+    "provider_catalog_claim"
+  ],
+  "revalidation_targets": [
+    "poyo.ai current product page",
+    "poyo.ai current API docs",
+    "src/pipeline/model_thresholds.py",
+    "docs/architecture/poyo-model-matrix-stable.md"
+  ]
+}

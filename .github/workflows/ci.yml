@@ -131,6 +131,7 @@ jobs:
             docs/runbooks/p2-recharge-smoke-checklist.md
             docs/runbooks/phase1-signoff-checklist.md
             docs/runbooks/pipeline-stuck.md
+            docs/runbooks/poyo-model-matrix-stale-warning.md
             docs/runbooks/poyo-rejection.md
             docs/runbooks/production-e2e-token-smoke.md
             docs/runbooks/regenerate-downstream-invalidation.md

@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-58 archive/draft link drift scan：当前阻断式文档范围的历史/临时链接已有契约、语境提示和新增漂移守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-59 poyo model matrix stale warning guard：poyo 模型矩阵的快照边界、充值前重验提示和 link-check 纳入项已有静态守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-57 Markdown frontmatter compliance scan：tracked `docs/**/*.md` / `drafts/**/*.md` 已有元信息扫描、legacy backfill 清单和新增文档阻断。
+> 上一次盘点：2026-06-01 — 已完成 P1-58 archive/draft link drift scan：当前阻断式文档范围的历史/临时链接已有契约、语境提示和新增漂移守卫。
 
 ## 当前执行入口
 
@@ -415,6 +415,13 @@ source: human+ai
 - **历史计划链接边界** — `known-gaps` 中的 `superpowers/plans` 链接保留为历史记录；测试要求新增同类链接必须进入契约并带非当前入口提示。
 - **无 token 边界** — 本轮只读取本地 Markdown、配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.71 2026-06-01 P1-59 poyo model matrix stale warning guard
+
+- **快照边界守卫** — 新增 `tests/test_poyo_model_matrix_stale_warning.py`，静态确认 `poyo-model-matrix-stable.md` 明确为 2026-05-31 / 2026-05 catalog snapshot，不保证代表 poyo.ai 当前最新目录、价格或审核规则。
+- **充值前重验契约** — 新增 `configs/poyo-model-matrix-stale-warning-contract.json`，锁定真实 token smoke、`RUN_TOKEN_SMOKE=1`、部署默认模型切换和成本测算前必须重验 poyo.ai 当前产品页面/API 文档。
+- **Runbook 固化** — 新增 `docs/runbooks/poyo-model-matrix-stale-warning.md` 并纳入 docs link-check scope，后续改矩阵、`src/pipeline/model_thresholds.py` 或 provider catalog 描述时先跑该守卫。
+- **无 token 边界** — 本轮只读取本地 Markdown、JSON 配置和 CI 文件，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -566,7 +573,7 @@ source: human+ai
 - [x] **P1-56：root directory pollution guard** — 已建立根目录允许清单、临时/截图/报告类 tracked 根文件守卫和本地-only 忽略契约。
 - [x] **P1-57：Markdown frontmatter compliance scan** — 已固化 tracked `docs/**/*.md` / `drafts/**/*.md` 元信息扫描、legacy backfill 清单和 doc_type 枚举守卫。
 - [x] **P1-58：archive/draft link drift scan** — 已固化当前文档范围内历史/临时链接 allowlist、非当前入口语境检查和新增漂移守卫。
-- [ ] **P1-59：poyo model matrix stale warning guard** — 锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
+- [x] **P1-59：poyo model matrix stale warning guard** — 已锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
 - [ ] **P1-60：release smoke token opt-in guard** — 审计 release smoke 脚本，确认生成接口不会默认执行。
 - [ ] **P1-61：workflow trigger path audit** — 检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
 - [ ] **P1-62：Dockerfile dev-tool parity guard** — 确认 Docker/CI 需要的测试工具和 lockfile 一致。
