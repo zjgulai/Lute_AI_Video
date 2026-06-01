@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-50 admin logs keyboard navigation guard：Admin Logs 行键盘打开、详情弹层关闭和焦点恢复已有回归守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-51 AssetPicker request boundary guard：素材选择器已锁定为只读 portfolio listing，不触发上传或生成。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-49 Settings API key accessibility guard：Settings key 输入、连接测试状态和保存动作已有可访问性回归守卫。
+> 上一次盘点：2026-06-01 — 已完成 P1-50 admin logs keyboard navigation guard：Admin Logs 行键盘打开、详情弹层关闭和焦点恢复已有回归守卫。
 
 ## 当前执行入口
 
@@ -351,6 +351,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/admin-logs-keyboard-navigation-contract.yaml`、`docs/runbooks/admin-logs-keyboard-navigation.md`，并扩展 `web/src/app/admin/logs/page.test.tsx`。
 - **无 token 边界** — 本轮只使用 mocked `adminFetchJson` 和 jsdom UI 测试，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.63 2026-06-01 P1-51 AssetPicker request boundary guard
+
+- **请求边界固化** — `AssetPickerModal` 只允许调用 `/portfolio/?limit=200&sort=recent` 获取现有媒体；测试显式禁止 `/api/upload`、`/api/assets/upload`、`/api/files/upload`、`/fast/*`、`/scenario/*`、`/pipeline/*` 和 `/gate/*`。
+- **确认动作无副作用** — Confirm 只把已选 portfolio path 经 `getMediaUrl()` 映射后回传 `onPick()`，不发上传、生成、regenerate 或 gate 请求。
+- **重复只读请求收口** — 移除素材列表加载 effect 对 `t` 的依赖，避免 i18n hydration 后重复拉取 portfolio listing。
+- **契约固化** — 新增 `configs/asset-picker-request-boundary-contract.yaml`、`docs/runbooks/asset-picker-request-boundary.md` 和 `web/src/components/AssetPickerModal.test.tsx`。
+- **无 token 边界** — 本轮只使用 mocked `apiFetch`、静态源码检查和 jsdom UI 测试，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -494,7 +502,7 @@ source: human+ai
 - [x] **P1-48：API key storage fallback guard** — 已覆盖 localStorage primary、cookie fallback、masking 和清除逻辑，不暴露完整 key。
 - [x] **P1-49：Settings API key accessibility guard** — 已为 Settings key 输入、保存、连接测试成功/失败状态补可访问性和回归测试。
 - [x] **P1-50：admin logs keyboard navigation guard** — 已锁定 Admin Logs 行键盘打开、详情弹层关闭和焦点恢复行为。
-- [ ] **P1-51：AssetPicker request boundary guard** — 确认素材选择器只调用只读资产接口，不触发上传或生成。
+- [x] **P1-51：AssetPicker request boundary guard** — 已确认素材选择器只调用只读 portfolio listing，不触发上传或生成。
 - [ ] **P1-52：env example no-secret drift guard** — 检查 `.env.example`、deploy env 文档和配置默认值不包含真实 secret。
 - [ ] **P1-53：Lighthouse nginx timeout parity** — 静态检查 nginx 长任务 timeout 与部署文档一致。
 - [ ] **P1-54：rsync exclude artifact guard** — 防止 `.next`、报告、截图、tmp 输出等本地产物进入远程部署同步。

@@ -1,0 +1,44 @@
+version: 1
+owner: frontend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  asset_picker: web/src/components/AssetPickerModal.tsx
+  asset_picker_tests: web/src/components/AssetPickerModal.test.tsx
+  guided_card_entry: web/src/components/GuidedCard.tsx
+  runbook: docs/runbooks/asset-picker-request-boundary.md
+
+allowed_requests:
+  portfolio_listing_only:
+    path: /portfolio/?limit=200&sort=recent
+    method: GET
+    purpose: list existing media for selection
+
+forbidden_upload_endpoints:
+  - /api/upload
+  - /api/assets/upload
+  - /api/files/upload
+
+forbidden_generation_endpoints:
+  - /fast/generate
+  - /fast/submit
+  - /scenario/
+  - /pipeline/
+  - /gate/
+
+runtime_rules:
+  mocked_api_fetch_only: true
+  picker_confirm_maps_existing_media_url: true
+  no_upload_on_pick: true
+  no_generation_on_pick: true
+  no_duplicate_listing_fetch_after_i18n_hydration: true
+
+tests:
+  request_boundary_guard: web/src/components/AssetPickerModal.test.tsx
+
+commands:
+  focused_test: npm test -- --run src/components/AssetPickerModal.test.tsx
+  type_check: npx tsc --noEmit -p tsconfig.json
+
+no_token_boundary: true

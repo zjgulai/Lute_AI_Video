@@ -48,11 +48,16 @@ function humanSize(bytes: number): string {
 export default function AssetPickerModal({ acceptKind, multiple = false, onPick, onClose }: Props) {
   const { t } = useI18n();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const loadFailedMessageRef = useRef(t("picker.loadFailed"));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<PortfolioFile[]>([]);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    loadFailedMessageRef.current = t("picker.loadFailed");
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +74,7 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
         );
         setFiles(all);
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : t("picker.loadFailed"));
+        if (!cancelled) setError(e instanceof Error ? e.message : loadFailedMessageRef.current);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -77,7 +82,7 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
     return () => {
       cancelled = true;
     };
-  }, [acceptKind, t]);
+  }, [acceptKind]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
