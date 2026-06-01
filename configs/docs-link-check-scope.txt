@@ -28,6 +28,7 @@ docs/runbooks/phase1-signoff-checklist.md
 docs/runbooks/pipeline-stuck.md
 docs/runbooks/poyo-rejection.md
 docs/runbooks/production-e2e-token-smoke.md
+docs/runbooks/regenerate-downstream-invalidation.md
 docs/runbooks/s1-s5-hermetic-regression.md
 docs/runbooks/scenario-state-persistence-schema.md
 docs/runbooks/thumbnail-missing.md
