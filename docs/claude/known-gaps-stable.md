@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-42 regenerate downstream invalidation guard：重生成上游 step 会同步清理当前/下游 gate candidates 和 approvals。
+最近一次盘点：**2026-06-01** — 已完成 P1-43 S4 footage asset filtering regression：S4 Live Shoot 成品与中间素材筛选分层已由前后端无 token 测试锁定。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-41 gate approve idempotency guard：重复 approve 相同选择返回幂等成功，不再重复启动 background resume。
+> 上一次盘点：2026-06-01 — 已完成 P1-42 regenerate downstream invalidation guard：重生成上游 step 会同步清理当前/下游 gate candidates 和 approvals。
 
 ## 当前执行入口
 
@@ -287,6 +287,14 @@ source: human+ai
 - **Runbook 固化** — 新增 `docs/runbooks/regenerate-downstream-invalidation.md` 并纳入 docs link-check scope，后续改 regenerate、step order 或 gate definitions 先跑该守卫。
 - **验证闭环** — `pytest tests/test_regenerate_downstream_invalidation_contract.py tests/test_scenario_step_regenerate_router.py tests/test_docs_link_check_scope.py -q` 通过，结果 `11 passed`；`pytest tests/test_gate_approve_idempotency_contract.py tests/test_s1_gate_full_flow.py tests/test_gate23_lifecycle.py tests/test_gate_scenario_configs.py -q` 通过，结果 `111 passed`；`ruff check src tests --statistics` 和 `git diff --check` 通过。
 
+## 0.55 2026-06-01 P1-43 S4 footage asset filtering regression
+
+- **Live Shoot alias 锁定** — `/works` 的 S4 筛选现在把 `s4`、`live_shoot`、`live_shoot_to_video`、`s4_live_shoot` 场景值和文件名前缀统一归入 Live Shoot，避免缺少 `scenario` 字段的 S4 成品落入 `other`。
+- **前端回归测试** — 新增 `web/src/app/works/works-page-filtering.test.tsx`，用 mocked portfolio response 覆盖 `live_shoot_*` 与 `live_shoot_to_video_*` 成品在 Live Shoot filter 下仍可见。
+- **后端分层契约** — 新增 `tests/test_portfolio_s4_filtering_contract.py`，确认 S4 `renders/*.mp4` 只进入 `final_work`，S4 `seedance/*.mp4` 中间素材只进入 `creation_intermediate`。
+- **契约固化** — 新增 `configs/s4-footage-filtering-contract.yaml` 和 `docs/runbooks/s4-footage-filtering.md`，后续改 `/works`、`/library`、portfolio `kind` 或 S4 输出命名先跑该守卫。
+- **无 token 边界** — 本轮只用 mocked response、pytest 临时目录文件和静态文档检查，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -422,7 +430,7 @@ source: human+ai
 - [x] **P1-40：scenario state persistence schema guard** — 已为 S1-S5 state JSON 关键字段增加 hermetic schema 断言，并补齐 filesystem 初始字段默认值。
 - [x] **P1-41：gate approve idempotency guard** — 已用无 token 测试确认相同选择重复 approve 不重复恢复、不破坏状态，不同选择保持 conflict。
 - [x] **P1-42：regenerate downstream invalidation guard** — 已锁定 step regenerate 后下游步骤和当前/下游 gate 状态的失效规则。
-- [ ] **P1-43：S4 footage asset filtering regression** — 为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补静态或单测证据。
+- [x] **P1-43：S4 footage asset filtering regression** — 已为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补前后端无 token 回归证据。
 - [ ] **P1-44：media URL sanitizer guard** — 检查 portfolio、thumbnail、upload preview 的媒体 URL 不产生开放重定向或危险 scheme。
 - [ ] **P1-45：thumbnail coverage dry-run** — 无 token 检查作品集缩略图覆盖率统计逻辑，不重新生成媒体。
 - [ ] **P1-46：OpenAPI generated types drift guard** — 建立前端 `api.generated.ts` 与后端 OpenAPI 的漂移检查策略，不访问生产。

@@ -69,6 +69,7 @@ const SCENE_FILTER_BY_SCENARIO: Record<string, SceneFilter> = {
   s4: "live_shoot",
   live_shoot: "live_shoot",
   live_shoot_to_video: "live_shoot",
+  s4_live_shoot: "live_shoot",
   s5: "brand_vlog",
   brand_vlog: "brand_vlog",
 };
@@ -78,6 +79,9 @@ const SCENE_FILTER_BY_FILENAME_PREFIX: Record<string, SceneFilter> = {
   s2: "brand_campaign",
   s3: "influencer_remix",
   s4: "live_shoot",
+  live_shoot: "live_shoot",
+  live_shoot_to_video: "live_shoot",
+  s4_live_shoot: "live_shoot",
   s5: "brand_vlog",
 };
 

@@ -1,0 +1,44 @@
+version: 1
+owner: frontend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  works_page: web/src/app/works/page.tsx
+  library_materials_tab: web/src/app/library/MaterialsTab.tsx
+  portfolio_router: src.routers.portfolio.list_portfolio
+
+works_filtering:
+  endpoint: /api/portfolio/?kind=final_work&limit=500&sort=size_desc
+  scene_filter: live_shoot
+  accepted_scenario_aliases:
+    - s4
+    - live_shoot
+    - live_shoot_to_video
+    - s4_live_shoot
+  accepted_filename_prefixes:
+    - s4
+    - live_shoot
+    - live_shoot_to_video
+    - s4_live_shoot
+
+library_filtering:
+  endpoint: /api/portfolio/?kind=creation_intermediate&limit=500&sort=size_desc
+  include_categories:
+    - seedance
+    - gpt_images
+    - audio
+    - keyframes
+    - thumbnails
+    - character_identity
+    - uploads
+    - assets
+  exclude_final_categories:
+    - renders
+    - fast_mode
+
+tests:
+  frontend: web/src/app/works/works-page-filtering.test.tsx
+  backend: tests/test_portfolio_s4_filtering_contract.py
+
+no_token_boundary: true
