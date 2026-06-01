@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-54 rsync exclude artifact guard：Lighthouse 同步已覆盖本地构建、报告、截图、tmp/output 和 secret/cert 排除项。
+最近一次盘点：**2026-06-01** — 已完成 P1-55 script naming/location governance audit：`scripts/` 目录已有分类契约、危险脚本默认入口守卫和 generated artifact 清理边界。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-53 Lighthouse nginx timeout parity：长任务路由 1500s timeout、shared include 和部署文档已有静态守卫。
+> 上一次盘点：2026-06-01 — 已完成 P1-54 rsync exclude artifact guard：Lighthouse 同步已覆盖本地构建、报告、截图、tmp/output 和 secret/cert 排除项。
 
 ## 当前执行入口
 
@@ -383,6 +383,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/lighthouse-rsync-artifact-exclude-contract.yaml`、`docs/runbooks/lighthouse-rsync-artifact-exclude.md`，并纳入 docs link-check scope。
 - **无 token 边界** — 本轮只读取本地脚本、配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.67 2026-06-01 P1-55 script naming/location governance audit
+
+- **脚本分类契约** — 新增 `configs/scripts-governance-contract.json`，把 `scripts/` 顶层脚本分为 `active_reusable_scripts`、`manual_deploy_scripts`、`provider_probe_scripts`、`legacy_one_off_scripts` 和 `historical_e2e_scripts`。
+- **危险命名守卫** — 新增 `tests/test_scripts_governance.py`，要求所有顶层脚本必须被分类；带 `fix`、`patch`、`overwrite`、`bugfix`、`phase`、`test_`、`_v2`、`_now` 等一次性语义的脚本不得标为 `active_reusable`。
+- **默认入口隔离** — 测试确认 `Makefile`、主 CI、deploy workflow、Lighthouse deploy 和无 token hermetic regression 不调用 `provider_probe_scripts`。
+- **清理边界明确** — `scripts/__pycache__/**` 和 `scripts/**/*.pyc` 被标注为 `cleanup_requires_confirmation`；本轮不直接删除或迁移，避免未确认的目录治理变更。
+- **无 token 边界** — 本轮只做静态文件扫描、契约和文档治理，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -530,7 +538,7 @@ source: human+ai
 - [x] **P1-52：env example no-secret drift guard** — 已检查 `.env.example`、deploy env 文档和配置默认值不包含真实 secret。
 - [x] **P1-53：Lighthouse nginx timeout parity** — 已静态检查 nginx 长任务 timeout 与部署文档一致。
 - [x] **P1-54：rsync exclude artifact guard** — 已防止 `.next`、报告、截图、tmp 输出等本地产物进入远程部署同步。
-- [ ] **P1-55：script naming/location governance audit** — 审计 `scripts/` 中一次性或危险脚本的命名、提示和归档状态。
+- [x] **P1-55：script naming/location governance audit** — 已固化 `scripts/` 分类契约、provider probe 默认入口隔离和 generated artifact 清理确认边界。
 - [ ] **P1-56：root directory pollution guard** — 建立根目录允许清单，防止临时文件和截图直接落根目录。
 - [ ] **P1-57：Markdown frontmatter compliance scan** — 扫描正式区 / 草稿区 Markdown frontmatter 完整性。
 - [ ] **P1-58：archive/draft link drift scan** — 检查历史文档和当前入口之间的链接是否误导执行计划。

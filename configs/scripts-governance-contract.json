@@ -1,0 +1,355 @@
+{
+  "updated": "2026-06-01",
+  "runbook": "docs/runbooks/scripts-governance.md",
+  "policy": {
+    "default_new_script_location": "scripts/",
+    "scratch_or_one_off_location": "tmp/ or drafts/scripts/",
+    "archive_location": "archive/scripts/",
+    "notes": "Top-level scripts must be reusable, named for stable purpose, and classified here before they are committed."
+  },
+  "active_reusable_scripts": [
+    {
+      "path": "scripts/check_openapi_types_drift.py",
+      "status": "active_reusable",
+      "reason": "OpenAPI generated type drift guard."
+    },
+    {
+      "path": "scripts/check_step_order_consistency.py",
+      "status": "active_reusable",
+      "reason": "Step ordering consistency check."
+    },
+    {
+      "path": "scripts/create_admin.py",
+      "status": "active_reusable",
+      "reason": "Admin account bootstrap utility."
+    },
+    {
+      "path": "scripts/dev_start.py",
+      "status": "active_reusable",
+      "reason": "Local developer startup helper."
+    },
+    {
+      "path": "scripts/diagnose_apis.py",
+      "status": "active_reusable",
+      "reason": "General API diagnostics that do not imply provider token spending by name."
+    },
+    {
+      "path": "scripts/generate_portfolio_posters.py",
+      "status": "active_reusable",
+      "reason": "Portfolio poster backfill utility."
+    },
+    {
+      "path": "scripts/generate_portfolio_thumbnails.py",
+      "status": "active_reusable",
+      "reason": "Portfolio thumbnail generation utility."
+    },
+    {
+      "path": "scripts/p2_recharge_smoke_checklist.py",
+      "status": "active_reusable",
+      "reason": "Dry-run checklist for post-recharge smoke execution."
+    },
+    {
+      "path": "scripts/portfolio_index.py",
+      "status": "active_reusable",
+      "reason": "Portfolio metadata index utility."
+    },
+    {
+      "path": "scripts/portfolio_thumbnail_coverage.py",
+      "status": "active_reusable",
+      "reason": "Read-only portfolio thumbnail coverage check."
+    },
+    {
+      "path": "scripts/prepare_demo_cache.py",
+      "status": "active_reusable",
+      "reason": "Demo cache preparation utility."
+    },
+    {
+      "path": "scripts/refresh_brand_assets.sh",
+      "status": "active_reusable",
+      "reason": "Brand asset refresh utility."
+    },
+    {
+      "path": "scripts/render_video.py",
+      "status": "active_reusable",
+      "reason": "Reusable local video rendering helper."
+    },
+    {
+      "path": "scripts/run_pipeline.py",
+      "status": "active_reusable",
+      "reason": "Generic pipeline runner."
+    },
+    {
+      "path": "scripts/run_s1_s5_hermetic_regression.sh",
+      "status": "active_reusable",
+      "reason": "No-token S1-S5 hermetic regression entrypoint."
+    },
+    {
+      "path": "scripts/run_s1_video.py",
+      "status": "active_reusable",
+      "reason": "Reusable S1 video runner retained for local explicit execution."
+    },
+    {
+      "path": "scripts/scrape_momcozy.py",
+      "status": "active_reusable",
+      "reason": "Brand catalog scraping utility."
+    },
+    {
+      "path": "scripts/start_api.sh",
+      "status": "active_reusable",
+      "reason": "Backend API startup helper."
+    },
+    {
+      "path": "scripts/start_backend.sh",
+      "status": "active_reusable",
+      "reason": "Backend startup helper."
+    }
+  ],
+  "manual_deploy_scripts": [
+    {
+      "path": "scripts/backup_production.sh",
+      "status": "manual_deploy_only",
+      "reason": "Production backup operation; requires explicit operator intent."
+    },
+    {
+      "path": "scripts/pg_dump_logical.py",
+      "status": "manual_deploy_only",
+      "reason": "Database logical backup operation."
+    },
+    {
+      "path": "scripts/pg_restore_logical.py",
+      "status": "manual_deploy_only",
+      "reason": "Database logical restore operation."
+    },
+    {
+      "path": "scripts/phase0_watchdog.sh",
+      "status": "manual_deploy_only",
+      "reason": "Historical phase-named deploy watchdog retained for explicit operations only."
+    },
+    {
+      "path": "scripts/release_finalize_v0.4.0.sh",
+      "status": "manual_deploy_only",
+      "reason": "Version-specific release finalization script."
+    },
+    {
+      "path": "scripts/release_smoke_v0.4.0.sh",
+      "status": "manual_deploy_only",
+      "reason": "Version-specific release smoke script; token behavior is reviewed separately."
+    },
+    {
+      "path": "scripts/run_alembic_upgrade.sh",
+      "status": "manual_deploy_only",
+      "reason": "Database migration operation."
+    },
+    {
+      "path": "scripts/sync_lighthouse_to_output.sh",
+      "status": "manual_deploy_only",
+      "reason": "Production artifact sync from Lighthouse to local output."
+    },
+    {
+      "path": "scripts/sync_output_to_lighthouse.sh",
+      "status": "manual_deploy_only",
+      "reason": "Production artifact sync from local output to Lighthouse."
+    }
+  ],
+  "provider_probe_scripts": [
+    {
+      "path": "scripts/debug_poyo_403.py",
+      "status": "provider_probe",
+      "reason": "Direct poyo.ai diagnostic; may consume provider credits."
+    },
+    {
+      "path": "scripts/diagnose_poyo.py",
+      "status": "provider_probe",
+      "reason": "Direct poyo.ai diagnostic; may consume provider credits."
+    },
+    {
+      "path": "scripts/discover_poyo_models.py",
+      "status": "provider_probe",
+      "reason": "Direct poyo.ai model discovery; may consume provider credits."
+    },
+    {
+      "path": "scripts/probe_sora2pro.py",
+      "status": "provider_probe",
+      "reason": "Direct provider probe; may consume provider credits."
+    },
+    {
+      "path": "scripts/test_poyo_all_media.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai media probe kept out of default checks."
+    },
+    {
+      "path": "scripts/test_poyo_image.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai image probe kept out of default checks."
+    },
+    {
+      "path": "scripts/test_poyo_image_models.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai image model probe kept out of default checks."
+    },
+    {
+      "path": "scripts/test_poyo_music.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai music probe kept out of default checks."
+    },
+    {
+      "path": "scripts/test_poyo_music_detail.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai music detail probe kept out of default checks."
+    },
+    {
+      "path": "scripts/test_poyo_music_status.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai music status probe kept out of default checks."
+    },
+    {
+      "path": "scripts/test_poyo_seedance.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai Seedance probe kept out of default checks."
+    },
+    {
+      "path": "scripts/test_poyo_tts.py",
+      "status": "provider_probe",
+      "reason": "Historical poyo.ai TTS probe kept out of default checks."
+    }
+  ],
+  "legacy_one_off_scripts": [
+    {
+      "path": "scripts/apply_fix_patch.py",
+      "status": "archive_candidate",
+      "reason": "One-off historical patch helper; not a stable project entrypoint."
+    },
+    {
+      "path": "scripts/fix_page_mac.py",
+      "status": "archive_candidate",
+      "reason": "Machine-specific historical fix script."
+    },
+    {
+      "path": "scripts/fix_remotion.sh",
+      "status": "archive_candidate",
+      "reason": "Historical remediation script with ambiguous fix naming."
+    },
+    {
+      "path": "scripts/overwrite_fix.py",
+      "status": "archive_candidate",
+      "reason": "One-off overwrite helper; unsafe as a default script."
+    },
+    {
+      "path": "scripts/patch_api_submit_review.py",
+      "status": "archive_candidate",
+      "reason": "One-off API patch helper."
+    },
+    {
+      "path": "scripts/phase1_sync.py",
+      "status": "archive_candidate",
+      "reason": "Historical phase sync script with non-semantic phase naming."
+    },
+    {
+      "path": "scripts/phase2_sync.py",
+      "status": "archive_candidate",
+      "reason": "Historical phase sync script with non-semantic phase naming."
+    },
+    {
+      "path": "scripts/phase3_sync.py",
+      "status": "archive_candidate",
+      "reason": "Historical phase sync script with non-semantic phase naming."
+    },
+    {
+      "path": "scripts/run_s1_video_now.py",
+      "status": "archive_candidate",
+      "reason": "Ad-hoc now-named S1 runner; stable runner is scripts/run_s1_video.py."
+    },
+    {
+      "path": "scripts/sync_brand_color.py",
+      "status": "archive_candidate",
+      "reason": "Historical one-off brand color sync."
+    },
+    {
+      "path": "scripts/sync_bugfix.py",
+      "status": "archive_candidate",
+      "reason": "Historical bugfix sync script."
+    },
+    {
+      "path": "scripts/sync_bugfix_v2.py",
+      "status": "archive_candidate",
+      "reason": "Historical bugfix sync variant with version-suffix naming."
+    },
+    {
+      "path": "scripts/sync_p4.py",
+      "status": "archive_candidate",
+      "reason": "Historical phase/priority sync helper with low-information name."
+    },
+    {
+      "path": "scripts/sync_phase6.py",
+      "status": "archive_candidate",
+      "reason": "Historical phase sync script with non-semantic phase naming."
+    },
+    {
+      "path": "scripts/sync_phase7.py",
+      "status": "archive_candidate",
+      "reason": "Historical phase sync script with non-semantic phase naming."
+    },
+    {
+      "path": "scripts/sync_plan_to_mac.py",
+      "status": "archive_candidate",
+      "reason": "Machine-specific historical sync helper."
+    },
+    {
+      "path": "scripts/sync_resume_fix.py",
+      "status": "archive_candidate",
+      "reason": "Historical resume-fix sync helper."
+    },
+    {
+      "path": "scripts/sync_s1.py",
+      "status": "archive_candidate",
+      "reason": "Historical S1 sync helper."
+    }
+  ],
+  "historical_e2e_scripts": [
+    {
+      "path": "scripts/e2e_influencer_remix.py",
+      "status": "historical_e2e",
+      "reason": "Legacy E2E utility retained outside default CI."
+    },
+    {
+      "path": "scripts/e2e_verify_distribution.py",
+      "status": "historical_e2e",
+      "reason": "Legacy E2E utility retained outside default CI."
+    },
+    {
+      "path": "scripts/run_5scenario_e2e.py",
+      "status": "historical_e2e",
+      "reason": "Legacy full-scenario E2E utility retained outside default CI."
+    },
+    {
+      "path": "scripts/run_s1_e2e.py",
+      "status": "historical_e2e",
+      "reason": "Legacy S1 E2E utility retained outside default CI."
+    },
+    {
+      "path": "scripts/test_media_skills_e2e.py",
+      "status": "historical_e2e",
+      "reason": "Legacy script-level E2E test; not a pytest suite entrypoint."
+    },
+    {
+      "path": "scripts/test_pipeline_quality.py",
+      "status": "historical_e2e",
+      "reason": "Legacy script-level pipeline quality check."
+    },
+    {
+      "path": "scripts/test_s1_unified_e2e.py",
+      "status": "historical_e2e",
+      "reason": "Legacy script-level S1 E2E check."
+    }
+  ],
+  "generated_artifact_policies": [
+    {
+      "pattern": "scripts/__pycache__/**",
+      "status": "cleanup_requires_confirmation"
+    },
+    {
+      "pattern": "scripts/**/*.pyc",
+      "status": "cleanup_requires_confirmation"
+    }
+  ]
+}

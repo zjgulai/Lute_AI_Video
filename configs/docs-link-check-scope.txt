@@ -35,6 +35,7 @@ docs/runbooks/production-e2e-token-smoke.md
 docs/runbooks/regenerate-downstream-invalidation.md
 docs/runbooks/s4-footage-filtering.md
 docs/runbooks/s1-s5-hermetic-regression.md
+docs/runbooks/scripts-governance.md
 docs/runbooks/scenario-state-persistence-schema.md
 docs/runbooks/thumbnail-missing.md
 docs/runbooks/ui-visual-baseline-sop.md
