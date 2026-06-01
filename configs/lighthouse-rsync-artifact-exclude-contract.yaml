@@ -1,0 +1,61 @@
+version: 1
+owner: deploy
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  exclude_file: deploy/lighthouse/rsync-excludes.txt
+  local_sync_wrapper: deploy/lighthouse/build-and-deploy.sh
+  github_deploy_workflow: .github/workflows/deploy.yml
+  artifact_guard_tests: tests/test_lighthouse_rsync_artifact_guard.py
+  runbook: docs/runbooks/lighthouse-rsync-artifact-exclude.md
+
+exclude_categories:
+  production_secrets_and_certificates:
+    - .env
+    - deploy/lighthouse/.env.prod
+    - deploy/lighthouse/server.crt
+    - deploy/lighthouse/server.key
+    - deploy/lighthouse/*.pem
+  dependencies_and_caches:
+    - node_modules
+    - web/node_modules
+    - rendering/node_modules
+    - .venv
+    - .pytest_cache
+    - .ruff_cache
+    - .mypy_cache
+  frontend_build_artifacts:
+    - web/.next
+    - web/.next.old
+    - web/dist
+    - web/tsconfig.tsbuildinfo
+  test_reports_and_traces:
+    - web/playwright-report
+    - web/test-results
+    - web/blob-report
+    - coverage
+    - htmlcov
+    - .coverage
+  runtime_outputs_and_screenshots:
+    - output
+    - tmp
+    - tmp/outputs
+    - tmp/screenshots
+    - web/tmp
+    - web/tmp/screenshots
+
+rules:
+  shared_exclude_file_required: true
+  github_workflow_must_not_duplicate_inline_excludes: true
+  local_wrapper_uses_exclude_file: true
+  dry_run_before_manual_deploy: true
+  no_runtime_smoke_or_provider_calls: true
+
+tests:
+  artifact_exclude_guard: tests/test_lighthouse_rsync_artifact_guard.py
+
+commands:
+  focused_test: .venv/bin/python -m pytest tests/test_lighthouse_rsync_artifact_guard.py -q
+
+no_token_boundary: true
