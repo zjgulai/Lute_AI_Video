@@ -24,6 +24,7 @@ docs/runbooks/github-actions-deploy-secrets.md
 docs/runbooks/github-deploy-secrets-setup.md
 docs/runbooks/gate-approve-idempotency.md
 docs/runbooks/key-rotation.md
+docs/runbooks/lighthouse-nginx-timeout-parity.md
 docs/runbooks/media-url-sanitizer.md
 docs/runbooks/p2-recharge-smoke-checklist.md
 docs/runbooks/phase1-signoff-checklist.md

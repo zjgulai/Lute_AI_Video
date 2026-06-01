@@ -1,0 +1,50 @@
+version: 1
+owner: deploy
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  nginx_server_blocks: deploy/lighthouse/nginx.conf
+  ai_video_locations: deploy/lighthouse/ai_video_locations.conf
+  deploy_doc: docs/workflows/deploy-lighthouse-stable.md
+  timeout_tests: tests/test_lighthouse_nginx_timeout_contract.py
+  runbook: docs/runbooks/lighthouse-nginx-timeout-parity.md
+
+long_running_locations:
+  /api/scenario/:
+    proxy_pass: http://backend/scenario/
+    proxy_read_timeout: 1500s
+    proxy_send_timeout: 1500s
+    proxy_connect_timeout: 60s
+    proxy_buffering: off
+  /api/fast/:
+    proxy_pass: http://backend/fast/
+    proxy_read_timeout: 1500s
+    proxy_send_timeout: 1500s
+    proxy_connect_timeout: 60s
+    proxy_buffering: off
+  /api/pipeline/:
+    proxy_pass: http://backend/pipeline/
+    proxy_read_timeout: 1500s
+    proxy_send_timeout: 1500s
+    proxy_connect_timeout: 60s
+    proxy_buffering: off
+
+shared_include_required:
+  - video.lute-tlz-dddd.top
+  - 101.34.52.232 _
+
+rules:
+  long_running_routes_keep_1500s_read_send: true
+  long_running_routes_disable_proxy_buffering: true
+  canonical_and_ip_fallback_share_ai_video_locations: true
+  deploy_doc_mirrors_timeout_values: true
+  no_runtime_smoke_or_provider_calls: true
+
+tests:
+  timeout_parity_guard: tests/test_lighthouse_nginx_timeout_contract.py
+
+commands:
+  focused_test: .venv/bin/python -m pytest tests/test_lighthouse_nginx_timeout_contract.py -q
+
+no_token_boundary: true

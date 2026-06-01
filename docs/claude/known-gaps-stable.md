@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-52 env example no-secret drift guard：`.env.example`、配置默认值和活跃部署 env 文档已有无真实 secret 守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-53 Lighthouse nginx timeout parity：长任务路由 1500s timeout、shared include 和部署文档已有静态守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-51 AssetPicker request boundary guard：素材选择器已锁定为只读 portfolio listing，不触发上传或生成。
+> 上一次盘点：2026-06-01 — 已完成 P1-52 env example no-secret drift guard：`.env.example`、配置默认值和活跃部署 env 文档已有无真实 secret 守卫。
 
 ## 当前执行入口
 
@@ -367,6 +367,14 @@ source: human+ai
 - **生产 secret 边界明确** — 新增 `configs/env-example-no-secret-contract.yaml` 和 `docs/runbooks/env-example-no-secret-drift.md`；测试明确不读取 gitignored 的 `deploy/lighthouse/.env.prod`。
 - **无 token 边界** — 本轮只做静态文件扫描和文档治理，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.65 2026-06-01 P1-53 Lighthouse nginx timeout parity
+
+- **长任务 timeout 守卫** — 静态检查 `deploy/lighthouse/ai_video_locations.conf` 中 `/api/scenario/`、`/api/fast/`、`/api/pipeline/` 必须保留 `proxy_read_timeout 1500s`、`proxy_send_timeout 1500s` 和 `proxy_buffering off`。
+- **shared include 守卫** — 检查 canonical `video.lute-tlz-dddd.top` 与 IP fallback `101.34.52.232 _` 都 include `/etc/nginx/ai_video_locations.conf`，避免两个入口配置漂移。
+- **部署文档对齐** — `docs/workflows/deploy-lighthouse-stable.md` 明确 timeout 来源是 `ai_video_locations.conf`，而不是笼统归因到 `nginx.conf`。
+- **契约固化** — 新增 `configs/lighthouse-nginx-timeout-contract.yaml`、`docs/runbooks/lighthouse-nginx-timeout-parity.md` 和 `tests/test_lighthouse_nginx_timeout_contract.py`。
+- **无 token 边界** — 本轮只读取本地 nginx 配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -512,7 +520,7 @@ source: human+ai
 - [x] **P1-50：admin logs keyboard navigation guard** — 已锁定 Admin Logs 行键盘打开、详情弹层关闭和焦点恢复行为。
 - [x] **P1-51：AssetPicker request boundary guard** — 已确认素材选择器只调用只读 portfolio listing，不触发上传或生成。
 - [x] **P1-52：env example no-secret drift guard** — 已检查 `.env.example`、deploy env 文档和配置默认值不包含真实 secret。
-- [ ] **P1-53：Lighthouse nginx timeout parity** — 静态检查 nginx 长任务 timeout 与部署文档一致。
+- [x] **P1-53：Lighthouse nginx timeout parity** — 已静态检查 nginx 长任务 timeout 与部署文档一致。
 - [ ] **P1-54：rsync exclude artifact guard** — 防止 `.next`、报告、截图、tmp 输出等本地产物进入远程部署同步。
 - [ ] **P1-55：script naming/location governance audit** — 审计 `scripts/` 中一次性或危险脚本的命名、提示和归档状态。
 - [ ] **P1-56：root directory pollution guard** — 建立根目录允许清单，防止临时文件和截图直接落根目录。

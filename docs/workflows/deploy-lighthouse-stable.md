@@ -16,7 +16,10 @@ The project ships three deploy targets, in priority order:
 1. **Tencent Lighthouse (canonical)** — current production at `https://video.lute-tlz-dddd.top`.
    IP fallback is `https://101.34.52.232`. `deploy/lighthouse/` contains
    `docker-compose.prod.yml` (backend + frontend + nginx +
-   rendering), `nginx.conf` (with 1500s `proxy_read_timeout` for long-running pipelines),
+   rendering), `nginx.conf` (server blocks) and `ai_video_locations.conf`
+   (shared AI Video route rules; `/api/scenario/`, `/api/fast/`, and `/api/pipeline/`
+   keep `proxy_read_timeout 1500s`, `proxy_send_timeout 1500s`, and
+   `proxy_buffering off` for long-running pipelines),
    `.env.prod` (live secrets — gitignored), `rsync-excludes.txt` (single source of truth for
    safe sync exclusions), `build-and-deploy.sh` (local safe sync wrapper), and `deploy.sh`
    (remote host build + container restart). Deploy from the local repo root via
