@@ -35,6 +35,26 @@ def test_media_sign_rejects_path_traversal(tmp_path, monkeypatch):
     assert exc.value.status_code == 400
 
 
+def test_media_sign_rejects_url_schemes_and_encoded_traversal(tmp_path, monkeypatch):
+    from src.routers import media
+
+    target = tmp_path / "renders" / "secret.mp4"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"fake mp4")
+    monkeypatch.setattr(media, "OUTPUT_DIR", tmp_path)
+
+    for bad_path in (
+        "https://evil.example/secret.mp4",
+        "//evil.example/secret.mp4",
+        "javascript:alert(1)",
+        "renders/%2e%2e/secret.mp4",
+        "renders/%252e%252e/secret.mp4",
+    ):
+        with pytest.raises(HTTPException) as exc:
+            media.sign_media_url(bad_path)
+        assert exc.value.status_code == 400
+
+
 def test_media_sign_uses_canonical_path_for_nested_file(tmp_path, monkeypatch):
     from src.routers import media
 

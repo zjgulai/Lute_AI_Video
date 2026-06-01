@@ -851,24 +851,67 @@ export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<u
   return data.files || [];
 }
 
+const MEDIA_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+
+function decodeMediaPath(raw: string): string | null {
+  let decoded = raw;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) return decoded;
+      decoded = next;
+    } catch {
+      return null;
+    }
+  }
+  return decoded;
+}
+
+function hasUnsafeMediaInput(rawPath: string): boolean {
+  const normalized = rawPath.trim().replace(/\\/g, "/");
+  const decoded = decodeMediaPath(normalized);
+  const candidates = decoded && decoded !== normalized ? [normalized, decoded] : [normalized];
+  return candidates.some((path) => {
+    if (!path || path.includes("\x00") || path.includes("?") || path.includes("#")) return true;
+    if (path.startsWith("//") || MEDIA_SCHEME_RE.test(path)) return true;
+    return path.split("/").some((segment) => segment === "." || segment === "..");
+  });
+}
+
+function encodeSafeMediaPath(filePath: string): string {
+  if (!filePath || hasUnsafeMediaInput(filePath)) return "";
+
+  let mediaRel = filePath.trim().replace(/\\/g, "/");
+  if (mediaRel.startsWith("/api/media/")) {
+    mediaRel = mediaRel.slice("/api/media/".length);
+  } else if (mediaRel.startsWith("api/media/")) {
+    mediaRel = mediaRel.slice("api/media/".length);
+  } else if (mediaRel.startsWith("/")) {
+    return "";
+  }
+
+  const decoded = decodeMediaPath(mediaRel);
+  if (!decoded) return "";
+  mediaRel = decoded.startsWith("output/") ? decoded.slice("output/".length) : decoded;
+
+  const segments = mediaRel.split("/");
+  if (
+    segments.length === 0 ||
+    segments.some((segment) => !segment || segment === "." || segment === ".." || segment.includes(":"))
+  ) {
+    return "";
+  }
+  return segments.map((s) => encodeURIComponent(s)).join("/");
+}
+
 export function getMediaUrl(filePath: string, forceReal: boolean = false): string {
-  if (!filePath) return "";
+  if (!filePath || hasUnsafeMediaInput(filePath)) return "";
   if (!forceReal && isDemoMode()) {
-    const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
+    const name = filePath.trim().replace(/\\/g, "/").split("/").pop() || "";
     const prefix = readEnv("NEXT_PUBLIC_ASSET_PREFIX") || "";
     return prefix + "/portfolio/" + encodeURIComponent(name);
   }
-  let mediaRel = filePath.replace(/\\/g, "/");
-  if (mediaRel.startsWith("/api/media/")) {
-    mediaRel = mediaRel.slice("/api/media/".length);
-  }
-  try {
-    mediaRel = decodeURIComponent(mediaRel);
-  } catch {
-    /* keep encoded segments */
-  }
-  const segments = mediaRel.split("/").filter(Boolean);
-  const encodedPath = segments.map((s) => encodeURIComponent(s)).join("/");
+  const encodedPath = encodeSafeMediaPath(filePath);
   if (!encodedPath) return "";
   const base = getApiBase().replace(/\/$/, "");
   if (base.startsWith("http")) {
@@ -883,18 +926,7 @@ export function getMediaUrl(filePath: string, forceReal: boolean = false): strin
  * control is needed. Falls back to unsigned URL on signing failure.
  */
 export async function getSignedMediaUrl(filePath: string): Promise<string> {
-  if (!filePath) return "";
-  let mediaRel = filePath.replace(/\\/g, "/");
-  if (mediaRel.startsWith("/api/media/")) {
-    mediaRel = mediaRel.slice("/api/media/".length);
-  }
-  try {
-    mediaRel = decodeURIComponent(mediaRel);
-  } catch {
-    /* keep encoded segments */
-  }
-  const segments = mediaRel.split("/").filter(Boolean);
-  const encodedPath = segments.map((s) => encodeURIComponent(s)).join("/");
+  const encodedPath = encodeSafeMediaPath(filePath);
   if (!encodedPath) return "";
 
   try {

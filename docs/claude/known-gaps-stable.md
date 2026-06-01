@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-43 S4 footage asset filtering regression：S4 Live Shoot 成品与中间素材筛选分层已由前后端无 token 测试锁定。
+最近一次盘点：**2026-06-01** — 已完成 P1-44 media URL sanitizer guard：前后端媒体 URL builder / signer 已拒绝危险 scheme、绝对 URL 和编码 traversal。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-42 regenerate downstream invalidation guard：重生成上游 step 会同步清理当前/下游 gate candidates 和 approvals。
+> 上一次盘点：2026-06-01 — 已完成 P1-43 S4 footage asset filtering regression：S4 Live Shoot 成品与中间素材筛选分层已由前后端无 token 测试锁定。
 
 ## 当前执行入口
 
@@ -295,6 +295,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/s4-footage-filtering-contract.yaml` 和 `docs/runbooks/s4-footage-filtering.md`，后续改 `/works`、`/library`、portfolio `kind` 或 S4 输出命名先跑该守卫。
 - **无 token 边界** — 本轮只用 mocked response、pytest 临时目录文件和静态文档检查，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.56 2026-06-01 P1-44 media URL sanitizer guard
+
+- **前端 URL builder 收口** — `getMediaUrl()` 和 `getSignedMediaUrl()` 复用同一 sanitizer，拒绝 `http(s):`、`javascript:`、`data:`、`blob:`、`//host/path`、query/hash 和 `..` / `%2e%2e` / `%252e%252e` traversal 输入。
+- **签名请求前置拒绝** — `getSignedMediaUrl()` 对非法路径直接返回空字符串，不再请求 `/api/media/sign`，避免把危险 path 交给后端 fallback。
+- **后端 basename fallback 防护** — `_resolve_media_path()` 在 basename fallback 前先解码并拒绝 scheme、protocol-relative URL、空段、`.`、`..`、query/hash 和编码 traversal，避免 `https://evil/secret.mp4` 命中本地同名文件。
+- **契约固化** — 新增 `configs/media-url-sanitizer-contract.yaml` 和 `docs/runbooks/media-url-sanitizer.md`，后续改 portfolio thumbnail、upload preview、media signer 或 runtime media component 先跑该守卫。
+- **无 token 边界** — 本轮只用字符串单测、mocked fetch 和 pytest 临时目录文件，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -431,7 +439,7 @@ source: human+ai
 - [x] **P1-41：gate approve idempotency guard** — 已用无 token 测试确认相同选择重复 approve 不重复恢复、不破坏状态，不同选择保持 conflict。
 - [x] **P1-42：regenerate downstream invalidation guard** — 已锁定 step regenerate 后下游步骤和当前/下游 gate 状态的失效规则。
 - [x] **P1-43：S4 footage asset filtering regression** — 已为 S4 `live_shoot` 在 `/works` / `/library` 的筛选逻辑补前后端无 token 回归证据。
-- [ ] **P1-44：media URL sanitizer guard** — 检查 portfolio、thumbnail、upload preview 的媒体 URL 不产生开放重定向或危险 scheme。
+- [x] **P1-44：media URL sanitizer guard** — 已锁定 portfolio、thumbnail、upload preview 的媒体 URL 不接受绝对 URL、危险 scheme 或 traversal 输入。
 - [ ] **P1-45：thumbnail coverage dry-run** — 无 token 检查作品集缩略图覆盖率统计逻辑，不重新生成媒体。
 - [ ] **P1-46：OpenAPI generated types drift guard** — 建立前端 `api.generated.ts` 与后端 OpenAPI 的漂移检查策略，不访问生产。
 - [ ] **P1-47：frontend store persistence migration guard** — 覆盖 Zustand/localStorage 版本迁移和坏数据恢复路径。

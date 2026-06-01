@@ -1,0 +1,44 @@
+version: 1
+owner: frontend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  frontend_builder: web/src/components/api.ts:getMediaUrl
+  frontend_signer: web/src/components/api.ts:getSignedMediaUrl
+  backend_resolver: src.routers.media._resolve_media_path
+  backend_signer: src.routers.media.sign_media_url
+
+allowed_inputs:
+  - renders/s1_1700000000.mp4
+  - thumbnails/portfolio_posters/s1.jpg
+  - /api/media/renders/s1_1700000000.mp4
+  - output/renders/s1_1700000000.mp4
+
+blocked_inputs:
+  schemes:
+    - https://evil.example/clip.mp4
+    - javascript:alert(1)
+    - data:image/svg+xml,<svg></svg>
+    - blob:https://evil.example/id
+  protocol_relative:
+    - //evil.example/clip.mp4
+  traversal:
+    - ../secret.mp4
+    - renders/%2e%2e/secret.mp4
+    - renders/%252e%252e/secret.mp4
+  query_or_fragment:
+    - renders/a.mp4?next=https://evil.example
+    - renders/a.mp4#fragment
+
+rules:
+  reject_before_dom_src: true
+  reject_before_sign_request: true
+  reject_before_backend_basename_fallback: true
+  normalize_output_prefix: true
+
+tests:
+  frontend: web/src/components/mediaUrlSanitizer.test.ts
+  backend: tests/test_p0_media_tenant_security.py::test_media_sign_rejects_url_schemes_and_encoded_traversal
+
+no_token_boundary: true
