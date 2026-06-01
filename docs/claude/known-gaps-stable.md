@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-59 poyo model matrix stale warning guard：poyo 模型矩阵的快照边界、充值前重验提示和 link-check 纳入项已有静态守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-60 release smoke token opt-in guard：历史 release smoke 中的生成 endpoint 已强制放入 `RUN_TOKEN_SMOKE=1` 显式分支。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-58 archive/draft link drift scan：当前阻断式文档范围的历史/临时链接已有契约、语境提示和新增漂移守卫。
+> 上一次盘点：2026-06-01 — 已完成 P1-59 poyo model matrix stale warning guard：poyo 模型矩阵的快照边界、充值前重验提示和 link-check 纳入项已有静态守卫。
 
 ## 当前执行入口
 
@@ -422,6 +422,13 @@ source: human+ai
 - **Runbook 固化** — 新增 `docs/runbooks/poyo-model-matrix-stale-warning.md` 并纳入 docs link-check scope，后续改矩阵、`src/pipeline/model_thresholds.py` 或 provider catalog 描述时先跑该守卫。
 - **无 token 边界** — 本轮只读取本地 Markdown、JSON 配置和 CI 文件，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.72 2026-06-01 P1-60 release smoke token opt-in guard
+
+- **release smoke 脚本守卫** — 新增 `tests/test_release_smoke_token_opt_in_guard.py`，静态扫描 `scripts/release_smoke_v0.4.0.sh` 中的 token-consuming curl，要求全部位于 `RUN_TOKEN_SMOKE=1` 分支内。
+- **默认路径收紧** — `scripts/release_smoke_v0.4.0.sh` 不再默认向 `/api/fast/generate` 发请求；Fast Mode 真实生成 smoke 仅在充值后显式设置 `RUN_TOKEN_SMOKE=1` 时运行。
+- **契约与 runbook** — 新增 `configs/release-smoke-token-opt-in-contract.json` 和 `docs/runbooks/release-smoke-token-opt-in.md`，并纳入 docs link-check scope。
+- **无 token 边界** — 本轮只做本地静态扫描和脚本文本调整，不执行 release smoke、不 SSH、不 curl 生产、不触发 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -574,7 +581,7 @@ source: human+ai
 - [x] **P1-57：Markdown frontmatter compliance scan** — 已固化 tracked `docs/**/*.md` / `drafts/**/*.md` 元信息扫描、legacy backfill 清单和 doc_type 枚举守卫。
 - [x] **P1-58：archive/draft link drift scan** — 已固化当前文档范围内历史/临时链接 allowlist、非当前入口语境检查和新增漂移守卫。
 - [x] **P1-59：poyo model matrix stale warning guard** — 已锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
-- [ ] **P1-60：release smoke token opt-in guard** — 审计 release smoke 脚本，确认生成接口不会默认执行。
+- [x] **P1-60：release smoke token opt-in guard** — 已审计 release smoke 脚本，确认生成接口不会默认执行。
 - [ ] **P1-61：workflow trigger path audit** — 检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
 - [ ] **P1-62：Dockerfile dev-tool parity guard** — 确认 Docker/CI 需要的测试工具和 lockfile 一致。
 - [ ] **P1-63：Remotion no-provider-key guard** — 确认 rendering build/test 不读取 provider API key。

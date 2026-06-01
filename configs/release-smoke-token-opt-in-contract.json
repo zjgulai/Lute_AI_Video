@@ -1,0 +1,31 @@
+{
+  "status": "stable",
+  "script": "scripts/release_smoke_v0.4.0.sh",
+  "runbook": "docs/runbooks/release-smoke-token-opt-in.md",
+  "default_token_smoke": "disabled",
+  "opt_in_env": "RUN_TOKEN_SMOKE=1",
+  "no_token_boundary": true,
+  "token_consuming_endpoints": [
+    "/api/fast/generate",
+    "/api/fast/submit",
+    "/api/scenario/",
+    "/api/pipeline/start",
+    "/gate/"
+  ],
+  "default_allowed_checks": [
+    "container_health",
+    "https_health",
+    "alembic_current",
+    "postgres_schema",
+    "prometheus_metrics",
+    "admin_auth_401",
+    "watchdog_logs",
+    "backend_log_scan"
+  ],
+  "recharge_required_before": [
+    "RUN_TOKEN_SMOKE=1",
+    "real_fast_generate",
+    "real_scenario_submit",
+    "gate_candidate_generate"
+  ]
+}
