@@ -11,6 +11,7 @@ docs/runbooks/README.md
 docs/runbooks/admin-csrf-contract.md
 docs/runbooks/api-rate-limit-contract.md
 docs/runbooks/api-response-metadata-contract.md
+docs/runbooks/archive-draft-link-drift.md
 docs/runbooks/backend-route-auth-contract.md
 docs/runbooks/background-task-registry-leak.md
 docs/runbooks/brand-assets-refresh.md

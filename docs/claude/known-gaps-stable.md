@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-57 Markdown frontmatter compliance scan：tracked `docs/**/*.md` / `drafts/**/*.md` 已有元信息扫描、legacy backfill 清单和新增文档阻断。
+最近一次盘点：**2026-06-01** — 已完成 P1-58 archive/draft link drift scan：当前阻断式文档范围的历史/临时链接已有契约、语境提示和新增漂移守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-56 root directory pollution guard：根目录 tracked 项已有允许清单，本地-only cache/output/tmp/worktrees 已被 `.gitignore` 和测试守卫。
+> 上一次盘点：2026-06-01 — 已完成 P1-57 Markdown frontmatter compliance scan：tracked `docs/**/*.md` / `drafts/**/*.md` 已有元信息扫描、legacy backfill 清单和新增文档阻断。
 
 ## 当前执行入口
 
@@ -407,6 +407,14 @@ source: human+ai
 - **枚举对齐** — 3 个已完整但使用 `doc_type: runbook` 的 runbook 调整为 `doc_type: workflow`，与 AGENTS.md 文档元信息枚举一致。
 - **无 token 边界** — 本轮只读取本地 Markdown、配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.70 2026-06-01 P1-58 archive/draft link drift scan
+
+- **历史链接扫描** — 新增 `tests/test_archive_draft_link_drift.py`，从 `configs/docs-link-check-scope.txt` 读取当前阻断式文档范围，扫描 Markdown links 和 frontmatter `file:`。
+- **漂移契约固化** — 新增 `configs/archive-draft-link-drift-contract.json`，将 `.kiro/`、`tmp/`、`archive/`、`drafts/`、`docs/research/`、`docs/superpowers/plans|specs/` 等目标统一视为历史/临时引用。
+- **当前入口防误导** — `docs/claude/updates/project-updates-202605-stable.md` 和 ADR-004 的 `.kiro` / `tmp` 链接已补“历史证据 / 不作为当前执行入口”语境。
+- **历史计划链接边界** — `known-gaps` 中的 `superpowers/plans` 链接保留为历史记录；测试要求新增同类链接必须进入契约并带非当前入口提示。
+- **无 token 边界** — 本轮只读取本地 Markdown、配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -557,7 +565,7 @@ source: human+ai
 - [x] **P1-55：script naming/location governance audit** — 已固化 `scripts/` 分类契约、provider probe 默认入口隔离和 generated artifact 清理确认边界。
 - [x] **P1-56：root directory pollution guard** — 已建立根目录允许清单、临时/截图/报告类 tracked 根文件守卫和本地-only 忽略契约。
 - [x] **P1-57：Markdown frontmatter compliance scan** — 已固化 tracked `docs/**/*.md` / `drafts/**/*.md` 元信息扫描、legacy backfill 清单和 doc_type 枚举守卫。
-- [ ] **P1-58：archive/draft link drift scan** — 检查历史文档和当前入口之间的链接是否误导执行计划。
+- [x] **P1-58：archive/draft link drift scan** — 已固化当前文档范围内历史/临时链接 allowlist、非当前入口语境检查和新增漂移守卫。
 - [ ] **P1-59：poyo model matrix stale warning guard** — 锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
 - [ ] **P1-60：release smoke token opt-in guard** — 审计 release smoke 脚本，确认生成接口不会默认执行。
 - [ ] **P1-61：workflow trigger path audit** — 检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
@@ -652,7 +660,7 @@ source: human+ai
 - **验证闭环** — 已通过 `eslint src/components/FastModePanel.tsx src/components/SceneForm.tsx src/components/SceneSelector.tsx` 与 `tsc --noEmit`。
 - **后端 hermetic 回归** — 已通过 `tests/test_scenario_step_regenerate_router.py`、`tests/test_gate_scenario_configs.py`、`tests/test_continuity_storyboard_grid.py`、`tests/test_candidate_scorer_continuity.py`、`tests/test_s1_continuity_pipeline.py`、`tests/test_s3_e2e.py`、`tests/test_s4_e2e.py`、`tests/test_s5_e2e.py`，结果 `135 passed, 12 deselected`；FastAPI `on_event` deprecation warning 已在 2026-05-30 lifespan 迁移中关闭。
 
-> 更早盘点：2026-05-22 — S1 连续分镜能力向 S2-S5 抽象迁移完成，13 个 POYO 模型 ID 修正，Kling/Wan/Hailuo 参数适配。详见 [`docs/superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md`](../../superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md)。
+> 更早盘点：2026-05-22 — S1 连续分镜能力向 S2-S5 抽象迁移完成，13 个 POYO 模型 ID 修正，Kling/Wan/Hailuo 参数适配。历史记录详见 [`docs/superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md`](../../superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md)，不作为当前执行入口。
 
 ## 0.1 2026-05-28 本地技术债收口
 
@@ -871,7 +879,7 @@ prompt 不足，改为 `_step_vlog_strategy` 内创建 `LLMClient(timeout=120.0)
 
 ### 6. 2026-05-22 新增（S1 连续分镜向 S2-S5 迁移）
 
-> 详见 [`docs/superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md`](../../superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md)。
+> 历史记录详见 [`docs/superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md`](../../superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md)，不作为当前执行入口。
 
 **已完成：**
 - S3/S4/S5 后端 `continuity_storyboard_grid` step 接入

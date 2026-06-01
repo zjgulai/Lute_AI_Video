@@ -27,13 +27,13 @@ source: human+ai
 | **v0.2.3** | `2238a84` | `BrandKitTab.tsx` 由硬编码 2 条改为 fetch `/api/portfolio/?kind=brand_kit`，137 张抓取的 momcozy 产品图全部可见 |
 | **v0.2.4** | `7daadc1` | 品牌资产 Phase 2-4：PortfolioFile 暴露 product_title/price/source_url/description (LRU 读 info.json) + 新 `/brand-presets` API + QuickTemplate API 化 + cron 刷新脚本 + brand-assets-refresh runbook |
 
-具体修复细节、QA 截图、生产验证步骤见：
+历史修复细节、QA 截图、生产验证步骤见；以下 `.kiro/` 和 `tmp/` 链接仅作历史证据，不作为当前执行入口：
 - [`.kiro/plan/RECONCILIATION-2026-05-11.md`](../../../.kiro/plan/RECONCILIATION-2026-05-11.md)
 - [`.kiro/plan/DEPLOY-CHECKLIST-2026-05-12.md`](../../../.kiro/plan/DEPLOY-CHECKLIST-2026-05-12.md)
 - [`.kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md`](../../../.kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md)
 - [`tmp/outputs/production-qa-2026-05-11/`](../../../tmp/outputs/production-qa-2026-05-11/)
 
-下一步规划见 [`.kiro/plan/NEXT-STEPS-2026-05-11.md`](../../../.kiro/plan/NEXT-STEPS-2026-05-11.md)。
+当时的历史下一步规划见 [`.kiro/plan/NEXT-STEPS-2026-05-11.md`](../../../.kiro/plan/NEXT-STEPS-2026-05-11.md)；当前执行入口以 [`docs/claude/known-gaps-stable.md`](./known-gaps-stable.md) 为准。
 
 ---
 
