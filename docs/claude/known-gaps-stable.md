@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-51 AssetPicker request boundary guard：素材选择器已锁定为只读 portfolio listing，不触发上传或生成。
+最近一次盘点：**2026-06-01** — 已完成 P1-52 env example no-secret drift guard：`.env.example`、配置默认值和活跃部署 env 文档已有无真实 secret 守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-50 admin logs keyboard navigation guard：Admin Logs 行键盘打开、详情弹层关闭和焦点恢复已有回归守卫。
+> 上一次盘点：2026-06-01 — 已完成 P1-51 AssetPicker request boundary guard：素材选择器已锁定为只读 portfolio listing，不触发上传或生成。
 
 ## 当前执行入口
 
@@ -359,6 +359,14 @@ source: human+ai
 - **契约固化** — 新增 `configs/asset-picker-request-boundary-contract.yaml`、`docs/runbooks/asset-picker-request-boundary.md` 和 `web/src/components/AssetPickerModal.test.tsx`。
 - **无 token 边界** — 本轮只使用 mocked `apiFetch`、静态源码检查和 jsdom UI 测试，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.64 2026-06-01 P1-52 env example no-secret drift guard
+
+- **`.env.example` 占位符守卫** — `KEY` / `TOKEN` / `SECRET` / `PASSWORD` 类变量只能为空、demo/test 值或占位符；真实 provider key 形态会使测试失败。
+- **配置默认值守卫** — `src/config.py` 中敏感 env fallback 必须保持空字符串，避免把真实 key 或伪生产 key 写入代码默认值。
+- **活跃部署文档守卫** — 扫描 CloudBase、local-run、Lighthouse、P2 smoke 等活跃 env 文档的敏感行，只允许占位符、变量引用或 `[redacted]`。
+- **生产 secret 边界明确** — 新增 `configs/env-example-no-secret-contract.yaml` 和 `docs/runbooks/env-example-no-secret-drift.md`；测试明确不读取 gitignored 的 `deploy/lighthouse/.env.prod`。
+- **无 token 边界** — 本轮只做静态文件扫描和文档治理，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -503,7 +511,7 @@ source: human+ai
 - [x] **P1-49：Settings API key accessibility guard** — 已为 Settings key 输入、保存、连接测试成功/失败状态补可访问性和回归测试。
 - [x] **P1-50：admin logs keyboard navigation guard** — 已锁定 Admin Logs 行键盘打开、详情弹层关闭和焦点恢复行为。
 - [x] **P1-51：AssetPicker request boundary guard** — 已确认素材选择器只调用只读 portfolio listing，不触发上传或生成。
-- [ ] **P1-52：env example no-secret drift guard** — 检查 `.env.example`、deploy env 文档和配置默认值不包含真实 secret。
+- [x] **P1-52：env example no-secret drift guard** — 已检查 `.env.example`、deploy env 文档和配置默认值不包含真实 secret。
 - [ ] **P1-53：Lighthouse nginx timeout parity** — 静态检查 nginx 长任务 timeout 与部署文档一致。
 - [ ] **P1-54：rsync exclude artifact guard** — 防止 `.next`、报告、截图、tmp 输出等本地产物进入远程部署同步。
 - [ ] **P1-55：script naming/location governance audit** — 审计 `scripts/` 中一次性或危险脚本的命名、提示和归档状态。

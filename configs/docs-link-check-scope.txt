@@ -19,6 +19,7 @@ docs/runbooks/db-pool-exhausted.md
 docs/runbooks/deepseek-timeout.md
 docs/runbooks/health-endpoint-no-secret.md
 docs/runbooks/docker-no-token-preflight.md
+docs/runbooks/env-example-no-secret-drift.md
 docs/runbooks/github-actions-deploy-secrets.md
 docs/runbooks/github-deploy-secrets-setup.md
 docs/runbooks/gate-approve-idempotency.md
