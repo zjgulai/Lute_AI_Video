@@ -1,12 +1,12 @@
 # Multi-stage Dockerfile for AI Video frontend
-# P3-3: Pre-built image — no runtime npm install/build
+# P3-3: Pre-built image — no runtime dependency install/build
 
 # ── Stage 1: Build ──
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
 
 COPY . .
 

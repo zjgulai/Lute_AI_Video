@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-61 workflow trigger path audit：path-filtered workflow 的 source/config/lockfile 触发范围已有合同守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-62 Dockerfile dev-tool parity guard：Docker/CI 的 dev-tool、npm lockfile 与前端 Dockerfile 安装口径已有一致性守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-60 release smoke token opt-in guard：历史 release smoke 中的生成 endpoint 已强制放入 `RUN_TOKEN_SMOKE=1` 显式分支。
+> 上一次盘点：2026-06-01 — 已完成 P1-61 workflow trigger path audit：path-filtered workflow 的 source/config/lockfile 触发范围已有合同守卫。
 
 ## 当前执行入口
 
@@ -436,6 +436,13 @@ source: human+ai
 - **主 CI 边界** — 测试确认 `.github/workflows/ci.yml` 不使用 `paths` / `paths-ignore`，继续作为 broad quality gate。
 - **无 token 边界** — 本轮只读取本地 YAML/JSON/Markdown，不触发 GitHub Actions、不运行 Playwright、不访问生产、不消耗 provider token。
 
+## 0.74 2026-06-01 P1-62 Dockerfile dev-tool parity guard
+
+- **dev-tool 合同** — 新增 `configs/docker-dev-tool-parity-contract.json` 和 `tests/test_docker_dev_tool_parity.py`，锁定 Python dev tools、前端 dev tools、Node workflow npm cache 与 lockfile 口径。
+- **前端 Dockerfile fail-fast** — `web/Dockerfile` 改为精确复制 `package.json package-lock.json`，并删除 `npm install` fallback，只允许 `npm ci --ignore-scripts`。
+- **runbook 固化** — 新增 `docs/runbooks/docker-dev-tool-parity.md` 并纳入 docs link-check scope，后续改测试工具、Dockerfile 或 lockfile 时先跑该守卫。
+- **无 token 边界** — 本轮只做本地静态检查和 Dockerfile 文本修正，不执行 Docker build、不启动容器、不访问生产、不触发 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -590,7 +597,7 @@ source: human+ai
 - [x] **P1-59：poyo model matrix stale warning guard** — 已锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
 - [x] **P1-60：release smoke token opt-in guard** — 已审计 release smoke 脚本，确认生成接口不会默认执行。
 - [x] **P1-61：workflow trigger path audit** — 已检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
-- [ ] **P1-62：Dockerfile dev-tool parity guard** — 确认 Docker/CI 需要的测试工具和 lockfile 一致。
+- [x] **P1-62：Dockerfile dev-tool parity guard** — 已确认 Docker/CI 需要的测试工具和 lockfile 一致。
 - [ ] **P1-63：Remotion no-provider-key guard** — 确认 rendering build/test 不读取 provider API key。
 - [ ] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
 - [ ] **P1-65：50-loop checkpoint review** — 对 P1-16~P1-64 执行结果做一次技术债重新排序，决定充值前是否继续扩展 P1。
