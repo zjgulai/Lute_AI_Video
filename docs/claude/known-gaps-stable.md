@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-62 Dockerfile dev-tool parity guard：Docker/CI 的 dev-tool、npm lockfile 与前端 Dockerfile 安装口径已有一致性守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-63 Remotion no-provider-key guard：Remotion rendering build/test 与 Lighthouse rendering service 已有 provider key 零注入守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-61 workflow trigger path audit：path-filtered workflow 的 source/config/lockfile 触发范围已有合同守卫。
+> 上一次盘点：2026-06-01 — 已完成 P1-62 Dockerfile dev-tool parity guard：Docker/CI 的 dev-tool、npm lockfile 与前端 Dockerfile 安装口径已有一致性守卫。
 
 ## 当前执行入口
 
@@ -443,6 +443,14 @@ source: human+ai
 - **runbook 固化** — 新增 `docs/runbooks/docker-dev-tool-parity.md` 并纳入 docs link-check scope，后续改测试工具、Dockerfile 或 lockfile 时先跑该守卫。
 - **无 token 边界** — 本轮只做本地静态检查和 Dockerfile 文本修正，不执行 Docker build、不启动容器、不访问生产、不触发 provider。
 
+## 0.75 2026-06-01 P1-63 Remotion no-provider-key guard
+
+- **Remotion 合同** — 新增 `configs/remotion-no-provider-key-contract.json` 和 `tests/test_remotion_no_provider_key_guard.py`，锁定 tracked `rendering/` 文件不得引用 provider key 或 provider API host。
+- **运行环境边界** — 测试确认 Remotion 只允许 `NODE_ENV`、`PORT`、`OUTPUT_DIR` 与 Chromium/Remotion 本地控制变量；Lighthouse `rendering` service 不使用 `env_file`，只接收本地渲染运行变量。
+- **CI/deploy 漂移防护** — 静态扫描 `.github/workflows/ci.yml` 与 `.github/workflows/deploy.yml`，未来新增 rendering 工作目录步骤时不得注入 provider env 或 `RUN_TOKEN_SMOKE=1`。
+- **runbook 固化** — 新增 `docs/runbooks/remotion-no-provider-key.md` 并纳入 docs link-check scope，后续改 rendering、compose 或 CI rendering 步骤时先跑该守卫。
+- **无 token 边界** — 本轮只做本地静态检查和文档契约，不执行 Docker build、不运行 Remotion render、不启动容器、不访问生产、不触发 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -598,7 +606,7 @@ source: human+ai
 - [x] **P1-60：release smoke token opt-in guard** — 已审计 release smoke 脚本，确认生成接口不会默认执行。
 - [x] **P1-61：workflow trigger path audit** — 已检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
 - [x] **P1-62：Dockerfile dev-tool parity guard** — 已确认 Docker/CI 需要的测试工具和 lockfile 一致。
-- [ ] **P1-63：Remotion no-provider-key guard** — 确认 rendering build/test 不读取 provider API key。
+- [x] **P1-63：Remotion no-provider-key guard** — 已确认 rendering build/test 不读取 provider API key，并固化静态守卫。
 - [ ] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
 - [ ] **P1-65：50-loop checkpoint review** — 对 P1-16~P1-64 执行结果做一次技术债重新排序，决定充值前是否继续扩展 P1。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。

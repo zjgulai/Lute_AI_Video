@@ -1,0 +1,48 @@
+{
+  "status": "stable",
+  "no_token_boundary": true,
+  "tracked_rendering_path": "rendering",
+  "allowed_env_names": [
+    "NODE_ENV",
+    "OUTPUT_DIR",
+    "PORT",
+    "PUPPETEER_EXECUTABLE_PATH",
+    "PUPPETEER_SKIP_DOWNLOAD",
+    "REMOTION_CHROME_EXECUTABLE"
+  ],
+  "forbidden_provider_env_names": [
+    "API_KEY",
+    "ANTHROPIC_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "NEXT_PUBLIC_API_KEY",
+    "OPENAI_API_KEY",
+    "PLAYWRIGHT_API_KEY",
+    "POYO_API_KEY",
+    "PROD_DEMO_API_KEY",
+    "RUN_TOKEN_SMOKE",
+    "SEEDANCE_API_KEY",
+    "SHOPIFY_ADMIN_TOKEN",
+    "SHOPIFY_STORE_URL",
+    "SILICONFLOW_API_KEY",
+    "SUPABASE_SERVICE_KEY",
+    "SUPABASE_URL",
+    "TIKTOK_ACCESS_TOKEN",
+    "TIKTOK_OPEN_ID"
+  ],
+  "forbidden_provider_markers": [
+    "api.anthropic.com",
+    "api.deepseek.com",
+    "api.openai.com",
+    "api.poyo.ai",
+    "api.seedance.ai",
+    "api.siliconflow.cn"
+  ],
+  "rendering_compose_env": [
+    "NODE_ENV=production",
+    "OUTPUT_DIR=/app/output",
+    "PORT=3001"
+  ],
+  "runbook": "docs/runbooks/remotion-no-provider-key.md",
+  "test": "tests/test_remotion_no_provider_key_guard.py"
+}
