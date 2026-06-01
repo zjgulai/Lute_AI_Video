@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-55 script naming/location governance audit：`scripts/` 目录已有分类契约、危险脚本默认入口守卫和 generated artifact 清理边界。
+最近一次盘点：**2026-06-01** — 已完成 P1-56 root directory pollution guard：根目录 tracked 项已有允许清单，本地-only cache/output/tmp/worktrees 已被 `.gitignore` 和测试守卫。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-54 rsync exclude artifact guard：Lighthouse 同步已覆盖本地构建、报告、截图、tmp/output 和 secret/cert 排除项。
+> 上一次盘点：2026-06-01 — 已完成 P1-55 script naming/location governance audit：`scripts/` 目录已有分类契约、危险脚本默认入口守卫和 generated artifact 清理边界。
 
 ## 当前执行入口
 
@@ -391,6 +391,14 @@ source: human+ai
 - **清理边界明确** — `scripts/__pycache__/**` 和 `scripts/**/*.pyc` 被标注为 `cleanup_requires_confirmation`；本轮不直接删除或迁移，避免未确认的目录治理变更。
 - **无 token 边界** — 本轮只做静态文件扫描、契约和文档治理，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.68 2026-06-01 P1-56 root directory pollution guard
+
+- **根目录允许清单** — 新增 `configs/root-directory-governance-contract.json`，把 tracked 顶层文件和目录分为 `allowed_root_files`、`allowed_root_directories` 和 `legacy_tracked_root_directories`。
+- **污染模式守卫** — 新增 `tests/test_root_directory_governance.py`，禁止 tracked 根文件使用 screenshot、tmp、draft、analysis、debug、final、report、output 等临时语义或图片、视频、日志、备份后缀。
+- **本地-only 忽略补齐** — `.gitignore` 显式补 `worktrees/`、`.ruff_cache/`、`coverage/`、`web/blob-report/`、`web/playwright-report/`、`web/test-results/`、`web/tmp/`，避免本地工具产物被误提交。
+- **落点文档化** — 新增 `docs/runbooks/root-directory-governance.md`，明确文档进 `docs/` / `drafts/docs/`，分析进 `drafts/analysis/`，截图进 `tmp/screenshots/`，输出进 `tmp/outputs/`，历史材料进 `archive/`。
+- **无 token 边界** — 本轮只读取 git 索引、`.gitignore`、配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -539,7 +547,7 @@ source: human+ai
 - [x] **P1-53：Lighthouse nginx timeout parity** — 已静态检查 nginx 长任务 timeout 与部署文档一致。
 - [x] **P1-54：rsync exclude artifact guard** — 已防止 `.next`、报告、截图、tmp 输出等本地产物进入远程部署同步。
 - [x] **P1-55：script naming/location governance audit** — 已固化 `scripts/` 分类契约、provider probe 默认入口隔离和 generated artifact 清理确认边界。
-- [ ] **P1-56：root directory pollution guard** — 建立根目录允许清单，防止临时文件和截图直接落根目录。
+- [x] **P1-56：root directory pollution guard** — 已建立根目录允许清单、临时/截图/报告类 tracked 根文件守卫和本地-only 忽略契约。
 - [ ] **P1-57：Markdown frontmatter compliance scan** — 扫描正式区 / 草稿区 Markdown frontmatter 完整性。
 - [ ] **P1-58：archive/draft link drift scan** — 检查历史文档和当前入口之间的链接是否误导执行计划。
 - [ ] **P1-59：poyo model matrix stale warning guard** — 锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。

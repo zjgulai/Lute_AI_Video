@@ -33,6 +33,7 @@ docs/runbooks/pipeline-stuck.md
 docs/runbooks/poyo-rejection.md
 docs/runbooks/production-e2e-token-smoke.md
 docs/runbooks/regenerate-downstream-invalidation.md
+docs/runbooks/root-directory-governance.md
 docs/runbooks/s4-footage-filtering.md
 docs/runbooks/s1-s5-hermetic-regression.md
 docs/runbooks/scripts-governance.md

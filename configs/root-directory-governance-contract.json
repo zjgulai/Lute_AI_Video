@@ -1,0 +1,336 @@
+{
+  "updated": "2026-06-01",
+  "runbook": "docs/runbooks/root-directory-governance.md",
+  "policy": {
+    "default_documents": "docs/ or drafts/docs/",
+    "default_analysis": "drafts/analysis/",
+    "default_outputs": "tmp/outputs/",
+    "default_screenshots": "tmp/screenshots/",
+    "default_archives": "archive/",
+    "notes": "The repository root is limited to project entrypoints, build configuration, and classified top-level directories."
+  },
+  "allowed_root_files": [
+    {
+      "path": ".dockerignore",
+      "status": "config",
+      "reason": "Docker build context exclude configuration."
+    },
+    {
+      "path": ".env.example",
+      "status": "config",
+      "reason": "Public environment variable template with no real secrets."
+    },
+    {
+      "path": ".gitignore",
+      "status": "config",
+      "reason": "Git ignore policy for local-only and generated artifacts."
+    },
+    {
+      "path": "AGENTS.md",
+      "status": "entrypoint",
+      "reason": "Agent operating contract for this repository."
+    },
+    {
+      "path": "CLAUDE.md",
+      "status": "entrypoint",
+      "reason": "Project guide retained as a top-level collaboration entrypoint."
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "status": "entrypoint",
+      "reason": "Contribution workflow entrypoint."
+    },
+    {
+      "path": "Dockerfile",
+      "status": "config",
+      "reason": "Canonical Docker build alias."
+    },
+    {
+      "path": "Dockerfile.backend",
+      "status": "config",
+      "reason": "Backend Docker build configuration."
+    },
+    {
+      "path": "Makefile",
+      "status": "entrypoint",
+      "reason": "Developer command entrypoint."
+    },
+    {
+      "path": "README.md",
+      "status": "entrypoint",
+      "reason": "Repository overview and onboarding entrypoint."
+    },
+    {
+      "path": "docker-compose.yml",
+      "status": "config",
+      "reason": "Local service orchestration configuration."
+    },
+    {
+      "path": "pyproject.toml",
+      "status": "config",
+      "reason": "Python project and tooling configuration."
+    },
+    {
+      "path": "render.yaml",
+      "status": "config",
+      "reason": "Alternative Render deployment blueprint."
+    },
+    {
+      "path": "requirements.txt",
+      "status": "config",
+      "reason": "Python dependency export."
+    },
+    {
+      "path": "uv.lock",
+      "status": "config",
+      "reason": "Python dependency lockfile."
+    }
+  ],
+  "allowed_root_directories": [
+    {
+      "path": ".github",
+      "status": "config",
+      "reason": "GitHub issue templates and workflow configuration."
+    },
+    {
+      "path": "configs",
+      "status": "config",
+      "reason": "Formal project configuration and governance contracts."
+    },
+    {
+      "path": "deploy",
+      "status": "deployment_directory",
+      "reason": "Deployment scripts and environment-specific SOPs."
+    },
+    {
+      "path": "docs",
+      "status": "project_asset_directory",
+      "reason": "Formal project documentation."
+    },
+    {
+      "path": "eval",
+      "status": "test_directory",
+      "reason": "Evaluation assets retained as test/evaluation materials."
+    },
+    {
+      "path": "migrations",
+      "status": "config",
+      "reason": "Alembic database migration configuration and versions."
+    },
+    {
+      "path": "prompts",
+      "status": "project_asset_directory",
+      "reason": "Formal prompt templates."
+    },
+    {
+      "path": "rendering",
+      "status": "source_directory",
+      "reason": "Remotion rendering source package."
+    },
+    {
+      "path": "scripts",
+      "status": "source_directory",
+      "reason": "Reusable project scripts governed by scripts-governance-contract.json."
+    },
+    {
+      "path": "src",
+      "status": "source_directory",
+      "reason": "Backend source code."
+    },
+    {
+      "path": "strategy_source",
+      "status": "project_asset_directory",
+      "reason": "Scenario strategy source material and thresholds."
+    },
+    {
+      "path": "templates",
+      "status": "project_asset_directory",
+      "reason": "Reusable visual and motion templates."
+    },
+    {
+      "path": "tests",
+      "status": "test_directory",
+      "reason": "Formal automated test suite."
+    },
+    {
+      "path": "web",
+      "status": "source_directory",
+      "reason": "Next.js frontend source package."
+    }
+  ],
+  "legacy_tracked_root_directories": [
+    {
+      "path": ".sisyphus",
+      "status": "legacy_tracked_metadata",
+      "reason": "Tracked historical planning metadata; do not add new root metadata directories without a contract update."
+    }
+  ],
+  "local_only_root_artifacts": [
+    {
+      "path": ".DS_Store",
+      "status": "gitignored_local_only",
+      "reason": "macOS filesystem metadata."
+    },
+    {
+      "path": ".env",
+      "status": "gitignored_local_only",
+      "reason": "Local secret-bearing environment file."
+    },
+    {
+      "path": ".env.local",
+      "status": "gitignored_local_only",
+      "reason": "Local secret-bearing environment file."
+    },
+    {
+      "path": ".env.production",
+      "status": "gitignored_local_only",
+      "reason": "Local production secret-bearing environment file."
+    },
+    {
+      "path": ".env.prod",
+      "status": "gitignored_local_only",
+      "reason": "Local production secret-bearing environment file."
+    },
+    {
+      "path": ".pytest_cache/",
+      "status": "gitignored_local_only",
+      "reason": "Pytest cache."
+    },
+    {
+      "path": ".ruff_cache/",
+      "status": "gitignored_local_only",
+      "reason": "Ruff cache."
+    },
+    {
+      "path": ".venv/",
+      "status": "gitignored_local_only",
+      "reason": "Local Python virtual environment."
+    },
+    {
+      "path": "node_modules/",
+      "status": "gitignored_local_only",
+      "reason": "Root Node dependency cache."
+    },
+    {
+      "path": "output/",
+      "status": "gitignored_local_only",
+      "reason": "Generated runtime media and local output."
+    },
+    {
+      "path": "tmp/",
+      "status": "gitignored_local_only",
+      "reason": "Disposable temporary outputs, screenshots, debug files, and scratch material."
+    },
+    {
+      "path": "drafts/",
+      "status": "gitignored_local_only",
+      "reason": "Local draft workspace not part of the tracked formal asset set."
+    },
+    {
+      "path": "archive/",
+      "status": "gitignored_local_only",
+      "reason": "Local archive workspace not part of the tracked formal asset set."
+    },
+    {
+      "path": "worktrees/",
+      "status": "gitignored_local_only",
+      "reason": "Local git worktree container."
+    },
+    {
+      "path": ".claude/",
+      "status": "gitignored_local_only",
+      "reason": "Local Claude/Codex artifacts."
+    },
+    {
+      "path": ".kiro/",
+      "status": "gitignored_local_only",
+      "reason": "Local planning artifacts."
+    },
+    {
+      "path": ".hermes/",
+      "status": "gitignored_local_only",
+      "reason": "Local assistant artifacts."
+    },
+    {
+      "path": ".playwright-mcp/",
+      "status": "gitignored_local_only",
+      "reason": "Local browser automation artifacts."
+    },
+    {
+      "path": ".omc/",
+      "status": "gitignored_local_only",
+      "reason": "Local OMC artifacts."
+    },
+    {
+      "path": ".next/",
+      "status": "gitignored_local_only",
+      "reason": "Next.js build output."
+    },
+    {
+      "path": "coverage/",
+      "status": "gitignored_local_only",
+      "reason": "Coverage output."
+    },
+    {
+      "path": "htmlcov/",
+      "status": "gitignored_local_only",
+      "reason": "HTML coverage output."
+    },
+    {
+      "path": ".coverage",
+      "status": "gitignored_local_only",
+      "reason": "Coverage database."
+    },
+    {
+      "path": "web/blob-report/",
+      "status": "gitignored_local_only",
+      "reason": "Playwright blob report."
+    },
+    {
+      "path": "web/playwright-report/",
+      "status": "gitignored_local_only",
+      "reason": "Playwright HTML report."
+    },
+    {
+      "path": "web/test-results/",
+      "status": "gitignored_local_only",
+      "reason": "Playwright test results."
+    },
+    {
+      "path": "web/tmp/",
+      "status": "gitignored_local_only",
+      "reason": "Frontend temporary outputs."
+    },
+    {
+      "path": "rendering/output/",
+      "status": "gitignored_local_only",
+      "reason": "Rendering package output."
+    }
+  ],
+  "forbidden_root_file_markers": [
+    "screenshot",
+    "screen-shot",
+    "capture",
+    "tmp",
+    "temp",
+    "draft",
+    "analysis",
+    "debug",
+    "final",
+    "report",
+    "output"
+  ],
+  "forbidden_root_file_suffixes": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".log",
+    ".tmp",
+    ".bak"
+  ]
+}
