@@ -1,6 +1,6 @@
 ---
 title: API key storage fallback guard
-doc_type: runbook
+doc_type: workflow
 module: frontend
 topic: api-key-storage
 status: stable

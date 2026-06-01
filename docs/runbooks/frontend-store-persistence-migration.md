@@ -1,6 +1,6 @@
 ---
 title: Frontend store persistence migration guard
-doc_type: runbook
+doc_type: workflow
 module: frontend
 topic: zustand-persistence
 status: stable

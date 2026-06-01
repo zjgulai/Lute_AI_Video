@@ -11,9 +11,9 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-56 root directory pollution guard：根目录 tracked 项已有允许清单，本地-only cache/output/tmp/worktrees 已被 `.gitignore` 和测试守卫。
+最近一次盘点：**2026-06-01** — 已完成 P1-57 Markdown frontmatter compliance scan：tracked `docs/**/*.md` / `drafts/**/*.md` 已有元信息扫描、legacy backfill 清单和新增文档阻断。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-55 script naming/location governance audit：`scripts/` 目录已有分类契约、危险脚本默认入口守卫和 generated artifact 清理边界。
+> 上一次盘点：2026-06-01 — 已完成 P1-56 root directory pollution guard：根目录 tracked 项已有允许清单，本地-only cache/output/tmp/worktrees 已被 `.gitignore` 和测试守卫。
 
 ## 当前执行入口
 
@@ -399,6 +399,14 @@ source: human+ai
 - **落点文档化** — 新增 `docs/runbooks/root-directory-governance.md`，明确文档进 `docs/` / `drafts/docs/`，分析进 `drafts/analysis/`，截图进 `tmp/screenshots/`，输出进 `tmp/outputs/`，历史材料进 `archive/`。
 - **无 token 边界** — 本轮只读取 git 索引、`.gitignore`、配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
 
+## 0.69 2026-06-01 P1-57 Markdown frontmatter compliance scan
+
+- **扫描范围固化** — 新增 `tests/test_markdown_frontmatter_compliance.py`，只扫描 git-tracked `docs/**/*.md` 和 `drafts/**/*.md`，不把本地未跟踪草稿纳入 CI。
+- **必填字段守卫** — 新增 `configs/markdown-frontmatter-compliance-contract.json`，锁定 `title`、`doc_type`、`module`、`topic`、`status`、`created`、`updated`、`owner`、`source`。
+- **历史缺口登记** — 当前 62 个历史 Markdown 缺口被精确标记为 `legacy_backfill_required`；新增 Markdown 不允许加入例外，必须直接补齐 frontmatter。
+- **枚举对齐** — 3 个已完整但使用 `doc_type: runbook` 的 runbook 调整为 `doc_type: workflow`，与 AGENTS.md 文档元信息枚举一致。
+- **无 token 边界** — 本轮只读取本地 Markdown、配置和文档，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或外部 provider。
+
 ## 0.17 2026-05-31 P1-5 文档漂移清理
 
 - **当前计划入口收口** — 本文件明确为当前技术债 TODO 的唯一入口；后续继续执行时从“完整 TODO list”读取下一项，避免多个历史路线图并行竞争。
@@ -548,7 +556,7 @@ source: human+ai
 - [x] **P1-54：rsync exclude artifact guard** — 已防止 `.next`、报告、截图、tmp 输出等本地产物进入远程部署同步。
 - [x] **P1-55：script naming/location governance audit** — 已固化 `scripts/` 分类契约、provider probe 默认入口隔离和 generated artifact 清理确认边界。
 - [x] **P1-56：root directory pollution guard** — 已建立根目录允许清单、临时/截图/报告类 tracked 根文件守卫和本地-only 忽略契约。
-- [ ] **P1-57：Markdown frontmatter compliance scan** — 扫描正式区 / 草稿区 Markdown frontmatter 完整性。
+- [x] **P1-57：Markdown frontmatter compliance scan** — 已固化 tracked `docs/**/*.md` / `drafts/**/*.md` 元信息扫描、legacy backfill 清单和 doc_type 枚举守卫。
 - [ ] **P1-58：archive/draft link drift scan** — 检查历史文档和当前入口之间的链接是否误导执行计划。
 - [ ] **P1-59：poyo model matrix stale warning guard** — 锁定 poyo 模型矩阵必须标注快照时间和充值前重验提示。
 - [ ] **P1-60：release smoke token opt-in guard** — 审计 release smoke 脚本，确认生成接口不会默认执行。

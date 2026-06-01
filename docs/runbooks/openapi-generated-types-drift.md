@@ -1,6 +1,6 @@
 ---
 title: OpenAPI generated types drift guard
-doc_type: runbook
+doc_type: workflow
 module: api
 topic: openapi-generated-types
 status: stable
