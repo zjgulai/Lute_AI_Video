@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pytest
+
 from src.models.commercial_contracts import (
     AuditEvidenceBundle,
     EditDecision,
@@ -14,6 +19,8 @@ from src.models.commercial_contracts import (
     TimelineManifest,
 )
 from src.pipeline.longform_audit_bundle import build_longform_audit_bundle
+
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "commercial_video" / "longform_audit_bundle_cases.json"
 
 
 def test_longform_audit_blocks_90s_output_without_timeline_blocks():
@@ -104,14 +111,39 @@ def test_longform_audit_passing_gate_requires_review_not_delivery_acceptance():
     assert "delivery accepted" in bundle.forbidden_claims
 
 
-def _longform_contract(scenario: str) -> LongformProductionContract:
+@pytest.mark.parametrize("case", json.loads(FIXTURE_PATH.read_text())["cases"], ids=lambda case: case["case_id"])
+def test_longform_audit_bundle_fixture_cases(case: dict[str, object]):
+    payload = json.loads(FIXTURE_PATH.read_text())
+    assert payload["evidence_level"] == "L2-fixture-or-dry-run"
+    scenario = str(case["scenario"])
+    evidence_overrides = case.get("evidence_overrides")
+    assert isinstance(evidence_overrides, dict)
+
+    bundle = build_longform_audit_bundle(
+        longform_contract=_longform_contract(
+            scenario,
+            target_duration_seconds=int(case["target_duration_seconds"]),
+        ),
+        quality_contract=_quality_contract(scenario),
+        evidence=_evidence(scenario, **evidence_overrides),
+    )
+
+    checks = [action.check for action in bundle.repair_plan.actions]
+    assert bundle.gate_decision.status == case["expected_status"]
+    assert bundle.gate_decision.publish_allowed == case["expected_publish_allowed"]
+    assert bundle.publish_allowed is False
+    for expected_check in case["expected_checks"]:
+        assert expected_check in checks
+
+
+def _longform_contract(scenario: str, *, target_duration_seconds: int = 120) -> LongformProductionContract:
     return LongformProductionContract(
         contract_id=f"lfc_{scenario}_ready_fixture",
         scenario=scenario,
         brand_id="momcozy",
-        target_duration_seconds=120,
+        target_duration_seconds=target_duration_seconds,
         scene_ledger=_scene_ledger(scenario),
-        timeline_manifest=_timeline_manifest(scenario),
+        timeline_manifest=_timeline_manifest(scenario, duration=target_duration_seconds),
         shot_ledger=_shot_ledger(scenario, shot_count=3),
         edit_decision_list=_edl(),
         review_checkpoint_ids=["review_longform_fixture"],
@@ -136,6 +168,7 @@ def _evidence(
     timeline_manifest_refs: list[str] | None = None,
     edit_decision_list_refs: list[str] | None = None,
     caption_safe_zone_refs: list[str] | None = None,
+    caption_safe_zone_violations: list[str] | None = None,
 ) -> AuditEvidenceBundle:
     return AuditEvidenceBundle(
         evidence_bundle_id=f"aeb_{scenario}_longform_fixture",
@@ -151,6 +184,7 @@ def _evidence(
         timeline_manifest_refs=timeline_manifest_refs if timeline_manifest_refs is not None else ["timeline_manifest_fixture"],
         edit_decision_list_refs=edit_decision_list_refs if edit_decision_list_refs is not None else ["edl_fixture"],
         caption_safe_zone_refs=caption_safe_zone_refs if caption_safe_zone_refs is not None else ["caption_safe_fixture"],
+        caption_safe_zone_violations=caption_safe_zone_violations or [],
         platform_target=PlatformTarget(platform="tiktok", duration_seconds=120),
     )
 

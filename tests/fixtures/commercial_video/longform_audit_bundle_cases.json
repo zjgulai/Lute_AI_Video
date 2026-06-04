@@ -1,0 +1,60 @@
+{
+  "evidence_level": "L2-fixture-or-dry-run",
+  "cases": [
+    {
+      "case_id": "s3_missing_source_rights_blocks",
+      "scenario": "s3",
+      "target_duration_seconds": 120,
+      "evidence_overrides": {
+        "rights_evidence_refs": []
+      },
+      "expected_status": "blocked",
+      "expected_checks": ["source_rights_pass"],
+      "expected_publish_allowed": false
+    },
+    {
+      "case_id": "s3_missing_timeline_edl_blocks",
+      "scenario": "s3",
+      "target_duration_seconds": 120,
+      "evidence_overrides": {
+        "timeline_manifest_refs": [],
+        "edit_decision_list_refs": []
+      },
+      "expected_status": "blocked",
+      "expected_checks": ["timeline_manifest_pass", "edl_pass"],
+      "expected_publish_allowed": false
+    },
+    {
+      "case_id": "s4_missing_footage_rights_blocks",
+      "scenario": "s4",
+      "target_duration_seconds": 120,
+      "evidence_overrides": {
+        "rights_evidence_refs": []
+      },
+      "expected_status": "blocked",
+      "expected_checks": ["footage_rights_pass"],
+      "expected_publish_allowed": false
+    },
+    {
+      "case_id": "s4_caption_safe_zone_violation_blocks",
+      "scenario": "s4",
+      "target_duration_seconds": 120,
+      "evidence_overrides": {
+        "caption_safe_zone_refs": ["caption_safe_fixture"],
+        "caption_safe_zone_violations": ["caption_overlap_lower_third"]
+      },
+      "expected_status": "blocked",
+      "expected_checks": ["caption_safe_zone_pass"],
+      "expected_publish_allowed": false
+    },
+    {
+      "case_id": "s4_ready_for_human_review_not_publish",
+      "scenario": "s4",
+      "target_duration_seconds": 120,
+      "evidence_overrides": {},
+      "expected_status": "review_required",
+      "expected_checks": [],
+      "expected_publish_allowed": false
+    }
+  ]
+}
