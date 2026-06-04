@@ -6,6 +6,10 @@ import { errorMessage } from "@/lib/errors";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
 import ProductionJobLedgerViewer, { extractProductionJobRecords } from "./ProductionJobLedgerViewer";
 import QualityGateReportPanel, { extractQualityGateReport } from "./QualityGateReportPanel";
+import ScenarioInjectionDiffPanel, {
+  buildScenarioInjectionDiff,
+  shouldShowScenarioInjectionDiff,
+} from "./ScenarioInjectionDiffPanel";
 
 interface Props {
   label: string;
@@ -129,6 +133,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
   const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
   const qualityGateReport = extractQualityGateReport(state);
   const productionJobRecords = extractProductionJobRecords(state);
+  const scenarioInjectionDiff = buildScenarioInjectionDiff(state);
 
   const getCurrentStep = (): string | null => {
     for (const step of stepOrder) {
@@ -302,6 +307,12 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
         {productionJobRecords.length > 0 && (
           <div className="mt-3">
             <ProductionJobLedgerViewer records={productionJobRecords} />
+          </div>
+        )}
+
+        {shouldShowScenarioInjectionDiff(state, scenarioInjectionDiff) && (
+          <div className="mt-3">
+            <ScenarioInjectionDiffPanel diff={scenarioInjectionDiff} />
           </div>
         )}
 
