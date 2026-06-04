@@ -4,21 +4,22 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-01
+updated: 2026-06-04
 owner: self
 source: human+ai
 ---
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-01** — 已完成 P1-63 Remotion no-provider-key guard：Remotion rendering build/test 与 Lighthouse rendering service 已有 provider key 零注入守卫。
+最近一次盘点：**2026-06-04** — 补充 AIHOT 图像/视频生成市场信号采集、长视频生产覆盖审计、工具库架构规格与 2.0 代码前自证计划，作为 S1-S5 后续无代码阶段方案内化依据；未改变当前 TODO 来源或真实 token 边界。
 
-> 上一次盘点：2026-06-01 — 已完成 P1-62 Dockerfile dev-tool parity guard：Docker/CI 的 dev-tool、npm lockfile 与前端 Dockerfile 安装口径已有一致性守卫。
+> 上一次盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
 
 ## 当前执行入口
 
 - **唯一当前 TODO 来源**：本文件的“完整 TODO list”。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
+- **当前研究 / 架构 / 流程引用**：2026-06-03 至 2026-06-04 新增 [`docs/research/ai-video-commercial-technology-research-review-20260603.md`](../research/ai-video-commercial-technology-research-review-20260603.md)、[`docs/research/ai-video-longform-production-research-audit-review-20260603.md`](../research/ai-video-longform-production-research-audit-review-20260603.md)、[`docs/research/aihot-image-video-product-technology-research-review-20260604.md`](../research/aihot-image-video-product-technology-research-review-20260604.md)、[`docs/architecture/ai-video-commercial-toolbox-architecture-review-20260603.md`](../architecture/ai-video-commercial-toolbox-architecture-review-20260603.md)、[`docs/architecture/brand-asset-token-contract-review-20260603.md`](../architecture/brand-asset-token-contract-review-20260603.md)、[`docs/architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md`](../architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md)、[`docs/architecture/quality-contract-brand-rights-audit-review-20260603.md`](../architecture/quality-contract-brand-rights-audit-review-20260603.md)、[`docs/workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md`](../workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md)、[`docs/workflows/brand-data-asset-directory-intake-review-20260603.md`](../workflows/brand-data-asset-directory-intake-review-20260603.md)、[`docs/workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md`](../workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md) 与 [`docs/workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md`](../workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md)，用于后续 S1-S5 工具库、Market Signal Intelligence、Brand Asset Token、Provider Prompt Compiler、Production Job Ledger、Quality Contract、长视频生产对象、品牌数据资产目录接入和 Project 2.0 代码前实施计划；十一份均为 `review` 状态，不替代本文件的 TODO list。
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
 - **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。
 
