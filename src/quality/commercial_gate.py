@@ -15,6 +15,9 @@ from src.models.commercial_contracts import (
     RepairAction,
     RepairPlan,
 )
+from src.pipeline.runtime_prompt_preview import RuntimePromptPreviewResult
+
+PROMPT_PREVIEW_GATE_EVIDENCE_LEVEL = "L2-fixture-or-dry-run"
 
 
 class BlockingFailure(BaseModel):
@@ -104,6 +107,31 @@ def evaluate_quality_contract(
     )
 
 
+def evaluate_runtime_prompt_preview_gate(
+    contract: QualityContract,
+    preview: RuntimePromptPreviewResult,
+) -> AuditResult:
+    """Evaluate a dry-run prompt preview without treating it as delivery approval."""
+    evidence = _prompt_preview_evidence_bundle(preview)
+    failures = _runtime_prompt_preview_failures(contract, preview)
+    advisory = AdvisoryResult()
+    blocking = BlockingResult(passed=not failures, failures=failures)
+    delivery = _delivery_decision(contract, blocking)
+    repair_plan = _build_repair_plan(contract, evidence, failures, advisory)
+    gate_decision = _build_gate_decision(contract, evidence, blocking, advisory, delivery, repair_plan)
+
+    return AuditResult(
+        audit_id=f"audit_{evidence.evidence_bundle_id}",
+        contract_id=contract.contract_id,
+        evidence_bundle_id=evidence.evidence_bundle_id,
+        blocking=blocking,
+        advisory=advisory,
+        delivery=delivery,
+        gate_decision=gate_decision,
+        repair_plan=repair_plan,
+    )
+
+
 def _required_evidence_present(required_ref: str, evidence: AuditEvidenceBundle) -> bool:
     if required_ref == "brand_bundle_id":
         return bool(evidence.brand_bundle_id)
@@ -128,6 +156,56 @@ def _required_evidence_present(required_ref: str, evidence: AuditEvidenceBundle)
     if required_ref == "caption_safe_zone_refs":
         return bool(evidence.caption_safe_zone_refs)
     return False
+
+
+def _runtime_prompt_preview_failures(
+    contract: QualityContract,
+    preview: RuntimePromptPreviewResult,
+) -> list[BlockingFailure]:
+    failures: list[BlockingFailure] = []
+    if contract.scenario != preview.scenario:
+        failures.append(BlockingFailure(
+            check="runtime_prompt_preview_scenario_match",
+            reason=f"contract scenario {contract.scenario} does not match preview scenario {preview.scenario}",
+            evidence_ref=preview.compile_id,
+        ))
+    if contract.stage != "prompt_preview":
+        failures.append(BlockingFailure(
+            check="runtime_prompt_preview_stage",
+            reason="runtime prompt preview gate requires contract stage prompt_preview",
+            evidence_ref=contract.stage,
+        ))
+    if preview.evidence_level != PROMPT_PREVIEW_GATE_EVIDENCE_LEVEL:
+        failures.append(BlockingFailure(
+            check="runtime_prompt_preview_evidence_level",
+            reason=f"prompt preview evidence level must remain {PROMPT_PREVIEW_GATE_EVIDENCE_LEVEL}",
+            evidence_ref=preview.evidence_level,
+        ))
+    if not preview.prompt_preview_allowed:
+        failures.append(BlockingFailure(
+            check="runtime_prompt_preview_allowed",
+            reason=_preview_block_reason(preview),
+            evidence_ref=preview.compile_id,
+        ))
+    if preview.compile_blocked and preview.prompt_hash is not None:
+        failures.append(BlockingFailure(
+            check="runtime_prompt_compile_pass",
+            reason=_preview_block_reason(preview),
+            evidence_ref=preview.prompt_hash,
+        ))
+    if preview.injection_diff.has_blocking_diff:
+        failures.append(BlockingFailure(
+            check="runtime_prompt_injection_diff_pass",
+            reason="runtime injection token ids do not match compile bundle",
+            evidence_ref=preview.compile_id,
+        ))
+    if preview.prompt_preview_allowed and not preview.prompt_hash:
+        failures.append(BlockingFailure(
+            check="runtime_prompt_hash_ready",
+            reason="prompt preview allowed but prompt hash is missing",
+            evidence_ref=preview.compile_id,
+        ))
+    return failures
 
 
 def _evaluate_blocking_check(check: str, evidence: AuditEvidenceBundle) -> BlockingFailure | None:
@@ -339,7 +417,38 @@ def _repair_recommendation_for_failure(failure: BlockingFailure) -> str:
         return "complete artifact manifest with final video reference"
     if failure.check == "c2pa_provenance_ready":
         return "prepare C2PA provenance evidence before delivery acceptance"
+    if failure.check == "runtime_prompt_preview_allowed":
+        return "repair runtime injection or provider compile blockers before prompt preview review"
+    if failure.check == "runtime_prompt_compile_pass":
+        return "repair provider capability mismatch or compile blockers before prompt preview review"
+    if failure.check == "runtime_prompt_injection_diff_pass":
+        return "align reviewed runtime token ids with the compile bundle before prompt preview review"
+    if failure.check == "runtime_prompt_hash_ready":
+        return "regenerate dry-run prompt preview so the prompt hash can be audited"
+    if failure.check == "runtime_prompt_preview_evidence_level":
+        return "keep prompt preview evidence labeled as fixture-or-dry-run unless authorized live evidence exists"
+    if failure.check == "runtime_prompt_preview_stage":
+        return "use a prompt_preview quality contract for runtime prompt preview audits"
+    if failure.check == "runtime_prompt_preview_scenario_match":
+        return "align preview scenario with the quality contract scenario before review"
     return "define or repair the blocking check before delivery acceptance"
+
+
+def _prompt_preview_evidence_bundle(preview: RuntimePromptPreviewResult) -> AuditEvidenceBundle:
+    token_ids = list(dict.fromkeys([*preview.hard_token_ids, *preview.soft_token_ids]))
+    return AuditEvidenceBundle(
+        evidence_bundle_id=f"aeb_{preview.compile_id}_prompt_preview",
+        scenario=preview.scenario,
+        stage="prompt_preview",
+        source_token_ids=token_ids,
+        prompt_hashes=[preview.prompt_hash] if preview.prompt_hash else [],
+    )
+
+
+def _preview_block_reason(preview: RuntimePromptPreviewResult) -> str:
+    if preview.block_reasons:
+        return "; ".join(preview.block_reasons)
+    return "runtime prompt preview blocked"
 
 
 def _build_gate_decision(

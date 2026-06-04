@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 from src.models.commercial_contracts import AuditEvidenceBundle, PlatformTarget, QualityContract
-from src.quality.commercial_gate import evaluate_quality_contract
+from src.pipeline.runtime_prompt_preview import RuntimePromptInjectionDiff, RuntimePromptPreviewResult
+from src.quality.commercial_gate import evaluate_quality_contract, evaluate_runtime_prompt_preview_gate
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "commercial_video" / "quality_gate_cases.json"
 
@@ -226,9 +227,87 @@ def test_unknown_blocking_check_fails_closed_with_repair_action():
     assert "blocking check" in result.repair_plan.actions[0].recommendation
 
 
+def test_runtime_prompt_preview_gate_passes_to_review_required_without_delivery_approval():
+    contract = _quality_contract(scenario="s1", stage="prompt_preview")
+    preview = _prompt_preview_result(prompt_preview_allowed=True, compile_blocked=False)
+
+    result = evaluate_runtime_prompt_preview_gate(contract, preview)
+
+    assert result.blocking.passed is True
+    assert result.gate_decision.status == "review_required"
+    assert result.delivery.accepted is False
+    assert result.delivery.publish_allowed is False
+    assert result.repair_plan.actions == []
+    assert result.evidence_bundle_id == "aeb_pci_fixture_prompt_preview"
+    serialized = json.dumps(result.model_dump(mode="json"))
+    assert "prompt body must not leak" not in serialized
+    assert "must-not-leak" not in serialized
+
+
+def test_runtime_prompt_preview_gate_blocks_runtime_preview_failures():
+    contract = _quality_contract(scenario="s1", stage="prompt_preview")
+    preview = _prompt_preview_result(
+        prompt_preview_allowed=False,
+        compile_blocked=True,
+        prompt_hash=None,
+        block_reasons=["runtime injection is not allowed", "reviewed brand bundle missing"],
+    )
+
+    result = evaluate_runtime_prompt_preview_gate(contract, preview)
+
+    assert result.gate_decision.status == "blocked"
+    assert result.blocking.failures[0].check == "runtime_prompt_preview_allowed"
+    assert "reviewed brand bundle missing" in result.blocking.failures[0].reason
+    assert result.repair_plan.actions[0].check == "runtime_prompt_preview_allowed"
+
+
+def test_runtime_prompt_preview_gate_blocks_token_diff():
+    contract = _quality_contract(scenario="s1", stage="prompt_preview")
+    preview = _prompt_preview_result(
+        prompt_preview_allowed=False,
+        compile_blocked=True,
+        prompt_hash=None,
+        block_reasons=["runtime injection token ids do not match compile bundle"],
+        injection_diff=RuntimePromptInjectionDiff(
+            runtime_hard_token_ids=["bat_runtime"],
+            compile_hard_token_ids=["bat_compile"],
+            missing_runtime_hard_token_ids=["bat_compile"],
+            compile_extra_hard_token_ids=["bat_runtime"],
+        ),
+    )
+
+    result = evaluate_runtime_prompt_preview_gate(contract, preview)
+
+    assert result.gate_decision.status == "blocked"
+    assert [failure.check for failure in result.blocking.failures] == [
+        "runtime_prompt_preview_allowed",
+        "runtime_prompt_injection_diff_pass",
+    ]
+    assert any(action.check == "runtime_prompt_injection_diff_pass" for action in result.repair_plan.actions)
+
+
+def test_runtime_prompt_preview_gate_blocks_provider_compile_failure_with_hash():
+    contract = _quality_contract(scenario="s1", stage="prompt_preview")
+    preview = _prompt_preview_result(
+        prompt_preview_allowed=False,
+        compile_blocked=True,
+        block_reasons=["provider does not have verified reference image support"],
+    )
+
+    result = evaluate_runtime_prompt_preview_gate(contract, preview)
+
+    assert result.gate_decision.status == "blocked"
+    assert [failure.check for failure in result.blocking.failures] == [
+        "runtime_prompt_preview_allowed",
+        "runtime_prompt_compile_pass",
+    ]
+    assert result.repair_plan.actions[-1].check == "runtime_prompt_compile_pass"
+
+
 def _quality_contract(
     *,
     scenario: str = "s2",
+    stage: str = "final_video",
     blocking_checks: list[str] | None = None,
     advisory_checks: list[str] | None = None,
     required_evidence: list[str] | None = None,
@@ -237,13 +316,41 @@ def _quality_contract(
     return QualityContract(
         contract_id=f"qc_{scenario}_fixture",
         scenario=scenario,
-        stage="final_video",
+        stage=stage,
         platform="tiktok",
         brand_id="momcozy",
         blocking_checks=blocking_checks or [],
         advisory_checks=advisory_checks or [],
         thresholds=thresholds or {"brand_voice_alignment": 0.72},
         required_evidence=required_evidence or [],
+    )
+
+
+def _prompt_preview_result(
+    *,
+    prompt_preview_allowed: bool,
+    compile_blocked: bool,
+    prompt_hash: str | None = "sha256:prompt_preview_fixture",
+    block_reasons: list[str] | None = None,
+    injection_diff: RuntimePromptInjectionDiff | None = None,
+) -> RuntimePromptPreviewResult:
+    return RuntimePromptPreviewResult(
+        compile_id="pci_fixture",
+        scenario="s1",
+        step="video_prompts",
+        provider="poyo",
+        model="seedance-2",
+        prompt_preview_allowed=prompt_preview_allowed,
+        compile_blocked=compile_blocked,
+        prompt_hash=prompt_hash,
+        duration_seconds=5,
+        aspect_ratio="9:16",
+        hard_token_ids=["bat_hard_fixture"],
+        block_reasons=block_reasons or [],
+        injection_diff=injection_diff or RuntimePromptInjectionDiff(
+            runtime_hard_token_ids=["bat_hard_fixture"],
+            compile_hard_token_ids=["bat_hard_fixture"],
+        ),
     )
 
 
