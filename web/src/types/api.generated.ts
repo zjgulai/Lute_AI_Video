@@ -1494,6 +1494,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scenario/{scenario}/prompt-preview/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Audit Prompt Preview
+         * @description Build a dry-run prompt preview audit bundle without exposing prompt payload.
+         */
+        post: operations["audit_prompt_preview_scenario__scenario__prompt_preview_audit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scenario/{scenario}/regenerate/{label}/{step_name}": {
         parameters: {
             query?: never;
@@ -1727,6 +1747,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AllowedUse
+         * @enum {string}
+         */
+        AllowedUse: "reference" | "generation" | "publishing" | "training";
         /** Body_upload_asset_api_assets_upload_post */
         Body_upload_asset_api_assets_upload_post: {
             /** File */
@@ -1840,6 +1865,57 @@ export interface components {
              */
             updated_at: string;
         };
+        /** BrandAssetToken */
+        BrandAssetToken: {
+            /** Allowed Uses */
+            allowed_uses?: components["schemas"]["AllowedUse"][];
+            /** Brand Id */
+            brand_id: string;
+            /** @default unknown */
+            license_status: components["schemas"]["LicenseStatus"];
+            /** Locale Scope */
+            locale_scope?: string[];
+            /**
+             * Modality
+             * @default text
+             */
+            modality: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Payload Summary */
+            payload_summary?: string[];
+            /** Platform Scope */
+            platform_scope?: string[];
+            /**
+             * Priority
+             * @default 50
+             */
+            priority: number;
+            provenance?: components["schemas"]["TokenProvenance"];
+            review?: components["schemas"]["TokenReview"];
+            /** Rights Gate */
+            rights_gate?: string | null;
+            /** Rights Ref */
+            rights_ref?: string | null;
+            /** Scenario Scope */
+            scenario_scope?: string[];
+            /** Source Asset Id */
+            source_asset_id?: string | null;
+            /** Source Refs */
+            source_refs?: string[];
+            /** @default candidate */
+            status: components["schemas"]["TokenStatus"];
+            /** Step Scope */
+            step_scope?: string[];
+            /** @default soft */
+            strength: components["schemas"]["TokenStrength"];
+            /** Token Id */
+            token_id: string;
+            /** Token Type */
+            token_type: string;
+        };
         /**
          * BrandColor
          * @description A brand color definition.
@@ -1860,6 +1936,27 @@ export interface components {
              * @default primary
              */
             usage: string;
+        };
+        /** BrandConstraintBundle */
+        BrandConstraintBundle: {
+            /** Brand Id */
+            brand_id: string;
+            /** Bundle Id */
+            bundle_id: string;
+            /** Hard Tokens */
+            hard_tokens?: components["schemas"]["BrandAssetToken"][];
+            /** Platform */
+            platform?: string | null;
+            /** Rejected Token Ids */
+            rejected_token_ids?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Soft Tokens */
+            soft_tokens?: components["schemas"]["BrandAssetToken"][];
+            /** Source Token Ids */
+            source_token_ids?: string[];
+            /** Step */
+            step: string;
         };
         /**
          * BrandFont
@@ -1895,6 +1992,29 @@ export interface components {
             }[];
             /** Scraped At */
             scraped_at?: string | null;
+        };
+        /**
+         * CapabilityValue
+         * @enum {string}
+         */
+        CapabilityValue: "unknown" | "supported" | "unsupported";
+        /** CompileOptions */
+        CompileOptions: {
+            /**
+             * Allow Native Audio
+             * @default false
+             */
+            allow_native_audio: boolean;
+            /**
+             * Allow Soft Token Compression
+             * @default true
+             */
+            allow_soft_token_compression: boolean;
+            /**
+             * Max Prompt Chars
+             * @default 1800
+             */
+            max_prompt_chars: number;
         };
         /** FastModeRequest */
         FastModeRequest: {
@@ -2110,6 +2230,11 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * LicenseStatus
+         * @enum {string}
+         */
+        LicenseStatus: "unknown" | "review" | "approved" | "rejected" | "expired";
         /** PipelineStartRequest */
         PipelineStartRequest: {
             /**
@@ -2160,6 +2285,26 @@ export interface components {
              *     ]
              */
             target_platforms: string[];
+        };
+        /** PlatformTarget */
+        PlatformTarget: {
+            /**
+             * Aspect Ratio
+             * @default 9:16
+             */
+            aspect_ratio: string;
+            /**
+             * Duration Seconds
+             * @default 5
+             */
+            duration_seconds: number;
+            /**
+             * Locale
+             * @default en-US
+             */
+            locale: string;
+            /** Platform */
+            platform: string;
         };
         /** PortfolioFile */
         PortfolioFile: {
@@ -2217,6 +2362,129 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** PromptCompileInput */
+        PromptCompileInput: {
+            brand_bundle: components["schemas"]["BrandConstraintBundle"];
+            /** Compile Id */
+            compile_id: string;
+            compile_options?: components["schemas"]["CompileOptions"];
+            platform_target: components["schemas"]["PlatformTarget"];
+            provider_capability: components["schemas"]["ProviderCapability"];
+            /** Scenario */
+            scenario: string;
+            shot: components["schemas"]["StoryboardShotSchema"];
+            /** Step Name */
+            step_name: string;
+        };
+        /** PromptPreviewAuditRequest */
+        PromptPreviewAuditRequest: {
+            compile_input: components["schemas"]["PromptCompileInput"];
+            contract: components["schemas"]["QualityContract"];
+            /** Planned Injection */
+            planned_injection?: {
+                [key: string]: unknown;
+            } | null;
+            runtime_injection: components["schemas"]["RuntimeInjectionResult"];
+        };
+        /** ProviderCapability */
+        ProviderCapability: {
+            /**
+             * Async Required
+             * @default true
+             */
+            async_required: boolean;
+            /** @default unknown */
+            c2pa: components["schemas"]["CapabilityValue"];
+            /** Capability Id */
+            capability_id: string;
+            /** Content Filter Notes */
+            content_filter_notes?: string[];
+            /** Known Failure Modes */
+            known_failure_modes?: string[];
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /** Max Duration Seconds */
+            max_duration_seconds?: number | null;
+            /** Max Reference Assets */
+            max_reference_assets?: number | null;
+            /** Modalities */
+            modalities?: string[];
+            /** Model */
+            model: string;
+            /**
+             * Model Family
+             * @default
+             */
+            model_family: string;
+            /** Provider */
+            provider: string;
+            /** Recommended Scenarios */
+            recommended_scenarios?: string[];
+            /** Retention Days */
+            retention_days?: number | null;
+            /** Source Urls */
+            source_urls?: string[];
+            /** Supports Aspect Ratios */
+            supports_aspect_ratios?: string[];
+            /** @default unknown */
+            supports_first_frame: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_last_frame: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_lip_sync: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_native_audio: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_negative_prompt: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_reference_images: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_reference_video: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_seed: components["schemas"]["CapabilityValue"];
+        };
+        /** PublishPolicy */
+        PublishPolicy: {
+            /**
+             * Publish Allowed Default
+             * @default false
+             */
+            publish_allowed_default: boolean;
+            /**
+             * Requires Human Review
+             * @default true
+             */
+            requires_human_review: boolean;
+        };
+        /** QualityContract */
+        QualityContract: {
+            /** Advisory Checks */
+            advisory_checks?: string[];
+            /** Blocking Checks */
+            blocking_checks?: string[];
+            /** Brand Id */
+            brand_id: string;
+            /** Contract Id */
+            contract_id: string;
+            /**
+             * Locale
+             * @default en-US
+             */
+            locale: string;
+            /** Platform */
+            platform: string;
+            publish_policy?: components["schemas"]["PublishPolicy"];
+            /** Required Evidence */
+            required_evidence?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Stage */
+            stage: string;
+            /** Thresholds */
+            thresholds?: {
+                [key: string]: number;
+            };
+        };
         /** ReviewAction */
         ReviewAction: {
             /** Action */
@@ -2226,6 +2494,52 @@ export interface components {
              * @default
              */
             reviewer_notes: string;
+        };
+        /**
+         * RuntimeInjectionResult
+         * @description Sanitized runtime result; token prompt payloads are intentionally absent.
+         */
+        RuntimeInjectionResult: {
+            /** Blocked Reasons */
+            blocked_reasons?: string[];
+            /** Brand Bundle Id */
+            brand_bundle_id?: string | null;
+            /** Bundle Refs */
+            bundle_refs?: string[];
+            /** Contract Refs */
+            contract_refs?: string[];
+            /**
+             * Evidence Level
+             * @default L2-fixture-or-dry-run
+             */
+            evidence_level: string;
+            /** Gate Checks */
+            gate_checks?: string[];
+            /** Hard Token Ids */
+            hard_token_ids?: string[];
+            /**
+             * Mode
+             * @default reviewed_bundle_runtime_check
+             * @constant
+             */
+            mode: "reviewed_bundle_runtime_check";
+            /** Notes */
+            notes?: string[];
+            /**
+             * Prompt Injection Allowed
+             * @default false
+             */
+            prompt_injection_allowed: boolean;
+            /** Scenario */
+            scenario: string;
+            /** Soft Token Ids */
+            soft_token_ids?: string[];
+            /** Source Token Ids */
+            source_token_ids?: string[];
+            /** Step */
+            step: string;
+            /** Toolbox Refs */
+            toolbox_refs?: string[];
         };
         /** S1StartRequest */
         S1StartRequest: {
@@ -2410,6 +2724,48 @@ export interface components {
              */
             video_duration: number;
         };
+        /** StoryboardShotSchema */
+        StoryboardShotSchema: {
+            /**
+             * Aspect Ratio
+             * @default 9:16
+             */
+            aspect_ratio: string;
+            /** Beat */
+            beat: string;
+            /**
+             * Camera
+             * @default static
+             */
+            camera: string;
+            /** Claim Evidence Refs */
+            claim_evidence_refs?: string[];
+            /**
+             * Contains Children Direct Reference
+             * @default false
+             */
+            contains_children_direct_reference: boolean;
+            /**
+             * Duration Seconds
+             * @default 5
+             */
+            duration_seconds: number;
+            /**
+             * Motion Description
+             * @default
+             */
+            motion_description: string;
+            /** Negative Constraints */
+            negative_constraints?: string[];
+            /** Reference Asset Ids */
+            reference_asset_ids?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Shot Id */
+            shot_id: string;
+            /** Visual Description */
+            visual_description: string;
+        };
         /** TelemetryErrorEntry */
         TelemetryErrorEntry: {
             /** Context */
@@ -2466,6 +2822,46 @@ export interface components {
             /** Total Runs */
             total_runs: number;
         };
+        /** TokenProvenance */
+        TokenProvenance: {
+            /** Extracted At */
+            extracted_at?: string | null;
+            /**
+             * Extraction Method
+             * @default rule-based
+             */
+            extraction_method: string;
+            /**
+             * Extractor Version
+             * @default spec-only
+             */
+            extractor_version: string;
+        };
+        /** TokenReview */
+        TokenReview: {
+            /** Review Notes */
+            review_notes?: string | null;
+            /**
+             * Review Status
+             * @default pending
+             * @enum {string}
+             */
+            review_status: "pending" | "approved" | "rejected";
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+        };
+        /**
+         * TokenStatus
+         * @enum {string}
+         */
+        TokenStatus: "candidate" | "review" | "approved" | "rejected" | "deprecated" | "expired";
+        /**
+         * TokenStrength
+         * @enum {string}
+         */
+        TokenStrength: "hard" | "soft" | "hard_for_review_only";
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -4773,6 +5169,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_prompt_preview_scenario__scenario__prompt_preview_audit_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                scenario: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptPreviewAuditRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
