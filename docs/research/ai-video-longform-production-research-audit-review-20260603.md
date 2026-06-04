@@ -1,6 +1,6 @@
 ---
 title: AI 长视频自动化生产难点研究与 2.0 覆盖审计
-doc_type: research
+doc_type: analysis
 module: ai-video
 topic: longform-production-research-audit
 status: review

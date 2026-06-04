@@ -1,6 +1,6 @@
 ---
 title: AIHOT 图像与视频生成信号采集及 2.0 方案校准
-doc_type: research
+doc_type: analysis
 module: ai-video
 topic: aihot-image-video-product-technology-signal
 status: review
