@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-06-04T00:00:00+00:00",
+  "brand_id": "momcozy",
+  "status": "draft",
+  "license_status_default": "unknown",
+  "allowed_uses_default": [],
+  "approved_token_count": 0,
+  "candidate_tokens": [
+    {
+      "token_id": "bat_momcozy_voice_tone_candidate_001",
+      "brand_id": "momcozy",
+      "token_type": "brand_voice",
+      "modality": "text",
+      "status": "candidate",
+      "strength": "hard_for_review_only",
+      "scenario_scope": ["s1", "s2", "s5"],
+      "step_scope": ["strategy", "script", "caption", "audit"],
+      "source_refs": ["drafts/analysis/brand-momcozy/source-docs/momcozy_ai_brand_knowledge_base.md"],
+      "payload_summary": ["witty and real", "empathetic", "no toxic positivity"],
+      "rights_gate": "unknown_license_candidate_only"
+    },
+    {
+      "token_id": "bat_momcozy_visual_identity_candidate_001",
+      "brand_id": "momcozy",
+      "token_type": "visual_identity",
+      "modality": "image",
+      "status": "candidate",
+      "strength": "soft",
+      "scenario_scope": ["s1", "s2", "s5"],
+      "step_scope": ["storyboard", "image_prompts", "video_prompts", "thumbnail", "audit"],
+      "source_refs": ["tmp/outputs/brand-momcozy/visual-candidates/"],
+      "payload_summary": ["soft diffused natural light", "low contrast", "Momcozy red accent"],
+      "rights_gate": "contains_people_and_marks_needs_manual_review"
+    },
+    {
+      "token_id": "bat_momcozy_claim_guardrail_candidate_001",
+      "brand_id": "momcozy",
+      "token_type": "claim_guardrail",
+      "modality": "structured_data",
+      "status": "candidate",
+      "strength": "hard_for_review_only",
+      "scenario_scope": ["s1", "s2", "s4"],
+      "step_scope": ["script", "storyboard", "video_prompts", "audit"],
+      "source_refs": ["drafts/analysis/brand-momcozy/structured-sku-data/*/10_compliance.json"],
+      "payload_summary": ["product claims must trace to SKU specs/compliance"],
+      "rights_gate": "candidate_only_until_claim_sources_reviewed"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "cases": [
+    {"case_id": "B-001", "topic": "candidate ledger parses without approved token"},
+    {"case_id": "B-002", "topic": "unknown rights excluded from approved bundle"},
+    {"case_id": "B-003", "topic": "approved hard token preserved in bundle"},
+    {"case_id": "B-004", "topic": "unknown provider capability is not treated as supported"},
+    {"case_id": "B-005", "topic": "reference image requirement blocks unknown support"},
+    {"case_id": "B-006", "topic": "negative prompt fallback creates warning"},
+    {"case_id": "B-007", "topic": "prompt hash includes hard token ids"},
+    {"case_id": "B-008", "topic": "job succeeded is not delivery accepted"},
+    {"case_id": "B-009", "topic": "publish allowed requires delivery accepted"},
+    {"case_id": "B-010", "topic": "missing rights evidence blocks delivery"},
+    {"case_id": "B-011", "topic": "missing claim evidence blocks delivery"},
+    {"case_id": "B-012", "topic": "children direct reference blocks S5"},
+    {"case_id": "B-013", "topic": "missing source fingerprint blocks S3 remix"},
+    {"case_id": "B-014", "topic": "advisory score never overrides blocking failure"},
+    {"case_id": "B-015", "topic": "longform floor requires scene timeline and review markers"},
+    {"case_id": "B-016", "topic": "scenario injection plan is read only"},
+    {"case_id": "B-017", "topic": "candidate tokens do not become approved fixtures"}
+  ]
+}
