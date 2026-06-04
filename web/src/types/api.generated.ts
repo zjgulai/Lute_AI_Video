@@ -2253,6 +2253,10 @@ export interface components {
              * @default 3
              */
             clip_group_size: number;
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Continuity Generation Mode
              * @default standard
@@ -2309,6 +2313,102 @@ export interface components {
              * @default
              */
             week: string;
+        };
+        /** S2BrandCampaignRequest */
+        S2BrandCampaignRequest: {
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
+            /**
+             * Brand Package
+             * @default {}
+             */
+            brand_package: {
+                [key: string]: unknown;
+            };
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Enable Media Synthesis
+             * @default true
+             */
+            enable_media_synthesis: boolean;
+            /**
+             * Target Languages
+             * @default [
+             *       "en"
+             *     ]
+             */
+            target_languages: string[];
+            /**
+             * Target Platforms
+             * @default [
+             *       "tiktok",
+             *       "shopify"
+             *     ]
+             */
+            target_platforms: string[];
+            /**
+             * Video Duration
+             * @default 60
+             */
+            video_duration: number;
+            /**
+             * Week
+             * @default
+             */
+            week: string;
+        };
+        /** S5BrandVlogRequest */
+        S5BrandVlogRequest: {
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
+            /**
+             * Brand Id
+             * @default momcozy
+             */
+            brand_id: string;
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Product Sku
+             * @default {}
+             */
+            product_sku: {
+                [key: string]: unknown;
+            };
+            /** Scene Id */
+            scene_id?: string | null;
+            /**
+             * Selected Models
+             * @default []
+             */
+            selected_models: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Story Description
+             * @default
+             */
+            story_description: string;
+            /**
+             * Video Duration
+             * @default 30
+             */
+            video_duration: number;
         };
         /** TelemetryErrorEntry */
         TelemetryErrorEntry: {
@@ -4414,9 +4514,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["S2BrandCampaignRequest"];
             };
         };
         responses: {
@@ -4525,9 +4623,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["S5BrandVlogRequest"];
             };
         };
         responses: {
