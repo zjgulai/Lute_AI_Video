@@ -656,10 +656,14 @@ class AuditEvidenceBundle(BaseModel):
     rights_evidence_refs: list[str] = Field(default_factory=list)
     claim_evidence_refs: list[str] = Field(default_factory=list)
     source_fingerprint_refs: list[str] = Field(default_factory=list)
+    timeline_manifest_refs: list[str] = Field(default_factory=list)
+    edit_decision_list_refs: list[str] = Field(default_factory=list)
+    caption_safe_zone_refs: list[str] = Field(default_factory=list)
     platform_target: PlatformTarget | None = None
     c2pa_status: str = "pending"
     hard_brand_token_violations: list[str] = Field(default_factory=list)
     platform_policy_violations: list[str] = Field(default_factory=list)
+    caption_safe_zone_violations: list[str] = Field(default_factory=list)
     children_direct_reference: bool = False
 
 

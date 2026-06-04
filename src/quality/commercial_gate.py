@@ -121,6 +121,12 @@ def _required_evidence_present(required_ref: str, evidence: AuditEvidenceBundle)
         return bool(evidence.claim_evidence_refs)
     if required_ref == "source_fingerprint_refs":
         return bool(evidence.source_fingerprint_refs)
+    if required_ref == "timeline_manifest_refs":
+        return bool(evidence.timeline_manifest_refs)
+    if required_ref == "edit_decision_list_refs":
+        return bool(evidence.edit_decision_list_refs)
+    if required_ref == "caption_safe_zone_refs":
+        return bool(evidence.caption_safe_zone_refs)
     return False
 
 
@@ -146,6 +152,16 @@ def _evaluate_blocking_check(check: str, evidence: AuditEvidenceBundle) -> Block
     if check == "rights_pass":
         if not evidence.rights_evidence_refs:
             return BlockingFailure(check=check, reason="missing rights evidence")
+        return None
+
+    if check == "source_rights_pass":
+        if not evidence.rights_evidence_refs:
+            return BlockingFailure(check=check, reason="missing source rights evidence")
+        return None
+
+    if check == "footage_rights_pass":
+        if not evidence.rights_evidence_refs:
+            return BlockingFailure(check=check, reason="missing footage rights evidence")
         return None
 
     if check == "hard_brand_token_pass":
@@ -179,6 +195,27 @@ def _evaluate_blocking_check(check: str, evidence: AuditEvidenceBundle) -> Block
     if check == "source_fingerprint_pass":
         if not evidence.source_fingerprint_refs:
             return BlockingFailure(check=check, reason="missing source fingerprint evidence")
+        return None
+
+    if check == "timeline_manifest_pass":
+        if not evidence.timeline_manifest_refs:
+            return BlockingFailure(check=check, reason="missing timeline manifest evidence")
+        return None
+
+    if check == "edl_pass":
+        if not evidence.edit_decision_list_refs:
+            return BlockingFailure(check=check, reason="missing edit decision list evidence")
+        return None
+
+    if check == "caption_safe_zone_pass":
+        if not evidence.caption_safe_zone_refs:
+            return BlockingFailure(check=check, reason="missing caption safe-zone evidence")
+        if evidence.caption_safe_zone_violations:
+            return BlockingFailure(
+                check=check,
+                reason="caption safe-zone violations present",
+                evidence_ref=",".join(evidence.caption_safe_zone_violations),
+            )
         return None
 
     if check == "c2pa_provenance_ready":
@@ -276,12 +313,22 @@ def _repair_recommendation_for_failure(failure: BlockingFailure) -> str:
         return f"attach required evidence before delivery acceptance: {failure.evidence_ref}"
     if failure.check == "rights_pass":
         return "attach reviewed rights evidence before delivery acceptance"
+    if failure.check == "source_rights_pass":
+        return "attach source rights evidence before remix delivery acceptance"
+    if failure.check == "footage_rights_pass":
+        return "attach footage rights evidence before cutdown delivery acceptance"
     if failure.check == "claim_substantiation_pass":
         return "attach claim substantiation evidence or remove the claim from the cut"
     if failure.check == "children_safety_pass":
         return "remove direct child reference or route through explicit safety review"
     if failure.check == "source_fingerprint_pass":
         return "attach source fingerprint evidence before remix or cutdown delivery"
+    if failure.check == "timeline_manifest_pass":
+        return "attach timeline manifest evidence before longform delivery acceptance"
+    if failure.check == "edl_pass":
+        return "attach edit decision list evidence before cutdown or remix delivery acceptance"
+    if failure.check == "caption_safe_zone_pass":
+        return "repair caption safe-zone evidence before delivery acceptance"
     if failure.check == "platform_policy_pass":
         return "resolve platform policy violations before delivery acceptance"
     if failure.check == "hard_brand_token_pass":
