@@ -8,6 +8,13 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from src.models.commercial_contracts import BrandConstraintBundle
+from src.pipeline.runtime_injection_executor import (
+    CURRENT_RUNTIME_INJECTION_KEY,
+    STEP_RUNTIME_INJECTION_DATA_KEY,
+    RuntimeInjectionResult,
+    build_runtime_injection_result,
+    find_reviewed_brand_bundle,
+)
 from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS
 
 SCENARIO_INJECTION_CONFIG_KEY = "commercial_injection_plan"
@@ -272,19 +279,24 @@ def get_step_injection_from_state(state: dict[str, Any], step_name: str) -> Scen
 def attach_step_injection_visibility(state: dict[str, Any], step_name: str) -> dict[str, Any]:
     """Expose one step's read-only injection metadata without executing it."""
     state.pop(CURRENT_STEP_INJECTION_KEY, None)
+    state.pop(CURRENT_RUNTIME_INJECTION_KEY, None)
     steps = state.get("steps", {})
     step_data = steps.get(step_name)
     if isinstance(step_data, dict):
         step_data.pop(STEP_INJECTION_DATA_KEY, None)
+        step_data.pop(STEP_RUNTIME_INJECTION_DATA_KEY, None)
 
     injection = get_step_injection_from_state(state, step_name)
     if injection is None:
         return state
 
     payload = injection.model_dump(mode="json")
+    runtime_payload = _build_runtime_injection_visibility(state, payload)
     state[CURRENT_STEP_INJECTION_KEY] = payload
+    state[CURRENT_RUNTIME_INJECTION_KEY] = runtime_payload
     if isinstance(step_data, dict):
         step_data[STEP_INJECTION_DATA_KEY] = payload
+        step_data[STEP_RUNTIME_INJECTION_DATA_KEY] = runtime_payload
     return state
 
 
@@ -323,6 +335,41 @@ def project_current_step_injection_visibility(state: dict[str, Any]) -> dict[str
         return None
 
 
+def project_step_runtime_injection_visibility(state: dict[str, Any], step_name: str) -> dict[str, Any] | None:
+    """Return one step's sanitized runtime injection projection."""
+    injection = get_step_injection_from_state(state, step_name)
+    if injection is not None:
+        return _build_runtime_injection_visibility(state, injection.model_dump(mode="json"))
+
+    step_data = state.get("steps", {}).get(step_name)
+    if not isinstance(step_data, dict):
+        return None
+    existing = step_data.get(STEP_RUNTIME_INJECTION_DATA_KEY)
+    if existing is None:
+        return None
+    try:
+        return RuntimeInjectionResult.model_validate(existing).model_dump(mode="json")
+    except ValueError:
+        return None
+
+
+def project_current_runtime_injection_visibility(state: dict[str, Any]) -> dict[str, Any] | None:
+    """Return sanitized current-step runtime injection metadata when available."""
+    current_step = state.get("current_step")
+    if isinstance(current_step, str) and current_step:
+        projected = project_step_runtime_injection_visibility(state, current_step)
+        if projected is not None:
+            return projected
+
+    existing = state.get(CURRENT_RUNTIME_INJECTION_KEY)
+    if existing is None:
+        return None
+    try:
+        return RuntimeInjectionResult.model_validate(existing).model_dump(mode="json")
+    except ValueError:
+        return None
+
+
 def project_state_injection_visibility(state: dict[str, Any]) -> dict[str, Any]:
     """Copy state with sanitized injection metadata added to top-level and steps."""
     projected_state = dict(state)
@@ -336,9 +383,13 @@ def project_state_injection_visibility(state: dict[str, Any]) -> dict[str, Any]:
                 continue
             projected_step = dict(step_data)
             projected_step.pop(STEP_INJECTION_DATA_KEY, None)
+            projected_step.pop(STEP_RUNTIME_INJECTION_DATA_KEY, None)
             injection = project_step_injection_visibility(state, step_name)
             if injection is not None:
                 projected_step[STEP_INJECTION_DATA_KEY] = injection
+            runtime_injection = project_step_runtime_injection_visibility(state, step_name)
+            if runtime_injection is not None:
+                projected_step[STEP_RUNTIME_INJECTION_DATA_KEY] = runtime_injection
             projected_steps[step_name] = projected_step
         projected_state["steps"] = projected_steps
 
@@ -347,4 +398,28 @@ def project_state_injection_visibility(state: dict[str, Any]) -> dict[str, Any]:
         projected_state.pop(CURRENT_STEP_INJECTION_KEY, None)
     else:
         projected_state[CURRENT_STEP_INJECTION_KEY] = current_injection
+
+    current_runtime_injection = project_current_runtime_injection_visibility(state)
+    if current_runtime_injection is None:
+        projected_state.pop(CURRENT_RUNTIME_INJECTION_KEY, None)
+    else:
+        projected_state[CURRENT_RUNTIME_INJECTION_KEY] = current_runtime_injection
     return projected_state
+
+
+def _build_runtime_injection_visibility(
+    state: dict[str, Any],
+    planned_injection: dict[str, Any],
+) -> dict[str, Any]:
+    config = state.get("config", {})
+    if not isinstance(config, dict):
+        config = {}
+    lookup = find_reviewed_brand_bundle(
+        config=config,
+        scenario=planned_injection["scenario"],
+        step=planned_injection["step"],
+    )
+    return build_runtime_injection_result(
+        planned_injection=planned_injection,
+        bundle_lookup=lookup,
+    ).model_dump(mode="json")

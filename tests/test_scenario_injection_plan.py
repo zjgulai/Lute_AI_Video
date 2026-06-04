@@ -13,6 +13,11 @@ from src.models.commercial_contracts import (
     TokenStatus,
     TokenStrength,
 )
+from src.pipeline.runtime_injection_executor import (
+    CURRENT_RUNTIME_INJECTION_KEY,
+    STEP_RUNTIME_INJECTION_DATA_KEY,
+    with_reviewed_brand_bundles,
+)
 from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS
 from src.pipeline.scenario_injection_plan import (
     CURRENT_STEP_INJECTION_KEY,
@@ -224,6 +229,27 @@ def test_c6_attach_step_injection_visibility_exposes_current_step_metadata():
     assert STEP_INJECTION_DATA_KEY not in updated["steps"]["scripts"]
 
 
+def test_c11_attach_step_injection_visibility_exposes_runtime_gate_result():
+    config = with_reviewed_brand_bundles(
+        with_injection_config({"brand_id": "momcozy"}, _empty_plan("s1")),
+        [_reviewed_bundle("s1", "strategy")],
+    )
+    state = {
+        "scenario": "s1",
+        "config": config,
+        "steps": {"strategy": {}, "scripts": {}},
+    }
+
+    updated = attach_step_injection_visibility(state, "strategy")
+    runtime = updated[CURRENT_RUNTIME_INJECTION_KEY]
+
+    assert runtime["prompt_injection_allowed"] is True
+    assert runtime["hard_token_ids"] == ["bat_s1_strategy_runtime"]
+    assert "payload" not in json.dumps(runtime)
+    assert updated["steps"]["strategy"][STEP_RUNTIME_INJECTION_DATA_KEY] == runtime
+    assert STEP_RUNTIME_INJECTION_DATA_KEY not in updated["steps"]["scripts"]
+
+
 def test_c6_attach_step_injection_visibility_clears_stale_metadata_when_missing():
     state = {
         "scenario": "s2",
@@ -232,11 +258,13 @@ def test_c6_attach_step_injection_visibility_clears_stale_metadata_when_missing(
             "strategy": {STEP_INJECTION_DATA_KEY: {"step": "stale"}},
         },
         CURRENT_STEP_INJECTION_KEY: {"step": "stale"},
+        CURRENT_RUNTIME_INJECTION_KEY: {"step": "stale"},
     }
 
     updated = attach_step_injection_visibility(state, "strategy")
 
     assert CURRENT_STEP_INJECTION_KEY not in updated
+    assert CURRENT_RUNTIME_INJECTION_KEY not in updated
     assert STEP_INJECTION_DATA_KEY not in updated["steps"]["strategy"]
 
 
@@ -408,6 +436,67 @@ async def test_c6_step_runner_exposes_current_step_injection_before_run_step(mon
     assert saved_state["steps"]["strategy"][STEP_INJECTION_DATA_KEY]["step"] == "strategy"
 
 
+@pytest.mark.asyncio
+async def test_c11_step_runner_exposes_runtime_injection_before_run_step(monkeypatch):
+    from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+    from src.pipeline.step_runner import StepRunner
+
+    captured: dict[str, object] = {}
+    config = with_reviewed_brand_bundles(
+        with_injection_config({"brand_id": "momcozy"}, _empty_plan("s1")),
+        [_reviewed_bundle("s1", "strategy")],
+    )
+    state = {
+        "label": "c11_step_runner_fixture",
+        "scenario": "s1",
+        "config": config,
+        "steps": {
+            step: {
+                "status": "pending",
+                "output": None,
+                "edited": False,
+                "edited_output": None,
+                "started_at": "",
+                "completed_at": "",
+                "duration_ms": 0,
+            }
+            for step in SCENARIO_STEP_ORDERS["s1"]
+        },
+        "current_step": "strategy",
+        "mode": "auto",
+        "trace_id": "trace_fixture",
+        "errors": [],
+        "media_synthesis_errors": [],
+        "gates": {},
+    }
+
+    class FakeStateManager:
+        async def load(self, label):
+            return state
+
+        async def save(self, label, saved_state):
+            captured["saved_state"] = saved_state
+
+    async def fake_run_step(self, step_name, runtime_state):
+        captured["current_runtime_injection"] = runtime_state.get(CURRENT_RUNTIME_INJECTION_KEY)
+        captured["step_runtime_injection"] = runtime_state["steps"][step_name].get(
+            STEP_RUNTIME_INJECTION_DATA_KEY
+        )
+        return []
+
+    monkeypatch.setattr("src.tools.cost_tracker.check_budget", lambda label, mode: None)
+    monkeypatch.setattr(S1ProductDirectPipeline, "run_step", fake_run_step)
+
+    await StepRunner(FakeStateManager()).run_step("c11_step_runner_fixture", "strategy")
+
+    runtime = captured["current_runtime_injection"]
+    assert runtime["prompt_injection_allowed"] is True
+    assert runtime["hard_token_ids"] == ["bat_s1_strategy_runtime"]
+    assert captured["step_runtime_injection"] == runtime
+    saved_state = captured["saved_state"]
+    assert saved_state["steps"]["strategy"][STEP_RUNTIME_INJECTION_DATA_KEY] == runtime
+
+
 def _token(
     *,
     token_id: str,
@@ -416,6 +505,7 @@ def _token(
     step_scope: list[str],
     license_status: LicenseStatus,
     review_status: str = "pending",
+    rights_ref: str | None = None,
 ) -> BrandAssetToken:
     return BrandAssetToken(
         token_id=token_id,
@@ -425,9 +515,30 @@ def _token(
         strength=strength,
         scenario_scope=["s1"],
         step_scope=step_scope,
+        rights_ref=rights_ref,
         license_status=license_status,
         allowed_uses=[AllowedUse.GENERATION] if license_status == LicenseStatus.APPROVED else [],
         review=TokenReview(review_status=review_status),
+    )
+
+
+def _reviewed_bundle(scenario: str, step: str) -> BrandConstraintBundle:
+    return BrandConstraintBundle.build_approved(
+        bundle_id=f"bundle_{scenario}_{step}_runtime",
+        brand_id="momcozy",
+        scenario=scenario,
+        step=step,
+        tokens=[
+            _token(
+                token_id=f"bat_{scenario}_{step}_runtime",
+                status=TokenStatus.APPROVED,
+                strength=TokenStrength.HARD,
+                step_scope=[step],
+                license_status=LicenseStatus.APPROVED,
+                review_status="approved",
+                rights_ref="rights_fixture_runtime",
+            ),
+        ],
     )
 
 

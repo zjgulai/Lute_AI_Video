@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from src.pipeline.runtime_injection_executor import (
+    CURRENT_RUNTIME_INJECTION_KEY,
+    STEP_RUNTIME_INJECTION_DATA_KEY,
+)
 from src.pipeline.scenario_injection_plan import (
     CURRENT_STEP_INJECTION_KEY,
     SCENARIO_INJECTION_CONFIG_KEY,
@@ -139,10 +143,18 @@ def test_steprunner_state_to_legacy_projects_commercial_injection_without_payloa
     assert legacy[CURRENT_STEP_INJECTION_KEY]["source_token_ids"] == ["bat_hard_fixture"]
     assert legacy["steps"]["strategy"][STEP_INJECTION_DATA_KEY]["gate_checks"] == ["rights_pass"]
     assert legacy["step_commercial_injections"]["strategy"]["bundle_refs"] == ["BrandConstraintBundle"]
+    assert legacy[CURRENT_RUNTIME_INJECTION_KEY]["prompt_injection_allowed"] is False
+    assert legacy["steps"]["strategy"][STEP_RUNTIME_INJECTION_DATA_KEY]["blocked_reasons"] == [
+        "reviewed brand bundle missing"
+    ]
+    assert legacy["step_runtime_injections"]["strategy"]["contract_refs"] == ["QualityContract"]
     serialized = str({
         "current": legacy[CURRENT_STEP_INJECTION_KEY],
         "step": legacy["steps"]["strategy"][STEP_INJECTION_DATA_KEY],
         "map": legacy["step_commercial_injections"],
+        "runtime_current": legacy[CURRENT_RUNTIME_INJECTION_KEY],
+        "runtime_step": legacy["steps"]["strategy"][STEP_RUNTIME_INJECTION_DATA_KEY],
+        "runtime_map": legacy["step_runtime_injections"],
     })
     assert "must-not-leak" not in serialized
     assert "prompt_payload" not in serialized
