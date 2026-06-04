@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Generate video with user-specified product — unbuffered output for demo."""
-import json, sys, time, requests
+import json
+import sys
+import time
+
+import requests
 
 API_BASE = "http://127.0.0.1:8001"
 API_KEY = "ai_video_demo_2026"

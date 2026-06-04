@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sync Bugfix #1 (target_platforms mock override) + Bugfix #2 (API key floating button) to Mac."""
-import base64, os, sys
+import os
 
 FILES_B64 = {
     "src/agents/strategy.py":

@@ -25,7 +25,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -34,22 +33,21 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dotenv import load_dotenv
 import httpx
+from dotenv import load_dotenv
 
 # Load .env before importing config
 load_dotenv()
 
 from src.config import (
-    OPENAI_API_KEY,
-    KIMI_MODEL,
-    SEEDANCE_API_KEY,
-    SEEDANCE_API_BASE_URL,
-    POYO_API_KEY,
-    POYO_API_BASE_URL,
     ELEVENLABS_API_KEY,
+    KIMI_MODEL,
+    OPENAI_API_KEY,
     OUTPUT_DIR,
-    PROJECT_ROOT as CFG_PROJECT_ROOT,
+    POYO_API_BASE_URL,
+    POYO_API_KEY,
+    SEEDANCE_API_BASE_URL,
+    SEEDANCE_API_KEY,
 )
 
 # ── Terminal colors ──

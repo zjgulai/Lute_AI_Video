@@ -215,7 +215,7 @@ def verify_video_exists(label: str) -> tuple[bool, str]:
 def run_fast_mode(payload: dict) -> dict:
     """Fast Mode uses blocking /fast/generate endpoint."""
     log(f"\n{'='*50}")
-    log(f"SCENARIO Fast Mode")
+    log("SCENARIO Fast Mode")
     log(f"{'='*50}")
     start = time.time()
     url = f"{API_BASE}/fast/generate"

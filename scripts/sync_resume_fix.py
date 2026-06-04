@@ -5,7 +5,9 @@ Run on Mac:
   python3 scripts/sync_resume_fix.py
   # uvicorn auto-reloads
 """
-import os, base64
+import base64
+import os
+
 ROOT = "/Users/pray/project/hermes_evo/AI_vedio"
 
 # src/api.py
@@ -272,6 +274,6 @@ ICAgICB9CgplbHNlOgogICAgYXBwID0gTm9uZSAgIyB0eXBlOiBpZ25vcmUK
 os.makedirs(os.path.join(ROOT, "src"), exist_ok=True)
 with open(os.path.join(ROOT, "src/api.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_api_py))
-print(f"  Wrote src/api.py")
+print("  Wrote src/api.py")
 
 print("\nDone.")

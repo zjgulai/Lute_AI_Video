@@ -5,7 +5,9 @@ Run on Mac:
   python3 scripts/sync_p4.py
   # restart uvicorn
 """
-import os, base64
+import base64
+import os
+
 ROOT = "/Users/pray/project/hermes_evo/AI_vedio"
 
 # src/api.py
@@ -268,7 +270,7 @@ ICAgICB9LAogICAgICAgIH0KCmVsc2U6CiAgICBhcHAgPSBOb25lICAjIHR5cGU6IGlnbm9yZQo=
 os.makedirs(os.path.join(ROOT, "src"), exist_ok=True)
 with open(os.path.join(ROOT, "src/api.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_api_py))
-print(f"  Wrote src/api.py")
+print("  Wrote src/api.py")
 
 # src/graph/nodes.py
 B64_src_graph_nodes_py = """
@@ -721,7 +723,7 @@ Y2F0aW9ucyI6IHNlbGZfdmVyaWZpY2F0aW9ucywKICAgIH0K
 os.makedirs(os.path.join(ROOT, "src/graph"), exist_ok=True)
 with open(os.path.join(ROOT, "src/graph/nodes.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_graph_nodes_py))
-print(f"  Wrote src/graph/nodes.py")
+print("  Wrote src/graph/nodes.py")
 
 # src/data/mock_quality.py
 B64_src_data_mock_quality_py = """
@@ -1115,7 +1117,7 @@ Y3Rpb24g4oCUIHN0cmF0ZWd5X25vZGUgd2lsbCBwcm9kdWNlIGl0IGluIG1vY2sgbW9kZQo=
 os.makedirs(os.path.join(ROOT, "src/data"), exist_ok=True)
 with open(os.path.join(ROOT, "src/data/mock_quality.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_data_mock_quality_py))
-print(f"  Wrote src/data/mock_quality.py")
+print("  Wrote src/data/mock_quality.py")
 
 # src/agents/thumbnail.py
 B64_src_agents_thumbnail_py = """
@@ -1242,6 +1244,6 @@ ZXR1cm4gcHJvbXB0Cg==
 os.makedirs(os.path.join(ROOT, "src/agents"), exist_ok=True)
 with open(os.path.join(ROOT, "src/agents/thumbnail.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_agents_thumbnail_py))
-print(f"  Wrote src/agents/thumbnail.py")
+print("  Wrote src/agents/thumbnail.py")
 
 print("\nDone.")

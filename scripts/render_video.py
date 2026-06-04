@@ -10,18 +10,18 @@ Usage:
     python scripts/render_video.py --output my_video  # Custom output name
 """
 
-import asyncio
 import argparse
-import json
-import structlog
+import asyncio
 from pathlib import Path
+
+import structlog
 
 from src.graph.pipeline import compile_pipeline
 from src.models import ApprovalStatus, HumanReview
-from src.tools.remotion_renderer import RemotionRenderer
-from src.tools.elevenlabs_client import ElevenLabsClient
 from src.tools.dalle_client import DalleClient
+from src.tools.elevenlabs_client import ElevenLabsClient
 from src.tools.metrics_repository import MetricsRepository
+from src.tools.remotion_renderer import RemotionRenderer
 
 logger = structlog.get_logger()
 
@@ -149,11 +149,11 @@ async def run_full_pipeline(output_name: str = "demo_output") -> dict:
     # ── Check if pipeline completed ──
     snapshot = compiled.get_state(config)
     if snapshot.values and snapshot.values.get("pipeline_complete"):
-        print(f"\n✅ Pipeline complete!")
+        print("\n✅ Pipeline complete!")
     elif snapshot.next:
         print(f"\n⏸️  Pipeline paused at: {snapshot.next}")
     else:
-        print(f"\n⚠️ Pipeline ended unexpectedly")
+        print("\n⚠️ Pipeline ended unexpectedly")
 
     state = snapshot.values if snapshot else {}
     script_count = len(state.get("scripts", [])) if state else 0
@@ -212,7 +212,7 @@ async def render_outputs(pipeline_state: dict, output_name: str, use_live: bool 
         input_json = output_dir / f"{output_name}_state.json"
         video_path = renderer.render(input_json, f"{output_name}.mp4", blocking=False)
         print(f"   → Render started (output: {video_path})")
-        print(f"   → Check progress with: cd rendering && npx remotion studio")
+        print("   → Check progress with: cd rendering && npx remotion studio")
     else:
         print("   → Remotion not available in this environment")
         print("   → To render locally: cd rendering && npm install && npx tsx src/render.ts")
@@ -222,13 +222,13 @@ async def render_outputs(pipeline_state: dict, output_name: str, use_live: bool 
     print(f"📁 Output directory: {output_dir.absolute()}")
     print(f"   Pipeline JSON: {output_name}_state.json")
     print(f"   Video: {output_name}.mp4 (rendering...)")
-    print(f"   Audio: audio/ directory")
-    print(f"   Thumbnails: thumbnails/ directory")
-    print(f"\n🔑 Next steps for live rendering:")
-    print(f"   1. Set ELEVENLABS_API_KEY in .env")
-    print(f"   2. Set OPENAI_API_KEY in .env")
-    print(f"   3. cd rendering && npm install")
-    print(f"   4. python scripts/render_video.py --live")
+    print("   Audio: audio/ directory")
+    print("   Thumbnails: thumbnails/ directory")
+    print("\n🔑 Next steps for live rendering:")
+    print("   1. Set ELEVENLABS_API_KEY in .env")
+    print("   2. Set OPENAI_API_KEY in .env")
+    print("   3. cd rendering && npm install")
+    print("   4. python scripts/render_video.py --live")
     print(f"{'='*50}")
 
 

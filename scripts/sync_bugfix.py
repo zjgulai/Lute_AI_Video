@@ -4,7 +4,8 @@ Usage: python3 scripts/sync_bugfix.py
 Works in any Python 3 (venv or system), no dependencies required.
 """
 
-import base64, os, sys, shutil, subprocess
+import os
+import shutil
 
 BASE = "/Users/pray/project/hermes_evo/AI_vedio"
 

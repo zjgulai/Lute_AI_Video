@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """sync page.tsx fix to Mac — standalone, no external deps"""
-import base64, sys
+import base64
 
 B64 = """InVzZSBjbGllbnQiOwoKaW1wb3J0IHsgdXNlU3RhdGUsIHVzZUVmZmVjdCwgdXNlQ2FsbGJhY2ss
 IHVzZVJlZiB9IGZyb20gInJlYWN0IjsKaW1wb3J0IHR5cGUgeyBSZXZpZXdTdGF0ZSB9IGZyb20g

@@ -6,7 +6,9 @@ Usage:
   # Restart: uvicorn src.api:app --reload --port 8001
   # Restart: cd web && npm run dev -- -p 3001
 """
-import os, base64
+import base64
+import os
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # src/api.py
@@ -253,7 +255,7 @@ ICAgIH0sCiAgICAgICAgfQoKZWxzZToKICAgIGFwcCA9IE5vbmUgICMgdHlwZTogaWdub3JlCg==
 os.makedirs(os.path.join(ROOT, "src"), exist_ok=True)
 with open(os.path.join(ROOT, "src/api.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_api_py))
-print(f"  Wrote src/api.py")
+print("  Wrote src/api.py")
 
 # src/graph/routing.py
 B64_src_graph_routing_py = """
@@ -441,7 +443,7 @@ CiAgICAgICAgcmV0dXJuICJfX2VuZF9fIgoKICAgIHJldHVybiAidGh1bWJuYWlsX25vZGUiCg==
 os.makedirs(os.path.join(ROOT, "src/graph"), exist_ok=True)
 with open(os.path.join(ROOT, "src/graph/routing.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_graph_routing_py))
-print(f"  Wrote src/graph/routing.py")
+print("  Wrote src/graph/routing.py")
 
 # src/data/mock_quality.py
 B64_src_data_mock_quality_py = """
@@ -831,7 +833,7 @@ Cg==
 os.makedirs(os.path.join(ROOT, "src/data"), exist_ok=True)
 with open(os.path.join(ROOT, "src/data/mock_quality.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_data_mock_quality_py))
-print(f"  Wrote src/data/mock_quality.py")
+print("  Wrote src/data/mock_quality.py")
 
 # tests/test_mock_quality.py
 B64_tests_test_mock_quality_py = """
@@ -1053,7 +1055,7 @@ MAo=
 os.makedirs(os.path.join(ROOT, "tests"), exist_ok=True)
 with open(os.path.join(ROOT, "tests/test_mock_quality.py"), "wb") as f:
     f.write(base64.b64decode(B64_tests_test_mock_quality_py))
-print(f"  Wrote tests/test_mock_quality.py")
+print("  Wrote tests/test_mock_quality.py")
 
 # web/src/app/page.tsx
 B64_web_src_app_page_tsx = """
@@ -1919,6 +1921,6 @@ ICAgPC9tYWluPgogICAgPC9kaXY+CiAgKTsKfQpleHBvcnQgZGVmYXVsdCBIb21lOwo=
 os.makedirs(os.path.join(ROOT, "web/src/app"), exist_ok=True)
 with open(os.path.join(ROOT, "web/src/app/page.tsx"), "wb") as f:
     f.write(base64.b64decode(B64_web_src_app_page_tsx))
-print(f"  Wrote web/src/app/page.tsx")
+print("  Wrote web/src/app/page.tsx")
 
 print("\nDone. Restart both servers.")

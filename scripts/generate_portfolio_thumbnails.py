@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()

@@ -5,7 +5,9 @@ Usage:
   python3 scripts/sync.py
   # Then restart servers
 """
-import os, base64
+import base64
+import os
+
 ROOT = "/Users/pray/project/hermes_evo/AI_vedio"
 
 # src/api.py
@@ -310,7 +312,7 @@ ICBhcHAgPSBOb25lICAjIHR5cGU6IGlnbm9yZQo=
 os.makedirs(os.path.join(ROOT, "src"), exist_ok=True)
 with open(os.path.join(ROOT, "src/api.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_api_py))
-print(f"  Wrote src/api.py")
+print("  Wrote src/api.py")
 
 # src/pipeline/s1_product_pipeline.py
 B64_src_pipeline_s1_product_pipeline_py = """
@@ -416,7 +418,7 @@ ICAgfQo=
 os.makedirs(os.path.join(ROOT, "src/pipeline"), exist_ok=True)
 with open(os.path.join(ROOT, "src/pipeline/s1_product_pipeline.py"), "wb") as f:
     f.write(base64.b64decode(B64_src_pipeline_s1_product_pipeline_py))
-print(f"  Wrote src/pipeline/s1_product_pipeline.py")
+print("  Wrote src/pipeline/s1_product_pipeline.py")
 
 # web/src/components/api.ts
 B64_web_src_components_api_ts = """
@@ -485,7 +487,7 @@ bCk7Cn0K
 os.makedirs(os.path.join(ROOT, "web/src/components"), exist_ok=True)
 with open(os.path.join(ROOT, "web/src/components/api.ts"), "wb") as f:
     f.write(base64.b64decode(B64_web_src_components_api_ts))
-print(f"  Wrote web/src/components/api.ts")
+print("  Wrote web/src/components/api.ts")
 
 # web/src/app/page.tsx
 B64_web_src_app_page_tsx = """
@@ -715,7 +717,7 @@ ICAgKX0KICAgICAgPC9tYWluPgogICAgPC9kaXY+CiAgKTsKfQo=
 os.makedirs(os.path.join(ROOT, "web/src/app"), exist_ok=True)
 with open(os.path.join(ROOT, "web/src/app/page.tsx"), "wb") as f:
     f.write(base64.b64decode(B64_web_src_app_page_tsx))
-print(f"  Wrote web/src/app/page.tsx")
+print("  Wrote web/src/app/page.tsx")
 
 print("Done. 现在可以启动后端和前端了。")
 print("  cd /Users/pray/project/hermes_evo/AI_vedio")
