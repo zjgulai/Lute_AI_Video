@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
 import ProductionJobLedgerViewer, { extractProductionJobRecords } from "./ProductionJobLedgerViewer";
+import PromptPreviewAuditPanel, { normalizePromptPreviewAuditBundle } from "./PromptPreviewAuditPanel";
 import QualityGateReportPanel, { extractQualityGateReport } from "./QualityGateReportPanel";
 import ScenarioInjectionDiffPanel, {
   buildScenarioInjectionDiff,
@@ -118,6 +119,38 @@ function getCommercialInjection(stepData: Record<string, unknown>): CommercialIn
   return injection && typeof injection === "object" && !Array.isArray(injection) ? injection as CommercialInjection : null;
 }
 
+function findPromptPreviewAuditBundle(
+  state: Record<string, unknown>,
+  steps: Record<string, Record<string, unknown>>,
+): unknown | null {
+  const stateCandidates = [
+    state.prompt_preview_audit_bundle,
+    state.prompt_preview_audit,
+    state.commercial_prompt_preview_audit,
+  ];
+  for (const candidate of stateCandidates) {
+    if (normalizePromptPreviewAuditBundle(candidate)) return candidate;
+  }
+
+  for (const stepData of Object.values(steps)) {
+    const output = asRecord(stepData.output);
+    const editedOutput = asRecord(stepData.edited_output);
+    const stepCandidates = [
+      stepData.prompt_preview_audit_bundle,
+      stepData.prompt_preview_audit,
+      output.prompt_preview_audit_bundle,
+      output.prompt_preview_audit,
+      editedOutput.prompt_preview_audit_bundle,
+      editedOutput.prompt_preview_audit,
+    ];
+    for (const candidate of stepCandidates) {
+      if (normalizePromptPreviewAuditBundle(candidate)) return candidate;
+    }
+  }
+
+  return null;
+}
+
 export default function StepByStepView({ label, state, onStepComplete, onResume, onError, loading }: Props) {
   const { t } = useI18n();
   const [viewingStep, setViewingStep] = useState<string | null>(null);
@@ -134,6 +167,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
   const qualityGateReport = extractQualityGateReport(state);
   const productionJobRecords = extractProductionJobRecords(state);
   const scenarioInjectionDiff = buildScenarioInjectionDiff(state);
+  const promptPreviewAuditBundle = findPromptPreviewAuditBundle(state, steps);
 
   const getCurrentStep = (): string | null => {
     for (const step of stepOrder) {
@@ -301,6 +335,12 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
         {qualityGateReport && (
           <div className="mt-3">
             <QualityGateReportPanel report={qualityGateReport} />
+          </div>
+        )}
+
+        {promptPreviewAuditBundle !== null && (
+          <div className="mt-3">
+            <PromptPreviewAuditPanel bundle={promptPreviewAuditBundle} />
           </div>
         )}
 

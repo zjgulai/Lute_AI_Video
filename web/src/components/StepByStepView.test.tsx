@@ -78,4 +78,86 @@ describe("StepByStepView commercial injection visibility", () => {
 
     cleanup();
   });
+
+  it("renders state-level prompt preview audit bundle without prompt body", () => {
+    const { container, cleanup } = renderStepByStepView({
+      meta: { step_order: ["video_prompts"] },
+      prompt_preview_audit_bundle: promptPreviewAuditBundle(),
+      steps: {
+        video_prompts: {
+          status: "done",
+          output: { prompts: [] },
+        },
+      },
+    });
+
+    const text = container.textContent || "";
+    expect(text).toMatch(/Prompt Preview Audit|Prompt 预览审计/);
+    expect(text).toContain("allowed-with-label");
+    expect(text).toContain("poyo");
+    expect(text).toContain("seedance-2");
+    expect(text).toContain("sha256:1234567890");
+    expect(text).toContain("delivery accepted");
+    expect(text).not.toContain("prompt body must not leak");
+
+    cleanup();
+  });
+
+  it("renders step-output prompt preview audit bundle from completed step output", () => {
+    const { container, cleanup } = renderStepByStepView({
+      meta: { step_order: ["video_prompts"] },
+      steps: {
+        video_prompts: {
+          status: "done",
+          output: {
+            prompt_preview_audit: {
+              ...promptPreviewAuditBundle(),
+              audit_bundle_id: "ppab_step_output_fixture",
+              prompt_hash: "sha256:abcdef1234567890abcdef1234567890",
+            },
+          },
+        },
+      },
+    });
+
+    const text = container.textContent || "";
+    expect(text).toMatch(/Prompt Preview Audit|Prompt 预览审计/);
+    expect(text).toContain("ppab_step_output_fixture");
+    expect(text).toContain("sha256:abcdef123456");
+    expect(text).not.toContain("prompt body must not leak");
+
+    cleanup();
+  });
 });
+
+function promptPreviewAuditBundle() {
+  return {
+    audit_bundle_id: "ppab_state_fixture",
+    compile_id: "pci_state_fixture",
+    scenario: "s1",
+    step: "video_prompts",
+    provider: "poyo",
+    model: "seedance-2",
+    prompt_hash: "sha256:1234567890abcdef1234567890abcdef",
+    preview: {
+      prompt: "prompt body must not leak",
+      negative_prompt: "prompt body must not leak",
+    },
+    gate_decision: {
+      status: "review_required",
+      requires_human_review: true,
+      blocking_failure_count: 0,
+      advisory_warning_count: 0,
+    },
+    repair_plan: {
+      actions: [],
+    },
+    evidence_boundary: {
+      decision: "allowed-with-label",
+      evidence_level: "L2-fixture-or-dry-run",
+      forbidden_claims: ["delivery accepted", "provider job submitted"],
+    },
+    delivery_accepted: false,
+    publish_allowed: false,
+  };
+}
