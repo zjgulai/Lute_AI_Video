@@ -243,6 +243,50 @@ describe("StageProgress continuity diagnostics", () => {
     cleanup();
   });
 
+  it.each([
+    ["s1", "strategy"],
+    ["s2", "strategy"],
+    ["s5", "vlog_strategy"],
+  ])("renders current-step commercial injection summary for %s", async (scenario, currentStep) => {
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      status: "running",
+      current_step: currentStep,
+      current_step_injection: {
+        bundle_refs: ["BrandConstraintBundle"],
+        toolbox_refs: ["ImageToolbox"],
+        contract_refs: ["QualityContract"],
+        gate_checks: ["rights_pass"],
+        source_token_ids: ["bat_fixture"],
+      },
+      steps: {
+        [currentStep]: { status: "running" },
+      },
+      errors: [],
+      soft_degraded_reasons: [],
+      continuity_diagnostics: null,
+    } as never);
+
+    const { container, cleanup } = renderStageProgress({
+      label: `${scenario}_commercial_injection`,
+      scenario,
+      onComplete: () => {},
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2200);
+    });
+
+    expect(container.textContent).toMatch(/Current Step Injection|当前步骤注入/);
+    expect(container.textContent).toMatch(/Read-only|只读/);
+    expect(container.textContent).toContain("BrandConstraintBundle");
+    expect(container.textContent).toContain("ImageToolbox");
+    expect(container.textContent).toContain("QualityContract");
+    expect(container.textContent).toContain("rights_pass");
+    expect(container.textContent).toContain("bat_fixture");
+
+    cleanup();
+  });
+
   it("does not call onComplete after unmounting during delayed completion", async () => {
     const onComplete = vi.fn();
 

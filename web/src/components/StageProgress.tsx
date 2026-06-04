@@ -110,6 +110,24 @@ type StageRuntimeState = StageDefinition & {
   anyStarted: boolean;
 };
 
+type CommercialInjectionSummary = {
+  hard_token_ids?: unknown;
+  soft_token_ids?: unknown;
+  source_token_ids?: unknown;
+  bundle_refs?: unknown;
+  toolbox_refs?: unknown;
+  contract_refs?: unknown;
+  gate_checks?: unknown;
+};
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeCommercialInjection(value: unknown): CommercialInjectionSummary | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as CommercialInjectionSummary : null;
+}
+
 export function deriveStageRuntimeState(
   stageDefs: StageDefinition[],
   steps: Record<string, Record<string, unknown>>,
@@ -231,6 +249,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
   const [status, setStatus] = useState<string>("running");
   const [gateStatus, setGateStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [currentStepInjection, setCurrentStepInjection] = useState<CommercialInjectionSummary | null>(null);
   const [softDegradedReasons, setSoftDegradedReasons] = useState<Array<{ step?: string; reason?: string; detail?: string }>>([]);
   const [continuityDiagnostics, setContinuityDiagnostics] = useState<ContinuityDiagnosticsPayload | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -338,6 +357,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       setSteps(newSteps);
       setStatus(data.status);
       setGateStatus(data.gate_status);
+      setCurrentStepInjection(normalizeCommercialInjection(data.current_step_injection));
       const currentErrors = data.errors || [];
       const isServerError = data.status === "error" || Boolean(data.pipeline_degraded);
       setErrors(currentErrors);
@@ -509,6 +529,10 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
             {t("gate.awaitingApproval") || "Awaiting approval — please review candidates in Expert Studio"}
           </p>
         </div>
+      )}
+
+      {currentStepInjection && !isError && (
+        <CurrentCommercialInjectionSummary injection={currentStepInjection} />
       )}
 
       {softDegradedReasons.length > 0 && !isError && (
@@ -770,6 +794,59 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
 }
 
 // ═══ Stage Icon — visual metaphors per stage ═══
+
+function CurrentCommercialInjectionSummary({ injection }: { injection: CommercialInjectionSummary }) {
+  const { t } = useI18n();
+  const groups = [
+    { label: t("commercialInjection.bundle"), values: stringList(injection.bundle_refs) },
+    { label: t("commercialInjection.toolbox"), values: stringList(injection.toolbox_refs) },
+    { label: t("commercialInjection.contract"), values: stringList(injection.contract_refs) },
+    { label: t("commercialInjection.gate"), values: stringList(injection.gate_checks) },
+    {
+      label: t("commercialInjection.tokens"),
+      values: [
+        ...stringList(injection.hard_token_ids),
+        ...stringList(injection.soft_token_ids),
+        ...stringList(injection.source_token_ids),
+      ],
+    },
+  ].filter((group) => group.values.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-[rgba(220,190,120,0.24)] bg-[rgba(220,190,120,0.07)] px-3 py-2">
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-semibold text-[var(--gold-foil)]">
+          {t("commercialInjection.currentStep")}
+        </span>
+        <span className="rounded-full bg-[rgba(220,190,120,0.12)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.02em] text-[var(--text-muted)]">
+          {t("commercialInjection.readOnly")}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {groups.map((group) => (
+          <div key={group.label} className="flex min-w-0 max-w-full items-center gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.02em] text-[var(--text-muted)]">
+              {group.label}
+            </span>
+            <div className="flex min-w-0 flex-wrap gap-1">
+              {group.values.slice(0, 3).map((value) => (
+                <span
+                  key={`${group.label}-${value}`}
+                  className="max-w-[160px] truncate rounded-md bg-[var(--bg-panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-h1)]"
+                  title={value}
+                >
+                  {value}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StageIcon({
   stageId,

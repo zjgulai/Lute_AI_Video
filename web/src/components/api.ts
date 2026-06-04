@@ -1130,6 +1130,7 @@ export async function getScenarioStatus(
   scenario: string;
   status: string;
   current_step: string | null;
+  current_step_injection?: Record<string, unknown> | null;
   progress: number;
   pipeline_degraded: boolean;
   soft_degraded_reasons?: Array<{ step?: string; reason?: string; detail?: string }>;
