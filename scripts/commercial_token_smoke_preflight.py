@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""No-token preflight report before C9 authorized live token smoke."""
+"""No-token preflight report before C21 authorized live token smoke."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--approval-record",
-        help="Path to explicit C9 authorized-live approval JSON. Defaults to AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD.",
+        help="Path to explicit C21 authorized-live approval JSON. Defaults to AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD.",
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON report.")
     return parser.parse_args()

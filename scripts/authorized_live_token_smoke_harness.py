@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gated C9 authorized-live sample harness.
+"""Gated C21 authorized-live sample harness.
 
 Default mode is disabled. The script never configures a provider submitter by
 itself, so it cannot call an external provider unless future code explicitly
@@ -29,7 +29,7 @@ def _parse_args() -> argparse.Namespace:
     mode.add_argument("--execute", action="store_true", help="Attempt execute mode. Requires explicit env gates.")
     parser.add_argument(
         "--approval-record",
-        help="Path to explicit C9 authorized-live approval JSON. Defaults to AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD.",
+        help="Path to explicit C21 authorized-live approval JSON. Defaults to AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD.",
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON report.")
     return parser.parse_args()

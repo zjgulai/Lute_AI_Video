@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -18,12 +19,16 @@ from src.models.commercial_contracts import (
     QualityContract,
 )
 from src.pipeline.production_job_ledger import ProductionJobLedger
-from src.pipeline.provider_profiles import list_provider_prompt_profiles
+from src.pipeline.provider_profiles import ProviderPromptProfile, list_provider_prompt_profiles
 from src.quality.commercial_gate import evaluate_quality_contract
 
 RUN_TOKEN_SMOKE_ENV = "RUN_TOKEN_SMOKE"
 APPROVAL_RECORD_ENV = "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD"
-APPROVAL_SCOPE = "c9-token-smoke"
+APPROVAL_SCOPE = "c21-token-smoke"
+APPROVAL_STATEMENT_TEMPLATE = (
+    "我明确授权 C21 运行一次真实 token smoke，允许调用 provider，"
+    "使用的 provider/model 是 {provider}/{model}，预算上限是 {budget_limit}。"
+)
 REQUIRED_API_KEY_ENVS = ("POYO_API_KEY", "DEEPSEEK_API_KEY", "SILICONFLOW_API_KEY")
 
 
@@ -39,6 +44,9 @@ class TokenSmokePreflightReport(BaseModel):
     evidence_level: Literal["L2-fixture-or-dry-run"] = "L2-fixture-or-dry-run"
     run_token_smoke: bool
     approval_record_ref: str | None = None
+    approved_provider: str | None = None
+    approved_model: str | None = None
+    approved_budget_limit_usd: float | None = None
     provider_call_allowed: bool = False
     blocked: bool = True
     checks: list[PreflightCheck] = Field(default_factory=list)
@@ -54,11 +62,12 @@ def build_token_smoke_preflight_report(
     env = env or os.environ
     record_path_raw = approval_record_path or env.get(APPROVAL_RECORD_ENV, "")
     record_path = Path(record_path_raw).expanduser() if record_path_raw else None
+    approval_check, approval_payload = _check_approval_record(record_path)
     checks = [
         _check_run_token_smoke(env),
         *_check_api_keys(env),
-        _check_approval_record(record_path),
-        _check_provider_capability_evidence(),
+        approval_check,
+        _check_provider_capability_evidence(approval_payload),
         _check_job_ledger_readiness(),
         _check_audit_bundle_readiness(),
     ]
@@ -68,6 +77,9 @@ def build_token_smoke_preflight_report(
         report_id=f"token_smoke_preflight_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
         run_token_smoke=env.get(RUN_TOKEN_SMOKE_ENV) == "1",
         approval_record_ref=str(record_path) if record_path else None,
+        approved_provider=_approval_string(approval_payload, "provider"),
+        approved_model=_approval_string(approval_payload, "model"),
+        approved_budget_limit_usd=_approval_budget_limit_usd(approval_payload),
         provider_call_allowed=not blocked,
         blocked=blocked,
         checks=checks,
@@ -103,28 +115,28 @@ def _check_api_keys(env: Mapping[str, str]) -> list[PreflightCheck]:
     return checks
 
 
-def _check_approval_record(path: Path | None) -> PreflightCheck:
+def _check_approval_record(path: Path | None) -> tuple[PreflightCheck, dict[str, Any] | None]:
     if path is None:
         return PreflightCheck(
             name="authorized_live_approval",
             status="block",
             detail=f"{APPROVAL_RECORD_ENV} must point to an explicit approval record",
             evidence_refs=[APPROVAL_RECORD_ENV],
-        )
+        ), None
     if not path.exists():
         return PreflightCheck(
             name="authorized_live_approval",
             status="block",
             detail="approval record path does not exist",
             evidence_refs=[str(path)],
-        )
+        ), None
     if not path.is_file():
         return PreflightCheck(
             name="authorized_live_approval",
             status="block",
             detail="approval record path must be a JSON file",
             evidence_refs=[str(path)],
-        )
+        ), None
 
     try:
         payload = json.loads(path.read_text())
@@ -134,7 +146,14 @@ def _check_approval_record(path: Path | None) -> PreflightCheck:
             status="block",
             detail="approval record must be valid JSON",
             evidence_refs=[str(path)],
-        )
+        ), None
+    if not isinstance(payload, dict):
+        return PreflightCheck(
+            name="authorized_live_approval",
+            status="block",
+            detail="approval record must be a JSON object",
+            evidence_refs=[str(path)],
+        ), None
 
     required = {
         "scope": APPROVAL_SCOPE,
@@ -148,7 +167,7 @@ def _check_approval_record(path: Path | None) -> PreflightCheck:
             status="block",
             detail=f"approval record missing required fields: {', '.join(missing_or_wrong)}",
             evidence_refs=[str(path)],
-        )
+        ), None
 
     if not payload.get("approved_by") or not payload.get("approved_at"):
         return PreflightCheck(
@@ -156,30 +175,108 @@ def _check_approval_record(path: Path | None) -> PreflightCheck:
             status="block",
             detail="approval record requires approved_by and approved_at",
             evidence_refs=[str(path)],
-        )
+        ), None
+
+    detail_missing = _missing_detail_fields(payload)
+    if detail_missing:
+        return PreflightCheck(
+            name="authorized_live_approval",
+            status="block",
+            detail=f"approval record missing live-smoke details: {', '.join(detail_missing)}",
+            evidence_refs=[str(path)],
+        ), None
+
+    budget_limit_usd = _approval_budget_limit_usd(payload)
+    if budget_limit_usd is None or budget_limit_usd <= 0:
+        return PreflightCheck(
+            name="authorized_live_approval",
+            status="block",
+            detail="approval record budget_limit_usd must be a positive number",
+            evidence_refs=[str(path)],
+        ), None
+
+    provider = str(payload["provider"]).strip()
+    model = str(payload["model"]).strip()
+    budget_limit = str(payload["budget_limit"]).strip()
+    expected_statement = APPROVAL_STATEMENT_TEMPLATE.format(
+        provider=provider,
+        model=model,
+        budget_limit=budget_limit,
+    )
+    if payload.get("approval_statement") != expected_statement:
+        return PreflightCheck(
+            name="authorized_live_approval",
+            status="block",
+            detail="approval record must include the exact C21 user authorization statement",
+            evidence_refs=[str(path)],
+        ), None
 
     return PreflightCheck(
         name="authorized_live_approval",
         status="pass",
         detail="explicit authorized-live approval record is present",
-        evidence_refs=[str(path), str(payload.get("approval_id", ""))],
-    )
+        evidence_refs=[str(path), str(payload.get("approval_id", "")), f"{provider}/{model}"],
+    ), payload
 
 
-def _check_provider_capability_evidence() -> PreflightCheck:
+def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | None) -> PreflightCheck:
     profiles = list_provider_prompt_profiles()
-    if profiles:
+    provider = _approval_string(approval_payload, "provider")
+    model = _approval_string(approval_payload, "model")
+    if provider is None or model is None:
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail="passing approval record with provider/model is required before capability evidence can be bound",
+        )
+    profile = _match_provider_profile(profiles, provider, model)
+    if profile is not None:
         return PreflightCheck(
             name="provider_capability_evidence",
             status="pass",
-            detail=f"{len(profiles)} fixture provider prompt profiles are registered",
-            evidence_refs=[profile.profile_id for profile in profiles],
+            detail=f"fixture provider prompt profile is registered for {provider}/{model}",
+            evidence_refs=[profile.profile_id],
         )
     return PreflightCheck(
         name="provider_capability_evidence",
         status="block",
-        detail="no provider capability fixture profiles are registered",
+        detail=f"no fixture provider prompt profile is registered for {provider}/{model}",
     )
+
+
+def _missing_detail_fields(payload: Mapping[str, Any]) -> list[str]:
+    required = ["provider", "model", "budget_limit", "budget_limit_usd", "approval_statement"]
+    return [key for key in required if not str(payload.get(key, "")).strip()]
+
+
+def _approval_budget_limit_usd(payload: Mapping[str, Any] | None) -> float | None:
+    if payload is None:
+        return None
+    try:
+        value = float(payload.get("budget_limit_usd"))
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def _approval_string(payload: Mapping[str, Any] | None, key: str) -> str | None:
+    if payload is None:
+        return None
+    value = str(payload.get(key, "")).strip()
+    return value or None
+
+
+def _match_provider_profile(
+    profiles: list[ProviderPromptProfile],
+    provider: str,
+    model: str,
+) -> ProviderPromptProfile | None:
+    provider_key = provider.lower()
+    model_key = model.lower()
+    for profile in profiles:
+        if profile.provider.lower() == provider_key and profile.model_family.lower() in model_key:
+            return profile
+    return None
 
 
 def _check_job_ledger_readiness() -> PreflightCheck:

@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from src.pipeline.authorized_live_harness import EXECUTE_ENV, run_authorized_live_harness
-from src.pipeline.token_smoke_preflight import APPROVAL_RECORD_ENV, REQUIRED_API_KEY_ENVS, RUN_TOKEN_SMOKE_ENV
+from src.pipeline.token_smoke_preflight import (
+    APPROVAL_RECORD_ENV,
+    APPROVAL_SCOPE,
+    APPROVAL_STATEMENT_TEMPLATE,
+    REQUIRED_API_KEY_ENVS,
+    RUN_TOKEN_SMOKE_ENV,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "authorized_live_token_smoke_harness.py"
@@ -43,7 +49,23 @@ def test_dry_run_passes_after_preflight_without_provider_call(tmp_path: Path):
     assert report.preflight.provider_call_allowed is True
     assert report.job_spec is not None
     assert report.job_spec.provider == "poyo"
+    assert report.job_spec.model == "seedance-2"
+    assert report.job_spec.cost_ceiling_usd == 1.0
     assert calls == []
+
+
+def test_dry_run_job_spec_uses_approval_provider_model_and_budget(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path, provider="kling", model="kling-3.0", budget_limit_usd=2.5)
+    env = _ready_env(approval_record)
+
+    report = run_authorized_live_harness(mode="dry_run", env=env)
+
+    assert report.status == "dry_run_ready"
+    assert report.provider_call_executed is False
+    assert report.job_spec is not None
+    assert report.job_spec.provider == "kling"
+    assert report.job_spec.model == "kling-3.0"
+    assert report.job_spec.cost_ceiling_usd == 2.5
 
 
 def test_execute_mode_requires_extra_execute_flag_after_preflight(tmp_path: Path):
@@ -100,15 +122,34 @@ def _ready_env(approval_record: Path) -> dict[str, str]:
     return env
 
 
-def _write_approval_record(tmp_path: Path) -> Path:
+def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
     path = tmp_path / "authorized-live-approval.json"
+    provider = str(overrides.get("provider", "poyo"))
+    model = str(overrides.get("model", "seedance-2"))
+    budget_limit = str(overrides.get("budget_limit", "$1.00"))
     payload: dict[str, Any] = {
         "approval_id": "approval_fixture",
-        "scope": "c9-token-smoke",
+        "scope": APPROVAL_SCOPE,
         "evidence_level": "L4-authorized-live",
         "provider_calls_allowed": True,
         "approved_by": "user",
         "approved_at": "2026-06-04T00:00:00Z",
+        "provider": provider,
+        "model": model,
+        "budget_limit": budget_limit,
+        "budget_limit_usd": 1.0,
+        "approval_statement": _approval_statement(provider, model, budget_limit),
     }
-    path.write_text(json.dumps(payload))
+    payload.update(overrides)
+    if {"provider", "model", "budget_limit"} & overrides.keys() and "approval_statement" not in overrides:
+        payload["approval_statement"] = _approval_statement(
+            str(payload["provider"]),
+            str(payload["model"]),
+            str(payload["budget_limit"]),
+        )
+    path.write_text(json.dumps(payload, ensure_ascii=False))
     return path
+
+
+def _approval_statement(provider: str, model: str, budget_limit: str) -> str:
+    return APPROVAL_STATEMENT_TEMPLATE.format(provider=provider, model=model, budget_limit=budget_limit)

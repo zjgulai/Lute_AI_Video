@@ -1,4 +1,4 @@
-"""Gated authorized-live harness entrypoint for C9 token smoke."""
+"""Gated authorized-live harness entrypoint for C21 token smoke."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def run_authorized_live_harness(
         )
 
     preflight = build_token_smoke_preflight_report(env=env, approval_record_path=approval_record_path)
-    job_spec = _build_sample_job_spec()
+    job_spec = _build_sample_job_spec(preflight)
     if preflight.blocked:
         return AuthorizedLiveHarnessReport(
             harness_id=harness_id,
@@ -106,15 +106,22 @@ def run_authorized_live_harness(
     )
 
 
-def _build_sample_job_spec() -> MediaJobSpec:
+def _build_sample_job_spec(preflight: TokenSmokePreflightReport | None = None) -> MediaJobSpec:
+    provider = preflight.approved_provider if preflight and preflight.approved_provider else "poyo"
+    model = preflight.approved_model if preflight and preflight.approved_model else "seedance-2"
+    cost_ceiling_usd = (
+        preflight.approved_budget_limit_usd
+        if preflight and preflight.approved_budget_limit_usd is not None
+        else 1.0
+    )
     return MediaJobSpec(
         job_id="authorized_live_sample_fixture",
-        provider="poyo",
-        model="seedance-2",
+        provider=provider,
+        model=model,
         scenario="s1",
         step_name="video_prompts",
         prompt_hash="sha256:authorized_live_sample_fixture",
         prompt_compile_id="pci_authorized_live_sample_fixture",
         brand_bundle_id="bundle_authorized_live_sample_fixture",
-        cost_ceiling_usd=1.0,
+        cost_ceiling_usd=cost_ceiling_usd,
     )
