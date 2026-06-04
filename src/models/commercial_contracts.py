@@ -387,6 +387,93 @@ class TranscriptTimeline(BaseModel):
     research_only: bool = True
 
 
+class SceneLedger(BaseModel):
+    scene_ledger_id: str
+    scenario: str
+    scene_ids: list[str] = Field(default_factory=list)
+    narrative_beats: list[str] = Field(default_factory=list)
+    target_duration_seconds: int | None = None
+
+
+class ShotLedger(BaseModel):
+    shot_ledger_id: str
+    scenario: str
+    shots: list[StoryboardShotSchema] = Field(default_factory=list)
+
+    @property
+    def shot_count(self) -> int:
+        return len(self.shots)
+
+    @property
+    def total_duration_seconds(self) -> int:
+        return sum(shot.duration_seconds for shot in self.shots)
+
+
+class TimelineBlock(BaseModel):
+    block_id: str
+    start_seconds: float
+    end_seconds: float
+    scene_ref: str | None = None
+    shot_refs: list[str] = Field(default_factory=list)
+    audio_ref: str | None = None
+    caption_refs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _end_must_follow_start(self) -> TimelineBlock:
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("timeline block end_seconds must be greater than start_seconds")
+        return self
+
+
+class TimelineManifest(BaseModel):
+    timeline_manifest_id: str
+    scenario: str
+    duration_seconds: int
+    timeline_blocks: list[TimelineBlock] = Field(default_factory=list)
+    audio_track_refs: list[str] = Field(default_factory=list)
+    caption_track_refs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _longform_requires_timeline_blocks(self) -> TimelineManifest:
+        if self.duration_seconds >= 90 and not self.timeline_blocks:
+            raise ValueError("90s+ timeline manifest requires timeline blocks")
+        return self
+
+
+class EditDecision(BaseModel):
+    edit_id: str
+    source_block_id: str
+    action: Literal["keep", "trim", "drop", "reorder", "speed_adjust"]
+    target_start_seconds: float | None = None
+    target_end_seconds: float | None = None
+    rationale: str = ""
+
+
+class EditDecisionList(BaseModel):
+    edl_id: str
+    source_timeline_manifest_id: str
+    decisions: list[EditDecision] = Field(default_factory=list)
+    generated_from: Literal["human", "fixture", "dry_run", "authorized_live"] = "fixture"
+
+
+class CutdownPlan(BaseModel):
+    cutdown_plan_id: str
+    source_timeline_manifest_id: str
+    target_duration_seconds: int
+    selected_block_ids: list[str] = Field(default_factory=list)
+    rights_evidence_refs: list[str] = Field(default_factory=list)
+    platform_targets: list[PlatformTarget] = Field(default_factory=list)
+
+
+class ReframeJob(BaseModel):
+    reframe_job_id: str
+    source_artifact_ref: str
+    target_aspect_ratio: str
+    safe_zone_policy: Literal["caption_safe", "subject_center", "manual_review"] = "caption_safe"
+    caption_safe_zone_required: bool = True
+    status: Literal["planned", "blocked", "prepared", "succeeded", "failed"] = "planned"
+
+
 class LongformProductionContract(BaseModel):
     contract_id: str
     scenario: str
@@ -395,9 +482,31 @@ class LongformProductionContract(BaseModel):
     scene_ledger_id: str | None = None
     timeline_manifest_id: str | None = None
     review_checkpoint_ids: list[str] = Field(default_factory=list)
+    scene_ledger: SceneLedger | None = None
+    shot_ledger: ShotLedger | None = None
+    timeline_manifest: TimelineManifest | None = None
+    edit_decision_list: EditDecisionList | None = None
+    cutdown_plan: CutdownPlan | None = None
+    reframe_jobs: list[ReframeJob] = Field(default_factory=list)
 
     def has_longform_delivery_floor(self) -> bool:
-        return bool(self.scene_ledger_id and self.timeline_manifest_id and self.review_checkpoint_ids)
+        return bool(self._has_scene_ledger() and self._has_timeline_manifest() and self.review_checkpoint_ids)
+
+    @model_validator(mode="after")
+    def _longform_requires_structured_timeline(self) -> LongformProductionContract:
+        if self.target_duration_seconds >= 90 and not self._has_timeline_manifest():
+            raise ValueError("90s+ longform contract requires timeline manifest with timeline blocks")
+        if self.target_duration_seconds >= 90 and not self._has_scene_ledger():
+            raise ValueError("90s+ longform contract requires scene ledger")
+        if self.target_duration_seconds >= 300 and self.shot_ledger is not None and self.shot_ledger.shot_count <= 1:
+            raise ValueError("single-shot 300s structure blocks longform delivery")
+        return self
+
+    def _has_scene_ledger(self) -> bool:
+        return bool(self.scene_ledger or self.scene_ledger_id)
+
+    def _has_timeline_manifest(self) -> bool:
+        return bool(self.timeline_manifest and self.timeline_manifest.timeline_blocks)
 
 
 class CompileOptions(BaseModel):

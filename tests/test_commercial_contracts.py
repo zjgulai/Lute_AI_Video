@@ -12,11 +12,20 @@ from src.models.commercial_contracts import (
     BrandConstraintBundle,
     CandidateTokenLedger,
     CapabilityValue,
+    EditDecision,
+    EditDecisionList,
     LicenseStatus,
     LongformProductionContract,
+    PlatformTarget,
     ProviderCapability,
     PublishPolicy,
     QualityContract,
+    ReframeJob,
+    SceneLedger,
+    ShotLedger,
+    StoryboardShotSchema,
+    TimelineBlock,
+    TimelineManifest,
     TokenReview,
     TokenStatus,
     TokenStrength,
@@ -120,7 +129,7 @@ def test_longform_contract_floor_requires_scene_timeline_and_review_markers():
         contract_id="lf_incomplete",
         scenario="s2",
         brand_id="momcozy",
-        target_duration_seconds=180,
+        target_duration_seconds=60,
         scene_ledger_id="scene_001",
     )
     complete = LongformProductionContract(
@@ -128,13 +137,133 @@ def test_longform_contract_floor_requires_scene_timeline_and_review_markers():
         scenario="s2",
         brand_id="momcozy",
         target_duration_seconds=180,
-        scene_ledger_id="scene_001",
-        timeline_manifest_id="timeline_001",
+        scene_ledger=SceneLedger(
+            scene_ledger_id="scene_001",
+            scenario="s2",
+            scene_ids=["scene_intro", "scene_demo"],
+        ),
+        timeline_manifest=TimelineManifest(
+            timeline_manifest_id="timeline_001",
+            scenario="s2",
+            duration_seconds=180,
+            timeline_blocks=[
+                TimelineBlock(
+                    block_id="block_intro",
+                    start_seconds=0,
+                    end_seconds=90,
+                    scene_ref="scene_intro",
+                    shot_refs=["shot_intro"],
+                ),
+                TimelineBlock(
+                    block_id="block_demo",
+                    start_seconds=90,
+                    end_seconds=180,
+                    scene_ref="scene_demo",
+                    shot_refs=["shot_demo"],
+                ),
+            ],
+        ),
         review_checkpoint_ids=["review_001"],
     )
 
     assert incomplete.has_longform_delivery_floor() is False
     assert complete.has_longform_delivery_floor() is True
+
+
+def test_timeline_manifest_blocks_90s_plus_without_timeline_blocks():
+    with pytest.raises(ValidationError, match="timeline blocks"):
+        TimelineManifest(
+            timeline_manifest_id="timeline_missing_blocks",
+            scenario="s2",
+            duration_seconds=120,
+            timeline_blocks=[],
+        )
+
+
+def test_longform_contract_blocks_90s_plus_without_structured_timeline():
+    with pytest.raises(ValidationError, match="timeline manifest"):
+        LongformProductionContract(
+            contract_id="lf_missing_timeline",
+            scenario="s2",
+            brand_id="momcozy",
+            target_duration_seconds=120,
+            scene_ledger=SceneLedger(
+                scene_ledger_id="scene_001",
+                scenario="s2",
+                scene_ids=["scene_intro", "scene_demo"],
+            ),
+            timeline_manifest_id="timeline_id_without_blocks",
+            review_checkpoint_ids=["review_001"],
+        )
+
+
+def test_longform_contract_blocks_single_shot_300s_structure():
+    with pytest.raises(ValidationError, match="single-shot 300s"):
+        LongformProductionContract(
+            contract_id="lf_single_shot_300",
+            scenario="s2",
+            brand_id="momcozy",
+            target_duration_seconds=300,
+            scene_ledger=SceneLedger(
+                scene_ledger_id="scene_single",
+                scenario="s2",
+                scene_ids=["scene_single"],
+            ),
+            shot_ledger=ShotLedger(
+                shot_ledger_id="shot_ledger_single",
+                scenario="s2",
+                shots=[
+                    StoryboardShotSchema(
+                        shot_id="shot_single",
+                        scenario="s2",
+                        beat="single sustained scene",
+                        visual_description="One uninterrupted product scene",
+                        duration_seconds=300,
+                    )
+                ],
+            ),
+            timeline_manifest=TimelineManifest(
+                timeline_manifest_id="timeline_single",
+                scenario="s2",
+                duration_seconds=300,
+                timeline_blocks=[
+                    TimelineBlock(
+                        block_id="block_single",
+                        start_seconds=0,
+                        end_seconds=300,
+                        scene_ref="scene_single",
+                        shot_refs=["shot_single"],
+                    )
+                ],
+            ),
+            review_checkpoint_ids=["review_001"],
+        )
+
+
+def test_longform_auxiliary_objects_are_fixture_ready_without_provider_calls():
+    edl = EditDecisionList(
+        edl_id="edl_fixture",
+        source_timeline_manifest_id="timeline_001",
+        decisions=[
+            EditDecision(
+                edit_id="edit_trim_intro",
+                source_block_id="block_intro",
+                action="trim",
+                target_start_seconds=0,
+                target_end_seconds=42,
+            )
+        ],
+    )
+    reframe = ReframeJob(
+        reframe_job_id="reframe_9x16",
+        source_artifact_ref="fixture://final.mp4",
+        target_aspect_ratio="9:16",
+    )
+
+    assert edl.generated_from == "fixture"
+    assert reframe.status == "planned"
+    assert reframe.caption_safe_zone_required is True
+    assert PlatformTarget(platform="tiktok").aspect_ratio == "9:16"
 
 
 def _approved_token(token_id: str, token_type: str, strength: TokenStrength, priority: int) -> BrandAssetToken:
