@@ -89,6 +89,29 @@ class S1StartRequest(BaseModel):
     storyboard_grid: int = 12
     clip_group_size: int = 3
     transition_style: str = "match_cut"
+    commercial_injection_plan: dict[str, Any] | None = None
+    api_keys: dict[str, str] = {}
+
+
+class S2BrandCampaignRequest(BaseModel):
+    brand_package: dict[str, Any] = {}
+    target_platforms: list[str] = ["tiktok", "shopify"]
+    target_languages: list[str] = DEFAULT_LANGUAGES
+    week: str = ""
+    video_duration: int = 60
+    enable_media_synthesis: bool = True
+    commercial_injection_plan: dict[str, Any] | None = None
+    api_keys: dict[str, str] = {}
+
+
+class S5BrandVlogRequest(BaseModel):
+    brand_id: str = "momcozy"
+    product_sku: dict[str, Any] = {}
+    scene_id: str | None = None
+    selected_models: list[dict[str, Any]] = []
+    story_description: str = ""
+    video_duration: int = 30
+    commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 
 

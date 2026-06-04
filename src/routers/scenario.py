@@ -16,6 +16,7 @@ except ImportError:
 from typing import Any
 
 from src.config import DEFAULT_LANGUAGES
+from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.routers._deps import (
     _classified_error,
     _inject_api_keys,
@@ -28,6 +29,8 @@ from src.routers._state import (
     _STEP_DURATIONS,
     FastModeRequest,
     S1StartRequest,
+    S2BrandCampaignRequest,
+    S5BrandVlogRequest,
     _get_step_deps,
     _get_step_output,
     _register_background_task,
@@ -73,6 +76,22 @@ def _assert_state_access(state: dict[str, Any] | None) -> None:
         raise HTTPException(status_code=404, detail="State not found")
     if state_tenant != ctx.tenant_id:
         raise HTTPException(status_code=404, detail="State not found")
+
+
+def _with_commercial_injection_config(
+    config: dict[str, Any],
+    plan_payload: dict[str, Any] | None,
+    *,
+    expected_scenario: str,
+) -> dict[str, Any]:
+    try:
+        return with_optional_injection_config(
+            config,
+            plan_payload,
+            expected_scenario=expected_scenario,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
@@ -122,6 +141,11 @@ async def run_s1_product_direct(body: dict[str, Any]):
         "clip_group_size": body.get("clip_group_size", 3),
         "transition_style": body.get("transition_style", "match_cut"),
     }
+    config = _with_commercial_injection_config(
+        config,
+        body.get("commercial_injection_plan"),
+        expected_scenario="s1",
+    )
 
     state_manager = PipelineStateManager()
     step_runner = StepRunner(state_manager)
@@ -152,6 +176,7 @@ async def run_s1_product_direct(body: dict[str, Any]):
             storyboard_grid=body.get("storyboard_grid", 12),
             clip_group_size=body.get("clip_group_size", 3),
             transition_style=body.get("transition_style", "match_cut"),
+            commercial_injection_plan=body.get("commercial_injection_plan"),
         )
         # S1ProductDirectPipeline returns a dict differently — extract steps from the state
         return final_state
@@ -207,11 +232,17 @@ async def run_s1_product_direct(body: dict[str, Any]):
 
 
 @router.post("/scenario/s2", dependencies=[Depends(verify_api_key)])
-async def run_s2_brand_campaign(body: dict[str, Any]):
+async def run_s2_brand_campaign(body: S2BrandCampaignRequest):
     """Run S2 Brand Campaign pipeline."""
-    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
+    _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
+    body_data = body.model_dump()
+    commercial_injection_plan = _with_commercial_injection_config(
+        {},
+        body.commercial_injection_plan,
+        expected_scenario="s2",
+    ).get("commercial_injection_plan")
 
-    brand_package = body.get("brand_package", {})
+    brand_package = body.brand_package
     # P3-4: Bind pipeline context to all downstream structlog calls
     structlog.contextvars.bind_contextvars(
         product_name=brand_package.get("brand_name", "unknown"),
@@ -223,10 +254,13 @@ async def run_s2_brand_campaign(body: dict[str, Any]):
     from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
     p = S2BrandCampaignPipeline()
     r = await p.run(
-        brand_package=body.get("brand_package", {}),
-        target_platforms=body.get("target_platforms", ["tiktok", "shopify"]),
-        target_languages=body.get("target_languages", DEFAULT_LANGUAGES),
-        week=body.get("week", ""),
+        brand_package=body.brand_package,
+        target_platforms=body.target_platforms,
+        target_languages=body.target_languages,
+        week=body.week,
+        video_duration=coerce_video_duration(body_data, default=60),
+        enable_media_synthesis=body.enable_media_synthesis,
+        commercial_injection_plan=commercial_injection_plan,
     )
     return r
 
@@ -299,7 +333,7 @@ async def run_s4_live_shoot(body: dict[str, Any]):
 
 
 @router.post("/scenario/s5", dependencies=[Depends(verify_api_key)])
-async def run_s5_brand_vlog(body: dict[str, Any]):
+async def run_s5_brand_vlog(body: S5BrandVlogRequest):
     """Run S5 Brand VLOG pipeline.
 
     Request body:
@@ -310,10 +344,16 @@ async def run_s5_brand_vlog(body: dict[str, Any]):
         story_description: str — user's story direction (max 300 chars)
         video_duration: int — target video seconds (15/30/45/60/90)
     """
-    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
-    product_sku = body.get("product_sku", {})
-    brand_id = body.get("brand_id", "momcozy")
-    scene_id = _validate_s5_scene_id(body.get("scene_id"))
+    _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
+    body_data = body.model_dump()
+    commercial_injection_plan = _with_commercial_injection_config(
+        {},
+        body.commercial_injection_plan,
+        expected_scenario="s5",
+    ).get("commercial_injection_plan")
+    product_sku = body.product_sku
+    brand_id = body.brand_id
+    scene_id = _validate_s5_scene_id(body.scene_id)
     structlog.contextvars.bind_contextvars(
         product_name=product_sku.get("name", "unknown") if isinstance(product_sku, dict) else "unknown",
         brand_name=brand_id,
@@ -323,12 +363,13 @@ async def run_s5_brand_vlog(body: dict[str, Any]):
     from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
     p = S5BrandVlogPipeline()
     r = await p.run(
-        brand_id=body.get("brand_id", "momcozy"),
-        product_sku=body.get("product_sku", {}),
+        brand_id=body.brand_id,
+        product_sku=body.product_sku,
         scene_id=scene_id,
-        selected_models=body.get("selected_models", []),
-        story_description=body.get("story_description", ""),
-        video_duration=coerce_video_duration(body),
+        selected_models=body.selected_models,
+        story_description=body.story_description,
+        video_duration=coerce_video_duration(body_data),
+        commercial_injection_plan=commercial_injection_plan,
     )
     return r
 
@@ -483,7 +524,11 @@ async def start_s1_pipeline(body: S1StartRequest):
 
     try:
         step_runner = StepRunner(PipelineStateManager())
-        config = body.model_dump()
+        config = _with_commercial_injection_config(
+            body.model_dump(),
+            body.commercial_injection_plan,
+            expected_scenario="s1",
+        )
         label = await step_runner.init_state(config=config, mode=body.mode)
 
         if body.mode == "auto":
@@ -495,6 +540,8 @@ async def start_s1_pipeline(body: S1StartRequest):
             "status": "initialized",
             "current_step": None,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("s1 pipeline failed", error=str(e))
         raise HTTPException(status_code=500, detail=_classified_error(e))
@@ -1147,6 +1194,11 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "clip_group_size": body.get("clip_group_size", 3),
             "transition_style": body.get("transition_style", "match_cut"),
         }
+        config = _with_commercial_injection_config(
+            config,
+            body.get("commercial_injection_plan"),
+            expected_scenario="s1",
+        )
     elif scenario == "s2":
         brand_package = body.get("brand_package", {})
         brand_name = brand_package.get("brand_name", "Brand")
@@ -1168,6 +1220,11 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "week": body.get("week", ""),
             "enable_media_synthesis": True,
         }
+        config = _with_commercial_injection_config(
+            config,
+            body.get("commercial_injection_plan"),
+            expected_scenario="s2",
+        )
     elif scenario == "s3":
         from src.tools.translate import translate_catalog_to_english
         product = body.get("product", {})
@@ -1196,6 +1253,11 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "story_description": body.get("story_description", ""),
             "video_duration": coerce_video_duration(body),
         }
+        config = _with_commercial_injection_config(
+            config,
+            body.get("commercial_injection_plan"),
+            expected_scenario="s5",
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
 
