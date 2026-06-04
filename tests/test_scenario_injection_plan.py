@@ -126,16 +126,37 @@ def test_c6_s5_first_pass_blueprint_has_persona_audio_and_children_gate():
     assert "children_safety_pass" in audit_step.gate_checks
 
 
-def test_c6_does_not_front_run_s3_s4_future_longform_injections():
+def test_c7_s3_read_only_blueprint_has_source_fingerprint_transcript_and_remix_boundary():
     s3_plan = _empty_plan("s3")
+
+    analysis_step = _step(s3_plan, "video_analysis")
+    remix_step = _step(s3_plan, "remix_script")
+    audit_step = _step(s3_plan, "audit")
+
+    assert "SourceFingerprintLedger" in analysis_step.bundle_refs
+    assert "TranscriptTimeline" in analysis_step.contract_refs
+    assert "source_fingerprint_pass" in analysis_step.gate_checks
+    assert "RemixBoundaryBundle" in remix_step.bundle_refs
+    assert "remix_boundary_pass" in audit_step.gate_checks
+
+
+def test_c7_s4_read_only_blueprint_has_footage_cutdown_reframe_and_caption_safe_zone():
     s4_plan = _empty_plan("s4")
 
-    assert all(not step.bundle_refs and not step.toolbox_refs and not step.gate_checks for step in s3_plan.steps)
-    assert all(not step.bundle_refs and not step.toolbox_refs and not step.gate_checks for step in s4_plan.steps)
+    scripts_step = _step(s4_plan, "scripts")
+    cutdown_step = _step(s4_plan, "continuity_storyboard_grid")
+    reframe_step = _step(s4_plan, "video_prompts")
+    audit_step = _step(s4_plan, "audit")
+
+    assert "FootageAssetBundle" in scripts_step.bundle_refs
+    assert "CutdownToolbox" in cutdown_step.toolbox_refs
+    assert "ReframeJob" in reframe_step.contract_refs
+    assert "caption_safe_zone_pass" in reframe_step.gate_checks
+    assert "CutdownPlan" in audit_step.contract_refs
 
 
 def test_c6_blueprint_uses_runtime_step_names():
-    for scenario in ("s1", "s2", "s5"):
+    for scenario in ("s1", "s2", "s3", "s4", "s5"):
         plan = _empty_plan(scenario)
         plan_steps = {step.step for step in plan.steps}
 

@@ -65,6 +65,69 @@ C6_FIRST_PASS_BLUEPRINTS: dict[str, dict[str, StepInjectionBlueprint]] = {
             gate_checks=["hard_brand_token_pass", "platform_policy_pass"],
         ),
     },
+    "s3": {
+        "video_analysis": StepInjectionBlueprint(
+            bundle_refs=["SourceFingerprintLedger"],
+            contract_refs=["TranscriptTimeline"],
+            gate_checks=["source_rights_pass", "source_fingerprint_pass"],
+        ),
+        "character_identity": StepInjectionBlueprint(
+            toolbox_refs=["IdentityAbstractionToolbox"],
+            gate_checks=["visible_likeness_pass", "source_rights_pass"],
+        ),
+        "remix_script": StepInjectionBlueprint(
+            bundle_refs=["RemixBoundaryBundle"],
+            contract_refs=["TranscriptTimeline"],
+            gate_checks=["source_fingerprint_pass", "rights_pass"],
+        ),
+        "storyboards": StepInjectionBlueprint(
+            toolbox_refs=["StoryboardToolbox"],
+            contract_refs=["SceneLedger", "ShotLedger"],
+            gate_checks=["remix_boundary_pass"],
+        ),
+        "continuity_storyboard_grid": StepInjectionBlueprint(
+            toolbox_refs=["ContinuityToolbox"],
+            contract_refs=["TimelineManifest"],
+        ),
+        "video_prompts": StepInjectionBlueprint(
+            gate_checks=["source_fingerprint_pass", "hard_brand_token_pass"],
+        ),
+        "audit": StepInjectionBlueprint(
+            contract_refs=["QualityContract", "AuditEvidenceBundle", "EditDecisionList"],
+            gate_checks=["source_fingerprint_pass", "rights_pass", "remix_boundary_pass"],
+        ),
+    },
+    "s4": {
+        "scripts": StepInjectionBlueprint(
+            bundle_refs=["FootageAssetBundle"],
+            contract_refs=["SceneLedger"],
+            gate_checks=["rights_pass"],
+        ),
+        "continuity_storyboard_grid": StepInjectionBlueprint(
+            toolbox_refs=["CutdownToolbox"],
+            contract_refs=["ShotLedger", "TimelineManifest"],
+        ),
+        "video_prompts": StepInjectionBlueprint(
+            contract_refs=["ReframeJob"],
+            gate_checks=["caption_safe_zone_pass", "rights_pass"],
+        ),
+        "thumbnails": StepInjectionBlueprint(
+            toolbox_refs=["ThumbnailToolbox"],
+            gate_checks=["platform_policy_pass"],
+        ),
+        "seedance_clips": StepInjectionBlueprint(
+            contract_refs=["CutdownPlan", "ReframeJob"],
+            gate_checks=["footage_rights_pass"],
+        ),
+        "assemble_final": StepInjectionBlueprint(
+            contract_refs=["EditDecisionList", "TimelineManifest"],
+            gate_checks=["caption_safe_zone_pass"],
+        ),
+        "audit": StepInjectionBlueprint(
+            contract_refs=["QualityContract", "AuditEvidenceBundle", "CutdownPlan", "ReframeJob"],
+            gate_checks=["rights_pass", "caption_safe_zone_pass", "source_fingerprint_pass"],
+        ),
+    },
     "s5": {
         "vlog_strategy": StepInjectionBlueprint(
             bundle_refs=["PersonaSceneBundle"],
