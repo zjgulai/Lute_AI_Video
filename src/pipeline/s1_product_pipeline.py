@@ -55,6 +55,7 @@ from src.pipeline.continuity_utils import (
     extract_clip_last_frame,
     normalize_continuity_config,
 )
+from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.skills.registry import SkillRegistry
@@ -97,6 +98,7 @@ class S1ProductDirectPipeline:
         storyboard_grid: int | str = 12,
         clip_group_size: int = 3,
         transition_style: str = "match_cut",
+        commercial_injection_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run the full S1 pipeline end-to-end.
 
@@ -136,6 +138,11 @@ class S1ProductDirectPipeline:
             "clip_group_size": clip_group_size,
             "transition_style": transition_style,
         }
+        config = with_optional_injection_config(
+            config,
+            commercial_injection_plan,
+            expected_scenario="s1",
+        )
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)

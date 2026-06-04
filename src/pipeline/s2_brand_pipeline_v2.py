@@ -38,6 +38,7 @@ from src.config import DEFAULT_LANGUAGES
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.model_router import select_model
 from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
+from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 
@@ -72,6 +73,7 @@ class S2BrandCampaignPipeline:
         video_duration: int = 60,
         enable_media_synthesis: bool = True,
         output_label: str | None = None,
+        commercial_injection_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run the S2 Brand Campaign pipeline end-to-end.
 
@@ -134,6 +136,11 @@ class S2BrandCampaignPipeline:
             "target_language": "en",
             "preferred_model_id": model_id,
         }
+        config = with_optional_injection_config(
+            config,
+            commercial_injection_plan,
+            expected_scenario=self.SCENARIO_TAG,
+        )
 
         logger.info(
             "s2: starting brand campaign",

@@ -16,6 +16,7 @@ import structlog
 
 from src.pipeline.gate_manager import SCENARIO_GATE_DEFINITIONS
 from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.scenario_injection_plan import attach_step_injection_visibility
 from src.pipeline.state_manager import PipelineStateManager
 from src.telemetry import error_collector, generate_trace_id, pipeline_metrics
 
@@ -433,6 +434,9 @@ class StepRunner:
             state["current_step"] = next_step
             await self.state_manager.save(state["label"], state)
             return state
+
+        state = attach_step_injection_visibility(state, step_name)
+        step_data = state["steps"][step_name]
 
         # Mark step as started
         step_data["status"] = "pending"

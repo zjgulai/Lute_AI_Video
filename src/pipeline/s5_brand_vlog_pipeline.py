@@ -25,6 +25,7 @@ from src.pipeline.continuity_utils import (
     build_continuity_audit_summary,
     build_transitions_from_clip_details,
 )
+from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.skills.registry import SkillRegistry
 from src.telemetry import generate_trace_id, pipeline_metrics
 
@@ -173,6 +174,7 @@ class S5BrandVlogPipeline:
         selected_models: list[dict[str, Any]] | None = None,
         story_description: str = "",
         video_duration: int = 30,
+        commercial_injection_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run the full S5 pipeline end-to-end.
 
@@ -205,6 +207,11 @@ class S5BrandVlogPipeline:
             "product_name": product_name,
             "output_label": label,
         }
+        config = with_optional_injection_config(
+            config,
+            commercial_injection_plan,
+            expected_scenario="s5",
+        )
 
         from src.pipeline.state_manager import PipelineStateManager
         from src.pipeline.step_runner import StepRunner
