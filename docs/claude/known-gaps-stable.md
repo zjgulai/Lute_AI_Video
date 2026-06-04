@@ -11,7 +11,7 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-04** — 追加 AI Video 2.0 C19 no-token commercial benchmark 证据边界；当前最高证据等级仍为 `L2-fixture-or-dry-run`，未触发 provider、未生成 approved brand token、未形成交付/发布结论。
+最近一次盘点：**2026-06-04** — 追加 AI Video 2.0 C19 no-token commercial benchmark 与 C20 dry-run acceptance 证据边界；当前最高证据等级仍为 `L2-fixture-or-dry-run`，未触发 provider、未生成 approved brand token、未形成交付/发布结论。
 
 > 上一次盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
 
@@ -32,6 +32,14 @@ source: human+ai
 - **状态分布** — benchmark 报告中 `brand_review_candidate_only=blocked`，`runtime_injection_reviewed_bundle=pass`，`prompt_preview_audit=review_required`，`commercial_quality_gate=review_required`，`production_job_ledger=prepared`，`longform_audit=review_required`；汇总为 `blocked_count=1`、`review_required_count=3`。
 - **禁止声明** — 当前报告显式禁止声明 `approved brand tokens available`、`candidate ledger approved for runtime injection`、`commercial production ready`、`customer evidence collected`、`delivery accepted`、`provider job submitted`、`publish allowed`。
 - **边界** — 本轮只做本地 fixture / dry-run 汇总，不访问生产、不触发 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或任何外部 provider。
+
+## 0.77 2026-06-04 AI Video 2.0 C20 dry-run acceptance
+
+- **后端目标集合** — `.venv/bin/python -m pytest tests/test_brand_token_intake.py tests/test_brand_token_review.py tests/test_brand_review_audit_bundle.py tests/test_runtime_injection_executor.py tests/test_runtime_prompt_preview.py tests/test_prompt_preview_audit_bundle.py tests/test_prompt_preview_audit_workflow.py tests/test_prompt_preview_audit_router.py tests/test_longform_audit_bundle.py tests/test_no_token_commercial_benchmark.py tests/test_commercial_gate.py tests/test_production_job_ledger.py` 通过，结果 `63 passed in 1.30s`。
+- **后端质量门** — `.venv/bin/python -m ruff check src tests scripts` 通过，结果 `All checks passed!`；为满足该门禁，历史 `scripts/` lint 债已用机械 ruff 修复单独收口。
+- **接口漂移** — `.venv/bin/python scripts/check_openapi_types_drift.py` 通过，结果 `OpenAPI generated types are up to date.`。
+- **前端质量门** — `cd web && npm run lint` 通过；`cd web && npx tsc --noEmit -p tsconfig.json` 通过；`cd web && npm test` 通过，结果 `43 passed (43)` test files、`199 passed (199)` tests。
+- **边界** — C20 只证明 dry-run toolchain 的本地可运行性和只读/fixture 证据一致性；不访问生产、不触发真实生成、不提交 provider job、不形成 delivery accepted 或 publish allowed 结论。
 
 ## 0.18 2026-05-31 P1-6 全站 UI/UX 无 token 审计与首轮修复
 
