@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from src.pipeline.scenario_injection_plan import (
+    CURRENT_STEP_INJECTION_KEY,
+    SCENARIO_INJECTION_CONFIG_KEY,
+    SCENARIO_INJECTION_EVIDENCE_LEVEL_KEY,
+    SCENARIO_INJECTION_MODE_KEY,
+    STEP_INJECTION_DATA_KEY,
+)
 from src.routers.pipeline import (
     LEGACY_PROXY_REQUIRED_STATE_FIELDS,
     _get_state_status,
@@ -9,6 +16,7 @@ from src.routers.pipeline import (
 
 def _sample_steprunner_state() -> dict:
     return {
+        "scenario": "s1",
         "config": {
             "product_catalog": {"name": "Bottle Warmer"},
             "brand_guidelines": {"brand_name": "Momcozy"},
@@ -85,3 +93,56 @@ def test_steprunner_state_to_legacy_not_found_shape() -> None:
 
     assert legacy == {"label": "missing", "status": "not_found"}
     assert _get_state_status(legacy) == "not_found"
+
+
+def test_steprunner_state_to_legacy_projects_commercial_injection_without_payload() -> None:
+    state = _sample_steprunner_state()
+    state["current_step"] = "strategy"
+    state["config"].update({
+        SCENARIO_INJECTION_CONFIG_KEY: {
+            "scenario": "s1",
+            "brand_id": "momcozy",
+            "platform": "tiktok",
+            "read_only": True,
+            "evidence_level": "L2-fixture-or-dry-run",
+            "steps": [
+                {
+                    "scenario": "s1",
+                    "step": "strategy",
+                    "hard_token_ids": ["bat_hard_fixture"],
+                    "soft_token_ids": [],
+                    "source_token_ids": ["bat_hard_fixture"],
+                    "bundle_refs": ["BrandConstraintBundle"],
+                    "toolbox_refs": ["ImageToolbox"],
+                    "contract_refs": ["QualityContract"],
+                    "gate_checks": ["rights_pass"],
+                    "notes": [],
+                }
+            ],
+        },
+        SCENARIO_INJECTION_MODE_KEY: "read_only_blueprint",
+        SCENARIO_INJECTION_EVIDENCE_LEVEL_KEY: "L2-fixture-or-dry-run",
+    })
+    state["steps"]["strategy"][STEP_INJECTION_DATA_KEY] = {
+        "scenario": "s1",
+        "step": "strategy",
+        "prompt_payload": "must-not-leak",
+    }
+    state[CURRENT_STEP_INJECTION_KEY] = {
+        "scenario": "s1",
+        "step": "strategy",
+        "prompt_payload": "must-not-leak",
+    }
+
+    legacy = _steprunner_state_to_legacy("run_3", state)
+
+    assert legacy[CURRENT_STEP_INJECTION_KEY]["source_token_ids"] == ["bat_hard_fixture"]
+    assert legacy["steps"]["strategy"][STEP_INJECTION_DATA_KEY]["gate_checks"] == ["rights_pass"]
+    assert legacy["step_commercial_injections"]["strategy"]["bundle_refs"] == ["BrandConstraintBundle"]
+    serialized = str({
+        "current": legacy[CURRENT_STEP_INJECTION_KEY],
+        "step": legacy["steps"]["strategy"][STEP_INJECTION_DATA_KEY],
+        "map": legacy["step_commercial_injections"],
+    })
+    assert "must-not-leak" not in serialized
+    assert "prompt_payload" not in serialized

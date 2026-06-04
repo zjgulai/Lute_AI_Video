@@ -25,6 +25,12 @@ except ImportError:
 
 from src.config import DEFAULT_LANGUAGES
 from src.models import REVIEW_NODES, ApprovalStatus
+from src.pipeline.scenario_injection_plan import (
+    CURRENT_STEP_INJECTION_KEY,
+    STEP_INJECTION_DATA_KEY,
+    project_current_step_injection_visibility,
+    project_step_injection_visibility,
+)
 from src.routers._deps import _inject_api_keys, _safe_error, get_auth_context, verify_api_key
 from src.routers._state import (
     PipelineStartRequest,
@@ -62,9 +68,12 @@ LEGACY_PROXY_REQUIRED_STATE_FIELDS = (
     "content_calendar_week",
     "content_scenario",
     "current_step",
+    CURRENT_STEP_INJECTION_KEY,
     "errors",
     "structured_errors",
     "pipeline_complete",
+    "steps",
+    "step_commercial_injections",
     "human_reviews",
     "distribution_plans",
     "analytics_reports",
@@ -96,10 +105,25 @@ def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dic
         "content_calendar_week": config.get("week", ""),
         "content_scenario": config.get("content_scenario", "product_direct"),
         "current_step": state.get("current_step", ""),
+        CURRENT_STEP_INJECTION_KEY: project_current_step_injection_visibility(state),
         "errors": state.get("errors", []),
         "structured_errors": [],
         "pipeline_complete": False,
     }
+
+    step_commercial_injections: dict[str, dict[str, Any]] = {}
+    legacy_steps: dict[str, dict[str, Any]] = {}
+    for step_name, step_data in steps.items():
+        if not isinstance(step_data, dict):
+            continue
+        legacy_step = {"status": step_data.get("status", "pending")}
+        injection = project_step_injection_visibility(state, step_name)
+        if injection is not None:
+            legacy_step[STEP_INJECTION_DATA_KEY] = injection
+            step_commercial_injections[step_name] = injection
+        legacy_steps[step_name] = legacy_step
+    legacy_state["steps"] = legacy_steps
+    legacy_state["step_commercial_injections"] = step_commercial_injections
 
     # Map StepRunner step outputs to the historical /pipeline/* field names.
     for step_name, legacy_key in LEGACY_PROXY_STEP_OUTPUT_MAP.items():

@@ -16,7 +16,12 @@ except ImportError:
 from typing import Any
 
 from src.config import DEFAULT_LANGUAGES
-from src.pipeline.scenario_injection_plan import with_optional_injection_config
+from src.pipeline.scenario_injection_plan import (
+    CURRENT_STEP_INJECTION_KEY,
+    STEP_INJECTION_DATA_KEY,
+    project_state_injection_visibility,
+    with_optional_injection_config,
+)
 from src.routers._deps import (
     _classified_error,
     _inject_api_keys,
@@ -661,7 +666,7 @@ async def get_s1_state(label: str):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
-        result = dict(state)
+        result = project_state_injection_visibility(state)
         result["meta"] = {
             "step_order": _SCENARIO_STEP_ORDER.get("s1", []),
             "step_durations": _STEP_DURATIONS,
@@ -738,7 +743,8 @@ async def list_steps(scenario: str, label: str):
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
 
-        steps_data = state.get("steps", {})
+        projected_state = project_state_injection_visibility(state)
+        steps_data = projected_state.get("steps", {})
         order = _SCENARIO_STEP_ORDER[scenario]
         result = []
         for step_name in order:
@@ -765,19 +771,24 @@ async def list_steps(scenario: str, label: str):
                 else:
                     preview = str(display_output)[:80]
 
-            result.append({
+            item = {
                 "step_name": step_name,
                 "status": status,
                 "preview": preview,
                 "has_output": output is not None,
                 "is_edited": sd.get("edited", False),
                 "completed_at": sd.get("completed_at", ""),
-            })
+            }
+            commercial_injection = sd.get(STEP_INJECTION_DATA_KEY)
+            if commercial_injection is not None:
+                item[STEP_INJECTION_DATA_KEY] = commercial_injection
+            result.append(item)
 
         return {
             "label": label,
             "scenario": scenario,
-            "current_step": state.get("current_step"),
+            "current_step": projected_state.get("current_step"),
+            CURRENT_STEP_INJECTION_KEY: projected_state.get(CURRENT_STEP_INJECTION_KEY),
             "steps": result,
             "meta": {
                 "step_order": _SCENARIO_STEP_ORDER.get(scenario, []),
@@ -1306,9 +1317,10 @@ async def get_scenario_status(scenario: str, label: str):
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
 
+        projected_state = project_state_injection_visibility(state)
         step_order = _SCENARIO_STEP_ORDER.get(scenario, [])
-        current_step = state.get("current_step", "")
-        steps = state.get("steps", {})
+        current_step = projected_state.get("current_step", "")
+        steps = projected_state.get("steps", {})
         audit_report = steps.get("audit", {}).get("output") or {}
 
         # Calculate progress: done steps / total steps
@@ -1335,13 +1347,14 @@ async def get_scenario_status(scenario: str, label: str):
             "scenario": scenario,
             "status": status,
             "current_step": current_step,
+            CURRENT_STEP_INJECTION_KEY: projected_state.get(CURRENT_STEP_INJECTION_KEY),
             "progress": progress,
-            "pipeline_degraded": state.get("pipeline_degraded", False),
-            "soft_degraded_reasons": state.get("soft_degraded_reasons", []),
+            "pipeline_degraded": projected_state.get("pipeline_degraded", False),
+            "soft_degraded_reasons": projected_state.get("soft_degraded_reasons", []),
             "continuity_diagnostics": extract_continuity_diagnostics(audit_report),
-            "gate_status": state.get("gate_status"),
-            "errors": state.get("errors", []),
-            "result": state.get("result"),
+            "gate_status": projected_state.get("gate_status"),
+            "errors": projected_state.get("errors", []),
+            "result": projected_state.get("result"),
             "steps": steps,
         }
     except HTTPException:

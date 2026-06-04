@@ -223,3 +223,65 @@ def attach_step_injection_visibility(state: dict[str, Any], step_name: str) -> d
     if isinstance(step_data, dict):
         step_data[STEP_INJECTION_DATA_KEY] = payload
     return state
+
+
+def project_step_injection_visibility(state: dict[str, Any], step_name: str) -> dict[str, Any] | None:
+    """Return one step's sanitized read-only injection projection."""
+    injection = get_step_injection_from_state(state, step_name)
+    if injection is not None:
+        return injection.model_dump(mode="json")
+
+    step_data = state.get("steps", {}).get(step_name)
+    if not isinstance(step_data, dict):
+        return None
+    existing = step_data.get(STEP_INJECTION_DATA_KEY)
+    if existing is None:
+        return None
+    try:
+        return ScenarioStepInjection.model_validate(existing).model_dump(mode="json")
+    except ValueError:
+        return None
+
+
+def project_current_step_injection_visibility(state: dict[str, Any]) -> dict[str, Any] | None:
+    """Return sanitized current-step injection metadata when available."""
+    current_step = state.get("current_step")
+    if isinstance(current_step, str) and current_step:
+        projected = project_step_injection_visibility(state, current_step)
+        if projected is not None:
+            return projected
+
+    existing = state.get(CURRENT_STEP_INJECTION_KEY)
+    if existing is None:
+        return None
+    try:
+        return ScenarioStepInjection.model_validate(existing).model_dump(mode="json")
+    except ValueError:
+        return None
+
+
+def project_state_injection_visibility(state: dict[str, Any]) -> dict[str, Any]:
+    """Copy state with sanitized injection metadata added to top-level and steps."""
+    projected_state = dict(state)
+    projected_steps: dict[str, Any] = {}
+    steps = state.get("steps", {})
+
+    if isinstance(steps, dict):
+        for step_name, step_data in steps.items():
+            if not isinstance(step_data, dict):
+                projected_steps[step_name] = step_data
+                continue
+            projected_step = dict(step_data)
+            projected_step.pop(STEP_INJECTION_DATA_KEY, None)
+            injection = project_step_injection_visibility(state, step_name)
+            if injection is not None:
+                projected_step[STEP_INJECTION_DATA_KEY] = injection
+            projected_steps[step_name] = projected_step
+        projected_state["steps"] = projected_steps
+
+    current_injection = project_current_step_injection_visibility(state)
+    if current_injection is None:
+        projected_state.pop(CURRENT_STEP_INJECTION_KEY, None)
+    else:
+        projected_state[CURRENT_STEP_INJECTION_KEY] = current_injection
+    return projected_state
