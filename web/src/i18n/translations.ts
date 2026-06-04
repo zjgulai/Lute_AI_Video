@@ -205,6 +205,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "step.noDownstream": "无下游步骤",
     "step.select": "选择",
     "step.retry": "重试",
+    "commercialInjection.badge": "商业注入",
+    "commercialInjection.readOnly": "只读",
+    "commercialInjection.bundle": "Bundle",
+    "commercialInjection.toolbox": "工具",
+    "commercialInjection.contract": "合约",
+    "commercialInjection.gate": "门禁",
+    "commercialInjection.tokens": "Token",
 
     // Step-by-step view
     "stepbystep.title": "逐步确认模式",
@@ -1727,6 +1734,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "step.noDownstream": "No downstream steps",
     "step.select": "Select",
     "step.retry": "Retry",
+    "commercialInjection.badge": "Commercial Injection",
+    "commercialInjection.readOnly": "Read-only",
+    "commercialInjection.bundle": "Bundle",
+    "commercialInjection.toolbox": "Toolbox",
+    "commercialInjection.contract": "Contract",
+    "commercialInjection.gate": "Gate",
+    "commercialInjection.tokens": "Token",
 
     // Step-by-step view
     "stepbystep.title": "Step-by-Step Mode",

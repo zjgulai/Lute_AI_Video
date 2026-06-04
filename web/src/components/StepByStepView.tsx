@@ -85,12 +85,31 @@ type AuditCriterion = {
   status?: string;
 };
 
+type CommercialInjection = {
+  hard_token_ids?: unknown;
+  soft_token_ids?: unknown;
+  source_token_ids?: unknown;
+  bundle_refs?: unknown;
+  toolbox_refs?: unknown;
+  contract_refs?: unknown;
+  gate_checks?: unknown;
+};
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function getCommercialInjection(stepData: Record<string, unknown>): CommercialInjection | null {
+  const injection = stepData.commercial_injection;
+  return injection && typeof injection === "object" && !Array.isArray(injection) ? injection as CommercialInjection : null;
 }
 
 export default function StepByStepView({ label, state, onStepComplete, onResume, onError, loading }: Props) {
@@ -285,6 +304,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
             const canRun = isCurrent && depsAllComplete;
             const isEditing = editingStep === stepName;
             const downstream = getDownstreamSteps(stepName);
+            const commercialInjection = getCommercialInjection(stepData);
 
             return (
               <div key={stepName}>
@@ -309,6 +329,12 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
 
                   <span className={`text-xs font-medium flex-1 min-w-0 ${isDone ? "text-[var(--text-h1)]" : isCurrent ? "text-[var(--text-h1)]" : "text-[var(--text-muted)]"}`}>
                     {t(STEP_LABELS[stepName])}
+                    {commercialInjection && (
+                      <span className="ml-2 inline-flex max-w-full items-center gap-1 rounded-full border border-[rgba(220,190,120,0.35)] bg-[rgba(220,190,120,0.10)] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[var(--gold-foil)]">
+                        <span>{t("commercialInjection.badge")}</span>
+                        <span className="text-[var(--text-muted)]">{t("commercialInjection.readOnly")}</span>
+                      </span>
+                    )}
                     {isDone && getOutputPreview(stepName) && (
                       <span className="ml-2 text-[12px] text-[var(--text-muted)] font-normal">
                         {getOutputPreview(stepName)}
@@ -367,6 +393,10 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
                     </button>
                   )}
                 </div>
+
+                {commercialInjection && (
+                  <CommercialInjectionPanel injection={commercialInjection} />
+                )}
 
                 {/* Regenerate confirmation warning */}
                 {confirmRegen === stepName && (
@@ -484,6 +514,51 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CommercialInjectionPanel({ injection }: { injection: CommercialInjection }) {
+  const { t } = useI18n();
+  const groups = [
+    { label: t("commercialInjection.bundle"), values: stringList(injection.bundle_refs) },
+    { label: t("commercialInjection.toolbox"), values: stringList(injection.toolbox_refs) },
+    { label: t("commercialInjection.contract"), values: stringList(injection.contract_refs) },
+    { label: t("commercialInjection.gate"), values: stringList(injection.gate_checks) },
+    {
+      label: t("commercialInjection.tokens"),
+      values: [
+        ...stringList(injection.hard_token_ids),
+        ...stringList(injection.soft_token_ids),
+        ...stringList(injection.source_token_ids),
+      ],
+    },
+  ].filter((group) => group.values.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="ml-7 mt-1 mb-1 rounded-lg border border-[rgba(220,190,120,0.22)] bg-[rgba(220,190,120,0.06)] px-2.5 py-2">
+      <div className="flex flex-wrap gap-1.5">
+        {groups.map((group) => (
+          <div key={group.label} className="flex min-w-0 max-w-full items-center gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.02em] text-[var(--text-muted)]">
+              {group.label}
+            </span>
+            <div className="flex min-w-0 flex-wrap gap-1">
+              {group.values.map((value) => (
+                <span
+                  key={`${group.label}-${value}`}
+                  className="max-w-[180px] truncate rounded-md bg-[var(--bg-panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-h1)]"
+                  title={value}
+                >
+                  {value}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
