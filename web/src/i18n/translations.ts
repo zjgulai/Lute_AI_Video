@@ -213,6 +213,16 @@ export const translations: Record<Locale, Record<string, string>> = {
     "commercialInjection.contract": "合约",
     "commercialInjection.gate": "门禁",
     "commercialInjection.tokens": "Token",
+    "qualityGate.title": "质量门禁报告",
+    "qualityGate.readOnly": "只读审计",
+    "qualityGate.publishAllowed": "允许发布",
+    "qualityGate.publishLocked": "发布锁定",
+    "qualityGate.humanReview": "人工复核",
+    "qualityGate.blocking": "阻断项",
+    "qualityGate.advisory": "建议项",
+    "qualityGate.reasons": "判定原因",
+    "qualityGate.noRepairActions": "无修复动作",
+    "qualityGate.requiredBefore": "要求节点",
 
     // Step-by-step view
     "stepbystep.title": "逐步确认模式",
@@ -1743,6 +1753,16 @@ export const translations: Record<Locale, Record<string, string>> = {
     "commercialInjection.contract": "Contract",
     "commercialInjection.gate": "Gate",
     "commercialInjection.tokens": "Token",
+    "qualityGate.title": "Quality Gate Report",
+    "qualityGate.readOnly": "Read-only Audit",
+    "qualityGate.publishAllowed": "Publish Allowed",
+    "qualityGate.publishLocked": "Publish Locked",
+    "qualityGate.humanReview": "Human Review",
+    "qualityGate.blocking": "Blocking",
+    "qualityGate.advisory": "Advisory",
+    "qualityGate.reasons": "Decision Reasons",
+    "qualityGate.noRepairActions": "No repair actions",
+    "qualityGate.requiredBefore": "Required Before",
 
     // Step-by-step view
     "stepbystep.title": "Step-by-Step Mode",

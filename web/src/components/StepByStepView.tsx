@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
+import QualityGateReportPanel, { extractQualityGateReport } from "./QualityGateReportPanel";
 
 interface Props {
   label: string;
@@ -125,6 +126,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     (state?.soft_degraded_reasons as Array<{ step?: string; reason?: string; detail?: string }>) || [];
   const softDegradedSummary = softDegradedReasons[0];
   const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
+  const qualityGateReport = extractQualityGateReport(state);
 
   const getCurrentStep = (): string | null => {
     for (const step of stepOrder) {
@@ -286,6 +288,12 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
             {softDegradedDisplay.detail ? (
               <p className="mt-1 text-[12px] text-amber-700">{softDegradedDisplay.detail}</p>
             ) : null}
+          </div>
+        )}
+
+        {qualityGateReport && (
+          <div className="mt-3">
+            <QualityGateReportPanel report={qualityGateReport} />
           </div>
         )}
 
