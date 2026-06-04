@@ -5,6 +5,7 @@ import time
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 logger = structlog.get_logger()
 
@@ -16,6 +17,9 @@ except ImportError:
 from typing import Any
 
 from src.config import DEFAULT_LANGUAGES
+from src.models.commercial_contracts import PromptCompileInput, QualityContract
+from src.pipeline.prompt_preview_audit_workflow import build_prompt_preview_audit_workflow
+from src.pipeline.runtime_injection_executor import RuntimeInjectionResult
 from src.pipeline.scenario_injection_plan import (
     CURRENT_STEP_INJECTION_KEY,
     STEP_INJECTION_DATA_KEY,
@@ -44,6 +48,13 @@ from src.routers._state import (
 )
 
 router = APIRouter()
+
+
+class PromptPreviewAuditRequest(BaseModel):
+    contract: QualityContract
+    compile_input: PromptCompileInput
+    runtime_injection: RuntimeInjectionResult
+    planned_injection: dict[str, Any] | None = None
 
 
 def _validate_s5_scene_id(scene_id: Any) -> str:
@@ -97,6 +108,25 @@ def _with_commercial_injection_config(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _assert_prompt_preview_scenario_match(
+    scenario: str,
+    body: PromptPreviewAuditRequest,
+) -> None:
+    mismatches: list[str] = []
+    if body.contract.scenario != scenario:
+        mismatches.append(f"contract.scenario={body.contract.scenario}")
+    if body.compile_input.scenario != scenario:
+        mismatches.append(f"compile_input.scenario={body.compile_input.scenario}")
+    if body.runtime_injection.scenario != scenario:
+        mismatches.append(f"runtime_injection.scenario={body.runtime_injection.scenario}")
+    if mismatches:
+        raise HTTPException(
+            status_code=422,
+            detail=f"prompt preview audit scenario mismatch: expected {scenario}; "
+            + ", ".join(mismatches),
+        )
 
 
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
@@ -875,6 +905,29 @@ async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
     except Exception as e:
         import logging
         logging.error("execute_step failed: %s", e)
+        raise HTTPException(status_code=500, detail=_safe_error(e))
+
+
+@router.post("/scenario/{scenario}/prompt-preview/audit", dependencies=[Depends(verify_api_key)])
+async def audit_prompt_preview(scenario: str, body: PromptPreviewAuditRequest):
+    """Build a dry-run prompt preview audit bundle without exposing prompt payload."""
+    _validate_scenario(scenario)
+    _assert_prompt_preview_scenario_match(scenario, body)
+
+    try:
+        bundle = build_prompt_preview_audit_workflow(
+            contract=body.contract,
+            compile_input=body.compile_input,
+            runtime_injection=body.runtime_injection,
+            planned_injection=body.planned_injection,
+        )
+        return bundle.model_dump(mode="json")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.error("audit_prompt_preview failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
