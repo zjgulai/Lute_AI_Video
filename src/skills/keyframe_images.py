@@ -218,8 +218,10 @@ class KeyframeImagesSkill(SkillCallable):
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors: list[str] = []
         sb = params.get("storyboard")
-        if not sb:
+        if sb is None:
             errors.append("missing 'storyboard' dict")
+        elif not isinstance(sb, dict):
+            errors.append("storyboard must be a dict")
         elif "shots" not in sb:
             errors.append("storyboard missing 'shots' list")
         elif not isinstance(sb["shots"], list):

@@ -47,6 +47,8 @@ def _restore_default_skill_registry() -> None:
         return
 
     for skill in (SeedancePromptSkill(), ViralExtractorSkill()):
+        if SkillRegistry().get_skill(skill.name) is not None:
+            continue
         try:
             SkillRegistry.register(skill)
         except ValueError:
