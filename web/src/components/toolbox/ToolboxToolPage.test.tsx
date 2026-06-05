@@ -88,7 +88,10 @@ describe("ToolboxToolPage", () => {
       prompt_hash: "sha256:toolbox-preview",
       required_checks: ["product_truth", "brand_rights"],
       artifact_manifest_id: "manifest://toolbox/product-image/001",
-      injection_target_refs: ["s1", "s2"],
+      injection_target_refs: [
+        "artifact://toolbox/product-image/001/inject/s1",
+        "artifact://toolbox/product-image/001/inject/s2",
+      ],
     };
     const promptPreview = {
       preview_id: "tbx_preview_product_image_001",
@@ -132,6 +135,16 @@ describe("ToolboxToolPage", () => {
           publish_allowed: false,
         },
       ],
+      injection_targets: [
+        {
+          target_ref: "artifact://toolbox/product-image/001/inject/s1",
+          scenario: "s1",
+          step_name: "product_assets",
+          artifact_refs: ["artifact://toolbox/product-image/001"],
+          contract_refs: ["manifest://toolbox/product-image/001", "job://toolbox/tbx_req_product_image_001"],
+          bundle_refs: ["bundle_momcozy_candidate"],
+        },
+      ],
     };
 
     planToolboxRun.mockResolvedValue(plan);
@@ -149,6 +162,16 @@ describe("ToolboxToolPage", () => {
           ...runState.artifacts[0],
           artifact_id: "artifact_product_image_loaded",
           artifact_ref: "artifact://toolbox/product-image/loaded",
+        },
+      ],
+      injection_targets: [
+        {
+          target_ref: "artifact://toolbox/product-image/loaded/inject/s1",
+          scenario: "s1",
+          step_name: "product_assets",
+          artifact_refs: ["artifact://toolbox/product-image/loaded"],
+          contract_refs: ["manifest://toolbox/product-image/loaded", "job://toolbox/tbx_req_product_image_loaded"],
+          bundle_refs: ["bundle_momcozy_candidate"],
         },
       ],
     });
@@ -199,6 +222,7 @@ describe("ToolboxToolPage", () => {
       expect(fetchToolboxRun).toHaveBeenCalledWith("tbx_run_product_image_001");
       expect(container.textContent).toContain("tbx_job_product_image_loaded");
       expect(container.textContent).toContain("artifact://toolbox/product-image/loaded");
+      expect(container.textContent).toContain("manifest://toolbox/product-image/loaded");
     } finally {
       cleanup();
     }
@@ -244,6 +268,9 @@ describe("ToolboxToolPage", () => {
       expect(container.textContent).toContain("tbx_job_product_image_001");
       expect(container.textContent).toContain("prepared");
       expect(container.textContent).toContain("artifact://toolbox/product-image/001");
+      expect(container.textContent).toContain("Contract refs");
+      expect(container.textContent).toContain("manifest://toolbox/product-image/001");
+      expect(container.textContent).toContain("bundle_momcozy_candidate");
       expect(container.textContent).toContain("仅允许 artifact refs、contract refs、bundle ids 回注 S1-S5。");
     } finally {
       cleanup();

@@ -96,9 +96,14 @@ async def test_toolbox_run_and_get_state_never_submits_provider(auth_headers) ->
     assert payload["status"] == "accepted_dry_run"
     assert payload["plan"]["provider_call"] is False
     assert payload["plan"]["delivery_accepted"] is False
+    assert payload["plan"]["injection_target_refs"]
     assert payload["job_record"]["status"] == "prepared"
     assert payload["job_record"]["delivery_accepted"] is False
     assert payload["job_record"]["publish_allowed"] is False
+    assert payload["injection_targets"]
+    assert payload["injection_targets"][0]["artifact_refs"][0].startswith("artifact://toolbox/storyboard/")
+    assert payload["injection_targets"][0]["contract_refs"][0].startswith("manifest://toolbox/storyboard/")
+    assert payload["injection_targets"][0]["bundle_refs"] == ["bundle_momcozy_candidate"]
     assert "submitted" not in serialized
     assert "provider_job_id" not in serialized
 
@@ -162,6 +167,8 @@ async def test_toolbox_runs_endpoint_lists_recent_refs_without_raw_input(auth_he
     assert [run["tool_id"] for run in payload["runs"]][:2] == ["product-image", "ecommerce-visual"]
     assert payload["runs"][0]["job_record"]["publish_allowed"] is False
     assert payload["runs"][0]["artifacts"][0]["artifact_ref"].startswith("artifact://toolbox/product-image/")
+    assert payload["runs"][0]["injection_targets"][0]["scenario"] in {"s1", "s2", "s5"}
+    assert payload["runs"][0]["injection_targets"][0]["artifact_refs"][0].startswith("artifact://toolbox/product-image/")
     assert "must-not-leak-run-list-brief" not in serialized
     assert "tool_input" not in serialized
     assert "campaign_brief" not in serialized

@@ -332,6 +332,7 @@ class ToolboxInjectionTarget(_StrictModel):
     step_name: str
     artifact_refs: list[str] = Field(default_factory=list)
     contract_refs: list[str] = Field(default_factory=list)
+    bundle_refs: list[str] = Field(default_factory=list)
 
     @field_validator("target_ref")
     @classmethod

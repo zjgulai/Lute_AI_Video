@@ -17,6 +17,7 @@ from src.models.toolbox_contracts import (
     StoryboardInput,
     ToolboxArtifact,
     ToolboxArtifactType,
+    ToolboxInjectionTarget,
     ToolboxPlan,
     ToolboxPromptPreview,
     ToolboxRequest,
@@ -31,6 +32,14 @@ TOOLBOX_MOCK_PROVIDER = "dry-run"
 TOOLBOX_MOCK_MODEL = "toolbox-fixture-planner-v1"
 TOOLBOX_PROVIDER_PROFILE_ID = "profile_toolbox_dry_run_v1"
 
+_INJECTION_STEP_BY_TOOL: dict[ToolboxToolId, str] = {
+    ToolboxToolId.PRODUCT_IMAGE: "product_assets",
+    ToolboxToolId.SIX_VIEW: "reference_manifest",
+    ToolboxToolId.ECOMMERCE_VISUAL: "visual_pack",
+    ToolboxToolId.DIGITAL_HUMAN: "presenter_plan",
+    ToolboxToolId.STORYBOARD: "storyboards",
+}
+
 
 def build_toolbox_plan(request: ToolboxRequest) -> ToolboxPlan:
     tool = get_toolbox_tool(request.tool_id)
@@ -43,6 +52,7 @@ def build_toolbox_plan(request: ToolboxRequest) -> ToolboxPlan:
         prompt_hash=prompt_hash,
         required_checks=tool.default_checks,
         artifact_manifest_id=f"manifest://toolbox/{request.tool_id.value}/{request.request_id}",
+        injection_target_refs=_injection_target_refs(request),
     )
 
 
@@ -71,6 +81,7 @@ def build_toolbox_run_state(request: ToolboxRequest) -> ToolboxRunState:
     preview = build_toolbox_prompt_preview(request, plan)
     job_record = _build_prepared_job_record(request, plan, preview)
     artifact = _build_artifact(request)
+    injection_targets = _build_injection_targets(request, artifact)
     return ToolboxRunState(
         run_id=f"tbx_run_{request.request_id}",
         request=request,
@@ -78,6 +89,7 @@ def build_toolbox_run_state(request: ToolboxRequest) -> ToolboxRunState:
         status=ToolboxRunStatus.ACCEPTED_DRY_RUN,
         prompt_preview=preview,
         artifacts=[artifact],
+        injection_targets=injection_targets,
         job_record=job_record,
     )
 
@@ -110,6 +122,10 @@ def project_toolbox_run_state(state: ToolboxRunState) -> dict[str, Any]:
         "artifacts": [
             artifact.model_dump(mode="json", exclude_none=True)
             for artifact in state.artifacts
+        ],
+        "injection_targets": [
+            target.model_dump(mode="json", exclude_none=True)
+            for target in state.injection_targets
         ],
     }
 
@@ -154,6 +170,33 @@ def _build_artifact(request: ToolboxRequest) -> ToolboxArtifact:
         source_job_id=f"tbx_job_{request.request_id}",
         manifest_ref=f"manifest://toolbox/{request.tool_id.value}/{request.request_id}",
     )
+
+
+def _build_injection_targets(request: ToolboxRequest, artifact: ToolboxArtifact) -> list[ToolboxInjectionTarget]:
+    manifest_ref = artifact.manifest_ref or f"manifest://toolbox/{request.tool_id.value}/{request.request_id}"
+    bundle_refs = [request.brand_bundle_ref] if request.brand_bundle_ref else []
+    return [
+        ToolboxInjectionTarget(
+            target_ref=_target_ref(request, scenario),
+            scenario=scenario,
+            step_name=_INJECTION_STEP_BY_TOOL[request.tool_id],
+            artifact_refs=[artifact.artifact_ref],
+            contract_refs=[manifest_ref, f"job://toolbox/{request.request_id}"],
+            bundle_refs=bundle_refs,
+        )
+        for scenario in get_toolbox_tool(request.tool_id).injectable_scenarios
+    ]
+
+
+def _injection_target_refs(request: ToolboxRequest) -> list[str]:
+    return [
+        _target_ref(request, scenario)
+        for scenario in get_toolbox_tool(request.tool_id).injectable_scenarios
+    ]
+
+
+def _target_ref(request: ToolboxRequest, scenario: str) -> str:
+    return f"artifact://toolbox/{request.tool_id.value}/{request.request_id}/inject/{scenario}"
 
 
 def _artifact_type_for_tool(tool_id: ToolboxToolId) -> ToolboxArtifactType:

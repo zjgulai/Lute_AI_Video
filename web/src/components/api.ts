@@ -181,6 +181,15 @@ export type ToolboxArtifact = {
   publish_allowed: boolean;
 };
 
+export type ToolboxInjectionTarget = {
+  target_ref: string;
+  scenario: string;
+  step_name: string;
+  artifact_refs: string[];
+  contract_refs: string[];
+  bundle_refs?: string[];
+};
+
 export type ToolboxJobRecord = {
   job_id: string;
   status: "prepared" | "blocked" | "submitted" | "failed" | "succeeded";
@@ -205,6 +214,7 @@ export type ToolboxRunResponse = {
   prompt_preview?: ToolboxPromptPreviewResponse | null;
   job_record?: ToolboxJobRecord | null;
   artifacts: ToolboxArtifact[];
+  injection_targets?: ToolboxInjectionTarget[];
 };
 
 export type ToolboxRunsResponse = {

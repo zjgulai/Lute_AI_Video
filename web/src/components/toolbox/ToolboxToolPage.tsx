@@ -20,6 +20,7 @@ import {
   previewToolboxPrompt,
   runToolboxDryRun,
   type ToolboxArtifact,
+  type ToolboxInjectionTarget,
   type ToolboxPlanResponse,
   type ToolboxPromptPreviewResponse,
   type ToolboxRequestPayload,
@@ -28,7 +29,6 @@ import {
 } from "@/components/api";
 import { useI18n } from "@/i18n/I18nProvider";
 import {
-  formatToolboxList,
   getToolPresentation,
   isToolboxToolId,
 } from "@/components/toolbox/toolboxCatalog";
@@ -267,6 +267,74 @@ function ArtifactList({ artifacts }: { artifacts: ToolboxArtifact[] }) {
   );
 }
 
+function RefList({ values }: { values: string[] }) {
+  if (values.length === 0) {
+    return <div className="text-xs text-[var(--text-muted)]">-</div>;
+  }
+  return (
+    <ul className="space-y-1.5">
+      {values.map((value) => (
+        <li key={value} className="break-all rounded-lg bg-[var(--bg-panel)] px-2.5 py-2 text-[11px] leading-5 text-[var(--text-muted)]">
+          {value}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function InjectionTargetDiff({
+  plannedRefs,
+  targets,
+  t,
+}: {
+  plannedRefs: string[];
+  targets: ToolboxInjectionTarget[];
+  t: (key: string, fallback?: string) => string;
+}) {
+  return (
+    <div className="grid gap-3">
+      <section className="rounded-lg bg-[var(--bg-layer2)] p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          {t("toolbox.injection.plannedRefs")}
+        </h3>
+        <div className="mt-3">
+          <RefList values={plannedRefs} />
+        </div>
+      </section>
+      {targets.length > 0 ? (
+        targets.map((target) => (
+          <section key={target.target_ref} className="rounded-lg bg-[var(--bg-layer2)] p-3" data-injection-target={target.target_ref}>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold text-[var(--text-h1)]">{target.scenario}</h3>
+              <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+                {target.step_name}
+              </span>
+            </div>
+            <div className="mt-3 space-y-3">
+              <div>
+                <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.injection.artifactRefs")}</div>
+                <RefList values={target.artifact_refs} />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.injection.contractRefs")}</div>
+                <RefList values={target.contract_refs} />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.injection.bundleRefs")}</div>
+                <RefList values={target.bundle_refs ?? []} />
+              </div>
+            </div>
+          </section>
+        ))
+      ) : (
+        <section className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+          {t("toolbox.injection.noTargets")}
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function ToolboxToolPage({ toolId }: { toolId: string }) {
   const { t } = useI18n();
 
@@ -310,6 +378,8 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const Icon = presentation.icon;
   const requiredChecks = plan?.required_checks ?? presentation.fallbackChecks;
   const artifacts = run?.artifacts ?? [];
+  const plannedInjectionRefs = plan?.injection_target_refs ?? [];
+  const injectionTargets = run?.injection_targets ?? [];
 
   const applyRunState = useCallback((nextRun: ToolboxRunResponse) => {
     setRun(nextRun);
@@ -641,9 +711,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
             <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.injectionBoundary")}</h2>
             <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--text-muted)]">
               <p>{t("toolbox.preview.refsOnly")}</p>
-              <p className="font-semibold text-[var(--text-h1)]">
-                {formatToolboxList(plan?.injection_target_refs ?? presentation.fallbackScenarios)}
-              </p>
+              <InjectionTargetDiff plannedRefs={plannedInjectionRefs} targets={injectionTargets} t={t} />
             </div>
           </section>
         </section>
