@@ -187,7 +187,10 @@ class TestTimedNodeErrorPath:
             return {"ok": True}
 
         result = ok_node({"trace_id": "test-trace-2"})
-        assert result == {"ok": True}
+        assert result["ok"] is True
+        assert result["trace_id"] == "test-trace-2"
+        assert result["pipeline_metrics"]["node_count"] >= 1
+        assert result["pipeline_metrics"]["steps"][-1]["step_name"] == "ok_node"
 
     def test_re_raises_exception_after_collect(self):
         """timed_node 收集 error 后必须重抛,不能静默。"""
