@@ -1,0 +1,65 @@
+{
+  "evidence_level": "L2-fixture-or-dry-run",
+  "cases": [
+    {
+      "case_id": "TBX-001",
+      "tool_id": "product-image",
+      "expected_status": "accepted_dry_run",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "required_checks": [
+        "product_truth",
+        "claim_evidence",
+        "brand_rights"
+      ]
+    },
+    {
+      "case_id": "TBX-002",
+      "tool_id": "six-view",
+      "expected_status": "blocked",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "required_checks": [
+        "canonical_six_views",
+        "view_consistency",
+        "reference_rights"
+      ]
+    },
+    {
+      "case_id": "TBX-003",
+      "tool_id": "ecommerce-visual",
+      "expected_status": "review_required",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "required_checks": [
+        "copy_safe_zone",
+        "platform_ratio",
+        "brand_alignment"
+      ]
+    },
+    {
+      "case_id": "TBX-004",
+      "tool_id": "digital-human",
+      "expected_status": "blocked",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "required_checks": [
+        "likeness_consent",
+        "voice_consent",
+        "children_safety"
+      ]
+    },
+    {
+      "case_id": "TBX-005",
+      "tool_id": "storyboard",
+      "expected_status": "accepted_dry_run",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "required_checks": [
+        "shot_ledger",
+        "timeline_floor",
+        "review_checkpoint"
+      ]
+    }
+  ]
+}
