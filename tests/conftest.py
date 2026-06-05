@@ -6,6 +6,27 @@ import os
 # 导致请求 header 与 verify_api_key 比对失败。设在文件最顶部以保证
 # src.api / src.routers 在测试 import 时拿到稳定的 API_KEY。
 os.environ.setdefault("API_KEY", "test-api-key-for-pytest")
+os.environ["ENVIRONMENT"] = "test"
+os.environ["ALLOW_MOCK_MODE"] = "1"
+os.environ["RUN_TOKEN_SMOKE"] = "0"
+
+PROVIDER_KEY_ENV_NAMES = (
+    "DEEPSEEK_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENAI_ADMIN_KEY",
+    "ANTHROPIC_API_KEY",
+    "KIMI_API_KEY",
+    "POYO_API_KEY",
+    "SEEDANCE_API_KEY",
+    "SILICONFLOW_API_KEY",
+    "ELEVENLABS_API_KEY",
+)
+
+# Pytest must stay hermetic by default. src.config calls load_dotenv(), so these
+# empty values intentionally shadow any local .env provider keys before app
+# modules import configuration.
+for _provider_key in PROVIDER_KEY_ENV_NAMES:
+    os.environ[_provider_key] = ""
 
 # ADR-004 Option D: production default is disabled. Tests that need the
 # live path either patch the flag explicitly or rely on this default-off.
@@ -38,6 +59,31 @@ def auth_headers() -> dict[str, str]:
 def auditor():
     from src.agents.auditor import AuditorAgent
     return AuditorAgent()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_provider_test_context(monkeypatch):
+    """Keep provider credentials and request-scoped keys out of default tests."""
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("ALLOW_MOCK_MODE", "1")
+    monkeypatch.setenv("RUN_TOKEN_SMOKE", "0")
+    for provider_key in PROVIDER_KEY_ENV_NAMES:
+        monkeypatch.setenv(provider_key, "")
+
+    request_token = None
+    try:
+        from src.tools.llm_client import _request_api_keys
+    except ImportError:
+        _request_api_keys = None
+    if _request_api_keys is not None:
+        request_token = _request_api_keys.set({})
+
+    yield
+
+    if _request_api_keys is not None and request_token is not None:
+        _request_api_keys.reset(request_token)
+    for provider_key in PROVIDER_KEY_ENV_NAMES:
+        os.environ[provider_key] = ""
 
 
 @pytest.fixture(autouse=True)
