@@ -26,6 +26,7 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
 RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 LIGHTHOUSE_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
+LIGHTHOUSE_BUILD_AND_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "build-and-deploy.sh"
 
 HERMETIC_PYTEST_ENV = {
     "API_KEY": "test-api-key-for-pytest",
@@ -194,15 +195,16 @@ class TestDeployWorkflow:
             "frontend deploy preflight build must not depend on production token state"
         )
 
-    def test_remote_deploy_disables_token_smoke_by_default(self, workflow):
+    def test_remote_deploy_disables_token_smoke_by_default_and_rebuilds_backend_when_needed(self, workflow):
         deploy = workflow["jobs"]["deploy"]
         steps = deploy.get("steps") or []
         remote_steps = [s for s in steps if s.get("name") == "Trigger remote deploy"]
         assert remote_steps, "deploy must trigger remote Lighthouse deploy"
 
         run = remote_steps[0].get("run") or ""
-        assert "RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh" in run, (
+        assert "REBUILD_BACKEND=1 RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh" in run, (
             "GitHub deploy must explicitly keep token-consuming smoke disabled by default"
+            " and allow unattended backend rebuild when requirements changed"
         )
 
     def test_rsync_uses_lighthouse_exclude_file(self, workflow):
@@ -267,6 +269,20 @@ class TestDeployWorkflow:
         assert "DEPLOY_API_KEY" not in frontend_build, (
             "production API key may be used by smoke.sh, not by frontend build env"
         )
+
+    def test_lighthouse_deploy_requirements_mismatch_is_non_interactive(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+
+        assert "read -p" not in text, "deploy.sh must not block non-interactive deploy sessions"
+        assert "REBUILD_BACKEND" in text, "backend rebuild must be controlled by explicit env"
+        assert "$COMPOSE build backend" in text, "deploy.sh must support rebuilding backend image"
+        assert "REBUILD_BACKEND=1" in text, "operator guidance must document the rebuild opt-in"
+
+    def test_lighthouse_build_wrapper_forwards_deploy_control_flags(self):
+        text = LIGHTHOUSE_BUILD_AND_DEPLOY.read_text()
+
+        assert "REBUILD_BACKEND=${REBUILD_BACKEND:-0}" in text
+        assert "RUN_TOKEN_SMOKE=${RUN_TOKEN_SMOKE:-0}" in text
 
 
 class TestCIWorkflow:

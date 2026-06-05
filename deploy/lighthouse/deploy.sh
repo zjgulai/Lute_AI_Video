@@ -34,6 +34,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 COMPOSE="sudo docker-compose -f docker-compose.prod.yml"
+REBUILD_BACKEND="${REBUILD_BACKEND:-0}"
 
 echo "========================================"
 echo "  AI Video Fast Deploy"
@@ -52,12 +53,19 @@ if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
   echo "  ⚠ requirements.txt 与当前 backend image 不一致"
   echo "  ⚠ 本地 hash: ${LOCAL_REQ_SHA:-(无法计算)}"
   echo "  ⚠ 镜像 hash: ${IMG_REQ_SHA:-(首次部署或镜像不存在)}"
-  echo "  ⚠ 强烈建议先 rebuild image,否则可能进 restart loop:"
-  echo "      sudo docker compose -f docker-compose.prod.yml build backend"
-  echo ""
-  read -p "  继续 deploy 不 rebuild? [y/N] " -r REPLY
-  if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
-    echo "  Aborted. Run 'docker compose ... build backend' then re-run deploy.sh"
+  if [ "$REBUILD_BACKEND" = "1" ]; then
+    echo "  REBUILD_BACKEND=1 set; rebuilding backend image..."
+    $COMPOSE build backend
+    IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest cat /app/.requirements_sha256 2>/dev/null | awk '{print $1}')
+    if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
+      echo "  ❌ backend rebuild finished but requirements hash still differs"
+      echo "  ❌ 镜像 hash: ${IMG_REQ_SHA:-(无法计算)}"
+      exit 1
+    fi
+    echo "  ✓ backend image rebuilt and requirements hash matched"
+  else
+    echo "  ❌ Aborted before container restart."
+    echo "  ❌ Re-run with REBUILD_BACKEND=1 to rebuild backend image automatically."
     exit 1
   fi
 else
