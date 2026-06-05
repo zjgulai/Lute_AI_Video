@@ -164,6 +164,14 @@ class S5BrandVlogPipeline:
             return step_data["edited_output"]
         return step_data.get("output")
 
+    @staticmethod
+    def _all_clips_are_stubs(
+        clip_paths: list[str],
+        clip_details: list[dict[str, Any]] | None = None,
+    ) -> bool:
+        """Compatibility wrapper for the shared continuity stub detector."""
+        return all_clips_are_stubs(clip_paths, clip_details)
+
     # ═══ Backwards-compatible full pipeline ═══
 
     async def run(
