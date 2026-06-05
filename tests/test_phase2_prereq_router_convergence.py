@@ -60,10 +60,10 @@ class TestPreferredModelsMatchRoadmap:
         assert select_model("s1") == "seedance-2"
 
     def test_s2_preferred_is_kling_3_0_pro(self):
-        assert select_model("s2") == "kling-3-0/pro"
+        assert select_model("s2") == "kling-3.0/pro"
 
     def test_s3_preferred_is_kling_3_0_standard(self):
-        assert select_model("s3") == "kling-3-0/standard"
+        assert select_model("s3") == "kling-3.0/standard"
 
     def test_s4_preferred_is_seedance_2_fast(self):
         assert select_model("s4") == "seedance-2-fast"
@@ -81,8 +81,8 @@ class TestEnvDefaultDecoupled:
 
     @pytest.mark.parametrize("scenario,expected", [
         ("s1", "seedance-2"),
-        ("s2", "kling-3-0/pro"),
-        ("s3", "kling-3-0/standard"),
+        ("s2", "kling-3.0/pro"),
+        ("s3", "kling-3.0/standard"),
         ("s4", "seedance-2-fast"),
         ("s5", "seedance-2"),
     ])
