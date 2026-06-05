@@ -354,6 +354,9 @@ if HAS_FASTAPI:
     from src.routers import portfolio
     app.include_router(portfolio.router, dependencies=[Depends(verify_api_key)])
 
+    from src.routers import toolbox
+    app.include_router(toolbox.router, dependencies=[Depends(verify_api_key)])
+
     # Mount legacy asset management endpoints
     try:
         from src import api_assets
