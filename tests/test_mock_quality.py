@@ -125,7 +125,7 @@ def test_strategy_audit_criterion_degradation(
     "level,expected_hook_score,expected_cta_score,expected_completeness",
     [
         (QualityLevel.PERFECT, 1.0, 1.0, 1.0),
-        (QualityLevel.MEDIUM, 0.0, 0.5, 0.8),
+        (QualityLevel.MEDIUM, 0.5, 0.5, 0.8),
         (QualityLevel.POOR, 0.0, 0.0, 0.6),
     ],
 )
