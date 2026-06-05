@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import socket
 
+import httpx
 import pytest
 
 from src.tools.webhook_manager import (
@@ -19,6 +21,28 @@ class TestWebhookManager:
 
     def setup_method(self):
         reset_webhook_manager()
+
+    @pytest.fixture(autouse=True)
+    def _mock_public_dns(self, monkeypatch):
+        def _fake_getaddrinfo(hostname, *args, **kwargs):
+            return [
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    6,
+                    "",
+                    ("93.184.216.34", 443),
+                )
+            ]
+
+        monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+    @pytest.fixture
+    def mock_failed_http_post(self, monkeypatch):
+        async def _raise_connect_error(self, url, **kwargs):
+            raise httpx.ConnectError("offline test webhook", request=httpx.Request("POST", url))
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", _raise_connect_error)
 
     def test_register_adds_url(self):
         """Register adds a url to the correct event type."""
@@ -94,10 +118,10 @@ class TestWebhookManager:
         # Should not raise
         asyncio.run(m.dispatch("audit.completed", {"checkpoint": "test"}))
 
-    def test_dispatch_bad_url_logs_warning(self):
+    def test_dispatch_bad_url_logs_warning(self, mock_failed_http_post):
         """dispatch to unreachable URL logs warning, doesn't raise."""
         m = WebhookManager()
-        m.register("audit.completed", "https://nonexistent.local/webhook")
+        m.register("audit.completed", "https://webhook.example.test/webhook")
         # Should complete without raising
         asyncio.run(m.dispatch("audit.completed", {"checkpoint": "test"}))
 
@@ -106,10 +130,10 @@ class TestWebhookManager:
         m = WebhookManager()
         m.dispatch_sync("audit.completed", {"checkpoint": "test"})
 
-    def test_dispatch_sync_bad_url_logs_warning(self):
+    def test_dispatch_sync_bad_url_logs_warning(self, mock_failed_http_post):
         """dispatch_sync to unreachable URL logs warning, doesn't raise."""
         m = WebhookManager()
-        m.register("audit.completed", "https://nonexistent.local/webhook")
+        m.register("audit.completed", "https://webhook.example.test/webhook")
         m.dispatch_sync("audit.completed", {"checkpoint": "test"})
 
     def test_envelope_format(self):
@@ -151,4 +175,3 @@ class TestWebhookManagerSingleton:
 # - subscribe + dispatch 真实并发流程已经在 tests/test_portfolio_mechanism.py
 #   覆盖 4 用例(sync/async listener fire、subscribe 幂等、listener 异常隔离、
 #   portfolio_hook end-to-end)
-
