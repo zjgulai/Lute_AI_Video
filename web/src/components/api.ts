@@ -1453,10 +1453,11 @@ export async function fetchToolboxRun(
 }
 
 export async function fetchToolboxRuns(
-  options?: { limit?: number; signal?: AbortSignal },
+  options?: { limit?: number; toolId?: ToolboxToolId; signal?: AbortSignal },
 ): Promise<ToolboxRunsResponse> {
   const params = new URLSearchParams();
   if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.toolId) params.set("tool_id", options.toolId);
   const query = params.toString();
   const res = await apiFetch(`/toolbox/runs${query ? `?${query}` : ""}`, {
     headers: getHeaders(false),

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  ArrowClockwise,
   ClipboardText,
   LockKey,
   PlayCircle,
@@ -13,6 +14,8 @@ import {
 } from "@phosphor-icons/react";
 import TopHeader from "@/components/TopHeader";
 import {
+  fetchToolboxRun,
+  fetchToolboxRuns,
   planToolboxRun,
   previewToolboxPrompt,
   runToolboxDryRun,
@@ -30,7 +33,7 @@ import {
   isToolboxToolId,
 } from "@/components/toolbox/toolboxCatalog";
 
-type BusyAction = "plan" | "preview" | "run" | null;
+type BusyAction = "plan" | "preview" | "run" | "refresh" | "loadRun" | null;
 
 type ToolboxFormState = {
   brandId: string;
@@ -297,6 +300,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const [plan, setPlan] = useState<ToolboxPlanResponse | null>(null);
   const [preview, setPreview] = useState<ToolboxPromptPreviewResponse | null>(null);
   const [run, setRun] = useState<ToolboxRunResponse | null>(null);
+  const [recentRuns, setRecentRuns] = useState<ToolboxRunResponse[]>([]);
 
   const updateField = (field: FieldName, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -306,6 +310,42 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const Icon = presentation.icon;
   const requiredChecks = plan?.required_checks ?? presentation.fallbackChecks;
   const artifacts = run?.artifacts ?? [];
+
+  const applyRunState = useCallback((nextRun: ToolboxRunResponse) => {
+    setRun(nextRun);
+    setPlan(nextRun.plan);
+    setPreview(nextRun.prompt_preview ?? null);
+  }, []);
+
+  const refreshRecentRuns = useCallback(async (options?: { applyLatest?: boolean }) => {
+    setBusyAction("refresh");
+    setError(null);
+    try {
+      const data = await fetchToolboxRuns({ toolId, limit: 5 });
+      setRecentRuns(data.runs);
+      if (options?.applyLatest && data.runs[0]) {
+        applyRunState(data.runs[0]);
+      }
+    } catch (nextError: unknown) {
+      setError(errorToMessage(nextError));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [applyRunState, toolId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchToolboxRuns({ toolId, limit: 5, signal: controller.signal })
+      .then((data) => {
+        setRecentRuns(data.runs);
+        if (data.runs[0]) applyRunState(data.runs[0]);
+      })
+      .catch((nextError: unknown) => {
+        if (nextError instanceof DOMException && nextError.name === "AbortError") return;
+        setError(errorToMessage(nextError));
+      });
+    return () => controller.abort();
+  }, [applyRunState, toolId]);
 
   const callAction = async <T,>(action: BusyAction, execute: () => Promise<T>, commit: (value: T) => void) => {
     if (!action) return;
@@ -334,10 +374,20 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const handleDryRun = () => {
     const body = buildToolboxRequest(toolId, form);
     void callAction("run", () => runToolboxDryRun(toolId, body), (result) => {
-      setRun(result);
-      setPlan(result.plan);
-      if (result.prompt_preview) setPreview(result.prompt_preview);
+      applyRunState(result);
+      setRecentRuns((current) => [
+        result,
+        ...current.filter((item) => item.run_id !== result.run_id),
+      ].slice(0, 5));
     });
+  };
+
+  const handleRefreshRuns = () => {
+    void refreshRecentRuns({ applyLatest: false });
+  };
+
+  const handleLoadRun = (runId: string) => {
+    void callAction("loadRun", () => fetchToolboxRun(runId), applyRunState);
   };
 
   return (
@@ -519,6 +569,47 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                     {check}
                   </div>
                 ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.currentRun")}</h2>
+                <button
+                  type="button"
+                  onClick={handleRefreshRuns}
+                  disabled={busyAction !== null}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <ArrowClockwise size={14} weight="bold" />
+                  {busyAction === "refresh" ? t("toolbox.actionRunning") : t("toolbox.refreshRuns")}
+                </button>
+              </div>
+              <div className="mt-3 rounded-lg bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+                <div className="font-semibold text-[var(--text-h1)]">{run?.run_id ?? t("toolbox.preview.noRun")}</div>
+                <div className="mt-1">{run?.status ?? "-"}</div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {recentRuns.length > 0 ? (
+                  recentRuns.map((item) => (
+                    <button
+                      key={item.run_id}
+                      type="button"
+                      onClick={() => handleLoadRun(item.run_id)}
+                      disabled={busyAction !== null}
+                      data-toolbox-run-select={item.run_id}
+                      className="block w-full rounded-lg bg-[var(--bg-layer2)] p-3 text-left transition hover:bg-[rgba(215,92,112,0.08)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span className="block text-xs font-semibold text-[var(--text-h1)]">{item.tool_id}</span>
+                      <span className="mt-1 block break-all text-[11px] leading-5 text-[var(--text-muted)]">{item.run_id}</span>
+                      <span className="mt-1 block text-[11px] font-semibold text-[#1c7d73]">{item.status}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="rounded-lg border border-dashed border-[var(--border-default)] p-3 text-xs text-[var(--text-muted)]">
+                    {t("toolbox.recentRunsEmpty")}
+                  </div>
+                )}
               </div>
             </section>
 

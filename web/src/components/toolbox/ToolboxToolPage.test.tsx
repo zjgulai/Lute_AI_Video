@@ -7,6 +7,8 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 const planToolboxRun = vi.fn();
 const previewToolboxPrompt = vi.fn();
 const runToolboxDryRun = vi.fn();
+const fetchToolboxRuns = vi.fn();
+const fetchToolboxRun = vi.fn();
 
 type CapturedToolboxRequest = {
   tool_id: string;
@@ -26,6 +28,8 @@ vi.mock("@/components/TopHeader", () => ({
 }));
 
 vi.mock("@/components/api", () => ({
+  fetchToolboxRun: (...args: unknown[]) => fetchToolboxRun(...args),
+  fetchToolboxRuns: (...args: unknown[]) => fetchToolboxRuns(...args),
   planToolboxRun: (...args: unknown[]) => planToolboxRun(...args),
   previewToolboxPrompt: (...args: unknown[]) => previewToolboxPrompt(...args),
   runToolboxDryRun: (...args: unknown[]) => runToolboxDryRun(...args),
@@ -96,10 +100,7 @@ describe("ToolboxToolPage", () => {
       compile_warnings: [],
       blocked_reasons: [],
     };
-
-    planToolboxRun.mockResolvedValue(plan);
-    previewToolboxPrompt.mockResolvedValue(promptPreview);
-    runToolboxDryRun.mockResolvedValue({
+    const runState = {
       run_id: "tbx_run_product_image_001",
       request_id: "tbx_req_product_image_001",
       tool_id: "product-image",
@@ -131,6 +132,29 @@ describe("ToolboxToolPage", () => {
           publish_allowed: false,
         },
       ],
+    };
+
+    planToolboxRun.mockResolvedValue(plan);
+    previewToolboxPrompt.mockResolvedValue(promptPreview);
+    runToolboxDryRun.mockResolvedValue(runState);
+    fetchToolboxRun.mockResolvedValue({
+      ...runState,
+      run_id: "tbx_run_product_image_loaded",
+      job_record: {
+        ...runState.job_record,
+        job_id: "tbx_job_product_image_loaded",
+      },
+      artifacts: [
+        {
+          ...runState.artifacts[0],
+          artifact_id: "artifact_product_image_loaded",
+          artifact_ref: "artifact://toolbox/product-image/loaded",
+        },
+      ],
+    });
+    fetchToolboxRuns.mockResolvedValue({
+      evidence_level: "L2-fixture-or-dry-run",
+      runs: [runState],
     });
   });
 
@@ -147,9 +171,34 @@ describe("ToolboxToolPage", () => {
       expect(container.textContent).toContain("任务账本");
       expect(container.textContent).toContain("产物清单");
       expect(container.textContent).toContain("真实生成锁定");
+      expect(container.textContent).toContain("当前 Run");
       const buttonText = Array.from(container.querySelectorAll("button")).map((button) => button.textContent ?? "").join(" ");
       expect(buttonText).not.toContain("发布");
       expect(buttonText).not.toContain("Publish");
+      expect(fetchToolboxRuns).toHaveBeenCalledWith(expect.objectContaining({ toolId: "product-image", limit: 5 }));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("loads current-tool recent runs and can rehydrate a selected run state", async () => {
+    const { container, cleanup } = renderToolPage("product-image");
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(container.textContent).toContain("tbx_run_product_image_001");
+      const loadButton = container.querySelector("[data-toolbox-run-select='tbx_run_product_image_001']") as HTMLButtonElement | null;
+      expect(loadButton).not.toBeNull();
+
+      await act(async () => {
+        loadButton?.click();
+      });
+      await flushEffects();
+
+      expect(fetchToolboxRun).toHaveBeenCalledWith("tbx_run_product_image_001");
+      expect(container.textContent).toContain("tbx_job_product_image_loaded");
+      expect(container.textContent).toContain("artifact://toolbox/product-image/loaded");
     } finally {
       cleanup();
     }

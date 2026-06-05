@@ -150,6 +150,10 @@ async def test_toolbox_runs_endpoint_lists_recent_refs_without_raw_input(auth_he
         )
         assert second_response.status_code == 200, second_response.text
         list_response = await client.get("/toolbox/runs?limit=2", headers=auth_headers)
+        product_only_response = await client.get(
+            "/toolbox/runs?limit=5&tool_id=product-image",
+            headers=auth_headers,
+        )
 
     assert list_response.status_code == 200, list_response.text
     payload = list_response.json()
@@ -161,6 +165,11 @@ async def test_toolbox_runs_endpoint_lists_recent_refs_without_raw_input(auth_he
     assert "must-not-leak-run-list-brief" not in serialized
     assert "tool_input" not in serialized
     assert "campaign_brief" not in serialized
+    assert product_only_response.status_code == 200, product_only_response.text
+    product_only_payload = product_only_response.json()
+    assert product_only_payload["runs"]
+    assert all(run["tool_id"] == "product-image" for run in product_only_payload["runs"])
+    assert product_only_payload["runs"][0]["run_id"] == "tbx_run_tbx_req_product_image_recent"
 
 
 @pytest.mark.asyncio

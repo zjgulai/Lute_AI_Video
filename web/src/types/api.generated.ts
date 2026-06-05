@@ -5673,6 +5673,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                tool_id?: components["schemas"]["ToolboxToolId"] | null;
             };
             header?: {
                 "x-api-key"?: string | null;

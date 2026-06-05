@@ -55,8 +55,12 @@ async def run_toolbox_dry_run(tool_id: ToolboxToolId, body: dict[str, Any]) -> d
 @router.get("/runs")
 async def list_toolbox_runs(
     limit: int = Query(default=20, ge=1, le=100),
+    tool_id: ToolboxToolId | None = None,
 ) -> dict[str, Any]:
-    states = list(_RUNS.values())[-limit:]
+    states = list(_RUNS.values())
+    if tool_id is not None:
+        states = [state for state in states if state.request.tool_id == tool_id]
+    states = states[-limit:]
     states.reverse()
     return {
         "evidence_level": EvidenceLevel.L2_FIXTURE_OR_DRY_RUN.value,
