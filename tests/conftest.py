@@ -37,6 +37,22 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
+def _restore_default_skill_registry() -> None:
+    """Restore default auto-registered skills after registry isolation tests."""
+    try:
+        from src.skills.registry import SkillRegistry
+        from src.skills.seedance_prompt import SeedancePromptSkill
+        from src.skills.viral_extractor import ViralExtractorSkill
+    except ImportError:
+        return
+
+    for skill in (SeedancePromptSkill(), ViralExtractorSkill()):
+        try:
+            SkillRegistry.register(skill)
+        except ValueError:
+            pass
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Default to the fast hermetic subset unless the caller opts into slow tests.
 
@@ -84,6 +100,7 @@ def _isolate_provider_test_context(monkeypatch):
         _request_api_keys.reset(request_token)
     for provider_key in PROVIDER_KEY_ENV_NAMES:
         os.environ[provider_key] = ""
+    _restore_default_skill_registry()
 
 
 @pytest.fixture(autouse=True)

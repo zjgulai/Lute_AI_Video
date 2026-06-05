@@ -13,7 +13,12 @@ from __future__ import annotations
 import pytest
 
 from src.skills.product_strategy import ProductStrategySkill
-from src.skills.seedance_prompt import SeedancePromptSkill
+from src.skills.seedance_prompt import (
+    FORBIDDEN_PATTERNS,
+    NARRATIVE_SHOT_TEMPLATE,
+    SeedancePromptSkill,
+    _shot_type_from_segment,
+)
 from src.skills.thumbnail_prompt import ThumbnailPromptSkill
 
 # ==============================================================================
@@ -114,9 +119,9 @@ class TestSeedancePromptSkillInit:
         assert skill.name == "seedance-video-prompt"
 
     def test_skill_has_templates(self):
-        """Should have templates for all shot types."""
-        from src.skills.seedance_prompt import SHOT_TEMPLATES  # type: ignore[attr-defined]
-        assert len(SHOT_TEMPLATES) >= 8
+        """Current contract uses one narrative template, not legacy product rotations."""
+        assert "{visual_description}" in NARRATIVE_SHOT_TEMPLATE
+        assert len(FORBIDDEN_PATTERNS) >= 5
 
 
 class TestSeedancePromptSkillExecution:
@@ -126,52 +131,72 @@ class TestSeedancePromptSkillExecution:
     def skill(self):
         return SeedancePromptSkill()
 
-    def test_execute_with_segments(self, skill):
+    @pytest.mark.asyncio
+    async def test_execute_with_segments(self, skill):
         """Should generate prompt from script segments."""
-        result = skill.execute({
+        result = await skill.execute({
             "script_segments": [
-                {"voiceover": "Introducing the new pump", "duration_seconds": 3},
-                {"voiceover": "Here's how it works", "duration_seconds": 5},
-                {"voiceover": "Buy now at the link below", "duration_seconds": 2},
+                {
+                    "segment_type": "hook",
+                    "voiceover": "Introducing the new pump",
+                    "visual_description": "Close-up of a compact wearable pump on a desk",
+                    "start_time": 0,
+                    "end_time": 3,
+                },
+                {
+                    "segment_type": "solution",
+                    "voiceover": "Here's how it works",
+                    "visual_description": "Hands demonstrate quiet setup in a work bag",
+                    "start_time": 3,
+                    "end_time": 8,
+                },
+                {
+                    "segment_type": "cta",
+                    "voiceover": "Buy now at the link below",
+                    "visual_description": "Clean final product beauty shot",
+                    "start_time": 8,
+                    "end_time": 10,
+                },
             ],
             "product_name": "X1 Pump",
         })
         assert result.success is True
         data = result.data
-        assert "seedance_prompt" in data
-        assert "@image1" in data["seedance_prompt"]
-        assert data["total_duration_seconds"] == 10
+        assert len(data) == 3
+        assert data[0]["segment_type"] == "hook"
+        assert "Close-up of a compact wearable pump" in data[0]["segment_prompt"]
+        assert data[0]["duration_seconds"] == 3
 
-    def test_execute_no_segments(self, skill):
+    @pytest.mark.asyncio
+    async def test_execute_no_segments(self, skill):
         """Should return fallback prompt when no segments."""
-        result = skill.execute({
+        result = await skill.execute({
             "script_segments": [],
             "product_name": "Product",
         })
         assert result.success is True
         data = result.data
-        assert "seedance_prompt" in data
-        assert data.get("_fallback", False) is True
+        assert len(data) == 1
+        assert data[0]["segment_type"] == "body"
 
-    def test_prompt_includes_timestamps(self, skill):
-        """Prompt should include [start-end]s timestamps."""
-        result = skill.execute({
+    @pytest.mark.asyncio
+    async def test_prompt_preserves_duration_seconds(self, skill):
+        result = await skill.execute({
             "script_segments": [
-                {"voiceover": "intro", "duration_seconds": 4},
-                {"voiceover": "body", "duration_seconds": 6},
+                {"voiceover": "intro", "start_time": 0, "end_time": 4},
+                {"voiceover": "body", "start_time": 4, "end_time": 10},
             ],
         })
-        prompt = result.data["seedance_prompt"]
-        assert "[0-4s]" in prompt
-        assert "[4-10s]" in prompt
+        assert [item["duration_seconds"] for item in result.data] == [4.0, 6.0]
 
-    def test_prompt_includes_quality_spec(self, skill):
-        """Prompt should include quality/resolution specs."""
-        result = skill.execute({
-            "script_segments": [{"voiceover": "test", "duration_seconds": 3}],
+    @pytest.mark.asyncio
+    async def test_prompt_includes_camera_and_lighting_spec(self, skill):
+        result = await skill.execute({
+            "script_segments": [{"voiceover": "test", "start_time": 0, "end_time": 3}],
         })
-        prompt = result.data["seedance_prompt"]
-        assert "720p" in prompt
+        prompt = result.data[0]["segment_prompt"]
+        assert "Lighting:" in prompt
+        assert "Camera:" in prompt
 
 
 class TestSeedancePromptSegmentClassification:
@@ -181,40 +206,20 @@ class TestSeedancePromptSegmentClassification:
     def skill(self):
         return SeedancePromptSkill()
 
-    def test_first_segment_classified_as_intro(self, skill):
-        seg_type = skill._classify_segment(
-            {"voiceover": "Today I'm reviewing this product", "duration_seconds": 3},
-            index=0, total=3,
-        )
-        assert seg_type == "influencer_intro"
+    def test_hook_segment_maps_to_close_up(self, skill):
+        assert _shot_type_from_segment("hook", "", index=0, total=3) == "close-up"
 
-    def test_first_segment_default_product_360(self, skill):
-        seg_type = skill._classify_segment(
-            {"voiceover": "This is great", "duration_seconds": 3},
-            index=0, total=3,
-        )
-        assert seg_type == "product_360"
+    def test_first_segment_fallback_maps_to_close_up(self, skill):
+        assert _shot_type_from_segment("", "This is great", index=0, total=3) == "close-up"
 
     def test_last_segment_cta(self, skill):
-        seg_type = skill._classify_segment(
-            {"voiceover": "check the link below", "duration_seconds": 2},
-            index=2, total=3,
-        )
-        assert seg_type == "cta_end"
+        assert _shot_type_from_segment("cta", "", index=2, total=3) == "static beauty shot"
 
     def test_comparison_segment(self, skill):
-        seg_type = skill._classify_segment(
-            {"voiceover": "compared to the old version this is", "duration_seconds": 5},
-            index=1, total=3,
-        )
-        assert seg_type == "comparison"
+        assert _shot_type_from_segment("comparison", "", index=1, total=3) == "split-screen"
 
     def test_demo_step_segment(self, skill):
-        seg_type = skill._classify_segment(
-            {"voiceover": "first step is to open the package", "duration_seconds": 4},
-            index=1, total=3,
-        )
-        assert seg_type == "demo_step"
+        assert _shot_type_from_segment("demo", "", index=1, total=3) == "over-shoulder"
 
 
 class TestSeedancePromptValidation:
@@ -241,9 +246,9 @@ class TestSeedancePromptValidation:
         assert len(errors) > 0
 
     def test_validate_output_valid(self, skill):
-        errors = skill.validate_output({
-            "seedance_prompt": "a prompt that is definitely longer than ten characters"
-        })
+        errors = skill.validate_output([
+            {"segment_prompt": "a prompt that is definitely longer than ten characters"}
+        ])
         assert len(errors) == 0
 
 
@@ -267,9 +272,10 @@ class TestThumbnailPromptSkillExecution:
     def skill(self):
         return ThumbnailPromptSkill()
 
-    def test_execute_returns_4_variants(self, skill):
+    @pytest.mark.asyncio
+    async def test_execute_returns_4_variants(self, skill):
         """Should return exactly 4 thumbnail variants."""
-        result = skill.execute({
+        result = await skill.execute({
             "hook_text": "Never pump in the bathroom again",
             "product_name": "X1 Pump",
             "brand_color": "#69FF68",
@@ -280,9 +286,10 @@ class TestThumbnailPromptSkillExecution:
         data = result.data
         assert len(data["variants"]) == 4
 
-    def test_variants_have_different_styles(self, skill):
+    @pytest.mark.asyncio
+    async def test_variants_have_different_styles(self, skill):
         """Each variant should have a different style."""
-        result = skill.execute({
+        result = await skill.execute({
             "hook_text": "Game changer",
             "product_name": "Product",
             "price": 49.99,
@@ -290,18 +297,20 @@ class TestThumbnailPromptSkillExecution:
         styles = [v["style"] for v in result.data["variants"]]
         assert len(set(styles)) >= 3  # At least 3 unique styles
 
-    def test_variants_include_product_name(self, skill):
+    @pytest.mark.asyncio
+    async def test_variants_include_product_name(self, skill):
         """Prompts should include the product name."""
-        result = skill.execute({
+        result = await skill.execute({
             "hook_text": "Best ever",
             "product_name": "X1 Ultra",
         })
         for v in result.data["variants"]:
             assert "X1 Ultra" in v["prompt"]
 
-    def test_platform_size_mapping(self, skill):
+    @pytest.mark.asyncio
+    async def test_platform_size_mapping(self, skill):
         """Size should match platform."""
-        result = skill.execute({
+        result = await skill.execute({
             "hook_text": "Test",
             "product_name": "P",
             "platform": "shopify",
@@ -309,8 +318,9 @@ class TestThumbnailPromptSkillExecution:
         for v in result.data["variants"]:
             assert v["size"] == "1536x1024"
 
-    def test_tiktok_size(self, skill):
-        result = skill.execute({
+    @pytest.mark.asyncio
+    async def test_tiktok_size(self, skill):
+        result = await skill.execute({
             "hook_text": "TikTok test",
             "product_name": "P",
             "platform": "tiktok",
