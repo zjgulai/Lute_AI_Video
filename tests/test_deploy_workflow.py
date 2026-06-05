@@ -25,6 +25,7 @@ CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
 RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
+LIGHTHOUSE_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
 
 HERMETIC_PYTEST_ENV = {
     "API_KEY": "test-api-key-for-pytest",
@@ -255,6 +256,17 @@ class TestDeployWorkflow:
             assert not re.search(pattern, text), (
                 f"deploy.yml must not contain plaintext secret matching: {pattern}"
             )
+
+    def test_lighthouse_deploy_does_not_inline_backend_api_key_into_frontend(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+        frontend_build = text.split("npm run build", 1)[0]
+
+        assert "export NEXT_PUBLIC_API_KEY" not in frontend_build, (
+            "Lighthouse deploy must not inline the backend API_KEY into browser bundles"
+        )
+        assert "DEPLOY_API_KEY" not in frontend_build, (
+            "production API key may be used by smoke.sh, not by frontend build env"
+        )
 
 
 class TestCIWorkflow:

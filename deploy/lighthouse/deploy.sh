@@ -34,10 +34,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 COMPOSE="sudo docker-compose -f docker-compose.prod.yml"
-DEPLOY_API_KEY="${API_KEY:-}"
-if [ -z "$DEPLOY_API_KEY" ] && [ -f ".env.prod" ]; then
-  DEPLOY_API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"
-fi
 
 echo "========================================"
 echo "  AI Video Fast Deploy"
@@ -112,14 +108,7 @@ export NEXT_PUBLIC_API_BASE_URL=/api
 # 与已验证的 5 场景非 demo 端到端结果冲突。
 # GitHub Pages demo 部署单独构建脚本里设 true。
 export NEXT_PUBLIC_IS_DEMO=false
-if [ -n "$DEPLOY_API_KEY" ]; then
-  # Convenience for manual production testing: Next.js inlines NEXT_PUBLIC_*
-  # at build time, so source it from the server-only .env.prod API_KEY.
-  # This exposes the key to browser users; keep this only for controlled access.
-  export NEXT_PUBLIC_API_KEY="$DEPLOY_API_KEY"
-else
-  echo "  ⚠ API_KEY not found; frontend will not prefill X-API-Key"
-fi
+unset NEXT_PUBLIC_API_KEY
 npm run build 2>&1 | tail -5
 
 # Verify build succeeded — critical files must exist
@@ -185,11 +174,20 @@ fi
 # The generate endpoint can consume external provider credits, so deployment
 # defaults to non-token health checks.
 if [ "${RUN_TOKEN_SMOKE:-0}" = "1" ]; then
-  FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
-    -H "Content-Type: application/json" \
-    -H "X-API-Key: $DEPLOY_API_KEY" \
-    -d '{"user_prompt":"test","duration":10}' \
-    https://localhost/api/fast/generate || echo "000")
+  DEPLOY_API_KEY="${API_KEY:-}"
+  if [ -z "$DEPLOY_API_KEY" ] && [ -f ".env.prod" ]; then
+    DEPLOY_API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"
+  fi
+  if [ -z "$DEPLOY_API_KEY" ]; then
+    echo "  ❌ Fast Mode API token smoke requested but API_KEY is missing"
+    FAST_STATUS="000"
+  else
+    FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
+      -H "Content-Type: application/json" \
+      -H "X-API-Key: $DEPLOY_API_KEY" \
+      -d '{"user_prompt":"test","duration":10}' \
+      https://localhost/api/fast/generate || echo "000")
+  fi
   if [ "$FAST_STATUS" = "200" ]; then
     echo "  Fast Mode API: 200"
   else
