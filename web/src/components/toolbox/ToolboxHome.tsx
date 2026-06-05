@@ -8,7 +8,12 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import TopHeader from "@/components/TopHeader";
-import { fetchToolboxTools, type ToolboxToolSummary } from "@/components/api";
+import {
+  fetchToolboxRuns,
+  fetchToolboxTools,
+  type ToolboxRunResponse,
+  type ToolboxToolSummary,
+} from "@/components/api";
 import { useI18n } from "@/i18n/I18nProvider";
 import {
   formatToolboxList,
@@ -21,12 +26,6 @@ type ToolCardModel = ToolPresentation & {
   api?: ToolboxToolSummary;
 };
 
-const AUDIT_SUMMARY = [
-  { labelKey: "toolbox.blocked", value: 0, className: "text-[var(--danger)]" },
-  { labelKey: "toolbox.reviewRequired", value: 0, className: "text-[#a66b1f]" },
-  { labelKey: "toolbox.acceptedDryRun", value: 0, className: "text-[#1c7d73]" },
-];
-
 function StatPill({ children }: { children: string }) {
   return (
     <span className="inline-flex h-7 items-center rounded-full border border-[var(--border-default)] bg-[var(--bg-panel)] px-3 text-xs font-semibold text-[var(--text-muted)]">
@@ -35,9 +34,36 @@ function StatPill({ children }: { children: string }) {
   );
 }
 
+function statusClassName(status: string): string {
+  if (status === "blocked" || status === "failed") return "text-[var(--danger)]";
+  if (status === "review_required") return "text-[#a66b1f]";
+  return "text-[#1c7d73]";
+}
+
+function deriveAuditSummary(runs: ToolboxRunResponse[]) {
+  return [
+    {
+      labelKey: "toolbox.blocked",
+      value: runs.filter((run) => run.status === "blocked" || run.status === "failed").length,
+      className: "text-[var(--danger)]",
+    },
+    {
+      labelKey: "toolbox.reviewRequired",
+      value: runs.filter((run) => run.status === "review_required").length,
+      className: "text-[#a66b1f]",
+    },
+    {
+      labelKey: "toolbox.acceptedDryRun",
+      value: runs.filter((run) => run.status === "accepted_dry_run").length,
+      className: "text-[#1c7d73]",
+    },
+  ];
+}
+
 export default function ToolboxHome() {
   const { t } = useI18n();
   const [apiTools, setApiTools] = useState<ToolboxToolSummary[]>([]);
+  const [runs, setRuns] = useState<ToolboxRunResponse[]>([]);
   const [toolsLoaded, setToolsLoaded] = useState(false);
 
   useEffect(() => {
@@ -55,12 +81,25 @@ export default function ToolboxHome() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchToolboxRuns({ limit: 5, signal: controller.signal })
+      .then((data) => setRuns(data.runs))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setRuns([]);
+      });
+    return () => controller.abort();
+  }, []);
+
   const tools = useMemo<ToolCardModel[]>(() => {
     return TOOL_ORDER.map((id) => ({
       ...TOOL_PRESENTATION[id],
       api: apiTools.find((tool) => tool.tool_id === id),
     }));
   }, [apiTools]);
+  const auditSummary = useMemo(() => deriveAuditSummary(runs), [runs]);
+  const latestRun = runs[0] ?? null;
 
   return (
     <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-body)]" data-testid="toolbox-home">
@@ -150,21 +189,65 @@ export default function ToolboxHome() {
           <aside className="grid gap-4">
             <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
               <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.recentRuns")}</h2>
-              <div className="mt-4 flex min-h-[104px] items-center justify-center rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] px-4 text-center text-sm text-[var(--text-muted)]">
-                {t("toolbox.recentRunsEmpty")}
-              </div>
+              {runs.length > 0 ? (
+                <ul className="mt-4 space-y-2">
+                  {runs.map((run) => (
+                    <li key={run.run_id} className="rounded-lg bg-[var(--bg-layer2)] p-3" data-toolbox-run={run.run_id}>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold text-[var(--text-h1)]">{run.tool_id}</span>
+                        <span className={`text-[11px] font-semibold ${statusClassName(run.status)}`}>{run.status}</span>
+                      </div>
+                      <div className="mt-2 break-all text-[11px] leading-5 text-[var(--text-muted)]">{run.run_id}</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+                          delivery_accepted={String(run.plan.delivery_accepted)}
+                        </span>
+                        <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+                          publish_allowed={String(run.job_record?.publish_allowed ?? false)}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="mt-4 flex min-h-[104px] items-center justify-center rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] px-4 text-center text-sm text-[var(--text-muted)]">
+                  {t("toolbox.recentRunsEmpty")}
+                </div>
+              )}
             </section>
 
             <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
               <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.auditQueue")}</h2>
               <div className="mt-4 grid grid-cols-3 gap-2">
-                {AUDIT_SUMMARY.map((item) => (
+                {auditSummary.map((item) => (
                   <div key={item.labelKey} className="rounded-lg bg-[var(--bg-layer2)] p-3 text-center">
                     <div className={`text-2xl font-semibold ${item.className}`}>{item.value}</div>
                     <div className="mt-1 text-[11px] font-semibold text-[var(--text-muted)]">{t(item.labelKey)}</div>
                   </div>
                 ))}
               </div>
+            </section>
+
+            <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
+              <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.jobLedger")}</h2>
+              {latestRun?.job_record ? (
+                <div className="mt-4 space-y-2 text-xs">
+                  <div className="rounded-lg bg-[var(--bg-layer2)] p-3">
+                    <div className="font-semibold text-[var(--text-h1)]">{latestRun.job_record.job_id}</div>
+                    <div className="mt-1 text-[var(--text-muted)]">{latestRun.job_record.status}</div>
+                  </div>
+                  <div className="break-all rounded-lg bg-[var(--bg-layer2)] p-3 text-[var(--text-muted)]">
+                    prompt_hash={latestRun.plan.prompt_hash ?? "-"}
+                  </div>
+                  <div className="rounded-lg bg-[var(--bg-layer2)] p-3 text-[var(--text-muted)]">
+                    {latestRun.artifacts[0]?.artifact_ref ?? t("toolbox.artifactRefsEmpty")}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] p-4 text-sm text-[var(--text-muted)]">
+                  {t("toolbox.jobLedgerEmpty")}
+                </div>
+              )}
             </section>
 
             <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">

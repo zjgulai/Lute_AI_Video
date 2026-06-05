@@ -207,6 +207,11 @@ export type ToolboxRunResponse = {
   artifacts: ToolboxArtifact[];
 };
 
+export type ToolboxRunsResponse = {
+  evidence_level: "L2-fixture-or-dry-run";
+  runs: ToolboxRunResponse[];
+};
+
 export type ToolboxArtifactsResponse = {
   run_id: string;
   tool_id: ToolboxToolId;
@@ -1440,6 +1445,20 @@ export async function fetchToolboxRun(
   options?: { signal?: AbortSignal },
 ): Promise<ToolboxRunResponse> {
   const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxRuns(
+  options?: { limit?: number; signal?: AbortSignal },
+): Promise<ToolboxRunsResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit) params.set("limit", String(options.limit));
+  const query = params.toString();
+  const res = await apiFetch(`/toolbox/runs${query ? `?${query}` : ""}`, {
     headers: getHeaders(false),
     signal: options?.signal,
   });

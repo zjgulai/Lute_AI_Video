@@ -128,6 +128,42 @@ async def test_toolbox_artifacts_endpoint_returns_refs_only(auth_headers) -> Non
 
 
 @pytest.mark.asyncio
+async def test_toolbox_runs_endpoint_lists_recent_refs_without_raw_input(auth_headers) -> None:
+    from src.api import app
+
+    ecommerce_body = _ecommerce_visual_request(raw_text="must-not-leak-run-list-brief")
+    ecommerce_body["request_id"] = "tbx_req_ecommerce_visual_recent"
+    product_body = _product_image_request()
+    product_body["request_id"] = "tbx_req_product_image_recent"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        first_response = await client.post(
+            "/toolbox/ecommerce-visual/run",
+            headers=auth_headers,
+            json=ecommerce_body,
+        )
+        assert first_response.status_code == 200, first_response.text
+        second_response = await client.post(
+            "/toolbox/product-image/run",
+            headers=auth_headers,
+            json=product_body,
+        )
+        assert second_response.status_code == 200, second_response.text
+        list_response = await client.get("/toolbox/runs?limit=2", headers=auth_headers)
+
+    assert list_response.status_code == 200, list_response.text
+    payload = list_response.json()
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert payload["evidence_level"] == "L2-fixture-or-dry-run"
+    assert [run["tool_id"] for run in payload["runs"]][:2] == ["product-image", "ecommerce-visual"]
+    assert payload["runs"][0]["job_record"]["publish_allowed"] is False
+    assert payload["runs"][0]["artifacts"][0]["artifact_ref"].startswith("artifact://toolbox/product-image/")
+    assert "must-not-leak-run-list-brief" not in serialized
+    assert "tool_input" not in serialized
+    assert "campaign_brief" not in serialized
+
+
+@pytest.mark.asyncio
 async def test_toolbox_path_and_body_tool_mismatch_fails_closed(auth_headers) -> None:
     from src.api import app
 

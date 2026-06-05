@@ -5,6 +5,7 @@ import ToolboxHome from "./ToolboxHome";
 import { I18nProvider } from "@/i18n/I18nProvider";
 
 const fetchToolboxTools = vi.fn();
+const fetchToolboxRuns = vi.fn();
 
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
@@ -18,6 +19,7 @@ vi.mock("@/components/TopHeader", () => ({
 
 vi.mock("@/components/api", () => ({
   fetchToolboxTools: (...args: unknown[]) => fetchToolboxTools(...args),
+  fetchToolboxRuns: (...args: unknown[]) => fetchToolboxRuns(...args),
 }));
 
 function renderToolboxHome() {
@@ -73,6 +75,56 @@ describe("ToolboxHome", () => {
         },
       ],
     });
+    fetchToolboxRuns.mockResolvedValue({
+      evidence_level: "L2-fixture-or-dry-run",
+      runs: [
+        {
+          run_id: "tbx_run_product_image_recent",
+          request_id: "tbx_req_product_image_recent",
+          tool_id: "product-image",
+          brand_id: "momcozy",
+          brand_bundle_ref: "bundle_momcozy_candidate",
+          target_scenario: "s1",
+          asset_refs: [],
+          status: "accepted_dry_run",
+          plan: {
+            plan_id: "tbx_plan_product_image_recent",
+            request_id: "tbx_req_product_image_recent",
+            tool_id: "product-image",
+            mode: "dry_run",
+            evidence_level: "L2-fixture-or-dry-run",
+            provider_call: false,
+            delivery_accepted: false,
+            prompt_hash: "sha256:recent-run",
+            required_checks: ["product_truth"],
+            artifact_manifest_id: "manifest://toolbox/product-image/recent",
+            injection_target_refs: ["s1"],
+          },
+          prompt_preview: null,
+          job_record: {
+            job_id: "tbx_job_product_image_recent",
+            status: "prepared",
+            delivery_accepted: false,
+            publish_allowed: false,
+            blocked_reasons: [],
+            artifact_paths: {},
+            spec: {},
+          },
+          artifacts: [
+            {
+              artifact_id: "tbx_artifact_product_image_recent",
+              tool_id: "product-image",
+              artifact_type: "product_image_set",
+              artifact_ref: "artifact://toolbox/product-image/recent",
+              source_job_id: "tbx_job_product_image_recent",
+              manifest_ref: "manifest://toolbox/product-image/recent",
+              delivery_accepted: false,
+              publish_allowed: false,
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("renders the five planned tools with dry-run evidence boundaries", async () => {
@@ -93,6 +145,26 @@ describe("ToolboxHome", () => {
       expect(container.textContent).toContain("故事版");
       expect(container.querySelectorAll("[data-tool-card]")).toHaveLength(5);
       expect(fetchToolboxTools).toHaveBeenCalledTimes(1);
+      expect(fetchToolboxRuns).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("renders recent dry-run job ledger and artifact refs from state projection", async () => {
+    const { container, cleanup } = renderToolboxHome();
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(container.querySelector("[data-toolbox-run='tbx_run_product_image_recent']")).not.toBeNull();
+      expect(container.textContent).toContain("tbx_run_product_image_recent");
+      expect(container.textContent).toContain("tbx_job_product_image_recent");
+      expect(container.textContent).toContain("sha256:recent-run");
+      expect(container.textContent).toContain("artifact://toolbox/product-image/recent");
+      expect(container.textContent).toContain("delivery_accepted=false");
+      expect(container.textContent).toContain("publish_allowed=false");
+      expect(container.textContent).toContain("Accepted Dry-run");
     } finally {
       cleanup();
     }

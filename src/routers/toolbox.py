@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 
 from src.models.commercial_contracts import EvidenceLevel
@@ -50,6 +50,18 @@ async def run_toolbox_dry_run(tool_id: ToolboxToolId, body: dict[str, Any]) -> d
     state = build_toolbox_run_state(request)
     _RUNS[state.run_id] = state
     return project_toolbox_run_state(state)
+
+
+@router.get("/runs")
+async def list_toolbox_runs(
+    limit: int = Query(default=20, ge=1, le=100),
+) -> dict[str, Any]:
+    states = list(_RUNS.values())[-limit:]
+    states.reverse()
+    return {
+        "evidence_level": EvidenceLevel.L2_FIXTURE_OR_DRY_RUN.value,
+        "runs": [project_toolbox_run_state(state) for state in states],
+    }
 
 
 @router.get("/runs/{run_id}")
