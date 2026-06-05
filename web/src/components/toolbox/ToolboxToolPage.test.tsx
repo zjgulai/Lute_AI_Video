@@ -74,6 +74,10 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+function expectAuditSummaryFetchedFor(runId: string) {
+  expect(fetchToolboxAuditSummary.mock.calls.some((call) => call[0] === runId)).toBe(true);
+}
+
 describe("ToolboxToolPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -172,9 +176,11 @@ describe("ToolboxToolPage", () => {
       blocked_reasons: [],
       warnings: ["read_only_preview_only", "scenario_state_write_disabled"],
     });
-    fetchToolboxAuditSummary.mockResolvedValue({
-      summary_id: "tbx_injection_audit_product_image_001",
-      run_id: "tbx_run_product_image_001",
+    fetchToolboxAuditSummary.mockImplementation(async (runId: string) => ({
+      summary_id: runId.includes("loaded")
+        ? "tbx_injection_audit_product_image_loaded"
+        : "tbx_injection_audit_product_image_001",
+      run_id: runId,
       tool_id: "product-image",
       evidence_level: "L2-fixture-or-dry-run",
       ready_for_scenario_injection: true,
@@ -203,7 +209,7 @@ describe("ToolboxToolPage", () => {
       ],
       blocking_reasons: [],
       advisory_reasons: [],
-    });
+    }));
     fetchToolboxRun.mockResolvedValue({
       ...runState,
       run_id: "tbx_run_product_image_loaded",
@@ -235,9 +241,10 @@ describe("ToolboxToolPage", () => {
     });
   });
 
-  it("renders the single-tool dry-run workbench without publish actions", async () => {
+  it("renders the single-tool dry-run workbench with auto-loaded audit summary and no publish actions", async () => {
     const { container, cleanup } = renderToolPage("product-image");
     try {
+      await flushEffects();
       await flushEffects();
 
       expect(container.querySelector("[data-testid='toolbox-tool-page']")).not.toBeNull();
@@ -253,6 +260,9 @@ describe("ToolboxToolPage", () => {
       expect(buttonText).not.toContain("发布");
       expect(buttonText).not.toContain("Publish");
       expect(fetchToolboxRuns).toHaveBeenCalledWith(expect.objectContaining({ toolId: "product-image", limit: 5 }));
+      expectAuditSummaryFetchedFor("tbx_run_product_image_001");
+      expect(container.textContent).toContain("tbx_injection_audit_product_image_001");
+      expect(container.textContent).toContain("Refs 可进入只读回注");
     } finally {
       cleanup();
     }
@@ -267,6 +277,7 @@ describe("ToolboxToolPage", () => {
       expect(container.textContent).toContain("tbx_run_product_image_001");
       const loadButton = container.querySelector("[data-toolbox-run-select='tbx_run_product_image_001']") as HTMLButtonElement | null;
       expect(loadButton).not.toBeNull();
+      fetchToolboxAuditSummary.mockClear();
 
       await act(async () => {
         loadButton?.click();
@@ -274,7 +285,9 @@ describe("ToolboxToolPage", () => {
       await flushEffects();
 
       expect(fetchToolboxRun).toHaveBeenCalledWith("tbx_run_product_image_001");
+      expectAuditSummaryFetchedFor("tbx_run_product_image_loaded");
       expect(container.textContent).toContain("tbx_job_product_image_loaded");
+      expect(container.textContent).toContain("tbx_injection_audit_product_image_loaded");
       expect(container.textContent).toContain("artifact://toolbox/product-image/loaded");
       expect(container.textContent).toContain("manifest://toolbox/product-image/loaded");
     } finally {
@@ -313,6 +326,7 @@ describe("ToolboxToolPage", () => {
     const { container, cleanup } = renderToolPage("product-image");
     try {
       await flushEffects();
+      fetchToolboxAuditSummary.mockClear();
 
       await act(async () => {
         findButton(container, "运行 Dry-run").click();
@@ -320,8 +334,10 @@ describe("ToolboxToolPage", () => {
       await flushEffects();
 
       expect(runToolboxDryRun).toHaveBeenCalledTimes(1);
+      expectAuditSummaryFetchedFor("tbx_run_product_image_001");
       expect(previewToolboxPrompt).not.toHaveBeenCalled();
       expect(container.textContent).toContain("tbx_job_product_image_001");
+      expect(container.textContent).toContain("tbx_injection_audit_product_image_001");
       expect(container.textContent).toContain("prepared");
       expect(container.textContent).toContain("artifact://toolbox/product-image/001");
       expect(container.textContent).toContain("Contract refs");
@@ -364,6 +380,7 @@ describe("ToolboxToolPage", () => {
     const { container, cleanup } = renderToolPage("product-image");
     try {
       await flushEffects();
+      fetchToolboxAuditSummary.mockClear();
 
       await act(async () => {
         findButton(container, "刷新审计摘要").click();

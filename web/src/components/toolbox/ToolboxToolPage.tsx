@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowClockwise,
@@ -507,6 +507,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const [injectionDraft, setInjectionDraft] = useState<ToolboxInjectionDraftResponse | null>(null);
   const [auditSummary, setAuditSummary] = useState<ToolboxInjectionAuditSummaryResponse | null>(null);
   const [recentRuns, setRecentRuns] = useState<ToolboxRunResponse[]>([]);
+  const activeRunIdRef = useRef<string | null>(null);
 
   const updateField = (field: FieldName, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -520,11 +521,28 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const injectionTargets = run?.injection_targets ?? [];
 
   const applyRunState = useCallback((nextRun: ToolboxRunResponse) => {
+    activeRunIdRef.current = nextRun.run_id;
     setRun(nextRun);
     setPlan(nextRun.plan);
     setPreview(nextRun.prompt_preview ?? null);
     setInjectionDraft(null);
     setAuditSummary(null);
+  }, []);
+
+  const refreshAuditSummaryForRun = useCallback(async (runId: string, options?: { signal?: AbortSignal }) => {
+    try {
+      const requestOptions = options?.signal ? { signal: options.signal } : undefined;
+      const summary = await fetchToolboxAuditSummary(runId, requestOptions);
+      if (activeRunIdRef.current === runId) {
+        setAuditSummary(summary);
+      }
+    } catch (nextError: unknown) {
+      if (nextError instanceof DOMException && nextError.name === "AbortError") return;
+      if (activeRunIdRef.current === runId) {
+        setAuditSummary(null);
+        setError(errorToMessage(nextError));
+      }
+    }
   }, []);
 
   const refreshRecentRuns = useCallback(async (options?: { applyLatest?: boolean }) => {
@@ -535,27 +553,31 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
       setRecentRuns(data.runs);
       if (options?.applyLatest && data.runs[0]) {
         applyRunState(data.runs[0]);
+        void refreshAuditSummaryForRun(data.runs[0].run_id);
       }
     } catch (nextError: unknown) {
       setError(errorToMessage(nextError));
     } finally {
       setBusyAction(null);
     }
-  }, [applyRunState, toolId]);
+  }, [applyRunState, refreshAuditSummaryForRun, toolId]);
 
   useEffect(() => {
     const controller = new AbortController();
     fetchToolboxRuns({ toolId, limit: 5, signal: controller.signal })
       .then((data) => {
         setRecentRuns(data.runs);
-        if (data.runs[0]) applyRunState(data.runs[0]);
+        if (data.runs[0]) {
+          applyRunState(data.runs[0]);
+          void refreshAuditSummaryForRun(data.runs[0].run_id, { signal: controller.signal });
+        }
       })
       .catch((nextError: unknown) => {
         if (nextError instanceof DOMException && nextError.name === "AbortError") return;
         setError(errorToMessage(nextError));
       });
     return () => controller.abort();
-  }, [applyRunState, toolId]);
+  }, [applyRunState, refreshAuditSummaryForRun, toolId]);
 
   const callAction = async <T,>(action: BusyAction, execute: () => Promise<T>, commit: (value: T) => void) => {
     if (!action) return;
@@ -585,6 +607,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
     const body = buildToolboxRequest(toolId, form);
     void callAction("run", () => runToolboxDryRun(toolId, body), (result) => {
       applyRunState(result);
+      void refreshAuditSummaryForRun(result.run_id);
       setRecentRuns((current) => [
         result,
         ...current.filter((item) => item.run_id !== result.run_id),
@@ -597,7 +620,10 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   };
 
   const handleLoadRun = (runId: string) => {
-    void callAction("loadRun", () => fetchToolboxRun(runId), applyRunState);
+    void callAction("loadRun", () => fetchToolboxRun(runId), (result) => {
+      applyRunState(result);
+      void refreshAuditSummaryForRun(result.run_id);
+    });
   };
 
   const handlePreviewInjectionDraft = () => {
