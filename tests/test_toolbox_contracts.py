@@ -14,6 +14,8 @@ from src.models.toolbox_contracts import (
     StoryboardInput,
     ToolboxArtifact,
     ToolboxAssetRef,
+    ToolboxInjectionAuditCheck,
+    ToolboxInjectionAuditSummary,
     ToolboxInjectionDraft,
     ToolboxInjectionTarget,
     ToolboxPlan,
@@ -199,6 +201,35 @@ def test_toolbox_injection_draft_rejects_state_write_or_publish_boundary():
             tool_id=ToolboxToolId.PRODUCT_IMAGE,
             publish_allowed=True,
             injection_targets=[target],
+        )
+
+
+def test_toolbox_injection_audit_summary_rejects_boundary_crossing_or_false_ready():
+    check = ToolboxInjectionAuditCheck(
+        check_id="artifact_refs",
+        label="Artifact refs",
+        status="blocked",
+        evidence_refs=[],
+        message="missing artifact refs",
+    )
+
+    with pytest.raises(ValidationError, match="cannot call provider"):
+        ToolboxInjectionAuditSummary(
+            summary_id="tbx_injection_audit_product_image_001",
+            run_id="tbx_run_product_image_001",
+            tool_id=ToolboxToolId.PRODUCT_IMAGE,
+            provider_call=True,
+            checks=[check],
+        )
+
+    with pytest.raises(ValidationError, match="requires no blocking reasons"):
+        ToolboxInjectionAuditSummary(
+            summary_id="tbx_injection_audit_product_image_001",
+            run_id="tbx_run_product_image_001",
+            tool_id=ToolboxToolId.PRODUCT_IMAGE,
+            ready_for_scenario_injection=True,
+            checks=[check],
+            blocking_reasons=["missing artifact refs"],
         )
 
 

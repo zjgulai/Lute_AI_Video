@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models.commercial_contracts import MediaJobRecord, MediaJobSpec, stable_prompt_hash
+from src.models.commercial_contracts import MediaJobRecord, MediaJobSpec, MediaJobStatus, stable_prompt_hash
 from src.models.toolbox_contracts import (
     DigitalHumanInput,
     EcommerceVisualInput,
@@ -17,6 +17,8 @@ from src.models.toolbox_contracts import (
     StoryboardInput,
     ToolboxArtifact,
     ToolboxArtifactType,
+    ToolboxInjectionAuditCheck,
+    ToolboxInjectionAuditSummary,
     ToolboxInjectionDraft,
     ToolboxInjectionTarget,
     ToolboxPlan,
@@ -180,6 +182,88 @@ def build_toolbox_injection_draft(state: ToolboxRunState) -> ToolboxInjectionDra
     )
 
 
+def build_toolbox_injection_audit_summary(state: ToolboxRunState) -> ToolboxInjectionAuditSummary:
+    draft = build_toolbox_injection_draft(state)
+    delivery_or_publish = _has_delivery_or_publish_boundary_crossed(state)
+    provider_submission = _has_provider_submission(state)
+    checks = [
+        _audit_check(
+            check_id="dry_run_status",
+            label="Dry-run accepted",
+            passed=state.status == ToolboxRunStatus.ACCEPTED_DRY_RUN,
+            evidence_refs=[state.plan.artifact_manifest_id] if state.plan.artifact_manifest_id else [],
+            blocked_message="toolbox run is not accepted_dry_run",
+        ),
+        _audit_check(
+            check_id="provider_boundary",
+            label="Provider boundary",
+            passed=not state.plan.provider_call and not provider_submission,
+            evidence_refs=[draft.draft_ref],
+            blocked_message="provider submission boundary was crossed",
+        ),
+        _audit_check(
+            check_id="artifact_refs",
+            label="Artifact refs",
+            passed=bool(draft.artifact_refs),
+            evidence_refs=draft.artifact_refs,
+            blocked_message="missing artifact refs",
+        ),
+        _audit_check(
+            check_id="contract_refs",
+            label="Contract refs",
+            passed=bool(draft.contract_refs) and all(target.contract_refs for target in draft.injection_targets),
+            evidence_refs=draft.contract_refs,
+            blocked_message="missing contract refs",
+        ),
+        _audit_check(
+            check_id="injection_targets",
+            label="Scenario injection targets",
+            passed=bool(draft.injection_targets),
+            evidence_refs=[target.target_ref for target in draft.injection_targets],
+            blocked_message="missing scenario injection targets",
+        ),
+        _audit_check(
+            check_id="delivery_boundary",
+            label="Delivery and publish boundary",
+            passed=not delivery_or_publish,
+            evidence_refs=[draft.draft_ref],
+            blocked_message="delivery or publish boundary was crossed",
+        ),
+        _audit_check(
+            check_id="bundle_refs",
+            label="Brand bundle refs",
+            passed=bool(draft.bundle_refs),
+            evidence_refs=[],
+            blocked_message="missing brand bundle refs",
+            advisory_when_failed=True,
+        ),
+    ]
+    blocking_reasons = [
+        check.message or check.check_id
+        for check in checks
+        if check.status == "blocked"
+    ]
+    advisory_reasons = [
+        check.message or check.check_id
+        for check in checks
+        if check.status == "advisory"
+    ]
+    return ToolboxInjectionAuditSummary(
+        summary_id=f"tbx_injection_audit_{state.request.request_id}",
+        run_id=state.run_id,
+        tool_id=state.request.tool_id,
+        ready_for_scenario_injection=not blocking_reasons,
+        injection_draft_ref=draft.draft_ref,
+        target_count=len(draft.injection_targets),
+        artifact_ref_count=len(draft.artifact_refs),
+        contract_ref_count=len(draft.contract_refs),
+        bundle_ref_count=len(draft.bundle_refs),
+        checks=checks,
+        blocking_reasons=blocking_reasons,
+        advisory_reasons=advisory_reasons,
+    )
+
+
 def _build_prepared_job_record(
     request: ToolboxRequest,
     plan: ToolboxPlan,
@@ -197,6 +281,46 @@ def _build_prepared_job_record(
         brand_bundle_id=request.brand_bundle_ref,
     )
     return ProductionJobLedger().prepare(spec)
+
+
+def _audit_check(
+    *,
+    check_id: str,
+    label: str,
+    passed: bool,
+    evidence_refs: list[str],
+    blocked_message: str,
+    advisory_when_failed: bool = False,
+) -> ToolboxInjectionAuditCheck:
+    status = "passed" if passed else "advisory" if advisory_when_failed else "blocked"
+    return ToolboxInjectionAuditCheck(
+        check_id=check_id,
+        label=label,
+        status=status,
+        evidence_refs=evidence_refs,
+        message=None if passed else blocked_message,
+    )
+
+
+def _has_provider_submission(state: ToolboxRunState) -> bool:
+    if state.job_record is None:
+        return False
+    return state.job_record.status in {
+        MediaJobStatus.SUBMITTED,
+        MediaJobStatus.SUCCEEDED,
+    }
+
+
+def _has_delivery_or_publish_boundary_crossed(state: ToolboxRunState) -> bool:
+    artifact_crossed = any(
+        artifact.delivery_accepted or artifact.publish_allowed
+        for artifact in state.artifacts
+    )
+    job_crossed = bool(
+        state.job_record
+        and (state.job_record.delivery_accepted or state.job_record.publish_allowed)
+    )
+    return artifact_crossed or job_crossed
 
 
 def _build_artifact(request: ToolboxRequest) -> ToolboxArtifact:

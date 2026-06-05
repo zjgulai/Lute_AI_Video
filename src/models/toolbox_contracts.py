@@ -388,6 +388,62 @@ class ToolboxInjectionDraft(_StrictModel):
         return self
 
 
+class ToolboxInjectionAuditCheck(_StrictModel):
+    check_id: str
+    label: str
+    status: Literal["passed", "advisory", "blocked"]
+    evidence_refs: list[str] = Field(default_factory=list)
+    message: str | None = None
+
+    @field_validator("evidence_refs")
+    @classmethod
+    def _evidence_refs_must_be_governed(cls, values: list[str]) -> list[str]:
+        return _validate_governed_refs(values, field_name="audit_evidence_refs")
+
+
+class ToolboxInjectionAuditSummary(_StrictModel):
+    summary_id: str
+    run_id: str
+    tool_id: ToolboxToolId
+    evidence_level: EvidenceLevel = EvidenceLevel.L2_FIXTURE_OR_DRY_RUN
+    ready_for_scenario_injection: bool = False
+    state_write: bool = False
+    provider_call: bool = False
+    delivery_accepted: bool = False
+    publish_allowed: bool = False
+    injection_draft_ref: str | None = None
+    target_count: int = 0
+    artifact_ref_count: int = 0
+    contract_ref_count: int = 0
+    bundle_ref_count: int = 0
+    checks: list[ToolboxInjectionAuditCheck] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    advisory_reasons: list[str] = Field(default_factory=list)
+
+    @field_validator("injection_draft_ref")
+    @classmethod
+    def _draft_ref_must_be_governed(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_governed_ref(value, field_name="injection_draft_ref")
+
+    @model_validator(mode="after")
+    def _summary_cannot_cross_read_only_boundary(self) -> ToolboxInjectionAuditSummary:
+        if self.evidence_level != EvidenceLevel.L2_FIXTURE_OR_DRY_RUN:
+            raise ValueError("toolbox injection audit summary must remain L2-fixture-or-dry-run")
+        if self.state_write:
+            raise ValueError("toolbox injection audit summary cannot write scenario state")
+        if self.provider_call:
+            raise ValueError("toolbox injection audit summary cannot call provider")
+        if self.delivery_accepted:
+            raise ValueError("toolbox injection audit summary cannot mark delivery accepted")
+        if self.publish_allowed:
+            raise ValueError("toolbox injection audit summary cannot allow publish")
+        if self.ready_for_scenario_injection and self.blocking_reasons:
+            raise ValueError("ready_for_scenario_injection requires no blocking reasons")
+        return self
+
+
 class ToolboxProviderReadiness(_StrictModel):
     readiness_id: str
     tool_id: ToolboxToolId

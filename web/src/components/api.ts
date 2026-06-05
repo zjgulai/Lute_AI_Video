@@ -247,6 +247,34 @@ export type ToolboxInjectionDraftResponse = {
   warnings?: string[];
 };
 
+export type ToolboxInjectionAuditCheck = {
+  check_id: string;
+  label: string;
+  status: "passed" | "advisory" | "blocked";
+  evidence_refs?: string[];
+  message?: string | null;
+};
+
+export type ToolboxInjectionAuditSummaryResponse = {
+  summary_id: string;
+  run_id: string;
+  tool_id: ToolboxToolId;
+  evidence_level: "L2-fixture-or-dry-run";
+  ready_for_scenario_injection: boolean;
+  state_write: boolean;
+  provider_call: boolean;
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+  injection_draft_ref?: string | null;
+  target_count: number;
+  artifact_ref_count: number;
+  contract_ref_count: number;
+  bundle_ref_count: number;
+  checks: ToolboxInjectionAuditCheck[];
+  blocking_reasons?: string[];
+  advisory_reasons?: string[];
+};
+
 // ── P3-5: Cookie fallback for privacy / incognito mode ──
 
 function setCookie(name: string, value: string, days = 365) {
@@ -1515,6 +1543,18 @@ export async function previewToolboxInjectionDraft(
   const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/inject`, {
     method: "POST",
     headers: getHeaders(),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxAuditSummary(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxInjectionAuditSummaryResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/audit-summary`, {
+    headers: getHeaders(false),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));

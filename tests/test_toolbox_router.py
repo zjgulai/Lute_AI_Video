@@ -177,6 +177,55 @@ async def test_toolbox_injection_draft_endpoint_is_read_only_and_refs_only(auth_
 
 
 @pytest.mark.asyncio
+async def test_toolbox_injection_audit_summary_explains_readiness_without_state_write(auth_headers) -> None:
+    from src.api import app
+
+    body = _ecommerce_visual_request(raw_text="must-not-leak-audit-summary-brief")
+    body["request_id"] = "tbx_req_ecommerce_visual_audit_summary"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        run_response = await client.post(
+            "/toolbox/ecommerce-visual/run",
+            headers=auth_headers,
+            json=body,
+        )
+        assert run_response.status_code == 200, run_response.text
+        run_id = run_response.json()["run_id"]
+        summary_response = await client.get(f"/toolbox/runs/{run_id}/audit-summary", headers=auth_headers)
+        after_response = await client.get(f"/toolbox/runs/{run_id}", headers=auth_headers)
+
+    assert summary_response.status_code == 200, summary_response.text
+    assert after_response.status_code == 200, after_response.text
+    payload = summary_response.json()
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert payload["summary_id"] == "tbx_injection_audit_tbx_req_ecommerce_visual_audit_summary"
+    assert payload["ready_for_scenario_injection"] is True
+    assert payload["state_write"] is False
+    assert payload["provider_call"] is False
+    assert payload["delivery_accepted"] is False
+    assert payload["publish_allowed"] is False
+    assert payload["target_count"] > 0
+    assert payload["artifact_ref_count"] > 0
+    assert payload["contract_ref_count"] > 0
+    assert payload["bundle_ref_count"] == 1
+    assert payload["blocking_reasons"] == []
+    assert {check["check_id"] for check in payload["checks"]} == {
+        "dry_run_status",
+        "provider_boundary",
+        "artifact_refs",
+        "contract_refs",
+        "injection_targets",
+        "delivery_boundary",
+        "bundle_refs",
+    }
+    assert all(check["status"] == "passed" for check in payload["checks"])
+    assert "must-not-leak-audit-summary-brief" not in serialized
+    assert "campaign_brief" not in serialized
+    assert "tool_input" not in serialized
+    assert after_response.json()["job_record"]["status"] == "prepared"
+
+
+@pytest.mark.asyncio
 async def test_toolbox_runs_endpoint_lists_recent_refs_without_raw_input(auth_headers) -> None:
     from src.api import app
 

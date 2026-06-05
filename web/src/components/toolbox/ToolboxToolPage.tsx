@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import TopHeader from "@/components/TopHeader";
 import {
+  fetchToolboxAuditSummary,
   fetchToolboxRun,
   fetchToolboxRuns,
   planToolboxRun,
@@ -21,6 +22,7 @@ import {
   previewToolboxPrompt,
   runToolboxDryRun,
   type ToolboxArtifact,
+  type ToolboxInjectionAuditSummaryResponse,
   type ToolboxInjectionDraftResponse,
   type ToolboxInjectionTarget,
   type ToolboxPlanResponse,
@@ -35,7 +37,7 @@ import {
   isToolboxToolId,
 } from "@/components/toolbox/toolboxCatalog";
 
-type BusyAction = "plan" | "preview" | "run" | "refresh" | "loadRun" | "injectDraft" | null;
+type BusyAction = "plan" | "preview" | "run" | "refresh" | "loadRun" | "injectDraft" | "auditSummary" | null;
 
 type ToolboxFormState = {
   brandId: string;
@@ -388,6 +390,87 @@ function InjectionDraftPanel({
   );
 }
 
+function auditStatusClassName(status: "passed" | "advisory" | "blocked"): string {
+  if (status === "passed") {
+    return "border-[#9fd8ce] bg-[rgba(28,125,115,0.08)] text-[#1c7d73]";
+  }
+  if (status === "advisory") {
+    return "border-[#e2c37c] bg-[rgba(166,107,31,0.08)] text-[#a66b1f]";
+  }
+  return "border-[var(--danger)] bg-[rgba(185,28,28,0.06)] text-[var(--danger)]";
+}
+
+function InjectionAuditSummaryPanel({
+  summary,
+  t,
+}: {
+  summary: ToolboxInjectionAuditSummaryResponse | null;
+  t: (key: string, fallback?: string) => string;
+}) {
+  if (!summary) {
+    return (
+      <section className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+        {t("toolbox.audit.noSummary")}
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg bg-[var(--bg-layer2)] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          {t("toolbox.injectionAuditSummary")}
+        </h3>
+        <span
+          className={`inline-flex h-7 items-center rounded-full border px-2.5 text-[11px] font-semibold ${
+            summary.ready_for_scenario_injection
+              ? "border-[#9fd8ce] bg-[rgba(28,125,115,0.08)] text-[#1c7d73]"
+              : "border-[var(--danger)] bg-[rgba(185,28,28,0.06)] text-[var(--danger)]"
+          }`}
+        >
+          {summary.ready_for_scenario_injection ? t("toolbox.audit.ready") : t("toolbox.audit.notReady")}
+        </span>
+      </div>
+      <div className="mt-3">
+        <ValueRow label="summary_id" value={summary.summary_id} />
+        <ValueRow label="state_write" value={summary.state_write} />
+        <ValueRow label="provider_call" value={summary.provider_call} />
+        <ValueRow label="delivery_accepted" value={summary.delivery_accepted} />
+        <ValueRow label="publish_allowed" value={summary.publish_allowed} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <ValueRow label={t("toolbox.audit.targetCount")} value={summary.target_count} />
+        <ValueRow label={t("toolbox.audit.artifactRefCount")} value={summary.artifact_ref_count} />
+        <ValueRow label={t("toolbox.audit.contractRefCount")} value={summary.contract_ref_count} />
+        <ValueRow label={t("toolbox.audit.bundleRefCount")} value={summary.bundle_ref_count} />
+      </div>
+      <div className="mt-3 space-y-2">
+        {summary.checks.map((check) => (
+          <div key={check.check_id} className={`rounded-lg border px-3 py-2 ${auditStatusClassName(check.status)}`}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold">{check.label}</span>
+              <span className="text-[11px] font-semibold uppercase">{check.status}</span>
+            </div>
+            {check.message ? <div className="mt-1 text-[11px] leading-5">{check.message}</div> : null}
+          </div>
+        ))}
+      </div>
+      {summary.blocking_reasons?.length ? (
+        <div className="mt-3">
+          <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.audit.blockingReasons")}</div>
+          <RefList values={summary.blocking_reasons} />
+        </div>
+      ) : null}
+      {summary.advisory_reasons?.length ? (
+        <div className="mt-3">
+          <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.audit.advisoryReasons")}</div>
+          <RefList values={summary.advisory_reasons} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function ToolboxToolPage({ toolId }: { toolId: string }) {
   const { t } = useI18n();
 
@@ -422,6 +505,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const [preview, setPreview] = useState<ToolboxPromptPreviewResponse | null>(null);
   const [run, setRun] = useState<ToolboxRunResponse | null>(null);
   const [injectionDraft, setInjectionDraft] = useState<ToolboxInjectionDraftResponse | null>(null);
+  const [auditSummary, setAuditSummary] = useState<ToolboxInjectionAuditSummaryResponse | null>(null);
   const [recentRuns, setRecentRuns] = useState<ToolboxRunResponse[]>([]);
 
   const updateField = (field: FieldName, value: string) => {
@@ -440,6 +524,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
     setPlan(nextRun.plan);
     setPreview(nextRun.prompt_preview ?? null);
     setInjectionDraft(null);
+    setAuditSummary(null);
   }, []);
 
   const refreshRecentRuns = useCallback(async (options?: { applyLatest?: boolean }) => {
@@ -518,6 +603,11 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const handlePreviewInjectionDraft = () => {
     if (!run) return;
     void callAction("injectDraft", () => previewToolboxInjectionDraft(run.run_id), setInjectionDraft);
+  };
+
+  const handleFetchAuditSummary = () => {
+    if (!run) return;
+    void callAction("auditSummary", () => fetchToolboxAuditSummary(run.run_id), setAuditSummary);
   };
 
   return (
@@ -770,18 +860,30 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
           <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.injectionBoundary")}</h2>
-              <button
-                type="button"
-                onClick={handlePreviewInjectionDraft}
-                disabled={!run || busyAction !== null}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <ClipboardText size={14} weight="fill" />
-                {busyAction === "injectDraft" ? t("toolbox.actionRunning") : t("toolbox.previewInjectionDraft")}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleFetchAuditSummary}
+                  disabled={!run || busyAction !== null}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <ShieldCheck size={14} weight="fill" />
+                  {busyAction === "auditSummary" ? t("toolbox.actionRunning") : t("toolbox.previewAuditSummary")}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePreviewInjectionDraft}
+                  disabled={!run || busyAction !== null}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <ClipboardText size={14} weight="fill" />
+                  {busyAction === "injectDraft" ? t("toolbox.actionRunning") : t("toolbox.previewInjectionDraft")}
+                </button>
+              </div>
             </div>
             <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--text-muted)]">
               <p>{t("toolbox.preview.refsOnly")}</p>
+              <InjectionAuditSummaryPanel summary={auditSummary} t={t} />
               <InjectionTargetDiff plannedRefs={plannedInjectionRefs} targets={injectionTargets} t={t} />
               <InjectionDraftPanel draft={injectionDraft} t={t} />
             </div>

@@ -1794,6 +1794,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/toolbox/runs/{run_id}/audit-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Run Audit Summary */
+        get: operations["get_toolbox_run_audit_summary_toolbox_runs__run_id__audit_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/toolbox/runs/{run_id}/inject": {
         parameters: {
             query?: never;
@@ -3003,6 +3020,85 @@ export interface components {
          * @enum {string}
          */
         TokenStrength: "hard" | "soft" | "hard_for_review_only";
+        /** ToolboxInjectionAuditCheck */
+        ToolboxInjectionAuditCheck: {
+            /** Check Id */
+            check_id: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Label */
+            label: string;
+            /** Message */
+            message?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "advisory" | "blocked";
+        };
+        /** ToolboxInjectionAuditSummary */
+        ToolboxInjectionAuditSummary: {
+            /** Advisory Reasons */
+            advisory_reasons?: string[];
+            /**
+             * Artifact Ref Count
+             * @default 0
+             */
+            artifact_ref_count: number;
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /**
+             * Bundle Ref Count
+             * @default 0
+             */
+            bundle_ref_count: number;
+            /** Checks */
+            checks?: components["schemas"]["ToolboxInjectionAuditCheck"][];
+            /**
+             * Contract Ref Count
+             * @default 0
+             */
+            contract_ref_count: number;
+            /**
+             * Delivery Accepted
+             * @default false
+             */
+            delivery_accepted: boolean;
+            /** @default L2-fixture-or-dry-run */
+            evidence_level: components["schemas"]["EvidenceLevel"];
+            /** Injection Draft Ref */
+            injection_draft_ref?: string | null;
+            /**
+             * Provider Call
+             * @default false
+             */
+            provider_call: boolean;
+            /**
+             * Publish Allowed
+             * @default false
+             */
+            publish_allowed: boolean;
+            /**
+             * Ready For Scenario Injection
+             * @default false
+             */
+            ready_for_scenario_injection: boolean;
+            /** Run Id */
+            run_id: string;
+            /**
+             * State Write
+             * @default false
+             */
+            state_write: boolean;
+            /** Summary Id */
+            summary_id: string;
+            /**
+             * Target Count
+             * @default 0
+             */
+            target_count: number;
+            tool_id: components["schemas"]["ToolboxToolId"];
+        };
         /** ToolboxInjectionDraft */
         ToolboxInjectionDraft: {
             /** Artifact Refs */
@@ -5849,6 +5945,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_run_audit_summary_toolbox_runs__run_id__audit_summary_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolboxInjectionAuditSummary"];
                 };
             };
             /** @description Validation Error */

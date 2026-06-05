@@ -5,6 +5,7 @@ import ToolboxToolPage from "./ToolboxToolPage";
 import { I18nProvider } from "@/i18n/I18nProvider";
 
 const planToolboxRun = vi.fn();
+const fetchToolboxAuditSummary = vi.fn();
 const previewToolboxInjectionDraft = vi.fn();
 const previewToolboxPrompt = vi.fn();
 const runToolboxDryRun = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("@/components/TopHeader", () => ({
 }));
 
 vi.mock("@/components/api", () => ({
+  fetchToolboxAuditSummary: (...args: unknown[]) => fetchToolboxAuditSummary(...args),
   fetchToolboxRun: (...args: unknown[]) => fetchToolboxRun(...args),
   fetchToolboxRuns: (...args: unknown[]) => fetchToolboxRuns(...args),
   planToolboxRun: (...args: unknown[]) => planToolboxRun(...args),
@@ -169,6 +171,38 @@ describe("ToolboxToolPage", () => {
       bundle_refs: ["bundle_momcozy_candidate"],
       blocked_reasons: [],
       warnings: ["read_only_preview_only", "scenario_state_write_disabled"],
+    });
+    fetchToolboxAuditSummary.mockResolvedValue({
+      summary_id: "tbx_injection_audit_product_image_001",
+      run_id: "tbx_run_product_image_001",
+      tool_id: "product-image",
+      evidence_level: "L2-fixture-or-dry-run",
+      ready_for_scenario_injection: true,
+      state_write: false,
+      provider_call: false,
+      delivery_accepted: false,
+      publish_allowed: false,
+      injection_draft_ref: "artifact://toolbox/product-image/001/injection-draft",
+      target_count: 2,
+      artifact_ref_count: 1,
+      contract_ref_count: 2,
+      bundle_ref_count: 1,
+      checks: [
+        {
+          check_id: "dry_run_status",
+          label: "Dry-run accepted",
+          status: "passed",
+          evidence_refs: ["manifest://toolbox/product-image/001"],
+        },
+        {
+          check_id: "provider_boundary",
+          label: "Provider boundary",
+          status: "passed",
+          evidence_refs: ["artifact://toolbox/product-image/001/injection-draft"],
+        },
+      ],
+      blocking_reasons: [],
+      advisory_reasons: [],
     });
     fetchToolboxRun.mockResolvedValue({
       ...runState,
@@ -326,6 +360,35 @@ describe("ToolboxToolPage", () => {
     }
   });
 
+  it("renders a read-only injection audit summary for scenario readiness", async () => {
+    const { container, cleanup } = renderToolPage("product-image");
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        findButton(container, "刷新审计摘要").click();
+      });
+      await flushEffects();
+
+      expect(fetchToolboxAuditSummary).toHaveBeenCalledWith("tbx_run_product_image_001");
+      expect(container.textContent).toContain("tbx_injection_audit_product_image_001");
+      expect(container.textContent).toContain("Refs 可进入只读回注");
+      expect(container.textContent).toContain("Dry-run accepted");
+      expect(container.textContent).toContain("Provider boundary");
+      expect(container.textContent).toContain("state_write");
+      expect(container.textContent).toContain("provider_call");
+      expect(container.textContent).toContain("delivery_accepted");
+      expect(container.textContent).toContain("publish_allowed");
+      expect(container.textContent).toContain("2");
+      expect(container.textContent).toContain("1");
+      const buttonText = Array.from(container.querySelectorAll("button")).map((button) => button.textContent ?? "").join(" ");
+      expect(buttonText).not.toContain("发布");
+      expect(buttonText).not.toContain("Publish");
+    } finally {
+      cleanup();
+    }
+  });
+
   it("renders a fail-closed view for unknown tool ids", async () => {
     const { container, cleanup } = renderToolPage("unknown-tool");
     try {
@@ -333,6 +396,7 @@ describe("ToolboxToolPage", () => {
 
       expect(container.textContent).toContain("未知工具");
       expect(planToolboxRun).not.toHaveBeenCalled();
+      expect(fetchToolboxAuditSummary).not.toHaveBeenCalled();
       expect(previewToolboxInjectionDraft).not.toHaveBeenCalled();
       expect(previewToolboxPrompt).not.toHaveBeenCalled();
       expect(runToolboxDryRun).not.toHaveBeenCalled();
