@@ -21,6 +21,7 @@ vi.mock("@/components/api", () => ({
   fetchS1State: vi.fn(),
   submitScenario: vi.fn(),
   logStateChange: vi.fn(),
+  fetchToolboxTools: vi.fn(),
 }));
 
 const PAGE_MODULES = [
@@ -35,6 +36,7 @@ const PAGE_MODULES = [
   { name: "settings", loader: () => import("@/app/settings/page") },
   { name: "footage", loader: () => import("@/app/footage/page") },
   { name: "library", loader: () => import("@/app/library/page") },
+  { name: "toolbox", loader: () => import("@/app/toolbox/page") },
   { name: "brand-packages", loader: () => import("@/app/brand-packages/page") },
   { name: "influencers", loader: () => import("@/app/influencers/page") },
   { name: "admin", loader: () => import("@/app/admin/page") },
