@@ -26,11 +26,6 @@ ALLOWED_BARE_PASS_EXCEPTIONS = {
     ("src/_version.py", "get_version", "PackageNotFoundError"),
     ("src/agents/strategy.py", "StrategyAgent.run", "ValueError"),
     ("src/pipeline/gate_manager.py", "_get_next_step", "ValueError"),
-    (
-        "src/pipeline/s1_product_pipeline.py",
-        "S1ProductDirectPipeline._extract_clip_last_frame",
-        "(FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception)",
-    ),
     ("src/pipeline/step_runner.py", "_get_next_step", "ValueError"),
     ("src/routers/assets.py", "<module>", "ImportError"),
     ("src/skills/character_identity.py", "<module>", "ValueError"),

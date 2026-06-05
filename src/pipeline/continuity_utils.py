@@ -123,8 +123,12 @@ def extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
         if frame_path.exists() and frame_path.stat().st_size > 100:
             return str(frame_path)
     except (FileNotFoundError, subprocess.TimeoutExpired,
-            subprocess.CalledProcessError, Exception):
-        pass
+            subprocess.CalledProcessError, Exception) as exc:
+        logger.debug(
+            "continuity_last_frame_extract_failed",
+            path=str(src),
+            error=str(exc),
+        )
     return None
 
 
