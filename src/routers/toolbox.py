@@ -8,8 +8,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 
 from src.models.commercial_contracts import EvidenceLevel
-from src.models.toolbox_contracts import ToolboxRequest, ToolboxToolId
+from src.models.toolbox_contracts import ToolboxInjectionDraft, ToolboxRequest, ToolboxToolId
 from src.pipeline.toolbox.planner import (
+    build_toolbox_injection_draft,
     build_toolbox_plan,
     build_toolbox_prompt_preview,
     build_toolbox_run_state,
@@ -82,6 +83,14 @@ async def get_toolbox_run_artifacts(run_id: str) -> dict[str, Any]:
     if state is None:
         raise HTTPException(status_code=404, detail="Toolbox run not found")
     return project_toolbox_artifacts(state)
+
+
+@router.post("/runs/{run_id}/inject")
+async def preview_toolbox_injection_draft(run_id: str) -> ToolboxInjectionDraft:
+    state = _RUNS.get(run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Toolbox run not found")
+    return build_toolbox_injection_draft(state)
 
 
 def _parse_toolbox_request(tool_id: ToolboxToolId, body: dict[str, Any]) -> ToolboxRequest:

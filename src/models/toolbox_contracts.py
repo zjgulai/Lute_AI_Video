@@ -345,6 +345,49 @@ class ToolboxInjectionTarget(_StrictModel):
         return _validate_governed_refs(values, field_name="injection_refs")
 
 
+class ToolboxInjectionDraft(_StrictModel):
+    draft_id: str
+    draft_ref: str
+    run_id: str
+    tool_id: ToolboxToolId
+    mode: Literal["read_only"] = "read_only"
+    evidence_level: EvidenceLevel = EvidenceLevel.L2_FIXTURE_OR_DRY_RUN
+    state_write: bool = False
+    provider_call: bool = False
+    delivery_accepted: bool = False
+    publish_allowed: bool = False
+    injection_targets: list[ToolboxInjectionTarget] = Field(default_factory=list)
+    artifact_refs: list[str] = Field(default_factory=list)
+    contract_refs: list[str] = Field(default_factory=list)
+    bundle_refs: list[str] = Field(default_factory=list)
+    blocked_reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+    @field_validator("draft_ref")
+    @classmethod
+    def _draft_ref_must_be_governed(cls, value: str) -> str:
+        return _validate_governed_ref(value, field_name="draft_ref")
+
+    @field_validator("artifact_refs", "contract_refs")
+    @classmethod
+    def _refs_must_be_governed(cls, values: list[str]) -> list[str]:
+        return _validate_governed_refs(values, field_name="injection_draft_refs")
+
+    @model_validator(mode="after")
+    def _draft_cannot_cross_read_only_boundary(self) -> ToolboxInjectionDraft:
+        if self.evidence_level != EvidenceLevel.L2_FIXTURE_OR_DRY_RUN:
+            raise ValueError("toolbox injection draft must remain L2-fixture-or-dry-run")
+        if self.state_write:
+            raise ValueError("toolbox injection draft cannot write scenario state")
+        if self.provider_call:
+            raise ValueError("toolbox injection draft cannot call provider")
+        if self.delivery_accepted:
+            raise ValueError("toolbox injection draft cannot mark delivery accepted")
+        if self.publish_allowed:
+            raise ValueError("toolbox injection draft cannot allow publish")
+        return self
+
+
 class ToolboxProviderReadiness(_StrictModel):
     readiness_id: str
     tool_id: ToolboxToolId

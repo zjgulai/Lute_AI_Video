@@ -228,6 +228,25 @@ export type ToolboxArtifactsResponse = {
   artifacts: ToolboxArtifact[];
 };
 
+export type ToolboxInjectionDraftResponse = {
+  draft_id: string;
+  draft_ref: string;
+  run_id: string;
+  tool_id: ToolboxToolId;
+  mode: "read_only";
+  evidence_level: "L2-fixture-or-dry-run";
+  state_write: boolean;
+  provider_call: boolean;
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+  injection_targets: ToolboxInjectionTarget[];
+  artifact_refs: string[];
+  contract_refs: string[];
+  bundle_refs: string[];
+  blocked_reasons?: string[];
+  warnings?: string[];
+};
+
 // ── P3-5: Cookie fallback for privacy / incognito mode ──
 
 function setCookie(name: string, value: string, days = 365) {
@@ -1483,6 +1502,19 @@ export async function fetchToolboxArtifacts(
 ): Promise<ToolboxArtifactsResponse> {
   const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/artifacts`, {
     headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function previewToolboxInjectionDraft(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxInjectionDraftResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/inject`, {
+    method: "POST",
+    headers: getHeaders(),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));

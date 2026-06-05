@@ -133,6 +133,50 @@ async def test_toolbox_artifacts_endpoint_returns_refs_only(auth_headers) -> Non
 
 
 @pytest.mark.asyncio
+async def test_toolbox_injection_draft_endpoint_is_read_only_and_refs_only(auth_headers) -> None:
+    from src.api import app
+
+    body = _ecommerce_visual_request(raw_text="must-not-leak-injection-brief")
+    body["request_id"] = "tbx_req_ecommerce_visual_injection"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        run_response = await client.post(
+            "/toolbox/ecommerce-visual/run",
+            headers=auth_headers,
+            json=body,
+        )
+        assert run_response.status_code == 200, run_response.text
+        run_id = run_response.json()["run_id"]
+        before_response = await client.get(f"/toolbox/runs/{run_id}", headers=auth_headers)
+        draft_response = await client.post(f"/toolbox/runs/{run_id}/inject", headers=auth_headers)
+        after_response = await client.get(f"/toolbox/runs/{run_id}", headers=auth_headers)
+
+    assert before_response.status_code == 200, before_response.text
+    assert draft_response.status_code == 200, draft_response.text
+    assert after_response.status_code == 200, after_response.text
+    draft = draft_response.json()
+    serialized = json.dumps(draft, ensure_ascii=False, sort_keys=True)
+    assert draft["draft_id"] == "tbx_injection_draft_tbx_req_ecommerce_visual_injection"
+    assert draft["mode"] == "read_only"
+    assert draft["state_write"] is False
+    assert draft["provider_call"] is False
+    assert draft["delivery_accepted"] is False
+    assert draft["publish_allowed"] is False
+    assert draft["injection_targets"]
+    assert draft["artifact_refs"][0].startswith("artifact://toolbox/ecommerce-visual/")
+    assert draft["contract_refs"][0].startswith("job://toolbox/") or draft["contract_refs"][0].startswith("manifest://toolbox/")
+    assert draft["bundle_refs"] == ["bundle_momcozy_candidate"]
+    assert "must-not-leak-injection-brief" not in serialized
+    assert "tool_input" not in serialized
+    assert "campaign_brief" not in serialized
+    before_payload = before_response.json()
+    after_payload = after_response.json()
+    before_payload.pop("_meta", None)
+    after_payload.pop("_meta", None)
+    assert before_payload == after_payload
+
+
+@pytest.mark.asyncio
 async def test_toolbox_runs_endpoint_lists_recent_refs_without_raw_input(auth_headers) -> None:
     from src.api import app
 

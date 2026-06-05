@@ -17,6 +17,7 @@ from src.models.toolbox_contracts import (
     StoryboardInput,
     ToolboxArtifact,
     ToolboxArtifactType,
+    ToolboxInjectionDraft,
     ToolboxInjectionTarget,
     ToolboxPlan,
     ToolboxPromptPreview,
@@ -139,6 +140,44 @@ def project_toolbox_artifacts(state: ToolboxRunState) -> dict[str, Any]:
             for artifact in state.artifacts
         ],
     }
+
+
+def build_toolbox_injection_draft(state: ToolboxRunState) -> ToolboxInjectionDraft:
+    artifact_refs = sorted({
+        artifact.artifact_ref
+        for artifact in state.artifacts
+    } | {
+        ref
+        for target in state.injection_targets
+        for ref in target.artifact_refs
+    })
+    contract_refs = sorted({
+        ref
+        for target in state.injection_targets
+        for ref in target.contract_refs
+    })
+    bundle_refs = sorted({
+        ref
+        for target in state.injection_targets
+        for ref in target.bundle_refs
+    })
+    request_id = state.request.request_id
+    tool_id = state.request.tool_id
+    return ToolboxInjectionDraft(
+        draft_id=f"tbx_injection_draft_{request_id}",
+        draft_ref=f"artifact://toolbox/{tool_id.value}/{request_id}/injection-draft",
+        run_id=state.run_id,
+        tool_id=tool_id,
+        injection_targets=state.injection_targets,
+        artifact_refs=artifact_refs,
+        contract_refs=contract_refs,
+        bundle_refs=bundle_refs,
+        warnings=[
+            "read_only_preview_only",
+            "scenario_state_write_disabled",
+            "provider_call_disabled",
+        ],
+    )
 
 
 def _build_prepared_job_record(

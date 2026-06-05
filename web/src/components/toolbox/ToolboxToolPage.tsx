@@ -17,9 +17,11 @@ import {
   fetchToolboxRun,
   fetchToolboxRuns,
   planToolboxRun,
+  previewToolboxInjectionDraft,
   previewToolboxPrompt,
   runToolboxDryRun,
   type ToolboxArtifact,
+  type ToolboxInjectionDraftResponse,
   type ToolboxInjectionTarget,
   type ToolboxPlanResponse,
   type ToolboxPromptPreviewResponse,
@@ -33,7 +35,7 @@ import {
   isToolboxToolId,
 } from "@/components/toolbox/toolboxCatalog";
 
-type BusyAction = "plan" | "preview" | "run" | "refresh" | "loadRun" | null;
+type BusyAction = "plan" | "preview" | "run" | "refresh" | "loadRun" | "injectDraft" | null;
 
 type ToolboxFormState = {
   brandId: string;
@@ -103,6 +105,13 @@ function createRequestId(toolId: ToolboxToolId): string {
   return `tbx_req_${toolId.replaceAll("-", "_")}_${Date.now()}`;
 }
 
+function normalizeEcommerceChannel(platform: string): string {
+  if (platform === "instagram") return "reels";
+  if (platform === "youtube") return "youtube_shorts";
+  if (["shopify", "amazon", "tiktok"].includes(platform)) return platform;
+  return "shopify";
+}
+
 function buildToolInput(toolId: ToolboxToolId, form: ToolboxFormState, assetRefs: string[]): Record<string, unknown> {
   const duration = toPositiveInteger(form.durationSeconds);
   switch (toolId) {
@@ -112,9 +121,7 @@ function buildToolInput(toolId: ToolboxToolId, form: ToolboxFormState, assetRefs
         product_ref: form.productRef,
         image_type: "main_white_bg",
         aspect_ratio: form.aspectRatio,
-        style_preset: form.stylePreset,
         reference_asset_refs: assetRefs,
-        brief: form.brief,
       };
     case "six-view":
       return {
@@ -122,38 +129,33 @@ function buildToolInput(toolId: ToolboxToolId, form: ToolboxFormState, assetRefs
         product_ref: form.productRef,
         seed_image_refs: assetRefs,
         required_views: ["front", "back", "left", "right", "top", "detail"],
-        style_preset: form.stylePreset,
-        brief: form.brief,
+        consistency_level: "strict",
       };
     case "ecommerce-visual":
       return {
         tool_id: toolId,
         campaign_brief: form.brief,
-        channel: form.platform,
-        visual_format: "commercial_pack",
+        channel: normalizeEcommerceChannel(form.platform),
+        visual_format: normalizeEcommerceChannel(form.platform) === "shopify" ? "detail_module" : "social_ad",
         product_image_refs: assetRefs,
         aspect_ratio: form.aspectRatio,
-        style_preset: form.stylePreset,
       };
     case "digital-human":
       return {
         tool_id: toolId,
-        presenter_brief: form.brief,
-        product_ref: form.productRef,
-        reference_asset_refs: assetRefs,
-        duration_target_seconds: duration,
-        consent_gate: "locked_by_default",
-        style_preset: form.stylePreset,
+        presenter_policy: form.brief || "brand_demo_locked",
+        voice_policy: "none",
       };
     case "storyboard":
       return {
         tool_id: toolId,
         brief: form.brief,
         duration_target_seconds: duration,
+        platform: normalizeEcommerceChannel(form.platform),
         planned_timeline_block_count: Math.max(3, Math.ceil(duration / 30)),
         review_checkpoint_refs: ["storyboard://review/checkpoint-001"],
         storyboard_grid: 12,
-        reference_asset_refs: assetRefs,
+        asset_refs: assetRefs,
       };
   }
 }
@@ -335,6 +337,57 @@ function InjectionTargetDiff({
   );
 }
 
+function InjectionDraftPanel({
+  draft,
+  t,
+}: {
+  draft: ToolboxInjectionDraftResponse | null;
+  t: (key: string, fallback?: string) => string;
+}) {
+  if (!draft) {
+    return (
+      <section className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+        {t("toolbox.injection.noDraft")}
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg bg-[var(--bg-layer2)] p-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+        {t("toolbox.injectionDraft")}
+      </h3>
+      <div className="mt-3">
+        <ValueRow label="draft_id" value={draft.draft_id} />
+        <ValueRow label="draft_ref" value={draft.draft_ref} />
+        <ValueRow label="mode" value={draft.mode} />
+        <ValueRow label="state_write" value={draft.state_write} />
+        <ValueRow label="provider_call" value={draft.provider_call} />
+        <ValueRow label="delivery_accepted" value={draft.delivery_accepted} />
+        <ValueRow label="publish_allowed" value={draft.publish_allowed} />
+      </div>
+      <div className="mt-3 space-y-3">
+        <div>
+          <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.injection.artifactRefs")}</div>
+          <RefList values={draft.artifact_refs} />
+        </div>
+        <div>
+          <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.injection.contractRefs")}</div>
+          <RefList values={draft.contract_refs} />
+        </div>
+        <div>
+          <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.injection.bundleRefs")}</div>
+          <RefList values={draft.bundle_refs} />
+        </div>
+        <div>
+          <div className="mb-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.injection.warnings")}</div>
+          <RefList values={draft.warnings ?? []} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function ToolboxToolPage({ toolId }: { toolId: string }) {
   const { t } = useI18n();
 
@@ -368,6 +421,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   const [plan, setPlan] = useState<ToolboxPlanResponse | null>(null);
   const [preview, setPreview] = useState<ToolboxPromptPreviewResponse | null>(null);
   const [run, setRun] = useState<ToolboxRunResponse | null>(null);
+  const [injectionDraft, setInjectionDraft] = useState<ToolboxInjectionDraftResponse | null>(null);
   const [recentRuns, setRecentRuns] = useState<ToolboxRunResponse[]>([]);
 
   const updateField = (field: FieldName, value: string) => {
@@ -385,6 +439,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
     setRun(nextRun);
     setPlan(nextRun.plan);
     setPreview(nextRun.prompt_preview ?? null);
+    setInjectionDraft(null);
   }, []);
 
   const refreshRecentRuns = useCallback(async (options?: { applyLatest?: boolean }) => {
@@ -458,6 +513,11 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
 
   const handleLoadRun = (runId: string) => {
     void callAction("loadRun", () => fetchToolboxRun(runId), applyRunState);
+  };
+
+  const handlePreviewInjectionDraft = () => {
+    if (!run) return;
+    void callAction("injectDraft", () => previewToolboxInjectionDraft(run.run_id), setInjectionDraft);
   };
 
   return (
@@ -708,10 +768,22 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
             </div>
           </section>
           <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
-            <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.injectionBoundary")}</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.injectionBoundary")}</h2>
+              <button
+                type="button"
+                onClick={handlePreviewInjectionDraft}
+                disabled={!run || busyAction !== null}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <ClipboardText size={14} weight="fill" />
+                {busyAction === "injectDraft" ? t("toolbox.actionRunning") : t("toolbox.previewInjectionDraft")}
+              </button>
+            </div>
             <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--text-muted)]">
               <p>{t("toolbox.preview.refsOnly")}</p>
               <InjectionTargetDiff plannedRefs={plannedInjectionRefs} targets={injectionTargets} t={t} />
+              <InjectionDraftPanel draft={injectionDraft} t={t} />
             </div>
           </section>
         </section>

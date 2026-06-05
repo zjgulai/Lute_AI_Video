@@ -24,6 +24,7 @@ vi.mock("@/components/api", () => ({
   fetchToolboxTools: vi.fn(),
   fetchToolboxRuns: vi.fn(),
   fetchToolboxRun: vi.fn(),
+  previewToolboxInjectionDraft: vi.fn(),
 }));
 
 const PAGE_MODULES = [

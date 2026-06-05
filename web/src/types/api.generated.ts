@@ -1794,6 +1794,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/toolbox/runs/{run_id}/inject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Toolbox Injection Draft */
+        post: operations["preview_toolbox_injection_draft_toolbox_runs__run_id__inject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/toolbox/tools": {
         parameters: {
             query?: never;
@@ -2135,6 +2152,11 @@ export interface components {
              */
             max_prompt_chars: number;
         };
+        /**
+         * EvidenceLevel
+         * @enum {string}
+         */
+        EvidenceLevel: "L0-unverified" | "aihot_signal" | "official_doc" | "supplier_backend" | "L1-public-or-runtime" | "L2-fixture-or-dry-run" | "L3-production-read-only" | "L4-authorized-live";
         /** FastModeRequest */
         FastModeRequest: {
             /**
@@ -2981,6 +3003,71 @@ export interface components {
          * @enum {string}
          */
         TokenStrength: "hard" | "soft" | "hard_for_review_only";
+        /** ToolboxInjectionDraft */
+        ToolboxInjectionDraft: {
+            /** Artifact Refs */
+            artifact_refs?: string[];
+            /** Blocked Reasons */
+            blocked_reasons?: string[];
+            /** Bundle Refs */
+            bundle_refs?: string[];
+            /** Contract Refs */
+            contract_refs?: string[];
+            /**
+             * Delivery Accepted
+             * @default false
+             */
+            delivery_accepted: boolean;
+            /** Draft Id */
+            draft_id: string;
+            /** Draft Ref */
+            draft_ref: string;
+            /** @default L2-fixture-or-dry-run */
+            evidence_level: components["schemas"]["EvidenceLevel"];
+            /** Injection Targets */
+            injection_targets?: components["schemas"]["ToolboxInjectionTarget"][];
+            /**
+             * Mode
+             * @default read_only
+             * @constant
+             */
+            mode: "read_only";
+            /**
+             * Provider Call
+             * @default false
+             */
+            provider_call: boolean;
+            /**
+             * Publish Allowed
+             * @default false
+             */
+            publish_allowed: boolean;
+            /** Run Id */
+            run_id: string;
+            /**
+             * State Write
+             * @default false
+             */
+            state_write: boolean;
+            tool_id: components["schemas"]["ToolboxToolId"];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** ToolboxInjectionTarget */
+        ToolboxInjectionTarget: {
+            /** Artifact Refs */
+            artifact_refs?: string[];
+            /** Bundle Refs */
+            bundle_refs?: string[];
+            /** Contract Refs */
+            contract_refs?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Step Name */
+            step_name: string;
+            /** Target Ref */
+            target_ref: string;
+        };
         /**
          * ToolboxToolId
          * @enum {string}
@@ -5762,6 +5849,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_toolbox_injection_draft_toolbox_runs__run_id__inject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolboxInjectionDraft"];
                 };
             };
             /** @description Validation Error */

@@ -14,6 +14,8 @@ from src.models.toolbox_contracts import (
     StoryboardInput,
     ToolboxArtifact,
     ToolboxAssetRef,
+    ToolboxInjectionDraft,
+    ToolboxInjectionTarget,
     ToolboxPlan,
     ToolboxRequest,
     ToolboxRunMode,
@@ -166,6 +168,37 @@ def test_toolbox_run_state_rejects_submitted_job_in_dry_run():
             plan=plan,
             status=ToolboxRunStatus.PREPARED,
             job_record=job_record,
+        )
+
+
+def test_toolbox_injection_draft_rejects_state_write_or_publish_boundary():
+    target = ToolboxInjectionTarget(
+        target_ref="artifact://toolbox/product-image/001/inject/s1",
+        scenario="s1",
+        step_name="product_assets",
+        artifact_refs=["artifact://toolbox/product-image/001"],
+        contract_refs=["manifest://toolbox/product-image/001", "job://toolbox/tbx_req_product_image_001"],
+        bundle_refs=["bundle_momcozy_candidate"],
+    )
+
+    with pytest.raises(ValidationError, match="cannot write scenario state"):
+        ToolboxInjectionDraft(
+            draft_id="tbx_injection_draft_product_image_001",
+            draft_ref="artifact://toolbox/product-image/001/injection-draft",
+            run_id="tbx_run_product_image_001",
+            tool_id=ToolboxToolId.PRODUCT_IMAGE,
+            state_write=True,
+            injection_targets=[target],
+        )
+
+    with pytest.raises(ValidationError, match="cannot allow publish"):
+        ToolboxInjectionDraft(
+            draft_id="tbx_injection_draft_product_image_001",
+            draft_ref="artifact://toolbox/product-image/001/injection-draft",
+            run_id="tbx_run_product_image_001",
+            tool_id=ToolboxToolId.PRODUCT_IMAGE,
+            publish_allowed=True,
+            injection_targets=[target],
         )
 
 
