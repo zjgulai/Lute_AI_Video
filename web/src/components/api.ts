@@ -4,6 +4,7 @@
 import { errorMessage } from "@/lib/errors";
 import type { ContinuityDiagnosticsPayload } from "@/lib/continuityDiagnostics";
 import type { ReviewState } from "@/components/types";
+import type { components } from "@/types/api.generated";
 
 const STORAGE_KEYS = {
   apiBase: "ai_video_api_base",
@@ -84,6 +85,132 @@ type DashboardOverview = {
     total_views: number;
     scenario_breakdown: Record<string, { avg_ctr: number; avg_cvr: number; avg_watch_rate: number }>;
   }>;
+};
+
+export type ToolboxToolId = components["schemas"]["ToolboxToolId"];
+
+export type ToolboxRunMode = "dry_run" | "authorized_live";
+
+export type ToolboxRunStatus =
+  | "not_configured"
+  | "prepared"
+  | "blocked"
+  | "review_required"
+  | "accepted_dry_run"
+  | "authorized_live_ready"
+  | "failed";
+
+export type ToolboxPlatformTarget = {
+  platform: string;
+  aspect_ratio?: string;
+  locale?: string;
+  duration_seconds?: number;
+};
+
+export type ToolboxAssetRef = {
+  asset_ref: string;
+  asset_kind: "image" | "video" | "audio" | "text" | "structured_data" | "mixed";
+  rights_ref?: string | null;
+  source_token_ids?: string[];
+};
+
+export type ToolboxToolInput = Record<string, unknown> & {
+  tool_id: ToolboxToolId;
+};
+
+export type ToolboxRequestPayload = {
+  request_id: string;
+  tool_id: ToolboxToolId;
+  brand_id: string;
+  platform_target: ToolboxPlatformTarget;
+  brand_bundle_ref?: string | null;
+  asset_refs?: ToolboxAssetRef[];
+  target_scenario?: string | null;
+  tool_input: ToolboxToolInput;
+};
+
+export type ToolboxToolSummary = {
+  tool_id: ToolboxToolId;
+  label: string;
+  description?: string;
+  output_types?: string[];
+  injectable_scenarios?: string[];
+  default_checks?: string[];
+  evidence_level?: string;
+};
+
+export type ToolboxToolsResponse = {
+  evidence_level: "L2-fixture-or-dry-run";
+  tools: ToolboxToolSummary[];
+};
+
+export type ToolboxPlanResponse = {
+  plan_id: string;
+  request_id: string;
+  tool_id: ToolboxToolId;
+  mode: ToolboxRunMode;
+  evidence_level: "L2-fixture-or-dry-run" | "L4-authorized-live";
+  provider_call: boolean;
+  delivery_accepted: boolean;
+  provider_profile_id?: string | null;
+  prompt_hash?: string | null;
+  required_checks?: string[];
+  artifact_manifest_id?: string | null;
+  injection_target_refs?: string[];
+};
+
+export type ToolboxPromptPreviewResponse = {
+  preview_id: string;
+  request_id: string;
+  tool_id: ToolboxToolId;
+  prompt_hash?: string | null;
+  prompt_preview_allowed: boolean;
+  sanitized_prompt_blocks?: string[];
+  compile_warnings?: string[];
+  blocked_reasons?: string[];
+};
+
+export type ToolboxArtifact = {
+  artifact_id: string;
+  tool_id: ToolboxToolId;
+  artifact_type: string;
+  artifact_ref: string;
+  source_job_id?: string | null;
+  manifest_ref?: string | null;
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+};
+
+export type ToolboxJobRecord = {
+  job_id: string;
+  status: "prepared" | "blocked" | "submitted" | "failed" | "succeeded";
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+  blocked_reasons?: string[];
+  failure_reason?: string | null;
+  artifact_paths?: Record<string, string>;
+  spec?: Record<string, unknown>;
+};
+
+export type ToolboxRunResponse = {
+  run_id: string;
+  request_id: string;
+  tool_id: ToolboxToolId;
+  brand_id: string;
+  brand_bundle_ref?: string | null;
+  target_scenario?: string | null;
+  asset_refs?: ToolboxAssetRef[];
+  status: ToolboxRunStatus;
+  plan: ToolboxPlanResponse;
+  prompt_preview?: ToolboxPromptPreviewResponse | null;
+  job_record?: ToolboxJobRecord | null;
+  artifacts: ToolboxArtifact[];
+};
+
+export type ToolboxArtifactsResponse = {
+  run_id: string;
+  tool_id: ToolboxToolId;
+  artifacts: ToolboxArtifact[];
 };
 
 // ── P3-5: Cookie fallback for privacy / incognito mode ──
@@ -1233,6 +1360,102 @@ export async function fetchDashboardOverview(scenario?: string, platform?: strin
   if (days) params.set("days", String(days));
   const res = await apiFetch("/dashboard/overview?" + params.toString(), { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch dashboard");
+  return res.json();
+}
+
+// ── AI Video 2.0 Toolbox dry-run APIs ──
+
+function toolboxUrl(toolId: ToolboxToolId, action: "plan" | "prompt-preview" | "run"): string {
+  return `/toolbox/${encodeURIComponent(toolId)}/${action}`;
+}
+
+function assertToolboxRequest(toolId: ToolboxToolId, body: ToolboxRequestPayload): void {
+  if (body.tool_id !== toolId) {
+    throw new Error(`Toolbox request mismatch: path=${toolId}, body=${body.tool_id}`);
+  }
+  if (body.tool_input?.tool_id !== toolId) {
+    throw new Error(`Toolbox input mismatch: path=${toolId}, input=${String(body.tool_input?.tool_id)}`);
+  }
+}
+
+export async function fetchToolboxTools(options?: { signal?: AbortSignal }): Promise<ToolboxToolsResponse> {
+  const res = await apiFetch("/toolbox/tools", {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function planToolboxRun(
+  toolId: ToolboxToolId,
+  body: ToolboxRequestPayload,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxPlanResponse> {
+  assertToolboxRequest(toolId, body);
+  const res = await apiFetch(toolboxUrl(toolId, "plan"), {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function previewToolboxPrompt(
+  toolId: ToolboxToolId,
+  body: ToolboxRequestPayload,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxPromptPreviewResponse> {
+  assertToolboxRequest(toolId, body);
+  const res = await apiFetch(toolboxUrl(toolId, "prompt-preview"), {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function runToolboxDryRun(
+  toolId: ToolboxToolId,
+  body: ToolboxRequestPayload,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxRunResponse> {
+  assertToolboxRequest(toolId, body);
+  const res = await apiFetch(toolboxUrl(toolId, "run"), {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxRun(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxRunResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxArtifacts(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxArtifactsResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/artifacts`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
 }
 

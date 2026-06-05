@@ -1743,6 +1743,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/toolbox/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Run */
+        get: operations["get_toolbox_run_toolbox_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/runs/{run_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Run Artifacts */
+        get: operations["get_toolbox_run_artifacts_toolbox_runs__run_id__artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tools */
+        get: operations["list_tools_toolbox_tools_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/{tool_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plan Toolbox Run */
+        post: operations["plan_toolbox_run_toolbox__tool_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/{tool_id}/prompt-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Toolbox Prompt */
+        post: operations["preview_toolbox_prompt_toolbox__tool_id__prompt_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/{tool_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Toolbox Dry Run */
+        post: operations["run_toolbox_dry_run_toolbox__tool_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2862,6 +2964,11 @@ export interface components {
          * @enum {string}
          */
         TokenStrength: "hard" | "soft" | "hard_for_review_only";
+        /**
+         * ToolboxToolId
+         * @enum {string}
+         */
+        ToolboxToolId: "product-image" | "six-view" | "ecommerce-visual" | "digital-human" | "storyboard";
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -5532,6 +5639,232 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_run_toolbox_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_run_artifacts_toolbox_runs__run_id__artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tools_toolbox_tools_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_toolbox_run_toolbox__tool_id__plan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_toolbox_prompt_toolbox__tool_id__prompt_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_toolbox_dry_run_toolbox__tool_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
