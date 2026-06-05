@@ -40,13 +40,18 @@ import pytest
 def _restore_default_skill_registry() -> None:
     """Restore default auto-registered skills after registry isolation tests."""
     try:
+        from src.skills.continuity_storyboard_grid import ContinuityStoryboardGridSkill
         from src.skills.registry import SkillRegistry
         from src.skills.seedance_prompt import SeedancePromptSkill
         from src.skills.viral_extractor import ViralExtractorSkill
     except ImportError:
         return
 
-    for skill in (SeedancePromptSkill(), ViralExtractorSkill()):
+    for skill in (
+        ContinuityStoryboardGridSkill(),
+        SeedancePromptSkill(),
+        ViralExtractorSkill(),
+    ):
         if SkillRegistry().get_skill(skill.name) is not None:
             continue
         try:
