@@ -102,4 +102,5 @@ class VideoPipelineState(TypedDict, total=False):
     pipeline_degraded: bool  # P0-2: Any node failure sets this; routing functions check it and terminate pipeline
 
     # ── Telemetry ──
+    trace_id: str  # Request/run trace id shared by node timing and error collection
     pipeline_metrics: dict[str, Any]  # PipelineMetrics serialized as dict

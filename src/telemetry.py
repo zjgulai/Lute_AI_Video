@@ -196,6 +196,26 @@ class PipelineMetrics:
             "labels": list(self._pipeline_metrics.keys()),
         }
 
+    def get_run_summary(self, label: str) -> dict[str, Any]:
+        """Return metrics for one pipeline run label."""
+        steps = self._step_metrics.get(label, [])
+        total_duration_ms = sum(step.duration_ms for step in steps)
+        return {
+            "trace_id": label,
+            "node_count": len(steps),
+            "total_duration_ms": round(total_duration_ms, 2),
+            "error_count": sum(1 for step in steps if not step.success),
+            "steps": [
+                {
+                    "step_name": step.step_name,
+                    "duration_ms": round(step.duration_ms, 2),
+                    "success": step.success,
+                    "timestamp": step.timestamp,
+                }
+                for step in steps
+            ],
+        }
+
 
 # ── Error Persistence (Admin Panel Phase 1) ──
 
@@ -371,12 +391,20 @@ def timed_node(func):
                     context={"node": node_name},
                 )
 
+        def _attach_state_metrics(result: Any) -> Any:
+            if not isinstance(result, dict):
+                return result
+            updated = dict(result)
+            updated.setdefault("trace_id", trace_id)
+            updated["pipeline_metrics"] = pipeline_metrics.get_run_summary(trace_id)
+            return updated
+
         if asyncio.iscoroutinefunction(func):
             async def async_wrapper(*a, **kw):
                 try:
                     result = await func(*a, **kw)
                     _record(success=True)
-                    return result
+                    return _attach_state_metrics(result)
                 except Exception as exc:
                     _record(success=False, exc=exc)
                     raise
@@ -385,7 +413,7 @@ def timed_node(func):
             try:
                 result = func(state, *args, **kwargs)
                 _record(success=True)
-                return result
+                return _attach_state_metrics(result)
             except Exception as exc:
                 _record(success=False, exc=exc)
                 raise
