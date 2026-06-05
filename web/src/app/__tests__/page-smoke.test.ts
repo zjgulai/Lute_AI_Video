@@ -37,6 +37,7 @@ const PAGE_MODULES = [
   { name: "footage", loader: () => import("@/app/footage/page") },
   { name: "library", loader: () => import("@/app/library/page") },
   { name: "toolbox", loader: () => import("@/app/toolbox/page") },
+  { name: "toolbox-detail", loader: () => import("@/app/toolbox/[toolId]/page") },
   { name: "brand-packages", loader: () => import("@/app/brand-packages/page") },
   { name: "influencers", loader: () => import("@/app/influencers/page") },
   { name: "admin", loader: () => import("@/app/admin/page") },
