@@ -39,12 +39,16 @@ AMBIGUOUS_NAME_MARKERS = (
     "test_",
 )
 
+LOCAL_SYNC_SIDECAR_SUFFIXES = (
+    ".baiduyun.uploading.cfg",
+)
+
 
 def _script_paths() -> set[str]:
     return {
         path.relative_to(REPO_ROOT).as_posix()
         for path in SCRIPTS_DIR.iterdir()
-        if path.is_file()
+        if path.is_file() and not path.name.endswith(LOCAL_SYNC_SIDECAR_SUFFIXES)
     }
 
 
@@ -125,6 +129,12 @@ def test_generated_script_artifacts_have_cleanup_policy_without_implicit_delete(
             "pattern": "scripts/__pycache__/**",
             "status": "cleanup_requires_confirmation",
         } in policies
+
+
+def test_lighthouse_rsync_excludes_local_sync_sidecars():
+    excludes = (REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt").read_text()
+    assert "*.baiduyun.uploading.cfg" in excludes
+    assert ".*.baiduyun.uploading.cfg" in excludes
 
 
 def test_scripts_governance_runbook_covers_contract_and_cleanup_boundary():

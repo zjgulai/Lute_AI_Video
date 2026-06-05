@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-06-01
+updated: 2026-06-05
 owner: self
 source: human+ai
 ---
@@ -35,11 +35,15 @@ source: human+ai
 | --- | --- |
 | `scripts/check_openapi_types_drift.py` | active_reusable |
 | `scripts/check_step_order_consistency.py` | active_reusable |
+| `scripts/brand_review_audit.py` | active_reusable |
+| `scripts/brand_token_intake.py` | active_reusable |
+| `scripts/commercial_token_smoke_preflight.py` | active_reusable |
 | `scripts/create_admin.py` | active_reusable |
 | `scripts/dev_start.py` | active_reusable |
 | `scripts/diagnose_apis.py` | active_reusable |
 | `scripts/generate_portfolio_posters.py` | active_reusable |
 | `scripts/generate_portfolio_thumbnails.py` | active_reusable |
+| `scripts/no_token_commercial_benchmark.py` | active_reusable |
 | `scripts/p2_recharge_smoke_checklist.py` | active_reusable |
 | `scripts/portfolio_index.py` | active_reusable |
 | `scripts/portfolio_thumbnail_coverage.py` | active_reusable |
@@ -71,6 +75,7 @@ source: human+ai
 
 | path | status |
 | --- | --- |
+| `scripts/authorized_live_token_smoke_harness.py` | provider_probe |
 | `scripts/debug_poyo_403.py` | provider_probe |
 | `scripts/diagnose_poyo.py` | provider_probe |
 | `scripts/discover_poyo_models.py` | provider_probe |

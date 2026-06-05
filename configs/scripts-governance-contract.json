@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-01",
+  "updated": "2026-06-05",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
@@ -17,6 +17,21 @@
       "path": "scripts/check_step_order_consistency.py",
       "status": "active_reusable",
       "reason": "Step ordering consistency check."
+    },
+    {
+      "path": "scripts/brand_review_audit.py",
+      "status": "active_reusable",
+      "reason": "Dry-run brand token review audit bundle builder."
+    },
+    {
+      "path": "scripts/brand_token_intake.py",
+      "status": "active_reusable",
+      "reason": "Candidate-only brand token ledger intake utility."
+    },
+    {
+      "path": "scripts/commercial_token_smoke_preflight.py",
+      "status": "active_reusable",
+      "reason": "No-token C21 authorized-live preflight report."
     },
     {
       "path": "scripts/create_admin.py",
@@ -42,6 +57,11 @@
       "path": "scripts/generate_portfolio_thumbnails.py",
       "status": "active_reusable",
       "reason": "Portfolio thumbnail generation utility."
+    },
+    {
+      "path": "scripts/no_token_commercial_benchmark.py",
+      "status": "active_reusable",
+      "reason": "No-token commercial AI video 2.0 benchmark report."
     },
     {
       "path": "scripts/p2_recharge_smoke_checklist.py",
@@ -152,6 +172,11 @@
     }
   ],
   "provider_probe_scripts": [
+    {
+      "path": "scripts/authorized_live_token_smoke_harness.py",
+      "status": "provider_probe",
+      "reason": "Authorized-live token smoke entrypoint; execute mode requires explicit gates and may call providers."
+    },
     {
       "path": "scripts/debug_poyo_403.py",
       "status": "provider_probe",
