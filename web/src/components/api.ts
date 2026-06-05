@@ -275,6 +275,11 @@ export type ToolboxInjectionAuditSummaryResponse = {
   advisory_reasons?: string[];
 };
 
+export type ToolboxAuditSummariesResponse = {
+  evidence_level: "L2-fixture-or-dry-run";
+  summaries: ToolboxInjectionAuditSummaryResponse[];
+};
+
 // ── P3-5: Cookie fallback for privacy / incognito mode ──
 
 function setCookie(name: string, value: string, days = 365) {
@@ -1517,6 +1522,21 @@ export async function fetchToolboxRuns(
   if (options?.toolId) params.set("tool_id", options.toolId);
   const query = params.toString();
   const res = await apiFetch(`/toolbox/runs${query ? `?${query}` : ""}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxAuditSummaries(
+  options?: { limit?: number; toolId?: ToolboxToolId; signal?: AbortSignal },
+): Promise<ToolboxAuditSummariesResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.toolId) params.set("tool_id", options.toolId);
+  const query = params.toString();
+  const res = await apiFetch(`/toolbox/runs/audit-summaries${query ? `?${query}` : ""}`, {
     headers: getHeaders(false),
     signal: options?.signal,
   });

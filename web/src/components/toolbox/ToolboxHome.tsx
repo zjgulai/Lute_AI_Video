@@ -9,8 +9,10 @@ import {
 } from "@phosphor-icons/react";
 import TopHeader from "@/components/TopHeader";
 import {
+  fetchToolboxAuditSummaries,
   fetchToolboxRuns,
   fetchToolboxTools,
+  type ToolboxInjectionAuditSummaryResponse,
   type ToolboxRunResponse,
   type ToolboxToolSummary,
 } from "@/components/api";
@@ -40,21 +42,39 @@ function statusClassName(status: string): string {
   return "text-[#1c7d73]";
 }
 
-function deriveAuditSummary(runs: ToolboxRunResponse[]) {
+function readinessClassName(summary: ToolboxInjectionAuditSummaryResponse | undefined): string {
+  if (!summary) return "text-[var(--text-muted)]";
+  if (!summary.ready_for_scenario_injection) return "text-[var(--danger)]";
+  if (summary.advisory_reasons?.length) return "text-[#a66b1f]";
+  return "text-[#1c7d73]";
+}
+
+function readinessLabelKey(summary: ToolboxInjectionAuditSummaryResponse | undefined): string {
+  if (!summary) return "toolbox.audit.noSummaryShort";
+  if (!summary.ready_for_scenario_injection) return "toolbox.audit.blockedShort";
+  if (summary.advisory_reasons?.length) return "toolbox.audit.advisoryShort";
+  return "toolbox.audit.readyShort";
+}
+
+function passedCheckCount(summary: ToolboxInjectionAuditSummaryResponse | undefined): number {
+  return summary?.checks.filter((check) => check.status === "passed").length ?? 0;
+}
+
+function deriveAuditSummary(summaries: ToolboxInjectionAuditSummaryResponse[]) {
   return [
     {
-      labelKey: "toolbox.blocked",
-      value: runs.filter((run) => run.status === "blocked" || run.status === "failed").length,
+      labelKey: "toolbox.audit.blockedRuns",
+      value: summaries.filter((summary) => !summary.ready_for_scenario_injection).length,
       className: "text-[var(--danger)]",
     },
     {
-      labelKey: "toolbox.reviewRequired",
-      value: runs.filter((run) => run.status === "review_required").length,
+      labelKey: "toolbox.audit.advisoryRuns",
+      value: summaries.filter((summary) => summary.ready_for_scenario_injection && summary.advisory_reasons?.length).length,
       className: "text-[#a66b1f]",
     },
     {
-      labelKey: "toolbox.acceptedDryRun",
-      value: runs.filter((run) => run.status === "accepted_dry_run").length,
+      labelKey: "toolbox.audit.readyRuns",
+      value: summaries.filter((summary) => summary.ready_for_scenario_injection).length,
       className: "text-[#1c7d73]",
     },
   ];
@@ -64,6 +84,7 @@ export default function ToolboxHome() {
   const { t } = useI18n();
   const [apiTools, setApiTools] = useState<ToolboxToolSummary[]>([]);
   const [runs, setRuns] = useState<ToolboxRunResponse[]>([]);
+  const [auditSummaries, setAuditSummaries] = useState<ToolboxInjectionAuditSummaryResponse[]>([]);
   const [toolsLoaded, setToolsLoaded] = useState(false);
 
   useEffect(() => {
@@ -92,13 +113,27 @@ export default function ToolboxHome() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchToolboxAuditSummaries({ limit: 5, signal: controller.signal })
+      .then((data) => setAuditSummaries(data.summaries))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setAuditSummaries([]);
+      });
+    return () => controller.abort();
+  }, []);
+
   const tools = useMemo<ToolCardModel[]>(() => {
     return TOOL_ORDER.map((id) => ({
       ...TOOL_PRESENTATION[id],
       api: apiTools.find((tool) => tool.tool_id === id),
     }));
   }, [apiTools]);
-  const auditSummary = useMemo(() => deriveAuditSummary(runs), [runs]);
+  const summaryByRunId = useMemo(() => {
+    return new Map(auditSummaries.map((summary) => [summary.run_id, summary]));
+  }, [auditSummaries]);
+  const auditSummary = useMemo(() => deriveAuditSummary(auditSummaries), [auditSummaries]);
   const latestRun = runs[0] ?? null;
 
   return (
@@ -191,23 +226,35 @@ export default function ToolboxHome() {
               <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.recentRuns")}</h2>
               {runs.length > 0 ? (
                 <ul className="mt-4 space-y-2">
-                  {runs.map((run) => (
-                    <li key={run.run_id} className="rounded-lg bg-[var(--bg-layer2)] p-3" data-toolbox-run={run.run_id}>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs font-semibold text-[var(--text-h1)]">{run.tool_id}</span>
-                        <span className={`text-[11px] font-semibold ${statusClassName(run.status)}`}>{run.status}</span>
-                      </div>
-                      <div className="mt-2 break-all text-[11px] leading-5 text-[var(--text-muted)]">{run.run_id}</div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
-                          delivery_accepted={String(run.plan.delivery_accepted)}
-                        </span>
-                        <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
-                          publish_allowed={String(run.job_record?.publish_allowed ?? false)}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
+                  {runs.map((run) => {
+                    const summary = summaryByRunId.get(run.run_id);
+                    return (
+                      <li key={run.run_id} className="rounded-lg bg-[var(--bg-layer2)] p-3" data-toolbox-run={run.run_id}>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold text-[var(--text-h1)]">{run.tool_id}</span>
+                          <span className={`text-[11px] font-semibold ${statusClassName(run.status)}`}>{run.status}</span>
+                        </div>
+                        <div className="mt-2 break-all text-[11px] leading-5 text-[var(--text-muted)]">{run.run_id}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <span className={`rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold ${readinessClassName(summary)}`}>
+                            {t(readinessLabelKey(summary))}
+                          </span>
+                          <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+                            targets={summary?.target_count ?? 0}
+                          </span>
+                          <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+                            checks={passedCheckCount(summary)}/{summary?.checks.length ?? 0}
+                          </span>
+                          <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+                            delivery_accepted={String(run.plan.delivery_accepted)}
+                          </span>
+                          <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+                            publish_allowed={String(run.job_record?.publish_allowed ?? false)}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <div className="mt-4 flex min-h-[104px] items-center justify-center rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] px-4 text-center text-sm text-[var(--text-muted)]">

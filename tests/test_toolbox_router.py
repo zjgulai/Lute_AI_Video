@@ -226,6 +226,56 @@ async def test_toolbox_injection_audit_summary_explains_readiness_without_state_
 
 
 @pytest.mark.asyncio
+async def test_toolbox_run_audit_summaries_endpoint_lists_recent_readiness(auth_headers) -> None:
+    from src.api import app
+
+    ecommerce_body = _ecommerce_visual_request(raw_text="must-not-leak-summary-list-brief")
+    ecommerce_body["request_id"] = "tbx_req_ecommerce_visual_summary_list"
+    product_body = _product_image_request()
+    product_body["request_id"] = "tbx_req_product_image_summary_list"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        first_response = await client.post(
+            "/toolbox/ecommerce-visual/run",
+            headers=auth_headers,
+            json=ecommerce_body,
+        )
+        assert first_response.status_code == 200, first_response.text
+        second_response = await client.post(
+            "/toolbox/product-image/run",
+            headers=auth_headers,
+            json=product_body,
+        )
+        assert second_response.status_code == 200, second_response.text
+        list_response = await client.get("/toolbox/runs/audit-summaries?limit=2", headers=auth_headers)
+        product_only_response = await client.get(
+            "/toolbox/runs/audit-summaries?limit=5&tool_id=product-image",
+            headers=auth_headers,
+        )
+
+    assert list_response.status_code == 200, list_response.text
+    payload = list_response.json()
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert payload["evidence_level"] == "L2-fixture-or-dry-run"
+    assert [summary["tool_id"] for summary in payload["summaries"]][:2] == ["product-image", "ecommerce-visual"]
+    assert all(summary["ready_for_scenario_injection"] is True for summary in payload["summaries"])
+    assert all(summary["state_write"] is False for summary in payload["summaries"])
+    assert all(summary["provider_call"] is False for summary in payload["summaries"])
+    assert all(summary["delivery_accepted"] is False for summary in payload["summaries"])
+    assert all(summary["publish_allowed"] is False for summary in payload["summaries"])
+    assert payload["summaries"][0]["target_count"] > 0
+    assert payload["summaries"][0]["artifact_ref_count"] > 0
+    assert payload["summaries"][0]["contract_ref_count"] > 0
+    assert "must-not-leak-summary-list-brief" not in serialized
+    assert "campaign_brief" not in serialized
+    assert "tool_input" not in serialized
+    assert product_only_response.status_code == 200, product_only_response.text
+    product_only_payload = product_only_response.json()
+    assert product_only_payload["summaries"]
+    assert all(summary["tool_id"] == "product-image" for summary in product_only_payload["summaries"])
+
+
+@pytest.mark.asyncio
 async def test_toolbox_runs_endpoint_lists_recent_refs_without_raw_input(auth_headers) -> None:
     from src.api import app
 

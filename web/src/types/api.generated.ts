@@ -1760,6 +1760,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/toolbox/runs/audit-summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Toolbox Run Audit Summaries */
+        get: operations["list_toolbox_run_audit_summaries_toolbox_runs_audit_summaries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/toolbox/runs/{run_id}": {
         parameters: {
             query?: never;
@@ -3098,6 +3115,13 @@ export interface components {
              */
             target_count: number;
             tool_id: components["schemas"]["ToolboxToolId"];
+        };
+        /** ToolboxInjectionAuditSummaryList */
+        ToolboxInjectionAuditSummaryList: {
+            /** @default L2-fixture-or-dry-run */
+            evidence_level: components["schemas"]["EvidenceLevel"];
+            /** Summaries */
+            summaries?: components["schemas"]["ToolboxInjectionAuditSummary"][];
         };
         /** ToolboxInjectionDraft */
         ToolboxInjectionDraft: {
@@ -5875,6 +5899,40 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_toolbox_run_audit_summaries_toolbox_runs_audit_summaries_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                tool_id?: components["schemas"]["ToolboxToolId"] | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolboxInjectionAuditSummaryList"];
                 };
             };
             /** @description Validation Error */

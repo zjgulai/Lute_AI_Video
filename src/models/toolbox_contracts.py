@@ -444,6 +444,17 @@ class ToolboxInjectionAuditSummary(_StrictModel):
         return self
 
 
+class ToolboxInjectionAuditSummaryList(_StrictModel):
+    evidence_level: EvidenceLevel = EvidenceLevel.L2_FIXTURE_OR_DRY_RUN
+    summaries: list[ToolboxInjectionAuditSummary] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _list_must_remain_dry_run_evidence(self) -> ToolboxInjectionAuditSummaryList:
+        if self.evidence_level != EvidenceLevel.L2_FIXTURE_OR_DRY_RUN:
+            raise ValueError("toolbox injection audit summary list must remain L2-fixture-or-dry-run")
+        return self
+
+
 class ToolboxProviderReadiness(_StrictModel):
     readiness_id: str
     tool_id: ToolboxToolId

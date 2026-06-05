@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from src.models.commercial_contracts import EvidenceLevel
 from src.models.toolbox_contracts import (
     ToolboxInjectionAuditSummary,
+    ToolboxInjectionAuditSummaryList,
     ToolboxInjectionDraft,
     ToolboxRequest,
     ToolboxToolId,
@@ -73,6 +74,24 @@ async def list_toolbox_runs(
         "evidence_level": EvidenceLevel.L2_FIXTURE_OR_DRY_RUN.value,
         "runs": [project_toolbox_run_state(state) for state in states],
     }
+
+
+@router.get("/runs/audit-summaries")
+async def list_toolbox_run_audit_summaries(
+    limit: int = Query(default=20, ge=1, le=100),
+    tool_id: ToolboxToolId | None = None,
+) -> ToolboxInjectionAuditSummaryList:
+    states = list(_RUNS.values())
+    if tool_id is not None:
+        states = [state for state in states if state.request.tool_id == tool_id]
+    states = states[-limit:]
+    states.reverse()
+    return ToolboxInjectionAuditSummaryList(
+        summaries=[
+            build_toolbox_injection_audit_summary(state)
+            for state in states
+        ]
+    )
 
 
 @router.get("/runs/{run_id}")

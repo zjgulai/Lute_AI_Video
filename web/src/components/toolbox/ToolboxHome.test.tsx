@@ -6,6 +6,7 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 
 const fetchToolboxTools = vi.fn();
 const fetchToolboxRuns = vi.fn();
+const fetchToolboxAuditSummaries = vi.fn();
 
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
@@ -18,6 +19,7 @@ vi.mock("@/components/TopHeader", () => ({
 }));
 
 vi.mock("@/components/api", () => ({
+  fetchToolboxAuditSummaries: (...args: unknown[]) => fetchToolboxAuditSummaries(...args),
   fetchToolboxTools: (...args: unknown[]) => fetchToolboxTools(...args),
   fetchToolboxRuns: (...args: unknown[]) => fetchToolboxRuns(...args),
 }));
@@ -125,6 +127,43 @@ describe("ToolboxHome", () => {
         },
       ],
     });
+    fetchToolboxAuditSummaries.mockResolvedValue({
+      evidence_level: "L2-fixture-or-dry-run",
+      summaries: [
+        {
+          summary_id: "tbx_injection_audit_product_image_recent",
+          run_id: "tbx_run_product_image_recent",
+          tool_id: "product-image",
+          evidence_level: "L2-fixture-or-dry-run",
+          ready_for_scenario_injection: true,
+          state_write: false,
+          provider_call: false,
+          delivery_accepted: false,
+          publish_allowed: false,
+          injection_draft_ref: "artifact://toolbox/product-image/recent/injection-draft",
+          target_count: 2,
+          artifact_ref_count: 1,
+          contract_ref_count: 2,
+          bundle_ref_count: 1,
+          checks: [
+            {
+              check_id: "dry_run_status",
+              label: "Dry-run accepted",
+              status: "passed",
+              evidence_refs: ["manifest://toolbox/product-image/recent"],
+            },
+            {
+              check_id: "provider_boundary",
+              label: "Provider boundary",
+              status: "passed",
+              evidence_refs: ["artifact://toolbox/product-image/recent/injection-draft"],
+            },
+          ],
+          blocking_reasons: [],
+          advisory_reasons: [],
+        },
+      ],
+    });
   });
 
   it("renders the five planned tools with dry-run evidence boundaries", async () => {
@@ -146,6 +185,7 @@ describe("ToolboxHome", () => {
       expect(container.querySelectorAll("[data-tool-card]")).toHaveLength(5);
       expect(fetchToolboxTools).toHaveBeenCalledTimes(1);
       expect(fetchToolboxRuns).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }));
+      expect(fetchToolboxAuditSummaries).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }));
     } finally {
       cleanup();
     }
@@ -164,7 +204,11 @@ describe("ToolboxHome", () => {
       expect(container.textContent).toContain("artifact://toolbox/product-image/recent");
       expect(container.textContent).toContain("delivery_accepted=false");
       expect(container.textContent).toContain("publish_allowed=false");
-      expect(container.textContent).toContain("Accepted Dry-run");
+      expect(container.textContent).toContain("只读回注 ready");
+      expect(container.textContent).toContain("targets=2");
+      expect(container.textContent).toContain("checks=2/2");
+      expect(container.textContent).toContain("可回注");
+      expect(container.textContent).toContain("accepted_dry_run");
     } finally {
       cleanup();
     }
