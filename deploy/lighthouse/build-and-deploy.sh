@@ -38,6 +38,34 @@ if [ ! -f "$EXCLUDE_FILE" ]; then
   exit 1
 fi
 
+if [ -z "${RSYNC_BIN:-}" ]; then
+  for candidate in \
+    "/opt/homebrew/bin/rsync" \
+    "/usr/local/bin/rsync" \
+    "$(command -v rsync 2>/dev/null || true)"
+  do
+    if [ -z "$candidate" ] || [ ! -x "$candidate" ]; then
+      continue
+    fi
+    version_line="$("$candidate" --version 2>/dev/null | sed -n '1p' || true)"
+    if printf '%s\n' "$version_line" | grep -Eq '^rsync[[:space:]]+version[[:space:]]+3'; then
+      RSYNC_BIN="$candidate"
+      break
+    fi
+  done
+fi
+
+RSYNC_VERSION_LINE=""
+if [ -n "${RSYNC_BIN:-}" ] && [ -x "$RSYNC_BIN" ]; then
+  RSYNC_VERSION_LINE="$("$RSYNC_BIN" --version 2>/dev/null | sed -n '1p' || true)"
+fi
+if [ -z "${RSYNC_BIN:-}" ] || [ ! -x "$RSYNC_BIN" ] \
+  || ! printf '%s\n' "$RSYNC_VERSION_LINE" | grep -Eq '^rsync[[:space:]]+version[[:space:]]+3'; then
+  echo "ERROR: GNU rsync 3.x is required for --chmod=F644,D755." >&2
+  echo "Install with 'brew install rsync' on macOS, or set RSYNC_BIN=/path/to/rsync." >&2
+  exit 1
+fi
+
 RSYNC_ARGS=(
   -avz
   --delete
@@ -57,6 +85,7 @@ echo "server:     $SSH_USER@$SERVER_IP"
 echo "remote dir: $REMOTE_DIR"
 echo "ssh key:    $SSH_KEY"
 echo "excludes:   $EXCLUDE_FILE"
+echo "rsync:      $RSYNC_BIN"
 echo "dry run:    $DRY_RUN"
 echo "rebuild:    ${REBUILD_BACKEND:-0}"
 echo "token smoke:${RUN_TOKEN_SMOKE:-0}"
@@ -65,7 +94,7 @@ echo ""
 cd "$REPO_ROOT"
 
 echo "[1/2] Syncing repository to Lighthouse..."
-rsync "${RSYNC_ARGS[@]}" ./ "$SSH_USER@$SERVER_IP:$REMOTE_DIR/"
+"$RSYNC_BIN" "${RSYNC_ARGS[@]}" ./ "$SSH_USER@$SERVER_IP:$REMOTE_DIR/"
 
 if [ "$DRY_RUN" = "1" ]; then
   echo ""

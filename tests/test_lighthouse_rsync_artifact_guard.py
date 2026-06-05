@@ -53,6 +53,21 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
         "web/tmp",
         "web/tmp/screenshots",
     },
+    "local_workspace_state": {
+        ".hermes",
+        "worktrees",
+        "drafts",
+        "archive",
+        "ref",
+    },
+    "remote_only_landing_sidecars": {
+        "deploy/lighthouse/landing/login.html",
+        "deploy/lighthouse/landing/register.html",
+        "deploy/lighthouse/landing/systems.html",
+        "deploy/lighthouse/landing/lute-*.html",
+        "deploy/lighthouse/landing/lute-auth.*",
+        "deploy/lighthouse/landing/voc-zh_messages.json",
+    },
 }
 
 
@@ -77,6 +92,9 @@ def test_lighthouse_sync_entrypoints_use_the_shared_exclude_file():
 
     assert 'EXCLUDE_FILE="${EXCLUDE_FILE:-$SCRIPT_DIR/rsync-excludes.txt}"' in wrapper
     assert '--exclude-from="$EXCLUDE_FILE"' in wrapper
+    assert "RSYNC_BIN" in wrapper
+    assert "GNU rsync 3.x is required for --chmod=F644,D755" in wrapper
+    assert '"$RSYNC_BIN" "${RSYNC_ARGS[@]}"' in wrapper
     assert "--exclude-from='deploy/lighthouse/rsync-excludes.txt'" in workflow
 
     for forbidden_inline in ("--exclude='.next'", "--exclude='output'", "--exclude='tmp'"):
@@ -92,8 +110,11 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
         "frontend_build_artifacts",
         "test_reports_and_traces",
         "runtime_outputs_and_screenshots",
+        "local_workspace_state",
+        "remote_only_landing_sidecars",
         "production_secrets_and_certificates",
         "shared_exclude_file_required",
+        "gnu_rsync_3_required_for_chmod",
     ]:
         assert token in contract
 
@@ -102,6 +123,10 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
         "deploy/lighthouse/rsync-excludes.txt",
         "web/playwright-report",
         "tmp/screenshots",
+        "drafts",
+        "ref",
+        "landing/login.html",
+        "GNU rsync 3.x",
         "不触发生成接口",
     ]:
         assert token in runbook

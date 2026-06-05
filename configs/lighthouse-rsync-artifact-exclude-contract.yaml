@@ -1,7 +1,7 @@
 version: 1
 owner: deploy
 status: stable
-updated: "2026-06-01"
+updated: "2026-06-05"
 
 entrypoints:
   exclude_file: deploy/lighthouse/rsync-excludes.txt
@@ -44,9 +44,23 @@ exclude_categories:
     - tmp/screenshots
     - web/tmp
     - web/tmp/screenshots
+  local_workspace_state:
+    - .hermes
+    - worktrees
+    - drafts
+    - archive
+    - ref
+  remote_only_landing_sidecars:
+    - deploy/lighthouse/landing/login.html
+    - deploy/lighthouse/landing/register.html
+    - deploy/lighthouse/landing/systems.html
+    - deploy/lighthouse/landing/lute-*.html
+    - deploy/lighthouse/landing/lute-auth.*
+    - deploy/lighthouse/landing/voc-zh_messages.json
 
 rules:
   shared_exclude_file_required: true
+  gnu_rsync_3_required_for_chmod: true
   github_workflow_must_not_duplicate_inline_excludes: true
   local_wrapper_uses_exclude_file: true
   dry_run_before_manual_deploy: true

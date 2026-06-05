@@ -7,6 +7,11 @@
 node_modules
 .claude
 .kiro
+.hermes
+worktrees
+drafts
+archive
+ref
 web/node_modules
 web/.next
 web/.next.old
@@ -37,3 +42,9 @@ deploy/lighthouse/.env.prod
 deploy/lighthouse/server.crt
 deploy/lighthouse/server.key
 deploy/lighthouse/*.pem
+deploy/lighthouse/landing/login.html
+deploy/lighthouse/landing/register.html
+deploy/lighthouse/landing/systems.html
+deploy/lighthouse/landing/lute-*.html
+deploy/lighthouse/landing/lute-auth.*
+deploy/lighthouse/landing/voc-zh_messages.json
