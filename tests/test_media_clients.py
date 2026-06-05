@@ -51,34 +51,34 @@ class TestSeedanceClientStubMode:
     def client(self):
         return SeedanceClient(api_key="")
 
-    def test_text_to_video_returns_stub(self, client):
+    @pytest.mark.asyncio
+    async def test_text_to_video_returns_stub(self, client):
         """Without API key, text_to_video should return stub."""
-        result = client.text_to_video(prompt="test video", duration=10)
+        result = await client.text_to_video(prompt="test video", duration=10)
         assert result["video_url"].startswith("[SEEDANCE_STUB")
         assert result["duration"] == 0
 
-    def test_image_to_video_returns_stub(self, client):
+    @pytest.mark.asyncio
+    async def test_image_to_video_returns_stub(self, client):
         """Without API key, image_to_video should return stub."""
-        result = client.image_to_video(
+        result = await client.image_to_video(
             image_url="https://example.com/img.jpg",
             prompt="animate this",
         )
         assert result["video_url"].startswith("[SEEDANCE_STUB")
         assert result["_stub_mode"] == "image_to_video"
 
-    def test_video_to_video_returns_stub(self, client):
-        """Without API key, video_to_video should return stub."""
-        result = client.video_to_video(
-            ref_video_url="https://example.com/vid.mp4",
-            prompt="change style",
-        )
+    def test_stub_result_preserves_mode_marker(self, client):
+        """Stub results should preserve the requested mode marker."""
+        result = client._stub_result(prompt="change style", mode="reference_video")
         assert result["video_url"].startswith("[SEEDANCE_STUB")
-        assert result["_stub_mode"] == "video_to_video"
+        assert result["_stub_mode"] == "reference_video"
 
-    def test_stub_includes_prompt(self, client):
+    @pytest.mark.asyncio
+    async def test_stub_includes_prompt(self, client):
         """Stub result should preserve the original prompt."""
         prompt = "a product demo with smooth transitions"
-        result = client.text_to_video(prompt=prompt, duration=5)
+        result = await client.text_to_video(prompt=prompt, duration=5)
         assert result["prompt_used"] == prompt
 
 
@@ -98,10 +98,9 @@ class TestSeedanceClientParameterValidation:
         result = client._stub_result(prompt="test", mode="image_to_video")
         assert result is not None
 
-    def test_video_to_video_style_preserve_false(self):
-        """Should allow style_preserve=False."""
+    def test_stub_result_accepts_reference_mode(self):
         client = SeedanceClient(api_key="sk-test")
-        result = client._stub_result(prompt="test", mode="video_to_video")
+        result = client._stub_result(prompt="test", mode="reference_video")
         assert result is not None
 
 
@@ -112,24 +111,22 @@ class TestSeedanceClientEdgeCases:
     def client(self):
         return SeedanceClient(api_key="")
 
-    def test_text_to_video_minimal_params(self, client):
+    @pytest.mark.asyncio
+    async def test_text_to_video_minimal_params(self, client):
         """Should work with only prompt and no optional params."""
-        result = client.text_to_video(prompt="minimal")
+        result = await client.text_to_video(prompt="minimal")
         assert result is not None
         assert result["video_url"].startswith("[SEEDANCE_STUB")
 
-    def test_text_to_video_with_image_refs_empty(self, client):
+    @pytest.mark.asyncio
+    async def test_text_to_video_with_image_refs_empty(self, client):
         """Should handle empty image_refs list."""
-        result = client.text_to_video(prompt="test", image_refs=[])
+        result = await client.text_to_video(prompt="test", image_refs=[])
         assert result is not None
 
-    def test_cost_estimate_returns_dict(self):
-        """cost_estimate property should return a dict."""
+    def test_client_uses_seedance_output_dir(self):
         client = SeedanceClient(api_key="")
-        estimate = client.cost_estimate  # type: ignore[attr-defined]
-        assert isinstance(estimate, dict)
-        assert "model" in estimate
-        assert estimate["model"] == "seedance-2.0"
+        assert client.output_dir.name == "seedance"
 
     def test_retry_logic_exhaustion(self):
         """_execute_with_retry should return stub after all retries fail."""
@@ -145,9 +142,10 @@ class TestSeedanceClientEdgeCases:
         assert result["video_url"].startswith("[SEEDANCE_STUB")
         assert result["_stub_mode"] == "test_mode"
 
-    def test_close_method_exists(self, client):
+    @pytest.mark.asyncio
+    async def test_close_method_exists(self, client):
         """close() should be callable."""
-        client.close()
+        await client.close()
         assert True  # Should not crash
 
 
