@@ -104,3 +104,23 @@ def test_token_consuming_curl_calls_are_only_inside_token_smoke_gate():
             f"{script_path} should keep real generation smoke inside RUN_TOKEN_SMOKE=1"
         )
         assert _curl_calls_to_token_endpoints(unguarded_text) == []
+
+
+def test_lighthouse_smoke_checks_toolbox_read_only_endpoints():
+    text = SMOKE_SCRIPT.read_text()
+    for endpoint in (
+        "/api/toolbox/tools",
+        "/api/toolbox/runs?limit=1",
+        "/api/toolbox/runs/audit-summaries?limit=1",
+    ):
+        assert endpoint in text
+
+    assert "L2-fixture-or-dry-run" in text
+
+    mutating_toolbox_calls = [
+        line
+        for line in _join_line_continuations(text)
+        if "/api/toolbox/" in line
+        and any(method in line for method in ("-X POST", "-X PUT", "-X PATCH", "-X DELETE"))
+    ]
+    assert mutating_toolbox_calls == []

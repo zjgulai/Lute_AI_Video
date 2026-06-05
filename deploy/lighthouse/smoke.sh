@@ -47,24 +47,56 @@ check() {
 }
 
 # 1. 后端 /health 不需要 API key
-echo "[1/4] Backend /api/health"
+echo "[1/5] Backend /api/health"
 status=$($CURL "$BASE/api/health")
 check "GET /api/health" "200" "$status"
 
 # 2. 后端 /api/health 内容里 persistence.backend 应该是 postgresql(P0-E 验收)
-echo "[2/4] Backend persistence backend = postgresql"
+echo "[2/5] Backend persistence backend = postgresql"
 backend=$(curl -sS -k "$BASE/api/health" | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('persistence', {}).get('backend', 'unknown'))" 2>/dev/null || echo "parse_error")
 check "persistence.backend" "postgresql" "$backend"
 
 # 3. 鉴权:无 key 必须 401
-echo "[3/4] Auth: missing API key returns 401"
+echo "[3/5] Auth: missing API key returns 401"
 status=$($CURL -X POST -H "Content-Type: application/json" \
   -d '{"target_platforms":["tiktok"],"target_languages":["en"]}' \
   "$BASE/api/pipeline/start")
 check "POST /api/pipeline/start without key" "401" "$status"
 
-# 4. 真链路生成会消耗外部额度,默认跳过;充值后用 RUN_TOKEN_SMOKE=1 显式开启。
-echo "[4/4] Real path: /api/fast/generate with valid API key"
+# 4. AI Video 2.0 toolbox 只读接口检查:不创建 run,不触发 provider。
+echo "[4/5] Toolbox read-only endpoints"
+toolbox_tools_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
+  -H "X-API-Key: $API_KEY" \
+  "$BASE/api/toolbox/tools")
+check "GET /api/toolbox/tools" "200" "$toolbox_tools_status"
+toolbox_tools_level=$(curl -sS -k \
+  -H "X-API-Key: $API_KEY" \
+  "$BASE/api/toolbox/tools" \
+  | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
+check "toolbox.tools.evidence_level" "L2-fixture-or-dry-run" "$toolbox_tools_level"
+
+toolbox_runs_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
+  -H "X-API-Key: $API_KEY" \
+  "$BASE/api/toolbox/runs?limit=1")
+check "GET /api/toolbox/runs?limit=1" "200" "$toolbox_runs_status"
+toolbox_runs_level=$(curl -sS -k \
+  -H "X-API-Key: $API_KEY" \
+  "$BASE/api/toolbox/runs?limit=1" \
+  | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
+check "toolbox.runs.evidence_level" "L2-fixture-or-dry-run" "$toolbox_runs_level"
+
+toolbox_audit_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
+  -H "X-API-Key: $API_KEY" \
+  "$BASE/api/toolbox/runs/audit-summaries?limit=1")
+check "GET /api/toolbox/runs/audit-summaries?limit=1" "200" "$toolbox_audit_status"
+toolbox_audit_level=$(curl -sS -k \
+  -H "X-API-Key: $API_KEY" \
+  "$BASE/api/toolbox/runs/audit-summaries?limit=1" \
+  | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
+check "toolbox.audit_summaries.evidence_level" "L2-fixture-or-dry-run" "$toolbox_audit_level"
+
+# 5. 真链路生成会消耗外部额度,默认跳过;充值后用 RUN_TOKEN_SMOKE=1 显式开启。
+echo "[5/5] Real path: /api/fast/generate with valid API key"
 if [ "${RUN_TOKEN_SMOKE:-0}" = "1" ]; then
   status=$($CURL -X POST \
     -H "Content-Type: application/json" \
