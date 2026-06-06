@@ -5,7 +5,7 @@ module: deploy
 topic: lighthouse-rsync-artifact-exclude
 status: stable
 created: 2026-06-01
-updated: 2026-06-05
+updated: 2026-06-06
 owner: self
 source: human+ai
 ---
@@ -28,12 +28,14 @@ source: human+ai
 - 必须排除 local workspace state：`.hermes`、`worktrees`、`drafts`、`archive`、`ref`。
 - 必须排除 production secret / cert：`deploy/lighthouse/.env.prod`、`server.crt`、`server.key`、`*.pem`。
 - 必须保护 remote-only landing sidecars：`landing/login.html`、`landing/register.html`、`landing/systems.html`、`landing/lute-*.html`、`landing/lute-auth.*`、`landing/voc-zh_messages.json`。这些文件是否删除属于单独的远端静态资产清理决策，不能被 AI Video 发布默认清理。
+- apex landing sidecar 的唯一手动同步入口是 `deploy/lighthouse/sync-landing-sidecars.sh`。该脚本默认 `DRY_RUN=1`，只同步 `index.html`、`login.html`、`register.html`、`systems.html`、`lute-auth.css`、`lute-auth.js`，不使用 `--delete`，不调用 `deploy.sh`，不重启容器，不触发生成接口。
 - 该检查只读取本地脚本和配置，不触发生成接口、不访问生产、不消耗 poyo.ai tokens。
 
 ## 验证命令
 
 ```bash
 .venv/bin/python -m pytest tests/test_lighthouse_rsync_artifact_guard.py -q
+.venv/bin/python -m pytest tests/test_lighthouse_landing_static_contract.py -q
 ```
 
 ## 修改流程
@@ -42,11 +44,21 @@ source: human+ai
 2. 同步更新 `configs/lighthouse-rsync-artifact-exclude-contract.yaml` 和测试里的分类清单。
 3. 手工部署前先执行 `DRY_RUN=1 SSH_KEY=/path/to/ai_video.pem deploy/lighthouse/build-and-deploy.sh`。
 4. dry-run 输出如出现 `.env.prod`、证书、`.next`、`web/playwright-report`、`tmp/screenshots`、`output`、`drafts`、`archive`、`ref`、`landing/login.html` 等路径，先修 exclude，不允许继续部署。
+5. 如需同步 apex landing sidecar，不要取消默认发布排除项；改用：
+
+```bash
+SSH_KEY=/path/to/ai_video.pem DRY_RUN=1 deploy/lighthouse/sync-landing-sidecars.sh
+SSH_KEY=/path/to/ai_video.pem DRY_RUN=0 deploy/lighthouse/sync-landing-sidecars.sh
+```
+
+该脚本只同步 landing 文件。运行后必须检查 `https://lute-tlz-dddd.top/`、`/systems.html`、`/login.html`、`/register.html`，并确认 `video.lute-tlz-dddd.top` 与 `voc.lute-tlz-dddd.top` 仍可访问。
 
 ## 相关文件
 
 - `deploy/lighthouse/rsync-excludes.txt`
 - `deploy/lighthouse/build-and-deploy.sh`
+- `deploy/lighthouse/sync-landing-sidecars.sh`
 - `.github/workflows/deploy.yml`
 - `configs/lighthouse-rsync-artifact-exclude-contract.yaml`
 - `tests/test_lighthouse_rsync_artifact_guard.py`
+- `tests/test_lighthouse_landing_static_contract.py`

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LANDING_DIR = REPO_ROOT / "deploy" / "lighthouse" / "landing"
 RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
+SIDECAR_SYNC = REPO_ROOT / "deploy" / "lighthouse" / "sync-landing-sidecars.sh"
 
 AUTH_VERSION = "20260606-auth-mail"
 APEX_HOST = "lute-tlz-dddd.top"
@@ -119,3 +121,21 @@ def test_lighthouse_landing_sidecars_remain_remote_only_for_default_deploy():
 
     missing = sorted(REMOTE_ONLY_EXCLUDES - excludes)
     assert not missing, f"remote-only landing sidecar excludes missing: {missing}"
+
+
+def test_lighthouse_landing_sidecar_sync_is_manual_dry_run_by_default():
+    script = SIDECAR_SYNC.read_text()
+
+    subprocess.run(["bash", "-n", str(SIDECAR_SYNC)], check=True)
+
+    assert 'DRY_RUN="${DRY_RUN:-1}"' in script
+    assert "REMOTE_LANDING_DIR=\"$REMOTE_DIR/deploy/lighthouse/landing\"" in script
+    assert "--delete" not in script
+    assert "RUN_TOKEN_SMOKE" not in script
+    assert "deploy.sh" not in script
+    assert "docker-compose" not in script
+    assert "docker compose" not in script
+    assert "docker exec ai_video_nginx nginx -t" in script
+
+    for filename in ["index.html", *sorted(LANDING_SIDECARS)]:
+        assert filename in script

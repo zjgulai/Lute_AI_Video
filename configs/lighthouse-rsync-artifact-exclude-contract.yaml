@@ -1,13 +1,15 @@
 version: 1
 owner: deploy
 status: stable
-updated: "2026-06-05"
+updated: "2026-06-06"
 
 entrypoints:
   exclude_file: deploy/lighthouse/rsync-excludes.txt
   local_sync_wrapper: deploy/lighthouse/build-and-deploy.sh
+  landing_sidecar_sync_wrapper: deploy/lighthouse/sync-landing-sidecars.sh
   github_deploy_workflow: .github/workflows/deploy.yml
   artifact_guard_tests: tests/test_lighthouse_rsync_artifact_guard.py
+  landing_sidecar_tests: tests/test_lighthouse_landing_static_contract.py
   runbook: docs/runbooks/lighthouse-rsync-artifact-exclude.md
 
 exclude_categories:
@@ -63,13 +65,16 @@ rules:
   gnu_rsync_3_required_for_chmod: true
   github_workflow_must_not_duplicate_inline_excludes: true
   local_wrapper_uses_exclude_file: true
+  landing_sidecar_sync_defaults_to_dry_run: true
+  landing_sidecar_sync_must_not_delete_remote_files: true
   dry_run_before_manual_deploy: true
   no_runtime_smoke_or_provider_calls: true
 
 tests:
   artifact_exclude_guard: tests/test_lighthouse_rsync_artifact_guard.py
+  landing_sidecar_guard: tests/test_lighthouse_landing_static_contract.py
 
 commands:
-  focused_test: .venv/bin/python -m pytest tests/test_lighthouse_rsync_artifact_guard.py -q
+  focused_test: .venv/bin/python -m pytest tests/test_lighthouse_rsync_artifact_guard.py tests/test_lighthouse_landing_static_contract.py -q
 
 no_token_boundary: true
