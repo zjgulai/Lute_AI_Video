@@ -59,8 +59,11 @@ def test_default_run_is_dry_run_and_does_not_require_tokens():
     assert "No commands were executed" in result.stdout
     assert "CONFIRM_P2_TOKEN_SMOKE=1" in result.stdout
     assert "RUN_TOKEN_SMOKE=1" in result.stdout
+    assert "Before execute, build a no-token launch packet" in result.stdout
+    assert "python scripts/build_authorized_live_smoke_packet.py --include-preflight" in result.stdout
     assert "deploy/lighthouse/smoke.sh" in result.stdout
     assert "npm run e2e:prod" in result.stdout
+    assert "Running:" not in result.stdout
 
 
 def test_execute_requires_double_confirmation_before_real_smoke():

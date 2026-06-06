@@ -18,6 +18,7 @@ CONFIRM_ENV = "CONFIRM_P2_TOKEN_SMOKE"
 TOKEN_SMOKE_ENV = "RUN_TOKEN_SMOKE"
 APPROVAL_RECORD_ENV = "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD"
 ACCOUNT_READINESS_RECORD_ENV = "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD"
+SMOKE_PACKET_SCRIPT = "scripts/build_authorized_live_smoke_packet.py"
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,9 @@ def _print_dry_run(base_url: str) -> None:
     print("Required before execution:")
     for line in _env_status():
         print(line)
+    print("")
+    print("Before execute, build a no-token launch packet:")
+    print(f"python {SMOKE_PACKET_SCRIPT} --include-preflight")
     print("")
     print("After recharge, execute with:")
     print(
