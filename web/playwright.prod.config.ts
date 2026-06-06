@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const runTokenSmoke = ["1", "true", "yes"].includes((process.env.RUN_TOKEN_SMOKE || "").toLowerCase());
+const workers = runTokenSmoke ? 1 : Number(process.env.PLAYWRIGHT_PROD_WORKERS || 1);
 
 export default defineConfig({
   testDir: "./e2e/production",
@@ -8,7 +9,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 1,
-  workers: process.env.CI ? 1 : 2,
+  workers,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: process.env.PLAYWRIGHT_PROD_URL || "https://video.lute-tlz-dddd.top",

@@ -1,6 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-
-const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+import {
+  expectOkJsonWith429Retry,
+  isExpectedProductionPageNoise,
+  PRODUCTION_API_KEY,
+  productionApiHeaders,
+} from "./helpers";
 
 const TOKEN_CONSUMING_ENDPOINT_PATTERNS = [
   /\/(?:api\/)?fast\/(?:generate|submit|status)/,
@@ -22,23 +26,6 @@ const TOP_PAGES = [
   { path: "/settings", name: "Settings" },
   { path: "/works", name: "Works" },
 ];
-
-function isInfraNoise(msg: string): boolean {
-  const lower = msg.toLowerCase();
-  return (
-    lower.includes("favicon")
-    || lower.includes("hydrat")
-    || lower.includes("404")
-    || lower.includes("preload")
-    || lower.includes("fonts.gstatic")
-    || lower.includes("fonts.googleapis")
-    || lower.includes("cors policy")
-    || lower.includes("err_failed")
-    || lower.includes("401")
-    || lower.includes("unauthorized")
-    || lower.includes("net::err_failed")
-  );
-}
 
 function isTokenConsumingEndpoint(url: string): boolean {
   const pathname = new URL(url).pathname;
@@ -66,6 +53,8 @@ async function installTokenConsumptionGuard(page: Page): Promise<string[]> {
 }
 
 test.describe("Production smoke — top-level pages", () => {
+  test.describe.configure({ mode: "serial" });
+
   for (const page of TOP_PAGES) {
     test(`${page.name} loads (${page.path})`, async ({ page: pw }) => {
       const errors: string[] = [];
@@ -82,23 +71,23 @@ test.describe("Production smoke — top-level pages", () => {
 
       await expect(pw.locator("body")).toBeVisible();
 
-      const blocking = errors.filter((e) => !isInfraNoise(e));
+      const blocking = errors.filter((e) => !isExpectedProductionPageNoise(e));
       expect(blocking, `blocking errors on ${page.path}:\n${blocking.join("\n")}`).toEqual([]);
     });
   }
 });
 
 test.describe("Production smoke — backend API connectivity", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("GET /api/portfolio/ returns valid JSON with files array", async ({ request }) => {
-    const r = await request.get("/api/portfolio/?limit=5", {
-      headers: { "X-API-Key": API_KEY },
+    const body = await expectOkJsonWith429Retry(request, "/api/portfolio/?limit=5", {
+      headers: productionApiHeaders(),
     });
-    expect(r.status()).toBe(200);
-    const body = await r.json();
     expect(body).toHaveProperty("files");
-    expect(Array.isArray(body.files)).toBe(true);
+    expect(Array.isArray((body as { files?: unknown }).files)).toBe(true);
     expect(body).toHaveProperty("_meta");
-    expect(body._meta).toHaveProperty("version");
+    expect((body as { _meta?: unknown })._meta).toHaveProperty("version");
   });
 
   test("GET /health returns version 0.2.x with media_tools all true", async ({ request }) => {
@@ -115,11 +104,11 @@ test.describe("Production smoke — backend API connectivity", () => {
 
   test("_meta.version is consistent across /health and /api/portfolio", async ({ request }) => {
     const r1 = await request.get("/health");
-    const r2 = await request.get("/api/portfolio/?limit=1", {
-      headers: { "X-API-Key": API_KEY },
+    const portfolio = await expectOkJsonWith429Retry(request, "/api/portfolio/?limit=1", {
+      headers: productionApiHeaders(),
     });
     const v1 = (await r1.json()).version;
-    const v2 = (await r2.json())._meta.version;
+    const v2 = (portfolio as { _meta: { version: string } })._meta.version;
     expect(v1).toBe(v2);
   });
 });
@@ -139,28 +128,39 @@ test.describe("Production smoke — navigation", () => {
 
   test("Settings provider configuration is covered by default non-token smoke", async ({ page }) => {
     const violations = await installTokenConsumptionGuard(page);
-    await page.addInitScript(() => {
-      localStorage.setItem("ai_video_api_key", "ai_video_demo_2026");
+    await page.addInitScript((apiKey) => {
+      localStorage.setItem("ai_video_api_key", apiKey || "production-non-token-placeholder");
       localStorage.setItem("ai_video_demo_mode", "true");
       localStorage.setItem("app-locale", "en");
       localStorage.setItem("ai-video-app-store", JSON.stringify({
         state: {
-          activeScene: "product_direct",
           mode: "expert",
           pipelineMode: "step_by_step",
-          showSplash: false,
-          stage: "home",
           videoDuration: 30,
         },
-        version: 0,
+        version: 1,
       }));
-    });
+    }, PRODUCTION_API_KEY);
 
-    await page.goto("/settings", { waitUntil: "domcontentloaded" });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    const enterButton = page.getByRole("button", { name: /Get Started|开始|进入/ });
+    if (await enterButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await enterButton.click();
+    }
+    const apiKeyInput = page.locator("#apikey-input");
+    if (await apiKeyInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      test.skip(PRODUCTION_API_KEY.length === 0, "PLAYWRIGHT_API_KEY is required to unlock production Settings UI");
+      await apiKeyInput.fill(PRODUCTION_API_KEY);
+      await page.getByRole("button", { name: /Enter|进入|验证|Verify/ }).click();
+      await expect(apiKeyInput).toBeHidden({ timeout: 15_000 });
+    }
+    await page.getByRole("link", { name: /Settings|设置/ }).click();
 
-    await expect(page.getByRole("dialog", { name: /Settings|设置/ })).toBeVisible();
-    await page.getByRole("button", { name: /Providers|提供方/ }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: /Settings|设置/ })).toBeVisible();
+    await dialog.getByRole("button", { name: /Providers|提供方/ }).click();
     await expect(page.getByText(/Provider API keys|Provider API Keys/)).toBeVisible();
     await expect(page.getByText(/Model route catalog|模型路由清单/)).toBeVisible();
     await expect(page.getByText("DEEPSEEK_API_KEY").first()).toBeVisible();

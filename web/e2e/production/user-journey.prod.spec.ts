@@ -4,13 +4,14 @@
  * Run: PLAYWRIGHT_PROD_URL=https://video.lute-tlz-dddd.top npm run e2e:prod -- user-journey
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { expectOkJsonWith429Retry, productionApiHeaders } from "./helpers";
 
-const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+type PortfolioResponse = {
+  files?: unknown[];
+};
 
 async function expectOkJson(request: APIRequestContext, path: string) {
-  const r = await request.get(path, { headers: { "X-API-Key": API_KEY } });
-  expect(r.status(), `${path} should return 2xx`).toBeLessThan(300);
-  return r.json();
+  return expectOkJsonWith429Retry(request, path, { headers: productionApiHeaders() });
 }
 
 test.describe("P4-1 — End-to-end user journey", () => {
@@ -43,7 +44,7 @@ test.describe("P4-1 — End-to-end user journey", () => {
   test("step 4: backend submits async task and returns task_id < 5s @token-smoke", async ({ request }) => {
     const start = Date.now();
     const resp = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: { user_prompt: "P4-1 user-journey probe", duration: 15 },
     });
     const elapsed = Date.now() - start;
@@ -59,7 +60,7 @@ test.describe("P4-1 — End-to-end user journey", () => {
 
   test("step 5: status endpoint reflects progress @token-smoke", async ({ request }) => {
     const submit = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: { user_prompt: "P4-1 status probe", duration: 15 },
     });
     expect(submit.status()).toBe(200);
@@ -68,7 +69,7 @@ test.describe("P4-1 — End-to-end user journey", () => {
     await new Promise((r) => setTimeout(r, 3_000));
 
     const status = await request.get(`/api/fast/status/${task_id}`, {
-      headers: { "X-API-Key": API_KEY },
+      headers: productionApiHeaders(),
     });
     expect(status.status()).toBe(200);
     const body = await status.json();
@@ -78,8 +79,12 @@ test.describe("P4-1 — End-to-end user journey", () => {
   });
 
   test("step 6: /works gallery exposes portfolio listing", async ({ page, request }) => {
-    const portfolio = await expectOkJson(request, "/api/portfolio/?limit=10");
-    expect(portfolio.files.length, "portfolio must have files").toBeGreaterThan(0);
+    const portfolio = await expectOkJson(request, "/api/portfolio/?limit=10") as PortfolioResponse;
+    const files = portfolio.files;
+    if (!Array.isArray(files)) {
+      throw new Error("portfolio.files must be an array");
+    }
+    expect(files.length, "portfolio must have files").toBeGreaterThan(0);
 
     await page.goto("/works", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toBeVisible();
@@ -88,7 +93,7 @@ test.describe("P4-1 — End-to-end user journey", () => {
 
   test("step 7: unknown task_id returns 404 (negative path)", async ({ request }) => {
     const r = await request.get("/api/fast/status/fake_task_does_not_exist_xyz", {
-      headers: { "X-API-Key": API_KEY },
+      headers: productionApiHeaders(),
     });
     expect(r.status()).toBe(404);
   });
