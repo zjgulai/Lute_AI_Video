@@ -4,25 +4,48 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-04
+updated: 2026-06-06
 owner: self
 source: human+ai
 ---
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-04** — 追加 AI Video 2.0 C19 no-token commercial benchmark 与 C20 dry-run acceptance 证据边界；当前最高证据等级仍为 `L2-fixture-or-dry-run`，未触发 provider、未生成 approved brand token、未形成交付/发布结论。
+最近一次盘点：**2026-06-06** — 追加 AI Video 2.0 C21 授权审批止损门禁、C22 Momcozy S5/toolbox L2 fixture 矩阵与 C23 工具级 provider readiness preflight；当前最高证据等级仍为 `L2-fixture-or-dry-run`，未触发 provider、未生成 approved brand token、未形成交付/发布结论。
 
 > 上一次盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
 
 ## 当前执行入口
 
 - **当前长期 TODO 来源**：本文件的“完整 TODO list”继续维护项目长期 P1/P2 缺口。
-- **当前 AI Video 2.0 实施计划**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的当前执行计划；C1-C20 最高证据等级保持 `L2-fixture-or-dry-run`，C21 仍需用户再次明确授权后才能进入局部 `L4-authorized-live`。
+- **当前 AI Video 2.0 执行入口**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的原始分步计划；[`docs/workflows/ai-video-toolbox-productization-plan-stable.md`](../workflows/ai-video-toolbox-productization-plan-stable.md) 追踪工具箱 T1-T9/C23；[`docs/workflows/ai-video-project-2-0-final-self-proof-stable.md`](../workflows/ai-video-project-2-0-final-self-proof-stable.md) 记录 C1-C23 自证状态。C1-C23 最高证据等级保持 `L2-fixture-or-dry-run`；C21/C23 仍需用户再次明确授权、有效 approval record、预算止损和 `RUN_TOKEN_SMOKE=1` 后才允许局部进入 `L4-authorized-live`。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **当前研究 / 架构 / 流程引用**：2026-06-03 至 2026-06-04 新增 `docs/research/ai-video-commercial-technology-research-review-20260603.md`、`docs/research/ai-video-longform-production-research-audit-review-20260603.md`、`docs/research/aihot-image-video-product-technology-research-review-20260604.md`、[`docs/architecture/ai-video-commercial-toolbox-architecture-review-20260603.md`](../architecture/ai-video-commercial-toolbox-architecture-review-20260603.md)、[`docs/architecture/brand-asset-token-contract-review-20260603.md`](../architecture/brand-asset-token-contract-review-20260603.md)、[`docs/architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md`](../architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md)、[`docs/architecture/quality-contract-brand-rights-audit-review-20260603.md`](../architecture/quality-contract-brand-rights-audit-review-20260603.md)、[`docs/workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md`](../workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md)、[`docs/workflows/brand-data-asset-directory-intake-review-20260603.md`](../workflows/brand-data-asset-directory-intake-review-20260603.md)、[`docs/workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md`](../workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md) 与 [`docs/workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md`](../workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md)，用于后续 S1-S5 工具库、Market Signal Intelligence、Brand Asset Token、Provider Prompt Compiler、Production Job Ledger、Quality Contract、长视频生产对象、品牌数据资产目录接入和 Project 2.0 代码前实施计划；十一份均为 `review` 状态，不替代本文件的 TODO list。
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
 - **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。
+
+## 0.80 2026-06-06 AI Video 2.0 C23 工具箱 provider readiness preflight
+
+- **新增入口** — `src/pipeline/toolbox/provider_readiness.py` 和 `GET /toolbox/{tool_id}/provider-readiness` 支持工具级授权前置检查，复用 C21 approval record、API key presence、provider capability、budget stop-loss 与 job ledger/audit readiness。
+- **工具授权范围** — `configs/authorized-live-token-smoke-approval-template.json` 的 `sample_plan.toolbox_tool_ids` 必须包含精确工具 id 或 `*`；未列入的工具不能继承其他工具授权。
+- **默认阻断** — approval template 仍是 `template_only: true`，即使设置 `RUN_TOKEN_SMOKE=1` 和 fixture API key，也会以 fail-closed 结果阻断真实调用。
+- **验证结果** — `.venv/bin/python -m pytest tests/test_authorized_live_provider_harness.py tests/test_toolbox_router.py tests/test_token_smoke_preflight.py tests/test_authorized_live_harness.py` 通过，结果 `34 passed`；`ruff check` 和 `git diff --check` 通过。
+- **边界** — C23 只证明工具级 provider readiness 可以在 no-call 模式下阻断或标记 ready；未提交 provider job，未生成媒体，未形成 delivery accepted 或 publish allowed 结论。
+
+## 0.79 2026-06-06 AI Video 2.0 C22 Momcozy S5/toolbox L2 fixture 矩阵
+
+- **新增 fixture** — `tests/fixtures/toolbox/momcozy_toolbox_l2_fixture_matrix.json` 覆盖 Momcozy S5 与 `product-image`、`six-view`、`ecommerce-visual` 等工具箱样本。
+- **benchmark 接入** — `scripts/no_token_commercial_benchmark.py` 纳入工具箱 fixture 矩阵，只报告 L2 evidence refs，不读取 provider secret，不提交 provider job。
+- **契约覆盖** — `tests/test_toolbox_contracts.py` 与 `tests/test_no_token_commercial_benchmark.py` 约束工具样本必须保持 refs-only、no delivery accepted、no publish allowed。
+- **边界** — C22 只证明 Momcozy 工具箱样本可以进入 dry-run 证据矩阵；不代表真实图片生成质量、真实品牌 token 通过或商业交付完成。
+
+## 0.78 2026-06-06 AI Video 2.0 C21 授权审批止损门禁
+
+- **新增模板** — `configs/authorized-live-token-smoke-approval-template.json` 定义 C21 approval record 所需字段，默认 `template_only: true`，不会被误认为已授权。
+- **预算止损** — `src/pipeline/token_smoke_preflight.py` 与 `src/pipeline/authorized_live_harness.py` 校验 provider/model、positive finite budget、sample count、provider call ceiling、per-job cost ceiling、retry ceiling 和 halt-on-failure policy。
+- **真实执行锁** — `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1` 与有效 approval record 均满足前，harness 只能 dry-run，不会提交真实 provider job。
+- **验证边界** — `tests/test_token_smoke_preflight.py`、`tests/test_authorized_live_harness.py` 与 `tests/test_p2_recharge_smoke_checklist.py` 覆盖缺失 approval、模板未转正、预算字段缺失和 execute flag 缺失等阻断路径。
+- **边界** — C21 是授权前置门禁，不是授权本身；没有用户固定授权语句和真实 approval record 时，不能进入 `L4-authorized-live`。
 
 ## 0.76 2026-06-04 AI Video 2.0 C19 no-token benchmark 证据边界
 
