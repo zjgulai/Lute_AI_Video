@@ -1,6 +1,15 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+
+const TOKEN_CONSUMING_ENDPOINT_PATTERNS = [
+  /\/(?:api\/)?fast\/(?:generate|submit|status)/,
+  /\/(?:api\/)?scenario\/[^/]+(?:$|\/(?:submit|start|step|resume|regenerate|gate))/,
+  /\/(?:api\/)?pipeline\/(?:start|[^/]+\/(?:review|distribution|output))/,
+  /\/(?:api\/)?distribution\/publish/,
+  /\/publish\//,
+  /\/api\/upload/,
+];
 
 const TOP_PAGES = [
   { path: "/", name: "Home" },
@@ -29,6 +38,31 @@ function isInfraNoise(msg: string): boolean {
     || lower.includes("unauthorized")
     || lower.includes("net::err_failed")
   );
+}
+
+function isTokenConsumingEndpoint(url: string): boolean {
+  const pathname = new URL(url).pathname;
+  return TOKEN_CONSUMING_ENDPOINT_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+async function installTokenConsumptionGuard(page: Page): Promise<string[]> {
+  const violations: string[] = [];
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    if (!isTokenConsumingEndpoint(request.url())) {
+      await route.continue();
+      return;
+    }
+
+    const pathname = new URL(request.url()).pathname;
+    violations.push(`${request.method().toUpperCase()} ${pathname}`);
+    await route.fulfill({
+      status: 451,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Production non-token smoke blocked a token-consuming request" }),
+    });
+  });
+  return violations;
 }
 
 test.describe("Production smoke — top-level pages", () => {
@@ -101,6 +135,39 @@ test.describe("Production smoke — navigation", () => {
       `Expected /settings or session_expired redirect, got: ${url}`,
     ).toBe(true);
     await expect(page.locator("body")).toBeVisible();
+  });
+
+  test("Settings provider configuration is covered by default non-token smoke", async ({ page }) => {
+    const violations = await installTokenConsumptionGuard(page);
+    await page.addInitScript(() => {
+      localStorage.setItem("ai_video_api_key", "ai_video_demo_2026");
+      localStorage.setItem("ai_video_demo_mode", "true");
+      localStorage.setItem("app-locale", "en");
+      localStorage.setItem("ai-video-app-store", JSON.stringify({
+        state: {
+          activeScene: "product_direct",
+          mode: "expert",
+          pipelineMode: "step_by_step",
+          showSplash: false,
+          stage: "home",
+          videoDuration: 30,
+        },
+        version: 0,
+      }));
+    });
+
+    await page.goto("/settings", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+
+    await expect(page.getByRole("dialog", { name: /Settings|设置/ })).toBeVisible();
+    await page.getByRole("button", { name: /Providers|提供方/ }).click();
+    await expect(page.getByText(/Provider API keys|Provider API Keys/)).toBeVisible();
+    await expect(page.getByText(/Model route catalog|模型路由清单/)).toBeVisible();
+    await expect(page.getByText("DEEPSEEK_API_KEY").first()).toBeVisible();
+    await expect(page.getByText("POYO_API_KEY").first()).toBeVisible();
+    await expect(page.getByText("SILICONFLOW_API_KEY").first()).toBeVisible();
+
+    expect(violations, "default production settings smoke must not touch token-consuming endpoints").toEqual([]);
   });
 
   test("Fast Mode page reachable via direct goto (handles session redirect)", async ({ page }) => {
