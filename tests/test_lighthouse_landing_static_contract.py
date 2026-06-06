@@ -11,9 +11,34 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LANDING_DIR = REPO_ROOT / "deploy" / "lighthouse" / "landing"
 RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 SIDECAR_SYNC = REPO_ROOT / "deploy" / "lighthouse" / "sync-landing-sidecars.sh"
+NGINX_CONF = REPO_ROOT / "deploy" / "lighthouse" / "nginx.conf"
+DOCKER_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.prod.yml"
 
 AUTH_VERSION = "20260606-auth-mail"
 APEX_HOST = "lute-tlz-dddd.top"
+EXPECTED_SYSTEM_HOSTS = {
+    "video",
+    "voc",
+    "report",
+    "shopify",
+    "mkt",
+    "brand",
+    "mas",
+    "business",
+    "product",
+    "kg",
+    "person",
+    "llm",
+}
+STATIC_SITE_MOUNTS = {
+    "mkt": ("/opt/mkt53/html", "/var/www/mkt53"),
+    "shopify": ("/opt/momcozy-audit/html", "/var/www/momcozy-audit"),
+    "report": ("/opt/voc-report/html", "/var/www/voc-report"),
+    "business": ("/opt/business-insight-hub/html", "/var/www/business-insight-hub"),
+    "product": ("/opt/ai-product-select/html", "/var/www/ai-product-select"),
+    "person": ("/opt/ai-employ-platform/html", "/var/www/ai-employ-platform"),
+    "llm": ("/opt/llm-compare-hub/html", "/var/www/llm-compare-hub"),
+}
 
 LANDING_SIDECARS = {
     "login.html",
@@ -86,9 +111,31 @@ def test_lighthouse_cover_enters_the_systems_directory_after_login():
     systems_html = (LANDING_DIR / "systems.html").read_text()
 
     assert "next=/systems.html" in index_html
-    assert "https://video.lute-tlz-dddd.top" in systems_html
-    assert "https://voc.lute-tlz-dddd.top" in systems_html
-    assert "具体业务系统仍由各自子域名和应用权限控制" in systems_html
+    assert "路特数据科学平台" in systems_html
+
+    missing_hosts = sorted(
+        host
+        for host in EXPECTED_SYSTEM_HOSTS
+        if f"https://{host}.{APEX_HOST}" not in systems_html
+    )
+    assert not missing_hosts, f"systems directory missing cards: {missing_hosts}"
+
+
+def test_lighthouse_system_domains_are_routed_before_default_ai_video_fallback():
+    nginx_conf = NGINX_CONF.read_text()
+    compose = DOCKER_COMPOSE.read_text()
+
+    for host in EXPECTED_SYSTEM_HOSTS:
+        assert f"{host}.{APEX_HOST}" in nginx_conf
+
+    for host, (source, target) in STATIC_SITE_MOUNTS.items():
+        assert f"server_name {host}.{APEX_HOST};" in nginx_conf
+        assert f"root {target};" in nginx_conf
+        assert f"{source}:{target}:ro" in compose
+
+    assert f"server_name brand.{APEX_HOST} mas.{APEX_HOST};" in nginx_conf
+    assert f"server_name kg.{APEX_HOST};" in nginx_conf
+    assert "server promptforge_app:3000;" in nginx_conf
 
 
 def test_lighthouse_auth_assets_use_one_cache_bust_version():
