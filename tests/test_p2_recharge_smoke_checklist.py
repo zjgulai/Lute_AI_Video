@@ -188,6 +188,7 @@ def test_authorized_live_approval_template_is_present_and_blocked_by_default():
     assert payload["template_only"] is True
     assert payload["scope"] == "c21-token-smoke"
     assert payload["provider_revalidation_ref"] == "configs/poyo-current-provider-revalidation-contract.json"
+    assert payload["sample_plan_ref"] == "configs/authorized-live-token-smoke-sample-plan-contract.json"
     assert payload["budget_stop_loss"]["max_retry_count"] == 0
     assert payload["budget_stop_loss"]["stop_on_first_failure"] is True
     assert payload["budget_stop_loss"]["halt_on_rate_limit"] is True

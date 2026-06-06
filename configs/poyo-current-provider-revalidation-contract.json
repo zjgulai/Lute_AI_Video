@@ -51,10 +51,10 @@
       },
       "recommended_l4_smoke_default": {
         "model": "seedance-2",
-        "resolution": "720p",
+        "resolution": "480p",
         "duration_seconds": 4,
         "video_input": false,
-        "estimated_provider_cost_usd": 0.8
+        "estimated_provider_cost_usd": 0.4
       }
     },
     {

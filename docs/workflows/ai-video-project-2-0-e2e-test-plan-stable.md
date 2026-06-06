@@ -117,6 +117,7 @@ git diff --check
 - demo `API_KEY` 或 demo `PLAYWRIGHT_API_KEY` 不允许进入真实 token smoke。
 - `scripts/p2_recharge_smoke_checklist.py --execute` 必须自动执行 preflight；preflight blocked 时不得启动 `smoke.sh` 或 Playwright。
 - approval record 必须绑定 `configs/poyo-current-provider-revalidation-contract.json`，否则 provider capability evidence 必须 blocked。
+- approval record 必须绑定 `configs/authorized-live-token-smoke-sample-plan-contract.json`，否则 sample plan contract 必须 blocked。
 - provider job ledger 只暴露 prompt hash、artifact refs、status，不暴露 prompt payload 或品牌资产原文。
 - C1-C8 不生成 approved brand token。
 
@@ -130,6 +131,8 @@ git diff --check
 - poyo 公开模型页仍列出 `seedance-2` / `seedance-2-fast`；`seedance-2` 支持 480p、720p、1080p 与 4-15 秒短片。
 - poyo 公开模型页仍列出 `gpt-image-2` / `gpt-image-2-edit`；支持低/中/高质量、1K/2K/4K、单图返回。
 - 这不证明 API key 有效、账户余额充足、内容审核会通过、runtime 不限流，也不证明商业交付完成。
+
+第一轮 L4 样本计划记录在 `configs/authorized-live-token-smoke-sample-plan-contract.json`。该计划只允许 Fast+S1 两条以内的 `seedance-2` 480p/4s 最小视频样本，预算止损为总额 `$1.00`、单任务 `$0.50`、零自动重试。它是连接性 smoke，不是质量验收。
 
 固定命令：
 
@@ -174,6 +177,7 @@ npm run e2e:prod
 - `API_KEY` 和 `PLAYWRIGHT_API_KEY` 是非 demo production key。
 - `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 已配置。
 - 私有 approval record 已绑定 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`。
+- 私有 approval record 已绑定 `sample_plan_ref=configs/authorized-live-token-smoke-sample-plan-contract.json`。
 - no-token preflight 已通过。
 - 生产日志和 artifact 目录可检查。
 
@@ -194,8 +198,8 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 
 | 顺序 | 场景 | 样本 | 目的 | 预算策略 |
 |---:|---|---|---|---|
-| 1 | Fast Mode | 1 条 15s 以内短视频 | 验证最短 text-to-video 链路 | 成功即停 |
-| 2 | S1 商品直拍 | 1 个商品、单路径 | 验证脚本、关键帧、视频任务、状态回写 | 失败后不自动重试 |
+| 1 | Fast Mode | 1 条 480p/4s 最小短视频 | 验证最短 text-to-video 链路 | 成功即停 |
+| 2 | S1 商品直拍 | 1 条 480p/4s 单路径 | 验证脚本、视频任务、状态回写、artifact refs | 失败后不自动重试 |
 | 3 | S5 Brand VLOG | 可选 1 条短样本 | 验证品牌人物/口播链路 | 需要用户单独确认 |
 
 失败处理：
@@ -231,6 +235,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 6. [x] 移除生产 `@token-smoke` spec 中残留的 demo key fallback，统一通过 production helper 管控 authenticated smoke。实现文件：`web/e2e/production/helpers.ts`、`web/e2e/production/s1-gate.prod.spec.ts`、`web/e2e/production/s1-step-by-step.prod.spec.ts`。
 7. [x] 强制 P2 充值后统一入口在任何 token-consuming 命令前执行 no-token preflight。实现文件：`scripts/p2_recharge_smoke_checklist.py`、`tests/test_p2_recharge_smoke_checklist.py`。
 8. [x] 增加 poyo 当前公开文档重验契约，并绑定到真实 smoke approval record/preflight。实现文件：`configs/poyo-current-provider-revalidation-contract.json`、`src/pipeline/token_smoke_preflight.py`。
+9. [x] 增加授权真实 smoke 最小样本计划契约，并绑定到 approval record/preflight。实现文件：`configs/authorized-live-token-smoke-sample-plan-contract.json`、`src/pipeline/token_smoke_preflight.py`。
 
 ## 阶段验收
 
@@ -241,6 +246,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - L2 preflight 在无授权状态下正确 blocked，在授权记录和 key 完整时才变为可执行。
 - P2 充值后统一入口 blocked 时不得启动真实 smoke 子进程。
 - L2.5 provider 公开文档重验已完成且 approval record 绑定当前 revalidation ref。
+- L2.5 authorized-live sample plan 已完成且 approval record 绑定当前 sample plan ref。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 

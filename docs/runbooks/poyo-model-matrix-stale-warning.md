@@ -20,6 +20,8 @@ source: human+ai
 
 当前公开文档重验契约：[`configs/poyo-current-provider-revalidation-contract.json`](../../configs/poyo-current-provider-revalidation-contract.json)。
 
+真实 smoke 最小样本计划契约：[`configs/authorized-live-token-smoke-sample-plan-contract.json`](../../configs/authorized-live-token-smoke-sample-plan-contract.json)。
+
 ## 2. 强制边界
 
 - 该矩阵只能表达 `2026-05` catalog snapshot 与本项目阈值映射。
@@ -46,6 +48,7 @@ source: human+ai
 - `seedance-2` 当前公开价格边界：720p text/image-to-video 为 `$0.20/sec`，1080p text/image-to-video 为 `$0.45/sec`；最低 video-input 档为 `$0.05/sec`。
 - `gpt-image-2` / `gpt-image-2-edit` 当前公开文档仍列为可用；低质量 1K 为 `$0.01/gen`，高质量 4K 为 `$0.321/gen`。
 - L4 approval record 必须包含 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`；缺失或不匹配时 preflight 必须 blocked。
+- 第一轮 L4 smoke 的视频样本计划收紧为 `seedance-2`、480p、4s、Fast+S1 两条以内，总 provider 预估成本 `$0.80`，预算止损上限 `$1.00`。这只验证连接性、状态回写和 artifact refs，不做高质量成片验收。
 
 ## 4. 变更流程
 
@@ -53,7 +56,7 @@ source: human+ai
 2. 如果涉及 provider catalog、价格、审核规则或默认模型，先人工核对 poyo.ai 当前产品页面/API 文档。
 3. 同步更新 `docs/architecture/poyo-model-matrix-stable.md` 与 `src/pipeline/model_thresholds.py`，不能只改其中一个。
 4. 如快照日期变化，同步更新 `configs/poyo-model-matrix-stale-warning-contract.json` 的 `snapshot_date` 和 `snapshot_catalog`。
-5. 如真实 smoke 前的 provider 文档发生变化，同步更新 `configs/poyo-current-provider-revalidation-contract.json` 和相关 preflight 测试。
+5. 如真实 smoke 前的 provider 文档或样本范围发生变化，同步更新 `configs/poyo-current-provider-revalidation-contract.json`、`configs/authorized-live-token-smoke-sample-plan-contract.json` 和相关 preflight 测试。
 6. 运行本地静态守卫，不用真实 key，不消耗 token。
 
 ## 5. 本地验证

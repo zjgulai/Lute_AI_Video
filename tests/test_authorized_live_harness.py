@@ -14,6 +14,7 @@ from src.pipeline.token_smoke_preflight import (
     PROVIDER_REVALIDATION_REF,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
+    SAMPLE_PLAN_REF,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -60,10 +61,10 @@ def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_pa
         tmp_path,
         provider="poyo",
         model="seedance-2-fast",
-        budget_limit_usd=2.5,
+        budget_limit_usd=1.0,
         budget_stop_loss={
-            "max_total_cost_usd": 2.5,
-            "per_job_cost_ceiling_usd": 1.25,
+            "max_total_cost_usd": 1.0,
+            "per_job_cost_ceiling_usd": 0.45,
             "max_retry_count": 0,
             "stop_on_first_failure": True,
             "halt_on_rate_limit": True,
@@ -81,7 +82,7 @@ def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_pa
     assert report.job_spec is not None
     assert report.job_spec.provider == "poyo"
     assert report.job_spec.model == "seedance-2-fast"
-    assert report.job_spec.cost_ceiling_usd == 1.25
+    assert report.job_spec.cost_ceiling_usd == 0.45
 
 
 def test_execute_mode_requires_extra_execute_flag_after_preflight(tmp_path: Path):
@@ -153,6 +154,7 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
         "provider": provider,
         "model": model,
         "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
         "sample_plan": {

@@ -1,0 +1,64 @@
+{
+  "status": "stable",
+  "evidence_level": "L2-fixture-or-dry-run",
+  "sample_plan_ref": "configs/authorized-live-token-smoke-sample-plan-contract.json",
+  "provider_revalidation_ref": "configs/poyo-current-provider-revalidation-contract.json",
+  "approval_scope": "c21-token-smoke",
+  "no_provider_call": true,
+  "limits": {
+    "max_sample_count": 2,
+    "max_provider_calls": 2,
+    "max_total_cost_usd": 1.0,
+    "per_job_cost_ceiling_usd": 0.5,
+    "max_retry_count": 0
+  },
+  "allowed_provider_models": [
+    {"provider": "poyo", "model": "seedance-2"},
+    {"provider": "poyo", "model": "seedance-2-fast"}
+  ],
+  "allowed_scenarios": ["fast", "s1", "toolbox"],
+  "allowed_toolbox_tool_ids": [
+    "product-image",
+    "six-view",
+    "ecommerce-visual",
+    "digital-human",
+    "storyboard"
+  ],
+  "core_video_samples": [
+    {
+      "sample_id": "fast-seedance-2-480p-4s",
+      "scenario": "fast",
+      "provider": "poyo",
+      "model": "seedance-2",
+      "workflow": "text-to-video",
+      "resolution": "480p",
+      "duration_seconds": 4,
+      "estimated_provider_cost_usd": 0.4,
+      "objective": "Verify the shortest production text-to-video provider path and artifact writeback."
+    },
+    {
+      "sample_id": "s1-seedance-2-480p-4s",
+      "scenario": "s1",
+      "provider": "poyo",
+      "model": "seedance-2",
+      "workflow": "text-to-video",
+      "resolution": "480p",
+      "duration_seconds": 4,
+      "estimated_provider_cost_usd": 0.4,
+      "objective": "Verify S1 state progression, job ledger, and artifact refs on a minimal provider call."
+    }
+  ],
+  "stop_loss_policy": {
+    "stop_on_first_failure": true,
+    "halt_on_rate_limit": true,
+    "halt_on_quota_error": true,
+    "halt_on_content_rejection": true,
+    "halt_on_missing_artifact": true
+  },
+  "forbidden_in_first_smoke": [
+    "S5 unless the user gives separate explicit approval",
+    "Publishing or delivery acceptance",
+    "Any sample outside allowed_scenarios or allowed_toolbox_tool_ids",
+    "Any retry count above zero"
+  ]
+}

@@ -28,6 +28,8 @@ APPROVAL_SCOPE = "c21-token-smoke"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROVIDER_REVALIDATION_REF = "configs/poyo-current-provider-revalidation-contract.json"
 PROVIDER_REVALIDATION_PATH = REPO_ROOT / PROVIDER_REVALIDATION_REF
+SAMPLE_PLAN_REF = "configs/authorized-live-token-smoke-sample-plan-contract.json"
+SAMPLE_PLAN_PATH = REPO_ROOT / SAMPLE_PLAN_REF
 APPROVAL_STATEMENT_TEMPLATE = (
     "我明确授权 C21 运行一次真实 token smoke，允许调用 provider，"
     "使用的 provider/model 是 {provider}/{model}，预算上限是 {budget_limit}。"
@@ -48,6 +50,7 @@ class TokenSmokePreflightReport(BaseModel):
     run_token_smoke: bool
     approval_record_ref: str | None = None
     provider_revalidation_ref: str | None = None
+    sample_plan_ref: str | None = None
     approved_provider: str | None = None
     approved_model: str | None = None
     approved_budget_limit_usd: float | None = None
@@ -76,6 +79,7 @@ def build_token_smoke_preflight_report(
         _check_run_token_smoke(env),
         *_check_api_keys(env),
         approval_check,
+        _check_sample_plan_contract(approval_payload),
         _check_budget_stop_loss(approval_payload),
         _check_provider_capability_evidence(approval_payload),
         _check_job_ledger_readiness(),
@@ -88,6 +92,7 @@ def build_token_smoke_preflight_report(
         run_token_smoke=env.get(RUN_TOKEN_SMOKE_ENV) == "1",
         approval_record_ref=str(record_path) if record_path else None,
         provider_revalidation_ref=_approval_string(approval_payload, "provider_revalidation_ref"),
+        sample_plan_ref=_approval_string(approval_payload, "sample_plan_ref"),
         approved_provider=_approval_string(approval_payload, "provider"),
         approved_model=_approval_string(approval_payload, "model"),
         approved_budget_limit_usd=_approval_budget_limit_usd(approval_payload),
@@ -354,6 +359,84 @@ def _check_budget_stop_loss(approval_payload: Mapping[str, Any] | None) -> Prefl
     )
 
 
+def _check_sample_plan_contract(approval_payload: Mapping[str, Any] | None) -> PreflightCheck:
+    if approval_payload is None:
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail="passing approval record is required before sample plan can be evaluated",
+        )
+
+    sample_plan_ref = _approval_string(approval_payload, "sample_plan_ref")
+    if sample_plan_ref is None:
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail="approval record requires sample_plan_ref before authorized-live provider calls",
+        )
+    if sample_plan_ref != SAMPLE_PLAN_REF:
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail=f"sample_plan_ref must equal {SAMPLE_PLAN_REF}",
+            evidence_refs=[sample_plan_ref],
+        )
+
+    contract_error, contract = _load_sample_plan_contract()
+    if contract_error or contract is None:
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail=contract_error or "sample plan contract is unavailable",
+            evidence_refs=[SAMPLE_PLAN_REF],
+        )
+
+    sample_plan = approval_payload.get("sample_plan")
+    if not isinstance(sample_plan, Mapping):
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail="approval record requires sample_plan object",
+            evidence_refs=[SAMPLE_PLAN_REF],
+        )
+    budget_stop_loss = approval_payload.get("budget_stop_loss")
+    if not isinstance(budget_stop_loss, Mapping):
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail="approval record requires budget_stop_loss object",
+            evidence_refs=[SAMPLE_PLAN_REF],
+        )
+
+    provider = _approval_string(approval_payload, "provider")
+    model = _approval_string(approval_payload, "model")
+    if not _contract_allows_provider_model(contract, provider, model):
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail=f"sample plan contract does not allow {provider}/{model}",
+            evidence_refs=[SAMPLE_PLAN_REF],
+        )
+
+    contract_limits = contract["limits"]
+    violations = _sample_plan_limit_violations(sample_plan, budget_stop_loss, contract_limits)
+    scenario_violations = _sample_plan_scope_violations(sample_plan, contract)
+    if violations or scenario_violations:
+        return PreflightCheck(
+            name="sample_plan_contract",
+            status="block",
+            detail="; ".join([*violations, *scenario_violations]),
+            evidence_refs=[SAMPLE_PLAN_REF],
+        )
+
+    return PreflightCheck(
+        name="sample_plan_contract",
+        status="pass",
+        detail=f"authorized-live sample plan is bound to {SAMPLE_PLAN_REF}",
+        evidence_refs=[SAMPLE_PLAN_REF, PROVIDER_REVALIDATION_REF],
+    )
+
+
 def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | None) -> PreflightCheck:
     profiles = list_provider_prompt_profiles()
     provider = _approval_string(approval_payload, "provider")
@@ -427,6 +510,7 @@ def _missing_detail_fields(payload: Mapping[str, Any]) -> list[str]:
         "provider",
         "model",
         "provider_revalidation_ref",
+        "sample_plan_ref",
         "budget_limit",
         "budget_limit_usd",
         "approval_statement",
@@ -452,6 +536,98 @@ def _load_provider_revalidation_contract() -> tuple[str | None, dict[str, Any] |
     if not isinstance(payload.get("models"), list) or not payload["models"]:
         return "provider revalidation contract requires model entries", None
     return None, payload
+
+
+def _load_sample_plan_contract() -> tuple[str | None, dict[str, Any] | None]:
+    if not SAMPLE_PLAN_PATH.exists():
+        return "sample plan contract is missing", None
+    try:
+        payload = json.loads(SAMPLE_PLAN_PATH.read_text())
+    except json.JSONDecodeError:
+        return "sample plan contract must be valid JSON", None
+    if not isinstance(payload, dict):
+        return "sample plan contract must be a JSON object", None
+    if payload.get("status") != "stable":
+        return "sample plan contract must be stable", None
+    if payload.get("no_provider_call") is not True:
+        return "sample plan contract must preserve the no-provider-call boundary", None
+    if payload.get("evidence_level") != "L2-fixture-or-dry-run":
+        return "sample plan contract must stay labeled as fixture/dry-run evidence", None
+    if payload.get("provider_revalidation_ref") != PROVIDER_REVALIDATION_REF:
+        return "sample plan contract must bind the current provider revalidation ref", None
+    if payload.get("approval_scope") != APPROVAL_SCOPE:
+        return "sample plan contract must bind the C21 approval scope", None
+    if not isinstance(payload.get("limits"), Mapping):
+        return "sample plan contract requires limits object", None
+    return None, payload
+
+
+def _contract_allows_provider_model(contract: Mapping[str, Any], provider: str | None, model: str | None) -> bool:
+    if provider is None or model is None:
+        return False
+    provider_key = provider.lower()
+    model_key = model.lower()
+    for item in contract.get("allowed_provider_models", []):
+        if not isinstance(item, Mapping):
+            continue
+        if str(item.get("provider", "")).lower() == provider_key and str(item.get("model", "")).lower() == model_key:
+            return True
+    return False
+
+
+def _sample_plan_limit_violations(
+    sample_plan: Mapping[str, Any],
+    budget_stop_loss: Mapping[str, Any],
+    contract_limits: Mapping[str, Any],
+) -> list[str]:
+    checks = [
+        ("sample_plan.max_sample_count", sample_plan.get("max_sample_count"), contract_limits.get("max_sample_count")),
+        (
+            "sample_plan.max_provider_calls",
+            sample_plan.get("max_provider_calls"),
+            contract_limits.get("max_provider_calls"),
+        ),
+        (
+            "budget_stop_loss.max_total_cost_usd",
+            budget_stop_loss.get("max_total_cost_usd"),
+            contract_limits.get("max_total_cost_usd"),
+        ),
+        (
+            "budget_stop_loss.per_job_cost_ceiling_usd",
+            budget_stop_loss.get("per_job_cost_ceiling_usd"),
+            contract_limits.get("per_job_cost_ceiling_usd"),
+        ),
+        (
+            "budget_stop_loss.max_retry_count",
+            budget_stop_loss.get("max_retry_count"),
+            contract_limits.get("max_retry_count"),
+        ),
+    ]
+    violations = []
+    for label, actual_raw, ceiling_raw in checks:
+        actual = _nonnegative_float(actual_raw)
+        ceiling = _nonnegative_float(ceiling_raw)
+        if actual is None or ceiling is None or actual > ceiling:
+            violations.append(f"{label} must be <= {ceiling_raw}")
+    return violations
+
+
+def _sample_plan_scope_violations(sample_plan: Mapping[str, Any], contract: Mapping[str, Any]) -> list[str]:
+    allowed_scenarios = {str(value) for value in contract.get("allowed_scenarios", [])}
+    scenarios = [str(value) for value in sample_plan.get("scenarios", [])]
+    invalid_scenarios = [value for value in scenarios if value not in allowed_scenarios]
+    violations = []
+    if not scenarios:
+        violations.append("sample_plan.scenarios must not be empty")
+    if invalid_scenarios:
+        violations.append(f"sample_plan.scenarios contains unsupported values: {', '.join(invalid_scenarios)}")
+
+    allowed_tool_ids = {str(value) for value in contract.get("allowed_toolbox_tool_ids", [])}
+    toolbox_tool_ids = [str(value) for value in sample_plan.get("toolbox_tool_ids", [])]
+    invalid_tool_ids = [value for value in toolbox_tool_ids if value not in allowed_tool_ids]
+    if invalid_tool_ids:
+        violations.append(f"sample_plan.toolbox_tool_ids contains unsupported values: {', '.join(invalid_tool_ids)}")
+    return violations
 
 
 def _contract_supports_model(contract: Mapping[str, Any], model: str) -> bool:
@@ -532,6 +708,16 @@ def _positive_finite_number(value: Any) -> float | None:
     if not math.isfinite(parsed) or parsed <= 0:
         return None
     return parsed
+
+
+def _nonnegative_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) and parsed >= 0 else None
 
 
 def _match_provider_profile(

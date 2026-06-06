@@ -14,6 +14,7 @@ from src.pipeline.token_smoke_preflight import (
     PROVIDER_REVALIDATION_REF,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
+    SAMPLE_PLAN_REF,
 )
 from src.pipeline.toolbox.provider_readiness import TOOLBOX_TOOL_SCOPE_FIELD
 
@@ -522,6 +523,7 @@ def _write_toolbox_approval_record(tmp_path: Path, **overrides: Any) -> Path:
         "provider": provider,
         "model": model,
         "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
         "sample_plan": {

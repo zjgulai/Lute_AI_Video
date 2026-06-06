@@ -13,6 +13,8 @@ from src.pipeline.token_smoke_preflight import (
     PROVIDER_REVALIDATION_REF,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
+    SAMPLE_PLAN_PATH,
+    SAMPLE_PLAN_REF,
     build_token_smoke_preflight_report,
 )
 
@@ -68,6 +70,7 @@ def test_valid_preflight_allows_harness_entry_without_provider_call(tmp_path: Pa
     assert report.blocked is False
     assert report.provider_call_allowed is True
     assert report.provider_revalidation_ref == PROVIDER_REVALIDATION_REF
+    assert report.sample_plan_ref == SAMPLE_PLAN_REF
     assert report.approved_provider == "poyo"
     assert report.approved_model == "seedance-2"
     assert report.approved_budget_limit_usd == 1.0
@@ -97,6 +100,67 @@ def test_provider_capability_evidence_requires_current_revalidation_ref(tmp_path
     assert PROVIDER_REVALIDATION_REF in _check_detail(report, "provider_capability_evidence")
 
 
+def test_sample_plan_contract_requires_current_ref(tmp_path: Path):
+    approval_record = _write_approval_record(
+        tmp_path,
+        sample_plan_ref="configs/old-sample-plan.json",
+    )
+    env = _ready_env()
+    env[APPROVAL_RECORD_ENV] = str(approval_record)
+
+    report = build_token_smoke_preflight_report(env=env)
+
+    assert report.blocked is True
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "authorized_live_approval") == "pass"
+    assert _check_status(report, "sample_plan_contract") == "block"
+    assert SAMPLE_PLAN_REF in _check_detail(report, "sample_plan_contract")
+
+
+def test_sample_plan_contract_blocks_over_budget_plan(tmp_path: Path):
+    approval_record = _write_approval_record(
+        tmp_path,
+        sample_plan={
+            "max_sample_count": 3,
+            "max_provider_calls": 3,
+            "scenarios": ["fast", "s1"],
+            "s5_requires_separate_confirmation": True,
+        },
+    )
+    env = _ready_env()
+    env[APPROVAL_RECORD_ENV] = str(approval_record)
+
+    report = build_token_smoke_preflight_report(env=env)
+
+    assert report.blocked is True
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "sample_plan_contract") == "block"
+    assert "sample_plan.max_sample_count" in _check_detail(report, "sample_plan_contract")
+
+
+def test_authorized_live_sample_plan_contract_keeps_no_token_budget_boundary():
+    payload = json.loads(SAMPLE_PLAN_PATH.read_text())
+    samples = {item["sample_id"]: item for item in payload["core_video_samples"]}
+
+    assert payload["status"] == "stable"
+    assert payload["evidence_level"] == "L2-fixture-or-dry-run"
+    assert payload["no_provider_call"] is True
+    assert payload["sample_plan_ref"] == SAMPLE_PLAN_REF
+    assert payload["provider_revalidation_ref"] == PROVIDER_REVALIDATION_REF
+    assert payload["limits"]["max_sample_count"] == 2
+    assert payload["limits"]["max_provider_calls"] == 2
+    assert payload["limits"]["max_total_cost_usd"] == 1.0
+    assert payload["limits"]["per_job_cost_ceiling_usd"] == 0.5
+    assert payload["limits"]["max_retry_count"] == 0
+    assert payload["stop_loss_policy"]["stop_on_first_failure"] is True
+    assert "fast" in payload["allowed_scenarios"]
+    assert "s1" in payload["allowed_scenarios"]
+    assert "product-image" in payload["allowed_toolbox_tool_ids"]
+
+    assert samples["fast-seedance-2-480p-4s"]["estimated_provider_cost_usd"] == 0.4
+    assert samples["s1-seedance-2-480p-4s"]["estimated_provider_cost_usd"] == 0.4
+
+
 def test_poyo_current_revalidation_contract_keeps_public_doc_evidence_boundary():
     payload = json.loads(PROVIDER_REVALIDATION_PATH.read_text())
     models = {item["model"]: item for item in payload["models"]}
@@ -115,7 +179,8 @@ def test_poyo_current_revalidation_contract_keeps_public_doc_evidence_boundary()
     assert "1080p" in seedance["resolutions"]
     assert seedance["reference_limits"]["combined_max"] == 12
     assert seedance["pricing_usd"]["seedance_2_720p_text_or_image_to_video_per_second"] == 0.2
-    assert seedance["recommended_l4_smoke_default"]["estimated_provider_cost_usd"] == 0.8
+    assert seedance["recommended_l4_smoke_default"]["resolution"] == "480p"
+    assert seedance["recommended_l4_smoke_default"]["estimated_provider_cost_usd"] == 0.4
 
     image = models["gpt-image-2"]
     assert "gpt-image-2-edit" in image["available_model_ids"]
@@ -265,6 +330,7 @@ def _write_approval_record(tmp_path: Path, **overrides) -> Path:
         "provider": provider,
         "model": model,
         "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
         "sample_plan": {
