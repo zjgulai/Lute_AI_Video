@@ -202,11 +202,100 @@ def test_http_transport_blocks_missing_file_url_without_retry():
     assert len(http_client.gets) == 1
 
 
+def test_http_submitter_factory_returns_none_without_transport_gate_even_with_http_inputs():
+    http_client = FakePoyoSubmitPollHttpClient()
+
+    submitter = poyo_submitter.build_authorized_live_poyo_submitter_from_http(
+        env={},
+        authorization_token="sk_fixture_private_token",
+        http_client=http_client,
+        payloads=_payloads(),
+    )
+
+    assert submitter is None
+    assert http_client.posts == []
+    assert http_client.gets == []
+
+
+def test_http_submitter_factory_requires_injected_token_http_client_and_payloads_when_enabled():
+    env = {poyo_submitter.AUTHORIZED_LIVE_POYO_TRANSPORT_ENV: "1"}
+    http_client = FakePoyoSubmitPollHttpClient()
+
+    with pytest.raises(ValueError, match="authorization token is required"):
+        poyo_submitter.build_authorized_live_poyo_submitter_from_http(
+            env=env,
+            http_client=http_client,
+            payloads=_payloads(),
+        )
+
+    with pytest.raises(ValueError, match="injected poyo http client is required"):
+        poyo_submitter.build_authorized_live_poyo_submitter_from_http(
+            env=env,
+            authorization_token="sk_fixture_private_token",
+            payloads=_payloads(),
+        )
+
+    with pytest.raises(ValueError, match="private poyo payloads are required"):
+        poyo_submitter.build_authorized_live_poyo_submitter_from_http(
+            env=env,
+            authorization_token="sk_fixture_private_token",
+            http_client=http_client,
+        )
+
+    assert http_client.posts == []
+    assert http_client.gets == []
+
+
+def test_http_submitter_factory_builds_http_submitter_when_enabled():
+    http_client = FakePoyoSubmitPollHttpClient()
+
+    submitter = poyo_submitter.build_authorized_live_poyo_submitter_from_http(
+        env={poyo_submitter.AUTHORIZED_LIVE_POYO_TRANSPORT_ENV: "1"},
+        authorization_token="sk_fixture_private_token",
+        http_client=http_client,
+        payloads=_payloads(),
+    )
+
+    assert submitter is not None
+    response = submitter(_image_spec())
+
+    assert response["provider_job_id"] == "poyo_task_1"
+    assert response["artifact_ref"] == _payloads()[
+        "momcozy_sterilizer_main_45_image_authorized_live_fixture"
+    ].artifact_ref
+    assert response["media_url"] == "https://cdn.example.test/asset.png"
+    assert "sk_fixture_private_token" not in str(response)
+    assert "private prompt" not in str(response)
+    assert http_client.posts == [
+        {
+            "path": "/api/generate/submit",
+            "headers": {
+                "Authorization": "Bearer sk_fixture_private_token",
+                "Content-Type": "application/json",
+            },
+            "body": {
+                "model": "gpt-image-2",
+                "input": {"prompt": "private prompt for main image", "size": "1:1", "quality": "low"},
+            },
+        }
+    ]
+    assert http_client.gets == [
+        {
+            "path": "/api/generate/status/poyo_task_1",
+            "headers": {
+                "Authorization": "Bearer sk_fixture_private_token",
+                "Content-Type": "application/json",
+            },
+        }
+    ]
+
+
 def test_harness_cli_source_still_does_not_wire_submitter_by_default():
     source = (REPO_ROOT / "scripts" / "authorized_live_token_smoke_harness.py").read_text()
 
     assert "AuthorizedLivePoyoSubmitter" not in source
     assert "build_authorized_live_poyo_submitter" not in source
+    assert "build_authorized_live_poyo_submitter_from_http" not in source
     assert "PoyoClient" not in source
     assert "httpx" not in source
     assert "POYO_API_KEY" not in source

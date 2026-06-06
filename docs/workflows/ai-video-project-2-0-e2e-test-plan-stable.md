@@ -227,6 +227,8 @@ C32 已新增 no-token submitter factory gate：`build_authorized_live_poyo_subm
 
 C33 已新增 no-token poyo submit/status HTTP adapter contract：`AuthorizedLivePoyoSubmitPollTransport` 只使用 injected HTTP client 和 injected authorization token 构造 `/api/generate/submit`、`/api/generate/status/{task_id}` 请求；fake HTTP 测试验证 request body、headers、finished task file refs、token/prompt 不回显、非 finished 或缺 artifact 时失败即停。该 adapter 仍未接线 CLI，也未执行真实 HTTP 请求。
 
+C34 已新增 no-token HTTP submitter assembly gate：`build_authorized_live_poyo_submitter_from_http()` 只在 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时，把调用方私有注入的 authorization token、HTTP client 和 private payloads 组装成 `AuthorizedLivePoyoSubmitter`。未启用 gate 时返回 `None`；启用后缺任一私有输入都会 fail-closed。`scripts/authorized_live_token_smoke_harness.py` 仍不接线该 helper，因此默认 CLI 仍不能真实调用 poyo。
+
 真实样本范围：
 
 | 顺序 | 场景 | 样本 | 目的 | 预算策略 |
@@ -277,6 +279,7 @@ C33 已新增 no-token poyo submit/status HTTP adapter contract：`AuthorizedLiv
 14. [x] 将首轮授权真实 smoke 样本计划从 Fast+S1 连通性样本调整为 Momcozy 消毒器 3 图 + 1 条 15 秒竖版图片驱动视频资产包，并保持 `pending_review` 素材库边界。实现文件：`configs/authorized-live-token-smoke-sample-plan-contract.json`、`configs/authorized-live-token-smoke-approval-template.json`、`src/pipeline/token_smoke_preflight.py`。
 15. [x] 增加 no-token poyo submitter factory gate，默认不构建 submitter，启用后仍要求 injected transport/private payloads。实现文件：`src/pipeline/authorized_live_poyo_submitter.py`、`tests/test_authorized_live_poyo_submitter.py`。
 16. [x] 增加 no-token poyo submit/status HTTP adapter contract，使用 fake HTTP client 验证 request shape、artifact refs 和失败即停。实现文件：`src/pipeline/authorized_live_poyo_submitter.py`、`tests/test_authorized_live_poyo_submitter.py`。
+17. [x] 增加 no-token HTTP submitter assembly gate，把 transport gate、injected token、injected HTTP client 和 private payloads 显式组装，同时保持默认 CLI 不接线。实现文件：`src/pipeline/authorized_live_poyo_submitter.py`、`tests/test_authorized_live_poyo_submitter.py`。
 
 ## 阶段验收
 
@@ -294,6 +297,7 @@ C33 已新增 no-token poyo submit/status HTTP adapter contract：`AuthorizedLiv
 - no-token test-plan readiness report 已验证，且能明确给出“可讨论测试计划 / 不可执行真实调用”的分层结论。
 - no-token poyo submitter factory gate 已验证，且默认 CLI 不接线真实 provider transport。
 - no-token poyo submit/status HTTP adapter 已验证，且默认 CLI 不接线真实 HTTP client。
+- no-token HTTP submitter assembly gate 已验证，且默认 CLI 不接线该 helper。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 

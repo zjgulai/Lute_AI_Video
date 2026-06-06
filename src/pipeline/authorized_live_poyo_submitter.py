@@ -157,6 +157,29 @@ def build_authorized_live_poyo_submitter(
     return AuthorizedLivePoyoSubmitter(transport=transport, payloads=payloads)
 
 
+def build_authorized_live_poyo_submitter_from_http(
+    *,
+    env: Mapping[str, str],
+    authorization_token: str | None = None,
+    http_client: PoyoSubmitPollHttpClient | None = None,
+    payloads: Mapping[str, AuthorizedLivePoyoPayload] | None = None,
+) -> AuthorizedLivePoyoSubmitter | None:
+    """Build the poyo HTTP submitter only from injected private runtime inputs."""
+    if env.get(AUTHORIZED_LIVE_POYO_TRANSPORT_ENV) != "1":
+        return None
+    if not authorization_token:
+        raise ValueError("authorization token is required")
+    if http_client is None:
+        raise ValueError("injected poyo http client is required")
+    if payloads is None:
+        raise ValueError("private poyo payloads are required")
+    transport = AuthorizedLivePoyoSubmitPollTransport(
+        authorization_token=authorization_token,
+        http_client=http_client,
+    )
+    return AuthorizedLivePoyoSubmitter(transport=transport, payloads=payloads)
+
+
 def _validate_spec(spec: MediaJobSpec) -> None:
     if spec.provider != "poyo":
         raise ValueError("provider must be poyo")
