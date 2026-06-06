@@ -34,6 +34,9 @@ def _run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Com
             "SILICONFLOW_API_KEY",
             "RUN_TOKEN_SMOKE",
             "CONFIRM_P2_TOKEN_SMOKE",
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS",
             "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD",
             "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD",
         }
@@ -62,7 +65,10 @@ def test_default_run_is_dry_run_and_does_not_require_tokens():
     assert "Before execute, build a no-token launch packet" in result.stdout
     assert "python scripts/build_authorized_live_smoke_packet.py --include-preflight" in result.stdout
     assert "Momcozy sterilizer authorized-live asset smoke harness" in result.stdout
-    assert "scripts/authorized_live_token_smoke_harness.py --execute --pretty" in result.stdout
+    assert "scripts/authorized_live_token_smoke_harness.py --execute --enable-poyo-http-submitter --pretty" in result.stdout
+    assert "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1" in result.stdout
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1" in result.stdout
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json>" in result.stdout
     assert "deploy/lighthouse/smoke.sh" not in result.stdout
     assert "npm run e2e:prod" not in result.stdout
     assert "Running:" not in result.stdout
@@ -74,6 +80,9 @@ def test_execute_requires_double_confirmation_before_real_smoke():
         "PLAYWRIGHT_API_KEY": "prod-api-key",
         "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": "/private/approval.json",
         "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD": "/private/account-readiness.json",
+        "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE": "1",
+        "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT": "1",
+        "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS": "/private/poyo-payloads.json",
         "POYO_API_KEY": "poyo-key",
         "DEEPSEEK_API_KEY": "deepseek-key",
         "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -98,6 +107,9 @@ def test_execute_rejects_demo_key_even_when_confirmed():
             "PLAYWRIGHT_API_KEY": DEMO_KEY,
             "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": "/private/approval.json",
             "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD": "/private/account-readiness.json",
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS": "/private/poyo-payloads.json",
             "POYO_API_KEY": "poyo-key",
             "DEEPSEEK_API_KEY": "deepseek-key",
             "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -116,6 +128,9 @@ def test_execute_requires_approval_record_path_even_when_confirmed():
             "RUN_TOKEN_SMOKE": "1",
             "API_KEY": "prod-api-key",
             "PLAYWRIGHT_API_KEY": "prod-api-key",
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS": "/private/poyo-payloads.json",
             "POYO_API_KEY": "poyo-key",
             "DEEPSEEK_API_KEY": "deepseek-key",
             "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -124,6 +139,39 @@ def test_execute_requires_approval_record_path_even_when_confirmed():
 
     assert result.returncode == 2
     assert "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD" in result.stderr
+
+
+def test_execute_requires_poyo_runtime_wiring_even_when_confirmed():
+    base_env = {
+        "CONFIRM_P2_TOKEN_SMOKE": "1",
+        "RUN_TOKEN_SMOKE": "1",
+        "API_KEY": "prod-api-key",
+        "PLAYWRIGHT_API_KEY": "prod-api-key",
+        "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": "/private/approval.json",
+        "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD": "/private/account-readiness.json",
+        "POYO_API_KEY": "poyo-key",
+        "DEEPSEEK_API_KEY": "deepseek-key",
+        "SILICONFLOW_API_KEY": "siliconflow-key",
+    }
+
+    missing_runtime = _run_script("--execute", env=base_env)
+    assert missing_runtime.returncode == 2
+    assert "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE is required" in missing_runtime.stderr
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT is required" in missing_runtime.stderr
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS is required" in missing_runtime.stderr
+
+    disabled_transport = _run_script(
+        "--execute",
+        env={
+            **base_env,
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT": "0",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS": "/private/poyo-payloads.json",
+        },
+    )
+
+    assert disabled_transport.returncode == 2
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT must be 1" in disabled_transport.stderr
 
 
 def test_execute_runs_preflight_before_any_token_smoke_command():
@@ -136,6 +184,9 @@ def test_execute_runs_preflight_before_any_token_smoke_command():
             "PLAYWRIGHT_API_KEY": "prod-api-key",
             "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": str(APPROVAL_TEMPLATE),
             "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD": "/private/account-readiness.json",
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS": "/private/poyo-payloads.json",
             "POYO_API_KEY": "poyo-key",
             "DEEPSEEK_API_KEY": "deepseek-key",
             "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -156,6 +207,10 @@ def test_script_source_keeps_token_endpoints_behind_execute_path():
     assert "RUN_TOKEN_SMOKE" in source
     assert "build_token_smoke_preflight_report" in source
     assert "_validate_execute_preflight" in source
+    assert "--enable-poyo-http-submitter" in source
+    assert "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE" in source
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT" in source
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS" in source
     assert "subprocess.run" in source
     assert "if not args.execute" in source
     assert "return 0" in source
@@ -176,6 +231,10 @@ def test_runbook_documents_recharge_checklist_and_is_link_checked():
         "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD",
         "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD",
         "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD",
+        "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE",
+        "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT",
+        "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS",
+        "--enable-poyo-http-submitter",
         "CONFIRM_P2_TOKEN_SMOKE=1",
         "RUN_TOKEN_SMOKE=1",
         "POYO_API_KEY",

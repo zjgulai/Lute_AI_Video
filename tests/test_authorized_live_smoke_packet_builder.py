@@ -35,6 +35,9 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
             "SILICONFLOW_API_KEY",
             RUN_TOKEN_SMOKE_ENV,
             "CONFIRM_P2_TOKEN_SMOKE",
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS",
             APPROVAL_RECORD_ENV,
             ACCOUNT_READINESS_RECORD_ENV,
         }
@@ -65,6 +68,9 @@ def test_default_packet_is_no_token_and_contains_exact_authorization_gate():
     assert packet["required_private_records"]["account_readiness_record_env"] == ACCOUNT_READINESS_RECORD_ENV
     assert packet["required_runtime_env"]["CONFIRM_P2_TOKEN_SMOKE"] == "1"
     assert packet["required_runtime_env"][RUN_TOKEN_SMOKE_ENV] == "1"
+    assert packet["required_runtime_env"]["AI_VIDEO_AUTHORIZED_LIVE_EXECUTE"] == "1"
+    assert packet["required_runtime_env"]["AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT"] == "1"
+    assert packet["required_runtime_env"]["AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS"].startswith("private poyo payload")
     assert "继续下一步" in packet["rejected_confirmation_examples"]
     assert packet["provider_model_scope"] == DEFAULT_AUTH_PROVIDER_MODEL_SCOPE
     assert packet["test_scope"] == DEFAULT_AUTH_TEST_SCOPE
@@ -74,6 +80,9 @@ def test_default_packet_is_no_token_and_contains_exact_authorization_gate():
     assert "Momcozy 消毒器" in packet["required_authorization_statement"]
     assert "--available-credit-usd 3.00" in " ".join(packet["record_build_commands"])
     assert "scripts/p2_recharge_smoke_checklist.py --execute" in packet["execute_command_preview"]
+    assert "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1" in packet["execute_command_preview"]
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1" in packet["execute_command_preview"]
+    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json>" in packet["execute_command_preview"]
     assert "sk_fixture_secret" not in result.stdout
 
 

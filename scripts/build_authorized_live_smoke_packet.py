@@ -108,6 +108,9 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
         "required_runtime_env": {
             CONFIRM_ENV: "1",
             RUN_TOKEN_SMOKE_ENV: "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT": "1",
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS": "private poyo payload JSON under tmp/ or outside repo",
             "API_KEY": "non-demo production backend key",
             "PLAYWRIGHT_API_KEY": "non-demo production Playwright key",
             **{env_name: "configured; value is never printed by this packet" for env_name in REQUIRED_API_KEY_ENVS},
@@ -137,6 +140,9 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
             f"{CONFIRM_ENV}=1 {RUN_TOKEN_SMOKE_ENV}=1 "
             f"{APPROVAL_RECORD_ENV}=<private-approval-json> "
             f"{ACCOUNT_READINESS_RECORD_ENV}=<private-account-readiness-json> "
+            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1 "
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1 "
+            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json> "
             "API_KEY=<production-api-key> PLAYWRIGHT_API_KEY=<production-api-key> "
             "POYO_API_KEY=<funded-poyo-key> DEEPSEEK_API_KEY=<deepseek-key> "
             "SILICONFLOW_API_KEY=<siliconflow-key> "

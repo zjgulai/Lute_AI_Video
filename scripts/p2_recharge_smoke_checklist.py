@@ -26,6 +26,7 @@ class EnvRequirement:
     name: str
     description: str
     reject_demo_key: bool = False
+    required_value: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,9 @@ REQUIRED_ENV = (
     EnvRequirement("PLAYWRIGHT_API_KEY", "Non-demo production API key for Playwright", True),
     EnvRequirement(APPROVAL_RECORD_ENV, "Private C21 approval record JSON with budget stop-loss"),
     EnvRequirement(ACCOUNT_READINESS_RECORD_ENV, "Private provider account readiness JSON with manual balance check"),
+    EnvRequirement("AI_VIDEO_AUTHORIZED_LIVE_EXECUTE", "Final harness execute confirmation", required_value="1"),
+    EnvRequirement("AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT", "Explicit poyo HTTP submitter opt-in", required_value="1"),
+    EnvRequirement("AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS", "Private poyo payload JSON under tmp/ or outside repo"),
     EnvRequirement("POYO_API_KEY", "Funded poyo.ai key configured for production"),
     EnvRequirement("DEEPSEEK_API_KEY", "DeepSeek key configured for production"),
     EnvRequirement("SILICONFLOW_API_KEY", "SiliconFlow CosyVoice key configured for production"),
@@ -62,6 +66,8 @@ def _env_status() -> list[str]:
         status = "MISSING" if not value else f"set ({_mask(value)})"
         if item.reject_demo_key and value == DEMO_API_KEY:
             status = "REJECTED demo key"
+        if item.required_value is not None and value and value != item.required_value:
+            status = f"REJECTED expected {item.required_value}"
         lines.append(f"- {item.name}: {status} — {item.description}")
     return lines
 
@@ -79,7 +85,13 @@ def _build_commands(base_url: str, *, execute: bool = False) -> list[SmokeComman
         SmokeCommand(
             name="Momcozy sterilizer authorized-live asset smoke harness",
             cwd=REPO_ROOT,
-            argv=("python", "scripts/authorized_live_token_smoke_harness.py", "--execute", "--pretty"),
+            argv=(
+                "python",
+                "scripts/authorized_live_token_smoke_harness.py",
+                "--execute",
+                "--enable-poyo-http-submitter",
+                "--pretty",
+            ),
             env=common_env,
         ),
     ]
@@ -110,6 +122,9 @@ def _print_dry_run(base_url: str) -> None:
         "API_KEY=<production-api-key> PLAYWRIGHT_API_KEY=<production-api-key> "
         "POYO_API_KEY=<funded-poyo-key> DEEPSEEK_API_KEY=<deepseek-key> "
         "SILICONFLOW_API_KEY=<siliconflow-key> "
+        "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1 "
+        "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1 "
+        "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json> "
         f"{APPROVAL_RECORD_ENV}=<private-approval-json> "
         f"{ACCOUNT_READINESS_RECORD_ENV}=<private-account-readiness-json> "
         "python scripts/p2_recharge_smoke_checklist.py --execute"
@@ -133,6 +148,8 @@ def _validate_execute_env() -> list[str]:
             errors.append(f"{item.name} is required for --execute")
         elif item.reject_demo_key and value == DEMO_API_KEY:
             errors.append(f"{item.name} must be a non-demo key; demo key is rejected")
+        elif item.required_value is not None and value != item.required_value:
+            errors.append(f"{item.name} must be {item.required_value} for --execute")
     return errors
 
 

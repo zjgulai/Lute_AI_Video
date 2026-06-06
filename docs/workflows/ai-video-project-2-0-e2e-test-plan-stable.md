@@ -217,10 +217,13 @@ PLAYWRIGHT_API_KEY=<production-api-key> \
 POYO_API_KEY=<funded-poyo-key> \
 DEEPSEEK_API_KEY=<deepseek-key> \
 SILICONFLOW_API_KEY=<siliconflow-key> \
+AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1 \
+AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1 \
+AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json> \
 python scripts/p2_recharge_smoke_checklist.py --execute
 ```
 
-当前 `--execute` 入口会先跑 no-token preflight，再进入 `scripts/authorized_live_token_smoke_harness.py --execute --pretty`。未显式接线 provider submitter 时 harness 必须 fail-closed，不调用 provider；接线后的执行范围仍只能是本节 3 图 + 1 视频资产包。
+当前 `--execute` 入口会先跑 no-token preflight，再进入 `scripts/authorized_live_token_smoke_harness.py --execute --enable-poyo-http-submitter --pretty`。只有 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`、私有 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS` 同时存在时才会接线 provider submitter；执行范围仍只能是本节 3 图 + 1 视频资产包。
 
 C31 已新增 no-token submitter facade contract：`src/pipeline/authorized_live_poyo_submitter.py` 只接受 injected transport，不导入 `PoyoClient`、`httpx`、`POYO_API_KEY` 或 `os.environ`。`tests/test_authorized_live_poyo_submitter.py` 使用 fake transport 证明 job scope、model、视频 reference refs、prompt 不回显和 failure no-retry 边界。该 contract 仍不是真实 provider submitter；下一步若要进入 L4，仍需在精确授权、私有 approval/account readiness、生产 key、provider key 和 execute flags 满足后，单独接线真实 transport。
 
@@ -230,7 +233,7 @@ C33 已新增 no-token poyo submit/status HTTP adapter contract：`AuthorizedLiv
 
 C34 已新增 no-token HTTP submitter assembly gate：`build_authorized_live_poyo_submitter_from_http()` 只在 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时，把调用方私有注入的 authorization token、HTTP client 和 private payloads 组装成 `AuthorizedLivePoyoSubmitter`。未启用 gate 时返回 `None`；启用后缺任一私有输入都会 fail-closed。`scripts/authorized_live_token_smoke_harness.py` 仍不接线该 helper，因此默认 CLI 仍不能真实调用 poyo。
 
-C35 已新增私有 poyo runtime 接线 contract：`build_authorized_live_poyo_runtime_submitter()` 从 injected env mapping 读取 `POYO_API_KEY`、`POYO_API_BASE_URL` 和 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS`，并只在 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时组装 submitter。CLI 只在 `--enable-poyo-http-submitter` 且 execute 模式下传入 lazy factory；preflight blocked 或 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1` 缺失时不会构造 submitter。该入口仍要求私有 payload 文件，且默认不执行 provider 调用。
+C35 已新增私有 poyo runtime 接线 contract：`build_authorized_live_poyo_runtime_submitter()` 从 injected env mapping 读取 `POYO_API_KEY`、`POYO_API_BASE_URL` 和 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS`，并只在 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时组装 submitter。CLI 只在 `--enable-poyo-http-submitter` 且 execute 模式下传入 lazy factory；preflight blocked 或 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1` 缺失时不会构造 submitter。C36 将 P2 统一执行入口同步为带 `--enable-poyo-http-submitter` 的真实接线路径，并显式要求 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`、私有 payload 文件；缺任一项仍 fail-closed，不调用 provider。
 
 真实样本范围：
 

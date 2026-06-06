@@ -43,6 +43,9 @@ python scripts/build_authorized_live_smoke_packet.py --include-preflight
 - `POYO_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `SILICONFLOW_API_KEY`
+- `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`
+- `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`
+- `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json>`
 
 同时准备授权记录：
 
@@ -100,6 +103,9 @@ PLAYWRIGHT_API_KEY=<production-api-key> \
 POYO_API_KEY=<funded-poyo-key> \
 DEEPSEEK_API_KEY=<deepseek-key> \
 SILICONFLOW_API_KEY=<siliconflow-key> \
+AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1 \
+AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1 \
+AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json> \
 python scripts/p2_recharge_smoke_checklist.py --execute
 ```
 
@@ -118,9 +124,9 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 脚本会顺序执行：
 
 1. `commercial_token_smoke_preflight` 的 no-token 门禁
-2. `scripts/authorized_live_token_smoke_harness.py --execute --pretty` 的 C21 授权 harness
+2. `scripts/authorized_live_token_smoke_harness.py --execute --enable-poyo-http-submitter --pretty` 的 C21 授权 harness
 
-当前 harness 只在 preflight 通过后进入执行入口；未显式接线 provider submitter 时会 fail-closed，不会调用 provider。接线后的本轮授权样本必须严格对应 Momcozy 消毒器 3 张待审图片资产和 1 条 15 秒 9:16 待审图片驱动视频，并保存 job ledger、artifact manifest、quality gate 和 repair plan。
+当前统一入口只在 preflight 通过、`AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`、私有 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS` 均存在时接线 provider submitter。本轮授权样本必须严格对应 Momcozy 消毒器 3 张待审图片资产和 1 条 15 秒 9:16 待审图片驱动视频，并保存 job ledger、artifact manifest、quality gate 和 repair plan。
 
 首轮不测试暖奶器、S5 VLOG、数字人、发布链路或完整上市交付。产物只能进入 `pending_review` 素材库，不能自动写入 approved brand token、delivery accepted 或 publish allowed。
 
@@ -131,6 +137,9 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 - 没有 `RUN_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向授权记录时不得执行。
 - 没有通过 `AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD` 指向账户 readiness 记录时不得执行。
+- 没有 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1` 时不得进入 harness execute。
+- 没有 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时不得接线 poyo HTTP submitter。
+- 没有私有 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS` 时不得构造 poyo 请求 payload。
 - no-token 启动包只证明门禁输入已被列明，不证明用户已经授权、账户已充值或 provider runtime 可用。
 - 授权记录必须由构建器或等价校验流程生成；`同意下一步` 这类泛化确认不构成 L4 授权。
 - 授权记录模板本身会被 preflight 阻断，不能直接作为正式授权记录。
