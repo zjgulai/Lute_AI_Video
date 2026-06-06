@@ -5,7 +5,7 @@ module: qa
 topic: p2-recharge-smoke-checklist
 status: stable
 created: 2026-05-31
-updated: 2026-05-31
+updated: 2026-06-06
 owner: self
 source: human+ai
 ---
@@ -36,16 +36,37 @@ python scripts/p2_recharge_smoke_checklist.py
 - `DEEPSEEK_API_KEY`
 - `SILICONFLOW_API_KEY`
 
+同时准备授权记录：
+
+- 模板：`configs/authorized-live-token-smoke-approval-template.json`
+- 私有授权记录路径：通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向
+- 授权记录必须将 `template_only` 改为 `false`
+- 授权记录必须包含 `sample_plan` 与 `budget_stop_loss`
+- `budget_stop_loss.max_retry_count` 只能是 `0` 或 `1`
+- `budget_stop_loss.stop_on_first_failure`、`halt_on_rate_limit`、`halt_on_quota_error`、`halt_on_content_rejection`、`halt_on_missing_artifact` 必须为 `true`
+
 执行真实 smoke 必须同时设置两个确认开关：
 
 ```bash
 CONFIRM_P2_TOKEN_SMOKE=1 RUN_TOKEN_SMOKE=1 \
+AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD=<private-approval-json> \
 API_KEY=<production-api-key> \
 PLAYWRIGHT_API_KEY=<production-api-key> \
 POYO_API_KEY=<funded-poyo-key> \
 DEEPSEEK_API_KEY=<deepseek-key> \
 SILICONFLOW_API_KEY=<siliconflow-key> \
 python scripts/p2_recharge_smoke_checklist.py --execute
+```
+
+执行前先跑 no-token preflight：
+
+```bash
+RUN_TOKEN_SMOKE=1 \
+AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD=<private-approval-json> \
+POYO_API_KEY=<funded-poyo-key> \
+DEEPSEEK_API_KEY=<deepseek-key> \
+SILICONFLOW_API_KEY=<siliconflow-key> \
+python scripts/commercial_token_smoke_preflight.py --pretty
 ```
 
 脚本会顺序执行：
@@ -58,6 +79,8 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - 没有 `--execute` 时永远只 dry-run。
 - 没有 `CONFIRM_P2_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有 `RUN_TOKEN_SMOKE=1` 时拒绝执行。
+- 没有通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向授权记录时不得执行。
+- 授权记录模板本身会被 preflight 阻断，不能直接作为正式授权记录。
 - `API_KEY` 或 `PLAYWRIGHT_API_KEY` 仍是 `ai_video_demo_2026` 时拒绝执行。
 - 失败后不要盲目循环重试；先检查 provider 控制台、生产日志和失败 artifact。
 

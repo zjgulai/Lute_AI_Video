@@ -1,0 +1,35 @@
+{
+  "template_only": true,
+  "approval_id": "replace-me-c21-token-smoke-20260606-001",
+  "scope": "c21-token-smoke",
+  "evidence_level": "L4-authorized-live",
+  "provider_calls_allowed": true,
+  "approved_by": "REPLACE_ME_USER_OR_OWNER",
+  "approved_at": "REPLACE_ME_ISO8601_TIMESTAMP",
+  "provider": "poyo",
+  "model": "seedance-2",
+  "budget_limit": "$1.00",
+  "budget_limit_usd": 1.0,
+  "sample_plan": {
+    "max_sample_count": 2,
+    "max_provider_calls": 2,
+    "scenarios": ["fast", "s1"],
+    "s5_requires_separate_confirmation": true
+  },
+  "budget_stop_loss": {
+    "max_total_cost_usd": 1.0,
+    "per_job_cost_ceiling_usd": 0.5,
+    "max_retry_count": 0,
+    "stop_on_first_failure": true,
+    "halt_on_rate_limit": true,
+    "halt_on_quota_error": true,
+    "halt_on_content_rejection": true,
+    "halt_on_missing_artifact": true
+  },
+  "approval_statement": "我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 poyo/seedance-2，预算上限是 $1.00。",
+  "operator_notes": [
+    "Do not put provider API keys in this file.",
+    "Keep template_only=true until the user gives the exact authorization statement in the active session.",
+    "Store the filled approval record in a private, non-committed path and set AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD to that path."
+  ]
+}

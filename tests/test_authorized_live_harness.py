@@ -50,12 +50,27 @@ def test_dry_run_passes_after_preflight_without_provider_call(tmp_path: Path):
     assert report.job_spec is not None
     assert report.job_spec.provider == "poyo"
     assert report.job_spec.model == "seedance-2"
-    assert report.job_spec.cost_ceiling_usd == 1.0
+    assert report.job_spec.cost_ceiling_usd == 0.5
     assert calls == []
 
 
-def test_dry_run_job_spec_uses_approval_provider_model_and_budget(tmp_path: Path):
-    approval_record = _write_approval_record(tmp_path, provider="kling", model="kling-3.0", budget_limit_usd=2.5)
+def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_path: Path):
+    approval_record = _write_approval_record(
+        tmp_path,
+        provider="kling",
+        model="kling-3.0",
+        budget_limit_usd=2.5,
+        budget_stop_loss={
+            "max_total_cost_usd": 2.5,
+            "per_job_cost_ceiling_usd": 1.25,
+            "max_retry_count": 0,
+            "stop_on_first_failure": True,
+            "halt_on_rate_limit": True,
+            "halt_on_quota_error": True,
+            "halt_on_content_rejection": True,
+            "halt_on_missing_artifact": True,
+        },
+    )
     env = _ready_env(approval_record)
 
     report = run_authorized_live_harness(mode="dry_run", env=env)
@@ -65,7 +80,7 @@ def test_dry_run_job_spec_uses_approval_provider_model_and_budget(tmp_path: Path
     assert report.job_spec is not None
     assert report.job_spec.provider == "kling"
     assert report.job_spec.model == "kling-3.0"
-    assert report.job_spec.cost_ceiling_usd == 2.5
+    assert report.job_spec.cost_ceiling_usd == 1.25
 
 
 def test_execute_mode_requires_extra_execute_flag_after_preflight(tmp_path: Path):
@@ -138,6 +153,22 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
         "model": model,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
+        "sample_plan": {
+            "max_sample_count": 2,
+            "max_provider_calls": 2,
+            "scenarios": ["fast", "s1"],
+            "s5_requires_separate_confirmation": True,
+        },
+        "budget_stop_loss": {
+            "max_total_cost_usd": 1.0,
+            "per_job_cost_ceiling_usd": 0.5,
+            "max_retry_count": 0,
+            "stop_on_first_failure": True,
+            "halt_on_rate_limit": True,
+            "halt_on_quota_error": True,
+            "halt_on_content_rejection": True,
+            "halt_on_missing_artifact": True,
+        },
         "approval_statement": _approval_statement(provider, model, budget_limit),
     }
     payload.update(overrides)

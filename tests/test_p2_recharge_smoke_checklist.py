@@ -7,6 +7,7 @@ tasks, while keeping a double-confirmed execute path ready after recharge.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -16,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "p2_recharge_smoke_checklist.py"
 RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "p2-recharge-smoke-checklist.md"
 DOCS_LINK_SCOPE = REPO_ROOT / "configs" / "docs-link-check-scope.txt"
+APPROVAL_TEMPLATE = REPO_ROOT / "configs" / "authorized-live-token-smoke-approval-template.json"
 DEMO_KEY = "ai_video_demo_2026"
 
 
@@ -32,6 +34,7 @@ def _run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Com
             "SILICONFLOW_API_KEY",
             "RUN_TOKEN_SMOKE",
             "CONFIRM_P2_TOKEN_SMOKE",
+            "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD",
         }
     }
     if env:
@@ -63,6 +66,7 @@ def test_execute_requires_double_confirmation_before_real_smoke():
     env = {
         "API_KEY": "prod-api-key",
         "PLAYWRIGHT_API_KEY": "prod-api-key",
+        "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": "/private/approval.json",
         "POYO_API_KEY": "poyo-key",
         "DEEPSEEK_API_KEY": "deepseek-key",
         "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -85,6 +89,7 @@ def test_execute_rejects_demo_key_even_when_confirmed():
             "RUN_TOKEN_SMOKE": "1",
             "API_KEY": DEMO_KEY,
             "PLAYWRIGHT_API_KEY": DEMO_KEY,
+            "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": "/private/approval.json",
             "POYO_API_KEY": "poyo-key",
             "DEEPSEEK_API_KEY": "deepseek-key",
             "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -93,6 +98,24 @@ def test_execute_rejects_demo_key_even_when_confirmed():
 
     assert result.returncode == 2
     assert "demo key" in result.stderr
+
+
+def test_execute_requires_approval_record_path_even_when_confirmed():
+    result = _run_script(
+        "--execute",
+        env={
+            "CONFIRM_P2_TOKEN_SMOKE": "1",
+            "RUN_TOKEN_SMOKE": "1",
+            "API_KEY": "prod-api-key",
+            "PLAYWRIGHT_API_KEY": "prod-api-key",
+            "POYO_API_KEY": "poyo-key",
+            "DEEPSEEK_API_KEY": "deepseek-key",
+            "SILICONFLOW_API_KEY": "siliconflow-key",
+        },
+    )
+
+    assert result.returncode == 2
+    assert "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD" in result.stderr
 
 
 def test_script_source_keeps_token_endpoints_behind_execute_path():
@@ -112,12 +135,17 @@ def test_runbook_documents_recharge_checklist_and_is_link_checked():
 
     for token in [
         "scripts/p2_recharge_smoke_checklist.py",
+        "scripts/commercial_token_smoke_preflight.py",
+        "configs/authorized-live-token-smoke-approval-template.json",
+        "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD",
         "CONFIRM_P2_TOKEN_SMOKE=1",
         "RUN_TOKEN_SMOKE=1",
         "POYO_API_KEY",
         "DEEPSEEK_API_KEY",
         "SILICONFLOW_API_KEY",
         "PLAYWRIGHT_API_KEY",
+        "budget_stop_loss",
+        "sample_plan",
         "dry-run",
         "充值后",
     ]:
@@ -129,3 +157,17 @@ def test_runbook_documents_recharge_checklist_and_is_link_checked():
         if line.strip() and not line.strip().startswith("#")
     }
     assert "docs/runbooks/p2-recharge-smoke-checklist.md" in scope_targets
+
+
+def test_authorized_live_approval_template_is_present_and_blocked_by_default():
+    payload = json.loads(APPROVAL_TEMPLATE.read_text())
+
+    assert payload["template_only"] is True
+    assert payload["scope"] == "c21-token-smoke"
+    assert payload["budget_stop_loss"]["max_retry_count"] == 0
+    assert payload["budget_stop_loss"]["stop_on_first_failure"] is True
+    assert payload["budget_stop_loss"]["halt_on_rate_limit"] is True
+    assert payload["budget_stop_loss"]["halt_on_quota_error"] is True
+    assert payload["budget_stop_loss"]["halt_on_content_rejection"] is True
+    assert payload["budget_stop_loss"]["halt_on_missing_artifact"] is True
+    assert "API_KEY" not in json.dumps(payload)

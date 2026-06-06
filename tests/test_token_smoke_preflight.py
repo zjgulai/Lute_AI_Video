@@ -54,6 +54,11 @@ def test_valid_preflight_allows_harness_entry_without_provider_call(tmp_path: Pa
     assert report.approved_provider == "poyo"
     assert report.approved_model == "seedance-2"
     assert report.approved_budget_limit_usd == 1.0
+    assert report.approved_max_sample_count == 2
+    assert report.approved_max_provider_calls == 2
+    assert report.approved_max_total_cost_usd == 1.0
+    assert report.approved_per_job_cost_ceiling_usd == 0.5
+    assert report.approved_max_retry_count == 0
     assert {check.status for check in report.checks} == {"pass"}
     assert "sk_fixture_secret" not in report.model_dump_json()
 
@@ -107,6 +112,57 @@ def test_approval_record_blocks_non_finite_budget(tmp_path: Path):
     assert "budget_limit_usd must be a positive number" in _check_detail(report, "authorized_live_approval")
 
 
+def test_approval_record_template_is_blocked_even_with_other_fields_present(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path, template_only=True)
+    env = _ready_env()
+    env[APPROVAL_RECORD_ENV] = str(approval_record)
+
+    report = build_token_smoke_preflight_report(env=env)
+
+    assert report.blocked is True
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "authorized_live_approval") == "block"
+    assert "template_only must be false" in _check_detail(report, "authorized_live_approval")
+
+
+def test_approval_record_requires_budget_stop_loss_fields(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path, budget_stop_loss={})
+    env = _ready_env()
+    env[APPROVAL_RECORD_ENV] = str(approval_record)
+
+    report = build_token_smoke_preflight_report(env=env)
+
+    assert report.blocked is True
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "budget_stop_loss") == "block"
+    assert "budget_stop_loss.max_total_cost_usd" in _check_detail(report, "budget_stop_loss")
+
+
+def test_approval_record_blocks_loose_retry_or_missing_halt_policy(tmp_path: Path):
+    approval_record = _write_approval_record(
+        tmp_path,
+        budget_stop_loss={
+            "max_total_cost_usd": 1.0,
+            "per_job_cost_ceiling_usd": 0.5,
+            "max_retry_count": 2,
+            "stop_on_first_failure": True,
+            "halt_on_rate_limit": True,
+            "halt_on_quota_error": True,
+            "halt_on_content_rejection": True,
+            "halt_on_missing_artifact": True,
+        },
+    )
+    env = _ready_env()
+    env[APPROVAL_RECORD_ENV] = str(approval_record)
+
+    report = build_token_smoke_preflight_report(env=env)
+
+    assert report.blocked is True
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "budget_stop_loss") == "block"
+    assert "max_retry_count must be 0 or 1" in _check_detail(report, "budget_stop_loss")
+
+
 def test_cli_exits_blocked_when_approval_is_missing():
     env = _ready_env()
     result = subprocess.run(
@@ -148,6 +204,22 @@ def _write_approval_record(tmp_path: Path, **overrides) -> Path:
         "model": model,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
+        "sample_plan": {
+            "max_sample_count": 2,
+            "max_provider_calls": 2,
+            "scenarios": ["fast", "s1"],
+            "s5_requires_separate_confirmation": True,
+        },
+        "budget_stop_loss": {
+            "max_total_cost_usd": 1.0,
+            "per_job_cost_ceiling_usd": 0.5,
+            "max_retry_count": 0,
+            "stop_on_first_failure": True,
+            "halt_on_rate_limit": True,
+            "halt_on_quota_error": True,
+            "halt_on_content_rejection": True,
+            "halt_on_missing_artifact": True,
+        },
         "approval_statement": _approval_statement(provider, model, budget_limit),
     }
     payload.update(overrides)

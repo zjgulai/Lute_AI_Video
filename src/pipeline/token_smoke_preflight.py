@@ -47,6 +47,11 @@ class TokenSmokePreflightReport(BaseModel):
     approved_provider: str | None = None
     approved_model: str | None = None
     approved_budget_limit_usd: float | None = None
+    approved_max_sample_count: int | None = None
+    approved_max_provider_calls: int | None = None
+    approved_max_total_cost_usd: float | None = None
+    approved_per_job_cost_ceiling_usd: float | None = None
+    approved_max_retry_count: int | None = None
     provider_call_allowed: bool = False
     blocked: bool = True
     checks: list[PreflightCheck] = Field(default_factory=list)
@@ -67,6 +72,7 @@ def build_token_smoke_preflight_report(
         _check_run_token_smoke(env),
         *_check_api_keys(env),
         approval_check,
+        _check_budget_stop_loss(approval_payload),
         _check_provider_capability_evidence(approval_payload),
         _check_job_ledger_readiness(),
         _check_audit_bundle_readiness(),
@@ -80,6 +86,15 @@ def build_token_smoke_preflight_report(
         approved_provider=_approval_string(approval_payload, "provider"),
         approved_model=_approval_string(approval_payload, "model"),
         approved_budget_limit_usd=_approval_budget_limit_usd(approval_payload),
+        approved_max_sample_count=_approval_nested_int(approval_payload, "sample_plan", "max_sample_count"),
+        approved_max_provider_calls=_approval_nested_int(approval_payload, "sample_plan", "max_provider_calls"),
+        approved_max_total_cost_usd=_approval_nested_float(approval_payload, "budget_stop_loss", "max_total_cost_usd"),
+        approved_per_job_cost_ceiling_usd=_approval_nested_float(
+            approval_payload,
+            "budget_stop_loss",
+            "per_job_cost_ceiling_usd",
+        ),
+        approved_max_retry_count=_approval_nested_int(approval_payload, "budget_stop_loss", "max_retry_count"),
         provider_call_allowed=not blocked,
         blocked=blocked,
         checks=checks,
@@ -155,6 +170,14 @@ def _check_approval_record(path: Path | None) -> tuple[PreflightCheck, dict[str,
             evidence_refs=[str(path)],
         ), None
 
+    if payload.get("template_only") is True:
+        return PreflightCheck(
+            name="authorized_live_approval",
+            status="block",
+            detail="approval record template_only must be false after explicit user approval",
+            evidence_refs=[str(path)],
+        ), None
+
     required = {
         "scope": APPROVAL_SCOPE,
         "evidence_level": "L4-authorized-live",
@@ -174,6 +197,13 @@ def _check_approval_record(path: Path | None) -> tuple[PreflightCheck, dict[str,
             name="authorized_live_approval",
             status="block",
             detail="approval record requires approved_by and approved_at",
+            evidence_refs=[str(path)],
+        ), None
+    if _looks_like_template_placeholder(payload.get("approved_by")) or _looks_like_template_placeholder(payload.get("approved_at")):
+        return PreflightCheck(
+            name="authorized_live_approval",
+            status="block",
+            detail="approval record approved_by and approved_at must be concrete non-template values",
             evidence_refs=[str(path)],
         ), None
 
@@ -219,6 +249,106 @@ def _check_approval_record(path: Path | None) -> tuple[PreflightCheck, dict[str,
     ), payload
 
 
+def _check_budget_stop_loss(approval_payload: Mapping[str, Any] | None) -> PreflightCheck:
+    if approval_payload is None:
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail="passing approval record is required before budget stop-loss can be evaluated",
+        )
+
+    sample_plan = approval_payload.get("sample_plan")
+    if not isinstance(sample_plan, Mapping):
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail="approval record requires sample_plan object",
+        )
+    budget_stop_loss = approval_payload.get("budget_stop_loss")
+    if not isinstance(budget_stop_loss, Mapping):
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail="approval record requires budget_stop_loss object",
+        )
+
+    max_sample_count = _positive_int(sample_plan.get("max_sample_count"))
+    max_provider_calls = _positive_int(sample_plan.get("max_provider_calls"))
+    max_total_cost_usd = _positive_finite_number(budget_stop_loss.get("max_total_cost_usd"))
+    per_job_cost_ceiling_usd = _positive_finite_number(budget_stop_loss.get("per_job_cost_ceiling_usd"))
+    max_retry_count = _nonnegative_int(budget_stop_loss.get("max_retry_count"))
+    missing = []
+    if max_sample_count is None:
+        missing.append("sample_plan.max_sample_count")
+    if max_provider_calls is None:
+        missing.append("sample_plan.max_provider_calls")
+    if max_total_cost_usd is None:
+        missing.append("budget_stop_loss.max_total_cost_usd")
+    if per_job_cost_ceiling_usd is None:
+        missing.append("budget_stop_loss.per_job_cost_ceiling_usd")
+    if max_retry_count is None:
+        missing.append("budget_stop_loss.max_retry_count")
+    if missing:
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail=f"approval record missing positive budget stop-loss fields: {', '.join(missing)}",
+        )
+
+    budget_limit_usd = _approval_budget_limit_usd(approval_payload)
+    if budget_limit_usd is None or max_total_cost_usd > budget_limit_usd:
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail="budget_stop_loss.max_total_cost_usd must not exceed budget_limit_usd",
+        )
+    if per_job_cost_ceiling_usd > max_total_cost_usd:
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail="budget_stop_loss.per_job_cost_ceiling_usd must not exceed max_total_cost_usd",
+        )
+    if max_provider_calls < max_sample_count:
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail="sample_plan.max_provider_calls must cover sample_plan.max_sample_count",
+        )
+    if max_retry_count > 1:
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail="budget_stop_loss.max_retry_count must be 0 or 1 for tiny token smoke",
+        )
+
+    boolean_requirements = [
+        "stop_on_first_failure",
+        "halt_on_rate_limit",
+        "halt_on_quota_error",
+        "halt_on_content_rejection",
+        "halt_on_missing_artifact",
+    ]
+    disabled = [key for key in boolean_requirements if budget_stop_loss.get(key) is not True]
+    if disabled:
+        return PreflightCheck(
+            name="budget_stop_loss",
+            status="block",
+            detail=f"budget stop-loss must explicitly enable: {', '.join(disabled)}",
+        )
+
+    return PreflightCheck(
+        name="budget_stop_loss",
+        status="pass",
+        detail=(
+            "budget stop-loss is explicit: "
+            f"samples<={max_sample_count}, provider_calls<={max_provider_calls}, "
+            f"total<=${max_total_cost_usd:.2f}, per_job<=${per_job_cost_ceiling_usd:.2f}, "
+            f"retries<={max_retry_count}"
+        ),
+        evidence_refs=["sample_plan", "budget_stop_loss"],
+    )
+
+
 def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | None) -> PreflightCheck:
     profiles = list_provider_prompt_profiles()
     provider = _approval_string(approval_payload, "provider")
@@ -249,6 +379,18 @@ def _missing_detail_fields(payload: Mapping[str, Any]) -> list[str]:
     return [key for key in required if not str(payload.get(key, "")).strip()]
 
 
+def _looks_like_template_placeholder(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    normalized = value.strip().lower()
+    return (
+        not normalized
+        or normalized.startswith("<")
+        or "replace_me" in normalized
+        or "example" in normalized
+    )
+
+
 def _approval_budget_limit_usd(payload: Mapping[str, Any] | None) -> float | None:
     if payload is None:
         return None
@@ -264,6 +406,45 @@ def _approval_string(payload: Mapping[str, Any] | None, key: str) -> str | None:
         return None
     value = str(payload.get(key, "")).strip()
     return value or None
+
+
+def _approval_nested_int(payload: Mapping[str, Any] | None, section: str, key: str) -> int | None:
+    if payload is None or not isinstance(payload.get(section), Mapping):
+        return None
+    return _nonnegative_int(payload[section].get(key))
+
+
+def _approval_nested_float(payload: Mapping[str, Any] | None, section: str, key: str) -> float | None:
+    if payload is None or not isinstance(payload.get(section), Mapping):
+        return None
+    return _positive_finite_number(payload[section].get(key))
+
+
+def _positive_int(value: Any) -> int | None:
+    parsed = _nonnegative_int(value)
+    if parsed is None or parsed <= 0:
+        return None
+    return parsed
+
+
+def _nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _positive_finite_number(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed) or parsed <= 0:
+        return None
+    return parsed
 
 
 def _match_provider_profile(

@@ -199,7 +199,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 1. [x] 为 `/settings` 增加 Playwright 页面级 smoke，覆盖后端离线、provider 分类、key masked 展示。实现文件：`web/e2e/ui-only/settings-config.smoke.spec.ts`。
 2. [x] 为 `api.ts` 增加请求 payload 审计测试，确保 disabled provider 和空 key 不会进入后端。实现文件：`web/src/components/apiProviderConfig.test.ts`。
 3. [x] 为生产非 token E2E 增加 `/settings` 路由覆盖，不改变 `@token-smoke` 默认跳过策略。实现文件：`web/e2e/production/smoke.prod.spec.ts`。
-4. [ ] 为 poyo 授权 smoke 准备 approval record 模板和预算止损字段，但不在未授权状态下执行 provider 调用。
+4. [x] 为 poyo 授权 smoke 准备 approval record 模板和预算止损字段，但不在未授权状态下执行 provider 调用。实现文件：`configs/authorized-live-token-smoke-approval-template.json`。
 5. [ ] 在品牌资产目录接入后，把 S5 和工具箱图像生成样本加入 L2 fixture 矩阵。
 
 ## 阶段验收

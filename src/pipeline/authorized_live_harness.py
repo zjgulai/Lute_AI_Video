@@ -110,7 +110,9 @@ def _build_sample_job_spec(preflight: TokenSmokePreflightReport | None = None) -
     provider = preflight.approved_provider if preflight and preflight.approved_provider else "poyo"
     model = preflight.approved_model if preflight and preflight.approved_model else "seedance-2"
     cost_ceiling_usd = (
-        preflight.approved_budget_limit_usd
+        preflight.approved_per_job_cost_ceiling_usd
+        if preflight and preflight.approved_per_job_cost_ceiling_usd is not None
+        else preflight.approved_budget_limit_usd
         if preflight and preflight.approved_budget_limit_usd is not None
         else 1.0
     )
