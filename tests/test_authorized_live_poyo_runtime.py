@@ -201,7 +201,7 @@ def _payloads() -> list[dict[str, Any]]:
             "model": "seedance-2",
             "input_payload": {
                 "prompt": "private video prompt",
-                "image_urls": list(REQUIRED_VIDEO_REFERENCE_REFS),
+                "reference_image_urls": list(REQUIRED_VIDEO_REFERENCE_REFS),
                 "aspect_ratio": "9:16",
                 "resolution": "480p",
                 "duration": 15,

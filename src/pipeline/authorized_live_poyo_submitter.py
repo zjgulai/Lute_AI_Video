@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from time import sleep as default_sleep
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
@@ -58,11 +59,26 @@ class PoyoSubmitPollHttpClient(Protocol):
 class AuthorizedLivePoyoSubmitPollTransport:
     """Submit one poyo task through an injected HTTP client and read one finished status."""
 
-    def __init__(self, *, authorization_token: str, http_client: PoyoSubmitPollHttpClient) -> None:
+    def __init__(
+        self,
+        *,
+        authorization_token: str,
+        http_client: PoyoSubmitPollHttpClient,
+        max_status_polls: int = 120,
+        poll_interval_seconds: float = 10.0,
+        sleep: Callable[[float], None] = default_sleep,
+    ) -> None:
         if not authorization_token:
             raise ValueError("authorization token is required")
+        if max_status_polls < 1:
+            raise ValueError("max_status_polls must be positive")
+        if poll_interval_seconds < 0:
+            raise ValueError("poll_interval_seconds must be nonnegative")
         self._authorization_token = authorization_token
         self._http_client = http_client
+        self._max_status_polls = max_status_polls
+        self._poll_interval_seconds = poll_interval_seconds
+        self._sleep = sleep
 
     def submit_once(self, *, model: str, input_payload: Mapping[str, Any]) -> Mapping[str, Any]:
         headers = self._headers()
@@ -73,13 +89,7 @@ class AuthorizedLivePoyoSubmitPollTransport:
         )
         task_id = _required_string(_success_data(submit_response, "submit"), "task_id")
 
-        status_response = self._http_client.get_json(
-            path=f"{POYO_STATUS_ENDPOINT_PREFIX}/{task_id}",
-            headers=headers,
-        )
-        task = _success_data(status_response, "status")
-        if task.get("status") != "finished":
-            raise ValueError("poyo task must be finished before artifact mapping")
+        task = self._poll_finished_task(task_id=task_id, headers=headers)
 
         file_url, thumbnail_url = _first_file_refs(task)
         return {
@@ -93,6 +103,24 @@ class AuthorizedLivePoyoSubmitPollTransport:
             "Authorization": f"Bearer {self._authorization_token}",
             "Content-Type": "application/json",
         }
+
+    def _poll_finished_task(self, *, task_id: str, headers: Mapping[str, str]) -> Mapping[str, Any]:
+        last_status = "unknown"
+        for attempt in range(self._max_status_polls):
+            status_response = self._http_client.get_json(
+                path=f"{POYO_STATUS_ENDPOINT_PREFIX}/{task_id}",
+                headers=headers,
+            )
+            task = _success_data(status_response, "status")
+            status = str(task.get("status") or "")
+            if status == "finished":
+                return task
+            if status in {"failed", "error", "cancelled", "canceled"}:
+                raise ValueError(f"poyo task ended before artifact mapping: {status}")
+            last_status = status or "unknown"
+            if attempt < self._max_status_polls - 1 and self._poll_interval_seconds:
+                self._sleep(self._poll_interval_seconds)
+        raise ValueError(f"poyo task did not finish before polling limit: {last_status}")
 
 
 class AuthorizedLivePoyoSubmitter:
@@ -111,17 +139,22 @@ class AuthorizedLivePoyoSubmitter:
     ) -> None:
         self._transport = transport
         self._payloads = dict(payloads)
+        self._artifact_media_urls: dict[str, str] = {}
 
     def __call__(self, spec: MediaJobSpec) -> dict[str, str]:
         payload = self._payload_for(spec)
-        result = self._transport.submit_once(model=spec.model, input_payload=dict(payload.input_payload))
+        provider_input = self._provider_input_for(spec, payload)
+        result = self._transport.submit_once(model=spec.model, input_payload=provider_input)
+        media_url = _required_string(result, "file_url")
+        if spec.job_id != _VIDEO_JOB_ID:
+            self._artifact_media_urls[payload.artifact_ref] = media_url
         return {
             "provider_job_id": _required_string(result, "provider_job_id"),
             "job_id": spec.job_id,
             "provider": spec.provider,
             "model": spec.model,
             "artifact_ref": payload.artifact_ref,
-            "media_url": _required_string(result, "file_url"),
+            "media_url": media_url,
             "thumbnail_ref": str(result.get("thumbnail_url") or ""),
         }
 
@@ -135,10 +168,21 @@ class AuthorizedLivePoyoSubmitter:
         if payload.model != spec.model:
             raise ValueError("payload model must match media job spec")
         if spec.job_id == _VIDEO_JOB_ID:
-            payload_refs = payload.input_payload.get("image_urls")
+            payload_refs = payload.input_payload.get("reference_image_urls")
             if payload_refs != list(REQUIRED_VIDEO_REFERENCE_REFS):
                 raise ValueError("video payload must carry the three authorized image artifacts")
         return payload
+
+    def _provider_input_for(self, spec: MediaJobSpec, payload: AuthorizedLivePoyoPayload) -> dict[str, Any]:
+        provider_input = dict(payload.input_payload)
+        if spec.job_id != _VIDEO_JOB_ID:
+            return provider_input
+
+        missing = [ref for ref in REQUIRED_VIDEO_REFERENCE_REFS if ref not in self._artifact_media_urls]
+        if missing:
+            raise ValueError("video payload requires generated image media URLs before submission")
+        provider_input["reference_image_urls"] = [self._artifact_media_urls[ref] for ref in REQUIRED_VIDEO_REFERENCE_REFS]
+        return provider_input
 
 
 def build_authorized_live_poyo_submitter(

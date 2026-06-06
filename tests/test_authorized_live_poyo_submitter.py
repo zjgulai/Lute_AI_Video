@@ -59,15 +59,32 @@ def test_submitter_maps_video_job_with_required_image_refs():
     payloads = _payloads()
     submitter = AuthorizedLivePoyoSubmitter(transport=transport, payloads=payloads)
 
+    submitter(_image_spec())
+    submitter(_uv_image_spec())
+    submitter(_kitchen_image_spec())
     response = submitter(_video_spec(reference_asset_ids=list(REQUIRED_VIDEO_REFERENCE_REFS)))
 
-    assert len(transport.calls) == 1
-    assert transport.calls[0]["model"] == "seedance-2"
-    assert transport.calls[0]["input_payload"]["image_urls"] == list(REQUIRED_VIDEO_REFERENCE_REFS)
-    assert response["provider_job_id"] == "poyo:job:1"
+    assert len(transport.calls) == 4
+    assert transport.calls[3]["model"] == "seedance-2"
+    assert transport.calls[3]["input_payload"]["reference_image_urls"] == [
+        "https://cdn.example.test/poyo-job-1.png",
+        "https://cdn.example.test/poyo-job-2.png",
+        "https://cdn.example.test/poyo-job-3.png",
+    ]
+    assert response["provider_job_id"] == "poyo:job:4"
     assert response["artifact_ref"] == payloads["momcozy_sterilizer_i2v_15s_authorized_live_fixture"].artifact_ref
-    assert response["media_url"] == "https://cdn.example.test/poyo-job-1.mp4"
+    assert response["media_url"] == "https://cdn.example.test/poyo-job-4.mp4"
     assert "private prompt" not in str(response)
+
+
+def test_submitter_blocks_video_before_image_media_urls_exist():
+    transport = FakePoyoTransport()
+    submitter = AuthorizedLivePoyoSubmitter(transport=transport, payloads=_payloads())
+
+    with pytest.raises(ValueError, match="generated image media URLs"):
+        submitter(_video_spec(reference_asset_ids=list(REQUIRED_VIDEO_REFERENCE_REFS)))
+
+    assert transport.calls == []
 
 
 def test_submitter_propagates_transport_failure_without_retry():
@@ -174,18 +191,36 @@ def test_http_transport_rejects_blank_authorization_token_before_http_call():
     assert http_client.gets == []
 
 
-def test_http_transport_blocks_unfinished_task_without_poll_retry():
+def test_http_transport_polls_until_task_is_finished_without_resubmitting():
+    http_client = FakePoyoSubmitPollHttpClient(statuses=["running", "finished"])
+    transport = poyo_submitter.AuthorizedLivePoyoSubmitPollTransport(
+        authorization_token="sk_fixture_private_token",
+        http_client=http_client,
+        max_status_polls=3,
+        poll_interval_seconds=0,
+    )
+
+    response = transport.submit_once(model="seedance-2", input_payload={"prompt": "private video prompt"})
+
+    assert response["provider_job_id"] == "poyo_task_1"
+    assert len(http_client.posts) == 1
+    assert len(http_client.gets) == 2
+
+
+def test_http_transport_blocks_unfinished_task_after_poll_limit():
     http_client = FakePoyoSubmitPollHttpClient(status="running")
     transport = poyo_submitter.AuthorizedLivePoyoSubmitPollTransport(
         authorization_token="sk_fixture_private_token",
         http_client=http_client,
+        max_status_polls=2,
+        poll_interval_seconds=0,
     )
 
-    with pytest.raises(ValueError, match="poyo task must be finished"):
+    with pytest.raises(ValueError, match="poyo task did not finish"):
         transport.submit_once(model="seedance-2", input_payload={"prompt": "private video prompt"})
 
     assert len(http_client.posts) == 1
-    assert len(http_client.gets) == 1
+    assert len(http_client.gets) == 2
 
 
 def test_http_transport_blocks_missing_file_url_without_retry():
@@ -328,8 +363,15 @@ class FakePoyoTransport:
 
 
 class FakePoyoSubmitPollHttpClient:
-    def __init__(self, *, status: str = "finished", file_url: str = "https://cdn.example.test/asset.png") -> None:
+    def __init__(
+        self,
+        *,
+        status: str = "finished",
+        statuses: list[str] | None = None,
+        file_url: str = "https://cdn.example.test/asset.png",
+    ) -> None:
         self.status = status
+        self.statuses = list(statuses or [])
         self.file_url = file_url
         self.posts: list[dict[str, Any]] = []
         self.gets: list[dict[str, Any]] = []
@@ -351,10 +393,11 @@ class FakePoyoSubmitPollHttpClient:
         headers: Mapping[str, str],
     ) -> Mapping[str, Any]:
         self.gets.append({"path": path, "headers": dict(headers)})
+        status = self.statuses.pop(0) if self.statuses else self.status
         return {
             "code": 200,
             "data": {
-                "status": self.status,
+                "status": status,
                 "files": [
                     {
                         "file_url": self.file_url,
@@ -373,12 +416,24 @@ def _payloads() -> dict[str, AuthorizedLivePoyoPayload]:
             input_payload={"prompt": "private prompt for main image", "size": "1:1", "quality": "low"},
             artifact_ref="artifact://authorized-live/momcozy-sterilizer-main-45-gpt-image-2",
         ),
+        "momcozy_sterilizer_uv_benefit_image_authorized_live_fixture": AuthorizedLivePoyoPayload(
+            job_id="momcozy_sterilizer_uv_benefit_image_authorized_live_fixture",
+            model="gpt-image-2",
+            input_payload={"prompt": "private prompt for UV benefit image", "size": "4:5", "quality": "low"},
+            artifact_ref="artifact://authorized-live/momcozy-sterilizer-uv-benefit-gpt-image-2",
+        ),
+        "momcozy_sterilizer_kitchen_scene_image_authorized_live_fixture": AuthorizedLivePoyoPayload(
+            job_id="momcozy_sterilizer_kitchen_scene_image_authorized_live_fixture",
+            model="gpt-image-2",
+            input_payload={"prompt": "private prompt for kitchen scene image", "size": "4:5", "quality": "low"},
+            artifact_ref="artifact://authorized-live/momcozy-sterilizer-kitchen-scene-gpt-image-2",
+        ),
         "momcozy_sterilizer_i2v_15s_authorized_live_fixture": AuthorizedLivePoyoPayload(
             job_id="momcozy_sterilizer_i2v_15s_authorized_live_fixture",
             model="seedance-2",
             input_payload={
                 "prompt": "private prompt for video",
-                "image_urls": list(REQUIRED_VIDEO_REFERENCE_REFS),
+                "reference_image_urls": list(REQUIRED_VIDEO_REFERENCE_REFS),
                 "aspect_ratio": "9:16",
                 "resolution": "480p",
                 "duration": 15,
@@ -400,6 +455,34 @@ def _image_spec(*, provider: str = "poyo") -> MediaJobSpec:
         step_name="momcozy_sterilizer_main_45_image",
         prompt_hash="sha256:momcozy_sterilizer_main_45_image_fixture",
         prompt_compile_id="pci_momcozy_sterilizer_main_45_image_fixture",
+        brand_bundle_id="bundle_momcozy_candidate",
+        cost_ceiling_usd=2.5,
+    )
+
+
+def _uv_image_spec() -> MediaJobSpec:
+    return MediaJobSpec(
+        job_id="momcozy_sterilizer_uv_benefit_image_authorized_live_fixture",
+        provider="poyo",
+        model="gpt-image-2",
+        scenario="toolbox",
+        step_name="momcozy_sterilizer_uv_benefit_image",
+        prompt_hash="sha256:momcozy_sterilizer_uv_benefit_image_fixture",
+        prompt_compile_id="pci_momcozy_sterilizer_uv_benefit_image_fixture",
+        brand_bundle_id="bundle_momcozy_candidate",
+        cost_ceiling_usd=2.5,
+    )
+
+
+def _kitchen_image_spec() -> MediaJobSpec:
+    return MediaJobSpec(
+        job_id="momcozy_sterilizer_kitchen_scene_image_authorized_live_fixture",
+        provider="poyo",
+        model="gpt-image-2",
+        scenario="toolbox",
+        step_name="momcozy_sterilizer_kitchen_scene_image",
+        prompt_hash="sha256:momcozy_sterilizer_kitchen_scene_image_fixture",
+        prompt_compile_id="pci_momcozy_sterilizer_kitchen_scene_image_fixture",
         brand_bundle_id="bundle_momcozy_candidate",
         cost_ceiling_usd=2.5,
     )
