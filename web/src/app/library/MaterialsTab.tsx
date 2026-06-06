@@ -49,6 +49,7 @@ function isVideoMime(m: string) { return m.startsWith("video/"); }
 function isImageMime(m: string) { return m.startsWith("image/"); }
 function isAudioMime(m: string) { return m.startsWith("audio/"); }
 function isAiGeneratedCategory(category: string) { return AI_GENERATED_CATEGORIES.has(category); }
+function reviewPriority(asset: MaterialAsset) { return asset.reviewStatus === "pending_review" ? 0 : 1; }
 
 function formatSize(bytes: number): string {
   if (!bytes) return "";
@@ -182,7 +183,7 @@ export default function MaterialsTab() {
         a.filename.toLowerCase().includes(q) ||
         a.tags.some((tag) => tag.toLowerCase().includes(q))
       );
-    });
+    }).sort((a, b) => reviewPriority(a) - reviewPriority(b));
   }, [assets, typeFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAssets.length / PAGE_SIZE));

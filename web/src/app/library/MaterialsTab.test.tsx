@@ -64,6 +64,18 @@ describe("MaterialsTab pending review assets", () => {
       mockJsonResponse({
         files: [
           {
+            id: "seedance/large_clip.mp4",
+            filename: "large_clip.mp4",
+            path: "seedance/large_clip.mp4",
+            category: "seedance",
+            kind: "creation_intermediate",
+            produced_at: "2026-06-07T00:59:00Z",
+            size_bytes: 20_000_000,
+            mime_type: "video/mp4",
+            thumbnail_path: null,
+            review_status: null,
+          },
+          {
             id: "pending_review/momcozy_sterilizer_smoke_20260607/main_45.png",
             filename: "main_45.png",
             path: "pending_review/momcozy_sterilizer_smoke_20260607/main_45.png",
@@ -94,6 +106,7 @@ describe("MaterialsTab pending review assets", () => {
       const card = container.querySelector("[data-asset-card]");
       expect(card?.getAttribute("data-review-status")).toBe("pending_review");
       expect(container.textContent).toContain("main_45.png");
+      expect(card?.textContent).toContain("main_45.png");
       expect(container.textContent).toContain("Pending review");
       expect(container.textContent).not.toMatch(/publish|approve|delivery accepted/i);
     } finally {
