@@ -221,6 +221,8 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 
 当前 `--execute` 入口会先跑 no-token preflight，再进入 `scripts/authorized_live_token_smoke_harness.py --execute --pretty`。未显式接线 provider submitter 时 harness 必须 fail-closed，不调用 provider；接线后的执行范围仍只能是本节 3 图 + 1 视频资产包。
 
+C31 已新增 no-token submitter facade contract：`src/pipeline/authorized_live_poyo_submitter.py` 只接受 injected transport，不导入 `PoyoClient`、`httpx`、`POYO_API_KEY` 或 `os.environ`。`tests/test_authorized_live_poyo_submitter.py` 使用 fake transport 证明 job scope、model、视频 reference refs、prompt 不回显和 failure no-retry 边界。该 contract 仍不是真实 provider submitter；下一步若要进入 L4，仍需在精确授权、私有 approval/account readiness、生产 key、provider key 和 execute flags 满足后，单独接线真实 transport。
+
 真实样本范围：
 
 | 顺序 | 场景 | 样本 | 目的 | 预算策略 |
