@@ -30,6 +30,7 @@ interface MaterialAsset {
   tags: string[];
   producedAt: string;
   isAiGenerated: boolean;
+  reviewStatus: "pending_review" | null;
 }
 
 type TypeFilter = "all" | "video" | "image" | "audio";
@@ -39,6 +40,7 @@ const AI_GENERATED_CATEGORIES = new Set([
   "character_identity",
   "gpt_images",
   "keyframes",
+  "pending_review",
   "seedance",
   "thumbnails",
 ]);
@@ -90,6 +92,7 @@ export default function MaterialsTab() {
           tags: (a.tags as string[]) || [],
           producedAt: ((a.metadata as Record<string, unknown> | undefined)?.uploaded_at as string) || new Date().toISOString(),
           isAiGenerated: ((a.tags as string[]) || []).some((tg: string) => tg.includes("ai-") || tg.includes("seedance")),
+          reviewStatus: null,
         }));
         if (shouldCommit()) {
           setAssets(mapped.filter((m) => !isVideoMime(m.mimeType) || m.sizeBytes === 0 || m.tags.every((t) => t !== "renders")));
@@ -121,6 +124,7 @@ export default function MaterialsTab() {
             tags: [f.category as string],
             producedAt: f.produced_at as string,
             isAiGenerated: isAiGeneratedCategory(f.category as string),
+            reviewStatus: (f.review_status as MaterialAsset["reviewStatus"]) ?? null,
           }));
         if (shouldCommit()) setAssets(mapped);
         return;
@@ -137,6 +141,7 @@ export default function MaterialsTab() {
         tags: [f.category as string],
         producedAt: f.produced_at as string,
         isAiGenerated: isAiGeneratedCategory(f.category as string),
+        reviewStatus: (f.review_status as MaterialAsset["reviewStatus"]) ?? null,
       }));
       if (shouldCommit()) setAssets(mapped);
     } catch (e: unknown) {
@@ -445,6 +450,7 @@ export default function MaterialsTab() {
                 key={asset.id}
                 data-asset-card
                 data-kind="creation_intermediate"
+                data-review-status={asset.reviewStatus ?? undefined}
                 onClick={() => setPreview(asset)}
                 className="apple-card overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md group text-left"
               >
@@ -475,6 +481,11 @@ export default function MaterialsTab() {
                     {asset.isAiGenerated && (
                       <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">
                         {t("brand.filter.ai")}
+                      </span>
+                    )}
+                    {asset.reviewStatus === "pending_review" && (
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[rgba(199,151,76,0.16)] text-[var(--gold-foil)] font-medium">
+                        {t("library.materials.pendingReview")}
                       </span>
                     )}
                     {!asset.isAiGenerated && asset.tags.length > 0 && (

@@ -1896,6 +1896,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/toolbox/{tool_id}/provider-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Provider Readiness */
+        get: operations["get_toolbox_provider_readiness_toolbox__tool_id__provider_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/toolbox/{tool_id}/run": {
         parameters: {
             query?: never;
@@ -2515,6 +2532,8 @@ export interface components {
             product_source_url?: string | null;
             /** Product Title */
             product_title?: string | null;
+            /** Review Status */
+            review_status?: "pending_review" | null;
             /** Scenario */
             scenario?: string | null;
             /** Size Bytes */
@@ -6174,6 +6193,41 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_provider_readiness_toolbox__tool_id__provider_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

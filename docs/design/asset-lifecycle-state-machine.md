@@ -8,13 +8,14 @@ description: Canonical state machine describing every stage of an asset's life i
 > 一张图看懂 Short Video Factory 里每个文件的"人生阶段"。
 > 这份文档的唯一目的：让 IA、后端和前端三方对一个资产**现在处于哪个状态**达成共识。
 
-## 1. 五个状态（State）
+## 1. 六个状态（State）
 
 | 状态 | 含义 | 典型例子 |
 |---|---|---|
 | **`brand_kit`** | 品牌底子。用户主动维护的"身份资产"。 | Logo、主色、Brand Voice 文档、字体规范 |
 | **`uploaded`** | 用户原始上传。等待进入流水线或被复用。 | 手机拍的产品图、抖音下载的参考视频 |
 | **`intermediate`** | 流水线中间产物。单步可用但不是最终交付。 | Seedance 生成的某个 clip、CosyVoice 的 TTS 片段、关键帧图 |
+| **`pending_review`** | 已真实生成但还未人工确认的待审素材。只能复核、预览、筛选，不能发布或写入正式品牌资产。 | 授权 poyo smoke 生成的 Momcozy 消毒器 3 图 + 15 秒视频 |
 | **`final_work`** | 完整流水线成片。可发布、可分享、可下载。 | `renders/s1_with_audio.mp4`、`fast_mode/xxx.mp4` |
 | **`published`** | 已分发到外部平台。 | TikTok 视频 URL、Shopify 商品页嵌入 |
 
@@ -51,6 +52,10 @@ description: Canonical state machine describing every stage of an asset's life i
                               │  │ character_identity   │     │
                               │  │ thumbnails           │     │
                               │  └──────────────────────┘     │
+                              │  ┌──────────────────────┐     │
+                              │  │ pending_review       │     │
+                              │  │ (authorized smoke)   │     │
+                              │  └──────────────────────┘     │
                               └──────┬────────────────────────┘
                                      │ assemble_final node succeeds
                                      ▼
@@ -78,6 +83,7 @@ description: Canonical state machine describing every stage of an asset's life i
 | `brand_kit` | N/A（走 `/api/assets/brand-packages` in-memory） | `brand_kit` | `/library?tab=brand_kit` | 品牌包 |
 | `uploaded` | `uploads/` | `creation_intermediate` | `/library?tab=materials` | 原始素材 |
 | `intermediate` | `seedance/` `gpt_images/` `audio/` `keyframes/` `character_identity/` `thumbnails/` `demo/` `quality-test/` `assets/` | `creation_intermediate` | `/library?tab=materials`（折叠分类：AI 生成）| 中间素材 |
+| `pending_review` | `pending_review/` | `creation_intermediate` + `review_status=pending_review` | `/library?tab=materials` | 待审 |
 | `final_work` | `renders/` `fast_mode/` | `final_work` | `/works` | 我的作品 |
 | `published` | 仅在 `publish_logs` 表中有记录 | N/A（当前不是文件） | `/works` 的发布状态 badge | 已发布 |
 
@@ -93,6 +99,7 @@ description: Canonical state machine describing every stage of an asset's life i
 | — | `uploaded` | 用户在 `/library?tab=materials` 或场景表单中上传素材 | `POST /api/upload` → 存 `uploads/` | "上传成功" toast + 卡片显现 |
 | `uploaded` | `intermediate` | 流水线节点消费该素材（e.g. `storyboard` → `media_generation`） | 生成新文件到 `seedance/` 等 | 流水线进度条推进 |
 | — | `intermediate` | 流水线自主生成（e.g. Seedance、GPT-Image） | 写入对应 category 目录 | 进度条推进 |
+| — | `pending_review` | 授权真实 smoke 或人工导入待审资产 | 写入 `pending_review/` 并返回 `review_status=pending_review` | 素材库出现"待审" badge |
 | `intermediate[N]` | `final_work` | `assemble_final` 节点成功，Remotion 组装 | 写入 `renders/` | "成片已生成" toast + `/works` 出现新卡片 |
 | — | `final_work` | Fast Mode 直接产出 | 写入 `fast_mode/` | 同上 |
 | `final_work` | `published` | 用户点击 `PublishPanel` 的发布按钮 | 调分发 connector + 写 `publish_logs` | 卡片角标变为"已发布 on TikTok" |
@@ -100,6 +107,8 @@ description: Canonical state machine describing every stage of an asset's life i
 ### 不允许的转移
 
 - `final_work` → `intermediate`（成片不会回退到中间状态）
+- `pending_review` → `final_work`（待审素材必须先被人工纳入场景或正式流水线，不能直接变成成片）
+- `pending_review` → `published`（未人工验收不得发布）
 - `published` → 任何其他状态（已发布不可撤回，除非用户手动重新上传）
 - `brand_kit` → 任何（品牌包是独立字典，不流动）
 
@@ -123,6 +132,7 @@ description: Canonical state machine describing every stage of an asset's life i
 - `brand_kit` — 「这是我的品牌身份吗？」
 - `uploaded` — 「这是我主动放进来的原料吗？」
 - `intermediate` — 「这是机器正在做的中间步骤吗？」
+- `pending_review` — 「这是已经真实生成、但还需要人工决定能不能成为品牌资产吗？」
 - `final_work` — 「这是能交给客户/市场的成品吗？」
 - `published` — 「这已经发出去了吗？」
 
