@@ -103,6 +103,7 @@ git diff --check
 
 ```bash
 .venv/bin/python scripts/commercial_token_smoke_preflight.py --pretty
+.venv/bin/python scripts/p2_recharge_smoke_checklist.py
 .venv/bin/python -m pytest tests/test_token_smoke_preflight.py
 ```
 
@@ -113,6 +114,7 @@ git diff --check
 - 缺少授权记录时 preflight 必须 blocked。
 - 缺少 `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 时必须 blocked。
 - demo `API_KEY` 或 demo `PLAYWRIGHT_API_KEY` 不允许进入真实 token smoke。
+- `scripts/p2_recharge_smoke_checklist.py --execute` 必须自动执行 preflight；preflight blocked 时不得启动 `smoke.sh` 或 Playwright。
 - provider job ledger 只暴露 prompt hash、artifact refs、status，不暴露 prompt payload 或品牌资产原文。
 - C1-C8 不生成 approved brand token。
 
@@ -159,6 +161,7 @@ npm run e2e:prod
 
 ```bash
 CONFIRM_P2_TOKEN_SMOKE=1 RUN_TOKEN_SMOKE=1 \
+AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD=<private-approval-json> \
 API_KEY=<production-api-key> \
 PLAYWRIGHT_API_KEY=<production-api-key> \
 POYO_API_KEY=<funded-poyo-key> \
@@ -206,6 +209,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 4. [x] 为 poyo 授权 smoke 准备 approval record 模板和预算止损字段，但不在未授权状态下执行 provider 调用。实现文件：`configs/authorized-live-token-smoke-approval-template.json`。
 5. [x] 在品牌资产目录接入后，把 S5 和工具箱图像生成样本加入 L2 fixture 矩阵。实现文件：`tests/fixtures/toolbox/momcozy_toolbox_l2_fixture_matrix.json`。
 6. [x] 移除生产 `@token-smoke` spec 中残留的 demo key fallback，统一通过 production helper 管控 authenticated smoke。实现文件：`web/e2e/production/helpers.ts`、`web/e2e/production/s1-gate.prod.spec.ts`、`web/e2e/production/s1-step-by-step.prod.spec.ts`。
+7. [x] 强制 P2 充值后统一入口在任何 token-consuming 命令前执行 no-token preflight。实现文件：`scripts/p2_recharge_smoke_checklist.py`、`tests/test_p2_recharge_smoke_checklist.py`。
 
 ## 阶段验收
 
@@ -214,6 +218,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - L0 全绿。
 - L1 `/settings` 页面验收通过。
 - L2 preflight 在无授权状态下正确 blocked，在授权记录和 key 完整时才变为可执行。
+- P2 充值后统一入口 blocked 时不得启动真实 smoke 子进程。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 

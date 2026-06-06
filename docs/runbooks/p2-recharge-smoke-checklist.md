@@ -58,7 +58,7 @@ SILICONFLOW_API_KEY=<siliconflow-key> \
 python scripts/p2_recharge_smoke_checklist.py --execute
 ```
 
-执行前先跑 no-token preflight：
+`--execute` 会自动先跑 no-token preflight；preflight blocked 时脚本直接退出，不会启动 `smoke.sh` 或 Playwright。也可以在正式执行前手动演练同一门禁：
 
 ```bash
 RUN_TOKEN_SMOKE=1 \
@@ -71,8 +71,9 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 
 脚本会顺序执行：
 
-1. `deploy/lighthouse/smoke.sh` 的 token path
-2. `web` 下的 `npm run e2e:prod`，并通过 `RUN_TOKEN_SMOKE=1` 打开 `@token-smoke`
+1. `commercial_token_smoke_preflight` 的 no-token 门禁
+2. `deploy/lighthouse/smoke.sh` 的 token path
+3. `web` 下的 `npm run e2e:prod`，并通过 `RUN_TOKEN_SMOKE=1` 打开 `@token-smoke`
 
 ## 安全边界
 
@@ -81,6 +82,7 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 - 没有 `RUN_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向授权记录时不得执行。
 - 授权记录模板本身会被 preflight 阻断，不能直接作为正式授权记录。
+- preflight blocked 时必须先修复授权、预算、provider capability evidence、job ledger 或 audit bundle，不允许绕过统一入口手动执行 token 命令。
 - `API_KEY` 或 `PLAYWRIGHT_API_KEY` 仍是 `ai_video_demo_2026` 时拒绝执行。
 - 失败后不要盲目循环重试；先检查 provider 控制台、生产日志和失败 artifact。
 

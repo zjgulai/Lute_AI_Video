@@ -118,12 +118,35 @@ def test_execute_requires_approval_record_path_even_when_confirmed():
     assert "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD" in result.stderr
 
 
+def test_execute_runs_preflight_before_any_token_smoke_command():
+    result = _run_script(
+        "--execute",
+        env={
+            "CONFIRM_P2_TOKEN_SMOKE": "1",
+            "RUN_TOKEN_SMOKE": "1",
+            "API_KEY": "prod-api-key",
+            "PLAYWRIGHT_API_KEY": "prod-api-key",
+            "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": str(APPROVAL_TEMPLATE),
+            "POYO_API_KEY": "poyo-key",
+            "DEEPSEEK_API_KEY": "deepseek-key",
+            "SILICONFLOW_API_KEY": "siliconflow-key",
+        },
+    )
+
+    assert result.returncode == 2
+    assert "token smoke preflight blocked execute" in result.stderr
+    assert "template_only must be false" in result.stderr
+    assert "Running:" not in result.stdout
+
+
 def test_script_source_keeps_token_endpoints_behind_execute_path():
     source = SCRIPT.read_text()
 
     assert "execute: bool" in source
     assert "CONFIRM_P2_TOKEN_SMOKE" in source
     assert "RUN_TOKEN_SMOKE" in source
+    assert "build_token_smoke_preflight_report" in source
+    assert "_validate_execute_preflight" in source
     assert "subprocess.run" in source
     assert "if not args.execute" in source
     assert "return 0" in source

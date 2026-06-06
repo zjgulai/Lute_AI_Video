@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import subprocess
 import sys
@@ -134,6 +135,29 @@ def _validate_execute_env() -> list[str]:
     return errors
 
 
+def _build_execute_preflight_report():
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
+    with contextlib.redirect_stdout(sys.stderr):
+        from src.pipeline.token_smoke_preflight import build_token_smoke_preflight_report
+
+    return build_token_smoke_preflight_report()
+
+
+def _validate_execute_preflight() -> int:
+    report = _build_execute_preflight_report()
+    if not report.blocked:
+        print(f"Token smoke preflight passed: {report.report_id}")
+        return 0
+
+    print(f"ERROR: token smoke preflight blocked execute ({report.report_id})", file=sys.stderr)
+    for check in report.checks:
+        if check.status == "block":
+            print(f"ERROR: [{check.name}] {check.detail}", file=sys.stderr)
+    return 2
+
+
 def _run_commands(commands: list[SmokeCommand]) -> int:
     for command in commands:
         print(f"Running: {command.name}")
@@ -168,6 +192,10 @@ def main() -> int:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 2
+
+    preflight_exit = _validate_execute_preflight()
+    if preflight_exit != 0:
+        return preflight_exit
 
     return _run_commands(_build_commands(args.base_url, execute=True))
 
