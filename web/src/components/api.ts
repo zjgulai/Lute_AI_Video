@@ -63,6 +63,7 @@ type DistributionResponse = {
 
 export type ModelProviderConfig = {
   apiKeys: Partial<Record<ProviderApiKeyName, string>>;
+  enabledProviders?: Partial<Record<ProviderApiKeyName, boolean>>;
   updatedAt?: string;
 };
 
@@ -353,8 +354,23 @@ function normalizeProviderConfig(value: unknown): ModelProviderConfig {
       apiKeys[keyName] = rawValue.trim();
     }
   }
+  const rawEnabledProviders = isRecord(value.enabledProviders) ? value.enabledProviders : {};
+  const enabledProviders: Partial<Record<ProviderApiKeyName, boolean>> = {};
+  for (const keyName of PROVIDER_API_KEY_NAMES) {
+    const rawValue = rawEnabledProviders[keyName];
+    if (typeof rawValue === "boolean") {
+      enabledProviders[keyName] = rawValue;
+    }
+  }
   const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : undefined;
-  return updatedAt ? { apiKeys, updatedAt } : { apiKeys };
+  const normalized: ModelProviderConfig = { apiKeys };
+  if (Object.keys(enabledProviders).length > 0) {
+    normalized.enabledProviders = enabledProviders;
+  }
+  if (updatedAt) {
+    normalized.updatedAt = updatedAt;
+  }
+  return normalized;
 }
 
 export function getModelProviderConfig(): ModelProviderConfig {
@@ -378,7 +394,10 @@ export function setModelProviderConfig(config: ModelProviderConfig): void {
     ...config,
     updatedAt: new Date().toISOString(),
   });
-  if (Object.keys(normalized.apiKeys).length === 0) {
+  const hasProviderState =
+    Object.keys(normalized.apiKeys).length > 0
+    || Object.keys(normalized.enabledProviders ?? {}).length > 0;
+  if (!hasProviderState) {
     storageRemove(STORAGE_KEYS.providerConfig);
     return;
   }
@@ -394,6 +413,9 @@ export function getProviderApiKeysForRequest(): Record<string, string> {
   const config = getModelProviderConfig();
   const apiKeys: Record<string, string> = {};
   for (const keyName of REQUEST_PROVIDER_API_KEY_NAMES) {
+    if (config.enabledProviders?.[keyName] === false) {
+      continue;
+    }
     const value = config.apiKeys[keyName]?.trim();
     if (value) {
       apiKeys[keyName] = value;
