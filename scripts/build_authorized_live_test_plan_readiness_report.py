@@ -25,6 +25,11 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
         ACCOUNT_READINESS_RECORD_ENV,
         APPROVAL_RECORD_ENV,
         APPROVAL_STATEMENT_TEMPLATE,
+        DEFAULT_AUTH_BUDGET_LIMIT,
+        DEFAULT_AUTH_MODEL,
+        DEFAULT_AUTH_PROVIDER,
+        DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+        DEFAULT_AUTH_TEST_SCOPE,
         PROVIDER_REVALIDATION_REF,
         REQUIRED_API_KEY_ENVS,
         RUN_TOKEN_SMOKE_ENV,
@@ -48,9 +53,11 @@ DISCUSSION_ARTIFACT_REFS = (
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--provider", default="poyo")
-    parser.add_argument("--model", default="seedance-2")
-    parser.add_argument("--budget-limit", default="$1.00")
+    parser.add_argument("--provider", default=DEFAULT_AUTH_PROVIDER)
+    parser.add_argument("--model", default=DEFAULT_AUTH_MODEL)
+    parser.add_argument("--provider-model-scope", default=DEFAULT_AUTH_PROVIDER_MODEL_SCOPE)
+    parser.add_argument("--test-scope", default=DEFAULT_AUTH_TEST_SCOPE)
+    parser.add_argument("--budget-limit", default=DEFAULT_AUTH_BUDGET_LIMIT)
     parser.add_argument(
         "--preflight-env",
         choices=("empty", "current"),
@@ -109,8 +116,12 @@ def _compact_sample_plan(payload: dict[str, Any] | None) -> dict[str, Any] | Non
         "sample_plan_ref": payload.get("sample_plan_ref"),
         "provider_revalidation_ref": payload.get("provider_revalidation_ref"),
         "limits": payload.get("limits", {}),
+        "provider_model_scope": payload.get("provider_model_scope"),
+        "test_scope": payload.get("test_scope"),
+        "expected_pending_asset_package": payload.get("expected_pending_asset_package"),
         "allowed_provider_models": payload.get("allowed_provider_models", []),
         "allowed_scenarios": payload.get("allowed_scenarios", []),
+        "core_asset_samples": payload.get("core_asset_samples", []),
         "core_video_samples": payload.get("core_video_samples", []),
         "stop_loss_policy": payload.get("stop_loss_policy", {}),
     }
@@ -147,8 +158,8 @@ def _execution_blockers(preflight: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _build_report(args: argparse.Namespace) -> dict[str, Any]:
     authorization_statement = APPROVAL_STATEMENT_TEMPLATE.format(
-        provider=args.provider,
-        model=args.model,
+        provider_model_scope=args.provider_model_scope,
+        test_scope=args.test_scope,
         budget_limit=args.budget_limit,
     )
     artifact_checks = _artifact_checks()
@@ -170,6 +181,10 @@ def _build_report(args: argparse.Namespace) -> dict[str, Any]:
         "ready_for_live_execution": live_execution_ready,
         "preflight_env_source": args.preflight_env,
         "target_base_url": args.base_url,
+        "provider": args.provider,
+        "model": args.model,
+        "provider_model_scope": args.provider_model_scope,
+        "test_scope": args.test_scope,
         "required_authorization_statement": authorization_statement,
         "generic_confirmation_is_not_authorization": True,
         "required_private_records": {

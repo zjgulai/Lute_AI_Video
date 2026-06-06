@@ -10,6 +10,9 @@ from src.pipeline.token_smoke_preflight import (
     ACCOUNT_READINESS_RECORD_ENV,
     APPROVAL_RECORD_ENV,
     APPROVAL_STATEMENT_TEMPLATE,
+    DEFAULT_AUTH_BUDGET_LIMIT,
+    DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+    DEFAULT_AUTH_TEST_SCOPE,
     PROVIDER_REVALIDATION_REF,
     RUN_TOKEN_SMOKE_ENV,
     SAMPLE_PLAN_REF,
@@ -63,10 +66,16 @@ def test_default_report_is_ready_for_discussion_but_not_live_execution():
     assert report["required_runtime_env"]["CONFIRM_P2_TOKEN_SMOKE"] == "1"
     assert report["required_runtime_env"][RUN_TOKEN_SMOKE_ENV] == "1"
     assert report["sample_plan"]["sample_plan_ref"] == SAMPLE_PLAN_REF
-    assert report["sample_plan"]["limits"]["max_provider_calls"] == 2
-    assert report["sample_plan"]["limits"]["max_total_cost_usd"] == 1.0
+    assert report["sample_plan"]["limits"]["max_provider_calls"] == 4
+    assert report["sample_plan"]["limits"]["max_total_cost_usd"] == 3.0
+    assert report["sample_plan"]["provider_model_scope"] == DEFAULT_AUTH_PROVIDER_MODEL_SCOPE
+    assert report["sample_plan"]["test_scope"] == DEFAULT_AUTH_TEST_SCOPE
+    assert report["sample_plan"]["expected_pending_asset_package"]["asset_status"] == "pending_review"
+    assert len(report["sample_plan"]["core_asset_samples"]) == 3
+    assert report["sample_plan"]["core_video_samples"][0]["duration_seconds"] == 15
     assert report["provider_revalidation_summary"]["provider_revalidation_ref"] == PROVIDER_REVALIDATION_REF
-    assert "poyo/seedance-2" in report["required_authorization_statement"]
+    assert "poyo/gpt-image-2 + poyo/seedance-2" in report["required_authorization_statement"]
+    assert "Momcozy 消毒器" in report["required_authorization_statement"]
     assert "sk_fixture_secret" not in result.stdout
 
 
@@ -132,7 +141,7 @@ def test_script_source_has_no_provider_or_subprocess_execution_path():
 
 def _approval_statement() -> str:
     return APPROVAL_STATEMENT_TEMPLATE.format(
-        provider="poyo",
-        model="seedance-2",
-        budget_limit="$1.00",
+        provider_model_scope=DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+        test_scope=DEFAULT_AUTH_TEST_SCOPE,
+        budget_limit=DEFAULT_AUTH_BUDGET_LIMIT,
     )

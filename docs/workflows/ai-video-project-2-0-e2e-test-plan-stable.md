@@ -108,7 +108,7 @@ git diff --check
 .venv/bin/python scripts/build_authorized_live_smoke_packet.py --include-preflight
 .venv/bin/python scripts/build_authorized_live_test_plan_readiness_report.py
 .venv/bin/python scripts/build_authorized_live_approval_record.py --print-required-statement --approved-by <operator-name> --approval-statement ignored
-.venv/bin/python scripts/build_provider_account_readiness_record.py --checked-by <operator-name> --available-credit-usd 1.00 --output tmp/outputs/poyo-account-readiness.json
+.venv/bin/python scripts/build_provider_account_readiness_record.py --checked-by <operator-name> --available-credit-usd 3.00 --output tmp/outputs/poyo-account-readiness.json
 .venv/bin/python -m pytest tests/test_token_smoke_preflight.py
 ```
 
@@ -140,7 +140,7 @@ git diff --check
 - poyo 公开模型页仍列出 `gpt-image-2` / `gpt-image-2-edit`；支持低/中/高质量、1K/2K/4K、单图返回。
 - 这不证明 API key 有效、账户余额充足、内容审核会通过、runtime 不限流，也不证明商业交付完成。
 
-第一轮 L4 样本计划记录在 `configs/authorized-live-token-smoke-sample-plan-contract.json`。该计划只允许 Fast+S1 两条以内的 `seedance-2` 480p/4s 最小视频样本，预算止损为总额 `$1.00`、单任务 `$0.50`、零自动重试。它是连接性 smoke，不是质量验收。
+第一轮 L4 样本计划记录在 `configs/authorized-live-token-smoke-sample-plan-contract.json`。该计划已从 Fast+S1 连通性 smoke 收紧为报告对齐的 Momcozy 消毒器资产包：3 张 `gpt-image-2` 图片 + 1 条 `seedance-2` 15 秒 9:16 image-to-video。预算止损为总额 `$3.00`、单任务 `$2.50`、零自动重试。产物只能进入 `pending_review` 素材库，不能写入 approved brand token、delivery accepted 或 publish allowed。
 
 固定命令：
 
@@ -186,7 +186,7 @@ npm run e2e:prod
 - `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 已配置。
 - 私有 approval record 已绑定 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`。
 - 私有 approval record 已绑定 `sample_plan_ref=configs/authorized-live-token-smoke-sample-plan-contract.json`。
-- 私有 provider account readiness record 已确认 poyo 控制台余额覆盖 `$1.00` 样本计划，并且不记录 API key 原文。
+- 私有 provider account readiness record 已确认 poyo 控制台余额覆盖 `$3.00` 样本计划，并且不记录 API key 原文。
 - no-token 启动包已生成并复核，确认授权句、样本计划、账户 readiness 环境变量和执行命令 preview 均与 runbook 一致。
 - no-token preflight 已通过。
 - 生产日志和 artifact 目录可检查。
@@ -196,12 +196,12 @@ npm run e2e:prod
 ```bash
 python scripts/build_authorized_live_approval_record.py \
   --approved-by <operator-name> \
-  --approval-statement '我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 poyo/seedance-2，预算上限是 $1.00。' \
+  --approval-statement '我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 范围是 poyo/gpt-image-2 + poyo/seedance-2，测试范围是 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频，预算上限是 $3.00。' \
   --output tmp/outputs/authorized-live-token-smoke-approval.json
 
 python scripts/build_provider_account_readiness_record.py \
   --checked-by <operator-name> \
-  --available-credit-usd 1.00 \
+  --available-credit-usd 3.00 \
   --output tmp/outputs/poyo-account-readiness.json
 ```
 
@@ -219,13 +219,16 @@ SILICONFLOW_API_KEY=<siliconflow-key> \
 python scripts/p2_recharge_smoke_checklist.py --execute
 ```
 
+当前 `--execute` 入口会先跑 no-token preflight，再进入 `scripts/authorized_live_token_smoke_harness.py --execute --pretty`。未显式接线 provider submitter 时 harness 必须 fail-closed，不调用 provider；接线后的执行范围仍只能是本节 3 图 + 1 视频资产包。
+
 真实样本范围：
 
 | 顺序 | 场景 | 样本 | 目的 | 预算策略 |
 |---:|---|---|---|---|
-| 1 | Fast Mode | 1 条 480p/4s 最小短视频 | 验证最短 text-to-video 链路 | 成功即停 |
-| 2 | S1 商品直拍 | 1 条 480p/4s 单路径 | 验证脚本、视频任务、状态回写、artifact refs | 失败后不自动重试 |
-| 3 | S5 Brand VLOG | 可选 1 条短样本 | 验证品牌人物/口播链路 | 需要用户单独确认 |
+| 1 | 工具箱：电商商品图 | 消毒器 45 度主图，白底/浅灰，产品居中约 70% | 形成可入库待审主图素材 | 失败即停 |
+| 2 | 工具箱：电商视觉图 | UV 双重消毒卖点图 | 形成 claim-safe 卖点视觉 | 失败后不自动重试 |
+| 3 | 工具箱：电商视觉图 | 厨房日常使用场景图 | 形成家庭场景素材 | 失败后不自动重试 |
+| 4 | 工具箱：故事版 / 图片驱动视频 | 15 秒 9:16 Hook → 痛点 → UV/烘干卖点 → CTA | 用 3 张图片 refs 生成待审短视频 | 失败后不自动重试 |
 
 失败处理：
 
@@ -240,14 +243,14 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 | 场景 | 当前优先级 | L2 no-token | L3 prod non-token | L4 token smoke | 备注 |
 |---|---:|---:|---:|---:|---|
 | `/settings` 配置控制面 | P0 | 是 | 是 | 否 | 不应触发 provider |
-| Fast Mode | P0 | 是 | 是 | 是 | poyo 首个最小样本 |
-| S1 商品直拍 | P0 | 是 | 是 | 是 | 2.0 主验证路径 |
+| Fast Mode | P0 | 是 | 是 | 否 | 首轮 L4 不再测试，保留后续连接性回归 |
+| S1 商品直拍 | P0 | 是 | 是 | 否 | 首轮 L4 不再测试，保留后续主流程回归 |
 | S5 Brand VLOG | P1 | 是 | 是 | 可选 | 品牌资产目录接入后再扩大 |
-| 工具箱：电商商品图 | P1 | 是 | 是 | 可选 | 先验证配置和 job ledger |
+| 工具箱：电商商品图 | P0 | 是 | 是 | 是 | 首轮 Momcozy 消毒器主图 |
 | 工具箱：产品六视图 | P1 | 是 | 是 | 可选 | 真实生成需成本确认 |
-| 工具箱：电商视觉图 | P1 | 是 | 是 | 可选 | 先走图像 provider mock |
+| 工具箱：电商视觉图 | P0 | 是 | 是 | 是 | 首轮 Momcozy 消毒器卖点图和场景图 |
 | 工具箱：数字人 | P2 | 是 | 是 | 否 | 需单独评估 HeyGen/Avatar 成本 |
-| 工具箱：故事版 | P0 | 是 | 是 | 否 | 可用 L2 验证核心价值 |
+| 工具箱：故事版 | P0 | 是 | 是 | 是 | 首轮 15 秒 image-to-video |
 | S2/S3/S4 | P2 | 是 | 是 | 否 | 长视频和 remix 权利门禁先行 |
 
 ## 下一轮开发 TODO
@@ -265,6 +268,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 11. [x] 增加私有 provider account readiness 构建器，要求人工余额确认并绑定到 preflight。实现文件：`scripts/build_provider_account_readiness_record.py`、`tests/test_provider_account_readiness_record_builder.py`。
 12. [x] 增加 no-token authorized-live smoke 启动包，并串联到 P2 recharge checklist dry-run。实现文件：`scripts/build_authorized_live_smoke_packet.py`、`tests/test_authorized_live_smoke_packet_builder.py`、`scripts/p2_recharge_smoke_checklist.py`。
 13. [x] 增加正式测试计划讨论 readiness report，区分可讨论测试计划与可执行真实调用。实现文件：`scripts/build_authorized_live_test_plan_readiness_report.py`、`tests/test_authorized_live_test_plan_readiness_report.py`。
+14. [x] 将首轮授权真实 smoke 样本计划从 Fast+S1 连通性样本调整为 Momcozy 消毒器 3 图 + 1 条 15 秒竖版图片驱动视频资产包，并保持 `pending_review` 素材库边界。实现文件：`configs/authorized-live-token-smoke-sample-plan-contract.json`、`configs/authorized-live-token-smoke-approval-template.json`、`src/pipeline/token_smoke_preflight.py`。
 
 ## 阶段验收
 

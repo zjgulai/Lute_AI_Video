@@ -637,7 +637,7 @@ Stop before running any live provider test.
 Required user statement:
 
 ```text
-我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 <provider>/<model>，预算上限是 <amount>。
+我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 范围是 poyo/gpt-image-2 + poyo/seedance-2，测试范围是 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频，预算上限是 $3.00。
 ```
 
 Without that statement, C21 remains blocked.

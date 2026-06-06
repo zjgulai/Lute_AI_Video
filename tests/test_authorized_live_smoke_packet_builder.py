@@ -10,6 +10,9 @@ from src.pipeline.token_smoke_preflight import (
     ACCOUNT_READINESS_RECORD_ENV,
     APPROVAL_RECORD_ENV,
     APPROVAL_STATEMENT_TEMPLATE,
+    DEFAULT_AUTH_BUDGET_LIMIT,
+    DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+    DEFAULT_AUTH_TEST_SCOPE,
     PROVIDER_REVALIDATION_REF,
     RUN_TOKEN_SMOKE_ENV,
     SAMPLE_PLAN_REF,
@@ -63,7 +66,12 @@ def test_default_packet_is_no_token_and_contains_exact_authorization_gate():
     assert packet["required_runtime_env"]["CONFIRM_P2_TOKEN_SMOKE"] == "1"
     assert packet["required_runtime_env"][RUN_TOKEN_SMOKE_ENV] == "1"
     assert "继续下一步" in packet["rejected_confirmation_examples"]
-    assert "poyo/seedance-2" in packet["required_authorization_statement"]
+    assert packet["provider_model_scope"] == DEFAULT_AUTH_PROVIDER_MODEL_SCOPE
+    assert packet["test_scope"] == DEFAULT_AUTH_TEST_SCOPE
+    assert packet["budget_limit"] == DEFAULT_AUTH_BUDGET_LIMIT
+    assert "poyo/gpt-image-2 + poyo/seedance-2" in packet["required_authorization_statement"]
+    assert "Momcozy 消毒器" in packet["required_authorization_statement"]
+    assert "--available-credit-usd 3.00" in " ".join(packet["record_build_commands"])
     assert "scripts/p2_recharge_smoke_checklist.py --execute" in packet["execute_command_preview"]
     assert "sk_fixture_secret" not in result.stdout
 
@@ -115,9 +123,9 @@ def test_script_source_has_no_provider_or_subprocess_execution_path():
 
 def _approval_statement() -> str:
     return APPROVAL_STATEMENT_TEMPLATE.format(
-        provider="poyo",
-        model="seedance-2",
-        budget_limit="$1.00",
+        provider_model_scope=DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+        test_scope=DEFAULT_AUTH_TEST_SCOPE,
+        budget_limit=DEFAULT_AUTH_BUDGET_LIMIT,
     )
 
 

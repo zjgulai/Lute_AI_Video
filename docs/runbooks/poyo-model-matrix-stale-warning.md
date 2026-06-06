@@ -48,7 +48,7 @@ source: human+ai
 - `seedance-2` 当前公开价格边界：720p text/image-to-video 为 `$0.20/sec`，1080p text/image-to-video 为 `$0.45/sec`；最低 video-input 档为 `$0.05/sec`。
 - `gpt-image-2` / `gpt-image-2-edit` 当前公开文档仍列为可用；低质量 1K 为 `$0.01/gen`，高质量 4K 为 `$0.321/gen`。
 - L4 approval record 必须包含 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`；缺失或不匹配时 preflight 必须 blocked。
-- 第一轮 L4 smoke 的视频样本计划收紧为 `seedance-2`、480p、4s、Fast+S1 两条以内，总 provider 预估成本 `$0.80`，预算止损上限 `$1.00`。这只验证连接性、状态回写和 artifact refs，不做高质量成片验收。
+- 第一轮 L4 smoke 的样本计划收紧为 Momcozy 消毒器 3 张 `gpt-image-2` 图片 + 1 条 `seedance-2` 15 秒 9:16 image-to-video，总预算止损上限 `$3.00`、单任务 `$2.50`、零自动重试。产物只进入 `pending_review` 素材库，不做 approved brand token、发布或商业交付验收。
 
 ## 4. 变更流程
 

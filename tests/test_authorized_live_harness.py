@@ -13,6 +13,12 @@ from src.pipeline.token_smoke_preflight import (
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
+    DEFAULT_AUTH_BUDGET_LIMIT,
+    DEFAULT_AUTH_BUDGET_LIMIT_USD,
+    DEFAULT_AUTH_MODEL,
+    DEFAULT_AUTH_PROVIDER,
+    DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+    DEFAULT_AUTH_TEST_SCOPE,
     PROVIDER_REVALIDATION_REF,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
@@ -54,7 +60,10 @@ def test_dry_run_passes_after_preflight_without_provider_call(tmp_path: Path):
     assert report.job_spec is not None
     assert report.job_spec.provider == "poyo"
     assert report.job_spec.model == "seedance-2"
-    assert report.job_spec.cost_ceiling_usd == 0.5
+    assert report.job_spec.scenario == "toolbox"
+    assert report.job_spec.step_name == "momcozy_sterilizer_asset_video"
+    assert report.job_spec.brand_bundle_id == "bundle_momcozy_candidate"
+    assert report.job_spec.cost_ceiling_usd == 2.5
     assert calls == []
 
 
@@ -62,11 +71,11 @@ def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_pa
     approval_record = _write_approval_record(
         tmp_path,
         provider="poyo",
-        model="seedance-2-fast",
-        budget_limit_usd=1.0,
+        model="seedance-2",
+        budget_limit_usd=3.0,
         budget_stop_loss={
-            "max_total_cost_usd": 1.0,
-            "per_job_cost_ceiling_usd": 0.45,
+            "max_total_cost_usd": 3.0,
+            "per_job_cost_ceiling_usd": 2.0,
             "max_retry_count": 0,
             "stop_on_first_failure": True,
             "halt_on_rate_limit": True,
@@ -83,8 +92,8 @@ def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_pa
     assert report.provider_call_executed is False
     assert report.job_spec is not None
     assert report.job_spec.provider == "poyo"
-    assert report.job_spec.model == "seedance-2-fast"
-    assert report.job_spec.cost_ceiling_usd == 0.45
+    assert report.job_spec.model == "seedance-2"
+    assert report.job_spec.cost_ceiling_usd == 2.0
 
 
 def test_execute_mode_requires_extra_execute_flag_after_preflight(tmp_path: Path):
@@ -145,9 +154,11 @@ def _ready_env(approval_record: Path) -> dict[str, str]:
 
 def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
     path = tmp_path / "authorized-live-approval.json"
-    provider = str(overrides.get("provider", "poyo"))
-    model = str(overrides.get("model", "seedance-2"))
-    budget_limit = str(overrides.get("budget_limit", "$1.00"))
+    provider = str(overrides.get("provider", DEFAULT_AUTH_PROVIDER))
+    model = str(overrides.get("model", DEFAULT_AUTH_MODEL))
+    provider_model_scope = str(overrides.get("provider_model_scope", DEFAULT_AUTH_PROVIDER_MODEL_SCOPE))
+    test_scope = str(overrides.get("test_scope", DEFAULT_AUTH_TEST_SCOPE))
+    budget_limit = str(overrides.get("budget_limit", DEFAULT_AUTH_BUDGET_LIMIT))
     payload: dict[str, Any] = {
         "approval_id": "approval_fixture",
         "scope": APPROVAL_SCOPE,
@@ -157,19 +168,38 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
         "approved_at": "2026-06-04T00:00:00Z",
         "provider": provider,
         "model": model,
+        "provider_model_scope": provider_model_scope,
+        "test_scope": test_scope,
         "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
         "sample_plan_ref": SAMPLE_PLAN_REF,
         "budget_limit": budget_limit,
-        "budget_limit_usd": 1.0,
+        "budget_limit_usd": DEFAULT_AUTH_BUDGET_LIMIT_USD,
         "sample_plan": {
-            "max_sample_count": 2,
-            "max_provider_calls": 2,
-            "scenarios": ["fast", "s1"],
+            "max_sample_count": 4,
+            "max_provider_calls": 4,
+            "scenarios": ["toolbox"],
+            "toolbox_tool_ids": ["product-image", "ecommerce-visual", "storyboard"],
+            "sample_ids": [
+                "momcozy-sterilizer-main-45-gpt-image-2",
+                "momcozy-sterilizer-uv-benefit-gpt-image-2",
+                "momcozy-sterilizer-kitchen-scene-gpt-image-2",
+                "momcozy-sterilizer-i2v-15s-seedance-2",
+            ],
+            "asset_package": {
+                "brand": "momcozy",
+                "product": "sterilizer",
+                "image_count": 3,
+                "video_count": 1,
+                "asset_status": "pending_review",
+                "delivery_accepted": False,
+                "publish_allowed": False,
+                "approved_brand_token_write": False,
+            },
             "s5_requires_separate_confirmation": True,
         },
         "budget_stop_loss": {
-            "max_total_cost_usd": 1.0,
-            "per_job_cost_ceiling_usd": 0.5,
+            "max_total_cost_usd": 3.0,
+            "per_job_cost_ceiling_usd": 2.5,
             "max_retry_count": 0,
             "stop_on_first_failure": True,
             "halt_on_rate_limit": True,
@@ -177,13 +207,13 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
             "halt_on_content_rejection": True,
             "halt_on_missing_artifact": True,
         },
-        "approval_statement": _approval_statement(provider, model, budget_limit),
+        "approval_statement": _approval_statement(provider_model_scope, test_scope, budget_limit),
     }
     payload.update(overrides)
     if {"provider", "model", "budget_limit"} & overrides.keys() and "approval_statement" not in overrides:
         payload["approval_statement"] = _approval_statement(
-            str(payload["provider"]),
-            str(payload["model"]),
+            str(payload["provider_model_scope"]),
+            str(payload["test_scope"]),
             str(payload["budget_limit"]),
         )
     path.write_text(json.dumps(payload, ensure_ascii=False))
@@ -204,8 +234,8 @@ def _write_account_readiness_record(tmp_path: Path) -> Path:
         "provider_dashboard_balance_confirmed": True,
         "api_key_configured_in_runtime_env": True,
         "api_key_secret_not_recorded": True,
-        "available_credit_usd": 1.0,
-        "minimum_required_credit_usd": 1.0,
+        "available_credit_usd": 3.0,
+        "minimum_required_credit_usd": 3.0,
         "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
         "sample_plan_ref": SAMPLE_PLAN_REF,
     }
@@ -213,5 +243,9 @@ def _write_account_readiness_record(tmp_path: Path) -> Path:
     return path
 
 
-def _approval_statement(provider: str, model: str, budget_limit: str) -> str:
-    return APPROVAL_STATEMENT_TEMPLATE.format(provider=provider, model=model, budget_limit=budget_limit)
+def _approval_statement(provider_model_scope: str, test_scope: str, budget_limit: str) -> str:
+    return APPROVAL_STATEMENT_TEMPLATE.format(
+        provider_model_scope=provider_model_scope,
+        test_scope=test_scope,
+        budget_limit=budget_limit,
+    )

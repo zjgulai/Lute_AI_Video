@@ -25,6 +25,12 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
         ACCOUNT_READINESS_RECORD_ENV,
         APPROVAL_RECORD_ENV,
         APPROVAL_STATEMENT_TEMPLATE,
+        DEFAULT_AUTH_BUDGET_LIMIT,
+        DEFAULT_AUTH_BUDGET_LIMIT_USD,
+        DEFAULT_AUTH_MODEL,
+        DEFAULT_AUTH_PROVIDER,
+        DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+        DEFAULT_AUTH_TEST_SCOPE,
         PROVIDER_REVALIDATION_REF,
         REQUIRED_API_KEY_ENVS,
         RUN_TOKEN_SMOKE_ENV,
@@ -36,9 +42,12 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--provider", default="poyo")
-    parser.add_argument("--model", default="seedance-2")
-    parser.add_argument("--budget-limit", default="$1.00")
+    parser.add_argument("--provider", default=DEFAULT_AUTH_PROVIDER)
+    parser.add_argument("--model", default=DEFAULT_AUTH_MODEL)
+    parser.add_argument("--provider-model-scope", default=DEFAULT_AUTH_PROVIDER_MODEL_SCOPE)
+    parser.add_argument("--test-scope", default=DEFAULT_AUTH_TEST_SCOPE)
+    parser.add_argument("--budget-limit", default=DEFAULT_AUTH_BUDGET_LIMIT)
+    parser.add_argument("--budget-limit-usd", type=float, default=DEFAULT_AUTH_BUDGET_LIMIT_USD)
     parser.add_argument(
         "--include-preflight",
         action="store_true",
@@ -72,8 +81,8 @@ def _relative(path: Path) -> str:
 
 def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
     required_statement = APPROVAL_STATEMENT_TEMPLATE.format(
-        provider=args.provider,
-        model=args.model,
+        provider_model_scope=args.provider_model_scope,
+        test_scope=args.test_scope,
         budget_limit=args.budget_limit,
     )
     packet: dict[str, Any] = {
@@ -84,7 +93,10 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
         "target_base_url": args.base_url,
         "provider": args.provider,
         "model": args.model,
+        "provider_model_scope": args.provider_model_scope,
+        "test_scope": args.test_scope,
         "budget_limit": args.budget_limit,
+        "budget_limit_usd": args.budget_limit_usd,
         "required_authorization_statement": required_statement,
         "generic_confirmation_is_not_authorization": True,
         "rejected_confirmation_examples": ["继续下一步", "同意下一步", "确认执行"],
@@ -107,12 +119,16 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
                 "python scripts/build_authorized_live_approval_record.py "
                 "--approved-by <operator-name> "
                 f"--approval-statement '{required_statement}' "
+                f"--provider-model-scope '{args.provider_model_scope}' "
+                f"--test-scope '{args.test_scope}' "
+                f"--budget-limit '{args.budget_limit}' "
+                f"--budget-limit-usd {args.budget_limit_usd:.2f} "
                 "--output tmp/outputs/authorized-live-token-smoke-approval.json"
             ),
             (
                 "python scripts/build_provider_account_readiness_record.py "
                 "--checked-by <operator-name> "
-                "--available-credit-usd 1.00 "
+                f"--available-credit-usd {args.budget_limit_usd:.2f} "
                 "--output tmp/outputs/poyo-account-readiness.json"
             ),
         ],

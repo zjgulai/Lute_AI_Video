@@ -5,48 +5,112 @@
   "provider_revalidation_ref": "configs/poyo-current-provider-revalidation-contract.json",
   "approval_scope": "c21-token-smoke",
   "no_provider_call": true,
+  "test_plan_id": "momcozy-sterilizer-asset-pack-v1",
+  "source_report_ref": "https://report.lute-tlz-dddd.top/reports/e2e-v5.html#上市落地",
+  "provider_model_scope": "poyo/gpt-image-2 + poyo/seedance-2",
+  "test_scope": "Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频",
+  "asset_review_status": "pending_review",
   "limits": {
-    "max_sample_count": 2,
-    "max_provider_calls": 2,
-    "max_total_cost_usd": 1.0,
-    "per_job_cost_ceiling_usd": 0.5,
+    "max_sample_count": 4,
+    "max_provider_calls": 4,
+    "max_total_cost_usd": 3.0,
+    "per_job_cost_ceiling_usd": 2.5,
     "max_retry_count": 0
   },
   "allowed_provider_models": [
-    {"provider": "poyo", "model": "seedance-2"},
-    {"provider": "poyo", "model": "seedance-2-fast"}
+    {"provider": "poyo", "model": "gpt-image-2"},
+    {"provider": "poyo", "model": "seedance-2"}
   ],
-  "allowed_scenarios": ["fast", "s1", "toolbox"],
+  "required_provider_models": [
+    {"provider": "poyo", "model": "gpt-image-2"},
+    {"provider": "poyo", "model": "seedance-2"}
+  ],
+  "allowed_scenarios": ["toolbox"],
   "allowed_toolbox_tool_ids": [
     "product-image",
-    "six-view",
     "ecommerce-visual",
-    "digital-human",
     "storyboard"
+  ],
+  "expected_pending_asset_package": {
+    "brand": "momcozy",
+    "product": "sterilizer",
+    "image_count": 3,
+    "video_count": 1,
+    "asset_status": "pending_review",
+    "delivery_accepted": false,
+    "publish_allowed": false,
+    "approved_brand_token_write": false
+  },
+  "core_asset_samples": [
+    {
+      "sample_id": "momcozy-sterilizer-main-45-gpt-image-2",
+      "scenario": "toolbox",
+      "tool_id": "product-image",
+      "provider": "poyo",
+      "model": "gpt-image-2",
+      "workflow": "text-to-image",
+      "asset_type": "product_main_image",
+      "aspect_ratio": "1:1",
+      "quality": "low",
+      "resolution": "1K",
+      "estimated_provider_cost_usd": 0.01,
+      "objective": "Generate a 45-degree white or light-gray hero image with the sterilizer centered at roughly 70 percent frame coverage."
+    },
+    {
+      "sample_id": "momcozy-sterilizer-uv-benefit-gpt-image-2",
+      "scenario": "toolbox",
+      "tool_id": "ecommerce-visual",
+      "provider": "poyo",
+      "model": "gpt-image-2",
+      "workflow": "text-to-image",
+      "asset_type": "benefit_visual",
+      "aspect_ratio": "4:5",
+      "quality": "low",
+      "resolution": "1K",
+      "estimated_provider_cost_usd": 0.01,
+      "objective": "Generate a UV dual-sterilization benefit visual with clear technical emphasis and claim-safe visual language."
+    },
+    {
+      "sample_id": "momcozy-sterilizer-kitchen-scene-gpt-image-2",
+      "scenario": "toolbox",
+      "tool_id": "ecommerce-visual",
+      "provider": "poyo",
+      "model": "gpt-image-2",
+      "workflow": "text-to-image",
+      "asset_type": "lifestyle_scene",
+      "aspect_ratio": "4:5",
+      "quality": "low",
+      "resolution": "1K",
+      "estimated_provider_cost_usd": 0.01,
+      "objective": "Generate a realistic kitchen daily-use scene for a family sterilizer workflow."
+    }
   ],
   "core_video_samples": [
     {
-      "sample_id": "fast-seedance-2-480p-4s",
-      "scenario": "fast",
+      "sample_id": "momcozy-sterilizer-i2v-15s-seedance-2",
+      "scenario": "toolbox",
+      "tool_id": "storyboard",
       "provider": "poyo",
       "model": "seedance-2",
-      "workflow": "text-to-video",
+      "workflow": "image-to-video",
+      "aspect_ratio": "9:16",
       "resolution": "480p",
-      "duration_seconds": 4,
-      "estimated_provider_cost_usd": 0.4,
-      "objective": "Verify the shortest production text-to-video provider path and artifact writeback."
-    },
-    {
-      "sample_id": "s1-seedance-2-480p-4s",
-      "scenario": "s1",
-      "provider": "poyo",
-      "model": "seedance-2",
-      "workflow": "text-to-video",
-      "resolution": "480p",
-      "duration_seconds": 4,
-      "estimated_provider_cost_usd": 0.4,
-      "objective": "Verify S1 state progression, job ledger, and artifact refs on a minimal provider call."
+      "duration_seconds": 15,
+      "estimated_provider_cost_usd": 1.5,
+      "reference_asset_sample_ids": [
+        "momcozy-sterilizer-main-45-gpt-image-2",
+        "momcozy-sterilizer-uv-benefit-gpt-image-2",
+        "momcozy-sterilizer-kitchen-scene-gpt-image-2"
+      ],
+      "structure": ["hook", "pain_point", "uv_dry_benefit", "cta"],
+      "objective": "Generate a 15-second vertical image-driven product video using the three image refs, with a first-three-second hook, UV/dry benefit, family context, and silent-readable captions."
     }
+  ],
+  "evidence_capture_requirements": [
+    "Record artifact refs, media URLs, thumbnails or preview fallbacks for all 3 images and the video.",
+    "Record job ledger provider, model, prompt hash, prompt compile id, status, artifact refs, and estimated cost.",
+    "Do not persist prompt payloads, API keys, raw brand asset text, delivery acceptance, publish approval, or approved brand token writes.",
+    "Verify the video job references the generated image artifact refs rather than running as text-only generation."
   ],
   "stop_loss_policy": {
     "stop_on_first_failure": true,
@@ -56,8 +120,8 @@
     "halt_on_missing_artifact": true
   },
   "forbidden_in_first_smoke": [
-    "S5 unless the user gives separate explicit approval",
-    "Publishing or delivery acceptance",
+    "Warmers or any product outside Momcozy sterilizer",
+    "S5 VLOG, digital-human, publishing, delivery acceptance, or approved brand token write",
     "Any sample outside allowed_scenarios or allowed_toolbox_tool_ids",
     "Any retry count above zero"
   ]

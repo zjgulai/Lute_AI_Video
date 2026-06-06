@@ -59,7 +59,7 @@ Plan source: `docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implement
 - Momcozy S5 and toolbox image-generation samples are represented as L2 fixture refs only: `product-image`, `six-view`, `ecommerce-visual` all target S5 without provider submission, delivery acceptance, publishing, or approved brand token claims.
 - Toolbox provider readiness can evaluate C21 approval, API key presence, provider capability, budget stop-loss and `sample_plan.toolbox_tool_ids` without provider side effects.
 - poyo public documentation has been revalidated as `L1-public-doc-revalidation` evidence only; it supports model/endpoint/cost assumptions but does not prove key validity, balance or runtime success.
-- The authorized-live sample plan is bounded to Fast + S1, `seedance-2`, 480p / 4s, max 2 provider calls, total budget <= `$1.00`, per-job <= `$0.50`, zero automatic retries.
+- The authorized-live sample plan is bounded to Momcozy sterilizer 3 image assets + 1 15s vertical image-to-video sample, max 4 provider calls, total budget <= `$3.00`, per-job <= `$2.50`, zero automatic retries, and `pending_review` asset status only.
 - Private approval and account readiness builders can create secret-free records under `tmp/` or outside the repo, while rejecting generic confirmations, underfunded account readiness and formal repo output paths.
 - The no-token smoke packet and P2 recharge checklist can show the exact authorization sentence, required private records and command preview before any `--execute` path is reached.
 - C20 backend and frontend acceptance passed locally: backend target pytest `63 passed`, repo-wide `ruff check src tests scripts` passed, OpenAPI types were up to date, frontend lint/typecheck/Vitest passed with `199` tests.
@@ -89,7 +89,7 @@ Plan source: `docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implement
 To attempt `L4-authorized-live`, the user must first provide this exact statement with concrete values:
 
 ```text
-我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 <provider>/<model>，预算上限是 <amount>。
+我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 范围是 poyo/gpt-image-2 + poyo/seedance-2，测试范围是 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频，预算上限是 $3.00。
 ```
 
 Then create an approval JSON pointed to by `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD`, create a private `AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD`, generate the no-token smoke packet, set `CONFIRM_P2_TOKEN_SMOKE=1` and `RUN_TOKEN_SMOKE=1`, provide non-demo production API keys plus required provider keys, and run the C21 preflight. Only after the preflight passes should `scripts/p2_recharge_smoke_checklist.py --execute` be used for the tiny provider call.

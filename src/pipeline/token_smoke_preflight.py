@@ -33,9 +33,16 @@ PROVIDER_REVALIDATION_REF = "configs/poyo-current-provider-revalidation-contract
 PROVIDER_REVALIDATION_PATH = REPO_ROOT / PROVIDER_REVALIDATION_REF
 SAMPLE_PLAN_REF = "configs/authorized-live-token-smoke-sample-plan-contract.json"
 SAMPLE_PLAN_PATH = REPO_ROOT / SAMPLE_PLAN_REF
+DEFAULT_AUTH_PROVIDER = "poyo"
+DEFAULT_AUTH_MODEL = "seedance-2"
+DEFAULT_AUTH_PROVIDER_MODEL_SCOPE = "poyo/gpt-image-2 + poyo/seedance-2"
+DEFAULT_AUTH_TEST_SCOPE = "Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频"
+DEFAULT_AUTH_BUDGET_LIMIT = "$3.00"
+DEFAULT_AUTH_BUDGET_LIMIT_USD = 3.0
 APPROVAL_STATEMENT_TEMPLATE = (
     "我明确授权 C21 运行一次真实 token smoke，允许调用 provider，"
-    "使用的 provider/model 是 {provider}/{model}，预算上限是 {budget_limit}。"
+    "使用的 provider/model 范围是 {provider_model_scope}，"
+    "测试范围是 {test_scope}，预算上限是 {budget_limit}。"
 )
 REQUIRED_API_KEY_ENVS = ("POYO_API_KEY", "DEEPSEEK_API_KEY", "SILICONFLOW_API_KEY")
 
@@ -57,6 +64,8 @@ class TokenSmokePreflightReport(BaseModel):
     sample_plan_ref: str | None = None
     approved_provider: str | None = None
     approved_model: str | None = None
+    approved_provider_model_scope: str | None = None
+    approved_test_scope: str | None = None
     approved_budget_limit_usd: float | None = None
     approved_max_sample_count: int | None = None
     approved_max_provider_calls: int | None = None
@@ -103,6 +112,8 @@ def build_token_smoke_preflight_report(
         sample_plan_ref=_approval_string(approval_payload, "sample_plan_ref"),
         approved_provider=_approval_string(approval_payload, "provider"),
         approved_model=_approval_string(approval_payload, "model"),
+        approved_provider_model_scope=_approval_string(approval_payload, "provider_model_scope"),
+        approved_test_scope=_approval_string(approval_payload, "test_scope"),
         approved_budget_limit_usd=_approval_budget_limit_usd(approval_payload),
         approved_max_sample_count=_approval_nested_int(approval_payload, "sample_plan", "max_sample_count"),
         approved_max_provider_calls=_approval_nested_int(approval_payload, "sample_plan", "max_provider_calls"),
@@ -124,15 +135,19 @@ def build_authorized_live_approval_payload(
     approved_by: str,
     approval_statement: str,
     approved_at: str | None = None,
-    provider: str = "poyo",
-    model: str = "seedance-2",
-    budget_limit: str = "$1.00",
-    budget_limit_usd: float = 1.0,
+    provider: str = DEFAULT_AUTH_PROVIDER,
+    model: str = DEFAULT_AUTH_MODEL,
+    provider_model_scope: str = DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+    test_scope: str = DEFAULT_AUTH_TEST_SCOPE,
+    budget_limit: str = DEFAULT_AUTH_BUDGET_LIMIT,
+    budget_limit_usd: float = DEFAULT_AUTH_BUDGET_LIMIT_USD,
 ) -> dict[str, Any]:
     """Build a private approval record payload without inspecting keys or calling providers."""
     approved_by = approved_by.strip()
     provider = provider.strip()
     model = model.strip()
+    provider_model_scope = provider_model_scope.strip()
+    test_scope = test_scope.strip()
     budget_limit = budget_limit.strip()
     approved_at = approved_at.strip() if approved_at else f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z"
 
@@ -144,8 +159,8 @@ def build_authorized_live_approval_payload(
         raise ValueError("budget_limit_usd must be a positive finite number")
 
     expected_statement = APPROVAL_STATEMENT_TEMPLATE.format(
-        provider=provider,
-        model=model,
+        provider_model_scope=provider_model_scope,
+        test_scope=test_scope,
         budget_limit=budget_limit,
     )
     if approval_statement != expected_statement:
@@ -156,6 +171,10 @@ def build_authorized_live_approval_payload(
         raise ValueError(contract_error or "sample plan contract is unavailable")
     if not _contract_allows_provider_model(contract, provider, model):
         raise ValueError(f"sample plan contract does not allow {provider}/{model}")
+    if _contract_string(contract, "provider_model_scope") != provider_model_scope:
+        raise ValueError("provider_model_scope must match the sample plan contract")
+    if _contract_string(contract, "test_scope") != test_scope:
+        raise ValueError("test_scope must match the sample plan contract")
 
     limits = contract["limits"]
     max_total_cost = _positive_finite_number(limits.get("max_total_cost_usd"))
@@ -168,9 +187,12 @@ def build_authorized_live_approval_payload(
     if not isinstance(stop_loss_policy, Mapping):
         raise ValueError("sample plan contract requires stop_loss_policy")
 
-    scenarios = _core_sample_scenarios(contract, provider, model)
+    scenarios = _core_sample_scenarios(contract)
     if not scenarios:
-        raise ValueError(f"sample plan contract has no core samples for {provider}/{model}")
+        raise ValueError("sample plan contract has no core samples")
+    toolbox_tool_ids = _core_toolbox_tool_ids(contract)
+    sample_ids = _core_sample_ids(contract)
+    asset_package = contract.get("expected_pending_asset_package")
 
     return {
         "template_only": False,
@@ -182,6 +204,8 @@ def build_authorized_live_approval_payload(
         "approved_at": approved_at,
         "provider": provider,
         "model": model,
+        "provider_model_scope": provider_model_scope,
+        "test_scope": test_scope,
         "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
         "sample_plan_ref": SAMPLE_PLAN_REF,
         "budget_limit": budget_limit,
@@ -190,7 +214,9 @@ def build_authorized_live_approval_payload(
             "max_sample_count": int(limits["max_sample_count"]),
             "max_provider_calls": int(limits["max_provider_calls"]),
             "scenarios": scenarios,
-            "toolbox_tool_ids": [],
+            "toolbox_tool_ids": toolbox_tool_ids,
+            "sample_ids": sample_ids,
+            "asset_package": asset_package if isinstance(asset_package, Mapping) else {},
             "s5_requires_separate_confirmation": True,
         },
         "budget_stop_loss": {
@@ -381,10 +407,12 @@ def _check_approval_record(path: Path | None) -> tuple[PreflightCheck, dict[str,
 
     provider = str(payload["provider"]).strip()
     model = str(payload["model"]).strip()
+    provider_model_scope = str(payload["provider_model_scope"]).strip()
+    test_scope = str(payload["test_scope"]).strip()
     budget_limit = str(payload["budget_limit"]).strip()
     expected_statement = APPROVAL_STATEMENT_TEMPLATE.format(
-        provider=provider,
-        model=model,
+        provider_model_scope=provider_model_scope,
+        test_scope=test_scope,
         budget_limit=budget_limit,
     )
     if payload.get("approval_statement") != expected_statement:
@@ -399,7 +427,7 @@ def _check_approval_record(path: Path | None) -> tuple[PreflightCheck, dict[str,
         name="authorized_live_approval",
         status="pass",
         detail="explicit authorized-live approval record is present",
-        evidence_refs=[str(path), str(payload.get("approval_id", "")), f"{provider}/{model}"],
+        evidence_refs=[str(path), str(payload.get("approval_id", "")), f"{provider}/{model}", provider_model_scope],
     ), payload
 
 
@@ -563,7 +591,10 @@ def _check_sample_plan_contract(approval_payload: Mapping[str, Any] | None) -> P
         )
 
     contract_limits = contract["limits"]
-    violations = _sample_plan_limit_violations(sample_plan, budget_stop_loss, contract_limits)
+    violations = [
+        *_sample_plan_binding_violations(approval_payload, contract),
+        *_sample_plan_limit_violations(sample_plan, budget_stop_loss, contract_limits),
+    ]
     scenario_violations = _sample_plan_scope_violations(sample_plan, contract)
     if violations or scenario_violations:
         return PreflightCheck(
@@ -703,6 +734,7 @@ def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | No
     profiles = list_provider_prompt_profiles()
     provider = _approval_string(approval_payload, "provider")
     model = _approval_string(approval_payload, "model")
+    provider_model_scope = _approval_string(approval_payload, "provider_model_scope")
     revalidation_ref = _approval_string(approval_payload, "provider_revalidation_ref")
     if provider is None or model is None:
         return PreflightCheck(
@@ -748,15 +780,43 @@ def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | No
             evidence_refs=[PROVIDER_REVALIDATION_REF],
         )
 
+    sample_plan_error, sample_plan_contract = _load_sample_plan_contract()
+    if sample_plan_error or sample_plan_contract is None:
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail=sample_plan_error or "sample plan contract is unavailable",
+            evidence_refs=[SAMPLE_PLAN_REF],
+        )
+    unsupported_required_models = [
+        f"{item['provider']}/{item['model']}"
+        for item in _contract_required_provider_models(sample_plan_contract)
+        if str(item["provider"]).lower() != provider.lower() or not _contract_supports_model(contract, str(item["model"]))
+    ]
+    if unsupported_required_models:
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail=(
+                "provider revalidation contract does not cover required sample plan models: "
+                + ", ".join(unsupported_required_models)
+            ),
+            evidence_refs=[PROVIDER_REVALIDATION_REF, SAMPLE_PLAN_REF],
+        )
+
     profile = _match_provider_profile(profiles, provider, model)
     if profile is not None:
         return PreflightCheck(
             name="provider_capability_evidence",
             status="pass",
-            detail=f"fixture provider profile and public-doc revalidation are bound for {provider}/{model}",
+            detail=(
+                f"fixture provider profile is bound for primary {provider}/{model}; "
+                f"public-doc revalidation covers {provider_model_scope or f'{provider}/{model}'}"
+            ),
             evidence_refs=[
                 profile.profile_id,
                 PROVIDER_REVALIDATION_REF,
+                SAMPLE_PLAN_REF,
                 *[str(url) for url in contract.get("source_urls", [])],
             ],
         )
@@ -771,6 +831,8 @@ def _missing_detail_fields(payload: Mapping[str, Any]) -> list[str]:
     required = [
         "provider",
         "model",
+        "provider_model_scope",
+        "test_scope",
         "provider_revalidation_ref",
         "sample_plan_ref",
         "budget_limit",
@@ -837,6 +899,46 @@ def _contract_allows_provider_model(contract: Mapping[str, Any], provider: str |
     return False
 
 
+def _contract_string(contract: Mapping[str, Any], key: str) -> str | None:
+    value = str(contract.get(key, "")).strip()
+    return value or None
+
+
+def _contract_required_provider_models(contract: Mapping[str, Any]) -> list[dict[str, str]]:
+    required: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in contract.get("required_provider_models", contract.get("allowed_provider_models", [])):
+        if not isinstance(item, Mapping):
+            continue
+        provider = str(item.get("provider", "")).strip()
+        model = str(item.get("model", "")).strip()
+        if not provider or not model:
+            continue
+        key = (provider.lower(), model.lower())
+        if key in seen:
+            continue
+        required.append({"provider": provider, "model": model})
+        seen.add(key)
+    return required
+
+
+def _sample_plan_binding_violations(
+    approval_payload: Mapping[str, Any],
+    contract: Mapping[str, Any],
+) -> list[str]:
+    violations = []
+    expected_provider_model_scope = _contract_string(contract, "provider_model_scope")
+    expected_test_scope = _contract_string(contract, "test_scope")
+    if expected_provider_model_scope and _approval_string(approval_payload, "provider_model_scope") != expected_provider_model_scope:
+        violations.append("approval record provider_model_scope must match sample plan contract")
+    if expected_test_scope and _approval_string(approval_payload, "test_scope") != expected_test_scope:
+        violations.append("approval record test_scope must match sample plan contract")
+    for item in _contract_required_provider_models(contract):
+        if not _contract_allows_provider_model(contract, item["provider"], item["model"]):
+            violations.append(f"sample plan required model is not allowed: {item['provider']}/{item['model']}")
+    return violations
+
+
 def _sample_plan_limit_violations(
     sample_plan: Mapping[str, Any],
     budget_stop_loss: Mapping[str, Any],
@@ -889,26 +991,67 @@ def _sample_plan_scope_violations(sample_plan: Mapping[str, Any], contract: Mapp
     invalid_tool_ids = [value for value in toolbox_tool_ids if value not in allowed_tool_ids]
     if invalid_tool_ids:
         violations.append(f"sample_plan.toolbox_tool_ids contains unsupported values: {', '.join(invalid_tool_ids)}")
+
+    allowed_sample_ids = set(_core_sample_ids(contract))
+    sample_ids = [str(value) for value in sample_plan.get("sample_ids", [])]
+    invalid_sample_ids = [value for value in sample_ids if value not in allowed_sample_ids]
+    if not sample_ids:
+        violations.append("sample_plan.sample_ids must not be empty")
+    if invalid_sample_ids:
+        violations.append(f"sample_plan.sample_ids contains unsupported values: {', '.join(invalid_sample_ids)}")
+
+    expected_asset_package = contract.get("expected_pending_asset_package")
+    if isinstance(expected_asset_package, Mapping):
+        asset_package = sample_plan.get("asset_package")
+        if not isinstance(asset_package, Mapping):
+            violations.append("sample_plan.asset_package must be present for this sample plan")
+        else:
+            for key, expected in expected_asset_package.items():
+                if asset_package.get(key) != expected:
+                    violations.append(f"sample_plan.asset_package.{key} must equal {expected}")
     return violations
 
 
-def _core_sample_scenarios(contract: Mapping[str, Any], provider: str, model: str) -> list[str]:
+def _iter_core_samples(contract: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    samples: list[Mapping[str, Any]] = []
+    for section in ("core_asset_samples", "core_video_samples"):
+        for sample in contract.get(section, []):
+            if isinstance(sample, Mapping):
+                samples.append(sample)
+    return samples
+
+
+def _core_sample_scenarios(contract: Mapping[str, Any]) -> list[str]:
     scenarios = []
     seen = set()
-    provider_key = provider.lower()
-    model_key = model.lower()
-    for sample in contract.get("core_video_samples", []):
-        if not isinstance(sample, Mapping):
-            continue
-        if str(sample.get("provider", "")).lower() != provider_key:
-            continue
-        if str(sample.get("model", "")).lower() != model_key:
-            continue
+    for sample in _iter_core_samples(contract):
         scenario = str(sample.get("scenario", "")).strip()
         if scenario and scenario not in seen:
             scenarios.append(scenario)
             seen.add(scenario)
     return scenarios
+
+
+def _core_toolbox_tool_ids(contract: Mapping[str, Any]) -> list[str]:
+    tool_ids = []
+    seen = set()
+    for sample in _iter_core_samples(contract):
+        tool_id = str(sample.get("tool_id", "")).strip()
+        if tool_id and tool_id not in seen:
+            tool_ids.append(tool_id)
+            seen.add(tool_id)
+    return tool_ids
+
+
+def _core_sample_ids(contract: Mapping[str, Any]) -> list[str]:
+    sample_ids = []
+    seen = set()
+    for sample in _iter_core_samples(contract):
+        sample_id = str(sample.get("sample_id", "")).strip()
+        if sample_id and sample_id not in seen:
+            sample_ids.append(sample_id)
+            seen.add(sample_id)
+    return sample_ids
 
 
 def _contract_supports_model(contract: Mapping[str, Any], model: str) -> bool:

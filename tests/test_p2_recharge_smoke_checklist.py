@@ -61,8 +61,10 @@ def test_default_run_is_dry_run_and_does_not_require_tokens():
     assert "RUN_TOKEN_SMOKE=1" in result.stdout
     assert "Before execute, build a no-token launch packet" in result.stdout
     assert "python scripts/build_authorized_live_smoke_packet.py --include-preflight" in result.stdout
-    assert "deploy/lighthouse/smoke.sh" in result.stdout
-    assert "npm run e2e:prod" in result.stdout
+    assert "Momcozy sterilizer authorized-live asset smoke harness" in result.stdout
+    assert "scripts/authorized_live_token_smoke_harness.py --execute --pretty" in result.stdout
+    assert "deploy/lighthouse/smoke.sh" not in result.stdout
+    assert "npm run e2e:prod" not in result.stdout
     assert "Running:" not in result.stdout
 
 
@@ -157,6 +159,8 @@ def test_script_source_keeps_token_endpoints_behind_execute_path():
     assert "subprocess.run" in source
     assert "if not args.execute" in source
     assert "return 0" in source
+    assert "deploy/lighthouse/smoke.sh" not in source
+    assert "npm run e2e:prod" not in source
 
 
 def test_runbook_documents_recharge_checklist_and_is_link_checked():
@@ -200,6 +204,11 @@ def test_authorized_live_approval_template_is_present_and_blocked_by_default():
     assert payload["scope"] == "c21-token-smoke"
     assert payload["provider_revalidation_ref"] == "configs/poyo-current-provider-revalidation-contract.json"
     assert payload["sample_plan_ref"] == "configs/authorized-live-token-smoke-sample-plan-contract.json"
+    assert payload["provider_model_scope"] == "poyo/gpt-image-2 + poyo/seedance-2"
+    assert payload["test_scope"] == "Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频"
+    assert payload["budget_limit_usd"] == 3.0
+    assert payload["sample_plan"]["max_sample_count"] == 4
+    assert payload["sample_plan"]["asset_package"]["asset_status"] == "pending_review"
     assert payload["budget_stop_loss"]["max_retry_count"] == 0
     assert payload["budget_stop_loss"]["stop_on_first_failure"] is True
     assert payload["budget_stop_loss"]["halt_on_rate_limit"] is True

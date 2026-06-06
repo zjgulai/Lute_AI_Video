@@ -117,13 +117,13 @@ def _build_sample_job_spec(preflight: TokenSmokePreflightReport | None = None) -
         else 1.0
     )
     return MediaJobSpec(
-        job_id="authorized_live_sample_fixture",
+        job_id="momcozy_sterilizer_i2v_15s_authorized_live_fixture",
         provider=provider,
         model=model,
-        scenario="s1",
-        step_name="video_prompts",
-        prompt_hash="sha256:authorized_live_sample_fixture",
-        prompt_compile_id="pci_authorized_live_sample_fixture",
-        brand_bundle_id="bundle_authorized_live_sample_fixture",
+        scenario="toolbox",
+        step_name="momcozy_sterilizer_asset_video",
+        prompt_hash="sha256:momcozy_sterilizer_i2v_15s_fixture",
+        prompt_compile_id="pci_momcozy_sterilizer_i2v_15s_fixture",
+        brand_bundle_id="bundle_momcozy_candidate",
         cost_ceiling_usd=cost_ceiling_usd,
     )

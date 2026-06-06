@@ -77,15 +77,9 @@ def _build_commands(base_url: str, *, execute: bool = False) -> list[SmokeComman
     }
     return [
         SmokeCommand(
-            name="Lighthouse smoke.sh token path",
+            name="Momcozy sterilizer authorized-live asset smoke harness",
             cwd=REPO_ROOT,
-            argv=("bash", "deploy/lighthouse/smoke.sh"),
-            env=common_env,
-        ),
-        SmokeCommand(
-            name="Production Playwright @token-smoke specs",
-            cwd=REPO_ROOT / "web",
-            argv=("npm", "run", "e2e:prod"),
+            argv=("python", "scripts/authorized_live_token_smoke_harness.py", "--execute", "--pretty"),
             env=common_env,
         ),
     ]

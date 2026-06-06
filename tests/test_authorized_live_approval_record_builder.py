@@ -11,6 +11,10 @@ from src.pipeline.token_smoke_preflight import (
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
+    DEFAULT_AUTH_BUDGET_LIMIT,
+    DEFAULT_AUTH_BUDGET_LIMIT_USD,
+    DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+    DEFAULT_AUTH_TEST_SCOPE,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
     SAMPLE_PLAN_REF,
@@ -51,7 +55,12 @@ def test_builder_writes_private_record_that_preflight_accepts(tmp_path: Path):
     assert payload["scope"] == APPROVAL_SCOPE
     assert payload["sample_plan_ref"] == SAMPLE_PLAN_REF
     assert payload["approval_statement"] == statement
-    assert payload["sample_plan"]["scenarios"] == ["fast", "s1"]
+    assert payload["provider_model_scope"] == DEFAULT_AUTH_PROVIDER_MODEL_SCOPE
+    assert payload["test_scope"] == DEFAULT_AUTH_TEST_SCOPE
+    assert payload["budget_limit_usd"] == DEFAULT_AUTH_BUDGET_LIMIT_USD
+    assert payload["sample_plan"]["scenarios"] == ["toolbox"]
+    assert payload["sample_plan"]["toolbox_tool_ids"] == ["product-image", "ecommerce-visual", "storyboard"]
+    assert payload["sample_plan"]["asset_package"]["asset_status"] == "pending_review"
     assert "sk_fixture_secret" not in output_path.read_text()
 
     env = _ready_env()
@@ -136,9 +145,9 @@ def test_builder_prints_required_statement_without_output():
 
 def _approval_statement() -> str:
     return APPROVAL_STATEMENT_TEMPLATE.format(
-        provider="poyo",
-        model="seedance-2",
-        budget_limit="$1.00",
+        provider_model_scope=DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+        test_scope=DEFAULT_AUTH_TEST_SCOPE,
+        budget_limit=DEFAULT_AUTH_BUDGET_LIMIT,
     )
 
 
@@ -163,8 +172,8 @@ def _write_account_readiness_record(tmp_path: Path) -> Path:
         "provider_dashboard_balance_confirmed": True,
         "api_key_configured_in_runtime_env": True,
         "api_key_secret_not_recorded": True,
-        "available_credit_usd": 1.0,
-        "minimum_required_credit_usd": 1.0,
+        "available_credit_usd": 3.0,
+        "minimum_required_credit_usd": 3.0,
         "provider_revalidation_ref": "configs/poyo-current-provider-revalidation-contract.json",
         "sample_plan_ref": SAMPLE_PLAN_REF,
     }
