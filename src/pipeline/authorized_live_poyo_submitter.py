@@ -15,6 +15,8 @@ REQUIRED_VIDEO_REFERENCE_REFS: tuple[str, str, str] = (
     "artifact://authorized-live/momcozy-sterilizer-kitchen-scene-gpt-image-2",
 )
 AUTHORIZED_LIVE_POYO_TRANSPORT_ENV = "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT"
+POYO_SUBMIT_ENDPOINT = "/api/generate/submit"
+POYO_STATUS_ENDPOINT_PREFIX = "/api/generate/status"
 
 _ALLOWED_JOB_MODELS = {
     "momcozy_sterilizer_main_45_image_authorized_live_fixture": "gpt-image-2",
@@ -34,6 +36,63 @@ class AuthorizedLivePoyoPayload(BaseModel):
 
 class PoyoSubmitOnceTransport(Protocol):
     def submit_once(self, *, model: str, input_payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
+
+
+class PoyoSubmitPollHttpClient(Protocol):
+    def post_json(
+        self,
+        *,
+        path: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+    ) -> Mapping[str, Any]: ...
+
+    def get_json(
+        self,
+        *,
+        path: str,
+        headers: Mapping[str, str],
+    ) -> Mapping[str, Any]: ...
+
+
+class AuthorizedLivePoyoSubmitPollTransport:
+    """Submit one poyo task through an injected HTTP client and read one finished status."""
+
+    def __init__(self, *, authorization_token: str, http_client: PoyoSubmitPollHttpClient) -> None:
+        if not authorization_token:
+            raise ValueError("authorization token is required")
+        self._authorization_token = authorization_token
+        self._http_client = http_client
+
+    def submit_once(self, *, model: str, input_payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        headers = self._headers()
+        submit_response = self._http_client.post_json(
+            path=POYO_SUBMIT_ENDPOINT,
+            headers=headers,
+            body={"model": model, "input": dict(input_payload)},
+        )
+        task_id = _required_string(_success_data(submit_response, "submit"), "task_id")
+
+        status_response = self._http_client.get_json(
+            path=f"{POYO_STATUS_ENDPOINT_PREFIX}/{task_id}",
+            headers=headers,
+        )
+        task = _success_data(status_response, "status")
+        if task.get("status") != "finished":
+            raise ValueError("poyo task must be finished before artifact mapping")
+
+        file_url, thumbnail_url = _first_file_refs(task)
+        return {
+            "provider_job_id": task_id,
+            "file_url": file_url,
+            "thumbnail_url": thumbnail_url,
+        }
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self._authorization_token}",
+            "Content-Type": "application/json",
+        }
 
 
 class AuthorizedLivePoyoSubmitter:
@@ -118,3 +177,26 @@ def _required_string(result: Mapping[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"poyo transport response missing {key}")
     return value
+
+
+def _success_data(response: Mapping[str, Any], stage: str) -> Mapping[str, Any]:
+    if response.get("code") != 200:
+        raise ValueError(f"poyo {stage} response must have code=200")
+    data = response.get("data")
+    if not isinstance(data, Mapping):
+        raise ValueError(f"poyo {stage} response missing data")
+    return data
+
+
+def _first_file_refs(task: Mapping[str, Any]) -> tuple[str, str]:
+    files = task.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError("poyo finished task missing file_url")
+    first_file = files[0]
+    if not isinstance(first_file, Mapping):
+        raise ValueError("poyo finished task missing file_url")
+    file_url = first_file.get("file_url") or first_file.get("audio_url")
+    if not isinstance(file_url, str) or not file_url:
+        raise ValueError("poyo finished task missing file_url")
+    thumbnail_url = first_file.get("thumbnail_url") or first_file.get("cover_url") or first_file.get("poster_url") or ""
+    return file_url, str(thumbnail_url)

@@ -118,6 +118,90 @@ def test_submitter_factory_builds_only_injected_submitter_when_enabled():
     assert len(transport.calls) == 1
 
 
+def test_http_transport_submits_and_reads_finished_task_without_token_leakage():
+    http_client = FakePoyoSubmitPollHttpClient()
+    transport = poyo_submitter.AuthorizedLivePoyoSubmitPollTransport(
+        authorization_token="sk_fixture_private_token",
+        http_client=http_client,
+    )
+
+    response = transport.submit_once(
+        model="gpt-image-2",
+        input_payload={"prompt": "private prompt", "quality": "low", "size": "1:1"},
+    )
+
+    assert http_client.posts == [
+        {
+            "path": "/api/generate/submit",
+            "headers": {
+                "Authorization": "Bearer sk_fixture_private_token",
+                "Content-Type": "application/json",
+            },
+            "body": {
+                "model": "gpt-image-2",
+                "input": {"prompt": "private prompt", "quality": "low", "size": "1:1"},
+            },
+        }
+    ]
+    assert http_client.gets == [
+        {
+            "path": "/api/generate/status/poyo_task_1",
+            "headers": {
+                "Authorization": "Bearer sk_fixture_private_token",
+                "Content-Type": "application/json",
+            },
+        }
+    ]
+    assert response == {
+        "provider_job_id": "poyo_task_1",
+        "file_url": "https://cdn.example.test/asset.png",
+        "thumbnail_url": "https://cdn.example.test/asset-thumb.jpg",
+    }
+    assert "sk_fixture_private_token" not in str(response)
+    assert "private prompt" not in str(response)
+
+
+def test_http_transport_rejects_blank_authorization_token_before_http_call():
+    http_client = FakePoyoSubmitPollHttpClient()
+
+    with pytest.raises(ValueError, match="authorization token is required"):
+        poyo_submitter.AuthorizedLivePoyoSubmitPollTransport(
+            authorization_token="",
+            http_client=http_client,
+        )
+
+    assert http_client.posts == []
+    assert http_client.gets == []
+
+
+def test_http_transport_blocks_unfinished_task_without_poll_retry():
+    http_client = FakePoyoSubmitPollHttpClient(status="running")
+    transport = poyo_submitter.AuthorizedLivePoyoSubmitPollTransport(
+        authorization_token="sk_fixture_private_token",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ValueError, match="poyo task must be finished"):
+        transport.submit_once(model="seedance-2", input_payload={"prompt": "private video prompt"})
+
+    assert len(http_client.posts) == 1
+    assert len(http_client.gets) == 1
+
+
+def test_http_transport_blocks_missing_file_url_without_retry():
+    http_client = FakePoyoSubmitPollHttpClient(file_url="")
+    transport = poyo_submitter.AuthorizedLivePoyoSubmitPollTransport(
+        authorization_token="sk_fixture_private_token",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ValueError, match="poyo finished task missing file_url"):
+        transport.submit_once(model="gpt-image-2", input_payload={"prompt": "private prompt"})
+
+    assert len(http_client.posts) == 1
+    assert len(http_client.gets) == 1
+
+
 def test_harness_cli_source_still_does_not_wire_submitter_by_default():
     source = (REPO_ROOT / "scripts" / "authorized_live_token_smoke_harness.py").read_text()
 
@@ -151,6 +235,44 @@ class FakePoyoTransport:
             "provider_job_id": f"poyo:job:{len(self.calls)}",
             "file_url": f"https://cdn.example.test/poyo-job-{len(self.calls)}.{suffix}",
             "thumbnail_url": f"https://cdn.example.test/poyo-job-{len(self.calls)}-thumb.jpg",
+        }
+
+
+class FakePoyoSubmitPollHttpClient:
+    def __init__(self, *, status: str = "finished", file_url: str = "https://cdn.example.test/asset.png") -> None:
+        self.status = status
+        self.file_url = file_url
+        self.posts: list[dict[str, Any]] = []
+        self.gets: list[dict[str, Any]] = []
+
+    def post_json(
+        self,
+        *,
+        path: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        self.posts.append({"path": path, "headers": dict(headers), "body": dict(body)})
+        return {"code": 200, "data": {"task_id": "poyo_task_1"}}
+
+    def get_json(
+        self,
+        *,
+        path: str,
+        headers: Mapping[str, str],
+    ) -> Mapping[str, Any]:
+        self.gets.append({"path": path, "headers": dict(headers)})
+        return {
+            "code": 200,
+            "data": {
+                "status": self.status,
+                "files": [
+                    {
+                        "file_url": self.file_url,
+                        "thumbnail_url": "https://cdn.example.test/asset-thumb.jpg",
+                    }
+                ],
+            },
         }
 
 
