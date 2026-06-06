@@ -26,6 +26,14 @@ python scripts/p2_recharge_smoke_checklist.py
 
 默认输出 `dry-run` checklist，只检查本地执行条件和将要运行的命令；不会访问生产站点，不会调用 `/health`，不会触发 provider。
 
+正式执行前先生成一次 no-token 启动包：
+
+```bash
+python scripts/build_authorized_live_smoke_packet.py --include-preflight
+```
+
+启动包只输出授权语句、私有记录要求、样本计划引用、provider revalidation 引用、命令 preview 和当前 preflight blocked/pass 投影；不读取 API key 原文，不访问 provider，不执行 `smoke.sh` 或 Playwright。启动包证据等级保持 `L2-fixture-or-dry-run`，不能单独作为 L4 授权或真实生成成功证据。
+
 ## 充值后执行
 
 确认以下 key 已准备好：
@@ -120,6 +128,7 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 - 没有 `RUN_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向授权记录时不得执行。
 - 没有通过 `AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD` 指向账户 readiness 记录时不得执行。
+- no-token 启动包只证明门禁输入已被列明，不证明用户已经授权、账户已充值或 provider runtime 可用。
 - 授权记录必须由构建器或等价校验流程生成；`同意下一步` 这类泛化确认不构成 L4 授权。
 - 授权记录模板本身会被 preflight 阻断，不能直接作为正式授权记录。
 - 账户 readiness 记录余额不足、仍是模板、或记录了 API key 原文时不得执行。

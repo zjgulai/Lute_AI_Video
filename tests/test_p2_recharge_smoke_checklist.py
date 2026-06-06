@@ -163,6 +163,7 @@ def test_runbook_documents_recharge_checklist_and_is_link_checked():
     for token in [
         "scripts/p2_recharge_smoke_checklist.py",
         "scripts/commercial_token_smoke_preflight.py",
+        "scripts/build_authorized_live_smoke_packet.py",
         "scripts/build_provider_account_readiness_record.py",
         "configs/authorized-live-token-smoke-approval-template.json",
         "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD",

@@ -105,6 +105,7 @@ git diff --check
 ```bash
 .venv/bin/python scripts/commercial_token_smoke_preflight.py --pretty
 .venv/bin/python scripts/p2_recharge_smoke_checklist.py
+.venv/bin/python scripts/build_authorized_live_smoke_packet.py --include-preflight
 .venv/bin/python scripts/build_authorized_live_approval_record.py --print-required-statement --approved-by <operator-name> --approval-statement ignored
 .venv/bin/python scripts/build_provider_account_readiness_record.py --checked-by <operator-name> --available-credit-usd 1.00 --output tmp/outputs/poyo-account-readiness.json
 .venv/bin/python -m pytest tests/test_token_smoke_preflight.py
@@ -122,6 +123,7 @@ git diff --check
 - approval record 必须绑定 `configs/authorized-live-token-smoke-sample-plan-contract.json`，否则 sample plan contract 必须 blocked。
 - 私有 approval record 必须由 `scripts/build_authorized_live_approval_record.py` 或等价校验流程生成；泛化确认文本不得提升为 L4 授权。
 - 私有 provider account readiness record 必须由 `scripts/build_provider_account_readiness_record.py` 或等价校验流程生成；余额不足或缺失时必须 blocked。
+- `scripts/build_authorized_live_smoke_packet.py` 只生成 no-token 启动包和 preflight 投影，不执行真实 smoke，不提升证据等级。
 - provider job ledger 只暴露 prompt hash、artifact refs、status，不暴露 prompt payload 或品牌资产原文。
 - C1-C8 不生成 approved brand token。
 
@@ -183,6 +185,7 @@ npm run e2e:prod
 - 私有 approval record 已绑定 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`。
 - 私有 approval record 已绑定 `sample_plan_ref=configs/authorized-live-token-smoke-sample-plan-contract.json`。
 - 私有 provider account readiness record 已确认 poyo 控制台余额覆盖 `$1.00` 样本计划，并且不记录 API key 原文。
+- no-token 启动包已生成并复核，确认授权句、样本计划、账户 readiness 环境变量和执行命令 preview 均与 runbook 一致。
 - no-token preflight 已通过。
 - 生产日志和 artifact 目录可检查。
 
