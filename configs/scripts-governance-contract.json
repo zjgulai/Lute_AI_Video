@@ -49,6 +49,11 @@
       "reason": "No-token pending-review asset packet builder for authorized-live smoke outputs."
     },
     {
+      "path": "scripts/build_pending_review_decision_record.py",
+      "status": "active_reusable",
+      "reason": "No-token human decision record builder for pending-review smoke assets."
+    },
+    {
       "path": "scripts/build_provider_account_readiness_record.py",
       "status": "active_reusable",
       "reason": "No-token private provider account readiness record builder."

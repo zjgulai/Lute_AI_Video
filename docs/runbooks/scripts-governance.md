@@ -41,6 +41,7 @@ source: human+ai
 | `scripts/build_authorized_live_smoke_packet.py` | active_reusable |
 | `scripts/build_authorized_live_test_plan_readiness_report.py` | active_reusable |
 | `scripts/build_pending_review_asset_packet.py` | active_reusable |
+| `scripts/build_pending_review_decision_record.py` | active_reusable |
 | `scripts/build_provider_account_readiness_record.py` | active_reusable |
 | `scripts/commercial_token_smoke_preflight.py` | active_reusable |
 | `scripts/create_admin.py` | active_reusable |
