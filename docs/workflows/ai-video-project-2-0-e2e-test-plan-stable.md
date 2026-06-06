@@ -261,6 +261,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 9. [x] 增加授权真实 smoke 最小样本计划契约，并绑定到 approval record/preflight。实现文件：`configs/authorized-live-token-smoke-sample-plan-contract.json`、`src/pipeline/token_smoke_preflight.py`。
 10. [x] 增加私有 authorized-live approval record 构建器，要求精确授权句并拒绝写入正式目录。实现文件：`scripts/build_authorized_live_approval_record.py`、`tests/test_authorized_live_approval_record_builder.py`。
 11. [x] 增加私有 provider account readiness 构建器，要求人工余额确认并绑定到 preflight。实现文件：`scripts/build_provider_account_readiness_record.py`、`tests/test_provider_account_readiness_record_builder.py`。
+12. [x] 增加 no-token authorized-live smoke 启动包，并串联到 P2 recharge checklist dry-run。实现文件：`scripts/build_authorized_live_smoke_packet.py`、`tests/test_authorized_live_smoke_packet_builder.py`、`scripts/p2_recharge_smoke_checklist.py`。
 
 ## 阶段验收
 
@@ -274,6 +275,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - L2.5 authorized-live sample plan 已完成且 approval record 绑定当前 sample plan ref。
 - 私有 approval record 构建器已验证，且模板或泛化确认不会绕过 preflight。
 - 私有 provider account readiness 构建器已验证，且余额不足、缺失或记录 API key 原文不会绕过 preflight。
+- no-token authorized-live smoke 启动包已验证，且默认 P2 recharge checklist dry-run 会提示先生成启动包。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 
