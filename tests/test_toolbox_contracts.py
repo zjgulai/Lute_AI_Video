@@ -25,6 +25,7 @@ from src.models.toolbox_contracts import (
     ToolboxRunStatus,
     ToolboxToolId,
 )
+from src.pipeline.toolbox.planner import build_toolbox_run_state, project_toolbox_run_state
 
 FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "toolbox"
 
@@ -42,6 +43,56 @@ def test_toolbox_contract_cases_cover_first_five_tools():
     }
     assert all(case["provider_call"] is False for case in data["cases"])
     assert all(case["delivery_accepted"] is False for case in data["cases"])
+
+
+def test_momcozy_toolbox_l2_matrix_covers_s5_and_image_tools_without_provider_calls():
+    data = json.loads((FIXTURE_ROOT / "momcozy_toolbox_l2_fixture_matrix.json").read_text())
+    serialized = json.dumps(data, ensure_ascii=False, sort_keys=True)
+
+    assert data["evidence_level"] == "L2-fixture-or-dry-run"
+    assert data["brand_id"] == "momcozy"
+    assert data["brand_bundle_ref"] == "bundle_momcozy_candidate"
+    assert data["approved_token_count"] == 0
+    assert data["provider_calls_allowed"] is False
+    assert data["delivery_accepted"] is False
+    assert {case["scenario"] for case in data["scenario_cases"]} == {"s5"}
+    assert {case["tool_id"] for case in data["toolbox_image_cases"]} == {
+        "product-image",
+        "six-view",
+        "ecommerce-visual",
+    }
+    assert all(case["provider_call"] is False for case in data["scenario_cases"])
+    assert all(case["provider_call"] is False for case in data["toolbox_image_cases"])
+    assert all(case["delivery_accepted"] is False for case in data["toolbox_image_cases"])
+    assert all(case["approved_brand_token"] is False for case in data["toolbox_image_cases"])
+    assert "prompt_payload" not in serialized
+    assert "brand_asset_source_body" not in serialized
+
+
+def test_momcozy_toolbox_image_matrix_projects_s5_refs_only_in_dry_run():
+    data = json.loads((FIXTURE_ROOT / "momcozy_toolbox_l2_fixture_matrix.json").read_text())
+
+    for case in data["toolbox_image_cases"]:
+        request = ToolboxRequest.model_validate(case["request"])
+        state = build_toolbox_run_state(request)
+        projection = project_toolbox_run_state(state)
+        serialized = json.dumps(projection, ensure_ascii=False, sort_keys=True)
+
+        assert request.brand_bundle_ref == "bundle_momcozy_candidate"
+        assert "s5" in case["target_scenarios"]
+        assert state.status == ToolboxRunStatus.ACCEPTED_DRY_RUN
+        assert state.plan.provider_call is False
+        assert state.plan.delivery_accepted is False
+        assert state.job_record is not None
+        assert state.job_record.status == MediaJobStatus.PREPARED
+        assert state.job_record.provider_job_id is None
+        assert state.job_record.delivery_accepted is False
+        assert state.job_record.publish_allowed is False
+        assert any(target.scenario == "s5" for target in state.injection_targets)
+        assert all(target.bundle_refs == ["bundle_momcozy_candidate"] for target in state.injection_targets)
+        assert "fixture brief must stay out of public projections" not in serialized
+        assert "provider_job_id" not in serialized
+        assert "submitted" not in serialized
 
 
 def test_product_image_request_and_plan_remain_dry_run():

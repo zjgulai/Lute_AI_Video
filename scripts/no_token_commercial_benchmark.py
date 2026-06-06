@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TOKEN_VAULT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "commercial_video" / "momcozy_token_vault_minimal.json"
+TOOLBOX_MATRIX_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "toolbox" / "momcozy_toolbox_l2_fixture_matrix.json"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -87,6 +88,7 @@ def build_no_token_commercial_benchmark_report() -> NoTokenCommercialBenchmarkRe
         _quality_gate_check(),
         _production_job_ledger_check(),
         _longform_audit_check(),
+        _toolbox_brand_fixture_matrix_check(),
     ]
     forbidden_claims = sorted({
         claim
@@ -255,6 +257,32 @@ def _longform_audit_check() -> BenchmarkCheck:
         detail="longform audit passes blockers but remains review-only",
         evidence_refs=[bundle.audit_bundle_id, bundle.gate_decision.decision_id],
         forbidden_claims=bundle.forbidden_claims,
+    )
+
+
+def _toolbox_brand_fixture_matrix_check() -> BenchmarkCheck:
+    matrix = json.loads(TOOLBOX_MATRIX_FIXTURE.read_text())
+    image_cases = matrix.get("toolbox_image_cases", [])
+    scenario_cases = matrix.get("scenario_cases", [])
+    provider_call_blocked = (
+        matrix.get("evidence_level") == "L2-fixture-or-dry-run"
+        and matrix.get("provider_calls_allowed") is False
+        and matrix.get("approved_token_count") == 0
+        and all(case.get("provider_call") is False for case in image_cases)
+        and all(case.get("provider_call") is False for case in scenario_cases)
+        and all("s5" in case.get("target_scenarios", []) for case in image_cases)
+        and {case.get("tool_id") for case in image_cases} == {"product-image", "six-view", "ecommerce-visual"}
+    )
+    return BenchmarkCheck(
+        name="toolbox_brand_fixture_matrix",
+        status="prepared" if provider_call_blocked else "blocked",
+        detail="Momcozy S5 and toolbox image-generation fixture matrix remains L2 and refs-only",
+        evidence_refs=[
+            matrix.get("matrix_id", "missing_matrix_id"),
+            matrix.get("brand_bundle_ref", "missing_brand_bundle_ref"),
+            *[case.get("case_id", "missing_case_id") for case in [*scenario_cases, *image_cases]],
+        ],
+        forbidden_claims=matrix.get("forbidden_claims", []),
     )
 
 

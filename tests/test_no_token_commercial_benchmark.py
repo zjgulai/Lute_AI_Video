@@ -28,11 +28,13 @@ def test_no_token_commercial_benchmark_report_is_l2_and_no_provider_side_effect(
         "commercial_quality_gate",
         "production_job_ledger",
         "longform_audit",
+        "toolbox_brand_fixture_matrix",
     }
     assert any(check.status == "prepared" for check in report.checks)
     assert "provider job submitted" in report.forbidden_claims
     assert "delivery accepted" in report.forbidden_claims
     assert "publish allowed" in report.forbidden_claims
+    assert "approved brand token available" in report.forbidden_claims
     assert "payload" not in serialized
     assert "must-not-leak" not in serialized
 
@@ -54,4 +56,5 @@ def test_no_token_commercial_benchmark_cli_outputs_parseable_report():
     assert payload["blocked_count"] == 1
     assert payload["review_required_count"] == 3
     assert "provider job submitted" in payload["forbidden_claims"]
+    assert "approved brand token available" in payload["forbidden_claims"]
     assert "payload" not in result.stdout
