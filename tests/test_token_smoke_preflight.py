@@ -9,6 +9,8 @@ from src.pipeline.token_smoke_preflight import (
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
+    PROVIDER_REVALIDATION_PATH,
+    PROVIDER_REVALIDATION_REF,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
     build_token_smoke_preflight_report,
@@ -65,6 +67,7 @@ def test_valid_preflight_allows_harness_entry_without_provider_call(tmp_path: Pa
 
     assert report.blocked is False
     assert report.provider_call_allowed is True
+    assert report.provider_revalidation_ref == PROVIDER_REVALIDATION_REF
     assert report.approved_provider == "poyo"
     assert report.approved_model == "seedance-2"
     assert report.approved_budget_limit_usd == 1.0
@@ -75,6 +78,51 @@ def test_valid_preflight_allows_harness_entry_without_provider_call(tmp_path: Pa
     assert report.approved_max_retry_count == 0
     assert {check.status for check in report.checks} == {"pass"}
     assert "sk_fixture_secret" not in report.model_dump_json()
+
+
+def test_provider_capability_evidence_requires_current_revalidation_ref(tmp_path: Path):
+    approval_record = _write_approval_record(
+        tmp_path,
+        provider_revalidation_ref="configs/old-poyo-matrix.json",
+    )
+    env = _ready_env()
+    env[APPROVAL_RECORD_ENV] = str(approval_record)
+
+    report = build_token_smoke_preflight_report(env=env)
+
+    assert report.blocked is True
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "authorized_live_approval") == "pass"
+    assert _check_status(report, "provider_capability_evidence") == "block"
+    assert PROVIDER_REVALIDATION_REF in _check_detail(report, "provider_capability_evidence")
+
+
+def test_poyo_current_revalidation_contract_keeps_public_doc_evidence_boundary():
+    payload = json.loads(PROVIDER_REVALIDATION_PATH.read_text())
+    models = {item["model"]: item for item in payload["models"]}
+
+    assert payload["status"] == "stable"
+    assert payload["evidence_level"] == "L1-public-doc-revalidation"
+    assert payload["provider"] == "poyo"
+    assert payload["no_provider_call"] is True
+    assert "https://docs.poyo.ai/api-manual/overview" in payload["source_urls"]
+    assert "https://poyo.ai/models/seedance-2" in payload["source_urls"]
+    assert "https://poyo.ai/models/gpt-image-2" in payload["source_urls"]
+
+    seedance = models["seedance-2"]
+    assert "seedance-2-fast" in seedance["available_model_ids"]
+    assert seedance["duration_seconds"] == {"min": 4, "max": 15}
+    assert "1080p" in seedance["resolutions"]
+    assert seedance["reference_limits"]["combined_max"] == 12
+    assert seedance["pricing_usd"]["seedance_2_720p_text_or_image_to_video_per_second"] == 0.2
+    assert seedance["recommended_l4_smoke_default"]["estimated_provider_cost_usd"] == 0.8
+
+    image = models["gpt-image-2"]
+    assert "gpt-image-2-edit" in image["available_model_ids"]
+    assert image["prompt_max_chars"] == 20000
+    assert image["returns_per_request"] == 1
+    assert image["pricing_usd"]["low_1k_per_generation"] == 0.01
+    assert image["pricing_usd"]["high_4k_per_generation"] == 0.321
 
 
 def test_approval_record_requires_exact_c21_statement_provider_model_and_budget(tmp_path: Path):
@@ -216,6 +264,7 @@ def _write_approval_record(tmp_path: Path, **overrides) -> Path:
         "approved_at": "2026-06-04T00:00:00Z",
         "provider": provider,
         "model": model,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
         "sample_plan": {

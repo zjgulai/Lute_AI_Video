@@ -41,6 +41,7 @@ python scripts/p2_recharge_smoke_checklist.py
 - 模板：`configs/authorized-live-token-smoke-approval-template.json`
 - 私有授权记录路径：通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向
 - 授权记录必须将 `template_only` 改为 `false`
+- 授权记录必须包含 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`
 - 授权记录必须包含 `sample_plan` 与 `budget_stop_loss`
 - `budget_stop_loss.max_retry_count` 只能是 `0` 或 `1`
 - `budget_stop_loss.stop_on_first_failure`、`halt_on_rate_limit`、`halt_on_quota_error`、`halt_on_content_rejection`、`halt_on_missing_artifact` 必须为 `true`
@@ -82,6 +83,7 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 - 没有 `RUN_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向授权记录时不得执行。
 - 授权记录模板本身会被 preflight 阻断，不能直接作为正式授权记录。
+- 授权记录没有绑定当前 poyo provider revalidation contract 时不得执行。
 - preflight blocked 时必须先修复授权、预算、provider capability evidence、job ledger 或 audit bundle，不允许绕过统一入口手动执行 token 命令。
 - `API_KEY` 或 `PLAYWRIGHT_API_KEY` 仍是 `ai_video_demo_2026` 时拒绝执行。
 - 失败后不要盲目循环重试；先检查 provider 控制台、生产日志和失败 artifact。

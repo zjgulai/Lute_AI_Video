@@ -25,6 +25,9 @@ from src.quality.commercial_gate import evaluate_quality_contract
 RUN_TOKEN_SMOKE_ENV = "RUN_TOKEN_SMOKE"
 APPROVAL_RECORD_ENV = "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD"
 APPROVAL_SCOPE = "c21-token-smoke"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PROVIDER_REVALIDATION_REF = "configs/poyo-current-provider-revalidation-contract.json"
+PROVIDER_REVALIDATION_PATH = REPO_ROOT / PROVIDER_REVALIDATION_REF
 APPROVAL_STATEMENT_TEMPLATE = (
     "我明确授权 C21 运行一次真实 token smoke，允许调用 provider，"
     "使用的 provider/model 是 {provider}/{model}，预算上限是 {budget_limit}。"
@@ -44,6 +47,7 @@ class TokenSmokePreflightReport(BaseModel):
     evidence_level: Literal["L2-fixture-or-dry-run"] = "L2-fixture-or-dry-run"
     run_token_smoke: bool
     approval_record_ref: str | None = None
+    provider_revalidation_ref: str | None = None
     approved_provider: str | None = None
     approved_model: str | None = None
     approved_budget_limit_usd: float | None = None
@@ -83,6 +87,7 @@ def build_token_smoke_preflight_report(
         report_id=f"token_smoke_preflight_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
         run_token_smoke=env.get(RUN_TOKEN_SMOKE_ENV) == "1",
         approval_record_ref=str(record_path) if record_path else None,
+        provider_revalidation_ref=_approval_string(approval_payload, "provider_revalidation_ref"),
         approved_provider=_approval_string(approval_payload, "provider"),
         approved_model=_approval_string(approval_payload, "model"),
         approved_budget_limit_usd=_approval_budget_limit_usd(approval_payload),
@@ -353,19 +358,62 @@ def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | No
     profiles = list_provider_prompt_profiles()
     provider = _approval_string(approval_payload, "provider")
     model = _approval_string(approval_payload, "model")
+    revalidation_ref = _approval_string(approval_payload, "provider_revalidation_ref")
     if provider is None or model is None:
         return PreflightCheck(
             name="provider_capability_evidence",
             status="block",
             detail="passing approval record with provider/model is required before capability evidence can be bound",
         )
+
+    if revalidation_ref is None:
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail="approval record requires provider_revalidation_ref before authorized-live provider calls",
+        )
+    if revalidation_ref != PROVIDER_REVALIDATION_REF:
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail=f"provider_revalidation_ref must equal {PROVIDER_REVALIDATION_REF}",
+            evidence_refs=[revalidation_ref],
+        )
+
+    contract_error, contract = _load_provider_revalidation_contract()
+    if contract_error or contract is None:
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail=contract_error or "provider revalidation contract is unavailable",
+            evidence_refs=[PROVIDER_REVALIDATION_REF],
+        )
+    if str(contract.get("provider", "")).lower() != provider.lower():
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail=f"provider revalidation contract is for {contract.get('provider')}, not {provider}/{model}",
+            evidence_refs=[PROVIDER_REVALIDATION_REF],
+        )
+    if not _contract_supports_model(contract, model):
+        return PreflightCheck(
+            name="provider_capability_evidence",
+            status="block",
+            detail=f"provider revalidation contract does not list {provider}/{model}",
+            evidence_refs=[PROVIDER_REVALIDATION_REF],
+        )
+
     profile = _match_provider_profile(profiles, provider, model)
     if profile is not None:
         return PreflightCheck(
             name="provider_capability_evidence",
             status="pass",
-            detail=f"fixture provider prompt profile is registered for {provider}/{model}",
-            evidence_refs=[profile.profile_id],
+            detail=f"fixture provider profile and public-doc revalidation are bound for {provider}/{model}",
+            evidence_refs=[
+                profile.profile_id,
+                PROVIDER_REVALIDATION_REF,
+                *[str(url) for url in contract.get("source_urls", [])],
+            ],
         )
     return PreflightCheck(
         name="provider_capability_evidence",
@@ -375,8 +423,47 @@ def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | No
 
 
 def _missing_detail_fields(payload: Mapping[str, Any]) -> list[str]:
-    required = ["provider", "model", "budget_limit", "budget_limit_usd", "approval_statement"]
+    required = [
+        "provider",
+        "model",
+        "provider_revalidation_ref",
+        "budget_limit",
+        "budget_limit_usd",
+        "approval_statement",
+    ]
     return [key for key in required if not str(payload.get(key, "")).strip()]
+
+
+def _load_provider_revalidation_contract() -> tuple[str | None, dict[str, Any] | None]:
+    if not PROVIDER_REVALIDATION_PATH.exists():
+        return "provider revalidation contract is missing", None
+    try:
+        payload = json.loads(PROVIDER_REVALIDATION_PATH.read_text())
+    except json.JSONDecodeError:
+        return "provider revalidation contract must be valid JSON", None
+    if not isinstance(payload, dict):
+        return "provider revalidation contract must be a JSON object", None
+    if payload.get("status") != "stable":
+        return "provider revalidation contract must be stable", None
+    if payload.get("no_provider_call") is not True:
+        return "provider revalidation contract must preserve the no-provider-call boundary", None
+    if payload.get("evidence_level") != "L1-public-doc-revalidation":
+        return "provider revalidation contract must stay labeled as public-doc evidence", None
+    if not isinstance(payload.get("models"), list) or not payload["models"]:
+        return "provider revalidation contract requires model entries", None
+    return None, payload
+
+
+def _contract_supports_model(contract: Mapping[str, Any], model: str) -> bool:
+    model_key = model.lower()
+    for item in contract.get("models", []):
+        if not isinstance(item, Mapping):
+            continue
+        listed = {str(item.get("model", "")).lower()}
+        listed.update(str(value).lower() for value in item.get("available_model_ids", []) if value)
+        if model_key in listed:
+            return True
+    return False
 
 
 def _looks_like_template_placeholder(value: Any) -> bool:

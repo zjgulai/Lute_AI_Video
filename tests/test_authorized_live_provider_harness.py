@@ -9,6 +9,7 @@ from src.pipeline.token_smoke_preflight import (
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
+    PROVIDER_REVALIDATION_REF,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
 )
@@ -103,6 +104,7 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
         "approved_at": "2026-06-06T00:00:00Z",
         "provider": provider,
         "model": model,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
         "sample_plan": {

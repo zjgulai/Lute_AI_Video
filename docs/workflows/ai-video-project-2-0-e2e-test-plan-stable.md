@@ -23,6 +23,7 @@ source: human+ai
 | L0 | lint、typecheck、unit、build | 否 | 代码结构和类型约束通过 |
 | L1 | 本地 UI 与配置页渲染 | 否 | 配置入口和前端状态可用 |
 | L2 | fixture、dry-run、mock provider、preflight | 否 | 工作流契约、门禁和账本可审计 |
+| L2.5 | provider 公开文档重验 | 否 | 当前模型、端点、价格有公开文档依据，但不证明 key/余额/runtime 成功 |
 | L3 | 生产非 token smoke、生产非 token Playwright | 否 | 生产路由、认证、静态页面、非生成路径可用 |
 | L4 | 授权真实 token smoke | 是 | 局部 provider 链路可用，不等于商业交付完成 |
 
@@ -115,8 +116,26 @@ git diff --check
 - 缺少 `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 时必须 blocked。
 - demo `API_KEY` 或 demo `PLAYWRIGHT_API_KEY` 不允许进入真实 token smoke。
 - `scripts/p2_recharge_smoke_checklist.py --execute` 必须自动执行 preflight；preflight blocked 时不得启动 `smoke.sh` 或 Playwright。
+- approval record 必须绑定 `configs/poyo-current-provider-revalidation-contract.json`，否则 provider capability evidence 必须 blocked。
 - provider job ledger 只暴露 prompt hash、artifact refs、status，不暴露 prompt payload 或品牌资产原文。
 - C1-C8 不生成 approved brand token。
+
+### L2.5 poyo 当前公开文档重验
+
+目的：在不触发 provider 的情况下，确认进入 L4 前使用的 poyo 模型、端点和成本边界不是旧的 2026-05 矩阵假设。
+
+2026-06-06 已重验的公开文档证据记录在 `configs/poyo-current-provider-revalidation-contract.json`，证据等级为 `L1-public-doc-revalidation`，只支持以下结论：
+
+- poyo 公开 API 文档仍显示 `https://api.poyo.ai`、`/api/generate/submit`、`/api/generate/status/{task_id}` 的异步任务架构。
+- poyo 公开模型页仍列出 `seedance-2` / `seedance-2-fast`；`seedance-2` 支持 480p、720p、1080p 与 4-15 秒短片。
+- poyo 公开模型页仍列出 `gpt-image-2` / `gpt-image-2-edit`；支持低/中/高质量、1K/2K/4K、单图返回。
+- 这不证明 API key 有效、账户余额充足、内容审核会通过、runtime 不限流，也不证明商业交付完成。
+
+固定命令：
+
+```bash
+.venv/bin/python -m pytest tests/test_token_smoke_preflight.py tests/test_poyo_model_matrix_stale_warning.py -q
+```
 
 ### L3 生产非 token E2E
 
@@ -154,6 +173,7 @@ npm run e2e:prod
 - poyo 账号已充值，预算和止损阈值明确。
 - `API_KEY` 和 `PLAYWRIGHT_API_KEY` 是非 demo production key。
 - `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 已配置。
+- 私有 approval record 已绑定 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`。
 - no-token preflight 已通过。
 - 生产日志和 artifact 目录可检查。
 
@@ -210,6 +230,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 5. [x] 在品牌资产目录接入后，把 S5 和工具箱图像生成样本加入 L2 fixture 矩阵。实现文件：`tests/fixtures/toolbox/momcozy_toolbox_l2_fixture_matrix.json`。
 6. [x] 移除生产 `@token-smoke` spec 中残留的 demo key fallback，统一通过 production helper 管控 authenticated smoke。实现文件：`web/e2e/production/helpers.ts`、`web/e2e/production/s1-gate.prod.spec.ts`、`web/e2e/production/s1-step-by-step.prod.spec.ts`。
 7. [x] 强制 P2 充值后统一入口在任何 token-consuming 命令前执行 no-token preflight。实现文件：`scripts/p2_recharge_smoke_checklist.py`、`tests/test_p2_recharge_smoke_checklist.py`。
+8. [x] 增加 poyo 当前公开文档重验契约，并绑定到真实 smoke approval record/preflight。实现文件：`configs/poyo-current-provider-revalidation-contract.json`、`src/pipeline/token_smoke_preflight.py`。
 
 ## 阶段验收
 
@@ -219,6 +240,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - L1 `/settings` 页面验收通过。
 - L2 preflight 在无授权状态下正确 blocked，在授权记录和 key 完整时才变为可执行。
 - P2 充值后统一入口 blocked 时不得启动真实 smoke 子进程。
+- L2.5 provider 公开文档重验已完成且 approval record 绑定当前 revalidation ref。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 

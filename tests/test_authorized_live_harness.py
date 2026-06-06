@@ -11,6 +11,7 @@ from src.pipeline.token_smoke_preflight import (
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
+    PROVIDER_REVALIDATION_REF,
     REQUIRED_API_KEY_ENVS,
     RUN_TOKEN_SMOKE_ENV,
 )
@@ -57,8 +58,8 @@ def test_dry_run_passes_after_preflight_without_provider_call(tmp_path: Path):
 def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_path: Path):
     approval_record = _write_approval_record(
         tmp_path,
-        provider="kling",
-        model="kling-3.0",
+        provider="poyo",
+        model="seedance-2-fast",
         budget_limit_usd=2.5,
         budget_stop_loss={
             "max_total_cost_usd": 2.5,
@@ -78,8 +79,8 @@ def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_pa
     assert report.status == "dry_run_ready"
     assert report.provider_call_executed is False
     assert report.job_spec is not None
-    assert report.job_spec.provider == "kling"
-    assert report.job_spec.model == "kling-3.0"
+    assert report.job_spec.provider == "poyo"
+    assert report.job_spec.model == "seedance-2-fast"
     assert report.job_spec.cost_ceiling_usd == 1.25
 
 
@@ -151,6 +152,7 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
         "approved_at": "2026-06-04T00:00:00Z",
         "provider": provider,
         "model": model,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
         "budget_limit": budget_limit,
         "budget_limit_usd": 1.0,
         "sample_plan": {

@@ -8,6 +8,7 @@
   "approved_at": "REPLACE_ME_ISO8601_TIMESTAMP",
   "provider": "poyo",
   "model": "seedance-2",
+  "provider_revalidation_ref": "configs/poyo-current-provider-revalidation-contract.json",
   "budget_limit": "$1.00",
   "budget_limit_usd": 1.0,
   "sample_plan": {
@@ -31,6 +32,7 @@
   "operator_notes": [
     "Do not put provider API keys in this file.",
     "Keep template_only=true until the user gives the exact authorization statement in the active session.",
+    "Keep provider_revalidation_ref bound to the current poyo public-doc revalidation contract unless that contract is refreshed first.",
     "For toolbox live smoke, fill sample_plan.toolbox_tool_ids with the exact tool ids, for example product-image or six-view.",
     "Store the filled approval record in a private, non-committed path and set AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD to that path."
   ]
