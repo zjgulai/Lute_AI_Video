@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 from src.pipeline.token_smoke_preflight import (
+    ACCOUNT_READINESS_RECORD_ENV,
+    ACCOUNT_READINESS_SCOPE,
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
@@ -15,6 +17,7 @@ from src.pipeline.token_smoke_preflight import (
     RUN_TOKEN_SMOKE_ENV,
     SAMPLE_PLAN_PATH,
     SAMPLE_PLAN_REF,
+    build_provider_account_readiness_payload,
     build_token_smoke_preflight_report,
 )
 
@@ -49,9 +52,11 @@ def test_explicit_empty_env_does_not_fall_back_to_process_env(monkeypatch):
 
 def test_missing_run_token_smoke_blocks_even_with_valid_approval_record(tmp_path: Path):
     approval_record = _write_approval_record(tmp_path)
+    account_readiness = _write_account_readiness_record(tmp_path)
     env = _ready_env()
     env[RUN_TOKEN_SMOKE_ENV] = "0"
     env[APPROVAL_RECORD_ENV] = str(approval_record)
+    env[ACCOUNT_READINESS_RECORD_ENV] = str(account_readiness)
 
     report = build_token_smoke_preflight_report(env=env)
 
@@ -62,13 +67,16 @@ def test_missing_run_token_smoke_blocks_even_with_valid_approval_record(tmp_path
 
 def test_valid_preflight_allows_harness_entry_without_provider_call(tmp_path: Path):
     approval_record = _write_approval_record(tmp_path)
+    account_readiness = _write_account_readiness_record(tmp_path)
     env = _ready_env()
     env[APPROVAL_RECORD_ENV] = str(approval_record)
+    env[ACCOUNT_READINESS_RECORD_ENV] = str(account_readiness)
 
     report = build_token_smoke_preflight_report(env=env)
 
     assert report.blocked is False
     assert report.provider_call_allowed is True
+    assert report.account_readiness_record_ref == str(account_readiness)
     assert report.provider_revalidation_ref == PROVIDER_REVALIDATION_REF
     assert report.sample_plan_ref == SAMPLE_PLAN_REF
     assert report.approved_provider == "poyo"
@@ -290,6 +298,65 @@ def test_approval_record_blocks_loose_retry_or_missing_halt_policy(tmp_path: Pat
     assert "max_retry_count must be 0 or 1" in _check_detail(report, "budget_stop_loss")
 
 
+def test_provider_account_readiness_record_is_required_for_valid_approval(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path)
+    env = _ready_env()
+    env[APPROVAL_RECORD_ENV] = str(approval_record)
+
+    report = build_token_smoke_preflight_report(env=env)
+
+    assert report.blocked is True
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "provider_account_readiness") == "block"
+    assert ACCOUNT_READINESS_RECORD_ENV in _check_detail(report, "provider_account_readiness")
+
+
+def test_provider_account_readiness_blocks_template_and_underfunded_records(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path)
+    template_record = _write_account_readiness_record(tmp_path, template_only=True)
+    underfunded_record = _write_account_readiness_record(
+        tmp_path,
+        file_name="underfunded-account-readiness.json",
+        available_credit_usd=0.5,
+        minimum_required_credit_usd=1.0,
+    )
+
+    for record, expected in [
+        (template_record, "template_only must be false"),
+        (underfunded_record, "available_credit_usd must cover"),
+    ]:
+        env = _ready_env()
+        env[APPROVAL_RECORD_ENV] = str(approval_record)
+        env[ACCOUNT_READINESS_RECORD_ENV] = str(record)
+
+        report = build_token_smoke_preflight_report(env=env)
+
+        assert report.blocked is True
+        assert report.provider_call_allowed is False
+        assert _check_status(report, "provider_account_readiness") == "block"
+        assert expected in _check_detail(report, "provider_account_readiness")
+
+
+def test_provider_account_readiness_builder_keeps_secret_free_private_shape():
+    payload = build_provider_account_readiness_payload(
+        checked_by="pray",
+        checked_at="2026-06-06T16:30:00Z",
+        available_credit_usd=1.0,
+    )
+
+    assert payload["template_only"] is False
+    assert payload["scope"] == ACCOUNT_READINESS_SCOPE
+    assert payload["evidence_level"] == "L3-production-read-only"
+    assert payload["no_provider_call"] is True
+    assert payload["provider"] == "poyo"
+    assert payload["provider_dashboard_balance_confirmed"] is True
+    assert payload["api_key_configured_in_runtime_env"] is True
+    assert payload["api_key_secret_not_recorded"] is True
+    assert payload["available_credit_usd"] == 1.0
+    assert payload["minimum_required_credit_usd"] == 1.0
+    assert "API_KEY" not in json.dumps(payload)
+
+
 def test_cli_exits_blocked_when_approval_is_missing():
     env = _ready_env()
     result = subprocess.run(
@@ -350,6 +417,31 @@ def _write_approval_record(tmp_path: Path, **overrides) -> Path:
             "halt_on_missing_artifact": True,
         },
         "approval_statement": _approval_statement(provider, model, budget_limit),
+    }
+    payload.update(overrides)
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    return path
+
+
+def _write_account_readiness_record(tmp_path: Path, **overrides) -> Path:
+    file_name = str(overrides.pop("file_name", "provider-account-readiness.json"))
+    path = tmp_path / file_name
+    payload = {
+        "template_only": False,
+        "readiness_id": "account_readiness_fixture",
+        "scope": ACCOUNT_READINESS_SCOPE,
+        "evidence_level": "L3-production-read-only",
+        "no_provider_call": True,
+        "provider": "poyo",
+        "checked_by": "user",
+        "checked_at": "2026-06-06T00:00:00Z",
+        "provider_dashboard_balance_confirmed": True,
+        "api_key_configured_in_runtime_env": True,
+        "api_key_secret_not_recorded": True,
+        "available_credit_usd": 1.0,
+        "minimum_required_credit_usd": 1.0,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
     }
     payload.update(overrides)
     path.write_text(json.dumps(payload, ensure_ascii=False))

@@ -17,6 +17,7 @@ DEMO_API_KEY = "ai_video_demo_2026"
 CONFIRM_ENV = "CONFIRM_P2_TOKEN_SMOKE"
 TOKEN_SMOKE_ENV = "RUN_TOKEN_SMOKE"
 APPROVAL_RECORD_ENV = "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD"
+ACCOUNT_READINESS_RECORD_ENV = "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD"
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ REQUIRED_ENV = (
     EnvRequirement("API_KEY", "Production backend API key for Lighthouse smoke", True),
     EnvRequirement("PLAYWRIGHT_API_KEY", "Non-demo production API key for Playwright", True),
     EnvRequirement(APPROVAL_RECORD_ENV, "Private C21 approval record JSON with budget stop-loss"),
+    EnvRequirement(ACCOUNT_READINESS_RECORD_ENV, "Private provider account readiness JSON with manual balance check"),
     EnvRequirement("POYO_API_KEY", "Funded poyo.ai key configured for production"),
     EnvRequirement("DEEPSEEK_API_KEY", "DeepSeek key configured for production"),
     EnvRequirement("SILICONFLOW_API_KEY", "SiliconFlow CosyVoice key configured for production"),
@@ -111,6 +113,7 @@ def _print_dry_run(base_url: str) -> None:
         "POYO_API_KEY=<funded-poyo-key> DEEPSEEK_API_KEY=<deepseek-key> "
         "SILICONFLOW_API_KEY=<siliconflow-key> "
         f"{APPROVAL_RECORD_ENV}=<private-approval-json> "
+        f"{ACCOUNT_READINESS_RECORD_ENV}=<private-account-readiness-json> "
         "python scripts/p2_recharge_smoke_checklist.py --execute"
     )
     print("")

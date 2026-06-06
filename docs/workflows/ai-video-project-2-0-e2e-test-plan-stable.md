@@ -106,6 +106,7 @@ git diff --check
 .venv/bin/python scripts/commercial_token_smoke_preflight.py --pretty
 .venv/bin/python scripts/p2_recharge_smoke_checklist.py
 .venv/bin/python scripts/build_authorized_live_approval_record.py --print-required-statement --approved-by <operator-name> --approval-statement ignored
+.venv/bin/python scripts/build_provider_account_readiness_record.py --checked-by <operator-name> --available-credit-usd 1.00 --output tmp/outputs/poyo-account-readiness.json
 .venv/bin/python -m pytest tests/test_token_smoke_preflight.py
 ```
 
@@ -120,6 +121,7 @@ git diff --check
 - approval record 必须绑定 `configs/poyo-current-provider-revalidation-contract.json`，否则 provider capability evidence 必须 blocked。
 - approval record 必须绑定 `configs/authorized-live-token-smoke-sample-plan-contract.json`，否则 sample plan contract 必须 blocked。
 - 私有 approval record 必须由 `scripts/build_authorized_live_approval_record.py` 或等价校验流程生成；泛化确认文本不得提升为 L4 授权。
+- 私有 provider account readiness record 必须由 `scripts/build_provider_account_readiness_record.py` 或等价校验流程生成；余额不足或缺失时必须 blocked。
 - provider job ledger 只暴露 prompt hash、artifact refs、status，不暴露 prompt payload 或品牌资产原文。
 - C1-C8 不生成 approved brand token。
 
@@ -180,6 +182,7 @@ npm run e2e:prod
 - `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 已配置。
 - 私有 approval record 已绑定 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`。
 - 私有 approval record 已绑定 `sample_plan_ref=configs/authorized-live-token-smoke-sample-plan-contract.json`。
+- 私有 provider account readiness record 已确认 poyo 控制台余额覆盖 `$1.00` 样本计划，并且不记录 API key 原文。
 - no-token preflight 已通过。
 - 生产日志和 artifact 目录可检查。
 
@@ -190,6 +193,11 @@ python scripts/build_authorized_live_approval_record.py \
   --approved-by <operator-name> \
   --approval-statement '我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 poyo/seedance-2，预算上限是 $1.00。' \
   --output tmp/outputs/authorized-live-token-smoke-approval.json
+
+python scripts/build_provider_account_readiness_record.py \
+  --checked-by <operator-name> \
+  --available-credit-usd 1.00 \
+  --output tmp/outputs/poyo-account-readiness.json
 ```
 
 统一入口：
@@ -197,6 +205,7 @@ python scripts/build_authorized_live_approval_record.py \
 ```bash
 CONFIRM_P2_TOKEN_SMOKE=1 RUN_TOKEN_SMOKE=1 \
 AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD=<private-approval-json> \
+AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD=<private-account-readiness-json> \
 API_KEY=<production-api-key> \
 PLAYWRIGHT_API_KEY=<production-api-key> \
 POYO_API_KEY=<funded-poyo-key> \
@@ -248,6 +257,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 8. [x] 增加 poyo 当前公开文档重验契约，并绑定到真实 smoke approval record/preflight。实现文件：`configs/poyo-current-provider-revalidation-contract.json`、`src/pipeline/token_smoke_preflight.py`。
 9. [x] 增加授权真实 smoke 最小样本计划契约，并绑定到 approval record/preflight。实现文件：`configs/authorized-live-token-smoke-sample-plan-contract.json`、`src/pipeline/token_smoke_preflight.py`。
 10. [x] 增加私有 authorized-live approval record 构建器，要求精确授权句并拒绝写入正式目录。实现文件：`scripts/build_authorized_live_approval_record.py`、`tests/test_authorized_live_approval_record_builder.py`。
+11. [x] 增加私有 provider account readiness 构建器，要求人工余额确认并绑定到 preflight。实现文件：`scripts/build_provider_account_readiness_record.py`、`tests/test_provider_account_readiness_record_builder.py`。
 
 ## 阶段验收
 
@@ -260,6 +270,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - L2.5 provider 公开文档重验已完成且 approval record 绑定当前 revalidation ref。
 - L2.5 authorized-live sample plan 已完成且 approval record 绑定当前 sample plan ref。
 - 私有 approval record 构建器已验证，且模板或泛化确认不会绕过 preflight。
+- 私有 provider account readiness 构建器已验证，且余额不足、缺失或记录 API key 原文不会绕过 preflight。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 

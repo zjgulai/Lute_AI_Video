@@ -8,6 +8,8 @@ from typing import Any
 
 from src.pipeline.authorized_live_harness import EXECUTE_ENV, run_authorized_live_harness
 from src.pipeline.token_smoke_preflight import (
+    ACCOUNT_READINESS_RECORD_ENV,
+    ACCOUNT_READINESS_SCOPE,
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
@@ -130,9 +132,11 @@ def test_cli_default_is_disabled_and_json_parseable():
 
 
 def _ready_env(approval_record: Path) -> dict[str, str]:
+    account_readiness = _write_account_readiness_record(approval_record.parent)
     env = {
         RUN_TOKEN_SMOKE_ENV: "1",
         APPROVAL_RECORD_ENV: str(approval_record),
+        ACCOUNT_READINESS_RECORD_ENV: str(account_readiness),
     }
     for key_name in REQUIRED_API_KEY_ENVS:
         env[key_name] = f"sk_fixture_secret_{key_name.lower()}"
@@ -182,6 +186,29 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
             str(payload["model"]),
             str(payload["budget_limit"]),
         )
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    return path
+
+
+def _write_account_readiness_record(tmp_path: Path) -> Path:
+    path = tmp_path / "provider-account-readiness.json"
+    payload: dict[str, Any] = {
+        "template_only": False,
+        "readiness_id": "account_readiness_harness_fixture",
+        "scope": ACCOUNT_READINESS_SCOPE,
+        "evidence_level": "L3-production-read-only",
+        "no_provider_call": True,
+        "provider": "poyo",
+        "checked_by": "user",
+        "checked_at": "2026-06-06T00:00:00Z",
+        "provider_dashboard_balance_confirmed": True,
+        "api_key_configured_in_runtime_env": True,
+        "api_key_secret_not_recorded": True,
+        "available_credit_usd": 1.0,
+        "minimum_required_credit_usd": 1.0,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
+    }
     path.write_text(json.dumps(payload, ensure_ascii=False))
     return path
 

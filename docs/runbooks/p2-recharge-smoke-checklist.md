@@ -48,6 +48,13 @@ python scripts/p2_recharge_smoke_checklist.py
 - `budget_stop_loss.max_retry_count` 只能是 `0` 或 `1`
 - `budget_stop_loss.stop_on_first_failure`、`halt_on_rate_limit`、`halt_on_quota_error`、`halt_on_content_rejection`、`halt_on_missing_artifact` 必须为 `true`
 
+同时准备 provider 账户 readiness 记录：
+
+- 构建器：`scripts/build_provider_account_readiness_record.py`
+- 私有账户记录路径：通过 `AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD` 指向，必须放在 `tmp/` 或仓库外
+- 账户记录只允许写入人工查看 provider 控制台后的余额/key 配置确认，不得写入 API key 原文
+- `available_credit_usd` 必须覆盖 `configs/authorized-live-token-smoke-sample-plan-contract.json` 的总预算
+
 先用构建器打印本轮必须逐字确认的授权句：
 
 ```bash
@@ -65,11 +72,21 @@ python scripts/build_authorized_live_approval_record.py \
   --output tmp/outputs/authorized-live-token-smoke-approval.json
 ```
 
+人工确认 poyo 控制台余额和 key 配置后，再生成私有账户 readiness 记录：
+
+```bash
+python scripts/build_provider_account_readiness_record.py \
+  --checked-by <operator-name> \
+  --available-credit-usd 1.00 \
+  --output tmp/outputs/poyo-account-readiness.json
+```
+
 执行真实 smoke 必须同时设置两个确认开关：
 
 ```bash
 CONFIRM_P2_TOKEN_SMOKE=1 RUN_TOKEN_SMOKE=1 \
 AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD=<private-approval-json> \
+AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD=<private-account-readiness-json> \
 API_KEY=<production-api-key> \
 PLAYWRIGHT_API_KEY=<production-api-key> \
 POYO_API_KEY=<funded-poyo-key> \
@@ -83,6 +100,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 ```bash
 RUN_TOKEN_SMOKE=1 \
 AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD=<private-approval-json> \
+AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD=<private-account-readiness-json> \
 POYO_API_KEY=<funded-poyo-key> \
 DEEPSEEK_API_KEY=<deepseek-key> \
 SILICONFLOW_API_KEY=<siliconflow-key> \
@@ -101,8 +119,10 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 - 没有 `CONFIRM_P2_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有 `RUN_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向授权记录时不得执行。
+- 没有通过 `AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD` 指向账户 readiness 记录时不得执行。
 - 授权记录必须由构建器或等价校验流程生成；`同意下一步` 这类泛化确认不构成 L4 授权。
 - 授权记录模板本身会被 preflight 阻断，不能直接作为正式授权记录。
+- 账户 readiness 记录余额不足、仍是模板、或记录了 API key 原文时不得执行。
 - 授权记录没有绑定当前 poyo provider revalidation contract 时不得执行。
 - 授权记录没有绑定当前 authorized-live sample plan contract 时不得执行。
 - preflight blocked 时必须先修复授权、预算、provider capability evidence、job ledger 或 audit bundle，不允许绕过统一入口手动执行 token 命令。

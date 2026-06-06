@@ -25,7 +25,9 @@ from src.quality.commercial_gate import evaluate_quality_contract
 
 RUN_TOKEN_SMOKE_ENV = "RUN_TOKEN_SMOKE"
 APPROVAL_RECORD_ENV = "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD"
+ACCOUNT_READINESS_RECORD_ENV = "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD"
 APPROVAL_SCOPE = "c21-token-smoke"
+ACCOUNT_READINESS_SCOPE = "c21-token-smoke-provider-account-readiness"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROVIDER_REVALIDATION_REF = "configs/poyo-current-provider-revalidation-contract.json"
 PROVIDER_REVALIDATION_PATH = REPO_ROOT / PROVIDER_REVALIDATION_REF
@@ -50,6 +52,7 @@ class TokenSmokePreflightReport(BaseModel):
     evidence_level: Literal["L2-fixture-or-dry-run"] = "L2-fixture-or-dry-run"
     run_token_smoke: bool
     approval_record_ref: str | None = None
+    account_readiness_record_ref: str | None = None
     provider_revalidation_ref: str | None = None
     sample_plan_ref: str | None = None
     approved_provider: str | None = None
@@ -75,6 +78,8 @@ def build_token_smoke_preflight_report(
     env = os.environ if env is None else env
     record_path_raw = approval_record_path or env.get(APPROVAL_RECORD_ENV, "")
     record_path = Path(record_path_raw).expanduser() if record_path_raw else None
+    account_readiness_path_raw = env.get(ACCOUNT_READINESS_RECORD_ENV, "")
+    account_readiness_path = Path(account_readiness_path_raw).expanduser() if account_readiness_path_raw else None
     approval_check, approval_payload = _check_approval_record(record_path)
     checks = [
         _check_run_token_smoke(env),
@@ -82,6 +87,7 @@ def build_token_smoke_preflight_report(
         approval_check,
         _check_sample_plan_contract(approval_payload),
         _check_budget_stop_loss(approval_payload),
+        _check_provider_account_readiness(account_readiness_path, approval_payload),
         _check_provider_capability_evidence(approval_payload),
         _check_job_ledger_readiness(),
         _check_audit_bundle_readiness(),
@@ -92,6 +98,7 @@ def build_token_smoke_preflight_report(
         report_id=f"token_smoke_preflight_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
         run_token_smoke=env.get(RUN_TOKEN_SMOKE_ENV) == "1",
         approval_record_ref=str(record_path) if record_path else None,
+        account_readiness_record_ref=str(account_readiness_path) if account_readiness_path else None,
         provider_revalidation_ref=_approval_string(approval_payload, "provider_revalidation_ref"),
         sample_plan_ref=_approval_string(approval_payload, "sample_plan_ref"),
         approved_provider=_approval_string(approval_payload, "provider"),
@@ -198,6 +205,53 @@ def build_authorized_live_approval_payload(
         },
         "approval_statement": approval_statement,
         "approval_origin": "operator_supplied_exact_statement",
+    }
+
+
+def build_provider_account_readiness_payload(
+    *,
+    checked_by: str,
+    available_credit_usd: float,
+    checked_at: str | None = None,
+    provider: str = "poyo",
+) -> dict[str, Any]:
+    """Build a private provider account readiness record without storing API keys."""
+    checked_by = checked_by.strip()
+    provider = provider.strip()
+    checked_at = checked_at.strip() if checked_at else f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z"
+    if _looks_like_template_placeholder(checked_by) or _looks_like_template_placeholder(checked_at):
+        raise ValueError("checked_by and checked_at must be concrete non-template values")
+
+    credit = _positive_finite_number(available_credit_usd)
+    if credit is None:
+        raise ValueError("available_credit_usd must be a positive finite number")
+
+    contract_error, contract = _load_sample_plan_contract()
+    if contract_error or contract is None:
+        raise ValueError(contract_error or "sample plan contract is unavailable")
+    minimum_required = _positive_finite_number(contract["limits"].get("max_total_cost_usd"))
+    if minimum_required is None:
+        raise ValueError("sample plan contract max_total_cost_usd must be positive")
+    if credit < minimum_required:
+        raise ValueError("available_credit_usd must cover the authorized-live sample plan budget")
+
+    return {
+        "template_only": False,
+        "readiness_id": _account_readiness_id(checked_by, checked_at, provider, credit),
+        "scope": ACCOUNT_READINESS_SCOPE,
+        "evidence_level": "L3-production-read-only",
+        "no_provider_call": True,
+        "provider": provider,
+        "checked_by": checked_by,
+        "checked_at": checked_at,
+        "provider_dashboard_balance_confirmed": True,
+        "api_key_configured_in_runtime_env": True,
+        "api_key_secret_not_recorded": True,
+        "available_credit_usd": credit,
+        "minimum_required_credit_usd": minimum_required,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
+        "account_readiness_origin": "operator_observed_provider_dashboard",
     }
 
 
@@ -527,6 +581,124 @@ def _check_sample_plan_contract(approval_payload: Mapping[str, Any] | None) -> P
     )
 
 
+def _check_provider_account_readiness(
+    path: Path | None,
+    approval_payload: Mapping[str, Any] | None,
+) -> PreflightCheck:
+    if approval_payload is None:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="passing approval record is required before provider account readiness can be evaluated",
+        )
+    if path is None:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail=f"{ACCOUNT_READINESS_RECORD_ENV} must point to a private provider account readiness record",
+            evidence_refs=[ACCOUNT_READINESS_RECORD_ENV],
+        )
+    if not path.exists():
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness record path does not exist",
+            evidence_refs=[str(path)],
+        )
+    if not path.is_file():
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness record path must be a JSON file",
+            evidence_refs=[str(path)],
+        )
+
+    try:
+        payload = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness record must be valid JSON",
+            evidence_refs=[str(path)],
+        )
+    if not isinstance(payload, Mapping):
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness record must be a JSON object",
+            evidence_refs=[str(path)],
+        )
+    if payload.get("template_only") is True:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness template_only must be false after manual dashboard check",
+            evidence_refs=[str(path)],
+        )
+
+    expected = {
+        "scope": ACCOUNT_READINESS_SCOPE,
+        "evidence_level": "L3-production-read-only",
+        "no_provider_call": True,
+        "provider_dashboard_balance_confirmed": True,
+        "api_key_configured_in_runtime_env": True,
+        "api_key_secret_not_recorded": True,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
+    }
+    missing_or_wrong = [key for key, value in expected.items() if payload.get(key) != value]
+    if missing_or_wrong:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail=f"provider account readiness record missing required fields: {', '.join(missing_or_wrong)}",
+            evidence_refs=[str(path)],
+        )
+
+    provider = _approval_string(approval_payload, "provider")
+    if _approval_string(payload, "provider") != provider:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail=f"provider account readiness record must match approved provider {provider}",
+            evidence_refs=[str(path)],
+        )
+
+    if _looks_like_template_placeholder(payload.get("checked_by")) or _looks_like_template_placeholder(payload.get("checked_at")):
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness requires concrete checked_by and checked_at",
+            evidence_refs=[str(path)],
+        )
+
+    available_credit = _positive_finite_number(payload.get("available_credit_usd"))
+    required_credit = _positive_finite_number(payload.get("minimum_required_credit_usd"))
+    approved_max_total = _approval_nested_float(approval_payload, "budget_stop_loss", "max_total_cost_usd")
+    if available_credit is None or required_credit is None or approved_max_total is None:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness requires positive credit fields and approved max total cost",
+            evidence_refs=[str(path)],
+        )
+    if available_credit < required_credit or available_credit < approved_max_total:
+        return PreflightCheck(
+            name="provider_account_readiness",
+            status="block",
+            detail="provider account readiness available_credit_usd must cover required and approved smoke budget",
+            evidence_refs=[str(path)],
+        )
+
+    return PreflightCheck(
+        name="provider_account_readiness",
+        status="pass",
+        detail=f"provider account readiness is manually confirmed for {provider} with no API key recorded",
+        evidence_refs=[str(path), str(payload.get("readiness_id", "")), ACCOUNT_READINESS_RECORD_ENV],
+    )
+
+
 def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | None) -> PreflightCheck:
     profiles = list_provider_prompt_profiles()
     provider = _approval_string(approval_payload, "provider")
@@ -847,6 +1019,13 @@ def _approval_id(approved_by: str, approved_at: str, provider: str, model: str, 
         f"{approved_by}|{approved_at}|{provider}|{model}|{budget_limit}".encode(),
     ).hexdigest()[:12]
     return f"c21-token-smoke-approval-{digest}"
+
+
+def _account_readiness_id(checked_by: str, checked_at: str, provider: str, available_credit_usd: float) -> str:
+    digest = hashlib.sha256(
+        f"{checked_by}|{checked_at}|{provider}|{available_credit_usd:.2f}".encode(),
+    ).hexdigest()[:12]
+    return f"c21-token-smoke-account-readiness-{digest}"
 
 
 def _check_job_ledger_readiness() -> PreflightCheck:

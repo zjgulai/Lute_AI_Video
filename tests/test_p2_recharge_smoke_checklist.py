@@ -35,6 +35,7 @@ def _run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Com
             "RUN_TOKEN_SMOKE",
             "CONFIRM_P2_TOKEN_SMOKE",
             "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD",
+            "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD",
         }
     }
     if env:
@@ -67,6 +68,7 @@ def test_execute_requires_double_confirmation_before_real_smoke():
         "API_KEY": "prod-api-key",
         "PLAYWRIGHT_API_KEY": "prod-api-key",
         "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": "/private/approval.json",
+        "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD": "/private/account-readiness.json",
         "POYO_API_KEY": "poyo-key",
         "DEEPSEEK_API_KEY": "deepseek-key",
         "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -90,6 +92,7 @@ def test_execute_rejects_demo_key_even_when_confirmed():
             "API_KEY": DEMO_KEY,
             "PLAYWRIGHT_API_KEY": DEMO_KEY,
             "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": "/private/approval.json",
+            "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD": "/private/account-readiness.json",
             "POYO_API_KEY": "poyo-key",
             "DEEPSEEK_API_KEY": "deepseek-key",
             "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -127,6 +130,7 @@ def test_execute_runs_preflight_before_any_token_smoke_command():
             "API_KEY": "prod-api-key",
             "PLAYWRIGHT_API_KEY": "prod-api-key",
             "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD": str(APPROVAL_TEMPLATE),
+            "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD": "/private/account-readiness.json",
             "POYO_API_KEY": "poyo-key",
             "DEEPSEEK_API_KEY": "deepseek-key",
             "SILICONFLOW_API_KEY": "siliconflow-key",
@@ -159,8 +163,11 @@ def test_runbook_documents_recharge_checklist_and_is_link_checked():
     for token in [
         "scripts/p2_recharge_smoke_checklist.py",
         "scripts/commercial_token_smoke_preflight.py",
+        "scripts/build_provider_account_readiness_record.py",
         "configs/authorized-live-token-smoke-approval-template.json",
         "AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD",
+        "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD",
+        "AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD",
         "CONFIRM_P2_TOKEN_SMOKE=1",
         "RUN_TOKEN_SMOKE=1",
         "POYO_API_KEY",

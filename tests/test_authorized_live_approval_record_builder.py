@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 from src.pipeline.token_smoke_preflight import (
+    ACCOUNT_READINESS_RECORD_ENV,
+    ACCOUNT_READINESS_SCOPE,
     APPROVAL_RECORD_ENV,
     APPROVAL_SCOPE,
     APPROVAL_STATEMENT_TEMPLATE,
@@ -21,6 +23,7 @@ SCRIPT_PATH = REPO_ROOT / "scripts" / "build_authorized_live_approval_record.py"
 
 def test_builder_writes_private_record_that_preflight_accepts(tmp_path: Path):
     output_path = tmp_path / "authorized-live-approval.json"
+    account_readiness = _write_account_readiness_record(tmp_path)
     statement = _approval_statement()
 
     result = subprocess.run(
@@ -53,6 +56,7 @@ def test_builder_writes_private_record_that_preflight_accepts(tmp_path: Path):
 
     env = _ready_env()
     env[APPROVAL_RECORD_ENV] = str(output_path)
+    env[ACCOUNT_READINESS_RECORD_ENV] = str(account_readiness)
     report = build_token_smoke_preflight_report(env=env)
 
     assert report.blocked is False
@@ -143,3 +147,26 @@ def _ready_env() -> dict[str, str]:
     for key_name in REQUIRED_API_KEY_ENVS:
         env[key_name] = f"sk_fixture_secret_{key_name.lower()}"
     return env
+
+
+def _write_account_readiness_record(tmp_path: Path) -> Path:
+    path = tmp_path / "provider-account-readiness.json"
+    payload = {
+        "template_only": False,
+        "readiness_id": "account_readiness_builder_fixture",
+        "scope": ACCOUNT_READINESS_SCOPE,
+        "evidence_level": "L3-production-read-only",
+        "no_provider_call": True,
+        "provider": "poyo",
+        "checked_by": "user",
+        "checked_at": "2026-06-06T00:00:00Z",
+        "provider_dashboard_balance_confirmed": True,
+        "api_key_configured_in_runtime_env": True,
+        "api_key_secret_not_recorded": True,
+        "available_credit_usd": 1.0,
+        "minimum_required_credit_usd": 1.0,
+        "provider_revalidation_ref": "configs/poyo-current-provider-revalidation-contract.json",
+        "sample_plan_ref": SAMPLE_PLAN_REF,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    return path
