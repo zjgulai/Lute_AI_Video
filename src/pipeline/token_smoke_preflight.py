@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -109,6 +110,95 @@ def build_token_smoke_preflight_report(
         blocked=blocked,
         checks=checks,
     )
+
+
+def build_authorized_live_approval_payload(
+    *,
+    approved_by: str,
+    approval_statement: str,
+    approved_at: str | None = None,
+    provider: str = "poyo",
+    model: str = "seedance-2",
+    budget_limit: str = "$1.00",
+    budget_limit_usd: float = 1.0,
+) -> dict[str, Any]:
+    """Build a private approval record payload without inspecting keys or calling providers."""
+    approved_by = approved_by.strip()
+    provider = provider.strip()
+    model = model.strip()
+    budget_limit = budget_limit.strip()
+    approved_at = approved_at.strip() if approved_at else f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z"
+
+    if _looks_like_template_placeholder(approved_by) or _looks_like_template_placeholder(approved_at):
+        raise ValueError("approved_by and approved_at must be concrete non-template values")
+
+    budget_value = _positive_finite_number(budget_limit_usd)
+    if budget_value is None:
+        raise ValueError("budget_limit_usd must be a positive finite number")
+
+    expected_statement = APPROVAL_STATEMENT_TEMPLATE.format(
+        provider=provider,
+        model=model,
+        budget_limit=budget_limit,
+    )
+    if approval_statement != expected_statement:
+        raise ValueError("approval_statement must exactly match the C21 authorization statement")
+
+    contract_error, contract = _load_sample_plan_contract()
+    if contract_error or contract is None:
+        raise ValueError(contract_error or "sample plan contract is unavailable")
+    if not _contract_allows_provider_model(contract, provider, model):
+        raise ValueError(f"sample plan contract does not allow {provider}/{model}")
+
+    limits = contract["limits"]
+    max_total_cost = _positive_finite_number(limits.get("max_total_cost_usd"))
+    if max_total_cost is None:
+        raise ValueError("sample plan contract max_total_cost_usd must be positive")
+    if budget_value < max_total_cost:
+        raise ValueError("budget_limit_usd must cover the sample plan max_total_cost_usd")
+
+    stop_loss_policy = contract.get("stop_loss_policy")
+    if not isinstance(stop_loss_policy, Mapping):
+        raise ValueError("sample plan contract requires stop_loss_policy")
+
+    scenarios = _core_sample_scenarios(contract, provider, model)
+    if not scenarios:
+        raise ValueError(f"sample plan contract has no core samples for {provider}/{model}")
+
+    return {
+        "template_only": False,
+        "approval_id": _approval_id(approved_by, approved_at, provider, model, budget_limit),
+        "scope": APPROVAL_SCOPE,
+        "evidence_level": "L4-authorized-live",
+        "provider_calls_allowed": True,
+        "approved_by": approved_by,
+        "approved_at": approved_at,
+        "provider": provider,
+        "model": model,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
+        "budget_limit": budget_limit,
+        "budget_limit_usd": budget_value,
+        "sample_plan": {
+            "max_sample_count": int(limits["max_sample_count"]),
+            "max_provider_calls": int(limits["max_provider_calls"]),
+            "scenarios": scenarios,
+            "toolbox_tool_ids": [],
+            "s5_requires_separate_confirmation": True,
+        },
+        "budget_stop_loss": {
+            "max_total_cost_usd": float(limits["max_total_cost_usd"]),
+            "per_job_cost_ceiling_usd": float(limits["per_job_cost_ceiling_usd"]),
+            "max_retry_count": int(limits["max_retry_count"]),
+            "stop_on_first_failure": stop_loss_policy.get("stop_on_first_failure") is True,
+            "halt_on_rate_limit": stop_loss_policy.get("halt_on_rate_limit") is True,
+            "halt_on_quota_error": stop_loss_policy.get("halt_on_quota_error") is True,
+            "halt_on_content_rejection": stop_loss_policy.get("halt_on_content_rejection") is True,
+            "halt_on_missing_artifact": stop_loss_policy.get("halt_on_missing_artifact") is True,
+        },
+        "approval_statement": approval_statement,
+        "approval_origin": "operator_supplied_exact_statement",
+    }
 
 
 def _check_run_token_smoke(env: Mapping[str, str]) -> PreflightCheck:
@@ -630,6 +720,25 @@ def _sample_plan_scope_violations(sample_plan: Mapping[str, Any], contract: Mapp
     return violations
 
 
+def _core_sample_scenarios(contract: Mapping[str, Any], provider: str, model: str) -> list[str]:
+    scenarios = []
+    seen = set()
+    provider_key = provider.lower()
+    model_key = model.lower()
+    for sample in contract.get("core_video_samples", []):
+        if not isinstance(sample, Mapping):
+            continue
+        if str(sample.get("provider", "")).lower() != provider_key:
+            continue
+        if str(sample.get("model", "")).lower() != model_key:
+            continue
+        scenario = str(sample.get("scenario", "")).strip()
+        if scenario and scenario not in seen:
+            scenarios.append(scenario)
+            seen.add(scenario)
+    return scenarios
+
+
 def _contract_supports_model(contract: Mapping[str, Any], model: str) -> bool:
     model_key = model.lower()
     for item in contract.get("models", []):
@@ -731,6 +840,13 @@ def _match_provider_profile(
         if profile.provider.lower() == provider_key and profile.model_family.lower() in model_key:
             return profile
     return None
+
+
+def _approval_id(approved_by: str, approved_at: str, provider: str, model: str, budget_limit: str) -> str:
+    digest = hashlib.sha256(
+        f"{approved_by}|{approved_at}|{provider}|{model}|{budget_limit}".encode(),
+    ).hexdigest()[:12]
+    return f"c21-token-smoke-approval-{digest}"
 
 
 def _check_job_ledger_readiness() -> PreflightCheck:

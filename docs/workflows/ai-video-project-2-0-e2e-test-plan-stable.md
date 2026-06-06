@@ -105,6 +105,7 @@ git diff --check
 ```bash
 .venv/bin/python scripts/commercial_token_smoke_preflight.py --pretty
 .venv/bin/python scripts/p2_recharge_smoke_checklist.py
+.venv/bin/python scripts/build_authorized_live_approval_record.py --print-required-statement --approved-by <operator-name> --approval-statement ignored
 .venv/bin/python -m pytest tests/test_token_smoke_preflight.py
 ```
 
@@ -118,6 +119,7 @@ git diff --check
 - `scripts/p2_recharge_smoke_checklist.py --execute` 必须自动执行 preflight；preflight blocked 时不得启动 `smoke.sh` 或 Playwright。
 - approval record 必须绑定 `configs/poyo-current-provider-revalidation-contract.json`，否则 provider capability evidence 必须 blocked。
 - approval record 必须绑定 `configs/authorized-live-token-smoke-sample-plan-contract.json`，否则 sample plan contract 必须 blocked。
+- 私有 approval record 必须由 `scripts/build_authorized_live_approval_record.py` 或等价校验流程生成；泛化确认文本不得提升为 L4 授权。
 - provider job ledger 只暴露 prompt hash、artifact refs、status，不暴露 prompt payload 或品牌资产原文。
 - C1-C8 不生成 approved brand token。
 
@@ -181,6 +183,15 @@ npm run e2e:prod
 - no-token preflight 已通过。
 - 生产日志和 artifact 目录可检查。
 
+私有 approval record 生成入口：
+
+```bash
+python scripts/build_authorized_live_approval_record.py \
+  --approved-by <operator-name> \
+  --approval-statement '我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 poyo/seedance-2，预算上限是 $1.00。' \
+  --output tmp/outputs/authorized-live-token-smoke-approval.json
+```
+
 统一入口：
 
 ```bash
@@ -236,6 +247,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 7. [x] 强制 P2 充值后统一入口在任何 token-consuming 命令前执行 no-token preflight。实现文件：`scripts/p2_recharge_smoke_checklist.py`、`tests/test_p2_recharge_smoke_checklist.py`。
 8. [x] 增加 poyo 当前公开文档重验契约，并绑定到真实 smoke approval record/preflight。实现文件：`configs/poyo-current-provider-revalidation-contract.json`、`src/pipeline/token_smoke_preflight.py`。
 9. [x] 增加授权真实 smoke 最小样本计划契约，并绑定到 approval record/preflight。实现文件：`configs/authorized-live-token-smoke-sample-plan-contract.json`、`src/pipeline/token_smoke_preflight.py`。
+10. [x] 增加私有 authorized-live approval record 构建器，要求精确授权句并拒绝写入正式目录。实现文件：`scripts/build_authorized_live_approval_record.py`、`tests/test_authorized_live_approval_record_builder.py`。
 
 ## 阶段验收
 
@@ -247,6 +259,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - P2 充值后统一入口 blocked 时不得启动真实 smoke 子进程。
 - L2.5 provider 公开文档重验已完成且 approval record 绑定当前 revalidation ref。
 - L2.5 authorized-live sample plan 已完成且 approval record 绑定当前 sample plan ref。
+- 私有 approval record 构建器已验证，且模板或泛化确认不会绕过 preflight。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 

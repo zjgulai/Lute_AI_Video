@@ -39,13 +39,31 @@ python scripts/p2_recharge_smoke_checklist.py
 同时准备授权记录：
 
 - 模板：`configs/authorized-live-token-smoke-approval-template.json`
-- 私有授权记录路径：通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向
+- 构建器：`scripts/build_authorized_live_approval_record.py`
+- 私有授权记录路径：通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向，必须放在 `tmp/` 或仓库外
 - 授权记录必须将 `template_only` 改为 `false`
 - 授权记录必须包含 `provider_revalidation_ref=configs/poyo-current-provider-revalidation-contract.json`
 - 授权记录必须包含 `sample_plan_ref=configs/authorized-live-token-smoke-sample-plan-contract.json`
 - 授权记录必须包含 `sample_plan` 与 `budget_stop_loss`
 - `budget_stop_loss.max_retry_count` 只能是 `0` 或 `1`
 - `budget_stop_loss.stop_on_first_failure`、`halt_on_rate_limit`、`halt_on_quota_error`、`halt_on_content_rejection`、`halt_on_missing_artifact` 必须为 `true`
+
+先用构建器打印本轮必须逐字确认的授权句：
+
+```bash
+python scripts/build_authorized_live_approval_record.py --print-required-statement \
+  --approved-by <operator-name> \
+  --approval-statement ignored
+```
+
+用户在当前会话提供完全一致的授权句后，再生成私有授权记录：
+
+```bash
+python scripts/build_authorized_live_approval_record.py \
+  --approved-by <operator-name> \
+  --approval-statement '我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 poyo/seedance-2，预算上限是 $1.00。' \
+  --output tmp/outputs/authorized-live-token-smoke-approval.json
+```
 
 执行真实 smoke 必须同时设置两个确认开关：
 
@@ -83,6 +101,7 @@ python scripts/commercial_token_smoke_preflight.py --pretty
 - 没有 `CONFIRM_P2_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有 `RUN_TOKEN_SMOKE=1` 时拒绝执行。
 - 没有通过 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD` 指向授权记录时不得执行。
+- 授权记录必须由构建器或等价校验流程生成；`同意下一步` 这类泛化确认不构成 L4 授权。
 - 授权记录模板本身会被 preflight 阻断，不能直接作为正式授权记录。
 - 授权记录没有绑定当前 poyo provider revalidation contract 时不得执行。
 - 授权记录没有绑定当前 authorized-live sample plan contract 时不得执行。

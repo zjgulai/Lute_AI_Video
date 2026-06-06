@@ -32,6 +32,7 @@
   "approval_statement": "我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 是 poyo/seedance-2，预算上限是 $1.00。",
   "operator_notes": [
     "Do not put provider API keys in this file.",
+    "Prefer scripts/build_authorized_live_approval_record.py to create the private approval record after exact user authorization.",
     "Keep template_only=true until the user gives the exact authorization statement in the active session.",
     "Keep provider_revalidation_ref bound to the current poyo public-doc revalidation contract unless that contract is refreshed first.",
     "Keep sample_plan_ref bound to the current authorized-live token smoke sample plan unless the plan is refreshed first.",
