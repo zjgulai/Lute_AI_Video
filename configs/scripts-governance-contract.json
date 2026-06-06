@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-05",
+  "updated": "2026-06-07",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
@@ -27,6 +27,31 @@
       "path": "scripts/brand_token_intake.py",
       "status": "active_reusable",
       "reason": "Candidate-only brand token ledger intake utility."
+    },
+    {
+      "path": "scripts/build_authorized_live_approval_record.py",
+      "status": "active_reusable",
+      "reason": "No-token private authorized-live approval record builder."
+    },
+    {
+      "path": "scripts/build_authorized_live_smoke_packet.py",
+      "status": "active_reusable",
+      "reason": "No-token authorized-live launch packet builder."
+    },
+    {
+      "path": "scripts/build_authorized_live_test_plan_readiness_report.py",
+      "status": "active_reusable",
+      "reason": "No-token authorized-live test-plan readiness report builder."
+    },
+    {
+      "path": "scripts/build_pending_review_asset_packet.py",
+      "status": "active_reusable",
+      "reason": "No-token pending-review asset packet builder for authorized-live smoke outputs."
+    },
+    {
+      "path": "scripts/build_provider_account_readiness_record.py",
+      "status": "active_reusable",
+      "reason": "No-token private provider account readiness record builder."
     },
     {
       "path": "scripts/commercial_token_smoke_preflight.py",

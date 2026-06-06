@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-06-05
+updated: 2026-06-07
 owner: self
 source: human+ai
 ---
@@ -37,6 +37,11 @@ source: human+ai
 | `scripts/check_step_order_consistency.py` | active_reusable |
 | `scripts/brand_review_audit.py` | active_reusable |
 | `scripts/brand_token_intake.py` | active_reusable |
+| `scripts/build_authorized_live_approval_record.py` | active_reusable |
+| `scripts/build_authorized_live_smoke_packet.py` | active_reusable |
+| `scripts/build_authorized_live_test_plan_readiness_report.py` | active_reusable |
+| `scripts/build_pending_review_asset_packet.py` | active_reusable |
+| `scripts/build_provider_account_readiness_record.py` | active_reusable |
 | `scripts/commercial_token_smoke_preflight.py` | active_reusable |
 | `scripts/create_admin.py` | active_reusable |
 | `scripts/dev_start.py` | active_reusable |

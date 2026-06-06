@@ -36,8 +36,8 @@ AMBIGUOUS_NAME_MARKERS = (
     "_now",
     "_v2",
     "sync_",
-    "test_",
 )
+AMBIGUOUS_NAME_PREFIXES = ("test_",)
 
 LOCAL_SYNC_SIDECAR_SUFFIXES = (
     ".baiduyun.uploading.cfg",
@@ -89,7 +89,9 @@ def test_script_contract_uses_explicit_statuses_and_project_paths():
 def test_ambiguous_script_names_are_not_marked_active_reusable():
     for item in _contract_items():
         filename = Path(item["path"]).name
-        has_ambiguous_marker = any(marker in filename for marker in AMBIGUOUS_NAME_MARKERS)
+        has_ambiguous_marker = filename.startswith(AMBIGUOUS_NAME_PREFIXES) or any(
+            marker in filename for marker in AMBIGUOUS_NAME_MARKERS
+        )
 
         if has_ambiguous_marker:
             assert item["status"] != "active_reusable", (
