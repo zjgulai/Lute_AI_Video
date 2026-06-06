@@ -26,6 +26,7 @@ EXECUTE_ENV = "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE"
 HarnessMode = Literal["disabled", "dry_run", "execute"]
 HarnessStatus = Literal["disabled", "dry_run_ready", "blocked", "submitted"]
 ProviderSubmitter = Callable[[MediaJobSpec], Mapping[str, Any]]
+ProviderSubmitterFactory = Callable[[], ProviderSubmitter | None]
 
 
 class AuthorizedLiveArtifactRef(BaseModel):
@@ -77,6 +78,7 @@ def run_authorized_live_harness(
     env: Mapping[str, str] | None = None,
     approval_record_path: str | Path | None = None,
     submitter: ProviderSubmitter | None = None,
+    submitter_factory: ProviderSubmitterFactory | None = None,
 ) -> AuthorizedLiveHarnessReport:
     """Run the C9 harness gate without implicit provider calls."""
     env = os.environ if env is None else env
@@ -132,7 +134,11 @@ def run_authorized_live_harness(
             preflight=preflight,
         )
 
-    if submitter is None:
+    configured_submitter = submitter
+    if configured_submitter is None and submitter_factory is not None:
+        configured_submitter = submitter_factory()
+
+    if configured_submitter is None:
         return AuthorizedLiveHarnessReport(
             harness_id=harness_id,
             mode=mode,
@@ -145,7 +151,7 @@ def run_authorized_live_harness(
             preflight=preflight,
         )
 
-    submitted_records, response_refs = _submit_job_specs(job_specs, submitter)
+    submitted_records, response_refs = _submit_job_specs(job_specs, configured_submitter)
     return AuthorizedLiveHarnessReport(
         harness_id=harness_id,
         mode=mode,

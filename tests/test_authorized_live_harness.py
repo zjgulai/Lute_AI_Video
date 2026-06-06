@@ -152,6 +152,62 @@ def test_execute_mode_blocks_when_submitter_is_not_configured(tmp_path: Path):
     assert report.artifact_manifest is not None
 
 
+def test_execute_mode_does_not_build_submitter_factory_when_preflight_blocks(tmp_path: Path):
+    calls: list[str] = []
+    env = {RUN_TOKEN_SMOKE_ENV: "1", EXECUTE_ENV: "1"}
+
+    report = run_authorized_live_harness(
+        mode="execute",
+        env=env,
+        submitter_factory=lambda: calls.append("built") or None,
+    )
+
+    assert report.status == "blocked"
+    assert report.provider_call_executed is False
+    assert calls == []
+
+
+def test_execute_mode_blocks_when_submitter_factory_returns_none(tmp_path: Path):
+    calls: list[str] = []
+    approval_record = _write_approval_record(tmp_path)
+    env = _ready_env(approval_record)
+    env[EXECUTE_ENV] = "1"
+
+    report = run_authorized_live_harness(
+        mode="execute",
+        env=env,
+        submitter_factory=lambda: calls.append("built") or None,
+    )
+
+    assert report.status == "blocked"
+    assert report.provider_call_executed is False
+    assert report.blocked_reasons == ["provider submitter is not configured"]
+    assert calls == ["built"]
+
+
+def test_execute_mode_uses_submitter_factory_after_preflight_and_execute_gate(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path)
+    env = _ready_env(approval_record)
+    env[EXECUTE_ENV] = "1"
+    factory_calls: list[str] = []
+    submitter_calls: list[str] = []
+
+    def submitter(spec: Any) -> dict[str, str]:
+        submitter_calls.append(spec.job_id)
+        return {"provider_job_id": f"provider:{spec.job_id}"}
+
+    report = run_authorized_live_harness(
+        mode="execute",
+        env=env,
+        submitter_factory=lambda: factory_calls.append("built") or submitter,
+    )
+
+    assert report.status == "submitted"
+    assert report.provider_call_executed is True
+    assert factory_calls == ["built"]
+    assert len(submitter_calls) == 4
+
+
 def test_execute_mode_with_submitter_runs_asset_pack_once_in_order_without_retry(tmp_path: Path):
     approval_record = _write_approval_record(tmp_path)
     env = _ready_env(approval_record)
@@ -192,6 +248,15 @@ def test_cli_default_is_disabled_and_json_parseable():
     payload = json.loads(result.stdout)
     assert payload["status"] == "disabled"
     assert payload["provider_call_executed"] is False
+
+
+def test_cli_source_has_explicit_poyo_http_submitter_opt_in():
+    source = SCRIPT_PATH.read_text()
+
+    assert "--enable-poyo-http-submitter" in source
+    assert "build_authorized_live_poyo_runtime_submitter" in source
+    assert "PoyoClient" not in source
+    assert "httpx" not in source
 
 
 def _ready_env(approval_record: Path) -> dict[str, str]:
