@@ -69,7 +69,8 @@ def test_default_packet_is_no_token_and_contains_exact_authorization_gate():
     assert packet["provider_model_scope"] == DEFAULT_AUTH_PROVIDER_MODEL_SCOPE
     assert packet["test_scope"] == DEFAULT_AUTH_TEST_SCOPE
     assert packet["budget_limit"] == DEFAULT_AUTH_BUDGET_LIMIT
-    assert "poyo/gpt-image-2 + poyo/seedance-2" in packet["required_authorization_statement"]
+    assert "poyo image + poyo Seedance" in packet["required_authorization_statement"]
+    assert packet["provider_model_scope"] == "poyo/gpt-image-2 + poyo/seedance-2"
     assert "Momcozy 消毒器" in packet["required_authorization_statement"]
     assert "--available-credit-usd 3.00" in " ".join(packet["record_build_commands"])
     assert "scripts/p2_recharge_smoke_checklist.py --execute" in packet["execute_command_preview"]

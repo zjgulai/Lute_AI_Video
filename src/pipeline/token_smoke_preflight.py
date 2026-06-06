@@ -40,9 +40,9 @@ DEFAULT_AUTH_TEST_SCOPE = "Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图
 DEFAULT_AUTH_BUDGET_LIMIT = "$3.00"
 DEFAULT_AUTH_BUDGET_LIMIT_USD = 3.0
 APPROVAL_STATEMENT_TEMPLATE = (
-    "我明确授权 C21 运行一次真实 token smoke，允许调用 provider，"
-    "使用的 provider/model 范围是 {provider_model_scope}，"
-    "测试范围是 {test_scope}，预算上限是 {budget_limit}。"
+    "我授权在生产环境 https://video.lute-tlz-dddd.top 使用 poyo image + poyo Seedance "
+    "执行 {test_scope}的真实调用 smoke，预算上限 {budget_limit}，自动重试 0，"
+    "不发布、不写入正式 brand token，产物只进入待审素材库。"
 )
 REQUIRED_API_KEY_ENVS = ("POYO_API_KEY", "DEEPSEEK_API_KEY", "SILICONFLOW_API_KEY")
 

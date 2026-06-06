@@ -76,7 +76,7 @@ python scripts/build_authorized_live_approval_record.py --print-required-stateme
 ```bash
 python scripts/build_authorized_live_approval_record.py \
   --approved-by <operator-name> \
-  --approval-statement '我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 范围是 poyo/gpt-image-2 + poyo/seedance-2，测试范围是 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频，预算上限是 $3.00。' \
+  --approval-statement '我授权在生产环境 https://video.lute-tlz-dddd.top 使用 poyo image + poyo Seedance 执行 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频的真实调用 smoke，预算上限 $3.00，自动重试 0，不发布、不写入正式 brand token，产物只进入待审素材库。' \
   --output tmp/outputs/authorized-live-token-smoke-approval.json
 ```
 

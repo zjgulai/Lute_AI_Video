@@ -89,7 +89,7 @@ Plan source: `docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implement
 To attempt `L4-authorized-live`, the user must first provide this exact statement with concrete values:
 
 ```text
-我明确授权 C21 运行一次真实 token smoke，允许调用 provider，使用的 provider/model 范围是 poyo/gpt-image-2 + poyo/seedance-2，测试范围是 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频，预算上限是 $3.00。
+我授权在生产环境 https://video.lute-tlz-dddd.top 使用 poyo image + poyo Seedance 执行 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频的真实调用 smoke，预算上限 $3.00，自动重试 0，不发布、不写入正式 brand token，产物只进入待审素材库。
 ```
 
 Then create an approval JSON pointed to by `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD`, create a private `AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD`, generate the no-token smoke packet, set `CONFIRM_P2_TOKEN_SMOKE=1` and `RUN_TOKEN_SMOKE=1`, provide non-demo production API keys plus required provider keys, and run the C21 preflight. Only after the preflight passes should `scripts/p2_recharge_smoke_checklist.py --execute` be used for the tiny provider call.

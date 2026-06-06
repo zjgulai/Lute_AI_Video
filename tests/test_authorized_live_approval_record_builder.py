@@ -97,6 +97,17 @@ def test_builder_rejects_loose_approval_statement(tmp_path: Path):
     assert not output_path.exists()
 
 
+def test_required_statement_locks_production_asset_review_boundary():
+    statement = _approval_statement()
+
+    assert "https://video.lute-tlz-dddd.top" in statement
+    assert "poyo image + poyo Seedance" in statement
+    assert "自动重试 0" in statement
+    assert "不发布" in statement
+    assert "不写入正式 brand token" in statement
+    assert "产物只进入待审素材库" in statement
+
+
 def test_builder_refuses_formal_repo_output_path():
     blocked_path = REPO_ROOT / "configs" / "should-not-write-approval.json"
 

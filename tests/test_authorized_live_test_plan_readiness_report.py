@@ -74,7 +74,8 @@ def test_default_report_is_ready_for_discussion_but_not_live_execution():
     assert len(report["sample_plan"]["core_asset_samples"]) == 3
     assert report["sample_plan"]["core_video_samples"][0]["duration_seconds"] == 15
     assert report["provider_revalidation_summary"]["provider_revalidation_ref"] == PROVIDER_REVALIDATION_REF
-    assert "poyo/gpt-image-2 + poyo/seedance-2" in report["required_authorization_statement"]
+    assert "poyo image + poyo Seedance" in report["required_authorization_statement"]
+    assert report["sample_plan"]["provider_model_scope"] == "poyo/gpt-image-2 + poyo/seedance-2"
     assert "Momcozy 消毒器" in report["required_authorization_statement"]
     assert "sk_fixture_secret" not in result.stdout
 
