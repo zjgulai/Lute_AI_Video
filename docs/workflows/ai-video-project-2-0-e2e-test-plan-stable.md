@@ -106,6 +106,7 @@ git diff --check
 .venv/bin/python scripts/commercial_token_smoke_preflight.py --pretty
 .venv/bin/python scripts/p2_recharge_smoke_checklist.py
 .venv/bin/python scripts/build_authorized_live_smoke_packet.py --include-preflight
+.venv/bin/python scripts/build_authorized_live_test_plan_readiness_report.py
 .venv/bin/python scripts/build_authorized_live_approval_record.py --print-required-statement --approved-by <operator-name> --approval-statement ignored
 .venv/bin/python scripts/build_provider_account_readiness_record.py --checked-by <operator-name> --available-credit-usd 1.00 --output tmp/outputs/poyo-account-readiness.json
 .venv/bin/python -m pytest tests/test_token_smoke_preflight.py
@@ -124,6 +125,7 @@ git diff --check
 - 私有 approval record 必须由 `scripts/build_authorized_live_approval_record.py` 或等价校验流程生成；泛化确认文本不得提升为 L4 授权。
 - 私有 provider account readiness record 必须由 `scripts/build_provider_account_readiness_record.py` 或等价校验流程生成；余额不足或缺失时必须 blocked。
 - `scripts/build_authorized_live_smoke_packet.py` 只生成 no-token 启动包和 preflight 投影，不执行真实 smoke，不提升证据等级。
+- `scripts/build_authorized_live_test_plan_readiness_report.py` 只证明可以讨论正式测试计划；默认 `ready_for_test_plan_discussion=true` 但 `ready_for_live_execution=false`。
 - provider job ledger 只暴露 prompt hash、artifact refs、status，不暴露 prompt payload 或品牌资产原文。
 - C1-C8 不生成 approved brand token。
 
@@ -262,6 +264,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 10. [x] 增加私有 authorized-live approval record 构建器，要求精确授权句并拒绝写入正式目录。实现文件：`scripts/build_authorized_live_approval_record.py`、`tests/test_authorized_live_approval_record_builder.py`。
 11. [x] 增加私有 provider account readiness 构建器，要求人工余额确认并绑定到 preflight。实现文件：`scripts/build_provider_account_readiness_record.py`、`tests/test_provider_account_readiness_record_builder.py`。
 12. [x] 增加 no-token authorized-live smoke 启动包，并串联到 P2 recharge checklist dry-run。实现文件：`scripts/build_authorized_live_smoke_packet.py`、`tests/test_authorized_live_smoke_packet_builder.py`、`scripts/p2_recharge_smoke_checklist.py`。
+13. [x] 增加正式测试计划讨论 readiness report，区分可讨论测试计划与可执行真实调用。实现文件：`scripts/build_authorized_live_test_plan_readiness_report.py`、`tests/test_authorized_live_test_plan_readiness_report.py`。
 
 ## 阶段验收
 
@@ -276,6 +279,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - 私有 approval record 构建器已验证，且模板或泛化确认不会绕过 preflight。
 - 私有 provider account readiness 构建器已验证，且余额不足、缺失或记录 API key 原文不会绕过 preflight。
 - no-token authorized-live smoke 启动包已验证，且默认 P2 recharge checklist dry-run 会提示先生成启动包。
+- no-token test-plan readiness report 已验证，且能明确给出“可讨论测试计划 / 不可执行真实调用”的分层结论。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 
