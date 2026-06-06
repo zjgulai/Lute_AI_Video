@@ -58,12 +58,36 @@ def test_dry_run_passes_after_preflight_without_provider_call(tmp_path: Path):
     assert report.preflight is not None
     assert report.preflight.provider_call_allowed is True
     assert report.job_spec is not None
+    assert len(report.job_specs) == 4
+    assert report.job_spec == report.job_specs[-1]
     assert report.job_spec.provider == "poyo"
     assert report.job_spec.model == "seedance-2"
     assert report.job_spec.scenario == "toolbox"
     assert report.job_spec.step_name == "momcozy_sterilizer_asset_video"
     assert report.job_spec.brand_bundle_id == "bundle_momcozy_candidate"
     assert report.job_spec.cost_ceiling_usd == 2.5
+    assert [spec.model for spec in report.job_specs[:3]] == ["gpt-image-2", "gpt-image-2", "gpt-image-2"]
+    assert [spec.step_name for spec in report.job_specs] == [
+        "momcozy_sterilizer_main_45_image",
+        "momcozy_sterilizer_uv_benefit_image",
+        "momcozy_sterilizer_kitchen_scene_image",
+        "momcozy_sterilizer_asset_video",
+    ]
+    assert report.artifact_manifest is not None
+    assert report.artifact_manifest.asset_status == "pending_review"
+    assert report.artifact_manifest.image_count == 3
+    assert report.artifact_manifest.video_count == 1
+    assert report.artifact_manifest.delivery_accepted is False
+    assert report.artifact_manifest.publish_allowed is False
+    assert report.artifact_manifest.approved_brand_token_write is False
+    assert len(report.artifact_manifest.artifacts) == 4
+    assert report.job_spec.reference_asset_ids == report.artifact_manifest.video_reference_asset_refs
+    assert len(report.artifact_manifest.video_reference_asset_refs) == 3
+    assert all(ref.startswith("artifact://authorized-live/") for ref in report.artifact_manifest.video_reference_asset_refs)
+    assert len(report.job_records) == 4
+    assert all(record.status == "prepared" for record in report.job_records)
+    assert all(record.delivery_accepted is False for record in report.job_records)
+    assert all(record.publish_allowed is False for record in report.job_records)
     assert calls == []
 
 
@@ -94,6 +118,7 @@ def test_dry_run_job_spec_uses_approval_provider_model_and_per_job_budget(tmp_pa
     assert report.job_spec.provider == "poyo"
     assert report.job_spec.model == "seedance-2"
     assert report.job_spec.cost_ceiling_usd == 2.0
+    assert [spec.cost_ceiling_usd for spec in report.job_specs] == [2.0, 2.0, 2.0, 2.0]
 
 
 def test_execute_mode_requires_extra_execute_flag_after_preflight(tmp_path: Path):
@@ -123,6 +148,35 @@ def test_execute_mode_blocks_when_submitter_is_not_configured(tmp_path: Path):
     assert report.status == "blocked"
     assert report.provider_call_executed is False
     assert report.blocked_reasons == ["provider submitter is not configured"]
+    assert len(report.job_specs) == 4
+    assert report.artifact_manifest is not None
+
+
+def test_execute_mode_with_submitter_runs_asset_pack_once_in_order_without_retry(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path)
+    env = _ready_env(approval_record)
+    env[EXECUTE_ENV] = "1"
+    calls: list[Any] = []
+
+    def submitter(spec: Any) -> dict[str, str]:
+        calls.append(spec)
+        return {"provider_job_id": f"provider:{spec.job_id}"}
+
+    report = run_authorized_live_harness(mode="execute", env=env, submitter=submitter)
+
+    assert report.status == "submitted"
+    assert report.provider_call_executed is True
+    assert len(calls) == 4
+    assert len({spec.job_id for spec in calls}) == 4
+    assert [spec.model for spec in calls[:3]] == ["gpt-image-2", "gpt-image-2", "gpt-image-2"]
+    assert calls[-1].model == "seedance-2"
+    assert report.artifact_manifest is not None
+    assert calls[-1].reference_asset_ids == report.artifact_manifest.video_reference_asset_refs
+    assert report.provider_response_refs == {spec.job_id: f"provider:{spec.job_id}" for spec in calls}
+    assert len(report.job_records) == 4
+    assert all(record.status == "submitted" for record in report.job_records)
+    assert all(record.delivery_accepted is False for record in report.job_records)
+    assert all(record.publish_allowed is False for record in report.job_records)
 
 
 def test_cli_default_is_disabled_and_json_parseable():
