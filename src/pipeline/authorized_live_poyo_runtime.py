@@ -31,7 +31,10 @@ class UrlOpenResponse(Protocol):
     def read(self) -> bytes: ...
 
 
-UrlOpen = Callable[[request.Request, float], UrlOpenResponse]
+class UrlOpen(Protocol):
+    def __call__(self, http_request: request.Request, *, timeout: float) -> UrlOpenResponse: ...
+
+
 HttpClientFactory = Callable[[str], PoyoSubmitPollHttpClient]
 
 
@@ -81,7 +84,7 @@ class AuthorizedLivePoyoHttpClient:
         return self._request_json(http_request)
 
     def _request_json(self, http_request: request.Request) -> Mapping[str, Any]:
-        with self._urlopen(http_request, self._timeout_seconds) as response:
+        with self._urlopen(http_request, timeout=self._timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
         if not isinstance(payload, Mapping):
             raise ValueError("poyo HTTP response must be a JSON object")

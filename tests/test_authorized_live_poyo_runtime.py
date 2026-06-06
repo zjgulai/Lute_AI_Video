@@ -147,7 +147,7 @@ class _FakeUrlOpen:
         self.response = response
         self.requests: list[Any] = []
 
-    def __call__(self, http_request: Any, timeout: float) -> _FakeUrlOpenResponse:
+    def __call__(self, http_request: Any, *, timeout: float) -> _FakeUrlOpenResponse:
         self.requests.append(http_request)
         assert timeout == 90.0
         return _FakeUrlOpenResponse(self.response)
