@@ -43,7 +43,7 @@ def run_authorized_live_harness(
     submitter: ProviderSubmitter | None = None,
 ) -> AuthorizedLiveHarnessReport:
     """Run the C9 harness gate without implicit provider calls."""
-    env = env or os.environ
+    env = os.environ if env is None else env
     harness_id = f"authorized_live_harness_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
     if mode == "disabled":
         return AuthorizedLiveHarnessReport(

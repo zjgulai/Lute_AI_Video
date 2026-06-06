@@ -5,7 +5,7 @@ module: ai-video-2.0
 topic: toolbox-productization
 status: stable
 created: 2026-06-05
-updated: 2026-06-05
+updated: 2026-06-06
 owner: self
 source: human+ai
 related:
@@ -21,13 +21,13 @@ related:
 
 # AI Video 工具箱产品化实施计划
 
-> 状态边界：本文定义 `电商商品图`、`产品六视图`、`电商视觉图`、`数字人`、`故事版` 五个独立工具的后端与前端产品化实施顺序。它不表示这些工具已经完成，不授权真实 provider 调用，不生成 approved brand token，不改变 S1-S5 场景语义。
+> 状态边界：本文定义并追踪 `电商商品图`、`产品六视图`、`电商视觉图`、`数字人`、`故事版` 五个独立工具的后端与前端产品化实施顺序。当前代码已覆盖 T1-T9 的 L2 dry-run / preflight 层，但仍不授权真实 provider 调用、不生成 approved brand token、不改变 S1-S5 场景语义。
 
 ## 1. 结论
 
-当前已完成的是 AI Video 2.0 的 dry-run 合约、门禁、job ledger、只读注入、prompt preview audit、品牌 token 候选治理和授权 smoke 前置门禁。
+当前已完成 AI Video 2.0 dry-run 合约、门禁、job ledger、只读注入、prompt preview audit、品牌 token 候选治理、工具箱独立产品层、工具产物只读回注、Momcozy S5/toolbox L2 fixture 矩阵和工具级 provider readiness preflight。
 
-用户本次点名的创作工具箱尚未产品化完成。现有项目里只有部分能力散落在 S1-S5 流程中，例如 storyboards、continuity storyboard、thumbnail/keyframe、S5 六视图输入；还没有独立的 `Toolbox` 顶部导航、工具页、统一 API、工具级 run state、工具级 artifact gallery 和工具级 job ledger 视图。
+工具箱已经具备 `/toolbox` 导航、五个工具页、统一 API、工具级 run state、artifact/job ledger/audit summary 与 refs-only injection draft。真实生成仍未授权；T9 只是授权前置门禁，不代表 live smoke 已执行。
 
 因此下一阶段目标不是继续堆 provider，而是建立一个可复用的工具箱产品层：
 
@@ -554,10 +554,17 @@ feat: 支持工具箱产物回注场景计划
 
 ### T9 授权真实生成前置
 
-- [ ] 复用 C21 授权记录门禁。
-- [ ] 对每个工具增加 provider readiness preflight。
-- [ ] 工具级真实 smoke 必须有 provider/model/budget/user approval。
-- [ ] smoke 结果只升级局部 provider/tool 证据，不升级整体商业交付等级。
+- [x] 复用 C21 授权记录门禁。
+- [x] 对每个工具增加 provider readiness preflight。
+- [x] 工具级真实 smoke 必须有 provider/model/budget/user approval。
+- [x] smoke 结果只升级局部 provider/tool 证据，不升级整体商业交付等级。
+
+实现文件：
+
+- `src/pipeline/toolbox/provider_readiness.py`
+- `src/routers/toolbox.py`
+- `tests/test_authorized_live_provider_harness.py`
+- `configs/authorized-live-token-smoke-approval-template.json`
 
 测试：
 
@@ -596,7 +603,7 @@ feat: 增加工具箱授权真实生成前置门禁
 
 - 每个 TODO 独立测试、独立提交。
 - 禁止 `git add .`。
-- C1-C8/T1-T8 最高证据等级保持 `L2-fixture-or-dry-run`。
+- C1-C8/T1-T9 preflight 最高证据等级保持 `L2-fixture-or-dry-run`。
 - 真实 provider 调用只能在 T9 且用户显式授权后执行。
 - `job succeeded` 不等于 `delivery accepted`。
 - `accepted_dry_run` 不等于商业交付。
@@ -607,16 +614,16 @@ feat: 增加工具箱授权真实生成前置门禁
 
 | GAP | 当前状态 | 覆盖阶段 |
 |---|---|---|
-| 顶部导航没有工具箱 | 未实现 | T4 |
-| 没有 `/toolbox` 路由 | 未实现 | T4 |
-| 没有后端 toolbox router | 未实现 | T2 |
-| 没有工具级统一 contract | 未实现 | T1 |
-| 没有工具级 prompt preview | 未实现 | T2/T3 |
-| 没有工具级 job ledger UI | 未实现 | T4-T8 |
-| 商品图独立工具 | 未实现 | T6 |
-| 六视图独立工具 | 未实现 | T5 |
-| 电商视觉图独立工具 | 未实现 | T6 |
-| 数字人工具 | 未实现 | T7 |
-| 故事版独立工具 | 未实现 | T5 |
-| 工具产物回注 S1-S5 | 未实现 | T8 |
-| 授权真实生成 | 未授权 | T9 |
+| 顶部导航没有工具箱 | 已实现，`Nav.tsx` 提供 `/toolbox` 一级入口 | T4 |
+| 没有 `/toolbox` 路由 | 已实现，含首页和动态工具页 | T4/T5/T6/T7 |
+| 没有后端 toolbox router | 已实现，含 tools/plan/prompt-preview/run/runs/artifacts/inject/audit-summary/provider-readiness | T2/T8/T9 |
+| 没有工具级统一 contract | 已实现，保持 refs-only 和 L2 边界 | T1 |
+| 没有工具级 prompt preview | 已实现，sanitized preview 不暴露 raw prompt | T2/T3 |
+| 没有工具级 job ledger UI | 已实现 dry-run job ledger 可见性 | T4-T8 |
+| 商品图独立工具 | 已实现 dry-run 页面和 L2 fixture | T6/C22 |
+| 六视图独立工具 | 已实现 dry-run 页面和 L2 fixture | T5/C22 |
+| 电商视觉图独立工具 | 已实现 dry-run 页面和 L2 fixture | T6/C22 |
+| 数字人工具 | 已实现 dry-run 页面和 consent gate，live 仍需单独授权 | T7/T9 |
+| 故事版独立工具 | 已实现 dry-run 页面和长视频 review floor | T5 |
+| 工具产物回注 S1-S5 | 已实现 refs-only injection draft/audit summary，不写场景状态 | T8 |
+| 授权真实生成 | 前置门禁已实现；真实调用未授权、未执行 | T9 |

@@ -29,6 +29,20 @@ def test_missing_approval_record_blocks_even_when_token_flag_and_keys_are_set():
     assert report.evidence_level == "L2-fixture-or-dry-run"
 
 
+def test_explicit_empty_env_does_not_fall_back_to_process_env(monkeypatch):
+    monkeypatch.setenv(RUN_TOKEN_SMOKE_ENV, "1")
+    for key_name in REQUIRED_API_KEY_ENVS:
+        monkeypatch.setenv(key_name, f"sk_fixture_secret_{key_name.lower()}")
+
+    report = build_token_smoke_preflight_report(env={})
+
+    assert report.run_token_smoke is False
+    assert report.provider_call_allowed is False
+    assert _check_status(report, "run_token_smoke") == "block"
+    assert all(_check_status(report, f"api_key:{key_name}") == "block" for key_name in REQUIRED_API_KEY_ENVS)
+    assert "sk_fixture_secret" not in report.model_dump_json()
+
+
 def test_missing_run_token_smoke_blocks_even_with_valid_approval_record(tmp_path: Path):
     approval_record = _write_approval_record(tmp_path)
     env = _ready_env()

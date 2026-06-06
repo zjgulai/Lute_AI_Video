@@ -24,6 +24,7 @@ from src.pipeline.toolbox.planner import (
     project_toolbox_artifacts,
     project_toolbox_run_state,
 )
+from src.pipeline.toolbox.provider_readiness import build_toolbox_provider_readiness
 from src.pipeline.toolbox.registry import list_toolbox_tools
 
 router = APIRouter(prefix="/toolbox", tags=["toolbox"])
@@ -50,6 +51,11 @@ async def preview_toolbox_prompt(tool_id: ToolboxToolId, body: dict[str, Any]) -
     request = _parse_toolbox_request(tool_id, body)
     plan = build_toolbox_plan(request)
     return build_toolbox_prompt_preview(request, plan).model_dump(mode="json", exclude_none=True)
+
+
+@router.get("/{tool_id}/provider-readiness")
+async def get_toolbox_provider_readiness(tool_id: ToolboxToolId) -> dict[str, Any]:
+    return build_toolbox_provider_readiness(tool_id).model_dump(mode="json", exclude_none=True)
 
 
 @router.post("/{tool_id}/run")

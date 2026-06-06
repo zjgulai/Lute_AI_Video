@@ -64,7 +64,7 @@ def build_token_smoke_preflight_report(
     approval_record_path: str | Path | None = None,
 ) -> TokenSmokePreflightReport:
     """Evaluate local readiness without contacting any provider."""
-    env = env or os.environ
+    env = os.environ if env is None else env
     record_path_raw = approval_record_path or env.get(APPROVAL_RECORD_ENV, "")
     record_path = Path(record_path_raw).expanduser() if record_path_raw else None
     approval_check, approval_payload = _check_approval_record(record_path)

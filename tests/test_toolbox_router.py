@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+from src.pipeline.token_smoke_preflight import (
+    APPROVAL_RECORD_ENV,
+    APPROVAL_SCOPE,
+    APPROVAL_STATEMENT_TEMPLATE,
+    REQUIRED_API_KEY_ENVS,
+    RUN_TOKEN_SMOKE_ENV,
+)
+from src.pipeline.toolbox.provider_readiness import TOOLBOX_TOOL_SCOPE_FIELD
 
 
 @pytest.mark.asyncio
@@ -72,6 +83,64 @@ async def test_toolbox_prompt_preview_is_sanitized(auth_headers) -> None:
     assert "must-not-leak-campaign-brief" not in serialized
     assert "prompt_payload" not in serialized
     assert '"prompt"' not in serialized
+
+
+@pytest.mark.asyncio
+async def test_toolbox_provider_readiness_endpoint_is_blocked_by_default(auth_headers, monkeypatch) -> None:
+    from src.api import app
+
+    monkeypatch.setenv(RUN_TOKEN_SMOKE_ENV, "0")
+    monkeypatch.delenv(APPROVAL_RECORD_ENV, raising=False)
+    for key_name in REQUIRED_API_KEY_ENVS:
+        monkeypatch.delenv(key_name, raising=False)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/toolbox/product-image/provider-readiness", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["evidence_level"] == "L2-fixture-or-dry-run"
+    assert payload["ready_for_dry_run"] is True
+    assert payload["ready_for_authorized_live"] is False
+    assert payload["provider_call_allowed"] is False
+    assert payload.get("approval_record_ref") is None
+    assert any("RUN_TOKEN_SMOKE=1" in reason for reason in payload["blocker_reasons"])
+
+
+@pytest.mark.asyncio
+async def test_toolbox_provider_readiness_endpoint_passes_only_for_tool_scoped_approval(
+    auth_headers,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from src.api import app
+
+    approval_record = _write_toolbox_approval_record(tmp_path, toolbox_tool_ids=["product-image"])
+    _set_ready_toolbox_env(monkeypatch, approval_record)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        product_response = await client.get("/toolbox/product-image/provider-readiness", headers=auth_headers)
+        digital_human_response = await client.get("/toolbox/digital-human/provider-readiness", headers=auth_headers)
+
+    assert product_response.status_code == 200, product_response.text
+    product_payload = product_response.json()
+    assert product_payload["ready_for_authorized_live"] is True
+    assert product_payload["provider_call_allowed"] is True
+    assert product_payload["approved_provider"] == "poyo"
+    assert product_payload["approved_model"] == "seedance-2"
+    assert product_payload["approved_budget_limit_usd"] == 1.0
+    assert product_payload["blocker_reasons"] == []
+    assert "sk_fixture_secret" not in json.dumps(product_payload, ensure_ascii=False)
+
+    assert digital_human_response.status_code == 200, digital_human_response.text
+    digital_human_payload = digital_human_response.json()
+    assert digital_human_payload["ready_for_authorized_live"] is False
+    assert digital_human_payload["provider_call_allowed"] is False
+    assert digital_human_payload["blocker_reasons"] == [
+        f"approval record sample_plan.{TOOLBOX_TOOL_SCOPE_FIELD} must include digital-human"
+    ]
 
 
 @pytest.mark.asyncio
@@ -427,3 +496,55 @@ def _storyboard_request() -> dict[str, object]:
             "storyboard_grid": 12,
         },
     }
+
+
+def _set_ready_toolbox_env(monkeypatch: pytest.MonkeyPatch, approval_record: Path) -> None:
+    monkeypatch.setenv(RUN_TOKEN_SMOKE_ENV, "1")
+    monkeypatch.setenv(APPROVAL_RECORD_ENV, str(approval_record))
+    for key_name in REQUIRED_API_KEY_ENVS:
+        monkeypatch.setenv(key_name, f"sk_fixture_secret_{key_name.lower()}")
+
+
+def _write_toolbox_approval_record(tmp_path: Path, **overrides: Any) -> Path:
+    path = tmp_path / "authorized-live-toolbox-approval.json"
+    provider = str(overrides.get("provider", "poyo"))
+    model = str(overrides.get("model", "seedance-2"))
+    budget_limit = str(overrides.get("budget_limit", "$1.00"))
+    toolbox_tool_ids = overrides.pop("toolbox_tool_ids", ["product-image"])
+    payload: dict[str, Any] = {
+        "approval_id": "approval_toolbox_router_fixture",
+        "scope": APPROVAL_SCOPE,
+        "evidence_level": "L4-authorized-live",
+        "provider_calls_allowed": True,
+        "approved_by": "user",
+        "approved_at": "2026-06-06T00:00:00Z",
+        "provider": provider,
+        "model": model,
+        "budget_limit": budget_limit,
+        "budget_limit_usd": 1.0,
+        "sample_plan": {
+            "max_sample_count": 2,
+            "max_provider_calls": 2,
+            "scenarios": ["toolbox"],
+            "s5_requires_separate_confirmation": True,
+            TOOLBOX_TOOL_SCOPE_FIELD: toolbox_tool_ids,
+        },
+        "budget_stop_loss": {
+            "max_total_cost_usd": 1.0,
+            "per_job_cost_ceiling_usd": 0.5,
+            "max_retry_count": 0,
+            "stop_on_first_failure": True,
+            "halt_on_rate_limit": True,
+            "halt_on_quota_error": True,
+            "halt_on_content_rejection": True,
+            "halt_on_missing_artifact": True,
+        },
+        "approval_statement": APPROVAL_STATEMENT_TEMPLATE.format(
+            provider=provider,
+            model=model,
+            budget_limit=budget_limit,
+        ),
+    }
+    payload.update(overrides)
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    return path

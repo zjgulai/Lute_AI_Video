@@ -14,6 +14,7 @@
     "max_sample_count": 2,
     "max_provider_calls": 2,
     "scenarios": ["fast", "s1"],
+    "toolbox_tool_ids": [],
     "s5_requires_separate_confirmation": true
   },
   "budget_stop_loss": {
@@ -30,6 +31,7 @@
   "operator_notes": [
     "Do not put provider API keys in this file.",
     "Keep template_only=true until the user gives the exact authorization statement in the active session.",
+    "For toolbox live smoke, fill sample_plan.toolbox_tool_ids with the exact tool ids, for example product-image or six-view.",
     "Store the filled approval record in a private, non-committed path and set AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD to that path."
   ]
 }

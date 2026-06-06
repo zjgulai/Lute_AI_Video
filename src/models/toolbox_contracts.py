@@ -458,16 +458,26 @@ class ToolboxInjectionAuditSummaryList(_StrictModel):
 class ToolboxProviderReadiness(_StrictModel):
     readiness_id: str
     tool_id: ToolboxToolId
+    evidence_level: EvidenceLevel = EvidenceLevel.L2_FIXTURE_OR_DRY_RUN
     provider_profile_id: str | None = None
     ready_for_dry_run: bool = True
     ready_for_authorized_live: bool = False
+    provider_call_allowed: bool = False
     approval_record_ref: str | None = None
+    approved_provider: str | None = None
+    approved_model: str | None = None
+    approved_budget_limit_usd: float | None = None
+    preflight_report_id: str | None = None
     blocker_reasons: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _authorized_live_requires_approval_record(self) -> ToolboxProviderReadiness:
+        if self.evidence_level != EvidenceLevel.L2_FIXTURE_OR_DRY_RUN:
+            raise ValueError("toolbox provider readiness preflight must remain L2-fixture-or-dry-run")
         if self.ready_for_authorized_live and not self.approval_record_ref:
             raise ValueError("authorized live readiness requires approval_record_ref")
+        if self.provider_call_allowed and not self.ready_for_authorized_live:
+            raise ValueError("provider_call_allowed requires ready_for_authorized_live")
         return self
 
 

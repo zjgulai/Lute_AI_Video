@@ -14,7 +14,7 @@ source: human+ai
 
 ## 结论
 
-AI Video 2.0 已形成一套可审计的商业视频 dry-run 工具层：商业合约、离线质量门禁、provider 信号、prompt compiler、生产任务账本、场景只读注入、prompt preview audit、品牌 token 审核、长视频审计、工具箱图像工具 L2 矩阵与 no-token benchmark 均已有本地测试证据。
+AI Video 2.0 已形成一套可审计的商业视频 dry-run 工具层：商业合约、离线质量门禁、provider 信号、prompt compiler、生产任务账本、场景只读注入、prompt preview audit、品牌 token 审核、长视频审计、工具箱图像工具 L2 矩阵、工具级 provider readiness preflight 与 no-token benchmark 均已有本地测试证据。
 
 当前最高证据等级仍是 `L2-fixture-or-dry-run`。C21 真实 token smoke 已完成审批记录门禁强化，但没有用户固定授权语句，不允许进入 provider 调用。
 
@@ -42,7 +42,7 @@ Plan source: `docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implement
 ## Evidence Grade
 
 - **Current grade**: `L2-fixture-or-dry-run`.
-- **No provider calls**: C15-C22 implementation and tests did not call POYO, DeepSeek, SiliconFlow, Seedance, OpenAI, Runway, Kling, Google Veo, or other external generation providers.
+- **No provider calls**: C15-C23 implementation and tests did not call POYO, DeepSeek, SiliconFlow, Seedance, OpenAI, Runway, Kling, Google Veo, or other external generation providers.
 - **No approval upgrade**: C21 preflight still requires an approval record with `scope=c21-token-smoke`, exact C21 user authorization statement, provider/model, positive finite budget, `RUN_TOKEN_SMOKE=1`, provider capability evidence, job ledger readiness and audit bundle readiness.
 
 ## Supported Claims
@@ -54,6 +54,7 @@ Plan source: `docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implement
 - S3/S4 longform risk surfaces are represented through timeline, EDL, source rights, caption safe-zone and reframe audit objects.
 - The no-token benchmark can summarize readiness and blockers without provider side effects.
 - Momcozy S5 and toolbox image-generation samples are represented as L2 fixture refs only: `product-image`, `six-view`, `ecommerce-visual` all target S5 without provider submission, delivery acceptance, publishing, or approved brand token claims.
+- Toolbox provider readiness can evaluate C21 approval, API key presence, provider capability, budget stop-loss and `sample_plan.toolbox_tool_ids` without provider side effects.
 - C20 backend and frontend acceptance passed locally: backend target pytest `63 passed`, repo-wide `ruff check src tests scripts` passed, OpenAPI types were up to date, frontend lint/typecheck/Vitest passed with `199` tests.
 
 ## Forbidden Claims
@@ -73,6 +74,7 @@ Plan source: `docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implement
 - **Brand data assets** are copied and modeled only as governed assets; runtime use still requires explicit review and scope-bound approval.
 - **Longform production** is structurally audited, but real source footage, transcript, EDL, timeline manifest, safe-zone verification and artifact manifest remain needed for live evidence.
 - **Delivery and publish gates** intentionally remain locked without human review and acceptance evidence.
+- **Toolbox authorized live** remains blocked unless the approval record explicitly lists the exact toolbox tool ids under `sample_plan.toolbox_tool_ids`.
 
 ## Next Evidence For L4
 
