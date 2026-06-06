@@ -14,6 +14,7 @@ REQUIRED_VIDEO_REFERENCE_REFS: tuple[str, str, str] = (
     "artifact://authorized-live/momcozy-sterilizer-uv-benefit-gpt-image-2",
     "artifact://authorized-live/momcozy-sterilizer-kitchen-scene-gpt-image-2",
 )
+AUTHORIZED_LIVE_POYO_TRANSPORT_ENV = "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT"
 
 _ALLOWED_JOB_MODELS = {
     "momcozy_sterilizer_main_45_image_authorized_live_fixture": "gpt-image-2",
@@ -79,6 +80,22 @@ class AuthorizedLivePoyoSubmitter:
             if payload_refs != list(REQUIRED_VIDEO_REFERENCE_REFS):
                 raise ValueError("video payload must carry the three authorized image artifacts")
         return payload
+
+
+def build_authorized_live_poyo_submitter(
+    *,
+    env: Mapping[str, str],
+    transport: PoyoSubmitOnceTransport | None = None,
+    payloads: Mapping[str, AuthorizedLivePoyoPayload] | None = None,
+) -> AuthorizedLivePoyoSubmitter | None:
+    """Build an injected submitter only after an explicit no-token wiring gate."""
+    if env.get(AUTHORIZED_LIVE_POYO_TRANSPORT_ENV) != "1":
+        return None
+    if transport is None:
+        raise ValueError("injected poyo transport is required")
+    if payloads is None:
+        raise ValueError("private poyo payloads are required")
+    return AuthorizedLivePoyoSubmitter(transport=transport, payloads=payloads)
 
 
 def _validate_spec(spec: MediaJobSpec) -> None:

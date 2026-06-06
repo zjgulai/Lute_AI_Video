@@ -223,6 +223,8 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 
 C31 已新增 no-token submitter facade contract：`src/pipeline/authorized_live_poyo_submitter.py` 只接受 injected transport，不导入 `PoyoClient`、`httpx`、`POYO_API_KEY` 或 `os.environ`。`tests/test_authorized_live_poyo_submitter.py` 使用 fake transport 证明 job scope、model、视频 reference refs、prompt 不回显和 failure no-retry 边界。该 contract 仍不是真实 provider submitter；下一步若要进入 L4，仍需在精确授权、私有 approval/account readiness、生产 key、provider key 和 execute flags 满足后，单独接线真实 transport。
 
+C32 已新增 no-token submitter factory gate：`build_authorized_live_poyo_submitter()` 默认在未设置 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时返回 `None`，即使启用该 gate 也必须由调用方注入 transport 和 private payloads，不能从 CLI、环境变量或模块默认值隐式构建真实 provider client。`scripts/authorized_live_token_smoke_harness.py` 仍不接线该 factory，不导入 `PoyoClient`、`httpx` 或 `POYO_API_KEY`。
+
 真实样本范围：
 
 | 顺序 | 场景 | 样本 | 目的 | 预算策略 |
@@ -271,6 +273,7 @@ C31 已新增 no-token submitter facade contract：`src/pipeline/authorized_live
 12. [x] 增加 no-token authorized-live smoke 启动包，并串联到 P2 recharge checklist dry-run。实现文件：`scripts/build_authorized_live_smoke_packet.py`、`tests/test_authorized_live_smoke_packet_builder.py`、`scripts/p2_recharge_smoke_checklist.py`。
 13. [x] 增加正式测试计划讨论 readiness report，区分可讨论测试计划与可执行真实调用。实现文件：`scripts/build_authorized_live_test_plan_readiness_report.py`、`tests/test_authorized_live_test_plan_readiness_report.py`。
 14. [x] 将首轮授权真实 smoke 样本计划从 Fast+S1 连通性样本调整为 Momcozy 消毒器 3 图 + 1 条 15 秒竖版图片驱动视频资产包，并保持 `pending_review` 素材库边界。实现文件：`configs/authorized-live-token-smoke-sample-plan-contract.json`、`configs/authorized-live-token-smoke-approval-template.json`、`src/pipeline/token_smoke_preflight.py`。
+15. [x] 增加 no-token poyo submitter factory gate，默认不构建 submitter，启用后仍要求 injected transport/private payloads。实现文件：`src/pipeline/authorized_live_poyo_submitter.py`、`tests/test_authorized_live_poyo_submitter.py`。
 
 ## 阶段验收
 
@@ -286,6 +289,7 @@ C31 已新增 no-token submitter facade contract：`src/pipeline/authorized_live
 - 私有 provider account readiness 构建器已验证，且余额不足、缺失或记录 API key 原文不会绕过 preflight。
 - no-token authorized-live smoke 启动包已验证，且默认 P2 recharge checklist dry-run 会提示先生成启动包。
 - no-token test-plan readiness report 已验证，且能明确给出“可讨论测试计划 / 不可执行真实调用”的分层结论。
+- no-token poyo submitter factory gate 已验证，且默认 CLI 不接线真实 provider transport。
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 

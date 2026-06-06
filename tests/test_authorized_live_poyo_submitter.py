@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from src.models.commercial_contracts import MediaJobSpec
+from src.pipeline import authorized_live_poyo_submitter as poyo_submitter
 from src.pipeline.authorized_live_poyo_submitter import (
     REQUIRED_VIDEO_REFERENCE_REFS,
     AuthorizedLivePoyoPayload,
@@ -77,6 +78,54 @@ def test_submitter_propagates_transport_failure_without_retry():
         submitter(_image_spec())
 
     assert len(transport.calls) == 1
+
+
+def test_submitter_factory_returns_none_without_explicit_transport_gate():
+    transport = FakePoyoTransport()
+
+    submitter = poyo_submitter.build_authorized_live_poyo_submitter(
+        env={},
+        transport=transport,
+        payloads=_payloads(),
+    )
+
+    assert submitter is None
+    assert transport.calls == []
+
+
+def test_submitter_factory_requires_injected_transport_and_payloads_when_enabled():
+    env = {poyo_submitter.AUTHORIZED_LIVE_POYO_TRANSPORT_ENV: "1"}
+
+    with pytest.raises(ValueError, match="injected poyo transport is required"):
+        poyo_submitter.build_authorized_live_poyo_submitter(env=env, payloads=_payloads())
+
+    with pytest.raises(ValueError, match="private poyo payloads are required"):
+        poyo_submitter.build_authorized_live_poyo_submitter(env=env, transport=FakePoyoTransport())
+
+
+def test_submitter_factory_builds_only_injected_submitter_when_enabled():
+    transport = FakePoyoTransport()
+    submitter = poyo_submitter.build_authorized_live_poyo_submitter(
+        env={poyo_submitter.AUTHORIZED_LIVE_POYO_TRANSPORT_ENV: "1"},
+        transport=transport,
+        payloads=_payloads(),
+    )
+
+    assert submitter is not None
+    response = submitter(_image_spec())
+
+    assert response["provider_job_id"] == "poyo:job:1"
+    assert len(transport.calls) == 1
+
+
+def test_harness_cli_source_still_does_not_wire_submitter_by_default():
+    source = (REPO_ROOT / "scripts" / "authorized_live_token_smoke_harness.py").read_text()
+
+    assert "AuthorizedLivePoyoSubmitter" not in source
+    assert "build_authorized_live_poyo_submitter" not in source
+    assert "PoyoClient" not in source
+    assert "httpx" not in source
+    assert "POYO_API_KEY" not in source
 
 
 def test_submitter_module_has_no_provider_client_or_env_access():
