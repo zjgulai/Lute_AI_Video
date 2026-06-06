@@ -327,6 +327,12 @@ export default function Home() {
   const router = useRouter();
   const pathname = usePathname();
 
+  useEffect(() => {
+    if (pathname !== "/settings") return;
+    setShowSplash(false);
+    setShowSettings(true);
+  }, [pathname, setShowSettings, setShowSplash]);
+
   // Expert Studio gate progression
   const GATE_SEQUENCE = [
     { gateId: "gate_1_script", gateLabel: t("gate.selectScript"), maxSelections: 2 },
@@ -1316,7 +1322,7 @@ function URLSync({
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (showSplash) return;
+    if (showSplash || pathname === "/settings") return;
     const targetPath = sceneToPath(activeScene);
     if (targetPath && pathname !== targetPath) {
       const params = new URLSearchParams(searchParams.toString());

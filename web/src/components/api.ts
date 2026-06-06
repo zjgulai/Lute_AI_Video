@@ -5,11 +5,17 @@ import { errorMessage } from "@/lib/errors";
 import type { ContinuityDiagnosticsPayload } from "@/lib/continuityDiagnostics";
 import type { ReviewState } from "@/components/types";
 import type { components } from "@/types/api.generated";
+import {
+  PROVIDER_API_KEY_NAMES,
+  REQUEST_PROVIDER_API_KEY_NAMES,
+  type ProviderApiKeyName,
+} from "@/lib/modelProviderConfig";
 
 const STORAGE_KEYS = {
   apiBase: "ai_video_api_base",
   apiKey: "ai_video_api_key",
   demoMode: "ai_video_demo_mode",
+  providerConfig: "ai_video_provider_config",
 };
 
 // Direct references are required for Next.js client-side build-time inlining.
@@ -53,6 +59,11 @@ type PublishResult = Record<string, unknown> & {
 
 type DistributionResponse = {
   distribution_plans?: Array<Record<string, unknown>>;
+};
+
+export type ModelProviderConfig = {
+  apiKeys: Partial<Record<ProviderApiKeyName, string>>;
+  updatedAt?: string;
 };
 
 type DashboardOverview = {
@@ -326,6 +337,86 @@ function storageRemove(key: string): void {
   removeCookie(key);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeProviderConfig(value: unknown): ModelProviderConfig {
+  if (!isRecord(value)) {
+    return { apiKeys: {} };
+  }
+  const rawApiKeys = isRecord(value.apiKeys) ? value.apiKeys : {};
+  const apiKeys: Partial<Record<ProviderApiKeyName, string>> = {};
+  for (const keyName of PROVIDER_API_KEY_NAMES) {
+    const rawValue = rawApiKeys[keyName];
+    if (typeof rawValue === "string" && rawValue.trim()) {
+      apiKeys[keyName] = rawValue.trim();
+    }
+  }
+  const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : undefined;
+  return updatedAt ? { apiKeys, updatedAt } : { apiKeys };
+}
+
+export function getModelProviderConfig(): ModelProviderConfig {
+  if (typeof window === "undefined") {
+    return { apiKeys: {} };
+  }
+  const raw = storageGet(STORAGE_KEYS.providerConfig);
+  if (!raw) {
+    return { apiKeys: {} };
+  }
+  try {
+    return normalizeProviderConfig(JSON.parse(raw));
+  } catch {
+    return { apiKeys: {} };
+  }
+}
+
+export function setModelProviderConfig(config: ModelProviderConfig): void {
+  if (typeof window === "undefined") return;
+  const normalized = normalizeProviderConfig({
+    ...config,
+    updatedAt: new Date().toISOString(),
+  });
+  if (Object.keys(normalized.apiKeys).length === 0) {
+    storageRemove(STORAGE_KEYS.providerConfig);
+    return;
+  }
+  storageSet(STORAGE_KEYS.providerConfig, JSON.stringify(normalized));
+}
+
+export function resetModelProviderConfig(): void {
+  if (typeof window === "undefined") return;
+  storageRemove(STORAGE_KEYS.providerConfig);
+}
+
+export function getProviderApiKeysForRequest(): Record<string, string> {
+  const config = getModelProviderConfig();
+  const apiKeys: Record<string, string> = {};
+  for (const keyName of REQUEST_PROVIDER_API_KEY_NAMES) {
+    const value = config.apiKeys[keyName]?.trim();
+    if (value) {
+      apiKeys[keyName] = value;
+    }
+  }
+  return apiKeys;
+}
+
+export function withProviderApiKeys(body: unknown): unknown {
+  const apiKeys = getProviderApiKeysForRequest();
+  if (Object.keys(apiKeys).length === 0 || !isRecord(body)) {
+    return body;
+  }
+  const existing = isRecord(body.api_keys) ? body.api_keys : {};
+  return {
+    ...body,
+    api_keys: {
+      ...apiKeys,
+      ...existing,
+    },
+  };
+}
+
 // ── Runtime configuration ──
 
 function readEnv(key: string): string | undefined {
@@ -430,6 +521,7 @@ export function resetApiConfig() {
     storageRemove(STORAGE_KEYS.apiBase);
     storageRemove(STORAGE_KEYS.apiKey);
     storageRemove(STORAGE_KEYS.demoMode);
+    storageRemove(STORAGE_KEYS.providerConfig);
   }
 }
 
@@ -850,7 +942,7 @@ export async function startPipeline(body: unknown, options?: { signal?: AbortSig
   const res = await apiFetch("/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Pipeline start failed (" + res.status + ")");
@@ -911,7 +1003,7 @@ export async function runS1ProductDirect(config: unknown, options?: { signal?: A
   const res = await apiFetch("/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(config),
+    body: JSON.stringify(withProviderApiKeys(config)),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
@@ -928,7 +1020,7 @@ export async function runS2BrandCampaign(body: {
   const res = await apiFetch("/scenario/s2", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Brand campaign scenario failed (" + res.status + ")");
@@ -946,7 +1038,7 @@ export async function runS3InfluencerRemix(body: {
   const res = await apiFetch("/scenario/s3", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Influencer remix scenario failed (" + res.status + ")");
@@ -962,7 +1054,7 @@ export async function runS4LiveShoot(body: {
   const res = await apiFetch("/scenario/s4", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Live shoot scenario failed (" + res.status + ")");
@@ -975,7 +1067,7 @@ export async function startS1StepByStep(config: unknown, options?: { signal?: Ab
   const res = await apiFetch("/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({ ...(config as Record<string, unknown>), mode: "step_by_step" }),
+    body: JSON.stringify(withProviderApiKeys({ ...(config as Record<string, unknown>), mode: "step_by_step" })),
     signal: options?.signal,
   });
   if (!res.ok) return throwApiError(res);
@@ -1282,7 +1374,7 @@ export async function runS5BrandVlog(body: {
   const res = await apiFetch("/scenario/s5", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
@@ -1304,7 +1396,7 @@ export async function submitScenario(
   const res = await apiFetch("/scenario/" + scenario + "/submit", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));

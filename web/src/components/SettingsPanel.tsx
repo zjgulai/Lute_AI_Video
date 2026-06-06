@@ -13,7 +13,17 @@ import {
   setDemoMode,
   resetApiConfig,
   testConnection,
+  getModelProviderConfig,
+  setModelProviderConfig,
+  type ModelProviderConfig,
 } from "./api";
+import {
+  MODEL_ROUTE_GROUPS,
+  PROVIDER_KEY_SPECS,
+  type ModelRouteGroup,
+  type ProviderApiKeyName,
+  type ProviderRouteStatus,
+} from "@/lib/modelProviderConfig";
 import {
   X,
   Check,
@@ -62,12 +72,24 @@ const TABS: Array<{
   },
 ];
 
-const PROVIDERS = [
-  { label: "Text", value: "DeepSeek", icon: Database },
-  { label: "Image", value: "poyo.ai GPT Image", icon: Cloud },
-  { label: "Video", value: "poyo.ai Seedance", icon: VideoCamera },
-  { label: "Voice", value: "SiliconFlow CosyVoice", icon: ShieldCheck },
-] as const;
+const GROUP_ICONS: Record<ModelRouteGroup["id"], typeof HardDrives> = {
+  text: Database,
+  image: Cloud,
+  video: VideoCamera,
+  voice: ShieldCheck,
+  music: Lightning,
+};
+
+const STATUS_CLASSES: Record<ProviderRouteStatus, string> = {
+  production: "border-[rgba(120,175,140,0.22)] bg-[rgba(120,175,140,0.10)] text-[var(--jade-accent)]",
+  fallback: "border-[rgba(93,132,187,0.18)] bg-[rgba(93,132,187,0.10)] text-[var(--text-body)]",
+  candidate: "border-[rgba(215,92,112,0.18)] bg-[rgba(215,92,112,0.08)] text-[var(--fortune-red)]",
+  legacy: "border-[var(--divider-light)] bg-[var(--bg-panel)] text-[var(--text-muted)]",
+};
+
+function countConfiguredProviderKeys(config: ModelProviderConfig): number {
+  return Object.values(config.apiKeys).filter((value) => typeof value === "string" && value.trim()).length;
+}
 
 function safeHostname(value: string): string {
   const trimmed = value.trim();
@@ -131,6 +153,7 @@ export default function SettingsPanel({ onClose }: Props) {
   const [baseUrl, setBaseUrl] = useState(getApiBase());
   const [key, setKey] = useState(getApiKey());
   const [demo, setDemo] = useState(isDemoMode());
+  const [providerConfig, setProviderConfigState] = useState<ModelProviderConfig>(() => getModelProviderConfig());
   const { submitting: testing, wrap: wrapTest } = useSubmitting();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -168,10 +191,15 @@ export default function SettingsPanel({ onClose }: Props) {
     "settings.providers.demo.desc",
     "Keep the UI in mock-data mode while testing layout, flows, or docs."
   );
-  const providerStackTitle = t("settings.providers.stack.title", "Provider stack");
-  const providerStackDesc = t(
-    "settings.providers.stack.desc",
-    "The pipeline keeps one upstream service per generation layer."
+  const providerKeysTitle = t("settings.providers.keys.title", "Provider API keys");
+  const providerKeysDesc = t(
+    "settings.providers.keys.desc",
+    "Store provider keys for this browser session and pass them to scenario runs."
+  );
+  const modelRoutesTitle = t("settings.providers.routes.title", "Model route catalog");
+  const modelRoutesDesc = t(
+    "settings.providers.routes.desc",
+    "Production routes and replacement candidates grouped by generation layer."
   );
   const currentModeTitle = t("settings.providers.mode.title", "Current mode");
   const currentModeDesc = t(
@@ -179,11 +207,8 @@ export default function SettingsPanel({ onClose }: Props) {
     "Use this as a quick visual cue before saving and leaving the dialog."
   );
   const currentModeStatusLabel = t("settings.providers.mode.status", "Status");
-  const currentModeCoverageLabel = t("settings.providers.mode.coverage", "Coverage");
-  const providerCoverageValue = t(
-    "settings.providers.coverage.value",
-    "Text, image, video, and voice providers"
-  );
+  const configuredKeysLabel = t("settings.providers.mode.configuredKeys", "Configured provider keys");
+  const providerKeyCount = countConfiguredProviderKeys(providerConfig);
   const advancedCardTitle = t("settings.advanced.card.title", "Browser storage");
   const advancedCardDesc = t(
     "settings.advanced.card.desc",
@@ -206,12 +231,14 @@ export default function SettingsPanel({ onClose }: Props) {
     setBaseUrl(getApiBase());
     setKey(getApiKey());
     setDemo(isDemoMode());
+    setProviderConfigState(getModelProviderConfig());
   }, []);
 
   const handleSave = () => {
     setApiBase(baseUrl.trim());
     setApiKey(key.trim());
     setDemoMode(demo);
+    setModelProviderConfig(providerConfig);
     setTestResult(null);
     onClose();
   };
@@ -225,9 +252,26 @@ export default function SettingsPanel({ onClose }: Props) {
     setBaseUrl(getApiBase());
     setKey(getApiKey());
     setDemo(isDemoMode());
+    setProviderConfigState({ apiKeys: {} });
     setTestResult(null);
     setShowResetConfirm(false);
   };
+
+  const updateProviderKey = (envName: ProviderApiKeyName, value: string) => {
+    setProviderConfigState((prev) => ({
+      ...prev,
+      apiKeys: {
+        ...prev.apiKeys,
+        [envName]: value,
+      },
+    }));
+  };
+
+  const providerStatusLabel = (status: ProviderRouteStatus) =>
+    t(`settings.providers.status.${status}`, status);
+
+  const capabilityLabel = (group: ModelRouteGroup) =>
+    t(`settings.providers.capability.${group.id}`, group.title);
 
   const handleTest = () =>
     wrapTest(async () => {
@@ -278,7 +322,7 @@ export default function SettingsPanel({ onClose }: Props) {
         aria-modal="true"
         aria-labelledby="settings-dialog-title"
         aria-describedby={dialogDescriptionId}
-        className="apple-card w-full max-w-2xl mx-4 flex max-h-[90vh] flex-col overflow-hidden animate-scale-in"
+        className="apple-card w-full max-w-5xl mx-4 flex max-h-[90vh] flex-col overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-b border-[var(--divider-light)] bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(252,245,242,0.94))] px-5 py-5">
@@ -473,13 +517,65 @@ export default function SettingsPanel({ onClose }: Props) {
           )}
 
           {activeTab === "providers" && (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(300px,0.92fr)_minmax(0,1.08fr)]">
               <div className="space-y-4">
+                <PanelCard
+                  title={providerKeysTitle}
+                  description={providerKeysDesc}
+                  icon={Key}
+                  accent
+                  extra={
+                    <span className="shrink-0 rounded-full border border-[rgba(215,92,112,0.16)] bg-white/80 px-2 py-1 text-[11px] font-medium text-[var(--fortune-red)]">
+                      {providerKeyCount}/{PROVIDER_KEY_SPECS.length}
+                    </span>
+                  }
+                >
+                  <div className="grid gap-3">
+                    {PROVIDER_KEY_SPECS.map((spec) => {
+                      const inputId = `settings-provider-key-${spec.envName}`;
+                      const value = providerConfig.apiKeys[spec.envName] ?? "";
+                      return (
+                        <div key={spec.envName} className="rounded-xl border border-[var(--divider-light)] bg-[var(--bg-panel)] px-3 py-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <label htmlFor={inputId} className="text-[12px] font-semibold text-[var(--text-h1)]">
+                                {spec.provider}
+                              </label>
+                              <p className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{spec.scope}</p>
+                            </div>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_CLASSES[spec.status]}`}>
+                              {providerStatusLabel(spec.status)}
+                            </span>
+                          </div>
+                          <input
+                            id={inputId}
+                            type="password"
+                            value={value}
+                            onChange={(event) => updateProviderKey(spec.envName, event.target.value)}
+                            placeholder={spec.envName}
+                            autoComplete="off"
+                            className="apple-input mt-2 text-xs"
+                          />
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="rounded-md border border-[var(--divider-light)] bg-white px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
+                              {spec.envName}
+                            </span>
+                            {spec.requiredForProduction && (
+                              <span className="rounded-md border border-[rgba(120,175,140,0.18)] bg-[rgba(120,175,140,0.08)] px-1.5 py-0.5 text-[10px] text-[var(--jade-accent)]">
+                                {t("settings.providers.required", "Production required")}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PanelCard>
+
                 <PanelCard
                   title={providerDemoTitle}
                   description={providerDemoDesc}
                   icon={Lightning}
-                  accent
                   extra={
                     <label className="relative inline-flex cursor-pointer items-center shrink-0">
                       <input
@@ -496,31 +592,6 @@ export default function SettingsPanel({ onClose }: Props) {
                 </PanelCard>
 
                 <PanelCard
-                  title={providerStackTitle}
-                  description={providerStackDesc}
-                  icon={HardDrives}
-                >
-                  <div className="grid gap-2">
-                    {PROVIDERS.map(({ label, value, icon: Icon }) => (
-                      <div
-                        key={label}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-[var(--divider-light)] bg-[var(--bg-panel)] px-3 py-2.5"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[var(--fortune-red)]">
-                            <Icon size={14} weight="fill" />
-                          </span>
-                          <span className="text-[12px] font-medium text-[var(--text-h1)]">{label}</span>
-                        </div>
-                        <span className="truncate text-right text-[12px] text-[var(--text-body)]">{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </PanelCard>
-              </div>
-
-              <div className="space-y-4">
-                <PanelCard
                   title={currentModeTitle}
                   description={currentModeDesc}
                   icon={ShieldCheck}
@@ -533,9 +604,75 @@ export default function SettingsPanel({ onClose }: Props) {
                       </p>
                     </div>
                     <div className="rounded-xl bg-[var(--bg-panel)] px-3 py-2.5">
-                      <p className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">{currentModeCoverageLabel}</p>
-                      <p className="mt-1 text-[13px] font-medium text-[var(--text-h1)]">{providerCoverageValue}</p>
+                      <p className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">{configuredKeysLabel}</p>
+                      <p className="mt-1 text-[13px] font-medium text-[var(--text-h1)]">
+                        {providerKeyCount}/{PROVIDER_KEY_SPECS.length}
+                      </p>
                     </div>
+                  </div>
+                </PanelCard>
+              </div>
+
+              <div className="space-y-4">
+                <PanelCard
+                  title={modelRoutesTitle}
+                  description={modelRoutesDesc}
+                  icon={HardDrives}
+                >
+                  <div className="grid gap-3">
+                    {MODEL_ROUTE_GROUPS.map((group) => {
+                      const Icon = GROUP_ICONS[group.id];
+                      return (
+                        <section key={group.id} className="rounded-xl border border-[var(--divider-light)] bg-[var(--bg-panel)]">
+                          <div className="flex items-center gap-2 border-b border-[var(--divider-light)] px-3 py-2.5">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[var(--fortune-red)]">
+                              <Icon size={14} weight="fill" />
+                            </span>
+                            <h4 className="text-[12px] font-semibold text-[var(--text-h1)]">{capabilityLabel(group)}</h4>
+                          </div>
+                          <div className="divide-y divide-[var(--divider-light)]">
+                            {group.routes.map((route) => (
+                              <div key={`${group.id}-${route.provider}-${route.role}`} className="px-3 py-3">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-[12px] font-semibold text-[var(--text-h1)]">{route.provider}</p>
+                                    <p className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{route.role}</p>
+                                  </div>
+                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_CLASSES[route.status]}`}>
+                                    {providerStatusLabel(route.status)}
+                                  </span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  <span className="rounded-md border border-[var(--divider-light)] bg-white px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
+                                    {route.keyEnv}
+                                  </span>
+                                  {route.modelEnv && (
+                                    <span className="rounded-md border border-[var(--divider-light)] bg-white px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
+                                      {route.modelEnv}: {route.currentDefault}
+                                    </span>
+                                  )}
+                                  {route.baseEnv && (
+                                    <span className="rounded-md border border-[var(--divider-light)] bg-white px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
+                                      {route.baseEnv}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {route.candidateModels.map((model) => (
+                                    <span key={model} className="rounded-full bg-white px-2 py-0.5 text-[10px] text-[var(--text-body)]">
+                                      {model}
+                                    </span>
+                                  ))}
+                                </div>
+                                {route.note && (
+                                  <p className="mt-2 text-[11px] leading-4 text-[var(--text-muted)]">{route.note}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      );
+                    })}
                   </div>
                 </PanelCard>
               </div>

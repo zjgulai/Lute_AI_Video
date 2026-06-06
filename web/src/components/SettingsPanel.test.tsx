@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import SettingsPanel from "./SettingsPanel";
 import { I18nProvider } from "@/i18n/I18nProvider";
-import { setApiKey } from "./api";
+import { setApiKey, setModelProviderConfig } from "./api";
 
 const apiMocks = vi.hoisted(() => ({
   setApiBase: vi.fn(),
@@ -13,6 +13,7 @@ const apiMocks = vi.hoisted(() => ({
   setDemoMode: vi.fn(),
   resetApiConfig: vi.fn(),
   testConnection: vi.fn(),
+  setModelProviderConfig: vi.fn(),
 }));
 
 // Mock api module
@@ -26,6 +27,8 @@ vi.mock("./api", () => ({
   setDemoMode: apiMocks.setDemoMode,
   resetApiConfig: apiMocks.resetApiConfig,
   testConnection: apiMocks.testConnection,
+  getModelProviderConfig: () => ({ apiKeys: {} }),
+  setModelProviderConfig: apiMocks.setModelProviderConfig,
 }));
 
 function renderWithProvider(ui: React.ReactElement) {
@@ -81,7 +84,10 @@ describe("SettingsPanel", () => {
     );
     expect(providersTab).toBeTruthy();
     act(() => providersTab?.click());
-    expect(container.textContent).toContain("Provider stack");
+    expect(container.textContent).toContain("Provider API keys");
+    expect(container.textContent).toContain("DEEPSEEK_API_KEY");
+    expect(container.textContent).toContain("Model route catalog");
+    expect(container.textContent).toContain("Text reasoning");
     expect(container.textContent).toContain("DeepSeek");
     expect(container.textContent).toContain("poyo.ai Seedance");
     cleanup();
@@ -167,7 +173,35 @@ describe("SettingsPanel", () => {
 
     expect(saveButton.type).toBe("button");
     expect(vi.mocked(setApiKey)).toHaveBeenCalledWith("tenant-key-123");
+    expect(vi.mocked(setModelProviderConfig)).toHaveBeenCalledWith({ apiKeys: {} });
     expect(onClose).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it("saves provider keys from the model configuration tab", () => {
+    const { container, cleanup } = renderWithProvider(
+      <SettingsPanel onClose={() => {}} />
+    );
+    const providersTab = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Providers")
+    );
+    act(() => providersTab?.click());
+
+    const poyoInput = container.querySelector("#settings-provider-key-POYO_API_KEY") as HTMLInputElement;
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Save")
+    ) as HTMLButtonElement;
+
+    act(() => {
+      setInputValue(poyoInput, "  poyo-session-key  ");
+      saveButton.click();
+    });
+
+    expect(vi.mocked(setModelProviderConfig)).toHaveBeenCalledWith({
+      apiKeys: {
+        POYO_API_KEY: "  poyo-session-key  ",
+      },
+    });
     cleanup();
   });
 
