@@ -94,6 +94,31 @@ describe("Production E2E token smoke guardrails", () => {
     }
   });
 
+  it("does not use demo key fallbacks inside production specs", () => {
+    const forbiddenFallbacks = [
+      "|| \"ai_video_demo_2026\"",
+      "|| 'ai_video_demo_2026'",
+      "?? \"ai_video_demo_2026\"",
+      "?? 'ai_video_demo_2026'",
+    ];
+
+    for (const specPath of getProductionSpecFiles()) {
+      const source = readWebFile(specPath);
+      for (const fallback of forbiddenFallbacks) {
+        expect(source, `${specPath} must use production helpers instead of demo key fallback`).not.toContain(fallback);
+      }
+    }
+  });
+
+  it("skips authenticated production checks when only the demo key is present", () => {
+    const helper = readWebFile("e2e/production/helpers.ts");
+
+    expect(helper).toContain("const DEMO_API_KEY = \"ai_video_demo_2026\"");
+    expect(helper).toContain("hasNonDemoProductionApiKey");
+    expect(helper).toContain("PRODUCTION_API_KEY !== DEMO_API_KEY");
+    expect(helper).toContain("A non-demo PLAYWRIGHT_API_KEY is required");
+  });
+
   it("tags known production specs that create real backend tasks", () => {
     const expectedTaggedTests: Record<string, string[]> = {
       "e2e/production/fast-mode-submit.prod.spec.ts": [

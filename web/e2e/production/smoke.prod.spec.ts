@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   expectOkJsonWith429Retry,
+  hasNonDemoProductionApiKey,
   isExpectedProductionPageNoise,
   PRODUCTION_API_KEY,
   productionApiHeaders,
@@ -127,6 +128,10 @@ test.describe("Production smoke — navigation", () => {
   });
 
   test("Settings provider configuration is covered by default non-token smoke", async ({ page }) => {
+    test.skip(
+      !hasNonDemoProductionApiKey(),
+      "A non-demo PLAYWRIGHT_API_KEY is required to unlock production Settings UI",
+    );
     const violations = await installTokenConsumptionGuard(page);
     await page.addInitScript((apiKey) => {
       localStorage.setItem("ai_video_api_key", apiKey || "production-non-token-placeholder");
@@ -150,7 +155,6 @@ test.describe("Production smoke — navigation", () => {
     }
     const apiKeyInput = page.locator("#apikey-input");
     if (await apiKeyInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      test.skip(PRODUCTION_API_KEY.length === 0, "PLAYWRIGHT_API_KEY is required to unlock production Settings UI");
       await apiKeyInput.fill(PRODUCTION_API_KEY);
       await page.getByRole("button", { name: /Enter|进入|验证|Verify/ }).click();
       await expect(apiKeyInput).toBeHidden({ timeout: 15_000 });

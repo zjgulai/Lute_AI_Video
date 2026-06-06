@@ -1,11 +1,10 @@
 import { test, expect } from "@playwright/test";
-
-const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+import { productionApiHeaders } from "./helpers";
 
 test.describe("Production smoke — S1 step_by_step", () => {
   test("POST /api/scenario/s1/start returns label @token-smoke", async ({ request }) => {
     const r = await request.post("/api/scenario/s1/start", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: {
         product_catalog: {
           products: [
@@ -32,7 +31,7 @@ test.describe("Production smoke — S1 step_by_step", () => {
 
   test("POST /api/scenario/s1/step/strategy completes successfully (no missing-name error) @token-smoke", async ({ request }) => {
     const initR = await request.post("/api/scenario/s1/start", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: {
         product_catalog: {
           products: [
@@ -53,7 +52,7 @@ test.describe("Production smoke — S1 step_by_step", () => {
     const label = (await initR.json()).label;
 
     const stepR = await request.post("/api/scenario/s1/step/strategy", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: { label },
       timeout: 30_000,
     });

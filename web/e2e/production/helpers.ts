@@ -1,11 +1,20 @@
 import { expect, test, type APIRequestContext, type APIResponse } from "@playwright/test";
 
 export const PRODUCTION_API_KEY = process.env.PLAYWRIGHT_API_KEY?.trim() ?? "";
+const DEMO_API_KEY = "ai_video_demo_2026";
+
+export function hasNonDemoProductionApiKey(): boolean {
+  return PRODUCTION_API_KEY.length > 0 && PRODUCTION_API_KEY !== DEMO_API_KEY;
+}
 
 export function requireProductionApiKey(): string {
   test.skip(
     PRODUCTION_API_KEY.length === 0,
     "PLAYWRIGHT_API_KEY is required for authenticated production API smoke; do not use the demo key on production.",
+  );
+  test.skip(
+    !hasNonDemoProductionApiKey(),
+    "A non-demo PLAYWRIGHT_API_KEY is required for authenticated production API smoke.",
   );
   return PRODUCTION_API_KEY;
 }

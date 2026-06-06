@@ -38,7 +38,7 @@ C1-C8 最高证据等级仍保持 L2。C9 只有在用户明确授权真实 toke
 | 图像生成 | poyo.ai | `POYO_API_KEY`, `POYO_API_BASE_URL`, `POYO_IMAGE_MODEL` | GPT image 类模型，经 poyo 接入 | L2 验证 prompt hash 和 job ledger；L4 小样本 |
 | 视频生成 | poyo.ai | `POYO_API_KEY`, `POYO_API_BASE_URL`, `POYO_VIDEO_MODEL` | Seedance 视频生成 | L2 禁止真实调用；L4 只跑最小样本 |
 | TTS | SiliconFlow CosyVoice | `SILICONFLOW_API_KEY`, `SILICONFLOW_API_BASE`, `COSYVOICE_MODEL`, `COSYVOICE_VOICE` | 旁白和音频生成 | L2 验证配置和任务边界；L4 可选 |
-| 后端访问 | Internal API | `API_KEY`, `PLAYWRIGHT_API_KEY` | 后端 API 认证和生产 E2E | demo key 只能用于只读或非 token 路径 |
+| 后端访问 | Internal API | `API_KEY`, `PLAYWRIGHT_API_KEY` | 后端 API 认证和生产 E2E | L3/L4 验收必须使用非 demo production key；demo key 或缺 key 只能得到跳过后的部分 smoke |
 
 ### 候选或备用链路
 
@@ -125,16 +125,20 @@ git diff --check
 ```bash
 cd web
 PLAYWRIGHT_PROD_URL=https://video.lute-tlz-dddd.top \
-PLAYWRIGHT_API_KEY=ai_video_demo_2026 \
+PLAYWRIGHT_API_KEY=<production-api-key> \
+RUN_TOKEN_SMOKE=0 \
 npm run e2e:prod
 ```
 
 默认 `web/playwright.prod.config.ts` 会跳过 `@token-smoke`。不得设置 `RUN_TOKEN_SMOKE=1`。
 
+2026-06-06 当前有效验收结果：使用生产 API key、`RUN_TOKEN_SMOKE=0` 执行后，生产套件为 `50 passed, 2 skipped`。缺少 `PLAYWRIGHT_API_KEY` 或只提供 `ai_video_demo_2026` 时，authenticated production checks 会跳过；这种结果只能说明页面级 smoke 可运行，不能作为生产验收通过。
+
 检查项：
 
 - `/`、`/settings`、S1-S5、Fast Mode、资源页可以打开。
-- demo key 不触发真实 provider。
+- authenticated production checks 必须使用非 demo production key。
+- `@token-smoke` 默认跳过，不触发真实 provider。
 - 生产错误页和离线状态有明确展示。
 - `/api/fast/generate` token path 不在默认 smoke 中执行。
 
@@ -201,6 +205,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 3. [x] 为生产非 token E2E 增加 `/settings` 路由覆盖，不改变 `@token-smoke` 默认跳过策略。实现文件：`web/e2e/production/smoke.prod.spec.ts`。
 4. [x] 为 poyo 授权 smoke 准备 approval record 模板和预算止损字段，但不在未授权状态下执行 provider 调用。实现文件：`configs/authorized-live-token-smoke-approval-template.json`。
 5. [x] 在品牌资产目录接入后，把 S5 和工具箱图像生成样本加入 L2 fixture 矩阵。实现文件：`tests/fixtures/toolbox/momcozy_toolbox_l2_fixture_matrix.json`。
+6. [x] 移除生产 `@token-smoke` spec 中残留的 demo key fallback，统一通过 production helper 管控 authenticated smoke。实现文件：`web/e2e/production/helpers.ts`、`web/e2e/production/s1-gate.prod.spec.ts`、`web/e2e/production/s1-step-by-step.prod.spec.ts`。
 
 ## 阶段验收
 
@@ -209,7 +214,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 - L0 全绿。
 - L1 `/settings` 页面验收通过。
 - L2 preflight 在无授权状态下正确 blocked，在授权记录和 key 完整时才变为可执行。
-- L3 生产非 token E2E 通过。
+- L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 
 未满足以上条件时，结论只能停留在 L2/L3，不能声明真实商业视频生成链路已完成。
