@@ -151,7 +151,8 @@ def run_authorized_live_harness(
             preflight=preflight,
         )
 
-    submitted_records, response_refs = _submit_job_specs(job_specs, configured_submitter)
+    submitted_records, response_refs, artifact_outputs = _submit_job_specs(job_specs, configured_submitter)
+    _attach_provider_outputs_to_manifest(artifact_manifest, artifact_outputs)
     return AuthorizedLiveHarnessReport(
         harness_id=harness_id,
         mode=mode,
@@ -252,17 +253,45 @@ def _prepare_job_records(job_specs: list[MediaJobSpec]) -> list[MediaJobRecord]:
 def _submit_job_specs(
     job_specs: list[MediaJobSpec],
     submitter: ProviderSubmitter,
-) -> tuple[list[MediaJobRecord], dict[str, str]]:
+) -> tuple[list[MediaJobRecord], dict[str, str], dict[str, dict[str, str]]]:
     ledger = ProductionJobLedger()
     submitted_records: list[MediaJobRecord] = []
     response_refs: dict[str, str] = {}
+    artifact_outputs: dict[str, dict[str, str]] = {}
     for spec in job_specs:
         ledger.prepare(spec)
         response = submitter(spec)
         provider_job_id = str(response.get("provider_job_id") or response.get("job_id") or spec.job_id)
+        media_url = _required_provider_string(response, "media_url", spec.job_id)
         response_refs[spec.job_id] = provider_job_id
+        artifact_outputs[spec.job_id] = {
+            "artifact_ref": str(response.get("artifact_ref") or _artifact_refs_by_job_id()[spec.job_id]),
+            "media_url": media_url,
+            "thumbnail_ref": str(response.get("thumbnail_ref") or ""),
+        }
         submitted_records.append(ledger.mark_submitted(spec.job_id, provider_job_id))
-    return submitted_records, response_refs
+    return submitted_records, response_refs, artifact_outputs
+
+
+def _required_provider_string(response: Mapping[str, Any], key: str, job_id: str) -> str:
+    value = response.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"authorized-live provider response for {job_id} missing {key}")
+    return value
+
+
+def _attach_provider_outputs_to_manifest(
+    manifest: AuthorizedLiveAssetPackManifest,
+    artifact_outputs: Mapping[str, Mapping[str, str]],
+) -> None:
+    for artifact in manifest.artifacts:
+        output = artifact_outputs.get(artifact.job_id)
+        if output is None:
+            raise ValueError(f"authorized-live artifact output missing for {artifact.job_id}")
+        if output.get("artifact_ref") != artifact.artifact_ref:
+            raise ValueError(f"authorized-live artifact ref mismatch for {artifact.job_id}")
+        artifact.media_url = _required_provider_string(output, "media_url", artifact.job_id)
+        artifact.thumbnail_ref = output.get("thumbnail_ref") or None
 
 
 def _build_asset_pack_manifest(job_specs: list[MediaJobSpec]) -> AuthorizedLiveAssetPackManifest:

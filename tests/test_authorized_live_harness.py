@@ -194,7 +194,7 @@ def test_execute_mode_uses_submitter_factory_after_preflight_and_execute_gate(tm
 
     def submitter(spec: Any) -> dict[str, str]:
         submitter_calls.append(spec.job_id)
-        return {"provider_job_id": f"provider:{spec.job_id}"}
+        return _provider_response(spec)
 
     report = run_authorized_live_harness(
         mode="execute",
@@ -216,7 +216,7 @@ def test_execute_mode_with_submitter_runs_asset_pack_once_in_order_without_retry
 
     def submitter(spec: Any) -> dict[str, str]:
         calls.append(spec)
-        return {"provider_job_id": f"provider:{spec.job_id}"}
+        return _provider_response(spec)
 
     report = run_authorized_live_harness(mode="execute", env=env, submitter=submitter)
 
@@ -233,6 +233,26 @@ def test_execute_mode_with_submitter_runs_asset_pack_once_in_order_without_retry
     assert all(record.status == "submitted" for record in report.job_records)
     assert all(record.delivery_accepted is False for record in report.job_records)
     assert all(record.publish_allowed is False for record in report.job_records)
+    assert all(artifact.media_url for artifact in report.artifact_manifest.artifacts)
+    assert report.artifact_manifest.artifacts[-1].media_url == (
+        "https://cdn.example.test/momcozy_sterilizer_i2v_15s_authorized_live_fixture.mp4"
+    )
+
+
+def test_execute_mode_requires_provider_media_url_for_artifact_manifest(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path)
+    env = _ready_env(approval_record)
+    env[EXECUTE_ENV] = "1"
+
+    def submitter(spec: Any) -> dict[str, str]:
+        return {"provider_job_id": f"provider:{spec.job_id}"}
+
+    try:
+        run_authorized_live_harness(mode="execute", env=env, submitter=submitter)
+    except ValueError as exc:
+        assert "missing media_url" in str(exc)
+    else:
+        raise AssertionError("execute mode must fail when provider media_url is missing")
 
 
 def test_cli_default_is_disabled_and_json_parseable():
@@ -269,6 +289,33 @@ def _ready_env(approval_record: Path) -> dict[str, str]:
     for key_name in REQUIRED_API_KEY_ENVS:
         env[key_name] = f"sk_fixture_secret_{key_name.lower()}"
     return env
+
+
+def _provider_response(spec: Any) -> dict[str, str]:
+    extension = "mp4" if spec.job_id == "momcozy_sterilizer_i2v_15s_authorized_live_fixture" else "png"
+    return {
+        "provider_job_id": f"provider:{spec.job_id}",
+        "artifact_ref": _artifact_ref_for_job_id(spec.job_id),
+        "media_url": f"https://cdn.example.test/{spec.job_id}.{extension}",
+        "thumbnail_ref": f"https://cdn.example.test/{spec.job_id}.jpg",
+    }
+
+
+def _artifact_ref_for_job_id(job_id: str) -> str:
+    return {
+        "momcozy_sterilizer_main_45_image_authorized_live_fixture": (
+            "artifact://authorized-live/momcozy-sterilizer-main-45-gpt-image-2"
+        ),
+        "momcozy_sterilizer_uv_benefit_image_authorized_live_fixture": (
+            "artifact://authorized-live/momcozy-sterilizer-uv-benefit-gpt-image-2"
+        ),
+        "momcozy_sterilizer_kitchen_scene_image_authorized_live_fixture": (
+            "artifact://authorized-live/momcozy-sterilizer-kitchen-scene-gpt-image-2"
+        ),
+        "momcozy_sterilizer_i2v_15s_authorized_live_fixture": (
+            "artifact://authorized-live/momcozy-sterilizer-i2v-15s-seedance-2"
+        ),
+    }[job_id]
 
 
 def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
