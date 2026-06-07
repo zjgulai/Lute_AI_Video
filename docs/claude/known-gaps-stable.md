@@ -36,6 +36,14 @@ source: human+ai
 - **运行护栏对齐** — `docs/runbooks/poyo-rejection.md` 与 `docs/poyo-trigger-words.md` 联动：新增触发词/替换词需同时更新 fixtures 与文档。
 - **边界** — P2-2 当前仍属 `L2-fixture-or-dry-run` 内容治理补强：未发起新的 provider 调用，不改变 `/api/fast/*`、`/scenario/*`、发布链路、`brand token` 发放状态。
 
+## 0.90 2026-06-07 生产部署后回归复盘清单
+
+- **新增回归 SOP** — 新增 `docs/runbooks/production-post-deploy-regression-checklist.md`，统一 `RUN_TOKEN_SMOKE=0` 下的 deploy 后页面/API/容器/日志复核顺序。
+- **复核内容** — 包含 `deploy/lighthouse/smoke.sh` 结果复盘、关键页面状态码清单、关键 API 只读校验、远端容器 `RestartCount` 与异常日志抽样、以及回归证据 JSON 模板。
+- **边界控制** — 文件明确要求 demo key 模式下跳过鉴权 API 细项，并要求以 `tmp/outputs/production-post-deploy-regression-YYYYMMDD.json` 固化结果后才能作为 P2-3 交付证据。
+- **执行状态** — 已在 2026-06-07 产线执行过一次完整检查，已形成 `tmp/outputs/production-post-deploy-regression-20260607.json` 证据，当前判定为 `demo` 鉴权模式下 PASS（`toolbox` 步骤跳过，未触发 provider）。
+- **状态** — P2-3 已从执行清单收口为可复跑清单；正式 PASS 判据仍等待下一轮回归循环后签字确认。
+
 ## 0.88 2026-06-07 AI Video 2.0 P1-65 50-loop checkpoint review
 
 - **结论** — 对 `P1-16`~`P1-64` 执行结果做完税式复核后，确认本轮 50-loop 已具备闭环证据：全部项完成、未发现新增阻塞项，且未引入 provider 真调用前提外扩散。
@@ -732,8 +740,8 @@ source: human+ai
 - [x] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
 - [x] **P1-65：50-loop checkpoint review** — 已对 P1-16~P1-64 执行结果复核并完成排序：当前未形成新增 P1 阻塞，执行入口切至 `P2-1`（充值后受控 live smoke/交付链路）。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
-- [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
-- [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。
+- [x] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
+- [x] **P2-3：生产部署后回归证据固化** — 已新增 `production-post-deploy-regression-checklist.md`，覆盖 Lighthouse 健康检查、页面/API smoke、容器与日志核验、回归证据模板。
 
 > 更早盘点：2026-05-31 — 遗留技术债深度汇总与执行计划。
 
