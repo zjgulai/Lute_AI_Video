@@ -137,6 +137,12 @@ describe("Production E2E token smoke guardrails", () => {
         "POST /api/scenario/s1/start returns label @token-smoke",
         "POST /api/scenario/s1/step/strategy completes successfully (no missing-name error) @token-smoke",
       ],
+      "e2e/production/scenario-multi-submit.prod.spec.ts": [
+        "POST /api/scenario/s2 with enable_media_synthesis=false returns brand campaign result @token-smoke",
+        "POST /api/scenario/s3/submit then /api/scenario/s3/status/{label} round-trip @token-smoke",
+        "POST /api/scenario/s4/submit then /api/scenario/s4/status/{label} round-trip @token-smoke",
+        "POST /api/scenario/s5/submit then /api/scenario/s5/status/{label} round-trip @token-smoke",
+      ],
     };
 
     for (const [path, taggedTitles] of Object.entries(expectedTaggedTests)) {
