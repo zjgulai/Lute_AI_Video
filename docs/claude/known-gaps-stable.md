@@ -11,7 +11,7 @@ source: human+ai
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-07** — 追加 AI Video 2.0 C21-C35 与 P1-64 真实 smoke 前置链路与 C2PA dry-run 合规补齐：授权审批止损、Momcozy S5/toolbox L2 fixture、工具级 provider readiness、poyo 当前公开文档重验、Momcozy 消毒器 3 图 + 1 视频样本计划、私有 approval/account readiness 构建器、no-token 启动包、资产包 harness、no-token submitter facade contract、submitter factory gate、poyo submit/status HTTP adapter contract、HTTP submitter assembly gate、私有 payload/runtime 接线 contract，以及 C2PA 无证书 dry-run 检查清单；当前最高证据等级仍为 `L2-fixture-or-dry-run`，未触发 provider、未生成 approved brand token、未形成交付/发布结论。
+最近一次盘点：**2026-06-07** — 追加 AI Video 2.0 C21-C35 与 P1-64 真实 smoke 前置链路与 C2PA dry-run 合规补齐：授权审批止损、Momcozy S5/toolbox L2 fixture、工具级 provider readiness、poyo 当前公开文档重验、Momcozy 消毒器 3 图 + 1 视频样本计划、私有 approval/account readiness 构建器、no-token 启动包、资产包 harness、no-token submitter facade contract、submitter factory gate、poyo submit/status HTTP adapter contract、HTTP submitter assembly gate、私有 payload/runtime 接线 contract，以及 C2PA 无证书 dry-run 检查清单；当前 50-loop checkpoint 复核完成（P1-16~P1-64 无阻塞技术债），`P1-65` 已收口，当前执行入口切到 P2，下一步继续在明确充值与双确认后执行小样本授权 live smoke；当前依然未触发完整交付发布闭环。
 
 > 上一次盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
 
@@ -22,7 +22,17 @@ source: human+ai
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **当前研究 / 架构 / 流程引用**：2026-06-03 至 2026-06-04 新增 `docs/research/ai-video-commercial-technology-research-review-20260603.md`、`docs/research/ai-video-longform-production-research-audit-review-20260603.md`、`docs/research/aihot-image-video-product-technology-research-review-20260604.md`、[`docs/architecture/ai-video-commercial-toolbox-architecture-review-20260603.md`](../architecture/ai-video-commercial-toolbox-architecture-review-20260603.md)、[`docs/architecture/brand-asset-token-contract-review-20260603.md`](../architecture/brand-asset-token-contract-review-20260603.md)、[`docs/architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md`](../architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md)、[`docs/architecture/quality-contract-brand-rights-audit-review-20260603.md`](../architecture/quality-contract-brand-rights-audit-review-20260603.md)、[`docs/workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md`](../workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md)、[`docs/workflows/brand-data-asset-directory-intake-review-20260603.md`](../workflows/brand-data-asset-directory-intake-review-20260603.md)、[`docs/workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md`](../workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md) 与 [`docs/workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md`](../workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md)，用于后续 S1-S5 工具库、Market Signal Intelligence、Brand Asset Token、Provider Prompt Compiler、Production Job Ledger、Quality Contract、长视频生产对象、品牌数据资产目录接入和 Project 2.0 代码前实施计划；十一份均为 `review` 状态，不替代本文件的 TODO list。
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
-- **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。
+- **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。该边界已在 `P1-65` 复核中闭环。
+
+## 0.88 2026-06-07 AI Video 2.0 P1-65 50-loop checkpoint review
+
+- **结论** — 对 `P1-16`~`P1-64` 执行结果做完税式复核后，确认本轮 50-loop 已具备闭环证据：全部项完成、未发现新增阻塞项，且未引入 provider 真调用前提外扩散。
+- **排序结果** — 技术债优先级重排为两层：
+  - **P1 可收尾项（保持现状）**：`api key hermetic`、`timeout/deploy`、`docs/test/CI`、`前端 error path` 与 `provider runtime 无泄露` 相关项继续保持阻断性防护，不允许放松；
+  - **P2 前置项（下阶段）**：S1-S5 实际 provider smoke、`C2PA` 商业签发闭环、品牌资产入库交付链路、发布/分发上线链条、长视频生产后续对象落地。
+  这部分不属于 P1 50-loop 技术债处理范围。
+- **门禁决策** — `P1-65` 已完成并合入执行结论：`P1-16~P1-64` 收口，`P1` 主线不再新增功能任务，下一阶段从 `P2-1` 按充值后授权执行路径推进。
+- **边界对齐** — 尽管本次复核完成，但授权真实执行仍受 `C21/C24~C35` 约束：需用户逐字授权、`approval record`、`provider account readiness`、`AI_VIDEO_AUTHORIZED_LIVE_*` 门禁与 `RUN_TOKEN_SMOKE=1` 同时满足后，才允许进入 `L4-authorized-live`。
 
 ## 0.86 2026-06-06 AI Video 2.0 C35 private poyo runtime wiring contract
 
@@ -708,7 +718,7 @@ source: human+ai
 - [x] **P1-62：Dockerfile dev-tool parity guard** — 已确认 Docker/CI 需要的测试工具和 lockfile 一致。
 - [x] **P1-63：Remotion no-provider-key guard** — 已确认 rendering build/test 不读取 provider API key，并固化静态守卫。
 - [x] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
-- [ ] **P1-65：50-loop checkpoint review** — 对 P1-16~P1-64 执行结果做一次技术债重新排序，决定充值前是否继续扩展 P1。
+- [x] **P1-65：50-loop checkpoint review** — 已对 P1-16~P1-64 执行结果复核并完成排序：当前未形成新增 P1 阻塞，执行入口切至 `P2-1`（充值后受控 live smoke/交付链路）。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [ ] **P2-3：生产部署后回归证据固化** — Lighthouse 部署、健康检查、关键页面、API smoke、日志异常统一形成可复跑 checklist。
