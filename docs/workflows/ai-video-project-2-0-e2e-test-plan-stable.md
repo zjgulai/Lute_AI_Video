@@ -5,7 +5,7 @@ module: ai-video-2.0
 topic: e2e-test-plan
 status: stable
 created: 2026-06-06
-updated: 2026-06-06
+updated: 2026-06-07
 owner: self
 source: human+ai
 ---
@@ -27,7 +27,7 @@ source: human+ai
 | L3 | 生产非 token smoke、生产非 token Playwright | 否 | 生产路由、认证、静态页面、非生成路径可用 |
 | L4 | 授权真实 token smoke | 是 | 局部 provider 链路可用，不等于商业交付完成 |
 
-C1-C8 最高证据等级仍保持 L2。C9 只有在用户明确授权真实 token smoke 后，才能对被测试的小范围路径升级为 L4。
+C1-C8 最高证据等级仍保持 L2。C9 在用户明确授权并满足双确认后，可将受控样本路径切到 L4；截至 `2026-06-07`，Momcozy 消毒器 3 图 + 1 视频样本已完成一次 `L4-authorized-live` 执行（pending_review 边界内）。
 
 ## 生产模型和 Key 盘点
 
@@ -164,7 +164,8 @@ npm run e2e:prod
 
 默认 `web/playwright.prod.config.ts` 会跳过 `@token-smoke`。不得设置 `RUN_TOKEN_SMOKE=1`。
 
-2026-06-06 当前有效验收结果：使用生产 API key、`RUN_TOKEN_SMOKE=0` 执行后，生产套件为 `50 passed, 2 skipped`。缺少 `PLAYWRIGHT_API_KEY` 或只提供 `ai_video_demo_2026` 时，authenticated production checks 会跳过；这种结果只能说明页面级 smoke 可运行，不能作为生产验收通过。
+2026-06-06 当前非 token 验收基线：使用生产 API key、`RUN_TOKEN_SMOKE=0` 执行后，生产套件为 `50 passed, 2 skipped`。缺少 `PLAYWRIGHT_API_KEY` 或只提供 `ai_video_demo_2026` 时，authenticated production checks 会跳过；该结果只能说明页面级 smoke 可运行，不能作为生产验收通过。
+2026-06-07 已完成一次受控 real-smoke（`tmp/outputs/authorized-live-poyo-smoke-rerun-20260607-summary.json`）并落库 `output/pending_review/momcozy_sterilizer_smoke_20260607`，其中 `provider_call_executed=true`、`blocked_reasons=[]`，证据等级 `L4-authorized-live`。
 
 检查项：
 
@@ -180,7 +181,7 @@ npm run e2e:prod
 
 执行前置条件：
 
-- 用户在当前会话再次明确授权真实 token smoke。
+- 用户在当前会话明确授权真实 token smoke（首次执行后再次执行需按“再次确认+更新私有 records”流程）。
 - poyo 账号已充值，预算和止损阈值明确。
 - `API_KEY` 和 `PLAYWRIGHT_API_KEY` 是非 demo production key。
 - `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 已配置。
@@ -225,7 +226,7 @@ python scripts/p2_recharge_smoke_checklist.py --execute
 
 当前 `--execute` 入口会先跑 no-token preflight，再进入 `scripts/authorized_live_token_smoke_harness.py --execute --enable-poyo-http-submitter --pretty`。只有 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`、私有 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS` 同时存在时才会接线 provider submitter；执行范围仍只能是本节 3 图 + 1 视频资产包。
 
-C31 已新增 no-token submitter facade contract：`src/pipeline/authorized_live_poyo_submitter.py` 只接受 injected transport，不导入 `PoyoClient`、`httpx`、`POYO_API_KEY` 或 `os.environ`。`tests/test_authorized_live_poyo_submitter.py` 使用 fake transport 证明 job scope、model、视频 reference refs、prompt 不回显和 failure no-retry 边界。该 contract 仍不是真实 provider submitter；下一步若要进入 L4，仍需在精确授权、私有 approval/account readiness、生产 key、provider key 和 execute flags 满足后，单独接线真实 transport。
+C31 已新增 no-token submitter facade contract：`src/pipeline/authorized_live_poyo_submitter.py` 只接受 injected transport，不导入 `PoyoClient`、`httpx`、`POYO_API_KEY` 或 `os.environ`。`tests/test_authorized_live_poyo_submitter.py` 使用 fake transport 证明 job scope、model、视频 reference refs、prompt 不回显和 failure no-retry 边界。该 contract 仍不是真实 provider submitter；进入真实 L4 仍需精确授权、私有 approval/account readiness、生产 key、provider key 与 execute flags 满足后，接线真实 transport。
 
 C32 已新增 no-token submitter factory gate：`build_authorized_live_poyo_submitter()` 默认在未设置 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时返回 `None`，即使启用该 gate 也必须由调用方注入 transport 和 private payloads，不能从 CLI、环境变量或模块默认值隐式构建真实 provider client。`scripts/authorized_live_token_smoke_harness.py` 仍不接线该 factory，不导入 `PoyoClient`、`httpx` 或 `POYO_API_KEY`。
 
@@ -233,7 +234,11 @@ C33 已新增 no-token poyo submit/status HTTP adapter contract：`AuthorizedLiv
 
 C34 已新增 no-token HTTP submitter assembly gate：`build_authorized_live_poyo_submitter_from_http()` 只在 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时，把调用方私有注入的 authorization token、HTTP client 和 private payloads 组装成 `AuthorizedLivePoyoSubmitter`。未启用 gate 时返回 `None`；启用后缺任一私有输入都会 fail-closed。`scripts/authorized_live_token_smoke_harness.py` 仍不接线该 helper，因此默认 CLI 仍不能真实调用 poyo。
 
-C35 已新增私有 poyo runtime 接线 contract：`build_authorized_live_poyo_runtime_submitter()` 从 injected env mapping 读取 `POYO_API_KEY`、`POYO_API_BASE_URL` 和 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS`，并只在 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时组装 submitter。CLI 只在 `--enable-poyo-http-submitter` 且 execute 模式下传入 lazy factory；preflight blocked 或 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1` 缺失时不会构造 submitter。C36 将 P2 统一执行入口同步为带 `--enable-poyo-http-submitter` 的真实接线路径，并显式要求 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`、私有 payload 文件；缺任一项仍 fail-closed，不调用 provider。
+C35 已新增私有 poyo runtime 接线 contract：`build_authorized_live_poyo_runtime_submitter()` 从 injected env mapping 读取 `POYO_API_KEY`、`POYO_API_BASE_URL` 和 `AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS`，并只在 `AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1` 时组装 submitter。CLI 只在 `--enable-poyo-http-submitter` 且 execute 模式下传入 lazy factory；preflight blocked 或 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1` 缺失时不会构造 submitter。
+
+C36 已统一执行入口为带 `--enable-poyo-http-submitter` 的真实接线路径：`scripts/p2_recharge_smoke_checklist.py --execute`。未满足 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS`、`AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD`、`AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD` 任一项，或 fail-closed 条件触发时，均不会调用 provider。
+
+截至 2026-06-07 的一次真实执行已按该路径完成并落入 `tmp/outputs/authorized-live-poyo-smoke-rerun-20260607-summary.json`：`status=submitted`、`provider_call_executed=true`、`blocked_reasons=[]`、4 条产物均为 `pending_review`（3 图 1 视频）、`delivery_accepted=false`、`publish_allowed=false`、`approved_brand_token_write=false`。
 
 真实样本范围：
 
@@ -260,11 +265,11 @@ C35 已新增私有 poyo runtime 接线 contract：`build_authorized_live_poyo_r
 | Fast Mode | P0 | 是 | 是 | 否 | 首轮 L4 不再测试，保留后续连接性回归 |
 | S1 商品直拍 | P0 | 是 | 是 | 否 | 首轮 L4 不再测试，保留后续主流程回归 |
 | S5 Brand VLOG | P1 | 是 | 是 | 可选 | 品牌资产目录接入后再扩大 |
-| 工具箱：电商商品图 | P0 | 是 | 是 | 是 | 首轮 Momcozy 消毒器主图 |
+| 工具箱：电商商品图 | P0 | 是 | 是 | 是（已执行） | 首轮 Momcozy 消毒器主图 |
 | 工具箱：产品六视图 | P1 | 是 | 是 | 可选 | 真实生成需成本确认 |
-| 工具箱：电商视觉图 | P0 | 是 | 是 | 是 | 首轮 Momcozy 消毒器卖点图和场景图 |
+| 工具箱：电商视觉图 | P0 | 是 | 是 | 是（已执行） | 首轮 Momcozy 消毒器卖点图和场景图 |
 | 工具箱：数字人 | P2 | 是 | 是 | 否 | 需单独评估 HeyGen/Avatar 成本 |
-| 工具箱：故事版 | P0 | 是 | 是 | 是 | 首轮 15 秒 image-to-video |
+| 工具箱：故事版 | P0 | 是 | 是 | 是（已执行） | 首轮 15 秒 image-to-video |
 | S2/S3/S4 | P2 | 是 | 是 | 否 | 长视频和 remix 权利门禁先行 |
 
 ## 下一轮开发 TODO
@@ -309,4 +314,4 @@ C35 已新增私有 poyo runtime 接线 contract：`build_authorized_live_poyo_r
 - L3 生产非 token E2E 使用非 demo production key 通过，且结果不低于当前 `50 passed, 2 skipped` 基线。
 - 用户明确授权 L4，并确认预算、样本数、失败停止规则。
 
-未满足以上条件时，结论只能停留在 L2/L3，不能声明真实商业视频生成链路已完成。
+已满足以上条件并完成一次 scoped 执行后，可声明“受控 `L4-authorized-live`（样本包）已完成”；仍不能声明商业交付完成、delivery acceptance、或可直接发布。
