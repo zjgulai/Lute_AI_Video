@@ -73,6 +73,7 @@ def _env_status() -> list[str]:
 
 
 def _build_commands(base_url: str, *, execute: bool = False) -> list[SmokeCommand]:
+    python_executable = sys.executable or "python3"
     common_env = {
         TOKEN_SMOKE_ENV: "1",
         "P2_RECHARGE_SMOKE_MODE": "execute" if execute else "dry-run",
@@ -86,7 +87,7 @@ def _build_commands(base_url: str, *, execute: bool = False) -> list[SmokeComman
             name="Momcozy sterilizer authorized-live asset smoke harness",
             cwd=REPO_ROOT,
             argv=(
-                "python",
+                python_executable,
                 "scripts/authorized_live_token_smoke_harness.py",
                 "--execute",
                 "--enable-poyo-http-submitter",
