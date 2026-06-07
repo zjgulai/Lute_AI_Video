@@ -4,21 +4,21 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-06
+updated: 2026-06-07
 owner: self
 source: human+ai
 ---
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-06** — 追加 AI Video 2.0 C21-C35 真实 smoke 前置门禁链路：授权审批止损、Momcozy S5/toolbox L2 fixture、工具级 provider readiness、poyo 当前公开文档重验、Momcozy 消毒器 3 图 + 1 视频样本计划、私有 approval/account readiness 构建器、no-token 启动包、资产包 harness、no-token submitter facade contract、submitter factory gate、poyo submit/status HTTP adapter contract、HTTP submitter assembly gate 和私有 payload/runtime 接线 contract；当前最高证据等级仍为 `L2-fixture-or-dry-run`，未触发 provider、未生成 approved brand token、未形成交付/发布结论。
+最近一次盘点：**2026-06-07** — 追加 AI Video 2.0 C21-C35 与 P1-64 真实 smoke 前置链路与 C2PA dry-run 合规补齐：授权审批止损、Momcozy S5/toolbox L2 fixture、工具级 provider readiness、poyo 当前公开文档重验、Momcozy 消毒器 3 图 + 1 视频样本计划、私有 approval/account readiness 构建器、no-token 启动包、资产包 harness、no-token submitter facade contract、submitter factory gate、poyo submit/status HTTP adapter contract、HTTP submitter assembly gate、私有 payload/runtime 接线 contract，以及 C2PA 无证书 dry-run 检查清单；当前最高证据等级仍为 `L2-fixture-or-dry-run`，未触发 provider、未生成 approved brand token、未形成交付/发布结论。
 
 > 上一次盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
 
 ## 当前执行入口
 
 - **当前长期 TODO 来源**：本文件的“完整 TODO list”继续维护项目长期 P1/P2 缺口。
-- **当前 AI Video 2.0 执行入口**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的原始分步计划；[`docs/workflows/ai-video-toolbox-productization-plan-stable.md`](../workflows/ai-video-toolbox-productization-plan-stable.md) 追踪工具箱 T1-T9/C23；[`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`](../workflows/ai-video-project-2-0-e2e-test-plan-stable.md) 是真实 poyo smoke 前置计划；[`docs/workflows/ai-video-project-2-0-final-self-proof-stable.md`](../workflows/ai-video-project-2-0-final-self-proof-stable.md) 记录 C1-C29 自证状态。C1-C35 最高证据等级保持 `L2-fixture-or-dry-run`；C21-C35 仍需用户再次明确授权、有效 approval record、provider account readiness record、私有 poyo payloads、预算止损、非 demo production key、provider keys、`CONFIRM_P2_TOKEN_SMOKE=1` 和 `RUN_TOKEN_SMOKE=1` 后才允许局部进入 `L4-authorized-live`。
+- **当前 AI Video 2.0 执行入口**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的原始分步计划；[`docs/workflows/ai-video-toolbox-productization-plan-stable.md`](../workflows/ai-video-toolbox-productization-plan-stable.md) 追踪工具箱 T1-T9/C23；[`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`](../workflows/ai-video-project-2-0-e2e-test-plan-stable.md) 是真实 poyo smoke 前置计划；[`docs/workflows/ai-video-project-2-0-final-self-proof-stable.md`](../workflows/ai-video-project-2-0-final-self-proof-stable.md) 记录 C1-C29 自证状态。C1-C35 最高证据等级保持 `L2-fixture-or-dry-run`；C21-C35 + C36 仍需用户再次明确授权、有效 approval record、provider account readiness record、私有 poyo payloads、预算止损、非 demo production key、provider keys、`CONFIRM_P2_TOKEN_SMOKE=1` 和 `RUN_TOKEN_SMOKE=1` 后才允许局部进入 `L4-authorized-live`。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **当前研究 / 架构 / 流程引用**：2026-06-03 至 2026-06-04 新增 `docs/research/ai-video-commercial-technology-research-review-20260603.md`、`docs/research/ai-video-longform-production-research-audit-review-20260603.md`、`docs/research/aihot-image-video-product-technology-research-review-20260604.md`、[`docs/architecture/ai-video-commercial-toolbox-architecture-review-20260603.md`](../architecture/ai-video-commercial-toolbox-architecture-review-20260603.md)、[`docs/architecture/brand-asset-token-contract-review-20260603.md`](../architecture/brand-asset-token-contract-review-20260603.md)、[`docs/architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md`](../architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md)、[`docs/architecture/quality-contract-brand-rights-audit-review-20260603.md`](../architecture/quality-contract-brand-rights-audit-review-20260603.md)、[`docs/workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md`](../workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md)、[`docs/workflows/brand-data-asset-directory-intake-review-20260603.md`](../workflows/brand-data-asset-directory-intake-review-20260603.md)、[`docs/workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md`](../workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md) 与 [`docs/workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md`](../workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md)，用于后续 S1-S5 工具库、Market Signal Intelligence、Brand Asset Token、Provider Prompt Compiler、Production Job Ledger、Quality Contract、长视频生产对象、品牌数据资产目录接入和 Project 2.0 代码前实施计划；十一份均为 `review` 状态，不替代本文件的 TODO list。
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
@@ -31,6 +31,12 @@ source: human+ai
 - **显式 CLI opt-in** — `scripts/authorized_live_token_smoke_harness.py` 新增 `--enable-poyo-http-submitter`，默认不启用；`run_authorized_live_harness()` 新增 lazy `submitter_factory`，preflight blocked 或 execute gate 未通过时不会构造 submitter。
 - **验证结果** — `.venv/bin/python -m pytest tests/test_authorized_live_harness.py tests/test_authorized_live_poyo_runtime.py` 通过，结果 `17 passed`；授权 smoke 串联回归 `.venv/bin/python -m pytest tests/test_authorized_live_poyo_submitter.py tests/test_authorized_live_poyo_runtime.py tests/test_authorized_live_harness.py tests/test_authorized_live_smoke_packet_builder.py tests/test_p2_recharge_smoke_checklist.py tests/test_token_smoke_preflight.py` 通过，结果 `65 passed`；docs governance `12 passed`；相关 `ruff check`、`git diff --check` 和 scoped secret scan 通过。
 - **边界** — C35 只证明真实调用所需私有 payload/runtime 接线可以 fail-closed 审计；没有精确授权句、私有 approval/account readiness records、生产部署、真实 provider response 和 artifact side effect，不能升级为 `L4-authorized-live`。
+
+## 0.87 2026-06-07 AI Video 2.0 P1-64 C2PA runbook dry-run checklist
+
+- **新增 runbook** — `docs/runbooks/c2pa-dry-run-checklist.md` 补齐 C2PA 签名链路 dry-run 自检：`sign_video` `no-op` 兼容、`build_manifest` 字段完整性、缺证书退化可执行、安全边界（不访问 CA）、与 `c2pa-cert-application` 的衔接。
+- **验证结果** — `.venv/bin/python -m pytest tests/test_sprint3_compliance_resilience.py -k c2pa` 通过，结果 `2 passed`；当前仅覆盖 C2PA dry-run 失败退化面，未触发真实证书申请或签名发布流程。
+- **边界** — P1-64 仍是前置执行清单与回归可视化，不是 EU/商用签发完成证明；未到 `C2PA_ENABLED=1` + production certificate 完整签名验收前，不产生对外发布结论。
 
 ## 0.85 2026-06-06 AI Video 2.0 C34 no-token HTTP submitter assembly gate
 
@@ -701,7 +707,7 @@ source: human+ai
 - [x] **P1-61：workflow trigger path audit** — 已检查 GitHub Actions path filters 是否覆盖对应测试/配置文件。
 - [x] **P1-62：Dockerfile dev-tool parity guard** — 已确认 Docker/CI 需要的测试工具和 lockfile 一致。
 - [x] **P1-63：Remotion no-provider-key guard** — 已确认 rendering build/test 不读取 provider API key，并固化静态守卫。
-- [ ] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
+- [x] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
 - [ ] **P1-65：50-loop checkpoint review** — 对 P1-16~P1-64 执行结果做一次技术债重新排序，决定充值前是否继续扩展 P1。
 - [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
 - [ ] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
