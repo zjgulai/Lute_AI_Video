@@ -99,6 +99,9 @@ class ErrorCode(StrEnum):
     LLM_API_ERROR = "LLM_API_ERROR"
     DALLE_API_ERROR = "DALLE_API_ERROR"
     ELEVENLABS_API_ERROR = "ELEVENLABS_API_ERROR"
+    # Policy & safety rejections are non-recoverable and should be handled
+    # by runbook-driven remediation (trigger-word expansion / prompt rewrite).
+    CONTENT_MODERATION_REJECTED = "CONTENT_MODERATION_REJECTED"
 
     # Pipeline Blocks
     AUDIT_BLOCKED = "AUDIT_BLOCKED"

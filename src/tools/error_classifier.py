@@ -51,6 +51,20 @@ def classify_error(
     extra.setdefault("exc_type", exc_type)
     extra.setdefault("context", context)
 
+    # ── Moderation / policy rejection classification ──
+    if (
+        "content_moderation" in exc_msg
+        or "content_violation" in exc_msg
+        or "safety_block" in exc_msg
+    ):
+        return _make(
+            ErrorCode.CONTENT_MODERATION_REJECTED,
+            exc,
+            context,
+            node,
+            {**extra, "detector": "content_moderation_rules"},
+        )
+
     # ── Timeout-based classification ──
     if isinstance(exc, asyncio.TimeoutError):
         return _make(ErrorCode.INPUT_TIMEOUT, exc, context, node, extra)
@@ -154,6 +168,7 @@ def _is_recoverable(code: ErrorCode) -> bool:
         ErrorCode.ASSET_NOT_FOUND: True,
         ErrorCode.ASSET_LIBRARY_UNAVAILABLE: True,
         ErrorCode.MSGPACK_SERIALIZE: True,
+        ErrorCode.CONTENT_MODERATION_REJECTED: False,
     }
     return recoverable.get(code, False)
 

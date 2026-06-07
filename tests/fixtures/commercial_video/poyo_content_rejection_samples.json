@@ -1,0 +1,86 @@
+{
+  "schema_version": "poyo-content-rejection-samples-v1",
+  "updated": "2026-06-07",
+  "status": "review",
+  "owner": "self",
+  "sanitization_cases": [
+    {
+      "id": "eng-001-breast-pump",
+      "trigger": "breast pump",
+      "raw": "A warm product shot of a baby using a breast pump in the kitchen",
+      "expected_replacement": "wearable wellness device"
+    },
+    {
+      "id": "eng-002-breastfeeding",
+      "trigger": "breastfeeding",
+      "raw": "A guide scene focused on breastfeeding moments and close-up hands",
+      "expected_replacement": "feeding"
+    },
+    {
+      "id": "eng-003-lactation",
+      "trigger": "lactation",
+      "raw": "A clean table with lactation support tools",
+      "expected_replacement": "wellness"
+    },
+    {
+      "id": "eng-004-baby-bottle",
+      "trigger": "baby bottle",
+      "raw": "Product hero with baby bottle on the night stand",
+      "expected_replacement": "infant feeding container"
+    },
+    {
+      "id": "eng-005-nipple",
+      "trigger": "nipple",
+      "raw": "Close-up on the soft nipple part",
+      "expected_replacement": "feeding tip"
+    },
+    {
+      "id": "eng-006-formula",
+      "trigger": "formula milk",
+      "raw": "Display formula milk and feeding accessories",
+      "expected_replacement": "prepared nutrition"
+    },
+    {
+      "id": "eng-007-postpartum",
+      "trigger": "postpartum",
+      "raw": "A realistic postpartum home scene with natural light",
+      "expected_replacement": "new parent"
+    },
+    {
+      "id": "zh-001-xinnaqi",
+      "trigger": "吸奶器",
+      "raw": "便携式吸奶器，适合职场妈妈",
+      "expected_replacement": "可穿戴设备"
+    },
+    {
+      "id": "zh-002-naiping",
+      "trigger": "奶瓶",
+      "raw": "防胀气奶瓶与奶嘴放在厨房台面",
+      "expected_replacement": "婴儿容器"
+    },
+    {
+      "id": "zh-003-shenghou",
+      "trigger": "产后",
+      "raw": "产后恢复护理套装放在浴室架上",
+      "expected_replacement": "恢复期"
+    }
+  ],
+  "runtime_rejection_messages": [
+    {
+      "id": "rej-001",
+      "raw_message": "poyo task failed: content_moderation_failed"
+    },
+    {
+      "id": "rej-002",
+      "raw_message": "poyo task failed: content_violation"
+    },
+    {
+      "id": "rej-003",
+      "raw_message": "poyo task failed: safety_block"
+    },
+    {
+      "id": "rej-004",
+      "raw_message": "POYO content_violation: image rejected by policy"
+    }
+  ]
+}

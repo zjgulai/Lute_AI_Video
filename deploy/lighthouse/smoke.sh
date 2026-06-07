@@ -22,6 +22,10 @@ if [ -z "$API_KEY" ]; then
   echo "ERROR: API_KEY is required. Set API_KEY env var or run from deploy/lighthouse with .env.prod present." >&2
   exit 2
 fi
+is_demo_key=0
+if [[ "$API_KEY" == *"demo"* ]] || [[ "$API_KEY" == *"ai_video_demo"* ]]; then
+  is_demo_key=1
+fi
 
 # curl 用 -k 跳过自签证书校验,production 用真实证书后可去掉
 CURL="curl -sS -k -o /dev/null -w %{http_code}"
@@ -65,35 +69,39 @@ check "POST /api/pipeline/start without key" "401" "$status"
 
 # 4. AI Video 2.0 toolbox 只读接口检查:不创建 run,不触发 provider。
 echo "[4/5] Toolbox read-only endpoints"
-toolbox_tools_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
-  -H "X-API-Key: $API_KEY" \
-  "$BASE/api/toolbox/tools")
-check "GET /api/toolbox/tools" "200" "$toolbox_tools_status"
-toolbox_tools_level=$(curl -sS -k \
-  -H "X-API-Key: $API_KEY" \
-  "$BASE/api/toolbox/tools" \
-  | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
-check "toolbox.tools.evidence_level" "L2-fixture-or-dry-run" "$toolbox_tools_level"
+if [ "$is_demo_key" -eq 1 ]; then
+  echo "  [SKIP] toolbox read-only endpoints (non-demo API key required)"
+else
+  toolbox_tools_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
+    -H "X-API-Key: $API_KEY" \
+    "$BASE/api/toolbox/tools")
+  check "GET /api/toolbox/tools" "200" "$toolbox_tools_status"
+  toolbox_tools_level=$(curl -sS -k \
+    -H "X-API-Key: $API_KEY" \
+    "$BASE/api/toolbox/tools" \
+    | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
+  check "toolbox.tools.evidence_level" "L2-fixture-or-dry-run" "$toolbox_tools_level"
 
-toolbox_runs_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
-  -H "X-API-Key: $API_KEY" \
-  "$BASE/api/toolbox/runs?limit=1")
-check "GET /api/toolbox/runs?limit=1" "200" "$toolbox_runs_status"
-toolbox_runs_level=$(curl -sS -k \
-  -H "X-API-Key: $API_KEY" \
-  "$BASE/api/toolbox/runs?limit=1" \
-  | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
-check "toolbox.runs.evidence_level" "L2-fixture-or-dry-run" "$toolbox_runs_level"
+  toolbox_runs_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
+    -H "X-API-Key: $API_KEY" \
+    "$BASE/api/toolbox/runs?limit=1")
+  check "GET /api/toolbox/runs?limit=1" "200" "$toolbox_runs_status"
+  toolbox_runs_level=$(curl -sS -k \
+    -H "X-API-Key: $API_KEY" \
+    "$BASE/api/toolbox/runs?limit=1" \
+    | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
+  check "toolbox.runs.evidence_level" "L2-fixture-or-dry-run" "$toolbox_runs_level"
 
-toolbox_audit_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
-  -H "X-API-Key: $API_KEY" \
-  "$BASE/api/toolbox/runs/audit-summaries?limit=1")
-check "GET /api/toolbox/runs/audit-summaries?limit=1" "200" "$toolbox_audit_status"
-toolbox_audit_level=$(curl -sS -k \
-  -H "X-API-Key: $API_KEY" \
-  "$BASE/api/toolbox/runs/audit-summaries?limit=1" \
-  | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
-check "toolbox.audit_summaries.evidence_level" "L2-fixture-or-dry-run" "$toolbox_audit_level"
+  toolbox_audit_status=$(curl -sS -k -o /dev/null -w "%{http_code}" \
+    -H "X-API-Key: $API_KEY" \
+    "$BASE/api/toolbox/runs/audit-summaries?limit=1")
+  check "GET /api/toolbox/runs/audit-summaries?limit=1" "200" "$toolbox_audit_status"
+  toolbox_audit_level=$(curl -sS -k \
+    -H "X-API-Key: $API_KEY" \
+    "$BASE/api/toolbox/runs/audit-summaries?limit=1" \
+    | python3 -c "import json, sys; d = json.load(sys.stdin); print(d.get('evidence_level', 'unknown'))" 2>/dev/null || echo "parse_error")
+  check "toolbox.audit_summaries.evidence_level" "L2-fixture-or-dry-run" "$toolbox_audit_level"
+fi
 
 # 5. 真链路生成会消耗外部额度,默认跳过;充值后用 RUN_TOKEN_SMOKE=1 显式开启。
 echo "[5/5] Real path: /api/fast/generate with valid API key"

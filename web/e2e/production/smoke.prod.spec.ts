@@ -91,8 +91,8 @@ test.describe("Production smoke — backend API connectivity", () => {
     expect((body as { _meta?: unknown })._meta).toHaveProperty("version");
   });
 
-  test("GET /health returns version 0.2.x with media_tools all true", async ({ request }) => {
-    const r = await request.get("/health");
+  test("GET /api/health returns version 0.2.x with media_tools all true", async ({ request }) => {
+    const r = await request.get("/api/health");
     expect(r.status()).toBe(200);
     const body = await r.json();
     expect(body.status).toBe("ok");
@@ -103,8 +103,8 @@ test.describe("Production smoke — backend API connectivity", () => {
     expect(body.media_tools.clip_available).toBe(true);
   });
 
-  test("_meta.version is consistent across /health and /api/portfolio", async ({ request }) => {
-    const r1 = await request.get("/health");
+  test("_meta.version is consistent across /api/health and /api/portfolio", async ({ request }) => {
+    const r1 = await request.get("/api/health");
     const portfolio = await expectOkJsonWith429Retry(request, "/api/portfolio/?limit=1", {
       headers: productionApiHeaders(),
     });

@@ -24,6 +24,18 @@ source: human+ai
 - **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
 - **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。该边界已在 `P1-65` 复核中闭环。
 
+## 0.89 2026-06-07 P2-2 内容审核样本回灌与差异隔离
+
+- **错误码补齐** — `src/models/enums.py` 增加 `ErrorCode.CONTENT_MODERATION_REJECTED`，并在 `src/tools/error_classifier.py` 将内容审核类消息（`content_moderation`/`content_violation`/`safety_block`）映射为该错误码。
+- **提示词清洗闭环** — `src/tools/poyo_safety.py` 对应替换词清单与 `docs/poyo-trigger-words.md` 显式一致，`ErrorCode.CONTENT_MODERATION_REJECTED` 在 `_is_recoverable()` 中定义为 `False`，避免自动重试。
+- **fixtures 与回灌** — 新增 `tests/fixtures/commercial_video/poyo_content_rejection_samples.json`，包含：
+  - `sanitization_cases`：触发词/替换词对照；
+  - `runtime_rejection_messages`：`poyo` 运行时拒绝消息模板。
+- **回归测试** — `tests/test_poyo_safety.py::test_fixture_terms_are_replaced` 与 `tests/test_negative_integration.py::test_poyo_runtime_error_classifies_to_content_moderation_rejection` 用 fixtures 做参数化回灌，新增 fixture 读取与 runtime 分类路径覆盖。
+  - 结果：`pytest tests/test_poyo_safety.py tests/test_negative_integration.py`，`34 passed`。
+- **运行护栏对齐** — `docs/runbooks/poyo-rejection.md` 与 `docs/poyo-trigger-words.md` 联动：新增触发词/替换词需同时更新 fixtures 与文档。
+- **边界** — P2-2 当前仍属 `L2-fixture-or-dry-run` 内容治理补强：未发起新的 provider 调用，不改变 `/api/fast/*`、`/scenario/*`、发布链路、`brand token` 发放状态。
+
 ## 0.88 2026-06-07 AI Video 2.0 P1-65 50-loop checkpoint review
 
 - **结论** — 对 `P1-16`~`P1-64` 执行结果做完税式复核后，确认本轮 50-loop 已具备闭环证据：全部项完成、未发现新增阻塞项，且未引入 provider 真调用前提外扩散。
