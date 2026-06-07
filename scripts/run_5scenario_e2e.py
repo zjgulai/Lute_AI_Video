@@ -1,29 +1,43 @@
 #!/usr/bin/env python3
-"""Production 5-scenario non-demo E2E runner.
+"""Production 5-scenario smoke helper with explicit authorization and no-ops default.
 
-Uses submit+poll pattern to avoid HTTP timeout on long pipelines.
-Serial execution to avoid LLM rate limit conflicts.
+Default mode is dry-run. Run requires explicit execution confirmation and non-demo
+keys, so this script cannot accidentally trigger real token consumption.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
 
 import requests
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Production uses self-signed cert — skip verification
-VERIFY_SSL = False
+DEFAULT_BASE_URL = "https://video.lute-tlz-dddd.top"
+DEMO_API_KEY = "ai_video_demo_2026"
+DEMO_KEY_WARNING = "demo key is rejected"
+CONFIRM_ENV = "CONFIRM_P2_TOKEN_SMOKE"
+RUN_TOKEN_SMOKE_ENV = "RUN_TOKEN_SMOKE"
+REQUIRED_RUN_ENV = (
+    ("API_KEY", "Production backend API key", True),
+    ("PLAYWRIGHT_API_KEY", "Production Playwright backend API key", True),
+    ("POYO_API_KEY", "Poyo account key", True),
+    ("DEEPSEEK_API_KEY", "DeepSeek key", True),
+    ("SILICONFLOW_API_KEY", "SiliconFlow key", True),
+)
 
-API_BASE = "https://101.34.52.232/api"
-API_KEY = "ai_video_demo_2026"
-
-POLL_INTERVAL = 30.0
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "tmp" / "outputs"
+POLL_INTERVAL_SECONDS = 30.0
 MAX_POLL_MINUTES = 45
 
 # ── Payload fixtures (minimal valid, derived from tests + D2 report) ──
@@ -132,8 +146,102 @@ FAST_PAYLOAD = {
     "enable_tts": True,
 }
 
+SCENARIO_MATRIX: dict[str, tuple[str, str, dict[str, Any]]] = {
+    "fast": ("Fast Mode", "fast", FAST_PAYLOAD),
+    "s1": ("Product Direct", "s1", S1_PAYLOAD),
+    "s2": ("Brand Campaign", "s2", S2_PAYLOAD),
+    "s3": ("Influencer Remix", "s3", S3_PAYLOAD),
+    "s4": ("Live Shoot", "s4", S4_PAYLOAD),
+    "s5": ("Brand VLOG", "s5", S5_PAYLOAD),
+}
 
-# ── Runner ──
+
+# ── Utilities ──
+
+def resolve_api_base(base_url: str) -> str:
+    return base_url.rstrip("/") + "/api"
+
+
+def _mask(value: str) -> str:
+    if not value:
+        return "missing"
+    if len(value) <= 8:
+        return "***"
+    return f"{value[:4]}...{value[-4:]}"
+
+
+def _verify_ssl_for_url(base_url: str) -> bool:
+    host = (urlparse(base_url).hostname or "").lower()
+    return not host.startswith("101.") and host not in {"localhost", "127.0.0.1"}
+
+
+def _validate_execute_env(env: Mapping[str, str]) -> list[str]:
+    errors: list[str] = []
+    if env.get(CONFIRM_ENV) != "1":
+        errors.append(f"{CONFIRM_ENV}=1 is required")
+    if env.get(RUN_TOKEN_SMOKE_ENV) != "1":
+        errors.append(f"{RUN_TOKEN_SMOKE_ENV}=1 is required")
+
+    for key_name, _desc, reject_demo in REQUIRED_RUN_ENV:
+        value = env.get(key_name, "")
+        if not value:
+            errors.append(f"{key_name} is required")
+            continue
+        if reject_demo and value == DEMO_API_KEY:
+            errors.append(f"{key_name} must be non-demo key, rejected demo key")
+
+    return errors
+
+
+def _env_status_preview() -> list[str]:
+    lines: list[str] = []
+    required = {name: (desc, reject_demo) for name, desc, reject_demo in REQUIRED_RUN_ENV}
+    current = os.environ
+    for name, (description, reject_demo) in required.items():
+        value = current.get(name, "")
+        if not value:
+            status = "MISSING"
+        elif reject_demo and value == DEMO_API_KEY:
+            status = "REJECTED demo key"
+        else:
+            status = f"set ({_mask(value)})"
+        lines.append(f"- {name}: {status} — {description}")
+    lines.append(
+        f"- {CONFIRM_ENV}: {'set' if current.get(CONFIRM_ENV) == '1' else 'MISSING'} — Execution confirmation"
+    )
+    lines.append(
+        f"- {RUN_TOKEN_SMOKE_ENV}: {'set' if current.get(RUN_TOKEN_SMOKE_ENV) == '1' else 'MISSING'} — Token smoke enable"
+    )
+    return lines
+
+
+def build_run_command(*, base_url: str, scenarios: list[str], output: Path | None = None) -> str:
+    selected = ",".join(scenarios)
+    output_arg = f" --output {output}" if output else ""
+    return (
+        f"CONFIRM_P2_TOKEN_SMOKE=1 RUN_TOKEN_SMOKE=1 API_KEY=<production-api-key> "
+        f"PLAYWRIGHT_API_KEY=<production-api-key> POYO_API_KEY=<funded-poyo-key> "
+        f"DEEPSEEK_API_KEY=<deepseek-key> SILICONFLOW_API_KEY=<siliconflow-key> "
+        f"python scripts/run_5scenario_e2e.py --execute --base-url {base_url} "
+        f"--scenario {selected}{output_arg}"
+    )
+
+
+def build_scenario_plan(scenarios: list[str] | None = None) -> list[tuple[str, str, dict[str, Any]]]:
+    if not scenarios:
+        return [
+            (name, scenario_key, payload)
+            for scenario_key, (name, scenario_key, payload) in SCENARIO_MATRIX.items()
+        ]
+
+    missing = [s for s in scenarios if s not in SCENARIO_MATRIX]
+    if missing:
+        raise ValueError(f"invalid scenario(s): {', '.join(missing)}")
+
+    return [(SCENARIO_MATRIX[s][0], SCENARIO_MATRIX[s][1], SCENARIO_MATRIX[s][2]) for s in scenarios]
+
+
+# ── Runner core ──
 
 def log(msg: str) -> None:
     ts = time.strftime("%H:%M:%S")
@@ -141,88 +249,127 @@ def log(msg: str) -> None:
     sys.stdout.flush()
 
 
-def submit_scenario(scenario: str, payload: dict) -> str:
-    url = f"{API_BASE}/scenario/{scenario}/submit"
-    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+def submit_scenario(
+    *,
+    api_base: str,
+    scenario: str,
+    payload: dict[str, Any],
+    api_key: str,
+    verify_ssl: bool,
+    timeout_seconds: float = 30.0,
+) -> str:
+    url = f"{api_base}/scenario/{scenario}/submit"
+    headers = {"Content-Type": "application/json", "X-API-Key": api_key}
     log(f"Submitting {scenario}...")
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=30, verify=VERIFY_SSL)
-        resp.raise_for_status()
-        data = resp.json()
-        label = data.get("label", "")
-        log(f"  label={label}")
-        return label
-    except requests.exceptions.HTTPError as e:
-        log(f"  Submit failed: {e}")
-        if e.response is not None:
-            try:
-                detail = e.response.json()
-                log(f"  Response: {json.dumps(detail, ensure_ascii=False)[:500]}")
-            except Exception:
-                log(f"  Response: {e.response.text[:500]}")
-        raise
+    resp = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds, verify=verify_ssl)
+    resp.raise_for_status()
+    data = resp.json()
+    label = data.get("label", "")
+    if not label:
+        raise ValueError(f"submit response missing label for {scenario}: {data}")
+    log(f"  label={label}")
+    return str(label)
 
 
-def poll_status(scenario: str, label: str) -> dict:
-    url = f"{API_BASE}/scenario/{scenario}/status/{label}"
-    headers = {"X-API-Key": API_KEY}
-    resp = requests.get(url, headers=headers, timeout=30, verify=VERIFY_SSL)
+def poll_status(
+    *,
+    api_base: str,
+    scenario: str,
+    label: str,
+    api_key: str,
+    verify_ssl: bool,
+    timeout_seconds: float = 30.0,
+) -> dict:
+    url = f"{api_base}/scenario/{scenario}/status/{label}"
+    headers = {"X-API-Key": api_key}
+    resp = requests.get(url, headers=headers, timeout=timeout_seconds, verify=verify_ssl)
     resp.raise_for_status()
     return resp.json()
 
 
-def wait_for_completion(scenario: str, label: str) -> dict:
-    max_polls = int(MAX_POLL_MINUTES * 60 / POLL_INTERVAL)
+def wait_for_completion(
+    *,
+    api_base: str,
+    scenario: str,
+    label: str,
+    api_key: str,
+    verify_ssl: bool,
+    poll_interval: float = POLL_INTERVAL_SECONDS,
+    max_poll_minutes: int = MAX_POLL_MINUTES,
+) -> dict:
+    max_polls = int(max_poll_minutes * 60 / poll_interval)
     status_data: dict = {}
     for i in range(max_polls):
-        time.sleep(POLL_INTERVAL)
-        status_data = poll_status(scenario, label)
+        time.sleep(poll_interval)
+        status_data = poll_status(
+            api_base=api_base,
+            scenario=scenario,
+            label=label,
+            api_key=api_key,
+            verify_ssl=verify_ssl,
+        )
         status = status_data.get("status", "unknown")
         progress = status_data.get("progress", 0)
         current = status_data.get("current_step", "")
         log(f"  [{i+1}] status={status} progress={progress:.0%} current={current}")
 
-        if status in ("completed", "error"):
+        if status in ("completed", "error", "failed"):
             return status_data
 
         errors = status_data.get("errors", [])
         if errors:
             log(f"  errors={errors}")
 
-    log(f"  TIMEOUT after {MAX_POLL_MINUTES} min")
+    log(f"  TIMEOUT after {max_poll_minutes} min")
     return status_data
 
 
-def verify_video_exists(label: str) -> tuple[bool, str]:
-    """Check if final video exists in container output dir."""
-    import subprocess
+def verify_video_exists(
+    *,
+    label: str,
+    enabled: bool,
+    remote_host: str = "ubuntu@101.34.52.232",
+    remote_container: str = "lighthouse-backend-1",
+    remote_key: str = Path(__file__).resolve().parents[1] / "ai_video.pem",
+    remote_path: str = "/app/output/renders",
+    ssh_timeout: int = 30,
+) -> tuple[bool, str]:
+    """Check final video existence in remote render directory.
+
+    Disabled by default (enabled=False) to keep command smoke safe in local/dev runs.
+    """
+    if not enabled:
+        return False, "0"
+
     cmd = [
-        "ssh", "-i", "/Users/pray/project/hermes_evo/AI_vedio/ai_video.pem",
-        "-o", "StrictHostKeyChecking=no",
-        "ubuntu@101.34.52.232",
-        f"sudo docker exec lighthouse-backend-1 find /app/output/renders -name '*{label}*.mp4' -ls 2>/dev/null || true",
+        "ssh",
+        "-i",
+        str(remote_key),
+        "-o",
+        "StrictHostKeyChecking=no",
+        remote_host,
+        f"sudo docker exec {remote_container} find {remote_path} -name '*{label}*.mp4' -ls 2>/dev/null || true",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=ssh_timeout)
     output = result.stdout.strip()
     if output:
-        # Extract file size from ls output
         parts = output.split()
         size = parts[6] if len(parts) > 6 else "?"
         return True, size
     return False, "0"
 
 
-def run_fast_mode(payload: dict) -> dict:
+def run_fast_mode(*, api_base: str, payload: dict[str, Any], api_key: str, verify_ssl: bool) -> dict[str, Any]:
     """Fast Mode uses blocking /fast/generate endpoint."""
     log(f"\n{'='*50}")
     log("SCENARIO Fast Mode")
     log(f"{'='*50}")
     start = time.time()
-    url = f"{API_BASE}/fast/generate"
-    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+    url = f"{api_base}/fast/generate"
+    headers = {"Content-Type": "application/json", "X-API-Key": api_key}
     log("Submitting fast/generate...")
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=1800, verify=VERIFY_SSL)
+        resp = requests.post(url, headers=headers, json=payload, timeout=1800, verify=verify_ssl)
         resp.raise_for_status()
         data = resp.json()
     except requests.exceptions.HTTPError as e:
@@ -238,11 +385,12 @@ def run_fast_mode(payload: dict) -> dict:
         data = {"success": False, "error": str(e)}
 
     elapsed = time.time() - start
-
     status = "completed" if data.get("success") else "error"
     final_path = data.get("video_path", "")
     label = Path(final_path).stem if final_path else ""
-    exists, size = verify_video_exists(label) if label else (False, "0")
+    exists, size = (False, "0")
+    if label:
+        exists, size = verify_video_exists(label=label, enabled=False)
 
     summary = {
         "scenario": "fast",
@@ -260,20 +408,45 @@ def run_fast_mode(payload: dict) -> dict:
     return summary
 
 
-def run_scenario(name: str, scenario: str, payload: dict) -> dict:
+def run_scenario(
+    *,
+    name: str,
+    scenario: str,
+    payload: dict[str, Any],
+    api_base: str,
+    api_key: str,
+    verify_ssl: bool,
+    poll_interval: float,
+    max_poll_minutes: int,
+    verify_remote_video: bool = False,
+) -> dict[str, Any]:
     log(f"\n{'='*50}")
     log(f"SCENARIO {name} ({scenario})")
     log(f"{'='*50}")
     start = time.time()
-    label = submit_scenario(scenario, payload)
-    result = wait_for_completion(scenario, label)
+    label = submit_scenario(
+        api_base=api_base,
+        scenario=scenario,
+        payload=payload,
+        api_key=api_key,
+        verify_ssl=verify_ssl,
+    )
+    result = wait_for_completion(
+        api_base=api_base,
+        scenario=scenario,
+        label=label,
+        api_key=api_key,
+        verify_ssl=verify_ssl,
+        poll_interval=poll_interval,
+        max_poll_minutes=max_poll_minutes,
+    )
     elapsed = time.time() - start
 
     status = result.get("status", "unknown")
     errors = result.get("errors", [])
     progress = result.get("progress", 0)
 
-    # Try to extract final video path from result or steps
+    # Try to extract final video path from result
     result_dict = result.get("result") or {}
     final_path = ""
     if isinstance(result_dict, dict):
@@ -285,7 +458,7 @@ def run_scenario(name: str, scenario: str, payload: dict) -> dict:
         elif isinstance(assemble, (list, tuple)) and len(assemble) > 0:
             final_path = str(assemble[0])
 
-    exists, size = verify_video_exists(label) if label else (False, "0")
+    exists, size = verify_video_exists(label=label, enabled=verify_remote_video)
 
     summary = {
         "scenario": scenario,
@@ -305,52 +478,137 @@ def run_scenario(name: str, scenario: str, payload: dict) -> dict:
     return summary
 
 
-def main() -> None:
-    out_dir = Path("/Users/pray/project/hermes_evo/AI_vedio/tmp/outputs")
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Production API base url")
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        choices=sorted(SCENARIO_MATRIX.keys()),
+        help="Scenario key to run. Repeat for multiple. Default runs all.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=str(OUTPUT_DIR),
+        help="Output directory for run summary JSON",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print execution plan only. Default when --execute is not set.",
+    )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Execute all selected scenarios against production endpoints.",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=POLL_INTERVAL_SECONDS,
+        help="Scenario polling interval in seconds.",
+    )
+    parser.add_argument(
+        "--max-poll-minutes",
+        type=int,
+        default=MAX_POLL_MINUTES,
+        help="Scenario poll timeout in minutes.",
+    )
+    parser.add_argument(
+        "--verify-remote-video",
+        action="store_true",
+        help="Enable remote container video existence check.",
+    )
+    return parser.parse_args()
+
+
+def _print_dry_run(args: argparse.Namespace) -> None:
+    api_base = resolve_api_base(args.base_url)
+    scenario_keys = args.scenario or []
+    plan = build_scenario_plan(scenario_keys)
+    out_dir = Path(args.output_dir)
+
+    print("5-scenario production smoke checker — DRY RUN")
+    print("No commands were executed.")
+    print(f"Target API: {api_base}")
+    print(f"Remote video verify (default): {'disabled' if not args.verify_remote_video else 'enabled'}")
+    print("")
+    print("Planned steps:")
+    for idx, (_, scenario, _payload) in enumerate(plan, start=1):
+        print(f"{idx}. {scenario.upper()}")
+
+    print("Required before execution:")
+    for line in _env_status_preview():
+        print(line)
+
+    print("")
+    print("Run command:")
+    print(build_run_command(base_url=args.base_url, scenarios=[scenario for _, scenario, _ in plan], output=out_dir / "5scenario-e2e-preview.json"))
+    print("")
+
+
+def _run(args: argparse.Namespace) -> int:
+    api_key = os.getenv("API_KEY", "")
+    if not api_key:
+        raise RuntimeError("API_KEY is required for execute mode")
+
+    env_errors = _validate_execute_env(os.environ)
+    if env_errors:
+        for reason in env_errors:
+            print(f"ERROR: {reason}", file=sys.stderr)
+        return 2
+
+    api_base = resolve_api_base(args.base_url)
+    verify_ssl = _verify_ssl_for_url(args.base_url)
+    plan = build_scenario_plan(args.scenario)
+    out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     out_file = out_dir / f"5scenario-e2e-{timestamp}.json"
 
-    results = []
-
-    scenarios = [
-        ("Product Direct", "s1", S1_PAYLOAD),
-        ("Brand Campaign", "s2", S2_PAYLOAD),
-        ("Influencer Remix", "s3", S3_PAYLOAD),
-        ("Live Shoot", "s4", S4_PAYLOAD),
-        ("Brand VLOG", "s5", S5_PAYLOAD),
-    ]
-
+    results: list[dict[str, Any]] = []
     total_start = time.time()
 
-    # Run Fast Mode first (blocking, ~50s)
-    summary = run_fast_mode(FAST_PAYLOAD)
-    results.append(summary)
-
-    # Run S1-S5 serially (submit+poll)
-    for name, scenario, payload in scenarios:
+    for name, scenario, payload in plan:
         try:
-            summary = run_scenario(name, scenario, payload)
+            if scenario == "fast":
+                summary = run_fast_mode(api_base=api_base, payload=payload, api_key=api_key, verify_ssl=verify_ssl)
+            else:
+                summary = run_scenario(
+                    name=name,
+                    scenario=scenario,
+                    payload=payload,
+                    api_base=api_base,
+                    api_key=api_key,
+                    verify_ssl=verify_ssl,
+                    poll_interval=args.poll_interval,
+                    max_poll_minutes=args.max_poll_minutes,
+                    verify_remote_video=args.verify_remote_video,
+                )
             results.append(summary)
-        except Exception as e:
-            log(f"  EXCEPTION: {e}")
-            results.append({
-                "scenario": scenario,
-                "name": name,
-                "label": "",
-                "status": "error",
-                "elapsed_seconds": 0,
-                "progress": 0,
-                "errors": [str(e)],
-                "final_video_path": "",
-                "video_exists": False,
-                "video_size": "0",
-            })
-        # Save incremental results after each scenario
+        except Exception as exc:
+            log(f"  EXCEPTION: {exc}")
+            results.append(
+                {
+                    "scenario": scenario,
+                    "name": name,
+                    "label": "",
+                    "status": "error",
+                    "elapsed_seconds": 0,
+                    "progress": 0,
+                    "errors": [str(exc)],
+                    "final_video_path": "",
+                    "video_exists": False,
+                    "video_size": "0",
+                }
+            )
+
         with open(out_file, "w") as f:
             json.dump(
                 {
                     "timestamp": timestamp,
+                    "base_url": args.base_url,
+                    "api_base": api_base,
                     "total_elapsed_seconds": round(time.time() - total_start, 1),
                     "scenarios": results,
                 },
@@ -358,9 +616,9 @@ def main() -> None:
                 indent=2,
                 ensure_ascii=False,
             )
-        # Early exit on error (configurable)
-        if summary["status"] == "error":
-            log("  ⚠️  Scenario failed — continuing with next (review logs)")
+
+        if results[-1]["status"] == "error":
+            log("  ⚠️  Scenario failed — continuing with next (review logs)\n")
 
     total_elapsed = time.time() - total_start
     passed = sum(1 for r in results if r["status"] == "completed")
@@ -368,7 +626,17 @@ def main() -> None:
     log(f"ALL DONE: {passed}/{len(results)} passed, total={total_elapsed:.0f}s")
     log(f"Report: {out_file}")
     log(f"{'='*50}")
+    return 0
+
+
+def main() -> int:
+    args = _parse_args()
+    if not args.execute:
+        _print_dry_run(args)
+        return 0
+
+    return _run(args)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
