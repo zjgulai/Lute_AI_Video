@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.graph.pipeline import compile_pipeline
 from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS
+from src.pipeline.step_utils import get_step_output_from_state
 
 # ── Pipeline state ──
 # P0-E: Pass DATABASE_URL so /pipeline/* uses PostgresSaver in production.
@@ -260,14 +261,9 @@ def _get_step_deps(scenario: str, step_name: str) -> list[str]:
 def _get_step_output(state: dict[str, Any], step_name: str) -> Any:
     """Extract step output from pipeline state (prefers edited over original).
 
-    Reads from the StepRunner-native structure ``state.steps[step_name].edited_output``
-    so that user edits made through the gate approval flow are correctly picked up.
+    Delegates to the canonical shared implementation in step_utils.py.
     """
-    steps = state.get("steps", {})
-    step_data = steps.get(step_name, {})
-    if step_data.get("edited") and step_data.get("edited_output") is not None:
-        return step_data["edited_output"]
-    return step_data.get("output")
+    return get_step_output_from_state(state, step_name)
 
 
 VALID_VIDEO_DURATIONS = (15, 30, 45, 60, 90)

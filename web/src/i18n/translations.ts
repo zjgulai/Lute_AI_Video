@@ -824,6 +824,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "fastMode.enableTTS": "生成配音（CosyVoice）",
     "fastMode.generate": "生成视频",
     "fastMode.generating": "生成中...",
+    "fastMode.progress.queued": "提交中...",
+    "fastMode.progress.enhancingPrompt": "正在用 DeepSeek 优化提示词...",
+    "fastMode.progress.generatingVideo": "正在用 Seedance 生成视频...",
+    "fastMode.progress.synthesizingVoiceover": "正在合成配音...",
     "fastMode.result.title": "生成结果",
     "fastMode.result.debugInfo": "调试信息",
     "fastMode.result.llmPrompt": "LLM 生成的视频提示词",
@@ -834,6 +838,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "fastMode.result.copyPrompt": "复制提示词",
     "fastMode.result.generationFailed": "生成失败",
     "fastMode.result.unknownError": "未知错误",
+
+    // Execution bar
+    "execution.generating": "生成中...",
+    "execution.cancel": "取消",
 
     // Toast messages
     "toast.autoDone": "自动执行完成",
@@ -2585,6 +2593,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "fastMode.enableTTS": "Generate voiceover (CosyVoice)",
     "fastMode.generate": "Generate Video",
     "fastMode.generating": "Generating...",
+    "fastMode.progress.queued": "Submitting...",
+    "fastMode.progress.enhancingPrompt": "Enhancing prompt with DeepSeek...",
+    "fastMode.progress.generatingVideo": "Generating video with Seedance...",
+    "fastMode.progress.synthesizingVoiceover": "Synthesizing voiceover...",
     "fastMode.result.title": "Generation Result",
     "fastMode.result.debugInfo": "Debug Info",
     "fastMode.result.llmPrompt": "LLM Generated Video Prompt",
@@ -2613,6 +2625,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "toast.regenerateFailed": "Regeneration failed",
     "toast.resumeFailed": "Resume all failed",
     "toast.stepByStepS1Only": "Step-by-step currently supports only S1 Product Direct. Switched to auto execution.",
+    "execution.generating": "Generating...",
+    "execution.cancel": "Cancel",
     "degraded.softTitle": "Continued with degraded fallback output",
     "degraded.reason.continuity_skill_fallback": "Used continuity fallback output",
     "degraded.reason.continuity_skill_execution_failed": "Continuity execution failed and fell back to a local degraded result",

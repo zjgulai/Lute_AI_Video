@@ -26,6 +26,7 @@ from src.pipeline.continuity_utils import (
     build_transitions_from_clip_details,
 )
 from src.pipeline.scenario_injection_plan import with_optional_injection_config
+from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
 from src.telemetry import generate_trace_id, pipeline_metrics
 
@@ -158,11 +159,11 @@ class S5BrandVlogPipeline:
 
     @staticmethod
     def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
-        """Retrieve output from a step, preferring edited_output if edited."""
-        step_data = steps.get(step_name, {})
-        if step_data.get("edited") and step_data.get("edited_output") is not None:
-            return step_data["edited_output"]
-        return step_data.get("output")
+        """Retrieve output from a step, preferring edited_output if edited.
+
+        Delegates to the canonical shared implementation in step_utils.py.
+        """
+        return get_step_output(steps, step_name)
 
     @staticmethod
     def _all_clips_are_stubs(

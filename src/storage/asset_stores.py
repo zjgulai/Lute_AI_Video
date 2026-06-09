@@ -54,7 +54,7 @@ def _unpack_brand_row(row: dict[str, Any]) -> BrandAssetPackage:
         import json
         try:
             payload = json.loads(payload)
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             payload = {}
     payload.setdefault("package_id", row.get("id", ""))
     payload.setdefault("brand_name", row.get("name", ""))
@@ -79,7 +79,7 @@ def _unpack_influencer_row(row: dict[str, Any]) -> InfluencerProfile:
         import json
         try:
             payload = json.loads(payload)
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             payload = {}
     payload.setdefault("influencer_id", row.get("id", ""))
     payload.setdefault("name", row.get("name", ""))
@@ -98,7 +98,7 @@ class BrandPackageStore:
             try:
                 await self._repo.create(_pack_brand_row(package))
                 return package
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("brand_store.create PG failed, mirroring to dict: %s", exc)
         self._memory[package.package_id] = package
         return package
@@ -109,7 +109,7 @@ class BrandPackageStore:
                 row = await self._repo.get_by_id(package_id)
                 if row is not None:
                     return _unpack_brand_row(row)
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("brand_store.get PG failed, falling back to dict: %s", exc)
         return self._memory.get(package_id)
 
@@ -118,7 +118,7 @@ class BrandPackageStore:
             try:
                 rows = await self._repo.list_all(limit=500)
                 return [_unpack_brand_row(r) for r in rows]
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("brand_store.list_all PG failed, falling back to dict: %s", exc)
         return list(self._memory.values())
 
@@ -127,7 +127,7 @@ class BrandPackageStore:
         if _pg_enabled():
             try:
                 deleted_pg = await self._repo.delete(package_id)
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("brand_store.delete PG failed: %s", exc)
         if package_id in self._memory:
             del self._memory[package_id]
@@ -147,7 +147,7 @@ class InfluencerStore:
             try:
                 await self._repo.create(_pack_influencer_row(profile))
                 return profile
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("influencer_store.create PG failed, mirroring to dict: %s", exc)
         self._memory[profile.influencer_id] = profile
         return profile
@@ -158,7 +158,7 @@ class InfluencerStore:
                 row = await self._repo.get_by_id(influencer_id)
                 if row is not None:
                     return _unpack_influencer_row(row)
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("influencer_store.get PG failed, falling back to dict: %s", exc)
         return self._memory.get(influencer_id)
 
@@ -167,7 +167,7 @@ class InfluencerStore:
             try:
                 rows = await self._repo.list_all(limit=500)
                 return [_unpack_influencer_row(r) for r in rows]
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("influencer_store.list_all PG failed, falling back to dict: %s", exc)
         return list(self._memory.values())
 
@@ -176,7 +176,7 @@ class InfluencerStore:
             try:
                 await self._repo.update(profile.influencer_id, _pack_influencer_row(profile))
                 return profile
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("influencer_store.update PG failed, mirroring to dict: %s", exc)
         self._memory[profile.influencer_id] = profile
         return profile
@@ -186,7 +186,7 @@ class InfluencerStore:
         if _pg_enabled():
             try:
                 deleted_pg = await self._repo.delete(influencer_id)
-            except Exception as exc:
+            except (OSError, RuntimeError, ConnectionError) as exc:
                 logger.warning("influencer_store.delete PG failed: %s", exc)
         if influencer_id in self._memory:
             del self._memory[influencer_id]

@@ -38,6 +38,28 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | [regenerate-downstream-invalidation.md](./regenerate-downstream-invalidation.md) | Step regenerate 后下游 step 和 gate candidate / approval 失效规则漂移 | 5-10 min |
 | [s4-footage-filtering.md](./s4-footage-filtering.md) | S4 Live Shoot 成品与中间素材在 /works / /library 的筛选分层漂移 | 2-5 min |
 | [db-pool-exhausted.md](./db-pool-exhausted.md) | asyncpg 连接池耗尽 | 5-10 min |
+
+## Configs ↔ Runbooks 关系
+
+部分 runbook 存在对应的机器可验证契约文件（`configs/*.yaml` / `configs/*.json`），用于 CI 静态断言。两者的关系如下：
+
+| Contract | Runbook | 关系 |
+|---|---|---|
+| `configs/admin-csrf-contract.yaml` | [admin-csrf-contract.md](./admin-csrf-contract.md) | 契约定义机器断言的字段/行为；runbook 描述诊断与修复流程 |
+| `configs/api-rate-limit-contract.yaml` | [api-rate-limit-contract.md](./api-rate-limit-contract.md) | 同上 |
+| `configs/api-response-metadata-contract.yaml` | [api-response-metadata-contract.md](./api-response-metadata-contract.md) | 同上 |
+| `configs/backend-route-auth-contract.yaml` | [backend-route-auth-contract.md](./backend-route-auth-contract.md) | 同上 |
+| `configs/health-endpoint-no-secret-contract.yaml` | [health-endpoint-no-secret.md](./health-endpoint-no-secret.md) | 同上 |
+| `configs/media-url-sanitizer-contract.yaml` | [media-url-sanitizer.md](./media-url-sanitizer.md) | 同上 |
+| `configs/gate-approve-idempotency-contract.yaml` | [gate-approve-idempotency.md](./gate-approve-idempotency.md) | 同上 |
+| `configs/scenario-state-persistence-contract.yaml` | [scenario-state-persistence-schema.md](./scenario-state-persistence-schema.md) | 同上 |
+| `configs/regenerate-downstream-invalidation-contract.yaml` | [regenerate-downstream-invalidation.md](./regenerate-downstream-invalidation.md) | 同上 |
+| `configs/s4-footage-filtering-contract.yaml` | [s4-footage-filtering.md](./s4-footage-filtering.md) | 同上 |
+| … | … | 其余 24 对遵循相同模式 |
+
+**规则**: 修改契约时必须同步更新对应的 runbook；新增 runbook 时如有 CI 可验证行为，应同时添加契约文件。
+
+*Last synced: 2026-06-09 — configs/ (35 files) ↔ docs/runbooks/ (48 files)*
 | [brand-assets-refresh.md](./brand-assets-refresh.md) | 品牌资产抓取刷新 / 新增产品 / 灾难恢复 | 2-5 min |
 | [docker-no-token-preflight.md](./docker-no-token-preflight.md) | Docker build / compose 预检必须保持无 token、无外部 provider 调用 | 2-5 min |
 | [gate-approve-idempotency.md](./gate-approve-idempotency.md) | Gate approve 重复提交、网络重试、background resume 重复启动 | 5-10 min |

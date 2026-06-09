@@ -33,8 +33,11 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-COMPOSE="sudo docker-compose -f docker-compose.prod.yml"
+COMPOSE="sudo docker compose -f docker-compose.prod.yml"
 REBUILD_BACKEND="${REBUILD_BACKEND:-0}"
+
+# Deployment root (was hardcoded /opt/ai-video; now configurable)
+DEPLOY_ROOT="${DEPLOY_ROOT:-/opt/ai-video}"
 
 echo "========================================"
 echo "  AI Video Fast Deploy"
@@ -78,7 +81,7 @@ echo ""
 # Belt-and-suspenders: normalize perms before backend restart so even a forgetful
 # rsync survives. Cost: ~50ms. Benefit: never see /app/src/routers/admin.py 502 again.
 echo "[0.5/5] Normalizing src/ file permissions..."
-sudo find /opt/ai-video/src -type f -name '*.py' ! -perm 644 -exec chmod 644 {} \; 2>/dev/null || true
+sudo find "$DEPLOY_ROOT/src" -type f -name '*.py' ! -perm 644 -exec chmod 644 {} \; 2>/dev/null || true
 echo "  ✓ src/**.py normalized to 0644"
 echo ""
 
@@ -87,7 +90,7 @@ echo ""
 # If an incremental rsync left the old file on the server, Python may import
 # the stale module instead of the package. Delete this one known legacy file.
 echo "[0.6/5] Removing stale split-module files..."
-sudo rm -f /opt/ai-video/src/routers/admin.py
+sudo rm -f "$DEPLOY_ROOT/src/routers/admin.py"
 echo "  ✓ stale src/routers/admin.py removed if present"
 echo ""
 
@@ -152,7 +155,7 @@ echo "[3/5] Health checks..."
 # Check backend
 BACKEND_STATUS="000"
 for attempt in $(seq 1 24); do
-  BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/api/health || echo "000")
+  BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --cacert /etc/letsencrypt/live/lute-tlz-dddd.top/fullchain.pem https://localhost/api/health || echo "000")
   if [ "$BACKEND_STATUS" = "200" ]; then
     echo "  Backend /api/health: 200 (attempt $attempt/24)"
     break

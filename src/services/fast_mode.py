@@ -107,7 +107,7 @@ class FastModeService:
             for attr in ("model_name", "model", "model_id"):
                 if hasattr(client, attr):
                     return str(getattr(client, attr))
-        except Exception as exc:
+        except (AttributeError, TypeError, ValueError) as exc:
             logger.debug(
                 "fast_mode: llm model resolution failed",
                 error=str(exc)[:200],
@@ -138,7 +138,9 @@ class FastModeService:
             if on_stage is not None:
                 try:
                     on_stage(s)
-                except Exception as exc:
+                except (TypeError, RuntimeError) as exc:
+                    # Callback failures should not crash the pipeline —
+                    # the callback is a progress indicator, not a critical path.
                     logger.warning(
                         "fast_mode: stage callback failed",
                         stage=s,
@@ -160,7 +162,7 @@ class FastModeService:
             )
             video_prompt = enhanced.get("video_prompt", "")
             scene_description = enhanced.get("scene_description", "")
-        except Exception as e:
+        except (ValueError, KeyError, TypeError, asyncio.TimeoutError) as e:
             logger.error("fast_mode: LLM enhancement failed, using raw prompt", error=str(e))
             video_prompt = user_prompt
             scene_description = user_prompt
@@ -209,7 +211,7 @@ class FastModeService:
         else:
             try:
                 video_result = await video_future
-            except Exception as e:
+            except (asyncio.TimeoutError, RuntimeError, ConnectionError) as e:
                 from src.tools.error_classifier import classify_error
                 structured = classify_error(e, context="fast_mode.video")
                 logger.error(
@@ -319,7 +321,7 @@ class FastModeService:
             try:
                 from src.tools.poster_extractor import ensure_poster
                 ensure_poster(local_path)
-            except Exception as exc:
+            except (AttributeError, TypeError, ValueError) as exc:
                 logger.warning(
                     "fast_mode: poster extraction failed",
                     video_path=str(local_path),

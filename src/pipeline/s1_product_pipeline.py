@@ -44,7 +44,7 @@ import src.skills.seedance_prompt  # noqa: F401
 import src.skills.seedance_video_generate  # noqa: F401  ← NEW media
 import src.skills.storyboard  # noqa: F401  (best-effort; may not exist in repo)
 import src.skills.thumbnail_prompt  # noqa: F401
-from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
+from src.config import DEFAULT_LANGUAGES, MAX_CLIPS_PER_DEMO, MAX_THUMBNAILS_PER_DEMO, OUTPUT_DIR
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     all_clips_are_stubs,
@@ -58,13 +58,14 @@ from src.pipeline.continuity_utils import (
 from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
+from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
 
 # Caps (each Seedance call is ~30-60s; cap for sane demo runs)
-MAX_CLIPS_PER_DEMO = 3
-MAX_THUMBNAILS_PER_DEMO = 2
+# Now configurable via MAX_CLIPS_PER_DEMO / MAX_THUMBNAILS_PER_DEMO env vars
+# Defaults: 3 clips, 2 thumbnails
 
 
 class S1ProductDirectPipeline:
@@ -236,11 +237,11 @@ class S1ProductDirectPipeline:
 
     @staticmethod
     def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
-        """Retrieve output from a step, preferring edited_output if edited."""
-        step_data = steps.get(step_name, {})
-        if step_data.get("edited") and step_data.get("edited_output") is not None:
-            return step_data["edited_output"]
-        return step_data.get("output")
+        """Retrieve output from a step, preferring edited_output if edited.
+
+        Delegates to the canonical shared implementation in step_utils.py.
+        """
+        return get_step_output(steps, step_name)
 
     @staticmethod
     def _extract_assemble_paths(output: Any) -> tuple[str, str]:

@@ -2,6 +2,11 @@
 
 import { useMemo } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import {
+  extractContinuityDirections,
+  truncatePreview as getDataPreview,
+} from "@/lib/continuityDirections";
+import type { ContinuityDirection } from "@/lib/continuityDirections";
 
 interface Score {
   overall: number;
@@ -63,58 +68,7 @@ function getDataPreview(data: unknown): string {
   return str.slice(0, 100);
 }
 
-function extractContinuityDirections(data: unknown): Array<{
-  sceneBeat: string;
-  beatSummary: string;
-  transitionIntent: string;
-}> {
-  if (!data || typeof data !== "object") return [];
-
-  const record = data as Record<string, unknown>;
-  const candidates: unknown[] = [];
-
-  if (Array.isArray(record.clip_details)) candidates.push(record.clip_details);
-  if (Array.isArray(record.clip_directions)) candidates.push(record.clip_directions);
-
-  const continuitySummary = record.continuity_direction_summary;
-  if (continuitySummary && typeof continuitySummary === "object") {
-    const summaryRecord = continuitySummary as Record<string, unknown>;
-    if (Array.isArray(summaryRecord.clip_directions)) candidates.push(summaryRecord.clip_directions);
-  }
-
-  const auditReport = record.audit_report;
-  if (auditReport && typeof auditReport === "object") {
-    const auditRecord = auditReport as Record<string, unknown>;
-    const auditSummary = auditRecord.continuity_direction_summary;
-    if (auditSummary && typeof auditSummary === "object") {
-      const summaryRecord = auditSummary as Record<string, unknown>;
-      if (Array.isArray(summaryRecord.clip_directions)) candidates.push(summaryRecord.clip_directions);
-    }
-  }
-
-  if (
-    typeof record.scene_beat === "string" ||
-    typeof record.beat_summary === "string" ||
-    typeof record.transition_intent === "string"
-  ) {
-    candidates.push([record]);
-  }
-
-  for (const candidate of candidates) {
-    if (!Array.isArray(candidate)) continue;
-    const normalized = candidate
-      .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"))
-      .map((entry) => ({
-        sceneBeat: String(entry.scene_beat || "").trim(),
-        beatSummary: String(entry.beat_summary || "").trim(),
-        transitionIntent: String(entry.transition_intent || "").trim(),
-      }))
-      .filter((entry) => entry.sceneBeat || entry.beatSummary || entry.transitionIntent);
-    if (normalized.length > 0) return normalized;
-  }
-
-  return [];
-}
+export type { ContinuityDirection };
 
 function extractDirectorIntentScore(score: Score | undefined): number | null {
   const value = score?.breakdown?.director_intent;

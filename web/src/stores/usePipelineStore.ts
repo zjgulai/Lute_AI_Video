@@ -16,18 +16,74 @@ export interface ActivePipeline {
   scene?: string;
 }
 
+/** Shape of a pipeline oneshot/fast-mode result. */
+export interface PipelineResult {
+  video_path?: string;
+  poster_path?: string;
+  duration_ms?: number;
+  model_info?: Record<string, string>;
+  timing?: Record<string, number>;
+  error?: string;
+  [key: string]: unknown;
+}
+
+/** Shape of step-by-step execution state. */
+export interface StepByStepState {
+  label?: string;
+  scenario?: string;
+  steps?: Record<string, unknown>;
+  current_step?: string;
+  mode?: string;
+  gates?: Record<string, unknown>;
+  pipeline_degraded?: boolean;
+  degraded_reason?: string | null;
+  [key: string]: unknown;
+}
+
+/** Per-scenario workflow configuration. */
+export interface WorkflowConfig {
+  scene?: string;
+  scenario?: string;
+  brand_mode?: boolean;
+  product_catalog?: Record<string, unknown>;
+  brand_package?: Record<string, unknown>;
+  video_duration?: number;
+  continuity_mode?: string;
+  continuity_required?: boolean;
+  reference_image_url?: string;
+  source_video_url?: string;
+  character_reference_url?: string;
+  target_platforms?: string[];
+  enable_media_synthesis?: boolean;
+  [key: string]: unknown;
+}
+
+/** Running workflow execution state. */
+export interface WorkflowState {
+  label?: string;
+  scenario?: string;
+  steps?: Record<string, unknown>;
+  current_step?: string;
+  status?: string;
+  pipeline_degraded?: boolean;
+  degraded_reason?: string | null;
+  soft_degraded_reasons?: Record<string, unknown>[];
+  errors?: string[];
+  [key: string]: unknown;
+}
+
 interface PipelineState {
   threadId: string | null;
   reviewState: ReviewState | null;
-  oneshotResult: unknown | null;
+  oneshotResult: PipelineResult | null;
   oneshotScenario: string;
   stepByStepLabel: string | null;
-  stepByStepState: unknown | null;
+  stepByStepState: StepByStepState | null;
   showStepByStep: boolean;
   smartCreateLabel: string | null;
-  workflowConfig: unknown | null;
+  workflowConfig: WorkflowConfig | null;
   workflowLabel: string | null;
-  workflowState: unknown | null;
+  workflowState: WorkflowState | null;
   showWorkflow: boolean;
   workflowRerenderKey: number;
   currentStepIdx: number;
@@ -37,15 +93,15 @@ interface PipelineState {
 
   setThreadId: (id: string | null) => void;
   setReviewState: (state: ReviewState | null) => void;
-  setOneshotResult: (result: unknown | null) => void;
+  setOneshotResult: (result: PipelineResult | null) => void;
   setOneshotScenario: (scenario: string) => void;
   setStepByStepLabel: (label: string | null) => void;
-  setStepByStepState: (state: unknown | null) => void;
+  setStepByStepState: (state: StepByStepState | null) => void;
   setShowStepByStep: (v: boolean) => void;
   setSmartCreateLabel: (label: string | null) => void;
-  setWorkflowConfig: (config: unknown | null) => void;
+  setWorkflowConfig: (config: WorkflowConfig | null) => void;
   setWorkflowLabel: (label: string | null) => void;
-  setWorkflowState: (state: unknown | null) => void;
+  setWorkflowState: (state: WorkflowState | null) => void;
   setShowWorkflow: (v: boolean) => void;
   setWorkflowRerenderKey: (key: number) => void;
   setCurrentStepIdx: (idx: number) => void;

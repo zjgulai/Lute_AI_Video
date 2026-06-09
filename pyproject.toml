@@ -80,10 +80,20 @@ exclude = [
 reportMissingTypeArgument = true
 reportPossiblyUnboundVariable = true
 # Phase C/D: Unknown 类型治理 — 经评估，reportUnknown* 规则在 dict[str,Any] 为主
-# 的代码库中噪音远大于价值，暂不启用。核心收益已在 A+B 中捕获。
+# 的代码库中噪音远大于价值，暂不全局启用。核心收益已在 A+B 中捕获。
 # 2026-05-07 评估: 启用后 1258 错误(631 unknownVariable + 627 unknownMember),
 # 其中 60%+ 来自 dict/list[Any] 推断限制，非真实缺陷。修复 ROI 为负。
-# Phase D: full strict
+# 2026-06-09: 对已收敛的模块（step_utils.py, config.py）启用严格检查防止回退。
+[tool.pyright.executionEnvironments]
+  [tool.pyright.executionEnvironments.strict_modules]
+  root = "."
+  extraPaths = ["."]
+  reportUnknownMemberType = true
+  reportUnknownVariableType = true
+  include = [
+    "src/pipeline/step_utils.py",
+    "src/config.py",
+  ]
 
 [tool.coverage.run]
 source = ["src"]
@@ -92,3 +102,6 @@ omit = [
     "*/prompts/*",
     "*/__init__.py",
 ]
+
+[tool.coverage.report]
+fail_under = 35

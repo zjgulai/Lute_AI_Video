@@ -4,14 +4,14 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-07
+updated: 2026-06-09
 owner: self
 source: human+ai
 ---
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-07** — 追加 AI Video 2.0 C21-C35 与 P1-64 真实 smoke 前置链路与 C2PA dry-run 合规补齐：授权审批止损、Momcozy S5/toolbox L2 fixture、工具级 provider readiness、poyo 当前公开文档重验、Momcozy 消毒器 3 图 + 1 视频样本计划、私有 approval/account readiness 构建器、no-token 启动包、资产包 harness、no-token submitter facade contract、submitter factory gate、poyo submit/status HTTP adapter contract、HTTP submitter assembly gate、私有 payload/runtime 接线 contract，以及 C2PA 无证书 dry-run 检查清单；当前 50-loop checkpoint 复核完成（P1-16~P1-64 无阻塞技术债），`P1-65` 已收口，当前执行入口切到 P2，下一步继续在明确充值与双确认后执行小样本授权 live smoke；当前依然未触发完整交付发布闭环。
+最近一次盘点：**2026-06-09** — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行了首批 23 项修复任务。修复涵盖：`.env.example` 补全 30+ 环境变量文档、10+ 个 LLM/API URL 从硬编码迁移到 `config.py` 集中管理、5 个 pipeline 模块中重复的 `_get_step_output()` 收敛为共享 `step_utils.py`、`deploy.sh` 现代化（docker-compose v1→v2 + 路径变量化）、nginx 安全头部、前端 i18n 硬编码字符串修复、测试中 60 秒硬 sleep 修复、45 篇历史文档归档、以及 LICENSE/CHANGELOG/SECURITY 标准文件补齐。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。本次修复未涉及 provider 真调用，继续遵守 P1-65 余额约束边界。
 
 > 上一次盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
 

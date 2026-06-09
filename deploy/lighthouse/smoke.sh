@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-BASE="${BASE:-https://101.34.52.232}"
+BASE="${BASE:-${SERVER_HOST:-https://101.34.52.232}}"
 API_KEY="${API_KEY:-}"
 if [ -z "$API_KEY" ] && [ -f ".env.prod" ]; then
   API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"

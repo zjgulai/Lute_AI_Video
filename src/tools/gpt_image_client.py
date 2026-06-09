@@ -14,6 +14,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+from src.config import (
+    OPENAI_API_KEY,
+    OPENAI_IMAGE_API_BASE,
+)
+
 import httpx
 import structlog
 
@@ -75,7 +80,7 @@ class GPTImageClient:
             self._poyo = PoyoClient()
         else:
             self._client = httpx.AsyncClient(
-                base_url="https://api.openai.com/v1",
+                base_url=OPENAI_IMAGE_API_BASE,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",

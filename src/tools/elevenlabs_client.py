@@ -17,6 +17,7 @@ import httpx
 import structlog
 
 from src.config import (
+    ELEVENLABS_API_BASE,
     ELEVENLABS_API_KEY,
     OUTPUT_DIR,
     POYO_API_KEY,
@@ -25,7 +26,7 @@ from src.config import (
 
 logger = structlog.get_logger()
 
-BASE_URL = "https://api.elevenlabs.io/v1"
+BASE_URL = ELEVENLABS_API_BASE
 
 # Voice presets for baby-feeding brand (warm, maternal, professional)
 VOICE_PRESETS = {

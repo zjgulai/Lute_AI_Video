@@ -20,7 +20,7 @@ services:
       - key: API_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "https://zjgulai.github.io"
+        value: ""  # Set to your production domain(s), comma-separated. Was "https://zjgulai.github.io" (legacy GitHub Pages).
       - key: VIDEO_OUTPUT_DIR
         value: /app/output
       - key: DEFAULT_LLM_PROVIDER

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface Props {
   label?: string;
@@ -9,6 +10,8 @@ interface Props {
 }
 
 export default function ExecutionBar({ label, progress, onCancel }: Props) {
+  const { t } = useI18n();
+
   if (!label && !progress) return null;
 
   return (
@@ -23,7 +26,7 @@ export default function ExecutionBar({ label, progress, onCancel }: Props) {
         </div>
 
         {/* Label */}
-        <span className="text-sm font-medium">{label || "Generating..."}</span>
+        <span className="text-sm font-medium">{label || t("execution.generating")}</span>
 
         {/* Progress */}
         {progress !== undefined && progress > 0 && (
@@ -36,7 +39,7 @@ export default function ExecutionBar({ label, progress, onCancel }: Props) {
             onClick={onCancel}
             className="text-xs text-white/60 hover:text-white ml-1 transition-colors"
           >
-            Cancel
+            {t("execution.cancel")}
           </button>
         )}
       </div>

@@ -15,18 +15,23 @@ from uuid import uuid4
 import httpx
 
 from src.connectors.base import PlatformConnector
+from src.config import SHOPIFY_GRAPHQL_URL_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
 # Shopify Admin GraphQL endpoint (version 2024-07 or later supports fileCreate)
-_SHOPIFY_GRAPHQL_URL = "https://{store}/admin/api/2024-07/graphql.json"
+_SHOPIFY_GRAPHQL_URL = SHOPIFY_GRAPHQL_URL_TEMPLATE
 
 
 def _is_mock_mode() -> bool:
-    """Return True when no real Shopify API credentials are available."""
-    api_key = os.environ.get("SHOPIFY_API_KEY", "")
+    """Return True when no real Shopify API credentials are available.
+
+    Checks SHOPIFY_ACCESS_TOKEN (canonical), falls back to SHOPIFY_API_KEY (legacy).
+    Ref: debt-audit-report-2026-06-09.md item CFG-2.
+    """
+    token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get("SHOPIFY_API_KEY", "")
     store_url = os.environ.get("SHOPIFY_STORE_URL", "")
-    return not api_key or not store_url
+    return not token or not store_url
 
 
 def _admin_url() -> str:

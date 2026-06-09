@@ -211,16 +211,11 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
   return (
     <div className="space-y-3">
       {/* GuidedForm (v2.0) */}
-      {USE_GUIDED_FORM && (
+      {USE_GUIDED_FORM ? (
         <GuidedForm scene={scene} onSubmit={onSubmit} loading={loading} fieldErrors={fieldErrors} />
-      )}
-
-      {/* Legacy form (hidden when GuidedForm is active) */}
-      <div
-        data-legacy-form
-        className={USE_GUIDED_FORM ? "hidden" : ""}
-        aria-hidden={USE_GUIDED_FORM ? "true" : undefined}
-      >
+      ) : (
+        /* Legacy form (only rendered when GuidedForm is disabled) */
+        <div data-legacy-form>
         {/* Scene-specific fields */}
       {scene === "product_direct" && (
         <div className="space-y-3">
@@ -992,3 +987,5 @@ function getCurrentWeek(): string {
   const week = Math.ceil(diff / 7);
   return `${now.getFullYear()}-W${String(week).padStart(2, "0")}`;
 }
+      </div>
+      )}

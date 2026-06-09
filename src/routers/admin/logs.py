@@ -234,19 +234,21 @@ async def _check_single_service(name: str) -> dict[str, Any]:
             await client.ainvoke("", "hi")
         elif name == "poyo":
             import httpx
+            from src.config import POYO_API_BASE_URL, POYO_API_KEY
             async with httpx.AsyncClient(timeout=10.0) as http_client:
                 resp = await http_client.get(
-                    "https://api.poyo.ai/v1/models",
-                    headers={"Authorization": f"Bearer {__import__('os').getenv('POYO_API_KEY', '')}"},
+                    f"{POYO_API_BASE_URL}/v1/models",
+                    headers={"Authorization": f"Bearer {POYO_API_KEY}"},
                 )
                 if resp.status_code >= 500:
                     raise Exception(f"POYO returned {resp.status_code}")
         elif name == "siliconflow":
             import httpx
+            from src.config import SILICONFLOW_API_BASE, SILICONFLOW_API_KEY
             async with httpx.AsyncClient(timeout=10.0) as http_client:
                 resp = await http_client.get(
-                    "https://api.siliconflow.cn/v1/models",
-                    headers={"Authorization": f"Bearer {__import__('os').getenv('SILICONFLOW_API_KEY', '')}"},
+                    f"{SILICONFLOW_API_BASE}/models",
+                    headers={"Authorization": f"Bearer {SILICONFLOW_API_KEY}"},
                 )
                 if resp.status_code >= 500:
                     raise Exception(f"SiliconFlow returned {resp.status_code}")

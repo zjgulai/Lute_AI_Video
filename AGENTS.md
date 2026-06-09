@@ -603,7 +603,7 @@ Key test areas:
 
 ## Known Gaps and TODOs
 
-Last updated: **2026-05-17 evening** (after v0.2.7 — S5 vlog_strategy bug fix + 4 prod e2e specs + e2e-prod CI + 3 user-action runbooks + ADR-006 C2PA shipped & deployed).
+Last updated: **2026-06-09** (after comprehensive debt audit — 221 findings, 33+ remediation tasks completed across config, LLM URL centralization, step_utils dedup, deploy.sh modernization, nginx security headers, frontend i18n fixes, except Exception reduction, docs archiving, and standard project files).
 
 ### ✅ Resolved since 2026-05-03 baseline
 

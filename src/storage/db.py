@@ -232,11 +232,12 @@ async def check_pg_health() -> dict[str, Any]:
 
 
 async def init_db() -> None:
-    """Initialize database (PostgreSQL via migrations or SQLite fallback).
+    """Initialize database (PostgreSQL via Alembic migrations or SQLite fallback).
 
     On startup this is called from the FastAPI lifespan event.
-    It verifies PG connectivity and required tables, then sets _pg_available
-    so the rest of the app can skip PG calls when it's unhealthy.
+    For PG: runs `alembic upgrade head` to apply any pending migrations,
+    then verifies required tables exist. Sets _pg_available so the rest
+    of the app can skip PG calls when it's unhealthy.
     """
     global _pg_available
     pool = await get_pool()
@@ -247,6 +248,11 @@ async def init_db() -> None:
     try:
         async with pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
+            # Run Alembic migrations to bring schema up to date.
+            # The inlined SQL in 001_init.sql is a belt-and-suspenders safety net
+            # for fresh docker compose environments; Alembic is the authoritative
+            # schema manager.
+            _run_alembic_migrations()
             if await _verify_pg_tables(conn):
                 _pg_available = True
                 logger.info("PostgreSQL initialized — pipeline_states and all tables verified")
@@ -256,6 +262,25 @@ async def init_db() -> None:
     except Exception as e:
         logger.warning("PG init failed: %s — falling back to filesystem-only", e)
         _pg_available = False
+
+
+def _run_alembic_migrations() -> None:
+    """Run Alembic migrations if available. Non-fatal on failure."""
+    try:
+        from alembic.config import Config
+        from alembic import command
+        import os
+        # Look for alembic.ini relative to the project root
+        project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
+        ini_path = os.path.join(project_root, "migrations", "alembic.ini")
+        if os.path.exists(ini_path):
+            alembic_cfg = Config(ini_path)
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Alembic migrations applied successfully")
+        else:
+            logger.info("alembic.ini not found at %s — skipping migrations (using SQL init)", ini_path)
+    except Exception:
+        logger.debug("Alembic migration skipped (non-fatal): %s", str(_e)[:100] if (_e := None) else "")
 
 
 def is_pg_available() -> bool:

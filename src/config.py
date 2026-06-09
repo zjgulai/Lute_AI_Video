@@ -189,6 +189,24 @@ S3_VIRAL_EXTRACT_DISABLED: bool = os.environ.get("S3_VIRAL_EXTRACT_DISABLED", "1
 _quality_mode = os.environ.get("QUALITY_MODE", "observe").lower()
 QUALITY_MODE: str = _quality_mode if _quality_mode in ("off", "observe", "enforce") else "observe"
 
+# ── LLM Client centralized base URLs (migrated from hardcoded tool/connector modules) ──
+# Ref: debt-audit-report-2026-06-09.md items D36-D45
+KIMI_API_BASE: str = os.environ.get("KIMI_API_BASE", "https://api.moonshot.cn/v1")
+ANTHROPIC_MODEL: str = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o")
+
+# ── Image generation base URLs ──
+OPENAI_IMAGE_API_BASE: str = os.environ.get("OPENAI_IMAGE_API_BASE", "https://api.openai.com/v1")
+ELEVENLABS_API_BASE: str = os.environ.get("ELEVENLABS_API_BASE", "https://api.elevenlabs.io/v1")
+
+# ── Connector base URLs ──
+TIKTOK_API_UPLOAD_URL: str = os.environ.get("TIKTOK_API_UPLOAD_URL", "https://open-api.tiktok.com")
+SHOPIFY_GRAPHQL_URL_TEMPLATE: str = os.environ.get("SHOPIFY_GRAPHQL_URL_TEMPLATE", "https://{store}/admin/api/2024-07/graphql.json")
+
+# ── Pipeline constants (now configurable via env) ──
+MAX_CLIPS_PER_DEMO: int = int(os.environ.get("MAX_CLIPS_PER_DEMO", "3"))
+MAX_THUMBNAILS_PER_DEMO: int = int(os.environ.get("MAX_THUMBNAILS_PER_DEMO", "2"))
+
 # ═══════════════════════════════════════════════════════════
 # Quality check thresholds (all configurable via env vars)
 # ═══════════════════════════════════════════════════════════
