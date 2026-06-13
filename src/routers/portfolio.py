@@ -151,6 +151,14 @@ def _thumbnail_path_for(rel_path: str, *, generate_missing: bool = False) -> str
     return None
 
 
+def _is_portfolio_poster_cache(path: Path) -> bool:
+    try:
+        path.relative_to(THUMBNAIL_DIR)
+    except ValueError:
+        return False
+    return True
+
+
 class PortfolioFile(BaseModel):
     id: str
     filename: str
@@ -219,12 +227,13 @@ def _scan_portfolio() -> list[PortfolioFile]:
     """
     files: list[PortfolioFile] = []
     min_bytes = 1024 * 1024
-    for subdir_name, (category, _source) in CATEGORIES.items():
-        subdir = OUTPUT_DIR / subdir_name
+    for subdir, category in _portfolio_scan_roots():
         if not subdir.is_dir():
             continue
         for path in sorted(subdir.rglob("*")):
             if not path.is_file():
+                continue
+            if category == "thumbnails" and _is_portfolio_poster_cache(path):
                 continue
             ext = path.suffix.lower()
             if ext not in MEDIA_EXTS:
@@ -273,6 +282,18 @@ def _scan_portfolio() -> list[PortfolioFile]:
                 )
             )
     return files
+
+
+def _portfolio_scan_roots() -> list[tuple[Path, str]]:
+    roots = [(OUTPUT_DIR / subdir_name, category) for subdir_name, (category, _source) in CATEGORIES.items()]
+    tenants_dir = OUTPUT_DIR / "tenants"
+    if tenants_dir.is_dir():
+        roots.extend(
+            (tenant_dir / "pending_review", "pending_review")
+            for tenant_dir in sorted(tenants_dir.iterdir())
+            if tenant_dir.is_dir()
+        )
+    return roots
 
 
 def _tenant_id_for_path(rel: Path, category: str) -> str | None:
