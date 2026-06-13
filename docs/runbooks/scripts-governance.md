@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-06-07
+updated: 2026-06-13
 owner: self
 source: human+ai
 ---
@@ -51,6 +51,7 @@ source: human+ai
 | `scripts/generate_portfolio_thumbnails.py` | active_reusable |
 | `scripts/no_token_commercial_benchmark.py` | active_reusable |
 | `scripts/p2_recharge_smoke_checklist.py` | active_reusable |
+| `scripts/production_readonly_log_gate.py` | active_reusable |
 | `scripts/portfolio_index.py` | active_reusable |
 | `scripts/portfolio_thumbnail_coverage.py` | active_reusable |
 | `scripts/prepare_demo_cache.py` | active_reusable |
@@ -135,6 +136,8 @@ source: human+ai
 新增脚本前先判断能否并入现有脚本。新脚本必须有稳定用途名，不能使用 `fix`、`patch`、`overwrite`、`bugfix`、`phase`、`test_`、`_v2`、`_now` 作为核心语义，除非同时被契约标记为非 active。
 
 `provider_probe_scripts` 只能在充值后、显式设置 key 和确认变量后运行。默认 CI、`Makefile`、Lighthouse deploy、`run_s1_s5_hermetic_regression.sh` 不得调用这些脚本。
+
+`scripts/production_readonly_log_gate.py` 只做本地 backend log / summary 回放，不创建 key、不访问生产、不调用 provider。它用于 L4D/L4E 这类生产只读回归的日志判定：允许 `GET /portfolio` 和本地健康检查噪音（`127.0.0.1 /health`、`rendering:3001/health`），继续禁止外部 health/admin/media 请求、scenario/Fast submit、provider、publish、delivery 和 approved brand token 相关日志。
 
 `legacy_one_off_scripts` 的下一步是迁移到 `archive/scripts/` 或删除。迁移、删除、批量重命名前必须先列出 diff 和影响范围，并获得确认。
 

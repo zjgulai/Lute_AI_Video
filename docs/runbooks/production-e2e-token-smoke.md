@@ -5,7 +5,7 @@ module: ci-cd
 topic: production-e2e-token-smoke
 status: stable
 created: 2026-05-31
-updated: 2026-06-06
+updated: 2026-06-13
 owner: self
 source: human+ai
 ---
@@ -24,6 +24,8 @@ Default production E2E must remain non-token:
 - `PLAYWRIGHT_API_KEY`: authenticated production checks require a non-demo production key
 
 If `PLAYWRIGHT_API_KEY` is missing or still equals `ai_video_demo_2026`, authenticated checks skip through `web/e2e/production/helpers.ts`. That result is not a production acceptance gate. The current non-token acceptance baseline is `50 passed, 2 skipped` with a real production API key and `RUN_TOKEN_SMOKE=0`.
+
+L4D real-media closeout evidence is indexed in [L4D Real Media Provider Evidence Index](../workflows/l4d-real-media-provider-evidence-index-stable.md). That evidence proves S2 bounded media through `seedance_clips` plus frontend/library read-only readback only; it does not prove S2 full media/final assembly, publish, delivery acceptance, or approved brand token writes.
 
 ## Required Secret For Token Smoke
 

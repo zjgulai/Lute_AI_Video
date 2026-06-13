@@ -166,7 +166,9 @@ jobs:
             docs/workflows/deploy-lighthouse-stable.md
             docs/workflows/deploy-test-sop-stable.md
             docs/workflows/deployment-sop-stable.md
+            docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md
             docs/workflows/ai-video-project-2-0-final-self-proof-stable.md
+            docs/workflows/l4d-real-media-provider-evidence-index-stable.md
             docs/workflows/portfolio-ops-stable.md
             docs/workflows/update-guide-stable.md
             deploy/local-run.md

@@ -5,7 +5,7 @@ module: ai-video-2.0
 topic: e2e-test-plan
 status: stable
 created: 2026-06-06
-updated: 2026-06-07
+updated: 2026-06-13
 owner: self
 source: human+ai
 ---
@@ -28,6 +28,8 @@ source: human+ai
 | L4 | 授权真实 token smoke | 是 | 局部 provider 链路可用，不等于商业交付完成 |
 
 C1-C8 最高证据等级仍保持 L2。C9 在用户明确授权并满足双确认后，可将受控样本路径切到 L4；截至 `2026-06-07`，Momcozy 消毒器 3 图 + 1 视频样本已完成一次 `L4-authorized-live` 执行（pending_review 边界内）。
+
+L4D 真实媒体 provider 的当前收口证据索引见 [L4D 真实媒体 Provider 证据索引](l4d-real-media-provider-evidence-index-stable.md)。当前可声明范围只到 S2 bounded media 的 `seedance_clips` 和 `/api/portfolio`、`/library?tab=materials` 只读回读；不得外推为 S2 full media、其他场景媒体生成、发布或 delivery acceptance。
 
 ## 生产模型和 Key 盘点
 
