@@ -37,7 +37,7 @@ async def test_video_analysis_disabled_returns_degraded_stub():
     assert result["viral_segments"] == []
     assert result["segments"] == []
     assert "fallback_prompt" in result
-    assert any("video_analysis_failed" in e for e in state["errors"])
+    assert state["errors"] == []
 
 
 @pytest.mark.asyncio

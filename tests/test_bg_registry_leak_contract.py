@@ -69,7 +69,7 @@ async def test_externally_cancelled_task_is_removed_without_shutdown() -> None:
         try:
             await asyncio.sleep(60)
         except asyncio.CancelledError:
-            pass
+            raise
 
     task = asyncio.create_task(sleeper())
     bg_registry.register_background_task(task, "leak_cancelled")

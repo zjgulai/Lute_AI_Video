@@ -22,7 +22,7 @@ async def test_cancel_background_tasks_cancels_registered_task() -> None:
         try:
             await asyncio.sleep(60)
         except asyncio.CancelledError:
-            pass
+            raise
 
     task = asyncio.create_task(sleeper())
     await started.wait()

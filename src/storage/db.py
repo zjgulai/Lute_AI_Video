@@ -267,9 +267,10 @@ async def init_db() -> None:
 def _run_alembic_migrations() -> None:
     """Run Alembic migrations if available. Non-fatal on failure."""
     try:
-        from alembic.config import Config
-        from alembic import command
         import os
+
+        from alembic import command
+        from alembic.config import Config
         # Look for alembic.ini relative to the project root
         project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
         ini_path = os.path.join(project_root, "migrations", "alembic.ini")

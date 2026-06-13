@@ -7,15 +7,14 @@ them with products. Falls back to mock mode when credentials are absent.
 import asyncio
 import logging
 import os
-import random
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
 import httpx
 
-from src.connectors.base import PlatformConnector
 from src.config import SHOPIFY_GRAPHQL_URL_TEMPLATE
+from src.connectors.base import PlatformConnector
 
 logger = logging.getLogger(__name__)
 
@@ -513,14 +512,6 @@ class ShopifyConnector(PlatformConnector):
     async def _mock_publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Simulate a Shopify publish (used when credentials are absent)."""
         await asyncio.sleep(1.5)
-
-        if random.random() < 0.1:
-            return {
-                "success": False,
-                "error": "Mock: Shopify API rate limit exceeded",
-                "status": "failed",
-                "platform": "shopify",
-            }
 
         mock_id = f"sp_mock_{uuid4().hex[:8]}"
         return {

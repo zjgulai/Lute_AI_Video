@@ -8,13 +8,13 @@ Verifies that:
 Ref: debt-audit-report-2026-06-09.md items E2, D21
 """
 
-import pytest
 from unittest.mock import patch
 
-from src.storage.asset_stores import BrandPackageStore, InfluencerStore
+import pytest
+
 from src.models.brand import BrandAssetPackage
 from src.models.influencer import InfluencerProfile
-
+from src.storage.asset_stores import BrandPackageStore, InfluencerStore
 
 # ── BrandPackageStore — In-Memory Dict Fallback ──────────────
 

@@ -7,11 +7,9 @@ Ref: debt-audit-report-2026-06-09.md items E1
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
 
-from src.connectors.tiktok_connector import TikTokConnector
 from src.connectors.shopify_connector import ShopifyConnector
-
+from src.connectors.tiktok_connector import TikTokConnector
 
 # ── TikTok Connector ──────────────────────────────────────────
 
