@@ -4,25 +4,263 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-09
+updated: 2026-06-12
 owner: self
 source: human+ai
 ---
 
 # 已知缺口与待办清单
 
-最近一次盘点：**2026-06-09** — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行了首批 23 项修复任务。修复涵盖：`.env.example` 补全 30+ 环境变量文档、10+ 个 LLM/API URL 从硬编码迁移到 `config.py` 集中管理、5 个 pipeline 模块中重复的 `_get_step_output()` 收敛为共享 `step_utils.py`、`deploy.sh` 现代化（docker-compose v1→v2 + 路径变量化）、nginx 安全头部、前端 i18n 硬编码字符串修复、测试中 60 秒硬 sleep 修复、45 篇历史文档归档、以及 LICENSE/CHANGELOG/SECURITY 标准文件补齐。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。本次修复未涉及 provider 真调用，继续遵守 P1-65 余额约束边界。
+最近一次盘点：**2026-06-11** — 完整路径修复已恢复本地质量门可信度，并补齐命令入口、rendering deploy 防回归守卫、前端热路径类型边界和“真实 provider + 前后端联动”E2E 正式计划。本轮已复跑 Phase A/B no-token 证据门：后端全量 `pytest tests -q` 通过，结果 `1888 passed, 11 skipped, 12 deselected`；前端 `npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 均通过，当前 Vitest 结果为 `52 passed` test files、`234 passed` tests；Phase B readiness 守卫 `36 passed`。Phase C 已使用非 demo production key 执行 `scripts/production_non_token_e2e_check.py --execute`，结果 `50 passed, 4 skipped`；其中 `library-portfolio` 的 L4B 待审素材回读检查因当时生产无 `pending_review` 资产按证据门禁跳过。随后用户给出精确授权，已完成 Momcozy 消毒器 3 张 poyo `gpt-image-2` 图片 + 1 条 poyo `seedance-2` 15 秒竖版图片驱动视频的 `L4-authorized-live` smoke：`tmp/outputs/authorized-live-poyo-smoke-20260611-summary-enriched.json` 显示 `status=submitted`、`provider_call_executed=true`、`blocked_reasons=[]`。产物已同步到生产租户待审目录并完成 L4B 只读回读：`tmp/outputs/l4b-production-readback-20260611-160827.json` 显示 `pending_review_count=4`、`final_work_total=0`，生产 Playwright `library-portfolio.prod.spec.ts` 结果 `2 passed`。随后执行 `L4C-1` Fast Mode 最小扩展 token smoke：`tmp/outputs/l4c-fast-mode-token-smoke-summary-20260611-162852.json` 显示 `provider_call_executed=true`、`token_smoke_executed=true`、Playwright `3 passed, 1 skipped`，两个 poyo Seedance 任务均完成且未观察到 submit retry；但该 spec 内含两个 submit 用例，实际 submit 计数为 `2`，且 Fast Mode 当时把产物写入 `output/fast_mode` 而不是 `pending_review`。本轮已补 `L4C-1R` single-submit / retry=0 / pending_review 守卫；首次 guarded run 因生产 volume 权限在视频 provider 之前失败，权限修复后经用户重新授权执行 retry，`tmp/outputs/l4c-1r-retry-fast-mode-single-submit-summary-20260611-171600.json` 显示 `decision=passed`、Playwright `1 passed`、任务 `fast_1781169431_7e4af0b5` 完成，poyo task `T17OTAHIXMPBNYXX` 仅 submit 1 次且 `poyo_retrying_submit_count=0`，产物为 tenant-scoped `pending_review` / `creation_intermediate`，未进入 `final_work`。随后执行 `L4C-2` S2 no-media single-submit：`tmp/outputs/l4c-2-s2-no-media-single-submit-summary-20260611-174120.json` 显示 `decision=failed_stopped`，Playwright 30s timeout 后发现生产 S2 `enable_media_synthesis=false` 仍进入 poyo image generation，已产生 3 个 poyo image task；已立即重启 backend 止损，未观察到 Seedance 视频日志、未发现这些 task 的落盘产物。根因修复已最小部署到生产 `src/pipeline/s2_brand_pipeline_v2.py`，生产 health 恢复 200；随后经用户重新授权执行 `L4C-2R` after-fix single-submit，`tmp/outputs/l4c-2r-s2-no-media-single-submit-summary-20260611-095826.json` 显示 `decision=passed`、Playwright `1 passed (11.1s)`，S2 开始后 poyo/Seedance/TTS/assemble/keyframe 执行态计数均为 `0`，DeepSeek 文本请求计数为 `2`，远端只新增 `pipeline_states/s2_momcozy_1781172006.json` 且媒体路径字段为空。随后执行 `L4C-3` S1 no-media single-submit 的前置最小代码同步并 hash verify 通过，但唯一一次授权 live submit 返回 HTTP 500；生产日志根因为 `ImportError: cannot import name 'MAX_CLIPS_PER_DEMO' from 'src.config'`，provider 执行态计数均为 `0`，没有第二次提交。`L4C-3R-prep` 已同步 `src/config.py`、重启 backend、hash verify 和容器 import smoke 通过；随后经用户重新授权执行 `L4C-3R`，Playwright `1 passed (8.3s)`，`/scenario/s1` 返回 200，S1 no-media 在 keyframe 前停止，媒体字段与近期媒体文件均为空；但同一日志窗口内存在后台 admin health check 对 poyo `/v1/models` 和 SiliconFlow `/v1/models` 的探测，因此只能声明业务路径和媒体生成边界通过，不能声明整个日志窗口绝对无 provider-looking 日志。随后用户授权 `L4C-3H-prep`，已同步 `src/config.py` 与 `src/routers/admin/logs.py`，重启 backend、health/hash verify 通过，并在 370 秒 no-submit 观察窗口中确认 DeepSeek/poyo/SiliconFlow 外部 HTTP、poyo submit、Seedance、TTS、assemble、keyframe 与 gate candidate 日志均为 `0`。所有产物仍未发布、未写入 approved brand token、未做 delivery acceptance；实际扣费只能以 provider 控制台为准。
 
-> 上一次盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
+本次新增状态：用户随后授权并执行 `L4C-4` S1 no-media clean-log single-submit token smoke。唯一一次 Playwright live spec 业务断言通过，`/scenario/s1` 返回 200，6 分钟窗口内 DeepSeek 文本请求 `2` 次，`api.poyo.ai`、`api.siliconflow.cn`、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate 的执行级计数均为 `0`；state 显示 `enable_media_synthesis=false`、媒体路径全空、`final_video_path` 为空、`delivery_accepted=false`、`publish_allowed=false`、`approved_brand_token_write=false`。但日志窗口仍出现 8 行媒体 skill `registered` 噪音，包含 Seedance/TTS/assemble/keyframe 词元，因此 `tmp/outputs/l4c-4-s1-no-media-clean-log-single-submit-summary-20260611-230535.json` 判定为 `failed_strict_clean_log_registration_noise`。随后用户授权 `L4C-4R-prep`，本轮只同步 `src/pipeline/__init__.py` 与 `src/pipeline/s1_product_pipeline.py`，远端原文件已备份到 `/opt/ai-video/backups/l4c4r-prep-s1-logging-20260612-000910/`，backend 已重启，生产 `/api/health` 返回 `ok`，本地/远端/容器 hash verify 通过；370 秒 no-submit 日志窗口内 `/scenario` submit、DeepSeek/poyo/SiliconFlow 外部 HTTP、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate 和媒体 skill `registered` 计数均为 `0`。证据摘要为 `tmp/outputs/l4c-4r-prep-s1-logging-import-hygiene-sync-summary-20260612-000910.json`，`decision=passed`。随后用户授权 `L4C-4R` 同一单 spec clean-log 复验；`tmp/outputs/l4c-4r-s1-no-media-clean-log-single-submit-summary-20260612-001.json` 固化 `decision=passed`，Playwright `1 passed (11.7s)`，spec 观察 submit 次数为 `1`，生产 label `s1_1781229202_7b5148d1`，370 秒窗口内 DeepSeek text calls `2`，`api.poyo.ai`、`api.siliconflow.cn`、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate、thumbnail media registration 和媒体 skill `registered` 均为 `0`。随后用户授权 `L4C-5` S2 no-media clean-log single-submit；`tmp/outputs/l4c-5-s2-no-media-clean-log-single-submit-summary-20260612-002.json` 固化 `decision=passed`，Playwright `1 passed (7.2s)`，spec 观察 submit 次数为 `1`，生产 label `s2_momcozy_1781230204`，370 秒窗口内 DeepSeek text calls `2`，`api.poyo.ai`、`api.siliconflow.cn`、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate、thumbnail media registration 和媒体 skill `registered` 均为 `0`。当前可声明 L4C-4R S1 no-media 与 L4C-5 S2 no-media clean-log single-submit 通过；不得外推为 S1 media/gate、S3-S5、完整 token suite、发布、delivery acceptance 或 approved brand token。
+
+> 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
+
+> 更早盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
 
 ## 当前执行入口
 
 - **当前长期 TODO 来源**：本文件的“完整 TODO list”继续维护项目长期 P1/P2 缺口。
-- **当前 AI Video 2.0 执行入口**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的原始分步计划；[`docs/workflows/ai-video-toolbox-productization-plan-stable.md`](../workflows/ai-video-toolbox-productization-plan-stable.md) 追踪工具箱 T1-T9/C23；[`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`](../workflows/ai-video-project-2-0-e2e-test-plan-stable.md) 是真实 poyo smoke 前置计划；[`docs/workflows/ai-video-project-2-0-final-self-proof-stable.md`](../workflows/ai-video-project-2-0-final-self-proof-stable.md) 记录 C1-C36 自证状态。`C1-C35` 中的基础层仍有 `L2-fixture-or-dry-run`，但 2026-06-07 已完成 scoped `L4-authorized-live`（Momcozy 消毒器 3 图 + 1 视频）并写入 pending_review；后续运行仍受 C21-C36 门禁与用户更新授权/records 的边界约束。
+- **当前 AI Video 2.0 执行入口**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的原始分步计划；[`docs/workflows/ai-video-toolbox-productization-plan-stable.md`](../workflows/ai-video-toolbox-productization-plan-stable.md) 追踪工具箱 T1-T9/C23；[`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`](../workflows/ai-video-project-2-0-e2e-test-plan-stable.md) 是“真实 provider + 前后端联动”E2E 正式计划，已拆分为 `L4A` 受控 provider smoke、`L4B` 前端只读回读和 `L4C` 扩展 token Playwright；[`docs/workflows/ai-video-project-2-0-final-self-proof-stable.md`](../workflows/ai-video-project-2-0-final-self-proof-stable.md) 记录 C1-C36 自证状态。`C1-C35` 中的基础层仍有 `L2-fixture-or-dry-run`；2026-06-07 与 2026-06-11 均完成 scoped `L4-authorized-live`（Momcozy 消毒器 3 图 + 1 视频）并保持 pending_review 边界；2026-06-11 已完成本轮 L4B 生产只读回读、`L4C-1` Fast Mode 最小 token smoke、`L4C-1R` Fast Mode single-submit pending_review token smoke、`L4C-2R` S2 no-media after-fix single-submit token smoke、`L4C-3R-prep` config/import gate、`L4C-3R` S1 no-media single-submit 业务路径和 `L4C-4` S1 no-media clean-log 单提交复测。`L4C-4` 业务路径与执行级 provider 边界通过，但 strict clean-log 因媒体 skill 注册日志污染失败；2026-06-12 的 `L4C-4R-prep` 已完成 import/logging hygiene 生产同步并通过 no-submit clean-log 验证；`L4C-4R` 已完成同一 S1 no-media 单 spec clean-log 复验并通过；`L4C-5` 已完成 S2 no-media clean-log 单提交复验并通过。后续继续扩大到 S1 media/gate、S3-S5、media/poster/quality 仍受 C21-C36 门禁与用户更新授权/records 的边界约束。
+- **L4C 下一阶段入口**：`configs/l4c-token-smoke-plan-template.json` + `scripts/l4c_token_smoke_plan.py` 是 no-execute 计划验证门。`L4C-1R` 已证明 single-submit / provider retry=0 / artifact disposition=pending_review 最小路径可跑通；`L4C-2` 首次执行已失败止损并暴露 S2 no-media 真实媒体越界，根因修复后 `L4C-2R` 与 `L4C-5` 已证明 S2 no-media 单提交只走 DeepSeek 文本且不触发媒体 provider 或媒体注册噪音。`L4C-3R`、`L4C-4` 与 `L4C-4R` 均证明 S1 no-media 单提交业务路径通过，媒体生成执行为 `0`；`L4C-3H-prep` 已把 admin provider health checks 隔离同步到生产并通过 370 秒 no-submit 日志验证；`L4C-4R-prep` 已消除 no-media S1 的媒体 skill `registered` 日志噪音；`L4C-4R` 已证明 submit 后 clean-log 窗口通过。下一片不应直接扩大到完整 token suite，应在 S3/S4/S5 no-media、S1 状态只读补证或其他最小风险切片中重新选择，重新生成 plan 并取得精确授权。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **当前研究 / 架构 / 流程引用**：2026-06-03 至 2026-06-04 新增 `docs/research/ai-video-commercial-technology-research-review-20260603.md`、`docs/research/ai-video-longform-production-research-audit-review-20260603.md`、`docs/research/aihot-image-video-product-technology-research-review-20260604.md`、[`docs/architecture/ai-video-commercial-toolbox-architecture-review-20260603.md`](../architecture/ai-video-commercial-toolbox-architecture-review-20260603.md)、[`docs/architecture/brand-asset-token-contract-review-20260603.md`](../architecture/brand-asset-token-contract-review-20260603.md)、[`docs/architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md`](../architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md)、[`docs/architecture/quality-contract-brand-rights-audit-review-20260603.md`](../architecture/quality-contract-brand-rights-audit-review-20260603.md)、[`docs/workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md`](../workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md)、[`docs/workflows/brand-data-asset-directory-intake-review-20260603.md`](../workflows/brand-data-asset-directory-intake-review-20260603.md)、[`docs/workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md`](../workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md) 与 [`docs/workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md`](../workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md)，用于后续 S1-S5 工具库、Market Signal Intelligence、Brand Asset Token、Provider Prompt Compiler、Production Job Ledger、Quality Contract、长视频生产对象、品牌数据资产目录接入和 Project 2.0 代码前实施计划；十一份均为 `review` 状态，不替代本文件的 TODO list。
-- **POYO 余额约束**：充值前只推进 hermetic / mock / unit / lint / 文档治理；真实 S1-S5 smoke、内容审核样本回灌和生产部署后真流量证据统一归入 P2。
+- **真实调用授权边界**：L4A/L4B 首轮已完成；任何继续扩大到 S1-S5、Fast Mode、gate、media/poster/quality 的真实调用都归入 `L4C`，必须先通过 no-execute 计划验证并重新取得精确授权、预算和产物处置边界。
 - **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。该边界已在 `P1-65` 复核中闭环。
+
+## 1.01 2026-06-11 L4B 生产只读回读已通过
+
+- **生产同步** — 已把本轮 L4A 产物同步到生产 Docker volume 的 `output/tenants/momcozy-marketing/pending_review/momcozy_sterilizer_smoke_20260611/`，并最小同步 `src/routers/portfolio.py` 到 Lighthouse 后端。远端原 `portfolio.py` 已备份为 `/opt/ai-video/src/routers/portfolio.py.bak-20260611160250`。
+- **后端重启与健康** — 只重启 `ai_video_backend`，未跑全量 deploy，未重建前端，未触发 provider。`https://video.lute-tlz-dddd.top/api/health` 恢复 200。
+- **后端只读回读** — `tmp/outputs/e2e-portfolio-creation-intermediate-20260611-160526.json` 显示 `total=4`、`pending_review_count=4`，4 个资产均为 `tenant_id=momcozy-marketing`、`kind=creation_intermediate`、`category=pending_review`。`tmp/outputs/e2e-portfolio-final-work-20260611-160526.json` 显示 `total=0`，本次 smoke 资产没有进入 `final_work`。
+- **前端只读回读** — 修正 `web/e2e/production/library-portfolio.prod.spec.ts`，避免测试把生产页面强制切到 demo-data；在 `RUN_TOKEN_SMOKE=0` 下复跑生产 spec，结果 `2 passed`。
+- **证据摘要** — `tmp/outputs/l4b-production-readback-20260611-160827.json` 固化 L4B 结果：`provider_call_executed=false`、`pending_review_count=4`、`final_work_total=0`、`final_work_smoke_assets=0`、`playwright_result=2 passed`。
+- **证据边界** — 当前可声明“本轮 L4B 生产只读回读通过”；仍不得声明商业交付完成、delivery accepted、publish allowed、approved brand token 或可直接发布。
+
+## 1.02 2026-06-11 L4C-1 Fast Mode 最小 token smoke 已执行
+
+- **授权范围** — 用户授权只运行 `web/e2e/production/fast-mode-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`--retries=0`，预算上限 `$2.00`，不运行 user-journey / S1 gate / S1 step-by-step / scenario multi-submit。
+- **计划门禁** — `tmp/outputs/l4c-token-smoke-plan-readiness-20260611-162852.json` 显示 `blocked=false`、`ready_for_l4c_operator_review=true`，且计划只允许 `fast-mode-submit.prod.spec.ts`。
+- **执行结果** — `tmp/outputs/l4c-fast-mode-token-smoke-summary-20260611-162852.json` 显示 Playwright `3 passed, 1 skipped`；两个 poyo Seedance provider task `YHUW7BP5TLUHMTC1`、`JPRCUUAFNJTK6MB6` 均完成，远程生成文件 `seedance_YHUW7BP5_ba8b.mp4`、`seedance_JPRCUUAF_f3cb.mp4` 存在。
+- **重试边界** — Playwright 显式 `--retries=0`；生产日志未出现 `poyo: retrying submit+poll`，两个 provider submit 均为 `attempt=1`。
+- **授权边界缺口** — 本次没有重复运行命令，也没有 Playwright retry；但授权文本中的“不做第二次提交”若按严格 submit 次数解释，本次 spec 内两个 submit 用例导致实际 submit 计数为 `2`。后续 `L4C-2+` 必须先增加 `max_submit_count=1` 守卫或拆分单 submit spec。
+- **产物处置缺口** — 授权要求产物只进入 `pending_review`；当前 Fast Mode 实现把生成文件保留在 `output/fast_mode`。这些文件没有进入 `final_work`、approved brand token、delivery acceptance 或 publish flow，但 pending_review-only 存储边界未满足。
+- **证据边界** — 当前可声明“L4C-1 Fast Mode submit/status 功能 smoke 通过，并暴露 submit-count 与 pending_review-only 产物处置守卫缺口”；不得声明严格单提交授权完全闭环，不得声明 S1/S2-S5/gate/media/poster/quality 已通过，不得声明 delivery accepted、publish allowed 或 approved brand token。
+
+## 1.04 2026-06-11 L4C-1R retry after volume-permission fix 已通过
+
+- **授权范围** — 用户重新授权只运行 `web/e2e/production/fast-mode-single-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`，预算上限 `$2.00`，不运行 Fast Mode multi-submit、user-journey、S1 gate、S1 step-by-step 或 scenario multi-submit。
+- **计划门禁** — `tmp/outputs/l4c-1r-retry-token-smoke-plan-readiness-20260611-171600.json` 显示 `blocked=false`、`allowed_specs=["fast-mode-single-submit.prod.spec.ts"]`、`max_submit_count=1`、`provider_max_retries=0`，且执行前未触发 provider。
+- **生产执行** — `tmp/outputs/l4c-1r-retry-fast-mode-single-submit-playwright-20260611-171600.log` 显示 `1 passed (8.8m)`；生产任务 `fast_1781169431_7e4af0b5` 状态为 `done`，poyo task 为 `T17OTAHIXMPBNYXX`。
+- **provider 边界** — 过滤后的生产后端日志 `tmp/outputs/l4c-1r-retry-production-backend-evidence-20260611-171600.log` 显示 `poyo: submitting task` 计数 `1`、`poyo: task submitted` 计数 `1`、`poyo: retrying submit` 计数 `0`。日志中的 `poyo: polling attempt=N` 只是状态轮询次数，不是 submit retry。
+- **产物处置** — 状态回读 `tmp/outputs/l4c-1r-retry-fast-mode-status-20260611-171600.json` 显示 `success=true`、`is_stub=false`、`artifact_disposition=pending_review`、`artifact_review_status=pending_review`、`artifact_storage_scope=tenant_pending_review`，文件路径为 `/app/output/tenants/default/pending_review/fast_mode/fast_1781169431_7e4af0b5/seedance_T17OTAHI_66fd.mp4`，大小 `1916459` bytes。
+- **前后端回读** — 远端文件证据 `tmp/outputs/l4c-1r-retry-remote-artifact-files-20260611-171600.txt` 显示文件 owner 为 `appuser:appgroup`；`tmp/outputs/l4c-1r-retry-portfolio-creation-intermediate-20260611-171600.json` 中目标资产为 `kind=creation_intermediate`、`review_status=pending_review`，`tmp/outputs/l4c-1r-retry-portfolio-final-work-20260611-171600.json` 中本次 task `target_count=0`。
+- **证据摘要** — `tmp/outputs/l4c-1r-retry-fast-mode-single-submit-summary-20260611-171600.json` 固化本轮 `L4-authorized-live` 结果：`decision=passed`、`provider_max_retries=0`、`max_submit_count=1`、`poyo_retrying_submit_count=0`。
+- **证据边界** — 当前可声明“Fast Mode single-submit + pending_review artifact disposition 最小生产 token smoke 通过”；不得声明实际扣费金额、delivery accepted、publish allowed、approved brand token、S1/S2-S5/gate/media/poster/quality 已通过。任何第三次 submit 仍需重新授权。
+
+## 1.05 2026-06-11 L4C-2 S2 no-media single-submit 失败止损
+
+- **授权范围** — 用户授权只运行 `web/e2e/production/scenario-s2-no-media-single-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`，预算上限 `$1.00`，并明确 `enable_media_synthesis=false`、不允许 Seedance/TTS/assemble/media synthesis。
+- **执行结果** — `tmp/outputs/l4c-2-s2-no-media-single-submit-playwright-20260611-174120.log` 显示 Playwright 在 30s test timeout 失败，未通过业务断言；没有重跑。
+- **范围违背** — 生产日志 `tmp/outputs/l4c-2-s2-no-media-production-backend-evidence-after-stop-20260611-174120.log` 显示 S2 已开始，且出现 3 次 poyo image submit，task id 为 `78BSCUGXZADGMCUH`、`83WVI2HST7TOLZF0`、`E48NL40OIALQV82N`。未观察到 `seedance:` 视频生成日志。
+- **止损动作** — 发现范围违背后立即重启 `ai_video_backend`，`tmp/outputs/l4c-2-s2-no-media-after-restart-clean-window-20260611-174120.log` 显示 `09:43:55Z` 后 poyo/Seedance/S2 日志为 0；生产 `/api/health` 恢复 `status=ok`。
+- **产物检查** — `tmp/outputs/l4c-2-s2-no-media-remote-artifact-search-20260611-174120.txt` 未发现上述 3 个 task id 的落盘文件；近期只发现 `/app/output/pipeline_states/s2_momcozy_1781170902.json`。
+- **根因与修复** — `S2BrandCampaignPipeline.run(enable_media_synthesis=False)` 原先只在结果拼装阶段跳过媒体字段，但 `StepRunner.resume()` 仍执行完整 S2 step order 到 `keyframe_images`。本轮已修复为 no-media 只运行 `keyframe_images` 之前的步骤，并补 `tests/test_s2_e2e.py` 防回归；修复文件已最小部署到生产，远端原文件备份为 `/opt/ai-video/src/pipeline/s2_brand_pipeline_v2.py.bak-l4c2-20260611174814`。
+- **证据摘要** — `tmp/outputs/l4c-2-s2-no-media-single-submit-summary-20260611-174120.json` 固化 `decision=failed_stopped`、`poyo_image_submit_count=3`、`seedance_video_log_count=0`、`production_fix_deployed=true`、`rerun_performed=false`。
+- **证据边界** — 不得声明 L4C-2 通过，不得声明修复已完成生产 smoke 复验，不得声明实际扣费金额、delivery accepted、publish allowed 或 approved brand token。L4C-2 复跑必须重新授权。
+
+## 1.06 2026-06-11 L4C-2R S2 no-media after-fix single-submit 已通过
+
+- **授权范围** — 用户重新授权只运行 `web/e2e/production/scenario-s2-no-media-single-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`、`--workers=1`，预算上限 `$1.00`，只允许 DeepSeek 文本调用，不允许 poyo image、Seedance、TTS、assemble 或 media synthesis。
+- **计划门禁** — `tmp/outputs/l4c-2r-s2-no-media-token-smoke-plan-readiness-livekey-20260611-095826.json` 显示 `blocked=false`、`allowed_specs=["scenario-s2-no-media-single-submit.prod.spec.ts"]`、`max_submit_count=1`、`provider_max_retries=0`；执行前未触发 provider。
+- **生产执行** — `tmp/outputs/l4c-2r-s2-no-media-single-submit-playwright-20260611-095826.log` 显示 `1 passed (11.1s)`；外层 zsh wrapper 在测试通过后误用只读变量名 `status`，导致 shell command 非业务性返回错误，但没有重跑 spec。
+- **provider 边界** — `tmp/outputs/l4c-2r-s2-no-media-production-provider-counts-refined-20260611-095826.json` 显示 S2 开始后 `poyo_http_request_count=0`、`poyo_submit_execution_count=0`、`seedance_execution_count=0`、`tts_execution_count=0`、`assemble_execution_count=0`、`keyframe_execution_count=0`；DeepSeek 文本请求计数为 `2`，`s2_complete_no_media_count=1`。
+- **产物处置** — `tmp/outputs/l4c-2r-s2-no-media-recent-output-files-20260611-095826.txt` 显示远端只新增 `/app/output/pipeline_states/s2_momcozy_1781172006.json`；`tmp/outputs/l4c-2r-s2-no-media-state-summary-20260611-095826.json` 显示 `keyframe_images`、`clip_paths`、`audio_paths`、`thumbnail_image_paths` 长度均为 `0`，`final_video_path` 为空。
+- **证据摘要** — `tmp/outputs/l4c-2r-s2-no-media-single-submit-summary-20260611-095826.json` 固化 `decision=passed`、`evidence_level=L4-authorized-live`、`submit_count_observed_by_spec=1`、`provider_error_count=0`、生产 health `status=ok`。
+- **证据边界** — 当前只可声明“L4C-2R S2 no-media after-fix single-submit token smoke 通过”；不得外推为 S1/S2-S5/gate/media/poster/quality 通过，不得声明 delivery accepted、publish allowed、approved brand token 或实际 provider 扣费金额。
+
+## 1.07 2026-06-11 L4C-3 S1 no-media single-submit 失败止损
+
+- **工程修复** — 发现 S1 no-media 与修复前 S2 存在同类执行层缺口：`enable_media_synthesis=false` 只影响结果字段，不阻止 `StepRunner.resume()` 进入 `keyframe_images`。本轮已修复 `S1ProductDirectPipeline.run()`、`/scenario/s1`、`/scenario/s1/start` auto 和 unified `/scenario/s1/submit`，使 no-media 在 `keyframe_images` 之前停止。
+- **测试守卫** — `tests/test_s1_continuity_pipeline.py` 新增/更新 no-media 防回归，断言不调用 full `resume()`，执行步骤只到 `strategy`、`scripts`、`compliance`、`storyboards`、`continuity_storyboard_grid`。
+- **production spec** — 新增 `web/e2e/production/scenario-s1-no-media-single-submit.prod.spec.ts`，仅允许一次 `/api/scenario/s1` submit，payload 固定 `enable_media_synthesis=false`，并检查 `keyframe_images`、`clip_paths`、`audio_paths`、`thumbnail_image_paths` 与 `final_video_path` 均为空。
+- **计划门禁** — 用户授权后生成 `tmp/outputs/l4c-3-s1-no-media-token-smoke-plan-readiness-livekey-20260611-101904.json`，显示 `blocked=false`、`allowed_specs=["scenario-s1-no-media-single-submit.prod.spec.ts"]`、`max_submit_count=1`、`provider_max_retries=0`；Playwright `--list` 只枚举 1 个测试。
+- **生产同步** — 用户随后授权 L4C-3 前置最小代码同步，只允许同步 `src/pipeline/s1_product_pipeline.py` 和 `src/routers/scenario.py`。远端原文件已备份到 `/opt/ai-video/backups/l4c3-s1-no-media-20260611-102747/`；backend 已重启；`tmp/outputs/l4c-3-production-code-sync-hash-check-after-sync-20260611-102747.txt` 显示两个授权文件本地与生产 hash 均一致，`/api/health` 返回 `status=ok`。
+- **生产执行** — 同步成功后只运行 `web/e2e/production/scenario-s1-no-media-single-submit.prod.spec.ts` 一次，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`。Playwright 日志 `tmp/outputs/l4c-3-s1-no-media-single-submit-playwright-20260611-102747.log` 显示唯一测试失败，断言期望 HTTP 200、实际收到 HTTP 500。
+- **根因** — 生产后端日志 `tmp/outputs/l4c-3-s1-no-media-production-backend-evidence-20260611-102747.log` 显示失败发生在 provider 前：`ImportError: cannot import name 'MAX_CLIPS_PER_DEMO' from 'src.config' (/app/src/config.py)`。本地 `src/pipeline/s1_product_pipeline.py` 已依赖 `src.config` 中的 `MAX_CLIPS_PER_DEMO` / `MAX_THUMBNAILS_PER_DEMO`，但本轮授权同步范围不包含 `src/config.py`，导致生产容器缺少该常量。
+- **provider 边界** — `tmp/outputs/l4c-3-s1-no-media-production-provider-counts-20260611-102747.json` 显示 `poyo_http_request_count=0`、`poyo_submit_execution_count=0`、`seedance_execution_count=0`、`tts_execution_count=0`、`assemble_execution_count=0`、`keyframe_execution_count=0`、`deepseek_http_request_count=0`。本次没有第二次 submit。
+- **证据摘要** — `tmp/outputs/l4c-3-s1-no-media-single-submit-summary-20260611-102747.json` 固化 `decision=failed_stopped`、`evidence_level=L4-authorized-live`、`submit_count=1`、HTTP 500 根因和零 provider 执行态计数。
+- **证据边界** — 当前只可声明“L4C-3 已执行一次授权 live submit，但在 provider 前因生产配置代码不同步失败止损”；不得声明 L4C-3 通过、S1 no-media 生产路径已验证、provider 已调用、产物已生成、delivery accepted、publish allowed 或 approved brand token。
+- **L4C-3R-prep 已通过** — 用户授权只同步 `src/config.py`、备份远端原文件、重启 backend、执行 `/api/health`、hash verify 和容器 import smoke，不允许 Playwright live spec、submit 或 provider 调用。本轮远端原文件备份到 `/opt/ai-video/backups/l4c3r-prep-config-20260611-183914/`；`tmp/outputs/l4c-3r-prep-config-hash-verify-20260611-183914.txt` 显示本地、远端和容器内 `src/config.py` hash 均为 `e54498c02e1d0ad3ca5f7c26bebf17e7f3bf985fe75a8aaee85a215a5306669a`；`tmp/outputs/l4c-3r-prep-container-import-smoke-20260611-183914.txt` 显示 `import_ok=true`，`MAX_CLIPS_PER_DEMO=3`、`MAX_THUMBNAILS_PER_DEMO=2`。
+- **L4C-3R-prep 边界** — `tmp/outputs/l4c-3r-prep-provider-log-counts-after-restart-20260611-183914.json` 显示重启后的 prep 窗口内 DeepSeek、poyo、SiliconFlow 外部 HTTP 计数均为 `0`，poyo/Seedance/TTS/assemble/keyframe 执行计数均为 `0`。更宽的 pre-prep 日志窗口中存在 admin health check 对 DeepSeek、poyo `/v1/models` 和 SiliconFlow 的历史探测，不能归因到本次 config sync/import smoke。
+- **历史边界** — 本节记录 `L4C-3R-prep` 完成时的配置同步/import 证据；后续 `L4C-3R` live submit 结果以 `1.08` 为准。
+
+## 1.08 2026-06-11 L4C-3R S1 no-media after-config-sync single-submit 业务路径通过
+
+- **授权范围** — 用户重新授权只运行 `web/e2e/production/scenario-s1-no-media-single-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`、`--workers=1`，只允许一次 `/api/scenario/s1` submit，`enable_media_synthesis=false`，允许 DeepSeek 文本调用，不允许 poyo image、Seedance、TTS、assemble、keyframe 或 gate candidate generation。
+- **计划门禁** — `tmp/outputs/l4c-3r-s1-no-media-token-smoke-plan-readiness-livekey-20260611-184923.json` 显示 `blocked=false`、`allowed_specs=["scenario-s1-no-media-single-submit.prod.spec.ts"]`、`max_submit_count=1`、`provider_max_retries=0`；`tmp/outputs/l4c-3r-s1-no-media-playwright-list-20260611-184923.txt` 只枚举 1 个测试。
+- **生产执行** — `tmp/outputs/l4c-3r-s1-no-media-single-submit-playwright-20260611-184923.log` 显示 `1 passed (8.3s)`，没有 Playwright retry；生产日志显示 label `s1_1781175031_a8117a86`，`/scenario/s1` 返回 200。
+- **状态回读** — `tmp/outputs/l4c-3r-s1-no-media-state-summary-20260611-184923.json` 显示 `enable_media_synthesis=false`，`strategy`、`scripts`、`compliance`、`storyboards`、`continuity_storyboard_grid` 为 done，`keyframe_images` 及后续媒体步骤保持 pending；`keyframe_images`、`clip_paths`、`audio_paths`、`thumbnail_image_paths` 长度均为 `0`，`final_video_path` 为空，`errors_len=0`，`media_synthesis_errors_len=0`。
+- **媒体产物检查** — `tmp/outputs/l4c-3r-s1-no-media-remote-artifact-search-20260611-184923.txt` 未发现该 label 下产物或近 15 分钟新增媒体文件。
+- **provider 边界** — `tmp/outputs/l4c-3r-s1-no-media-production-provider-counts-refined-20260611-184923.json` 显示 DeepSeek 文本请求 `3` 次，poyo image/video submit、Seedance generation、TTS generation、assemble generation、keyframe generation、gate candidate generation 均为 `0`。
+- **后台探测 caveat** — 同一日志窗口在 `/scenario/s1` 返回 200 后出现 admin health check 对 poyo `/v1/models` 和 SiliconFlow `/v1/models` 的 GET 探测，各 `1` 次。这不是 poyo image、Seedance、TTS、assemble、keyframe 或 gate candidate 生成，但意味着本轮不得声明“整个 backend 日志窗口绝对无 provider-looking 日志”。
+- **证据摘要** — `tmp/outputs/l4c-3r-s1-no-media-single-submit-summary-20260611-184923.json` 固化 `decision=passed_with_background_probe_caveat`。
+- **证据边界** — 当前只可声明“L4C-3R S1 no-media after-config-sync 单提交业务路径通过，媒体生成边界通过，带后台 provider health probe caveat”；不得声明 delivery accepted、publish allowed、approved brand token、final_work 创建、S1 media generation、S1 gate/step-by-step、user journey、S2-S5 或完整 token suite 通过。
+
+## 1.09 2026-06-11 admin provider health probe 本地隔离已实现
+
+- **根因** — `src/routers/admin/logs.py::run_health_checks()` 原先每 5 分钟在后台主动检查 DeepSeek、poyo `/v1/models` 和 SiliconFlow `/models`，会在 token smoke 的生产日志窗口中出现 provider-looking HTTP 日志，即使业务路径没有触发媒体 provider。
+- **本地修复** — 新增 `ADMIN_EXTERNAL_PROVIDER_HEALTH_CHECKS_ENABLED` 配置，默认关闭外部 provider health probe；关闭时 admin health 仍返回 `deepseek`、`poyo`、`siliconflow` 三个服务键，但状态为 `skipped`、`reason=external_provider_health_checks_disabled`。Postgres 与 Remotion health check 保持执行。
+- **可选恢复** — 只有显式设置 `ADMIN_EXTERNAL_PROVIDER_HEALTH_CHECKS_ENABLED=1/true/yes/on` 时，admin health 才会恢复 DeepSeek/poyo/SiliconFlow 外部探测。
+- **测试证据** — `tests/test_admin_health_provider_probe_guard.py` 覆盖默认跳过和显式开启两种路径；`.venv/bin/python -m pytest tests/test_admin_health_provider_probe_guard.py tests/test_admin_endpoints_smoke.py -q` 通过，结果 `8 passed`；`.venv/bin/ruff check src/config.py src/routers/admin/logs.py tests/test_admin_health_provider_probe_guard.py` 通过。
+- **L4C-3H-prep 生产同步** — 用户授权后只同步 `src/config.py` 与 `src/routers/admin/logs.py`，远端原文件备份到 `/opt/ai-video/backups/l4c3h-admin-health-probe-20260611-222821/`，backend 已重启，`/api/health` 返回 `ok`，本地/远端/容器内两个文件 hash 均一致。
+- **生产观察窗口** — `tmp/outputs/l4c-3h-prep-observation-counts-20260611-222821.json` 显示从 `2026-06-11T14:31:16Z` 起 370 秒 no-submit backend 日志窗口内，`scenario_submit_count=0`、DeepSeek/poyo/SiliconFlow 外部 HTTP 计数均为 `0`，poyo submit、Seedance generation、TTS generation、assemble generation、keyframe generation 与 gate candidate generation 均为 `0`；匹配行文件 `tmp/outputs/l4c-3h-prep-observation-matches-20260611-222821.txt` 为 0 行。
+- **证据摘要** — `tmp/outputs/l4c-3h-prep-admin-provider-health-probe-sync-summary-20260611-222821.json` 固化 `decision=passed`。
+- **证据边界** — 当前只可声明“admin provider health probe 隔离已在生产同步并通过 no-submit 日志窗口验证”；不得声明任何 Playwright live spec、S1/S2-S5/gate/media/poster/quality 新路径已通过。
+
+## 1.10 2026-06-11 L4C-4 S1 no-media clean-log single-submit strict clean-log 未通过
+
+- **授权范围** — 用户授权只运行 `web/e2e/production/scenario-s1-no-media-single-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`、`--workers=1`，只允许一次 `/api/scenario/s1` submit，`enable_media_synthesis=false`，允许 DeepSeek 文本调用，并观察 submit 开始后 6 分钟 backend 日志。
+- **计划与执行** — `tmp/outputs/l4c-4-s1-no-media-clean-log-token-smoke-plan-readiness-livekey-20260611-230535.json` 显示 `blocked=false`、只允许 `scenario-s1-no-media-single-submit.prod.spec.ts`、`max_submit_count=1`、`provider_max_retries=0`；Playwright `--list` 只枚举 1 个测试。唯一一次 live run 的日志 `tmp/outputs/l4c-4-s1-no-media-clean-log-single-submit-playwright-20260611-230535.log` 显示 `1 passed (13.4s)`，没有重跑。shell wrapper 因 zsh 无 `PIPESTATUS` 在测试完成后报错，结果已通过日志固化，未做第二次 submit。
+- **业务与状态证据** — 生产 label 为 `s1_1781190534_6dcf8877`；`tmp/outputs/l4c-4-s1-no-media-clean-log-state-summary-20260611-230535.json` 显示 `enable_media_synthesis=false`、媒体路径长度均为 `0`、`final_video_path` 为空，`delivery_accepted=false`、`publish_allowed=false`、`approved_brand_token_write=false`。`tmp/outputs/l4c-4-s1-no-media-clean-log-remote-artifact-search-20260611-230535.txt` 未发现该 label 的媒体或近期 final_work 产物。
+- **日志窗口证据** — `tmp/outputs/l4c-4-s1-no-media-clean-log-production-provider-counts-20260611-230535.json` 显示 6 分钟窗口内 DeepSeek text calls `2`，`api.poyo.ai=0`、`api.siliconflow.cn=0`，poyo submit、Seedance execution、TTS execution、assemble execution、keyframe execution、gate candidate generation 均为 `0`。
+- **阻塞项** — 同一日志窗口仍有 8 行媒体 skill `registered` 噪音，见 `tmp/outputs/l4c-4-s1-no-media-clean-log-registration-noise-matches-20260611-230535.txt`；这些行包含 `elevenlabs-tts-skill`、`keyframe-images`、`remotion-assemble-skill`、`seedance-video-generate-skill` 等词元。它们不是执行级 provider 调用，但按本轮 “clean-log” 授权口径仍污染日志。
+- **证据摘要** — `tmp/outputs/l4c-4-s1-no-media-clean-log-single-submit-summary-20260611-230535.json` 固化 `decision=failed_strict_clean_log_registration_noise`。
+- **证据边界** — 当前只可声明“L4C-4 S1 no-media 单提交业务路径通过，执行级 provider/media 生成边界通过，但 strict clean-log 未通过”；不得声明 L4C-4 clean-log passed、delivery accepted、publish allowed、approved brand token、final_work 创建、S1 media generation、gate/step-by-step、S2-S5 或完整 token suite 通过。
+- **当时下一步** — 先做最小 import/logging hygiene 修复，使 no-media S1 不在 submit 窗口内注册或打印媒体 skill 日志；修复需另行授权生产同步。该动作后续已在 `1.11` 完成，同一单 spec clean-log 复验已在 `1.12` 完成。
+
+## 1.11 2026-06-12 L4C-4R-prep S1 no-media logging/import hygiene 已通过
+
+- **授权范围** — 用户授权只修改并同步与 S1 no-media 媒体 skill 注册日志污染直接相关的最小文件；不允许运行 Playwright live spec、`/scenario/*` submit、provider 生成调用、发布、approved brand token 写入或 delivery acceptance。
+- **工程修复** — `src/pipeline/__init__.py` 不再在包 import 时注册 scenario/media skills；`src/pipeline/s1_product_pipeline.py` 改为只在实际执行媒体步骤时 lazy import/register 对应 media skills，no-media S1 import 只保留 strategy/script/compliance/storyboard/continuity 等前置 skills。
+- **本地验证** — S1 import smoke 显示 forbidden media skills 注册集合为空；聚焦测试 `5 passed`，`ruff check src/pipeline/__init__.py src/pipeline/s1_product_pipeline.py tests/test_s1_continuity_pipeline.py` 通过。
+- **生产同步** — 只同步 `src/pipeline/__init__.py` 与 `src/pipeline/s1_product_pipeline.py`。远端原文件备份到 `/opt/ai-video/backups/l4c4r-prep-s1-logging-20260612-000910/`；backend 已重启；`/api/health` 在同步前、重启后、观察后均返回 `status=ok`。
+- **hash verify** — `tmp/outputs/l4c-4r-prep-hash-verify-20260612-000910.txt` 显示本地、远端宿主机、backend 容器三方 hash 一致：`src/pipeline/__init__.py=263d0ca1e868c6f4938de3ad7f5f1a83b71f2bf44659f4db342d4fbe8a7dd92a`，`src/pipeline/s1_product_pipeline.py=623f6ffba96b4a31c31e4116f4cb6b1ab1a6b3378f21a1c1e1d1eed9cda99315`。
+- **日志窗口证据** — `tmp/outputs/l4c-4r-prep-observation-counts-20260612-000910.json` 显示 370 秒 no-submit backend 窗口内 `/scenario` submit、DeepSeek/poyo/SiliconFlow 外部 HTTP、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate、thumbnail media registration 与媒体 skill `registered` 计数均为 `0`。
+- **证据摘要** — `tmp/outputs/l4c-4r-prep-s1-logging-import-hygiene-sync-summary-20260612-000910.json` 固化 `decision=passed`。
+- **证据边界** — 本节完成时只可声明“L4C-4R-prep 生产同步和 no-submit clean-log 验证通过”；不得声明 `L4C-4R` live submit 已通过。该 live submit 复验后续已在 `1.12` 完成。
+
+## 1.12 2026-06-12 L4C-4R S1 no-media clean-log single-submit 已通过
+
+- **授权范围** — 用户授权只运行 `web/e2e/production/scenario-s1-no-media-single-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`、`--workers=1`，只允许一次 `/api/scenario/s1` submit，`enable_media_synthesis=false`，允许 DeepSeek 文本调用，不允许 poyo/Seedance/TTS/assemble/keyframe/gate candidate/media skill registered 日志。
+- **计划门禁** — `tmp/outputs/l4c-4r-s1-no-media-clean-log-token-smoke-plan-readiness-livekey-20260612-001.json` 显示 `blocked=false`、`allowed_specs=["scenario-s1-no-media-single-submit.prod.spec.ts"]`、`max_submit_count=1`、`provider_max_retries=0`；Playwright `--list` 只枚举 1 个测试。
+- **生产执行** — `tmp/outputs/l4c-4r-s1-no-media-clean-log-single-submit-playwright-20260612-001.log` 显示 `1 passed (11.7s)`，没有 retry；生产 label 为 `s1_1781229202_7b5148d1`。
+- **日志窗口证据** — `tmp/outputs/l4c-4r-s1-no-media-clean-log-observation-counts-20260612-001.json` 显示 370 秒窗口内 DeepSeek text calls `2`，`api.poyo.ai=0`、`api.siliconflow.cn=0`，poyo submit、Seedance/TTS/assemble/keyframe/gate candidate、thumbnail media registration、media skill `registered` 和 stop-loss status 均为 `0`。`scenario_s1_submit=2` 是同一次 HTTP 200 的应用日志与 uvicorn access 日志两行，spec 观察 submit 次数为 `1`。
+- **产物边界** — spec 已断言媒体输出字段为空；本轮没有额外执行 scenario state read、发布、approved brand token 写入或 delivery acceptance。
+- **证据摘要** — `tmp/outputs/l4c-4r-s1-no-media-clean-log-single-submit-summary-20260612-001.json` 固化 `decision=passed`。
+- **证据边界** — 当前只可声明“L4C-4R S1 no-media clean-log single-submit token smoke 通过”；不得外推为 S1 media generation、gate/step-by-step、S2-S5、完整 token suite、publish、delivery acceptance 或 approved brand token write。
+
+## 1.13 2026-06-12 L4C-5 S2 no-media clean-log single-submit 已通过
+
+- **授权范围** — 用户授权只运行 `web/e2e/production/scenario-s2-no-media-single-submit.prod.spec.ts`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`、`PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`、`--retries=0`、`--workers=1`，只允许一次 `/api/scenario/s2` submit，`enable_media_synthesis=false`，允许 DeepSeek 文本调用，不允许 poyo/Seedance/TTS/assemble/keyframe/gate candidate/media skill registered 日志。
+- **计划门禁** — `tmp/outputs/l4c-5-s2-no-media-clean-log-token-smoke-plan-readiness-livekey-20260612-002.json` 显示 `blocked=false`、`allowed_specs=["scenario-s2-no-media-single-submit.prod.spec.ts"]`、`max_submit_count=1`、`provider_max_retries=0`；Playwright `--list` 只枚举 1 个测试。
+- **生产执行** — `tmp/outputs/l4c-5-s2-no-media-clean-log-single-submit-playwright-20260612-002.log` 显示 `1 passed (7.2s)`，没有 retry；生产 label 为 `s2_momcozy_1781230204`。
+- **日志窗口证据** — `tmp/outputs/l4c-5-s2-no-media-clean-log-observation-counts-20260612-002.json` 显示 370 秒窗口内 DeepSeek text calls `2`，`api.poyo.ai=0`、`api.siliconflow.cn=0`，poyo submit、Seedance/TTS/assemble/keyframe/gate candidate、thumbnail media registration、media skill `registered` 和 stop-loss status 均为 `0`。`scenario_s2_submit=2` 是同一次 HTTP 200 的应用日志与 uvicorn access 日志两行，spec 观察 submit 次数为 `1`。
+- **产物边界** — spec 已断言媒体输出字段为空；本轮没有额外执行 scenario state read、发布、approved brand token 写入或 delivery acceptance。
+- **证据摘要** — `tmp/outputs/l4c-5-s2-no-media-clean-log-single-submit-summary-20260612-002.json` 固化 `decision=passed`。
+- **证据边界** — 当前只可声明“L4C-5 S2 no-media clean-log single-submit token smoke 通过”；不得外推为 S2 media generation、S3-S5、S1 gate/step-by-step、完整 token suite、publish、delivery acceptance 或 approved brand token write。
+
+## 1.03 2026-06-11 L4C-1R single-submit 守卫首次执行但未完成视频产物
+
+- **工程守卫** — 新增 `fast-mode-single-submit.prod.spec.ts`，计划验证器新增 `max_submit_count`、`provider_max_retries` 和 `artifact_policy.storage_scope`；Fast Mode 请求支持 `artifact_disposition=pending_review` 与 `provider_max_retries=0`，Seedance 客户端支持把 video provider attempt 限制为 1。
+- **计划门禁** — `tmp/outputs/l4c-1r-token-smoke-plan-readiness-20260611-170131.json` 显示 `blocked=false`、`allowed_specs=["fast-mode-single-submit.prod.spec.ts"]`、`max_submit_count=1`、`provider_max_retries=0`。
+- **生产执行** — 只运行 1 个测试，实际 `submit_count_observed=1`；任务 `fast_1781168782_cc749671` 在 `llm` 阶段失败，错误为 `[Errno 13] Permission denied: '/app/output/tenants/default'`。
+- **provider 边界** — 本次到达 DeepSeek LLM enhancement，但未出现 `poyo: submitting task`、未生成 poyo/Seedance video task、未发生 poyo retry。证据为 `tmp/outputs/l4c-1r-fast-mode-single-submit-playwright-20260611-170131.log` 与 `tmp/outputs/l4c-1r-provider-log-evidence-20260611-170131.log`。
+- **生产修复** — 已把生产 `/app/output/tenants` owner 修为 `appuser:appgroup`，并完成空目录写入/删除预检；`/api/health` 返回 200。该修复未触发 provider，也没有第二次 submit。
+- **证据边界** — 该次首次执行只能声明“single-submit 守卫生效，并定位/修复 pending_review volume 权限阻塞”；不能声明该次执行已完成 L4C-1R 视频生成、pending_review 产物创建、delivery accepted、publish allowed 或 approved brand token。后续通过状态以 `1.04` 为准。
+
+## 1.00 2026-06-11 L4A authorized-live provider smoke 已执行
+
+- **授权输入** — 用户明确授权在生产环境 `https://video.lute-tlz-dddd.top` 使用 poyo image + poyo Seedance 执行 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频真实调用 smoke，预算上限 `$3.00`，自动重试 `0`，不发布、不写入正式 brand token，产物只进入待审素材库；检查人为 `pray`。
+- **执行证据** — `scripts/p2_recharge_smoke_checklist.py --execute` 已在 `AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`、`RUN_TOKEN_SMOKE=1` 和私有 records/payloads 满足后执行；日志为 `tmp/outputs/l4a-authorized-live-provider-smoke-20260611-152953.log`，汇总为 `tmp/outputs/authorized-live-poyo-smoke-20260611-summary-enriched.json`。
+- **provider 结果** — 4 个 provider job 均返回：`0K4K8A3DLKREWJQO`、`YH2UB4QFC4H380KL`、`CSWOZOYCVOPARHCD`、`9GUN6SYY41RGODIG`；汇总状态为 `status=submitted`、`provider_call_executed=true`、`blocked_reasons=[]`。
+- **待审产物** — 本地待审包位于 `output/pending_review/momcozy_sterilizer_smoke_20260611/`，包含 `main_45.png`、`uv_benefit.png`、`kitchen_scene.png`、`i2v_15s.mp4`；review packet 为 `tmp/outputs/pending-review-asset-packet-20260611.json`。`uv_benefit` 被标记为 `regenerate_or_edit_before_brand_use`，其余资产仍需人工 review。
+- **生产回读缺口（已在 1.01 闭环）** — L4A 执行后，生产 `/api/portfolio/?kind=creation_intermediate&limit=500&sort=size_desc` 一度使用当前 tenant key 返回 `total=0`、`pending_review_count=0`。根因是本次产物只在本地 `output/pending_review`，尚未同步到生产可扫描目录；同时 portfolio 原实现只扫描顶层 `pending_review`，tenant key 无法读取 default 待审资产。
+- **工程修复（已部署）** — `src/routers/portfolio.py` 已支持扫描 `output/tenants/<tenant>/pending_review/...`；`tests/test_p0_media_tenant_security.py` 增加 tenant-scoped pending_review 可见性与 default pending_review 隔离测试；L4B 生产只读回读结果见 `1.01`。
+- **验证结果** — `.venv/bin/python -m pytest tests/test_p0_media_tenant_security.py tests/test_portfolio_s4_filtering_contract.py tests/test_pending_review_asset_packet.py -q` 通过，结果 `15 passed`；`.venv/bin/ruff check src/routers/portfolio.py tests/test_p0_media_tenant_security.py` 通过；`git diff --check -- src/routers/portfolio.py tests/test_p0_media_tenant_security.py` 通过。
+- **证据边界** — 本节只声明“L4A 受控 provider smoke 成功提交并生成待审资产”；L4B 生产只读回读见 `1.01`。不得声明商业交付完成、delivery accepted、publish allowed、approved brand token 或可直接发布。
+
+## 0.99 2026-06-11 L4A 授权前 readiness 摸排
+
+- **状态说明** — 本节记录 2026-06-11 授权执行前的 no-token readiness；当前 L4A 结果以 `1.00` 为准。
+- **no-token 证据包** — 已生成 `tmp/outputs/l4a-authorized-live-smoke-packet-20260611-152010.json`，证据等级 `L2-fixture-or-dry-run`，`no_provider_call=true`，`provider_call_allowed=false`。
+- **test-plan readiness** — 已生成 `tmp/outputs/l4a-test-plan-readiness-20260611-152010.json`，`ready_for_test_plan_discussion=true`，`ready_for_live_execution=false`。
+- **已满足项** — 当前环境中 `API_KEY` / `PLAYWRIGHT_API_KEY` 为非 demo，`POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY` 均存在；job ledger 与 audit bundle fixture readiness 为 pass。
+- **阻塞项** — 当前会话没有精确 C21 授权语句，缺 `AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD`、`AI_VIDEO_PROVIDER_ACCOUNT_READINESS_RECORD`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS`、`AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1`、`AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1`，且 `RUN_TOKEN_SMOKE` 未启用。
+- **授权前证据边界** — 在该 no-token readiness 时间点，只能声明“L4A 测试计划可讨论”；不能声明 L4A 已授权、provider 账户余额有效、runtime 成功、产物质量通过或商业交付完成。当前真实执行结果以 `1.00` 为准。
+
+## 0.98 2026-06-11 E2E Phase A/B no-token 执行闭环
+
+- **Phase A 本地质量门** — `.venv/bin/python -m pytest tests -q` 通过，结果 `1888 passed, 11 skipped, 12 deselected`；`make lint`、前端 `npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 和 `git diff --check` 均通过。
+- **Phase B fail-closed readiness** — `p2_recharge_smoke_checklist.py` 保持 dry-run；launch packet 为 `L2-fixture-or-dry-run`、`no_provider_call=true`、`provider_call_allowed=false`；readiness report 为 `ready_for_test_plan_discussion=true`、`ready_for_live_execution=false`；相关 pytest 守卫 `36 passed`。
+- **Phase C 正式非 token E2E** — 已为 active tenant `momcozy-marketing` 生成专用非 demo Playwright key，并用 `RUN_TOKEN_SMOKE=0 .venv/bin/python scripts/production_non_token_e2e_check.py --execute` 跑通生产前后端联动，结果 `50 passed, 4 skipped`。helper 仍在缺 key/demo key 或 truthy `RUN_TOKEN_SMOKE` 时 fail-closed。
+- **L4B 证据门禁修正** — `web/e2e/production/library-portfolio.prod.spec.ts` 的 UI 回读用例现在与 API 回读用例一致：先只读查询 `creation_intermediate` 中是否存在 `pending_review` 资产；不存在时明确 skip，不把“未执行 L4A / 当前无待审资产”误报为前端失败。
+- **证据边界** — 该阶段当时可声明 `L2-fixture-or-dry-run` 与 `L3-production-read-only` 的 Phase C 通过；不能声明 `L4A` provider smoke、`L4B` 待审素材回读通过、provider runtime 成功、delivery acceptance、publish allowed 或 approved brand token。当前 `L4A` 真实执行结果以 `1.00` 为准，`L4B` 只读回读结果以 `1.01` 为准。
+
+## 0.97 2026-06-11 真实 provider 前后端 E2E 计划正式化
+
+- **执行口径** — `docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md` 已把首轮真实 provider 联测拆成 `L4A` 受控 provider smoke、`L4B` 前端只读回读和 `L4C` 扩展 token Playwright；首轮不直接运行完整 `RUN_TOKEN_SMOKE=1 npm run e2e:prod`。
+- **runbook 对齐** — `docs/runbooks/production-e2e-token-smoke.md` 已同步新路径：`L4A` 通过 `scripts/p2_recharge_smoke_checklist.py --execute` 执行 Momcozy 3 图 + 1 视频样本，`L4B` 用 `library-portfolio.prod.spec.ts` 且 `RUN_TOKEN_SMOKE=0` 验证 `/library` 只读可见。
+- **证据边界** — 2026-06-07 历史样本仍只证明 scoped `L4-authorized-live`；下一次真实执行必须重新授权、重新生成私有 approval/account readiness records、重新固化 evidence record。
+- **边界** — 本轮只制定正式计划和 runbook，不设置 `RUN_TOKEN_SMOKE=1`，不调用 poyo/DeepSeek/SiliconFlow，不执行生产 Playwright。
+
+## 0.96 2026-06-11 Phase 3 media step output selector 收口
+
+- **媒体 selector 抽取** — 新增 `web/src/lib/pipelineStepOutput.ts`，集中解析 `seedance_clips`、`tts_audio`、`thumbnail_images`、`assemble_final` 的兼容输出形状。
+- **共享数据接口** — `extractSeedanceClipOutput()` 同时支持 `{ clip_paths, clip_details, total_duration, target_duration }` 与 legacy `string[]`；`extractTtsAudioPaths()`、`extractThumbnailImagePaths()`、`extractFinalVideoPath()` 覆盖现有兼容字段。
+- **组件重复减少** — `StepByStepView` 与 `VideoWorkflow` 保留原 UI 展示差异，但媒体路径、clip detail、final video path 的读取不再各自维护格式判断。
+- **测试覆盖** — 新增 `pipelineStepOutput.test.ts`，覆盖新旧 Seedance 格式、clip detail 清洗、音频/缩略图路径 fallback、最终视频路径字段优先级与 render JSON 路径。
+- **验证闭环** — 局部 `tsc`、目标 ESLint、`pipelineStepOutput`/`pipelineOutputPreview`/`StepByStepView` 测试通过；完整 `cd web && npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 均通过，Vitest 当前结果为 `52 passed` test files、`234 passed` tests。
+- **边界** — 本轮只完成前端媒体 step output 数据 selector 收口，未改变 UI 合并策略，未执行真实 provider，未证明真实媒体生成链路成功。
+
+## 0.95 2026-06-11 Phase 3 step output preview 边界收口
+
+- **预览 helper 抽取** — 新增 `web/src/lib/pipelineOutputPreview.ts`，用 `summarizeStepOutputPreview()` 把 step output 的数组计数、quality status、summary、字段计数和 primitive text 预览抽成纯函数。
+- **组件断言减少** — `StepByStepView` 删除本地 `getOutputPreview()` 中的 `output as { overall_status?: string; summary?: string }` 断言，改为消费结构化 `StepOutputPreview`。
+- **重复计算减少** — step 行渲染时只计算一次 `outputPreview`，不再在条件判断和文本渲染处重复调用预览逻辑。
+- **测试覆盖** — 新增 `pipelineOutputPreview.test.ts`，覆盖数组、audit status、summary 截断、字段计数、primitive text、空值和空对象。
+- **验证闭环** — 局部 `tsc`、目标 ESLint、`pipelineOutputPreview` + `StepByStepView` 测试通过；完整 `cd web && npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 均通过，Vitest 当前结果为 `51 passed` test files、`231 passed` tests。
+- **边界** — 本轮只处理 step output 行内预览的前端纯函数边界，未抽离完整 `StepOutput` JSX，未改变后端输出结构，未触发 provider 真调用。
+
+## 0.94 2026-06-11 Phase 3 workflow/step-by-step 状态边界收口
+
+- **状态 normalizer** — 新增 `web/src/lib/pipelineState.ts`，提供 `normalizeStepByStepState()`、`normalizeWorkflowState()` 与 payload 版本 normalizer，把 `{ state }` 包裹响应、脏 `steps`、`errors`、`soft_degraded_reasons` 收口后再进入 UI store。
+- **StepByStepView 接口收口** — `StepByStepView` 的 `state`、`onStepComplete`、`onResume` 从裸 `Record<string, unknown>` 改为 store 的 `StepByStepState`；run/regenerate/resume/save 后的 API 返回统一归一化。
+- **VideoWorkflow 接口收口** — `VideoWorkflow` 不再在 refresh/run/regenerate/resume 路径中 `as WorkflowState`，统一使用 `normalizeWorkflowStatePayload()`；step order、duration、soft degraded reasons 通过 helper 提取。
+- **首页接线收口** — 首页取消 `stepByStepState as Record<string, unknown>`；恢复 partial state、expert session state、step-by-step 初始化 state 均先归一化；workflow/step-by-step 完成后进入 `oneshotResult` 仍走 `normalizePipelineResult()`。
+- **测试覆盖** — 新增 `pipelineState.test.ts`，覆盖嵌套 payload 提取、非对象 payload fail-safe、step map fallback、step_order/duration/degraded reasons 清洗。
+- **验证闭环** — 局部 `tsc`、目标 ESLint、`pipelineState`/`pipelineResult`/`StepByStepView` 测试通过；完整 `cd web && npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 均通过，Vitest 当前结果为 `50 passed` test files、`228 passed` tests。
+- **边界** — 本轮只处理前端 workflow/step-by-step 状态输入边界，未改变后端 StepRunner schema，未执行真实生成，证据等级仍为 `L2-fixture-or-dry-run`。
+
+## 0.93 2026-06-11 Phase 3 pipeline result 类型边界收口
+
+- **完成结果契约** — 新增 `web/src/lib/pipelineResult.ts`，用 `normalizePipelineResult()` 把轮询完成 payload 从 `unknown` 收口为 store 已有的 `PipelineResult`；非对象 payload 进入空结果对象，函数、symbol、`undefined` 等非 JSON 值归一化为 `null`。
+- **步骤状态契约** — `StageProgress` 使用 `normalizePipelineSteps()` 接收 `data.steps`，不再把后端返回值整体强转为 `Record<string, Record<string, unknown>>`；非对象 step 会保留为 `{ output }`，避免破坏完成态计算。
+- **页面断言移除** — `StageProgress.onComplete` 从 `(result: unknown) => void` 改为 `(result: PipelineResult) => void`；首页 smart-create 完成回调不再 `asRecord(result)` 或 `result as GalleryResult`。
+- **Gallery 字段读取收口** — `saveToGallery()` 改为接收 `PipelineResult`，通过 `extractGalleryResultFields()` 只读取支持的 briefs/scripts/thumbnail/video/audit score 形状，避免脏 payload 直接污染 localStorage。
+- **测试覆盖** — 新增 `pipelineResult.test.ts`，覆盖 completion payload 归一化、非对象拒绝、steps map 收口、gallery 字段提取。
+- **验证闭环** — 局部 `npx tsc --noEmit -p tsconfig.json`、目标 ESLint、`pipelineResult` + `StageProgress` 测试通过；完整 `cd web && npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 均通过，Vitest 当前结果为 `49 passed` test files、`225 passed` tests。
+- **边界** — 本轮只处理前端完成结果与 step 状态的输入边界，未改后端响应 schema，未触发 provider 真调用，证据等级仍为 `L2-fixture-or-dry-run`。
+
+## 0.92 2026-06-11 Phase 3 gate candidate 类型边界收口
+
+- **Candidate data contract** — `CandidateSelector` 新增 `CandidateData` JSON-like 类型、`CandidateVariant`、`normalizeCandidateData()` 与 `normalizeCandidates()`，把 gate candidate 的 UI 输入从 `unknown` 收口为可预览、可诊断、可序列化的数据形状。
+- **GatePanel 接线** — 后端 `fetchGateState()` 返回的候选列表不再直接 `as Candidate[]`，统一通过 `normalizeCandidates()` 进入 UI；demo candidates 也通过 `normalizeCandidateData()` 归一化，避免测试数据绕过正式接口。
+- **轮询状态读取收口** — `GatePanel` 稳定性 hash 改为 `summarizeRuntimeStatuses()`，只读取运行态对象的 `status` 字段，不再把 gate/step 对象整体强转为 `Record<string, unknown>`。
+- **测试覆盖** — `CandidateSelector.test.tsx` 增加脏 backend payload 归一化用例，覆盖 fallback id、variant fallback、score clamp、`undefined -> null` 和 recommended 布尔收窄。
+- **验证闭环** — `cd web && npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 均通过；Vitest 当前结果为 `48 passed` test files、`221 passed` tests。
+- **边界** — 本轮只收口 Gate candidate 前端类型接口，未删除 legacy endpoint，未改后端候选生成 schema，未触发 provider 真调用。
+
+## 0.91 2026-06-11 完整路径修复与质量门恢复
+
+- **前端构建门恢复** — 修复 `SceneForm.tsx` legacy form JSX 收口；`continuityDirections.ts` 导出并收口 `extractContinuityDirections` / `truncatePreview`，同时兼容 snake_case 与 camelCase 连续性字段；`usePipelineStore` 对齐后端可返回 `current_step: null` 的运行态。
+- **命令入口对齐** — `web/package.json` 的 `lint` 与 CI 前端门禁一致；`Makefile` 通过 `PYTHON ?= .venv/bin/python` 执行 pytest/ruff，并把 lint surface 固定为 `src tests scripts`；主 CI 与 deploy preflight 同步扩展到 `ruff check src tests scripts`。
+- **部署脆弱点收口** — `deploy/lighthouse/deploy.sh` 新增 `REBUILD_RENDERING`、显式 `build rendering`、`force-recreate rendering` 与容器内 `/health` 检查；`build-and-deploy.sh` 透传 `REBUILD_RENDERING`；GitHub deploy 默认 `REBUILD_BACKEND=1 REBUILD_RENDERING=1 RUN_TOKEN_SMOKE=0`。
+- **测试脆弱点收口** — TikTok / Shopify no-token mock publish 移除隐藏随机失败；`bg_registry` 取消语义测试改为重新抛出 `CancelledError`；`page-smoke` 模块导入测试增加显式 60s timeout，避免重导入 smoke 在全量并发时假红。
+- **文档/治理同步** — root governance contract 登记 `CHANGELOG.md`、`LICENSE`、`SECURITY.md`；2026-06-09 两份 debt-audit 文档补齐 frontmatter；README 本地验证命令与实际可运行入口对齐。
+- **验证闭环** — `.venv/bin/python -m pytest tests -q` 通过，结果 `1888 passed, 11 skipped, 12 deselected`；`make lint` 通过；`cd web && npm run lint`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run`、`npm run build` 均通过；`git diff --check` 通过。
+- **边界** — 本轮只达到 `L2-fixture-or-dry-run` / 本地构建运行证据等级；没有设置 `RUN_TOKEN_SMOKE=1`，没有调用 poyo/DeepSeek/SiliconFlow/TikTok/Shopify 真实 provider，不升级为生产商业交付证明。
 
 ## 0.89 2026-06-07 P2-2 内容审核样本回灌与差异隔离
 
@@ -208,7 +446,7 @@ source: human+ai
 
 - **部署前端门禁对齐主 CI** — `.github/workflows/deploy.yml` 的 `preflight` 现在执行 `npm ci`、`npx eslint src e2e playwright.ui.config.ts playwright.prod.config.ts`、`npx tsc --noEmit -p tsconfig.json`、`npm test -- --run` 和 `npm run build`。
 - **构建不依赖生产 token** — deploy preflight 的 frontend build 设置 `NEXT_PUBLIC_IS_DEMO=true`，只验证 Next 构建完整性，不读取生产 API key 或 POYO key。
-- **远程部署默认无真实 smoke** — GitHub Actions 调用 Lighthouse deploy 时显式传入 `RUN_TOKEN_SMOKE=0`；真实生成 smoke 仍只能在充值后手动显式开启。
+- **远程部署默认无真实 smoke** — GitHub Actions 调用 Lighthouse deploy 时显式传入 `RUN_TOKEN_SMOKE=0`；真实生成 smoke 仍只能按当前 `L4A/L4B/L4C` 计划手动显式开启。
 - **防回归测试** — `tests/test_deploy_workflow.py` 已补静态检查，锁定 deploy preflight 前端质量门和 `RUN_TOKEN_SMOKE=0` 默认值。
 
 ## 0.26 2026-05-31 P1-14 deploy pytest timeout 依赖闭环
@@ -244,8 +482,8 @@ source: human+ai
 
 ## 0.31 2026-05-31 P1-19 e2e-prod secret/runbook coverage
 
-- **新增 runbook** — 新增 `docs/runbooks/production-e2e-token-smoke.md`，明确 `e2e-prod` 默认跳过 `@token-smoke`，充值后才允许配置 `PROD_DEMO_API_KEY` 并手动设置 `run_token_smoke=true`。
-- **显式失败条件** — runbook 记录：如果 `run_token_smoke=true` 但仍使用 `ai_video_demo_2026`，workflow 会失败，避免误以为已经跑通真实生成 smoke。
+- **新增 runbook** — 新增 `docs/runbooks/production-e2e-token-smoke.md`，明确 `e2e-prod` 默认跳过 `@token-smoke`；2026-06-11 后当前正式路径为 `L4A` 受控 provider smoke、`L4B` 前端只读回读，完整 `run_token_smoke=true` 只保留为 `L4C` 扩展入口。
+- **显式失败条件** — runbook 记录：如果 `run_token_smoke=true` 但仍使用 `ai_video_demo_2026`，workflow 会失败，避免误以为已经跑通真实生成 smoke；当前首轮不以该入口执行。
 - **防回归测试** — `prodE2eTokenGuard.test.ts` 已检查 runbook 必须包含 `PROD_DEMO_API_KEY`、`run_token_smoke`、`RUN_TOKEN_SMOKE=1`、`@token-smoke` 和充值前置说明。
 
 ## 0.32 2026-05-31 P1-20 production Playwright no-mutation scan
@@ -739,7 +977,7 @@ source: human+ai
 - [x] **P1-63：Remotion no-provider-key guard** — 已确认 rendering build/test 不读取 provider API key，并固化静态守卫。
 - [x] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
 - [x] **P1-65：50-loop checkpoint review** — 已对 P1-16~P1-64 执行结果复核并完成排序：当前未形成新增 P1 阻塞，执行入口切至 `P2-1`（充值后受控 live smoke/交付链路）。
-- [ ] **P2-1：充值后执行 S1-S5 真实 smoke** — 覆盖 Fast Mode、S1-S5 auto、gate approve/regenerate、media/poster/quality、admin/library 关键路径。
+- [x] **P2-1：真实 provider + 前后端联动 E2E 执行** — 首轮已完成：`L4A` Momcozy 3 图 + 1 视频受控 provider smoke 通过，`L4B` `/library` 生产只读回读通过（证据 `tmp/outputs/l4b-production-readback-20260611-160827.json`）。Fast Mode、S1-S5、gate approve/regenerate、media/poster/quality 统一延后到 `L4C` 单独授权和预算后扩展。
 - [x] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [x] **P2-3：生产部署后回归证据固化** — 已新增 `production-post-deploy-regression-checklist.md`，覆盖 Lighthouse 健康检查、页面/API smoke、容器与日志核验、回归证据模板。
 
@@ -753,7 +991,7 @@ source: human+ai
 - **后端全量 lint 仍不可作为 CI 门禁** — `ruff check src tests` 当前仍有 `176 errors`，其中 `174` 项可自动修复，主要集中在历史测试文件的 import 顺序、未使用 import、无占位符 f-string、`datetime.UTC` 迁移和少量疑似 stale import。
 - **前端无 error 但仍有 warning 债** — `npm exec eslint src --quiet` 无 error；完整 `npm exec eslint src` 仍有 `21 warnings`，主要是 admin 页 hook dependency、未使用变量，以及运行时媒体 `<img>` 策略未统一。
 - **工作区变更量大** — 当前存在大量 modified / untracked 文件。继续推进前必须按主题分批验证和提交，避免把已完成修复、文档计划、历史探索和后续实验混成一个不可回滚变更包。
-- **真实生产验证仍受 POYO 余额约束** — 当前阶段继续只做 hermetic / mock / unit / lint / 类型收口；S2-S5 真实生成、gate 真 API key 路径和质量评分生产闭环留到充值后执行。
+- **真实生产验证当时受 POYO 余额约束** — 2026-05-31 当时只做 hermetic / mock / unit / lint / 类型收口；2026-06-11 已完成 Momcozy 样本的 `L4A` 受控 provider smoke 与 `L4B` 生产只读回读，S2-S5、gate 真 API key 路径和质量评分生产闭环仍需按 `L4C` 另行授权。
 
 ### 债务分层
 
@@ -773,7 +1011,7 @@ source: human+ai
 4. **收口热路径类型边界** — 只处理跨前后端或跨 pipeline 的输出结构，避免在低 ROI 的内部 `dict[str, Any]` 上做大规模重构。
 5. **整理兼容层决策** — 为 `api_assets.py`、LangGraph proxy、S2 wrapper 分别给出保留、冻结、迁移或删除条件；删除或批量移动前单独确认。
 6. **文档去漂移** — 将仍有效的 TODO 汇入 stable 文档；把只描述历史探索的内容标注为历史背景，不再作为执行计划来源。
-7. **充值后执行生产 smoke** — 按 S1-S5、Fast Mode、gate approve/regenerate、media/poster/quality、admin/library 关键路径分批实测，并把失败样本回灌到 hermetic 测试。
+7. **按 L4C 授权扩展生产 smoke** — 若继续覆盖 S1-S5、Fast Mode、gate approve/regenerate、media/poster/quality、admin/library 关键路径，需先重新确认预算、范围、重试策略和产物处置边界，并把失败样本回灌到 hermetic 测试。
 
 ## 0.7 2026-05-31 bg_registry 测试封装收口
 
@@ -1176,6 +1414,6 @@ prompt 不足，改为 `_step_vlog_strategy` 内创建 `LLMClient(timeout=120.0)
 **建议下一步顺序：**
 1. 继续清理无 poyo token 也能验证的前端/文档口径不一致
 2. 保持 continuity 产物质量增强在 hermetic / mock / unit 层推进
-3. 充值后再做生产 smoke
+3. 如需继续扩大真实调用范围，按 `L4C` 重新取得单独授权、预算和执行边界后再跑
 
 ---

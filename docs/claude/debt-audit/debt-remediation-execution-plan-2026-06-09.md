@@ -1,3 +1,15 @@
+---
+title: AI Video Pipeline 技术债务修复执行计划
+doc_type: workflow
+module: project
+topic: technical-debt-remediation
+status: stable
+created: 2026-06-09
+updated: 2026-06-09
+owner: self
+source: human+ai
+---
+
 # AI Video Pipeline — 技术债务修复执行计划
 
 **日期**: 2026-06-09

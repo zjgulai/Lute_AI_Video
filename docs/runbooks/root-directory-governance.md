@@ -5,7 +5,7 @@ module: project
 topic: root-directory-governance
 status: stable
 created: 2026-06-01
-updated: 2026-06-01
+updated: 2026-06-11
 owner: self
 source: human+ai
 ---
@@ -38,12 +38,15 @@ source: human+ai
 | `.env.example` | config |
 | `.gitignore` | config |
 | `AGENTS.md` | entrypoint |
+| `CHANGELOG.md` | entrypoint |
 | `CLAUDE.md` | entrypoint |
 | `CONTRIBUTING.md` | entrypoint |
 | `Dockerfile` | config |
 | `Dockerfile.backend` | config |
+| `LICENSE` | entrypoint |
 | `Makefile` | entrypoint |
 | `README.md` | entrypoint |
+| `SECURITY.md` | entrypoint |
 | `docker-compose.yml` | config |
 | `pyproject.toml` | config |
 | `render.yaml` | config |

@@ -31,6 +31,11 @@
       "reason": "Agent operating contract for this repository."
     },
     {
+      "path": "CHANGELOG.md",
+      "status": "entrypoint",
+      "reason": "Release history and version-change summary."
+    },
+    {
       "path": "CLAUDE.md",
       "status": "entrypoint",
       "reason": "Project guide retained as a top-level collaboration entrypoint."
@@ -51,6 +56,11 @@
       "reason": "Backend Docker build configuration."
     },
     {
+      "path": "LICENSE",
+      "status": "entrypoint",
+      "reason": "Repository license and usage terms."
+    },
+    {
       "path": "Makefile",
       "status": "entrypoint",
       "reason": "Developer command entrypoint."
@@ -59,6 +69,11 @@
       "path": "README.md",
       "status": "entrypoint",
       "reason": "Repository overview and onboarding entrypoint."
+    },
+    {
+      "path": "SECURITY.md",
+      "status": "entrypoint",
+      "reason": "Security reporting and handling policy."
     },
     {
       "path": "docker-compose.yml",

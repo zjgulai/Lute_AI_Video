@@ -1,3 +1,15 @@
+---
+title: AI Video Pipeline 综合技术债务审计报告
+doc_type: analysis
+module: project
+topic: technical-debt-audit
+status: stable
+created: 2026-06-09
+updated: 2026-06-09
+owner: self
+source: human+ai
+---
+
 # AI Video Pipeline — 综合技术债务审计报告
 
 **日期**: 2026-06-09
