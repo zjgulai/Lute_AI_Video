@@ -1,0 +1,65 @@
+import { test, expect } from "@playwright/test";
+import { productionApiHeaders } from "./helpers";
+
+const maxSubmitCount = Number(process.env.PLAYWRIGHT_MAX_SUBMIT_COUNT ?? "1");
+const providerMaxRetries = Number(process.env.PLAYWRIGHT_PROVIDER_MAX_RETRIES ?? "0");
+const artifactDisposition = process.env.PLAYWRIGHT_ARTIFACT_DISPOSITION ?? "pending_review";
+
+test.describe("Production smoke — S1 no-media single-submit token smoke", () => {
+  test("single S1 no-media submit returns product direct result without media synthesis @token-smoke", async ({ request }) => {
+    expect(maxSubmitCount, "L4C-3 must be capped to a single submit").toBe(1);
+    expect(providerMaxRetries, "L4C-3 provider/backend retries must be disabled").toBe(0);
+    expect(["pending_review", "quarantine"]).toContain(artifactDisposition);
+
+    let submitCount = 0;
+    submitCount += 1;
+    expect(submitCount, "submit count exceeded authorized max_submit_count").toBeLessThanOrEqual(maxSubmitCount);
+
+    const response = await request.post("/api/scenario/s1", {
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
+      timeout: 90_000,
+      data: {
+        product_catalog: {
+          product_name: "Momcozy Nutri Bottle Warmer",
+          category: "baby feeding appliance",
+          usps: [
+            "quickly warms breast milk and formula",
+            "gentle temperature control",
+            "easy night-time use",
+          ],
+          target_audience: "new parents",
+        },
+        brand_guidelines: {
+          brand_name: "Momcozy",
+          tone: "warm, practical, no medical claims",
+        },
+        target_platforms: ["tiktok"],
+        video_duration: 15,
+        enable_media_synthesis: false,
+        commercial_injection_plan: null,
+      },
+    });
+
+    if ([401, 403, 422, 429].includes(response.status())) {
+      throw new Error(`L4C-3 stop-loss status from S1 submit: ${response.status()} ${await response.text()}`);
+    }
+
+    expect(response.status(), "single S1 no-media submit should complete").toBe(200);
+    const body = await response.json();
+
+    expect(body.success).toBe(true);
+    expect(body.scenario).toBe("s1");
+    expect(body.video_duration).toBe(15);
+    expect(Array.isArray(body.briefs)).toBe(true);
+    expect(Array.isArray(body.scripts)).toBe(true);
+    expect(body.errors ?? []).toEqual([]);
+    expect(body.media_synthesis_errors ?? []).toEqual([]);
+    expect(Array.isArray(body.keyframe_images)).toBe(true);
+    expect(body.keyframe_images).toHaveLength(0);
+    expect(body.clip_paths ?? []).toEqual([]);
+    expect(body.audio_paths ?? []).toEqual([]);
+    expect(body.thumbnail_image_paths ?? []).toEqual([]);
+    expect(body.final_video_path ?? "").toBe("");
+    expect(submitCount).toBe(1);
+  });
+});

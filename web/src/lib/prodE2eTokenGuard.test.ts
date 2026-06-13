@@ -143,6 +143,24 @@ describe("Production E2E token smoke guardrails", () => {
         "POST /api/scenario/s4/submit then /api/scenario/s4/status/{label} round-trip @token-smoke",
         "POST /api/scenario/s5/submit then /api/scenario/s5/status/{label} round-trip @token-smoke",
       ],
+      "e2e/production/scenario-s2-no-media-single-submit.prod.spec.ts": [
+        "single S2 no-media submit returns brand campaign result without media synthesis @token-smoke",
+      ],
+      "e2e/production/scenario-s2-bounded-media-pilot-live.prod.spec.ts": [
+        "single S2 bounded media submit stops after seedance_clips @token-smoke",
+      ],
+      "e2e/production/scenario-s1-no-media-single-submit.prod.spec.ts": [
+        "single S1 no-media submit returns product direct result without media synthesis @token-smoke",
+      ],
+      "e2e/production/scenario-s3-no-media-single-submit.prod.spec.ts": [
+        "single S3 no-media submit returns influencer remix result without media synthesis @token-smoke",
+      ],
+      "e2e/production/scenario-s4-no-media-single-submit.prod.spec.ts": [
+        "single S4 no-media submit returns live shoot result without media synthesis @token-smoke",
+      ],
+      "e2e/production/scenario-s5-no-media-single-submit.prod.spec.ts": [
+        "single S5 no-media submit returns brand vlog result without media synthesis @token-smoke",
+      ],
     };
 
     for (const [path, taggedTitles] of Object.entries(expectedTaggedTests)) {

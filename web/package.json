@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint src e2e playwright.ui.config.ts playwright.prod.config.ts",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "e2e": "playwright test",
