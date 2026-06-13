@@ -149,12 +149,12 @@ class TestDeployWorkflow:
 
         _assert_hermetic_pytest_env(test_step.get("env") or {})
 
-    def test_preflight_lints_src_and_tests(self, workflow):
+    def test_preflight_lints_full_python_surface(self, workflow):
         preflight = workflow["jobs"]["preflight"]
         steps = preflight.get("steps") or []
         step_text = " ".join((s.get("run") or "") for s in steps)
-        assert "ruff check src tests" in step_text, (
-            "deploy preflight must lint tests as well as src to prevent hidden test debt"
+        assert "ruff check src tests scripts" in step_text, (
+            "deploy preflight must lint src, tests, and scripts to prevent hidden Python debt"
         )
 
     def test_preflight_pytest_timeout_dependency_is_declared(self, workflow):
@@ -195,16 +195,16 @@ class TestDeployWorkflow:
             "frontend deploy preflight build must not depend on production token state"
         )
 
-    def test_remote_deploy_disables_token_smoke_by_default_and_rebuilds_backend_when_needed(self, workflow):
+    def test_remote_deploy_disables_token_smoke_and_rebuilds_images_by_default(self, workflow):
         deploy = workflow["jobs"]["deploy"]
         steps = deploy.get("steps") or []
         remote_steps = [s for s in steps if s.get("name") == "Trigger remote deploy"]
         assert remote_steps, "deploy must trigger remote Lighthouse deploy"
 
         run = remote_steps[0].get("run") or ""
-        assert "REBUILD_BACKEND=1 RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh" in run, (
+        assert "REBUILD_BACKEND=1 REBUILD_RENDERING=1 RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh" in run, (
             "GitHub deploy must explicitly keep token-consuming smoke disabled by default"
-            " and allow unattended backend rebuild when requirements changed"
+            " and rebuild backend/rendering images for unattended production deploys"
         )
 
     def test_rsync_uses_lighthouse_exclude_file(self, workflow):
@@ -278,10 +278,22 @@ class TestDeployWorkflow:
         assert "$COMPOSE build backend" in text, "deploy.sh must support rebuilding backend image"
         assert "REBUILD_BACKEND=1" in text, "operator guidance must document the rebuild opt-in"
 
+    def test_lighthouse_deploy_manages_rendering_service_explicitly(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+
+        assert "REBUILD_RENDERING" in text, "rendering rebuild must be controlled by explicit env"
+        assert "$COMPOSE build rendering" in text, "deploy.sh must support rebuilding rendering image"
+        assert "$COMPOSE up -d --force-recreate rendering" in text, (
+            "deploy.sh must explicitly recreate rendering instead of relying on backend depends_on"
+        )
+        assert "docker exec ai_video_rendering" in text
+        assert "http://127.0.0.1:3001/health" in text
+
     def test_lighthouse_build_wrapper_forwards_deploy_control_flags(self):
         text = LIGHTHOUSE_BUILD_AND_DEPLOY.read_text()
 
         assert "REBUILD_BACKEND=${REBUILD_BACKEND:-0}" in text
+        assert "REBUILD_RENDERING=${REBUILD_RENDERING:-0}" in text
         assert "RUN_TOKEN_SMOKE=${RUN_TOKEN_SMOKE:-0}" in text
 
 
@@ -295,10 +307,10 @@ class TestCIWorkflow:
             wf = yaml.safe_load(f)
         assert "jobs" in wf
 
-    def test_ci_lints_src_and_tests(self):
+    def test_ci_lints_full_python_surface(self):
         text = CI_YML.read_text()
-        assert "ruff check src tests" in text, (
-            "main CI must lint tests as well as src to keep repo-wide ruff trustworthy"
+        assert "ruff check src tests scripts" in text, (
+            "main CI must lint src, tests, and scripts to keep repo-wide ruff trustworthy"
         )
 
     def test_ci_pytest_env_is_hermetic(self):

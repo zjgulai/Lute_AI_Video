@@ -87,7 +87,8 @@ echo "ssh key:    $SSH_KEY"
 echo "excludes:   $EXCLUDE_FILE"
 echo "rsync:      $RSYNC_BIN"
 echo "dry run:    $DRY_RUN"
-echo "rebuild:    ${REBUILD_BACKEND:-0}"
+echo "rebuild backend:   ${REBUILD_BACKEND:-0}"
+echo "rebuild rendering: ${REBUILD_RENDERING:-0}"
 echo "token smoke:${RUN_TOKEN_SMOKE:-0}"
 echo ""
 
@@ -105,7 +106,7 @@ fi
 echo ""
 echo "[2/2] Running remote deploy.sh..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SERVER_IP" \
-  "cd '$REMOTE_DIR/deploy/lighthouse' && REBUILD_BACKEND=${REBUILD_BACKEND:-0} RUN_TOKEN_SMOKE=${RUN_TOKEN_SMOKE:-0} bash deploy.sh"
+  "cd '$REMOTE_DIR/deploy/lighthouse' && REBUILD_BACKEND=${REBUILD_BACKEND:-0} REBUILD_RENDERING=${REBUILD_RENDERING:-0} RUN_TOKEN_SMOKE=${RUN_TOKEN_SMOKE:-0} bash deploy.sh"
 
 echo ""
 echo "Deploy complete: https://video.lute-tlz-dddd.top"

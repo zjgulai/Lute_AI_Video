@@ -146,14 +146,15 @@ See [docs/reference/api-endpoints.md](docs/reference/api-endpoints.md) for full 
 ```bash
 # Backend
 make test           # pytest
-make lint           # ruff
-make typecheck      # pyright
+make lint           # ruff over src, tests, and scripts
 make ci             # lint + test
 
 # Frontend
 cd web
+npx tsc --noEmit -p tsconfig.json
 npm test -- --run   # vitest
 npm run lint        # eslint
+npm run build       # Next.js production build
 
 # E2E
 cd web

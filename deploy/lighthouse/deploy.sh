@@ -35,6 +35,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 COMPOSE="sudo docker compose -f docker-compose.prod.yml"
 REBUILD_BACKEND="${REBUILD_BACKEND:-0}"
+REBUILD_RENDERING="${REBUILD_RENDERING:-0}"
 
 # Deployment root (was hardcoded /opt/ai-video; now configurable)
 DEPLOY_ROOT="${DEPLOY_ROOT:-/opt/ai-video}"
@@ -73,6 +74,16 @@ if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
   fi
 else
   echo "  ✓ requirements.txt 与 backend image 一致"
+fi
+echo ""
+
+echo "[0.1/5] Rendering image rebuild check..."
+if [ "$REBUILD_RENDERING" = "1" ]; then
+  echo "  REBUILD_RENDERING=1 set; rebuilding rendering image..."
+  $COMPOSE build rendering
+  echo "  ✓ rendering image rebuilt"
+else
+  echo "  ✓ rendering rebuild skipped (set REBUILD_RENDERING=1 after rendering/ changes)"
 fi
 echo ""
 
@@ -139,6 +150,7 @@ echo ""
 # -- Phase 2: Restart containers --
 echo "[2/5] Restarting containers..."
 cd ../deploy/lighthouse
+$COMPOSE up -d --force-recreate rendering 2>&1 | tail -3
 $COMPOSE up -d --force-recreate backend 2>&1 | tail -3
 $COMPOSE up -d --force-recreate frontend 2>&1 | tail -3
 # Recreate nginx to pick up nginx.conf changes AND volume mount changes.
@@ -179,6 +191,25 @@ if [ "$FRONTEND_STATUS" = "200" ]; then
   echo "  Frontend /: 200"
 else
   echo "  ❌ Frontend /: $FRONTEND_STATUS"
+fi
+
+# Check rendering service directly inside the container because it is only
+# exposed on the Docker network.
+RENDERING_STATUS="000"
+for attempt in $(seq 1 12); do
+  if sudo docker exec ai_video_rendering wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1; then
+    RENDERING_STATUS="200"
+    echo "  Rendering /health: 200 (attempt $attempt/12)"
+    break
+  fi
+  if [ "$attempt" != "12" ]; then
+    sleep 5
+  fi
+done
+if [ "$RENDERING_STATUS" != "200" ]; then
+  echo "  ❌ Rendering /health: $RENDERING_STATUS"
+  echo "  --- 最近 30 行 rendering logs ---"
+  sudo docker logs --tail 30 ai_video_rendering 2>&1 | tail -30
 fi
 
 # Check Fast Mode API only when explicitly requested.
