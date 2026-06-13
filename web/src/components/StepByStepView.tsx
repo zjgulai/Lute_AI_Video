@@ -3,7 +3,23 @@
 import { useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
+import { summarizeStepOutputPreview, type StepOutputPreview } from "@/lib/pipelineOutputPreview";
+import {
+  extractFinalVideoPath,
+  extractRenderJsonPath,
+  extractSeedanceClipOutput,
+  extractThumbnailImagePaths,
+  extractTtsAudioPaths,
+} from "@/lib/pipelineStepOutput";
+import {
+  extractPipelineSteps,
+  extractPipelineStepOrder,
+  extractSoftDegradedReasons,
+  normalizeStepByStepState,
+  normalizeStepByStepStatePayload,
+} from "@/lib/pipelineState";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
+import type { StepByStepState } from "@/stores/usePipelineStore";
 import ProductionJobLedgerViewer, { extractProductionJobRecords } from "./ProductionJobLedgerViewer";
 import PromptPreviewAuditPanel, { normalizePromptPreviewAuditBundle } from "./PromptPreviewAuditPanel";
 import QualityGateReportPanel, { extractQualityGateReport } from "./QualityGateReportPanel";
@@ -14,9 +30,9 @@ import ScenarioInjectionDiffPanel, {
 
 interface Props {
   label: string;
-  state: Record<string, unknown>;
-  onStepComplete: (newState: Record<string, unknown>) => void;
-  onResume: (finalState: Record<string, unknown>) => void;
+  state: StepByStepState;
+  onStepComplete: (newState: StepByStepState) => void;
+  onResume: (finalState: StepByStepState) => void;
   onError?: (message: string) => void;
   loading: boolean;
 }
@@ -79,12 +95,6 @@ type StoryboardItem = Record<string, unknown> & {
   script_id?: string;
   total_duration?: number;
   shots?: unknown[];
-};
-
-type ClipDetail = {
-  duration?: number;
-  is_stub?: boolean;
-  is_filler?: boolean;
 };
 
 type AuditCriterion = {
@@ -158,16 +168,16 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
   const [editValue, setEditValue] = useState<string>("");
   const [confirmRegen, setConfirmRegen] = useState<string | null>(null);
 
-  const steps = (state?.steps as Record<string, Record<string, unknown>>) || {};
-  const stepOrder: string[] = (state?.meta as Record<string, unknown>)?.step_order as string[] || _FALLBACK_STEP_ORDER;
-  const softDegradedReasons: Array<{ step?: string; reason?: string; detail?: string }> =
-    (state?.soft_degraded_reasons as Array<{ step?: string; reason?: string; detail?: string }>) || [];
+  const normalizedState = normalizeStepByStepState(state);
+  const steps = extractPipelineSteps(normalizedState);
+  const stepOrder = extractPipelineStepOrder(normalizedState, _FALLBACK_STEP_ORDER);
+  const softDegradedReasons = extractSoftDegradedReasons(normalizedState.soft_degraded_reasons);
   const softDegradedSummary = softDegradedReasons[0];
   const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
-  const qualityGateReport = extractQualityGateReport(state);
-  const productionJobRecords = extractProductionJobRecords(state);
-  const scenarioInjectionDiff = buildScenarioInjectionDiff(state);
-  const promptPreviewAuditBundle = findPromptPreviewAuditBundle(state, steps);
+  const qualityGateReport = extractQualityGateReport(normalizedState);
+  const productionJobRecords = extractProductionJobRecords(normalizedState);
+  const scenarioInjectionDiff = buildScenarioInjectionDiff(normalizedState);
+  const promptPreviewAuditBundle = findPromptPreviewAuditBundle(normalizedState, steps);
 
   const getCurrentStep = (): string | null => {
     for (const step of stepOrder) {
@@ -192,14 +202,14 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     const { runS1Step } = await import("./api");
     try {
       const result = await runS1Step(label, stepName);
-      onStepComplete(result?.state || result);
+      onStepComplete(normalizeStepByStepStatePayload(result));
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Step execution failed:", err);
       onError?.(t("toast.stepExecFailed") + `: ${errorMessage(err).slice(0, 80)}`);
       const { fetchS1State } = await import("./api");
       const freshState = await fetchS1State(label);
-      onStepComplete(freshState);
+      onStepComplete(normalizeStepByStepState(freshState));
     }
   };
 
@@ -208,14 +218,14 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     const { regenerateS1Step } = await import("./api");
     try {
       const result = await regenerateS1Step(label, stepName);
-      onStepComplete(result?.state || result);
+      onStepComplete(normalizeStepByStepStatePayload(result));
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Regeneration failed:", err);
       onError?.(t("toast.regenerateFailed") + `: ${errorMessage(err).slice(0, 80)}`);
       const { fetchS1State } = await import("./api");
       const freshState = await fetchS1State(label);
-      onStepComplete(freshState);
+      onStepComplete(normalizeStepByStepState(freshState));
     }
   };
 
@@ -223,7 +233,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     const { resumeS1 } = await import("./api");
     try {
       const result = await resumeS1(label);
-      onResume(result?.state || result);
+      onResume(normalizeStepByStepStatePayload(result));
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Resume failed:", err);
@@ -267,7 +277,7 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
       // Reload state
       const { fetchS1State } = await import("./api");
       const freshState = await fetchS1State(label);
-      onStepComplete(freshState);
+      onStepComplete(normalizeStepByStepState(freshState));
       setEditingStep(null);
       setEditValue("");
     } catch (err: unknown) {
@@ -282,25 +292,19 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
     setEditValue("");
   };
 
-  const getOutputPreview = (stepName: string): string => {
-    const sd = steps[stepName] || {};
-    const output = sd.edited_output ?? sd.output;
-    if (!output) return "";
-    if (Array.isArray(output)) return `${output.length}${t("step.items")}`;
-    if (typeof output === "object") {
-      const obj = output as { overall_status?: string; summary?: string };
-      if (obj.overall_status) return `${t("quality.overallStatus")}: ${obj.overall_status}`;
-      if (obj.summary) return String(obj.summary).slice(0, 60);
-      const keys = Object.keys(output);
-      if (keys.length > 0) return `${keys.length}${t("step.fields")}`;
-    }
-    return String(output).slice(0, 60);
-  };
-
   const getDownstreamSteps = (stepName: string): string[] => {
     const idx = stepOrder.indexOf(stepName);
     if (idx < 0 || idx >= stepOrder.length - 1) return [];
     return stepOrder.slice(idx + 1);
+  };
+
+  const formatOutputPreview = (preview: StepOutputPreview | null): string => {
+    if (!preview) return "";
+    if (preview.type === "items") return `${preview.count}${t("step.items")}`;
+    if (preview.type === "quality_status") return `${t("quality.overallStatus")}: ${preview.status}`;
+    if (preview.type === "summary") return preview.text;
+    if (preview.type === "fields") return `${preview.count}${t("step.fields")}`;
+    return preview.text;
   };
 
   return (
@@ -372,6 +376,9 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
             const isEditing = editingStep === stepName;
             const downstream = getDownstreamSteps(stepName);
             const commercialInjection = getCommercialInjection(stepData);
+            const outputPreview = formatOutputPreview(
+              summarizeStepOutputPreview(stepData.edited_output ?? stepData.output),
+            );
 
             return (
               <div key={stepName}>
@@ -402,9 +409,9 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
                         <span className="text-[var(--text-muted)]">{t("commercialInjection.readOnly")}</span>
                       </span>
                     )}
-                    {isDone && getOutputPreview(stepName) && (
+                    {isDone && outputPreview && (
                       <span className="ml-2 text-[12px] text-[var(--text-muted)] font-normal">
-                        {getOutputPreview(stepName)}
+                        {outputPreview}
                       </span>
                     )}
                   </span>
@@ -740,9 +747,9 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "seedance_clips") {
-    const isNewFormat = !Array.isArray(output) && Array.isArray(outputRecord.clip_paths);
-    const paths = isNewFormat ? asArray<string>(outputRecord.clip_paths) : asArray<string>(output);
-    const details = isNewFormat ? asArray<ClipDetail>(outputRecord.clip_details) : [];
+    const clipOutput = extractSeedanceClipOutput(output);
+    const paths = clipOutput.paths;
+    const details = clipOutput.details;
     if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2 space-y-1">
@@ -765,9 +772,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "tts_audio") {
-    const paths = Array.isArray(output)
-      ? asArray<string>(output)
-      : asArray<string>(outputRecord.audio_paths);
+    const paths = extractTtsAudioPaths(output);
     if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2">
@@ -785,7 +790,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "thumbnail_images") {
-    const paths = asArray<string>(output);
+    const paths = extractThumbnailImagePaths(output);
     if (paths.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{t("step.noMedia")}</p>;
     return (
       <div className="p-2">
@@ -803,20 +808,16 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "assemble_final") {
-    if (typeof output === "string") {
-      return <p className="text-xs text-[var(--text-body)] p-2">{output}</p>;
-    }
-    if (Array.isArray(output)) {
-      return <p className="text-xs text-[var(--text-body)] p-2">{output[0] || "N/A"}</p>;
-    }
+    const videoPath = extractFinalVideoPath(output);
+    const renderJsonPath = extractRenderJsonPath(output);
     return (
       <div className="p-2">
         <p className="text-xs text-[var(--text-body)]">
-          {typeof outputRecord.video_path === "string" ? outputRecord.video_path : "N/A"}
+          {videoPath || "N/A"}
         </p>
-        {typeof outputRecord.render_json_path === "string" && (
+        {renderJsonPath && (
           <p className="text-xs text-[var(--text-body)] mt-1">
-            {outputRecord.render_json_path}
+            {renderJsonPath}
           </p>
         )}
       </div>

@@ -214,8 +214,8 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
       {USE_GUIDED_FORM ? (
         <GuidedForm scene={scene} onSubmit={onSubmit} loading={loading} fieldErrors={fieldErrors} />
       ) : (
-        /* Legacy form (only rendered when GuidedForm is disabled) */
         <div data-legacy-form>
+        {/* Legacy form (only rendered when GuidedForm is disabled) */}
         {/* Scene-specific fields */}
       {scene === "product_direct" && (
         <div className="space-y-3">
@@ -975,7 +975,8 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
           )}
         </button>
       </div>
-      </div>{/* /legacy form */}
+      </div>
+      )}
     </div>
   );
 }
@@ -987,5 +988,3 @@ function getCurrentWeek(): string {
   const week = Math.ceil(diff / 7);
   return `${now.getFullYear()}-W${String(week).padStart(2, "0")}`;
 }
-      </div>
-      )}

@@ -266,7 +266,7 @@ describe("CandidateSelector — multi-select edge cases (D3)", () => {
     const cand: Candidate = {
       id: "empty",
       variant: "standard",
-      data: null as unknown as Record<string, unknown>,
+      data: null,
       score: { overall: 0.5 },
       recommended: false,
     };

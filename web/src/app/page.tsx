@@ -12,6 +12,11 @@ import { errorMessage } from "@/lib/errors";
 import { handleSmartCreateStageError } from "@/lib/smartCreateError";
 import { withScenarioContinuityConfig } from "@/lib/scenarioContinuity";
 import { sceneToPath, sceneToScenarioId } from "@/lib/scenarioRouting";
+import { extractGalleryResultFields, normalizePipelineResult } from "@/lib/pipelineResult";
+import {
+  normalizeStepByStepState,
+  normalizeWorkflowState,
+} from "@/lib/pipelineState";
 import {
   fetchState,
   submitReview,
@@ -48,7 +53,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { useI18n } from "@/i18n/I18nProvider";
 import { DEMO_RESULT_1, DEMO_RESULT_2, DEMO_RESULT_VLOG } from "@/demo-data";
 import { useAppStore } from "@/stores/useAppStore";
-import { usePipelineStore } from "@/stores/usePipelineStore";
+import { usePipelineStore, type PipelineResult } from "@/stores/usePipelineStore";
 import { useExpertStore } from "@/stores/useExpertStore";
 import { useExecutionBar } from "@/hooks/useExecutionBar";
 import { useSubmitting } from "@/hooks/useSubmitting";
@@ -89,15 +94,6 @@ type SceneConfig = UnknownRecord & {
   storyboard_grid?: number | string;
   clip_group_size?: number;
   transition_style?: string;
-};
-
-type GalleryResult = {
-  briefs?: UnknownRecord[];
-  scripts?: UnknownRecord[];
-  thumbnail_image_paths?: string[];
-  final_video_path?: string;
-  video_duration?: number;
-  audit_report?: { overall_score?: number };
 };
 
 function asRecord(value: unknown): UnknownRecord {
@@ -301,19 +297,20 @@ export default function Home() {
   }, [t, showToast, setDisconnected]);
 
   // v2.0: Save completed creations to gallery (localStorage)
-  const saveToGallery = useCallback((result: GalleryResult, scenario: string) => {
+  const saveToGallery = useCallback((result: PipelineResult, scenario: string) => {
     try {
-      const brief = result?.briefs?.[0] || {};
-      const script = result?.scripts?.[0] || {};
+      const galleryFields = extractGalleryResultFields(result);
+      const brief = galleryFields.briefs[0] || {};
+      const script = galleryFields.scripts[0] || {};
       const item = {
         id: `${scenario}-${Date.now()}`,
         title: brief.product_name || brief.brand_name || script.product_name || t("gallery.untitled") || "Untitled",
         scene: scenario,
         videoType: brief.video_type || "default",
-        thumbnail: result?.thumbnail_image_paths?.[0] || "",
-        videoPath: result?.final_video_path || "",
-        duration: result?.video_duration || 0,
-        score: result?.audit_report?.overall_score || 0,
+        thumbnail: galleryFields.thumbnailImagePaths[0] || "",
+        videoPath: galleryFields.finalVideoPath,
+        duration: galleryFields.videoDuration,
+        score: galleryFields.auditScore,
         createdAt: new Date().toISOString(),
       };
       const stored = JSON.parse(localStorage.getItem("hermes_gallery_items") || "[]");
@@ -354,7 +351,7 @@ export default function Home() {
     if (stepByStepLabel) {
       try {
         const partial = await fetchS1State(stepByStepLabel);
-        if (partial) { setStepByStepState(partial); setShowStepByStep(true); }
+        if (partial) { setStepByStepState(normalizeStepByStepState(partial)); setShowStepByStep(true); }
       } catch { showToast(t("toast.cancelNoPartial"), "info"); }
     }
   }, [
@@ -425,7 +422,7 @@ export default function Home() {
           setShowWorkflow(true);
           // Restore workflow state asynchronously; clear stale session on failure
           fetchS1State(session.workflowLabel)
-            .then((state) => setWorkflowState(state))
+            .then((state) => setWorkflowState(normalizeWorkflowState(state)))
             .catch(() => {
               localStorage.removeItem("ai_video_expert_session");
               setWorkflowLabel(null);
@@ -756,7 +753,7 @@ export default function Home() {
       }
       setWorkflowConfig(config);
       setWorkflowLabel(result.label);
-      setWorkflowState(result.state || {});
+      setWorkflowState(normalizeWorkflowState(result.state || {}));
       setShowWorkflow(true);
       setCurrentGate(1);
       startActivePipeline({
@@ -1145,7 +1142,7 @@ export default function Home() {
               onComplete={(result) => {
                 setOneshotResult(result);
                 setOneshotScenario(activeScene || "product_direct");
-                saveToGallery(result as GalleryResult, activeScene || "product_direct");
+                saveToGallery(result, activeScene || "product_direct");
                 setStage("result");
                 setShowStageProgress(false);
                 clearActivePipeline();
@@ -1168,12 +1165,12 @@ export default function Home() {
           {showStepByStep && stepByStepLabel !== null && stepByStepState !== null ? (
             <StepByStepView
               label={stepByStepLabel}
-              state={stepByStepState as Record<string, unknown>}
+              state={stepByStepState}
               onStepComplete={(newState) => setStepByStepState(newState)}
               onResume={(finalState) => {
                 setStepByStepState(finalState);
                 setShowStepByStep(false);
-                setOneshotResult(finalState);
+                setOneshotResult(normalizePipelineResult(finalState));
                 setOneshotScenario("product_direct");
                 showToast(t("toast.stepByStepDone"), "success");
               }}
@@ -1191,7 +1188,7 @@ export default function Home() {
               onStateChange={(newState) => setWorkflowState(newState)}
               onComplete={(finalState) => {
                 setShowWorkflow(false);
-                setOneshotResult(finalState);
+                setOneshotResult(normalizePipelineResult(finalState));
                 setOneshotScenario("product_direct");
                 showToast(t("toast.workflowDone"), "success");
               }}

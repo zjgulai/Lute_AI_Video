@@ -32,7 +32,7 @@ export interface StepByStepState {
   label?: string;
   scenario?: string;
   steps?: Record<string, unknown>;
-  current_step?: string;
+  current_step?: string | null;
   mode?: string;
   gates?: Record<string, unknown>;
   pipeline_degraded?: boolean;
@@ -48,7 +48,7 @@ export interface WorkflowConfig {
   product_catalog?: Record<string, unknown>;
   brand_package?: Record<string, unknown>;
   video_duration?: number;
-  continuity_mode?: string;
+  continuity_mode?: boolean | string;
   continuity_required?: boolean;
   reference_image_url?: string;
   source_video_url?: string;
@@ -63,7 +63,7 @@ export interface WorkflowState {
   label?: string;
   scenario?: string;
   steps?: Record<string, unknown>;
-  current_step?: string;
+  current_step?: string | null;
   status?: string;
   pipeline_degraded?: boolean;
   degraded_reason?: string | null;

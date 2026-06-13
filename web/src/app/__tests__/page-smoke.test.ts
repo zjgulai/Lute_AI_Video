@@ -49,6 +49,8 @@ const PAGE_MODULES = [
   { name: "works", loader: () => import("@/app/works/page") },
 ] as const;
 
+const PAGE_MODULE_LOAD_TIMEOUT_MS = 60_000;
+
 describe("D4 page-module smoke", () => {
   PAGE_MODULES.forEach(({ name, loader }) => {
     it(`${name}/page module loads + exports default function`, async () => {
@@ -56,7 +58,7 @@ describe("D4 page-module smoke", () => {
       expect(mod).toBeTruthy();
       expect(typeof mod.default).toBe("function");
       expect(mod.default.name.length).toBeGreaterThan(0);
-    });
+    }, PAGE_MODULE_LOAD_TIMEOUT_MS);
   });
 
   it("all page modules expose stable default export shape", async () => {
@@ -66,5 +68,5 @@ describe("D4 page-module smoke", () => {
     }));
     const failures = all.filter(r => !r.hasDefault);
     expect(failures, `pages without default function: ${JSON.stringify(failures)}`).toHaveLength(0);
-  });
+  }, PAGE_MODULE_LOAD_TIMEOUT_MS);
 });

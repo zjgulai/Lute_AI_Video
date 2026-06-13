@@ -8,16 +8,25 @@ import {
 } from "@/lib/continuityDirections";
 import type { ContinuityDirection } from "@/lib/continuityDirections";
 
+type CandidatePrimitive = string | number | boolean | null;
+export type CandidateData = CandidatePrimitive | CandidateData[] | { [key: string]: CandidateData };
+export type CandidateVariant = "standard" | "creative" | "conservative";
+
+type CandidateScoreBreakdown = {
+  director_intent?: number;
+  [key: string]: CandidatePrimitive | undefined;
+};
+
 interface Score {
   overall: number;
-  breakdown?: Record<string, unknown>;
+  breakdown?: CandidateScoreBreakdown;
   explanation?: string;
 }
 
 export interface Candidate {
   id: string;
-  variant: "standard" | "creative" | "conservative";
-  data: unknown;
+  variant: CandidateVariant;
+  data: CandidateData;
   score: Score;
   recommended: boolean;
 }
@@ -61,14 +70,79 @@ function getVariantLabelKey(variant: string): string {
   }
 }
 
-function getDataPreview(data: unknown): string {
-  if (!data) return "";
-  if (typeof data === "string") return data.slice(0, 100);
-  const str = JSON.stringify(data, null, 2);
-  return str.slice(0, 100);
+export type { ContinuityDirection };
+
+export function normalizeCandidateData(value: unknown): CandidateData {
+  if (value === null) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map(normalizeCandidateData);
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeCandidateData(item)]),
+    );
+  }
+  return null;
 }
 
-export type { ContinuityDirection };
+function normalizeVariant(value: unknown, index: number): CandidateVariant {
+  if (value === "standard" || value === "creative" || value === "conservative") return value;
+  return (["standard", "creative", "conservative"] as const)[index % 3];
+}
+
+function normalizeOverallScore(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function normalizeScoreBreakdown(value: unknown): CandidateScoreBreakdown | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const breakdown: CandidateScoreBreakdown = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === "director_intent") {
+      if (typeof item === "number" && Number.isFinite(item)) breakdown.director_intent = item;
+      continue;
+    }
+    if (item === null || typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+      breakdown[key] = item;
+    }
+  }
+
+  return Object.keys(breakdown).length > 0 ? breakdown : undefined;
+}
+
+function normalizeScore(value: unknown): Score {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { overall: 0 };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    overall: normalizeOverallScore(record.overall),
+    breakdown: normalizeScoreBreakdown(record.breakdown),
+    explanation: typeof record.explanation === "string" ? record.explanation : undefined,
+  };
+}
+
+export function normalizeCandidates(value: unknown): Candidate[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index): Candidate | null => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+
+      const record = item as Record<string, unknown>;
+      const rawId = typeof record.id === "string" ? record.id.trim() : "";
+      return {
+        id: rawId || `candidate-${index + 1}`,
+        variant: normalizeVariant(record.variant, index),
+        data: normalizeCandidateData(record.data),
+        score: normalizeScore(record.score),
+        recommended: record.recommended === true,
+      };
+    })
+    .filter((candidate): candidate is Candidate => candidate !== null);
+}
 
 function extractDirectorIntentScore(score: Score | undefined): number | null {
   const value = score?.breakdown?.director_intent;

@@ -11,12 +11,14 @@ import {
   type ContinuityDiagnosticsPayload,
 } from "@/lib/continuityDiagnostics";
 import { truncateDiagnosticText } from "@/lib/diagnosticText";
+import { normalizePipelineResult, normalizePipelineSteps } from "@/lib/pipelineResult";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
+import type { PipelineResult } from "@/stores/usePipelineStore";
 
 interface Props {
   label: string;
   scenario: string;
-  onComplete: (result: unknown) => void;
+  onComplete: (result: PipelineResult) => void;
   onGatePause?: (gateId: string | null) => void;
   onError?: (errors: string[]) => void;
 }
@@ -353,7 +355,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       failureCountRef.current = 0;
       setPollError(null);
 
-      const newSteps = (data.steps as Record<string, Record<string, unknown>>) || {};
+      const newSteps = normalizePipelineSteps(data.steps);
       setSteps(newSteps);
       setStatus(data.status);
       setGateStatus(data.gate_status);
@@ -402,7 +404,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
         clearPollTimeout();
         stopElapsedTimer();
         completionTimeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) onComplete(data.result || newSteps);
+          if (mountedRef.current) onComplete(normalizePipelineResult(data.result || newSteps));
         }, 1500);
         return;
       }

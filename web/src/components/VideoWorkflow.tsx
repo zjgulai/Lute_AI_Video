@@ -5,7 +5,22 @@ import { getMediaUrl } from "./api";
 import RuntimeMediaImage from "./RuntimeMediaImage";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
+import {
+  extractFinalVideoPath,
+  extractSeedanceClipOutput,
+  extractThumbnailImagePaths,
+  extractTtsAudioPaths,
+} from "@/lib/pipelineStepOutput";
+import {
+  extractPipelineSteps,
+  extractPipelineStepDurations,
+  extractPipelineStepOrder,
+  extractSoftDegradedReasons,
+  normalizeWorkflowState,
+  normalizeWorkflowStatePayload,
+} from "@/lib/pipelineState";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
+import type { WorkflowState } from "@/stores/usePipelineStore";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -18,23 +33,6 @@ type WorkflowConfig = UnknownRecord & {
   target_platforms?: string[];
   video_duration?: number;
   content_scenario?: string;
-};
-
-type StepState = UnknownRecord & {
-  status?: string;
-  output?: unknown;
-  edited_output?: unknown;
-  duration_ms?: number;
-};
-
-type WorkflowState = UnknownRecord & {
-  steps?: Record<string, StepState>;
-  meta?: {
-    step_order?: string[];
-    step_durations?: Record<string, string>;
-  };
-  errors?: string[];
-  soft_degraded_reasons?: Array<{ step?: string; reason?: string; detail?: string }>;
 };
 
 type StepItem = UnknownRecord & {
@@ -72,14 +70,6 @@ type ScriptItem = StepItem & {
 type StoryboardItem = StepItem & {
   shots?: unknown[];
   total_duration?: number;
-};
-
-type ClipDetail = {
-  duration?: number;
-  is_stub?: boolean;
-  is_filler?: boolean;
-  continuity_frame?: unknown;
-  verification?: { all_ok?: boolean };
 };
 
 function asRecord(value: unknown): UnknownRecord {
@@ -149,12 +139,12 @@ export default function VideoWorkflow({
   const [runningStep, setRunningStep] = useState<string | null>(null);
 
   const config = asRecord(rawConfig) as WorkflowConfig;
-  const state = asRecord(rawState) as WorkflowState;
-  const steps = state?.steps || {};
-  const stepOrder: string[] = state?.meta?.step_order || _FALLBACK_STEP_ORDER;
-  const stepDurations: Record<string, string> = state?.meta?.step_durations || _FALLBACK_STEP_DURATIONS;
+  const state = normalizeWorkflowState(rawState);
+  const steps = extractPipelineSteps(state);
+  const stepOrder = extractPipelineStepOrder(state, _FALLBACK_STEP_ORDER);
+  const stepDurations = extractPipelineStepDurations(state, _FALLBACK_STEP_DURATIONS);
   const errors = asArray<string>(state.errors);
-  const softDegradedReasons: Array<{ step?: string; reason?: string; detail?: string }> = state?.soft_degraded_reasons || [];
+  const softDegradedReasons = extractSoftDegradedReasons(state.soft_degraded_reasons);
   const softDegradedSummary = softDegradedReasons[0];
   const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
 
@@ -193,7 +183,7 @@ export default function VideoWorkflow({
   const refreshState = useCallback(async () => {
     const { fetchS1State } = await import("./api");
     const fresh = await fetchS1State(label);
-    onStateChange(asRecord(fresh.state || fresh) as WorkflowState);
+    onStateChange(normalizeWorkflowStatePayload(fresh));
   }, [label, onStateChange]);
 
   const handleRunStep = async (stepName: string) => {
@@ -203,7 +193,7 @@ export default function VideoWorkflow({
     try {
       const { runS1Step } = await import("./api");
       const result = await runS1Step(label, stepName);
-      const newState = asRecord(result?.state || result) as WorkflowState;
+      const newState = normalizeWorkflowStatePayload(result);
       onStateChange(newState);
       setViewingStep(stepName);
     } catch (e: unknown) {
@@ -225,7 +215,7 @@ export default function VideoWorkflow({
     try {
       const { regenerateS1Step } = await import("./api");
       const result = await regenerateS1Step(label, stepName);
-      const newState = asRecord(result?.state || result) as WorkflowState;
+      const newState = normalizeWorkflowStatePayload(result);
       onStateChange(newState);
       setViewingStep(stepName);
       setEditingStep(null);
@@ -273,7 +263,7 @@ export default function VideoWorkflow({
     try {
       const { resumeS1 } = await import("./api");
       const result = await resumeS1(label);
-      const finalState = result?.state || result;
+      const finalState = normalizeWorkflowStatePayload(result);
       onStateChange(finalState);
       onComplete(finalState);
     } catch (e: unknown) {
@@ -932,18 +922,16 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "seedance_clips") {
-    // New format: {clip_paths, clip_details, total_duration, target_duration}
-    // Old format: string[]
-    const isNewFormat = !Array.isArray(output) && Array.isArray(outputRecord.clip_paths);
-    const rawUrls = isNewFormat ? asArray<string>(outputRecord.clip_paths) : (Array.isArray(output) ? asArray<string>(output) : asArray<string>(outputRecord.urls));
-    const details = isNewFormat ? asArray<ClipDetail>(outputRecord.clip_details) : [];
-    const totalDur = isNewFormat && typeof outputRecord.total_duration === "number" ? outputRecord.total_duration : 0;
-    const targetDur = isNewFormat && typeof outputRecord.target_duration === "number" ? outputRecord.target_duration : 0;
+    const clipOutput = extractSeedanceClipOutput(output);
+    const rawUrls = clipOutput.paths;
+    const details = clipOutput.details;
+    const totalDur = clipOutput.totalDuration;
+    const targetDur = clipOutput.targetDuration;
     const urls = rawUrls.map((url: string) => getMediaUrl(url));
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {isNewFormat && targetDur > 0 && (
+        {clipOutput.hasDurationTarget && (
           <div className="flex items-center gap-2 text-[12px]">
             <span className="text-[var(--text-body)]">
               {to("step.totalDuration")}: {totalDur.toFixed(1)}s / {targetDur}s
@@ -1003,7 +991,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "thumbnail_images") {
-    const rawUrls = Array.isArray(output) ? asArray<string>(output) : asArray<string>(outputRecord.urls);
+    const rawUrls = extractThumbnailImagePaths(output);
     const urls = rawUrls.map((url: string) => getMediaUrl(url));
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
@@ -1019,10 +1007,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "tts_audio") {
-    // Format: {"audio_paths": [...], "lyrics_paths": [...]}
-    const rawUrls = Array.isArray(output)
-      ? asArray<string>(output)
-      : asArray<string>(outputRecord.audio_paths || outputRecord.urls);
+    const rawUrls = extractTtsAudioPaths(output);
     const urls = rawUrls.map((url: string) => getMediaUrl(url));
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
@@ -1037,7 +1022,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
   }
 
   if (stepName === "assemble_final") {
-    const rawUrl = typeof output === "string" ? output : typeof outputRecord.final_video_url === "string" ? outputRecord.final_video_url : "";
+    const rawUrl = extractFinalVideoPath(output);
     const finalUrl = getMediaUrl(rawUrl);
     if (!finalUrl) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noData")}</p>;
     return (
