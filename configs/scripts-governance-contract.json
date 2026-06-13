@@ -64,6 +64,11 @@
       "reason": "No-token C21 authorized-live preflight report."
     },
     {
+      "path": "scripts/l4c_token_smoke_plan.py",
+      "status": "active_reusable",
+      "reason": "No-execute L4C expanded token-smoke plan validator."
+    },
+    {
       "path": "scripts/create_admin.py",
       "status": "active_reusable",
       "reason": "Admin account bootstrap utility."
@@ -97,6 +102,11 @@
       "path": "scripts/p2_recharge_smoke_checklist.py",
       "status": "active_reusable",
       "reason": "Dry-run checklist for post-recharge smoke execution."
+    },
+    {
+      "path": "scripts/production_non_token_e2e_check.py",
+      "status": "active_reusable",
+      "reason": "Fail-closed Phase C production non-token E2E readiness and runner."
     },
     {
       "path": "scripts/production_readonly_log_gate.py",
@@ -211,6 +221,21 @@
       "path": "scripts/authorized_live_token_smoke_harness.py",
       "status": "provider_probe",
       "reason": "Authorized-live token smoke entrypoint; execute mode requires explicit gates and may call providers."
+    },
+    {
+      "path": "scripts/l4d_image_only_smoke.py",
+      "status": "provider_probe",
+      "reason": "L4D staged image-only provider smoke; execute mode may call poyo.ai."
+    },
+    {
+      "path": "scripts/l4d_paired_smoke.py",
+      "status": "provider_probe",
+      "reason": "L4D staged paired image-plus-video provider smoke; execute mode may call poyo.ai."
+    },
+    {
+      "path": "scripts/l4d_video_only_smoke.py",
+      "status": "provider_probe",
+      "reason": "L4D staged video-only provider smoke; execute mode may call poyo.ai."
     },
     {
       "path": "scripts/debug_poyo_403.py",

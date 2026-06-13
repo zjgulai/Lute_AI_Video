@@ -44,6 +44,7 @@ source: human+ai
 | `scripts/build_pending_review_decision_record.py` | active_reusable |
 | `scripts/build_provider_account_readiness_record.py` | active_reusable |
 | `scripts/commercial_token_smoke_preflight.py` | active_reusable |
+| `scripts/l4c_token_smoke_plan.py` | active_reusable |
 | `scripts/create_admin.py` | active_reusable |
 | `scripts/dev_start.py` | active_reusable |
 | `scripts/diagnose_apis.py` | active_reusable |
@@ -51,6 +52,7 @@ source: human+ai
 | `scripts/generate_portfolio_thumbnails.py` | active_reusable |
 | `scripts/no_token_commercial_benchmark.py` | active_reusable |
 | `scripts/p2_recharge_smoke_checklist.py` | active_reusable |
+| `scripts/production_non_token_e2e_check.py` | active_reusable |
 | `scripts/production_readonly_log_gate.py` | active_reusable |
 | `scripts/portfolio_index.py` | active_reusable |
 | `scripts/portfolio_thumbnail_coverage.py` | active_reusable |
@@ -83,6 +85,9 @@ source: human+ai
 | path | status |
 | --- | --- |
 | `scripts/authorized_live_token_smoke_harness.py` | provider_probe |
+| `scripts/l4d_image_only_smoke.py` | provider_probe |
+| `scripts/l4d_paired_smoke.py` | provider_probe |
+| `scripts/l4d_video_only_smoke.py` | provider_probe |
 | `scripts/debug_poyo_403.py` | provider_probe |
 | `scripts/diagnose_poyo.py` | provider_probe |
 | `scripts/discover_poyo_models.py` | provider_probe |

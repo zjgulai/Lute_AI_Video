@@ -121,6 +121,13 @@ def test_provider_probe_scripts_are_not_called_by_default_entrypoints():
             assert script_name not in text, f"{entrypoint} must not run {script_name} by default"
 
 
+def test_makefile_lint_covers_scripts_and_tests():
+    makefile = (REPO_ROOT / "Makefile").read_text()
+
+    assert "$(PYTHON) -m ruff check src tests scripts" in makefile
+    assert "ruff check src/" not in makefile
+
+
 def test_generated_script_artifacts_have_cleanup_policy_without_implicit_delete():
     generated_artifacts = list(SCRIPTS_DIR.rglob("__pycache__/*")) + list(SCRIPTS_DIR.rglob("*.pyc"))
     contract = _contract()
