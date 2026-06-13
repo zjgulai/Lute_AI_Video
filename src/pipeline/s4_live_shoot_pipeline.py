@@ -17,6 +17,7 @@ Steps (7):
 from __future__ import annotations
 
 import asyncio
+import importlib
 import time
 from typing import Any
 
@@ -24,23 +25,51 @@ import structlog
 
 import src.skills.continuity_storyboard_grid  # noqa: F401
 import src.skills.script_writer  # noqa: F401
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.thumbnail_prompt  # noqa: F401
 from src.config import DEFAULT_LANGUAGES
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     build_continuity_audit_summary,
     build_transitions_from_clip_details,
 )
-from src.pipeline.step_utils import get_step_output
+from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
+from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
 
 # Caps for demo runs
 MAX_SCRIPTS_PER_RUN = 3
+
+_LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
+    "video_prompts": (
+        ("src.skills.seedance_prompt", "seedance-video-prompt"),
+    ),
+    "thumbnails": (
+        ("src.skills.thumbnail_prompt", "gpt-image-thumbnail-prompt"),
+    ),
+    "seedance_clips": (
+        ("src.skills.seedance_video_generate", "seedance-video-generate-skill"),
+    ),
+    "tts_audio": (
+        ("src.skills.elevenlabs_tts", "elevenlabs-tts-skill"),
+    ),
+    "assemble_final": (
+        ("src.skills.remotion_assemble", "remotion-assemble-skill"),
+    ),
+    "audit": (
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+}
+
+
+def _ensure_step_skills_registered(step_name: str) -> None:
+    """Register media-step skills only when that step is actually executed."""
+    for module_name, skill_name in _LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()):
+        module = importlib.import_module(module_name)
+        if skill_name not in SkillRegistry._global_skills:
+            importlib.reload(module)
 
 
 class S4LiveShootPipeline:
@@ -105,6 +134,7 @@ class S4LiveShootPipeline:
         appropriate _step_* method, and returns the step output.
         """
         config = state["config"]
+        _ensure_step_skills_registered(step_name)
         reg = SkillRegistry()
         steps = state["steps"]
         errors = state["errors"]
@@ -788,6 +818,10 @@ class S4LiveShootPipeline:
         product_info: dict[str, Any],
         topic: str = "",
         target_platforms: list[str] | None = None,
+        brand_guidelines: dict[str, Any] | None = None,
+        video_duration: int = 30,
+        enable_media_synthesis: bool = True,
+        output_label: str | None = None,
     ) -> dict[str, Any]:
         """Run the full S4 pipeline end-to-end.
 
@@ -797,7 +831,8 @@ class S4LiveShootPipeline:
         platforms = target_platforms or ["tiktok", "shopify"]
         product_name = product_info.get("name", "Product")
         brand_name = product_info.get("brand_name", "")
-        label = f"s4_{int(time.time())}"
+        video_duration = video_duration if video_duration in {15, 30, 45, 60, 90} else 30
+        label = output_label or f"s4_{int(time.time())}"
 
         config = {
             "footage_assets": footage_assets,
@@ -806,30 +841,43 @@ class S4LiveShootPipeline:
             "target_platforms": platforms,
             "product_name": product_name,
             "brand_name": brand_name,
+            "brand_guidelines": brand_guidelines or {},
+            "video_duration": video_duration,
+            "enable_media_synthesis": enable_media_synthesis,
+            "output_label": label,
+            "target_language": "en",
         }
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s4")
-        final_state = await runner.resume(label)
+        if enable_media_synthesis:
+            final_state = await runner.resume(label)
+        else:
+            final_state = await self._resume_without_media_synthesis(runner, label)
 
         # Convert final state back to the legacy result dict
         steps = final_state.get("steps", {})
         seedance_out = self._get_step_output(steps, "seedance_clips") or {}
+        tts_out = self._get_step_output(steps, "tts_audio") or {}
         assemble_out = self._get_step_output(steps, "assemble_final")
         final_video, render_json_path = extract_assemble_paths(assemble_out)
 
         result: dict[str, Any] = {
             "success": True,
             "scenario": "s4_live_shoot",
+            "video_duration": video_duration,
             "scripts": self._get_step_output(steps, "scripts") or [],
             "video_prompts": self._get_step_output(steps, "video_prompts") or [],
             "thumbnail_sets": self._get_step_output(steps, "thumbnails") or [],
             "seedance_clips": seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else [],
+            "clip_paths": seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else [],
+            "audio_paths": tts_out.get("audio_paths", []) if isinstance(tts_out, dict) else [],
             "final_video_path": final_video,
             "render_json_path": render_json_path,
-            "steps_completed": 7,
+            "steps_completed": 7 if enable_media_synthesis else 2,
             "errors": final_state.get("errors", []),
+            "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
         }
 
         if final_state.get("pipeline_degraded"):
@@ -848,3 +896,19 @@ class S4LiveShootPipeline:
             errors=len(result.get("errors", [])),
         )
         return result
+
+    async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
+        """Run only S4 pre-media steps; stop before Seedance prompt generation."""
+        final_state: dict[str, Any] = {}
+        for step_name in get_scenario_step_order("s4"):
+            if step_name == "video_prompts":
+                break
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+        if final_state and not final_state.get("pipeline_degraded"):
+            final_state["current_step"] = None
+            save = getattr(runner.state_manager, "save", None)
+            if callable(save):
+                await save(label, final_state)
+        return final_state

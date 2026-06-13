@@ -119,13 +119,21 @@ class SkillCallable(ABC):
         start_time = time.time()
         last_error = None
 
+        max_attempts = self.max_retries
+        provider_max_retries = params.get("provider_max_retries")
+        if provider_max_retries is not None:
+            try:
+                max_attempts = max(1, int(provider_max_retries) + 1)
+            except (TypeError, ValueError):
+                max_attempts = self.max_retries
+
         # 2. Attempt execution with retries
-        for attempt in range(self.max_retries):
+        for attempt in range(max_attempts):
             try:
                 result = await self.execute(params)
                 if not result.success:
                     last_error = result.error
-                    if attempt < self.max_retries - 1:
+                    if attempt < max_attempts - 1:
                         import asyncio
                         await asyncio.sleep(2.0 ** attempt)
                     continue
@@ -134,7 +142,7 @@ class SkillCallable(ABC):
                 output_errors = self.validate_output(result.data)
                 if output_errors:
                     last_error = f"Output validation: {'; '.join(output_errors)}"
-                    if attempt < self.max_retries - 1:
+                    if attempt < max_attempts - 1:
                         import asyncio
                         await asyncio.sleep(2.0 ** attempt)
                     continue
@@ -146,14 +154,14 @@ class SkillCallable(ABC):
 
             except Exception as e:
                 last_error = str(e)
-                if attempt < self.max_retries - 1:
+                if attempt < max_attempts - 1:
                     import asyncio
                     await asyncio.sleep(2.0 ** attempt)
 
         # 4. All retries exhausted — use fallback
         fallback_result = self.fallback(params)
         fallback_result.metadata["latency_seconds"] = time.time() - start_time
-        fallback_result.metadata["retries"] = self.max_retries
+        fallback_result.metadata["retries"] = max_attempts
         fallback_result.metadata["fallback_reason"] = last_error
         # P0-3: Explicitly mark fallback so callers can distinguish real
         # success from degraded data. Previously this was indistinguishable

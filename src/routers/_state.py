@@ -9,9 +9,9 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.graph.pipeline import compile_pipeline
@@ -71,6 +71,8 @@ class FastModeRequest(BaseModel):
     user_prompt: str
     duration: int = 5
     enable_tts: bool = True
+    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
+    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     # P1-C: 用户填的多供应商 key 通过此字段下发,scenario.py 入口注入 contextvars
     api_keys: dict[str, str] = {}
 
@@ -100,7 +102,10 @@ class S2BrandCampaignRequest(BaseModel):
     target_languages: list[str] = DEFAULT_LANGUAGES
     week: str = ""
     video_duration: int = 60
+    output_label: str | None = None
     enable_media_synthesis: bool = True
+    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
+    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 

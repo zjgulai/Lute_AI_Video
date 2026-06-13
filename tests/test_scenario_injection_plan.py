@@ -294,6 +294,9 @@ async def test_c6_s1_run_passes_read_only_injection_plan_to_step_runner(monkeypa
             captured["scenario"] = scenario
             return label or "s1_c6_fixture"
 
+        async def run_step(self, label, step_name):
+            return {"scenario": "s1", "steps": {}, "errors": [], "media_synthesis_errors": []}
+
         async def resume(self, label):
             return {"scenario": "s1", "steps": {}, "errors": [], "media_synthesis_errors": []}
 
@@ -324,6 +327,9 @@ async def test_c6_s2_run_passes_read_only_injection_plan_to_step_runner(monkeypa
             captured["config"] = config
             captured["scenario"] = scenario
             return label or "s2_c6_fixture"
+
+        async def run_step(self, label, step_name):
+            return {"scenario": "s2", "steps": {}, "errors": [], "media_synthesis_errors": []}
 
         async def resume(self, label):
             return {"scenario": "s2", "steps": {}, "errors": [], "media_synthesis_errors": []}

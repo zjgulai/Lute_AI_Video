@@ -18,6 +18,7 @@ Self-verification runs inside each media skill; cross-artifact audit runs at the
 from __future__ import annotations
 
 import asyncio
+import importlib
 import time
 from pathlib import Path
 from typing import Any
@@ -26,15 +27,7 @@ import structlog
 
 import src.skills.character_identity  # noqa: F401 — auto-register (NEW)
 import src.skills.continuity_storyboard_grid  # noqa: F401 — auto-register
-import src.skills.elevenlabs_tts  # noqa: F401 — auto-register (NEW)
-import src.skills.gpt_image_generate  # noqa: F401 — auto-register (NEW)
-import src.skills.keyframe_images  # noqa: F401 — auto-register (NEW)
-import src.skills.media_quality_audit  # noqa: F401 — auto-register (NEW)
 import src.skills.remix_script  # noqa: F401 — auto-register
-import src.skills.remotion_assemble  # noqa: F401 — auto-register (NEW)
-import src.skills.seedance_prompt  # noqa: F401 — auto-register
-import src.skills.seedance_video_generate  # noqa: F401 — auto-register (NEW)
-import src.skills.thumbnail_prompt  # noqa: F401 — auto-register
 import src.skills.video_analysis  # noqa: F401 — auto-register
 from src.config import OUTPUT_DIR, S3_VIRAL_EXTRACT_DISABLED
 from src.pipeline.artifact_paths import extract_assemble_paths
@@ -43,6 +36,9 @@ from src.pipeline.continuity_utils import (
     build_transitions_from_clip_details,
     extract_clip_last_frame,
 )
+from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.state_manager import PipelineStateManager
+from src.pipeline.step_runner import StepRunner
 from src.pipeline.step_utils import get_step_output
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
@@ -52,6 +48,43 @@ logger = structlog.get_logger()
 # Caps to keep demo timeline sane (each Seedance call ~30-60s)
 MAX_CLIPS_PER_DEMO = 3
 MAX_THUMBNAILS_PER_DEMO = 4
+
+_LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
+    "keyframe_images": (
+        ("src.skills.gpt_image_generate", "gpt-image-generate-skill"),
+        ("src.skills.keyframe_images", "keyframe-images"),
+    ),
+    "video_prompts": (
+        ("src.skills.seedance_prompt", "seedance-video-prompt"),
+    ),
+    "thumbnail_prompts": (
+        ("src.skills.thumbnail_prompt", "gpt-image-thumbnail-prompt"),
+    ),
+    "seedance_clips": (
+        ("src.skills.seedance_video_generate", "seedance-video-generate-skill"),
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+    "tts_audio": (
+        ("src.skills.elevenlabs_tts", "elevenlabs-tts-skill"),
+    ),
+    "thumbnail_images": (
+        ("src.skills.gpt_image_generate", "gpt-image-generate-skill"),
+    ),
+    "assemble_final": (
+        ("src.skills.remotion_assemble", "remotion-assemble-skill"),
+    ),
+    "audit": (
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+}
+
+
+def _ensure_step_skills_registered(step_name: str) -> None:
+    """Register provider-backed skills only when their step actually runs."""
+    for module_name, skill_name in _LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()):
+        module = importlib.import_module(module_name)
+        if skill_name not in SkillRegistry._global_skills:
+            importlib.reload(module)
 
 
 class S3Result:
@@ -128,6 +161,9 @@ class S3InfluencerRemixPipeline:
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step (used by StepRunner)."""
         config = state["config"]
+        _ensure_step_skills_registered(step_name)
+        if step_name in _LAZY_SKILL_MODULES_BY_STEP:
+            self._registry = SkillRegistry()
         reg = SkillRegistry()
         steps = state["steps"]
         errors = state["errors"]
@@ -141,7 +177,8 @@ class S3InfluencerRemixPipeline:
             )
             if not res.success:
                 disabled_by_policy = res.error == "s3_viral_extract_disabled_by_policy"
-                errors.append(f"video_analysis_failed: {res.error}")
+                if not disabled_by_policy:
+                    errors.append(f"video_analysis_failed: {res.error}")
                 return {
                     "_soft_degraded": True,
                     "_degraded_reason": (
@@ -338,17 +375,18 @@ class S3InfluencerRemixPipeline:
             "target_language": target_language,
             "video_duration": self._video_duration,
             "output_label": label,
+            "enable_media_synthesis": enable_media_synthesis,
         }
-
-        from src.pipeline.state_manager import PipelineStateManager
-        from src.pipeline.step_runner import StepRunner
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s3")
 
         try:
-            final_state = await runner.resume(label)
+            if enable_media_synthesis:
+                final_state = await runner.resume(label)
+            else:
+                final_state = await self._resume_without_media_synthesis(runner, label)
         except Exception as e:
             logger.error("s3: pipeline failed", error=str(e))
             result = S3Result()
@@ -390,6 +428,22 @@ class S3InfluencerRemixPipeline:
                     audit=result.audit_report and result.audit_report.get("overall_status"),
                     errors=len(result.errors))
         return result
+
+    async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
+        """Run only S3 pre-media steps; stop before provider-backed asset generation."""
+        final_state: dict[str, Any] = {}
+        for step_name in get_scenario_step_order("s3"):
+            if step_name == "keyframe_images":
+                break
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+        if final_state and not final_state.get("pipeline_degraded"):
+            final_state["current_step"] = None
+            save = getattr(runner.state_manager, "save", None)
+            if callable(save):
+                await save(label, final_state)
+        return final_state
 
     # ═══ Step 1-4: existing data-producing steps ═══
 

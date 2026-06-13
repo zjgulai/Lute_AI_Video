@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import src.pipeline.s3_remix_pipeline as s3_remix_pipeline
 import src.skills.character_identity as character_identity_skill
 import src.skills.continuity_storyboard_grid as continuity_storyboard_grid_skill
 import src.skills.elevenlabs_tts as elevenlabs_tts_skill
@@ -272,6 +273,90 @@ async def _run_upper_pipeline_for_product(product: dict[str, object]) -> dict[st
 
 class TestS3Pipeline:
     """S3 influencer remix pipeline tests."""
+
+    def test_import_does_not_register_provider_backed_media_skills(self):
+        forbidden_media_skill_names = {
+            "elevenlabs-tts-skill",
+            "gpt-image-generate-skill",
+            "keyframe-images",
+            "media-quality-audit-skill",
+            "remotion-assemble-skill",
+            "seedance-video-generate-skill",
+            "seedance-video-prompt",
+            "gpt-image-thumbnail-prompt",
+        }
+
+        SkillRegistry.clear_global()
+        importlib.reload(s3_remix_pipeline)
+
+        assert forbidden_media_skill_names.isdisjoint(SkillRegistry._global_skills)
+
+    def test_media_skills_register_lazily_for_provider_backed_steps(self):
+        SkillRegistry.clear_global()
+        importlib.reload(s3_remix_pipeline)
+
+        assert "keyframe-images" not in SkillRegistry._global_skills
+        assert "gpt-image-generate-skill" not in SkillRegistry._global_skills
+
+        s3_remix_pipeline._ensure_step_skills_registered("keyframe_images")
+
+        assert "keyframe-images" in SkillRegistry._global_skills
+        assert "gpt-image-generate-skill" in SkillRegistry._global_skills
+
+    @pytest.mark.asyncio
+    async def test_skip_media_stops_before_provider_backed_steps(self, monkeypatch: pytest.MonkeyPatch):
+        executed_steps: list[str] = []
+        saved_states: list[dict[str, object]] = []
+
+        class FakeStateManager:
+            async def save(self, label: str, state: dict[str, object]) -> None:
+                saved_states.append({"label": label, "current_step": state.get("current_step")})
+
+        class FakeStepRunner:
+            def __init__(self, state_manager: object) -> None:
+                self.state_manager = FakeStateManager()
+
+            async def init_state(self, *, config, mode="auto", label=None, scenario="s3"):
+                return label or "s3_no_media_fixture"
+
+            async def resume(self, label):
+                raise AssertionError("no-media S3 must not resume the full media pipeline")
+
+            async def run_step(self, label, step_name):
+                executed_steps.append(step_name)
+                return {
+                    "label": label,
+                    "scenario": "s3",
+                    "steps": {step: {"output": {}} for step in executed_steps},
+                    "errors": [],
+                    "media_synthesis_errors": [],
+                    "pipeline_degraded": False,
+                }
+
+        monkeypatch.setattr(s3_remix_pipeline, "StepRunner", FakeStepRunner)
+
+        result = await s3_remix_pipeline.S3InfluencerRemixPipeline().run(
+            video_url="https://tiktok.com/@momcozy/video/1000000000",
+            product={"name": "Momcozy UV Sterilizer", "usps": ["quiet"], "brand_name": "Momcozy"},
+            influencer_name="Test Influencer",
+            video_duration=15,
+            enable_media_synthesis=False,
+        )
+
+        assert executed_steps == [
+            "video_analysis",
+            "character_identity",
+            "remix_script",
+            "storyboards",
+            "continuity_storyboard_grid",
+        ]
+        assert "keyframe_images" not in executed_steps
+        assert result.success is True
+        assert result.clip_paths == []
+        assert result.audio_paths == []
+        assert result.thumbnail_image_paths == []
+        assert result.final_video_path == ""
+        assert saved_states[-1]["current_step"] is None
 
     @pytest.mark.asyncio
     @pytest.mark.hermetic_slow
@@ -591,3 +676,42 @@ class TestS3Pipeline:
         assert result.remix_script is not None
         assert len(result.video_prompts) > 0
         assert any("video_analysis_failed" in err for err in result.errors)
+
+
+@pytest.mark.asyncio
+async def test_scenario_s3_route_passes_enable_media_synthesis_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.routers import scenario
+    from src.tools import translate
+
+    captured: dict[str, object] = {}
+
+    async def fake_translate_catalog(product: dict) -> dict:
+        return product
+
+    class FakeS3Pipeline:
+        async def run(self, **kwargs):
+            captured.update(kwargs)
+            result = S3Result()
+            result.success = True
+            return result
+
+    monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
+    monkeypatch.setattr(
+        "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
+        FakeS3Pipeline,
+    )
+
+    response = await scenario.run_s3_influencer_remix(
+        {
+            "video_url": "https://tiktok.com/@momcozy/video/1000000000",
+            "product": {"name": "Momcozy UV Sterilizer"},
+            "influencer_name": "Test Influencer",
+            "video_duration": 15,
+            "enable_media_synthesis": False,
+        }
+    )
+
+    assert response["success"] is True
+    assert captured["enable_media_synthesis"] is False

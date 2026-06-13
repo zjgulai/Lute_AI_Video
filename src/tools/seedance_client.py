@@ -98,6 +98,7 @@ class SeedanceClient:
         api_key: str | None = None,
         base_url: str | None = None,
         output_dir: Path | None = None,
+        max_retries: int | None = None,
     ):
         # Unified routing: poyo.ai preferred when POYO_API_KEY is set
         # P0-1: Read from request context first (contextvars) for multi-tenant isolation
@@ -122,6 +123,7 @@ class SeedanceClient:
         self.base_url = _seedance_url.rstrip("/")
         self.output_dir = output_dir or OUTPUT_DIR / "seedance"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.max_attempts = max(1, int(max_retries) + 1) if max_retries is not None else MAX_RETRIES
         limits = httpx.Limits(max_keepalive_connections=0, max_connections=50)
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
@@ -239,13 +241,12 @@ class SeedanceClient:
     ) -> SeedanceVideoResult:
         """poyo.ai flow: submit → poll → download with retry + backoff.
 
-        Retries up to 3 times on submit failure or task failure to handle
-        poyo.ai queue limits and transient errors.
+        Retries according to the client-level retry policy on submit failure or
+        task failure to handle poyo.ai queue limits and transient errors.
         """
-        MAX_RETRIES = 3
         SUBMIT_BACKOFF_BASE = 2.0  # 2^attempt seconds between retries
 
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(self.max_attempts):
             result = await self._poyo_attempt_submit_and_poll(
                 prompt=prompt,
                 image_refs=image_refs,
@@ -268,7 +269,7 @@ class SeedanceClient:
             )
             is_retryable = any(stub_mode.startswith(m) for m in retryable_modes)
 
-            if is_retryable and attempt < MAX_RETRIES - 1:
+            if is_retryable and attempt < self.max_attempts - 1:
                 delay = SUBMIT_BACKOFF_BASE ** attempt
                 logger.warning(
                     "poyo: retrying submit+poll",
@@ -482,7 +483,7 @@ class SeedanceClient:
 
     async def _execute_with_retry(self, fn, mode: str, prompt: str) -> SeedanceVideoResult:
         last_error = None
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(self.max_attempts):
             try:
                 return await fn()
             except TimeoutError:
@@ -497,7 +498,7 @@ class SeedanceClient:
                 logger.error("seedance: error", mode=mode, error=str(e))
                 last_error = str(e)
 
-            if attempt < MAX_RETRIES - 1:
+            if attempt < self.max_attempts - 1:
                 await asyncio.sleep(2.0 ** attempt)
 
         logger.warning("seedance: all retries exhausted, returning stub", mode=mode, error=last_error)

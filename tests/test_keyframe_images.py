@@ -1,5 +1,6 @@
 """Tests for KeyframeImagesSkill — keyframe image generation from storyboard."""
 
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -75,7 +76,7 @@ def test_keyframe_images_adds_path_to_shots():
         mock_exec.return_value = _mock_gpt_image_result()
 
         result = asyncio.run(skill.execute({
-            "storyboard": SAMPLE_STORYBOARD,
+            "storyboard": deepcopy(SAMPLE_STORYBOARD),
             "identity_card": SAMPLE_IDENTITY,
         }))
 
@@ -92,6 +93,47 @@ def test_keyframe_images_adds_path_to_shots():
     assert result.data.get("keyframes_generated") == 3
 
 
+def test_keyframe_images_respects_max_shots_without_fallback():
+    """A capped successful image generation must not be replaced by fallback."""
+    skill = KeyframeImagesSkill()
+
+    import asyncio
+
+    with patch.object(SkillRegistry, "execute", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = _mock_gpt_image_result("/tmp/real_keyframe.png")
+
+        result = asyncio.run(skill.safe_execute({
+            "storyboard": deepcopy(SAMPLE_STORYBOARD),
+            "_max_shots": 1,
+            "provider_max_retries": 0,
+        }))
+
+    assert result.success, f"safe_execute failed: {result.error}"
+    assert not result.metadata.get("is_fallback")
+    assert result.data is not None
+    assert result.data["keyframes_generated"] == 1
+    assert len(result.data["shots"]) == 1
+    assert result.data["shots"][0]["keyframe_image_path"] == "/tmp/real_keyframe.png"
+    assert result.data["shots"][0]["keyframe_prompt"]
+    assert mock_exec.await_count == 1
+
+
+def test_keyframe_images_fallback_respects_max_shots(tmp_path):
+    """Fallback must obey the caller's job cap and not expand the storyboard."""
+    skill = KeyframeImagesSkill()
+
+    result = skill.fallback({
+        "storyboard": deepcopy(SAMPLE_STORYBOARD),
+        "_max_shots": 1,
+        "output_dir": str(tmp_path),
+    })
+
+    assert result.success
+    assert result.data["keyframes_generated"] == 1
+    assert len(result.data["shots"]) == 1
+    assert result.data["shots"][0]["keyframe_image_path"].startswith(str(tmp_path))
+
+
 def test_keyframe_images_fallback_on_failure():
     """Verify fallback works when GPT-Image skill fails."""
     skill = KeyframeImagesSkill()
@@ -106,7 +148,7 @@ def test_keyframe_images_fallback_on_failure():
         )
 
         result = asyncio.run(skill.execute({
-            "storyboard": SAMPLE_STORYBOARD,
+            "storyboard": deepcopy(SAMPLE_STORYBOARD),
         }))
 
     assert result.success
@@ -135,7 +177,7 @@ def test_keyframe_images_validate_params():
 def test_keyframe_images_fallback():
     """Verify fallback produces valid output."""
     skill = KeyframeImagesSkill()
-    result = skill.fallback({"storyboard": SAMPLE_STORYBOARD})
+    result = skill.fallback({"storyboard": deepcopy(SAMPLE_STORYBOARD)})
 
     assert result.success
     assert "shots" in result.data

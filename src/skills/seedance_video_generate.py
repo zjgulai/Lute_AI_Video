@@ -92,6 +92,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         resolution = params.get("resolution", DEFAULT_RESOLUTION)
         image_refs = params.get("image_refs") or []
         output_label = params.get("output_label", "clip")
+        output_dir = Path(params["output_dir"]) if params.get("output_dir") else None
+        provider_max_retries = params.get("provider_max_retries")
         # Sprint 1 P1-2: per-call model override (set by ModelRouter at the
         # pipeline layer). When None, SeedanceClient falls back to env default.
         model: str | None = params.get("model")
@@ -108,7 +110,10 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         # Lazy import to avoid module-load network handles
         from src.tools.seedance_client import SeedanceClient
 
-        client = SeedanceClient()
+        client = SeedanceClient(
+            output_dir=output_dir,
+            max_retries=provider_max_retries,
+        )
 
         try:
             # Choose API based on whether we have a reference image
@@ -608,10 +613,12 @@ class SeedanceVideoGenerateSkill(SkillCallable):
 
     def fallback(self, params: dict[str, Any]) -> SkillResult:
         """Deterministic fallback: write a placeholder mp4 marker."""
-        from src.config import OUTPUT_DIR
-
         label = params.get("output_label", "fallback")
-        out_dir = OUTPUT_DIR / "seedance"
+        if params.get("output_dir"):
+            out_dir = Path(params["output_dir"])
+        else:
+            from src.config import OUTPUT_DIR
+            out_dir = OUTPUT_DIR / "seedance"
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"fallback_{label}_{abs(hash(params.get('prompt',''))) & 0xFFFF:04x}.mp4"
         self._build_stub_mp4(path, label)

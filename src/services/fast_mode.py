@@ -13,7 +13,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import structlog
 
@@ -31,6 +31,32 @@ FAST_MODE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Module-level singleton instance — avoids rebuilding clients per request
 _fast_mode_service_instance: FastModeService | None = None
+
+FastModeArtifactDisposition = Literal["default", "pending_review", "quarantine"]
+
+
+def _safe_path_segment(value: str | None, fallback: str) -> str:
+    raw = (value or "").strip()
+    cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in raw)
+    cleaned = cleaned.strip("-_")
+    return cleaned[:80] or fallback
+
+
+def _artifact_output_dir(
+    disposition: FastModeArtifactDisposition,
+    *,
+    tenant_id: str | None,
+    run_id: str | None,
+) -> Path:
+    if disposition == "pending_review":
+        tenant = _safe_path_segment(tenant_id, "default")
+        run = _safe_path_segment(run_id, f"fast_mode_{int(time.time())}")
+        return OUTPUT_DIR / "tenants" / tenant / "pending_review" / "fast_mode" / run
+    if disposition == "quarantine":
+        tenant = _safe_path_segment(tenant_id, "default")
+        run = _safe_path_segment(run_id, f"fast_mode_{int(time.time())}")
+        return OUTPUT_DIR / "tenants" / tenant / "quarantine" / "fast_mode" / run
+    return FAST_MODE_OUTPUT_DIR
 
 
 def get_fast_mode_service() -> FastModeService:
@@ -120,6 +146,10 @@ class FastModeService:
         duration: int = 15,
         enable_tts: bool = False,
         on_stage: Callable[[str], object] | None = None,
+        artifact_disposition: FastModeArtifactDisposition = "default",
+        tenant_id: str | None = None,
+        artifact_run_id: str | None = None,
+        provider_max_retries: int | None = None,
     ) -> FastModeResult:
         """Generate a short video from simple text input.
 
@@ -162,7 +192,7 @@ class FastModeService:
             )
             video_prompt = enhanced.get("video_prompt", "")
             scene_description = enhanced.get("scene_description", "")
-        except (ValueError, KeyError, TypeError, asyncio.TimeoutError) as e:
+        except (TimeoutError, ValueError, KeyError, TypeError) as e:
             logger.error("fast_mode: LLM enhancement failed, using raw prompt", error=str(e))
             video_prompt = user_prompt
             scene_description = user_prompt
@@ -174,16 +204,30 @@ class FastModeService:
             prompt_length=len(video_prompt),
         )
 
+        artifact_output_dir = _artifact_output_dir(
+            artifact_disposition,
+            tenant_id=tenant_id,
+            run_id=artifact_run_id,
+        )
+        seedance_client = self.seedance
+        local_seedance_client: SeedanceClient | None = None
+        if artifact_disposition != "default" or provider_max_retries is not None:
+            local_seedance_client = SeedanceClient(
+                output_dir=artifact_output_dir,
+                max_retries=provider_max_retries,
+            )
+            seedance_client = local_seedance_client
+
         # ── Step 2: Video + optional TTS in parallel ──
         video_start = time.perf_counter()
         _stage("video")
         logger.info("fast_mode: generating video", duration=duration, enable_tts=enable_tts)
 
-        video_future = self.seedance.text_to_video(
+        video_future = seedance_client.text_to_video(
             prompt=video_prompt,
             duration=duration,
             resolution="720p",
-            model=select_model("s1") if self.seedance._is_poyo else None,
+            model=select_model("s1") if seedance_client._is_poyo else None,
         )
 
         tts_future = None
@@ -194,35 +238,39 @@ class FastModeService:
                 language="en",
             )
 
-        if tts_future is not None:
-            results = await asyncio.gather(video_future, tts_future, return_exceptions=True)
-            video_result = results[0]
-            tts_result = results[1]
+        try:
+            if tts_future is not None:
+                results = await asyncio.gather(video_future, tts_future, return_exceptions=True)
+                video_result = results[0]
+                tts_result = results[1]
 
-            # TTS failure is non-fatal — log and continue
-            tts_path = None
-            tts_time_ms = 0
-            if isinstance(tts_result, Exception):
-                logger.warning("fast_mode: TTS generation failed", error=str(tts_result))
-            elif tts_result:
-                tts_path = str(tts_result)
-                tts_time_ms = int((time.perf_counter() - video_start) * 1000)
-                logger.info("fast_mode: TTS generated", tts_path=tts_path)
-        else:
-            try:
-                video_result = await video_future
-            except (asyncio.TimeoutError, RuntimeError, ConnectionError) as e:
-                from src.tools.error_classifier import classify_error
-                structured = classify_error(e, context="fast_mode.video")
-                logger.error(
-                    "fast_mode: video generation failed",
-                    error=str(e),
-                    error_code=structured.code.value,
-                    recoverable=structured.recoverable,
-                )
-                raise RuntimeError(f"Video generation failed: {e}") from e
-            tts_path = None
-            tts_time_ms = 0
+                # TTS failure is non-fatal — log and continue
+                tts_path = None
+                tts_time_ms = 0
+                if isinstance(tts_result, Exception):
+                    logger.warning("fast_mode: TTS generation failed", error=str(tts_result))
+                elif tts_result:
+                    tts_path = str(tts_result)
+                    tts_time_ms = int((time.perf_counter() - video_start) * 1000)
+                    logger.info("fast_mode: TTS generated", tts_path=tts_path)
+            else:
+                try:
+                    video_result = await video_future
+                except (TimeoutError, RuntimeError, ConnectionError) as e:
+                    from src.tools.error_classifier import classify_error
+                    structured = classify_error(e, context="fast_mode.video")
+                    logger.error(
+                        "fast_mode: video generation failed",
+                        error=str(e),
+                        error_code=structured.code.value,
+                        recoverable=structured.recoverable,
+                    )
+                    raise RuntimeError(f"Video generation failed: {e}") from e
+                tts_path = None
+                tts_time_ms = 0
+        finally:
+            if local_seedance_client is not None:
+                await local_seedance_client.close()
 
         video_time_ms = int((time.perf_counter() - video_start) * 1000)
 
@@ -261,9 +309,17 @@ class FastModeService:
         model_info: FastModeModelInfo = {
             "llm": DEFAULT_LLM_PROVIDER,
             "llm_model": self._llm_model,
-            "video": self._video_model,
+            "video": f"poyo-{select_model('s1')}" if seedance_client._is_poyo else "seedance-2.0",
             "tts": "cosyvoice2" if enable_tts else None,
         }
+        artifact_review_status = "pending_review" if artifact_disposition == "pending_review" else None
+        artifact_storage_scope = (
+            "tenant_pending_review"
+            if artifact_disposition == "pending_review"
+            else "tenant_quarantine"
+            if artifact_disposition == "quarantine"
+            else "fast_mode"
+        )
 
         # If stub mode (video generation failed), mark as failure and do not
         # return a non-existent filename that would cause a 404 on media fetch.
@@ -294,6 +350,10 @@ class FastModeService:
                 "model_info": model_info,
                 "is_stub": True,
                 "tts_path": None,
+                "artifact_disposition": artifact_disposition,
+                "artifact_review_status": artifact_review_status,
+                "artifact_storage_scope": artifact_storage_scope,
+                "artifact_run_id": artifact_run_id,
             }
 
         result: FastModeResult = {
@@ -315,6 +375,10 @@ class FastModeService:
             "model_info": model_info,
             "is_stub": False,
             "tts_path": tts_path,
+            "artifact_disposition": artifact_disposition,
+            "artifact_review_status": artifact_review_status,
+            "artifact_storage_scope": artifact_storage_scope,
+            "artifact_run_id": artifact_run_id,
         }
 
         if local_path:

@@ -14,16 +14,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.config import (
-    OPENAI_API_KEY,
-    OPENAI_IMAGE_API_BASE,
-)
-
 import httpx
 import structlog
 
 from src.config import (
     OPENAI_API_KEY,
+    OPENAI_IMAGE_API_BASE,
     OUTPUT_DIR,
     POYO_API_KEY,
     POYO_IMAGE_MODEL,
@@ -59,6 +55,7 @@ class GPTImageClient:
         self,
         api_key: str | None = None,
         output_dir: Path | None = None,
+        max_retries: int | None = None,
     ):
         _openai_key = api_key or OPENAI_API_KEY
         self._is_poyo = False
@@ -74,6 +71,7 @@ class GPTImageClient:
         self.api_key = POYO_API_KEY or _openai_key
         self.output_dir = output_dir or OUTPUT_DIR / "gpt_images"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.max_attempts = max(1, int(max_retries) + 1) if max_retries is not None else MAX_RETRIES
 
         if self._is_poyo:
             from src.tools.poyo_client import PoyoClient
@@ -210,9 +208,9 @@ class GPTImageClient:
                 }
 
         last_error = None
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(self.max_attempts):
             try:
-                return await retry_with_backoff(_do_generate)
+                return await retry_with_backoff(_do_generate, max_retries=0)
             except TimeoutError:
                 logger.error("gpt_image: timed out", image_id=image_id, attempt=attempt + 1)
                 last_error = "timeout"
@@ -225,7 +223,7 @@ class GPTImageClient:
                 logger.error("gpt_image: error", image_id=image_id, error=str(e))
                 last_error = str(e)
 
-            if attempt < MAX_RETRIES - 1:
+            if attempt < self.max_attempts - 1:
                 await asyncio.sleep(2.0 ** attempt)
 
         logger.warning("gpt_image: all retries exhausted, returning stub", image_id=image_id)

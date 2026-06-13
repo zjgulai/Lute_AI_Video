@@ -48,6 +48,74 @@ def test_s1_pipeline_run_accepts_router_continuity_kwargs() -> None:
     assert "transition_style" in params
 
 
+def test_s1_pipeline_import_does_not_register_media_skills() -> None:
+    import importlib
+    import sys
+
+    import src.pipeline.s1_product_pipeline as s1_product_pipeline
+    from src.skills.registry import SkillRegistry
+
+    module_names = [
+        "src.skills.elevenlabs_tts",
+        "src.skills.gpt_image_generate",
+        "src.skills.keyframe_images",
+        "src.skills.media_quality_audit",
+        "src.skills.remotion_assemble",
+        "src.skills.seedance_prompt",
+        "src.skills.seedance_video_generate",
+        "src.skills.thumbnail_prompt",
+    ]
+    original_modules = {name: sys.modules.pop(name, None) for name in module_names}
+    original_global_skills = dict(SkillRegistry._global_skills)
+    media_skill_names = {
+        "elevenlabs-tts-skill",
+        "gpt-image-generate-skill",
+        "keyframe-images",
+        "media-quality-audit-skill",
+        "remotion-assemble-skill",
+        "seedance-video-prompt",
+        "seedance-video-generate-skill",
+        "gpt-image-thumbnail-prompt",
+    }
+
+    SkillRegistry.clear_global()
+    try:
+        importlib.reload(s1_product_pipeline)
+
+        assert media_skill_names.isdisjoint(SkillRegistry._global_skills)
+    finally:
+        SkillRegistry._global_skills = original_global_skills
+        for name in module_names:
+            sys.modules.pop(name, None)
+        for name, module in original_modules.items():
+            if module is not None:
+                sys.modules[name] = module
+        importlib.reload(s1_product_pipeline)
+
+
+def test_s1_media_skills_are_lazy_registered_for_media_steps() -> None:
+    import importlib
+
+    import src.pipeline.s1_product_pipeline as s1_product_pipeline
+    from src.skills.registry import SkillRegistry
+
+    original_global_skills = dict(SkillRegistry._global_skills)
+    SkillRegistry.clear_global()
+    try:
+        importlib.reload(s1_product_pipeline)
+
+        assert "keyframe-images" not in SkillRegistry._global_skills
+        assert "gpt-image-generate-skill" not in SkillRegistry._global_skills
+
+        s1_product_pipeline._ensure_step_skills_registered("keyframe_images")
+
+        assert "keyframe-images" in SkillRegistry._global_skills
+        assert "gpt-image-generate-skill" in SkillRegistry._global_skills
+    finally:
+        SkillRegistry._global_skills = original_global_skills
+        importlib.reload(s1_product_pipeline)
+
+
 def test_s1_start_request_accepts_frontend_continuity_options() -> None:
     from src.routers._state import S1StartRequest
 
@@ -702,6 +770,7 @@ async def test_direct_run_preserves_explicit_continuity_false(
     from src.pipeline import s1_product_pipeline
 
     captured: dict[str, object] = {}
+    executed_steps: list[str] = []
 
     class FakeStepRunner:
         def __init__(self, state_manager: object) -> None:
@@ -719,7 +788,8 @@ async def test_direct_run_preserves_explicit_continuity_false(
             captured["scenario"] = scenario
             return label or "s1_direct_run_test"
 
-        async def resume(self, label: str) -> dict:
+        async def run_step(self, label: str, step_name: str) -> dict:
+            executed_steps.append(step_name)
             return {
                 "label": label,
                 "scenario": "s1",
@@ -727,6 +797,9 @@ async def test_direct_run_preserves_explicit_continuity_false(
                 "errors": [],
                 "media_synthesis_errors": [],
             }
+
+        async def resume(self, label: str) -> dict:
+            raise AssertionError("no-media S1 must not resume the full media pipeline")
 
     monkeypatch.setattr(s1_product_pipeline, "StepRunner", FakeStepRunner)
 
@@ -743,6 +816,79 @@ async def test_direct_run_preserves_explicit_continuity_false(
     assert config["continuity_mode"] is False
     assert config["storyboard_grid"] == "24"
     assert config["clip_group_size"] == 4
+    assert executed_steps == [
+        "strategy",
+        "scripts",
+        "compliance",
+        "storyboards",
+        "continuity_storyboard_grid",
+    ]
+    assert "keyframe_images" not in executed_steps
+
+
+@pytest.mark.asyncio
+async def test_scenario_s1_no_media_stops_before_provider_backed_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.routers import scenario
+    from src.tools import translate
+
+    executed_steps: list[str] = []
+
+    async def fake_translate_catalog(product_catalog: dict) -> dict:
+        return product_catalog
+
+    class FakeStepRunner:
+        def __init__(self, state_manager: object) -> None:
+            self.state_manager = state_manager
+
+        async def init_state(
+            self,
+            config: dict,
+            mode: str = "auto",
+            label: str | None = None,
+            scenario: str = "s1",
+        ) -> str:
+            return label or "s1_no_media_route_test"
+
+        async def run_step(self, label: str, step_name: str) -> dict:
+            executed_steps.append(step_name)
+            return {
+                "label": label,
+                "scenario": "s1",
+                "steps": {},
+                "errors": [],
+                "media_synthesis_errors": [],
+            }
+
+        async def resume(self, label: str) -> dict:
+            raise AssertionError("no-media /scenario/s1 must not resume the full media pipeline")
+
+    monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
+    monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
+    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
+
+    result = await scenario.run_s1_product_direct(
+        {
+            "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
+            "target_platforms": ["tiktok"],
+            "video_duration": 15,
+            "enable_media_synthesis": False,
+        }
+    )
+
+    assert result["keyframe_images"] == []
+    assert result["clip_paths"] == []
+    assert result["audio_paths"] == []
+    assert result["thumbnail_image_paths"] == []
+    assert result["final_video_path"] == ""
+    assert executed_steps == [
+        "strategy",
+        "scripts",
+        "compliance",
+        "storyboards",
+        "continuity_storyboard_grid",
+    ]
 
 
 @pytest.mark.asyncio

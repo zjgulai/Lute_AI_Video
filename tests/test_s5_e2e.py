@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -24,6 +25,7 @@ import src.skills.remotion_assemble as remotion_assemble_skill
 import src.skills.seedance_prompt as seedance_prompt_skill
 import src.skills.seedance_video_generate as seedance_video_generate_skill
 from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
+from src.routers._state import S5BrandVlogRequest
 from src.skills.base import SkillResult
 from src.skills.elevenlabs_tts import ElevenLabsTTSSkill
 from src.skills.registry import SkillRegistry
@@ -205,6 +207,127 @@ PRODUCT_SKU_FIXTURE = {
 SELECTED_MODELS_FIXTURE = [
     {"name": "Sarah", "role": "new mom", "description": "28yo, first-time mother"},
 ]
+
+
+def test_s5_import_does_not_register_forbidden_media_skills():
+    SkillRegistry.clear_global()
+    module = importlib.import_module("src.pipeline.s5_brand_vlog_pipeline")
+    importlib.reload(module)
+
+    forbidden = {
+        "seedance-video-prompt",
+        "seedance-video-generate-skill",
+        "elevenlabs-tts-skill",
+        "remotion-assemble-skill",
+        "media-quality-audit-skill",
+    }
+
+    assert forbidden.isdisjoint(SkillRegistry._global_skills)
+
+
+@pytest.mark.asyncio
+async def test_s5_no_media_run_stops_before_video_prompts(monkeypatch):
+    captured: dict[str, Any] = {"steps": [], "resume_called": False}
+
+    class FakeRunner:
+        def __init__(self, state_manager):
+            class NoopStateManager:
+                async def save(self, label, state):
+                    return None
+
+            self.state_manager = NoopStateManager()
+
+        async def init_state(self, *, config, mode, label, scenario):
+            captured["config"] = config
+            captured["scenario"] = scenario
+            return label
+
+        async def run_step(self, label, step_name):
+            captured["steps"].append(step_name)
+            steps: dict[str, Any] = {}
+            if "vlog_strategy" in captured["steps"]:
+                steps["vlog_strategy"] = {
+                    "output": {
+                        "shots": [
+                            {
+                                "shot_type": "close-up",
+                                "duration_seconds": 4,
+                                "visual_description": "Product close-up",
+                                "voiceover": "轻松开始。",
+                                "product_angle": "主视图",
+                            }
+                        ],
+                        "scripts": [{"segments": [{"voiceover": "轻松开始。"}]}],
+                    }
+                }
+            if "continuity_storyboard_grid" in captured["steps"]:
+                steps["continuity_storyboard_grid"] = {"output": {"clip_groups": []}}
+            return {"steps": steps, "errors": [], "media_synthesis_errors": []}
+
+        async def resume(self, label):
+            captured["resume_called"] = True
+            return {"steps": {}, "errors": []}
+
+    monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeRunner)
+
+    result = await S5BrandVlogPipeline().run(
+        brand_id="lactfit",
+        product_sku=PRODUCT_SKU_FIXTURE,
+        scene_id="living-room",
+        selected_models=SELECTED_MODELS_FIXTURE,
+        story_description="Test story",
+        video_duration=15,
+        enable_media_synthesis=False,
+    )
+
+    assert captured["config"]["enable_media_synthesis"] is False
+    assert captured["scenario"] == "s5"
+    assert captured["steps"] == ["vlog_strategy", "continuity_storyboard_grid"]
+    assert captured["resume_called"] is False
+    assert result["success"] is True
+    assert result["steps_completed"] == 2
+    assert result["video_prompts"] == []
+    assert result["seedance_clips"] == []
+    assert result["clip_paths"] == []
+    assert result["audio_paths"] == []
+    assert result["final_video_path"] == ""
+    assert result["render_json_path"] == ""
+
+
+@pytest.mark.asyncio
+async def test_scenario_s5_route_passes_enable_media_synthesis_false(monkeypatch):
+    from src.pipeline import s5_brand_vlog_pipeline
+    from src.routers import scenario
+
+    captured: dict[str, Any] = {}
+
+    async def fake_run(self: S5BrandVlogPipeline, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"success": True, "scenario": "brand_vlog"}
+
+    class FakeRequest:
+        async def json(self) -> dict[str, Any]:
+            return {
+                "enable_media_synthesis": False,
+                "scene_id": "living-room",
+            }
+
+    monkeypatch.setattr(s5_brand_vlog_pipeline.S5BrandVlogPipeline, "run", fake_run)
+
+    result = await scenario.run_s5_brand_vlog(
+        S5BrandVlogRequest(
+            brand_id="lactfit",
+            product_sku=PRODUCT_SKU_FIXTURE,
+            scene_id="living-room",
+            selected_models=SELECTED_MODELS_FIXTURE,
+            story_description="Test story",
+            video_duration=15,
+        ),
+        request=FakeRequest(),
+    )
+
+    assert result["success"] is True
+    assert captured["enable_media_synthesis"] is False
 
 
 @pytest.mark.asyncio

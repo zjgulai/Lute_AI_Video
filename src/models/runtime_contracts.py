@@ -49,6 +49,10 @@ class FastModeResult(TypedDict):
     is_stub: bool
     tts_path: str | None
     error: NotRequired[str]
+    artifact_disposition: NotRequired[str]
+    artifact_review_status: NotRequired[str | None]
+    artifact_storage_scope: NotRequired[str]
+    artifact_run_id: NotRequired[str | None]
 
 
 class ClipDetail(TypedDict, total=False):

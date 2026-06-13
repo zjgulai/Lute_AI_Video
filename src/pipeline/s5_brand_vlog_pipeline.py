@@ -7,24 +7,19 @@ Output: full VLOG video via LLM storyboarding → Happy Horse clips → Remotion
 from __future__ import annotations
 
 import asyncio
+import importlib
 import time
 from typing import Any
 
 import structlog
 
-import src.skills.elevenlabs_tts  # noqa: F401
-import src.skills.media_quality_audit  # noqa: F401
-import src.skills.remotion_assemble  # noqa: F401
-
-# Import-time skill auto-registration
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.seedance_video_generate  # noqa: F401
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     all_clips_are_stubs,
     build_continuity_audit_summary,
     build_transitions_from_clip_details,
 )
+from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
@@ -57,6 +52,33 @@ SCENE_MAP = {
     "kitchen": {"name": "厨房", "desc": "高效家务和台面操作"},
 }
 
+_LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
+    "video_prompts": (
+        ("src.skills.seedance_prompt", "seedance-video-prompt"),
+    ),
+    "seedance_clips": (
+        ("src.skills.seedance_video_generate", "seedance-video-generate-skill"),
+        ("src.skills.video_continuity_manager", "video-continuity-manager-skill"),
+    ),
+    "tts_audio": (
+        ("src.skills.elevenlabs_tts", "elevenlabs-tts-skill"),
+    ),
+    "assemble_final": (
+        ("src.skills.remotion_assemble", "remotion-assemble-skill"),
+    ),
+    "audit": (
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+}
+
+
+def _ensure_step_skills_registered(step_name: str) -> None:
+    """Register media-step skills only when that step is actually executed."""
+    for module_name, skill_name in _LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()):
+        module = importlib.import_module(module_name)
+        if skill_name not in SkillRegistry._global_skills:
+            importlib.reload(module)
+
 
 class S5BrandVlogPipeline:
     """品牌VLOG — 素材装配驱动的叙事视频生成管道 (auto mode)."""
@@ -66,6 +88,7 @@ class S5BrandVlogPipeline:
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step (used by StepRunner)."""
         config = state["config"]
+        _ensure_step_skills_registered(step_name)
         reg = SkillRegistry()
         steps = state["steps"]
         errors = state["errors"]
@@ -184,6 +207,7 @@ class S5BrandVlogPipeline:
         story_description: str = "",
         video_duration: int = 30,
         commercial_injection_plan: dict[str, Any] | None = None,
+        enable_media_synthesis: bool = True,
     ) -> dict[str, Any]:
         """Run the full S5 pipeline end-to-end.
 
@@ -215,6 +239,7 @@ class S5BrandVlogPipeline:
             "video_duration": video_duration,
             "product_name": product_name,
             "output_label": label,
+            "enable_media_synthesis": enable_media_synthesis,
         }
         config = with_optional_injection_config(
             config,
@@ -231,7 +256,10 @@ class S5BrandVlogPipeline:
 
         start = time.perf_counter()
         try:
-            final_state = await runner.resume(label)
+            if enable_media_synthesis:
+                final_state = await runner.resume(label)
+            else:
+                final_state = await self._resume_without_media_synthesis(runner, label)
         except Exception as e:
             logger.error("s5_vlog: pipeline failed", error=str(e), trace_id=trace_id)
             return {"success": False, "errors": [str(e)], "scripts": []}
@@ -249,23 +277,26 @@ class S5BrandVlogPipeline:
         assemble_out = self._get_step_output(steps, "assemble_final")
         final_video, render_json_path = extract_assemble_paths(assemble_out)
         audit_report = self._get_step_output(steps, "audit") or {}
+        success = len(errors) == 0 and (bool(final_video) if enable_media_synthesis else bool(scripts))
 
         pipeline_metrics.record_pipeline(
             label=label, scenario="brand_vlog",
-            total_duration_ms=duration_ms, success=len(errors) == 0,
+            total_duration_ms=duration_ms, success=success,
             error_count=len(errors),
         )
 
         return {
-            "success": len(errors) == 0 and bool(final_video),
+            "success": success,
             "label": label,
             "scenario": "brand_vlog",
             "trace_id": trace_id,
+            "video_duration": video_duration,
             "briefs": [],
             "scripts": scripts,
             "storyboards": [],
             "video_prompts": video_prompts,
             "seedance_output": seedance_out,
+            "seedance_clips": clip_paths,
             "clip_paths": clip_paths,
             "audio_paths": audio_paths if isinstance(audio_paths, list) else [],
             "final_video_path": final_video,
@@ -274,8 +305,25 @@ class S5BrandVlogPipeline:
             "thumbnail_image_paths": [],
             "audit_report": audit_report,
             "errors": errors,
-            "steps_completed": 6,
+            "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
+            "steps_completed": 7 if enable_media_synthesis else 2,
         }
+
+    async def _resume_without_media_synthesis(self, runner, label: str) -> dict[str, Any]:
+        """Run only S5 pre-media steps; stop before Seedance prompt generation."""
+        final_state: dict[str, Any] = {}
+        for step_name in get_scenario_step_order("s5"):
+            if step_name == "video_prompts":
+                break
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+        if final_state and not final_state.get("pipeline_degraded"):
+            final_state["current_step"] = None
+            save = getattr(runner.state_manager, "save", None)
+            if callable(save):
+                await save(label, final_state)
+        return final_state
 
     # ═══ Step ①: VLOG Strategy (LLM) ═══
 

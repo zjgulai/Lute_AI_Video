@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+import src.pipeline.s4_live_shoot_pipeline as s4_live_shoot_pipeline
 import src.skills.continuity_storyboard_grid as continuity_storyboard_grid_skill
 import src.skills.script_writer as script_writer_skill
 import src.skills.seedance_prompt as seedance_prompt_skill
@@ -62,12 +63,105 @@ async def test_s4_full_pipeline_mock():
         target_platforms=["tiktok", "shopify"],
     )
 
-    assert result.get("success") is True
+    assert result.get("success") is False
     assert result.get("scenario") == "s4_live_shoot"
     assert isinstance(result.get("scripts"), list)
     assert isinstance(result.get("video_prompts"), list)
     assert isinstance(result.get("thumbnail_sets"), list)
+    assert "all stub clips" in " ".join(result.get("errors", []))
     assert result.get("steps_completed") == 7
+
+
+def test_s4_import_does_not_register_media_prompt_or_generation_skills():
+    forbidden_media_skill_names = {
+        "seedance-video-prompt",
+        "gpt-image-thumbnail-prompt",
+        "seedance-video-generate-skill",
+        "elevenlabs-tts-skill",
+        "remotion-assemble-skill",
+        "media-quality-audit-skill",
+    }
+
+    SkillRegistry.clear_global()
+    importlib.reload(s4_live_shoot_pipeline)
+
+    assert forbidden_media_skill_names.isdisjoint(SkillRegistry._global_skills)
+
+
+def test_s4_media_prompt_skills_register_lazily_for_media_steps():
+    SkillRegistry.clear_global()
+    importlib.reload(s4_live_shoot_pipeline)
+
+    assert "seedance-video-prompt" not in SkillRegistry._global_skills
+
+    s4_live_shoot_pipeline._ensure_step_skills_registered("video_prompts")
+
+    assert "seedance-video-prompt" in SkillRegistry._global_skills
+
+
+@pytest.mark.asyncio
+async def test_s4_no_media_stops_before_provider_backed_steps(monkeypatch: pytest.MonkeyPatch):
+    executed_steps: list[str] = []
+    saved_states: list[dict[str, Any]] = []
+    captured: dict[str, Any] = {}
+
+    class FakeStateManager:
+        async def save(self, label: str, state: dict[str, Any]) -> None:
+            saved_states.append({"label": label, "current_step": state.get("current_step")})
+
+    class FakeStepRunner:
+        def __init__(self, state_manager: object) -> None:
+            self.state_manager = FakeStateManager()
+
+        async def init_state(self, *, config, mode="auto", label=None, scenario="s4"):
+            captured["config"] = config
+            captured["scenario"] = scenario
+            return label or "s4_no_media_fixture"
+
+        async def resume(self, label):
+            raise AssertionError("no-media S4 must not resume the full media pipeline")
+
+        async def run_step(self, label, step_name):
+            executed_steps.append(step_name)
+            steps: dict[str, dict[str, Any]] = {}
+            if "scripts" in executed_steps:
+                steps["scripts"] = {"output": [{"id": "s4-script", "segments": []}]}
+            if "continuity_storyboard_grid" in executed_steps:
+                steps["continuity_storyboard_grid"] = {"output": {"clip_groups": []}}
+            return {
+                "label": label,
+                "scenario": "s4",
+                "steps": steps,
+                "errors": [],
+                "media_synthesis_errors": [],
+                "pipeline_degraded": False,
+            }
+
+    monkeypatch.setattr(s4_live_shoot_pipeline, "StepRunner", FakeStepRunner)
+
+    result = await s4_live_shoot_pipeline.S4LiveShootPipeline().run(
+        footage_assets=FOOTAGE_FIXTURE,
+        product_info=PRODUCT_INFO_FIXTURE,
+        topic="Working mom daily routine",
+        target_platforms=["tiktok"],
+        video_duration=15,
+        enable_media_synthesis=False,
+    )
+
+    assert captured["scenario"] == "s4"
+    assert captured["config"]["enable_media_synthesis"] is False
+    assert captured["config"]["video_duration"] == 15
+    assert executed_steps == ["scripts", "continuity_storyboard_grid"]
+    assert "video_prompts" not in executed_steps
+    assert result["success"] is True
+    assert result["video_prompts"] == []
+    assert result["thumbnail_sets"] == []
+    assert result["seedance_clips"] == []
+    assert result["clip_paths"] == []
+    assert result["audio_paths"] == []
+    assert result["final_video_path"] == ""
+    assert result["steps_completed"] == 2
+    assert saved_states[-1]["current_step"] is None
 
 
 @pytest.mark.asyncio
@@ -357,3 +451,37 @@ def test_s4_fallback_clip_groups_include_topic_and_stock_context():
     prompt = groups[0]["seedance_prompt"]
     assert "Working mom desk routine" in prompt
     assert "2 approved stock/live reference asset" in prompt
+
+
+@pytest.mark.asyncio
+async def test_scenario_s4_route_passes_enable_media_synthesis_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.routers import scenario
+
+    captured: dict[str, Any] = {}
+
+    class FakeS4Pipeline:
+        async def run(self, **kwargs):
+            captured.update(kwargs)
+            return {"success": True, "scenario": "s4_live_shoot"}
+
+    monkeypatch.setattr(
+        "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
+        FakeS4Pipeline,
+    )
+
+    response = await scenario.run_s4_live_shoot(
+        {
+            "footage_assets": [],
+            "product_info": {"name": "Momcozy UV Sterilizer", "brand_name": "Momcozy"},
+            "topic": "kitchen hygiene",
+            "target_platforms": ["tiktok"],
+            "video_duration": 15,
+            "enable_media_synthesis": False,
+        }
+    )
+
+    assert response["success"] is True
+    assert captured["enable_media_synthesis"] is False
+    assert captured["video_duration"] == 15

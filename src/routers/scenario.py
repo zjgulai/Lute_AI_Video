@@ -4,7 +4,7 @@ import asyncio
 import time
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 logger = structlog.get_logger()
@@ -20,6 +20,7 @@ from src.config import DEFAULT_LANGUAGES
 from src.models.commercial_contracts import PromptCompileInput, QualityContract
 from src.pipeline.prompt_preview_audit_workflow import build_prompt_preview_audit_workflow
 from src.pipeline.runtime_injection_executor import RuntimeInjectionResult
+from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.scenario_injection_plan import (
     CURRENT_STEP_INJECTION_KEY,
     STEP_INJECTION_DATA_KEY,
@@ -110,6 +111,23 @@ def _with_commercial_injection_config(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+async def _resume_s1_without_media_synthesis(step_runner: Any, label: str) -> dict[str, Any]:
+    """Run S1 only through pre-media steps; stop before provider-backed generation."""
+    final_state: dict[str, Any] = {}
+    for step_name in get_scenario_step_order("s1"):
+        if step_name == "keyframe_images":
+            break
+        final_state = await step_runner.run_step(label, step_name)
+        if final_state.get("pipeline_degraded"):
+            break
+    if final_state and not final_state.get("pipeline_degraded"):
+        final_state["current_step"] = None
+        save = getattr(step_runner.state_manager, "save", None)
+        if callable(save):
+            await save(label, final_state)
+    return final_state
+
+
 def _assert_prompt_preview_scenario_match(
     scenario: str,
     body: PromptPreviewAuditRequest,
@@ -190,7 +208,10 @@ async def run_s1_product_direct(body: dict[str, Any]):
     from src.tools.cost_tracker import set_thread_id
     set_thread_id(label)
     try:
-        final_state = await step_runner.resume(label)
+        if config["enable_media_synthesis"]:
+            final_state = await step_runner.resume(label)
+        else:
+            final_state = await _resume_s1_without_media_synthesis(step_runner, label)
     except TypeError as te:
         # structlog kwarg compatibility — fall back to legacy pipeline
         import logging as _log
@@ -295,6 +316,9 @@ async def run_s2_brand_campaign(body: S2BrandCampaignRequest):
         week=body.week,
         video_duration=coerce_video_duration(body_data, default=60),
         enable_media_synthesis=body.enable_media_synthesis,
+        artifact_disposition=body.artifact_disposition,
+        provider_max_retries=body.provider_max_retries,
+        output_label=body.output_label,
         commercial_injection_plan=commercial_injection_plan,
     )
     return r
@@ -340,6 +364,7 @@ async def run_s3_influencer_remix(body: dict[str, Any]):
         influencer_name=body.get("influencer_name", "Influencer"),
         brief_id=body.get("brief_id", ""),
         video_duration=coerce_video_duration(body),
+        enable_media_synthesis=body.get("enable_media_synthesis", True),
     )
     return r.to_dict()
 
@@ -363,12 +388,15 @@ async def run_s4_live_shoot(body: dict[str, Any]):
         product_info=product_info,
         topic=body.get("topic", ""),
         target_platforms=body.get("target_platforms", ["tiktok"]),
+        brand_guidelines=body.get("brand_guidelines", {}),
+        video_duration=coerce_video_duration(body),
+        enable_media_synthesis=body.get("enable_media_synthesis", True),
     )
     return r
 
 
 @router.post("/scenario/s5", dependencies=[Depends(verify_api_key)])
-async def run_s5_brand_vlog(body: S5BrandVlogRequest):
+async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
     """Run S5 Brand VLOG pipeline.
 
     Request body:
@@ -381,6 +409,10 @@ async def run_s5_brand_vlog(body: S5BrandVlogRequest):
     """
     _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     body_data = body.model_dump()
+    raw_body = await request.json() if request is not None else {}
+    enable_media_synthesis = True
+    if isinstance(raw_body, dict):
+        enable_media_synthesis = raw_body.get("enable_media_synthesis", True) is not False
     commercial_injection_plan = _with_commercial_injection_config(
         {},
         body.commercial_injection_plan,
@@ -405,6 +437,7 @@ async def run_s5_brand_vlog(body: S5BrandVlogRequest):
         story_description=body.story_description,
         video_duration=coerce_video_duration(body_data),
         commercial_injection_plan=commercial_injection_plan,
+        enable_media_synthesis=enable_media_synthesis,
     )
     return r
 
@@ -442,11 +475,17 @@ async def fast_generate(req: FastModeRequest):
     from src.services.fast_mode import get_fast_mode_service
 
     service = get_fast_mode_service()
+    ctx = get_auth_context()
+    tenant_id = ctx.tenant_id if ctx is not None else "default"
     try:
         result = await service.generate(
             user_prompt=req.user_prompt,
             duration=max(10, min(15, req.duration)),
             enable_tts=req.enable_tts,
+            artifact_disposition=req.artifact_disposition,
+            tenant_id=tenant_id,
+            artifact_run_id=f"fast_generate_{int(time.time())}",
+            provider_max_retries=req.provider_max_retries,
         )
         return result
     except Exception as e:
@@ -473,9 +512,13 @@ async def fast_submit(req: FastModeRequest):
     )
 
     service = get_fast_mode_service()
+    ctx = get_auth_context()
+    tenant_id = ctx.tenant_id if ctx is not None else "default"
     duration = max(10, min(15, req.duration))
     enable_tts = req.enable_tts
     user_prompt = req.user_prompt
+    artifact_disposition = req.artifact_disposition
+    provider_max_retries = req.provider_max_retries
 
     task_id_holder: dict[str, str] = {}
 
@@ -491,6 +534,10 @@ async def fast_submit(req: FastModeRequest):
             duration=duration,
             enable_tts=enable_tts,
             on_stage=_on_stage,
+            artifact_disposition=artifact_disposition,
+            tenant_id=tenant_id,
+            artifact_run_id=tid or None,
+            provider_max_retries=provider_max_retries,
         )
 
     task = asyncio.create_task(_run())
@@ -567,7 +614,9 @@ async def start_s1_pipeline(body: S1StartRequest):
         label = await step_runner.init_state(config=config, mode=body.mode)
 
         if body.mode == "auto":
-            return await step_runner.resume(label)
+            if body.enable_media_synthesis:
+                return await step_runner.resume(label)
+            return await _resume_s1_without_media_synthesis(step_runner, label)
 
         return {
             "label": label,
@@ -1331,7 +1380,10 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
     # Start pipeline in background so HTTP returns immediately
     async def _background_run() -> None:
         try:
-            await step_runner.resume(label)
+            if scenario == "s1" and config.get("enable_media_synthesis") is False:
+                await _resume_s1_without_media_synthesis(step_runner, label)
+            else:
+                await step_runner.resume(label)
         except Exception as e:
             logger.error("background_run_failed", label=label, scenario=scenario, error=str(e)[:200])
 

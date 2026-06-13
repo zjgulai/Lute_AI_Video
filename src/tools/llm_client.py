@@ -34,7 +34,6 @@ from src.config import (
     KIMI_API_BASE,
     KIMI_MODEL,
     OPENAI_API_KEY,
-    OPENAI_IMAGE_API_BASE,
     OPENAI_MODEL,
 )
 
