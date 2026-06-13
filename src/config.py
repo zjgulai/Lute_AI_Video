@@ -203,6 +203,14 @@ ELEVENLABS_API_BASE: str = os.environ.get("ELEVENLABS_API_BASE", "https://api.el
 TIKTOK_API_UPLOAD_URL: str = os.environ.get("TIKTOK_API_UPLOAD_URL", "https://open-api.tiktok.com")
 SHOPIFY_GRAPHQL_URL_TEMPLATE: str = os.environ.get("SHOPIFY_GRAPHQL_URL_TEMPLATE", "https://{store}/admin/api/2024-07/graphql.json")
 
+# ── Admin health checks ──
+# External provider probes are opt-in so token smokes are not polluted by
+# unrelated admin background checks touching provider APIs.
+ADMIN_EXTERNAL_PROVIDER_HEALTH_CHECKS_ENABLED: bool = (
+    os.environ.get("ADMIN_EXTERNAL_PROVIDER_HEALTH_CHECKS_ENABLED", "").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
+
 # ── Pipeline constants (now configurable via env) ──
 MAX_CLIPS_PER_DEMO: int = int(os.environ.get("MAX_CLIPS_PER_DEMO", "3"))
 MAX_THUMBNAILS_PER_DEMO: int = int(os.environ.get("MAX_THUMBNAILS_PER_DEMO", "2"))

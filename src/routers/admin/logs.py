@@ -213,6 +213,23 @@ import asyncio as _asyncio
 _health_history: list[dict[str, Any]] = []
 _health_lock = _asyncio.Lock()
 
+_EXTERNAL_PROVIDER_HEALTH_SERVICES = ("deepseek", "poyo", "siliconflow")
+
+
+def _external_provider_health_checks_enabled() -> bool:
+    from src.config import ADMIN_EXTERNAL_PROVIDER_HEALTH_CHECKS_ENABLED
+
+    return ADMIN_EXTERNAL_PROVIDER_HEALTH_CHECKS_ENABLED
+
+
+def _skipped_external_provider_health(name: str) -> dict[str, Any]:
+    return {
+        "status": "skipped",
+        "latency_ms": 0,
+        "reason": "external_provider_health_checks_disabled",
+        "service": name,
+    }
+
 
 async def _check_single_service(name: str) -> dict[str, Any]:
     """Check a single external service. Returns {status, latency_ms}."""
@@ -234,6 +251,7 @@ async def _check_single_service(name: str) -> dict[str, Any]:
             await client.ainvoke("", "hi")
         elif name == "poyo":
             import httpx
+
             from src.config import POYO_API_BASE_URL, POYO_API_KEY
             async with httpx.AsyncClient(timeout=10.0) as http_client:
                 resp = await http_client.get(
@@ -244,6 +262,7 @@ async def _check_single_service(name: str) -> dict[str, Any]:
                     raise Exception(f"POYO returned {resp.status_code}")
         elif name == "siliconflow":
             import httpx
+
             from src.config import SILICONFLOW_API_BASE, SILICONFLOW_API_KEY
             async with httpx.AsyncClient(timeout=10.0) as http_client:
                 resp = await http_client.get(
@@ -270,13 +289,24 @@ async def _check_single_service(name: str) -> dict[str, Any]:
         return {"status": "down", "latency_ms": latency_ms}
 
 
-async def run_health_checks() -> None:
+async def run_health_checks(*, include_external_providers: bool | None = None) -> None:
     """Run all health checks and store results. Called by background task."""
     from datetime import datetime as _dt
 
+    external_enabled = (
+        _external_provider_health_checks_enabled()
+        if include_external_providers is None
+        else include_external_providers
+    )
     services = {}
-    for svc in ["postgres", "deepseek", "poyo", "siliconflow", "remotion"]:
-        services[svc] = await _check_single_service(svc)
+    services["postgres"] = await _check_single_service("postgres")
+    if external_enabled:
+        for svc in _EXTERNAL_PROVIDER_HEALTH_SERVICES:
+            services[svc] = await _check_single_service(svc)
+    else:
+        for svc in _EXTERNAL_PROVIDER_HEALTH_SERVICES:
+            services[svc] = _skipped_external_provider_health(svc)
+    services["remotion"] = await _check_single_service("remotion")
 
     entry = {
         "checked_at": _dt.now(UTC).isoformat(),
