@@ -31,6 +31,58 @@ source: human+ai
 - **真实调用授权边界**：L4A/L4B 首轮已完成；任何继续扩大到 S1-S5、Fast Mode、gate、media/poster/quality 的真实调用都归入 `L4C`，必须先通过 no-execute 计划验证并重新取得精确授权、预算和产物处置边界。
 - **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。该边界已在 `P1-65` 复核中闭环。
 
+## 2026-06-14 执行 TODO（当前权威）
+
+本节是 2026-06-14 之后的执行矩阵。执行原则保持“执行一步、测试一步、验收一步”：每一项只在对应证据通过后推进；任何生产 submit、provider 调用、发布、delivery acceptance 或 approved brand token 写入都必须另行取得精确授权。
+
+### P0：立即收口，不消耗 provider
+
+| ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
+|---|---|---|---|---|
+| TODO-P0-1 | Dependabot PR 分批复核与合并 | in_progress | 先处理 all-green 的低风险 PR；失败或 unstable PR 只记录阻塞，不合并 | 每个 PR 单独确认 diff、checks、mergeable、review/thread；本地目标测试通过；合并前需有明确授权 |
+| TODO-P0-2 | ToolBox 产品化计划 checklist 漂移收口 | pending | 只对齐 `docs/workflows/ai-video-toolbox-productization-plan-stable.md` 的状态表与 TODO；不改业务代码 | 文档不再同时表达“已实现”和“未完成”的冲突状态；markdown/frontmatter/link scope 测试通过 |
+| TODO-P0-3 | 默认生产 E2E no-provider baseline | pending | 只运行 `RUN_TOKEN_SMOKE=0` 生产 E2E；禁止 `@token-smoke`、provider、submit | 默认 suite 通过或给出精确失败；确认未触发 `/api/scenario/*`、Fast Mode submit、provider |
+| TODO-P0-4 | L4D-5Y/L4D-5Z 证据索引复核 | pending | 只读检查 `tmp/debug`、portfolio/read-only evidence 与 runbook 文档一致性 | 证据索引只声明 S2 bounded media 到 `seedance_clips`，不外推 full media/S1-S5/publish |
+| TODO-P0-5 | Production key 生命周期治理 | pending | 只读核对临时 key 创建、过期、撤销记录；不展示明文 key | 明确当前可用/已过期/已撤销状态；如需撤销须另行授权 |
+
+### P1：受控真实链路补证，需逐项授权
+
+| ID | 任务 | 当前状态 | 授权要求 | 验收口径 |
+|---|---|---|---|---|
+| TODO-P1-1 | S1 bounded media single-submit smoke | blocked_by_authorization | 需限定 submit=1、image/video job cap、预算、artifact_disposition=pending_review、retry=0 | 只进入 tenant-scoped `pending_review` 或 quarantine；`final_work=0`；无 publish/delivery/token write |
+| TODO-P1-2 | S3 bounded media single-submit smoke | blocked_by_authorization | 同上，且先做 no-provider readiness 与 import/log gate | 只证明 S3 bounded media，不外推 S1/S2/S4/S5 |
+| TODO-P1-3 | S4 bounded media single-submit smoke | blocked_by_authorization | 同上，重点验证 live-shoot continuity 输入和 media stop point | 无 TTS/assemble/audit/publish，产物 pending_review |
+| TODO-P1-4 | S5 bounded media single-submit smoke | blocked_by_authorization | 同上，重点验证 vlog strategy、model selector 与 keyframe input | 无 full-chain assembly，产物 pending_review |
+| TODO-P1-5 | S2 full-media 分段计划 | blocked_by_plan | 先拆成 TTS、thumbnail、assemble、media_quality_audit、final assembly 五个 stop point | 每个 stop point 单独 spec、单独预算、单独止损；不得一次跑完整链 |
+| TODO-P1-6 | S1 gate / step-by-step 真实 token flow | blocked_by_plan | 先做 no-provider readiness，再授权 gate candidate 单步 | gate candidate 数量、重试、产物处置和日志门禁全部可计数 |
+
+### P2：工程韧性与产品闭环
+
+| ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
+|---|---|---|---|---|
+| TODO-P2-1 | metrics / webhook / analytics 真实闭环 | pending | 先做本地/fixture，再做生产只读，再考虑真实事件 | 不把 mock metrics 当成真实业务效果 |
+| TODO-P2-2 | 多租户并发与 API key 隔离压测 | pending | 先本地并发与 request-context 隔离测试；生产只读压测需授权 | 无跨 tenant 数据泄漏；无 contextvar key 污染 |
+| TODO-P2-3 | Quality ML 依赖生产可用性验证 | pending | 先容器 import/runtime smoke；不触发 provider | CLIP/BRISQUE/PySceneDetect/MediaPipe/DeepFace 可用性被逐项记录 |
+| TODO-P2-4 | CloudBase / Render 替代部署路径复核 | pending | 只做文档和配置 drift 审计；不部署 | 明确哪些路径仍可用、哪些已历史化 |
+| TODO-P2-5 | publish / delivery acceptance / approved brand token 设计复核 | pending | 只做 dry-run contract 和人工确认字段隔离 | human-confirmed 字段与 LLM suggestion 字段不混用 |
+
+### 当前禁止外推
+
+- `L4D-5Y` 只证明 S2 bounded media 到 `seedance_clips`，不证明 S2 full media/final assembly。
+- `L4D-5Z` 只证明 portfolio/library read-only 可见性与 `final_work=0`，不证明发布可用。
+- `RUN_TOKEN_SMOKE=1 --list` 只证明 spec 可枚举，不证明真实 E2E 已执行。
+- Dependabot checks 绿色只证明对应 PR 的 CI 通过，不自动证明生产兼容；高风险依赖仍需本地目标测试和人工合并授权。
+
+### 本轮执行记录
+
+- `TODO-P0-1` 已开始：PR `#6` (`yt-dlp>=2026.6.9`) 只读复核通过，diff 仅 `requirements.txt` 一行，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，本地独立 worktree 目标测试 `tests/test_media_tools.py tests/test_health_media_tools.py` 结果 `39 passed`。尚未合并；合并需要下一步明确授权。
+- PR `#6` 已在用户授权后合并到 `main`，merge commit 为 `022b15dc5884aa267c05749f2e2fdda9cfe45ce2`；合并后本地 `main` 已 fast-forward 到 `origin/main`，目标测试 `tests/test_media_tools.py tests/test_health_media_tools.py` 复跑结果 `39 passed`。
+- PR `#5` (`@vitejs/plugin-react 6.0.1 -> 6.0.2`) 只读复核完成，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，diff 仅 `web/package.json` 与 `web/package-lock.json`。本地独立 worktree 的 clean `npm ci` 超过 150 秒无输出，已终止并清理 worktree；因此本地 clean-install 验证未完成，暂不进入合并授权候选。
+- PR `#10` (`alembic>=1.18.4`) 只读复核通过，diff 仅 `requirements.txt` 一行，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`。本地独立 worktree + 临时 venv 验证 Alembic `1.18.4` 可解析 migration tree（head `e4b9c1d2a6f0`，revision count `11`），并复跑 `tests/test_postgres.py::TestThreadIdSchema`，结果 `2 passed`。尚未合并；合并需要下一步明确授权。
+- PR `#10` 已在用户授权后合并到 `main`，merge commit 为 `dba3ea9d3af7bf84e13d69f128c0a10cea347dc8`；合并后本地 `main` 已 fast-forward 到 `origin/main`，Alembic `1.18.4` migration tree 解析复跑通过，`tests/test_postgres.py::TestThreadIdSchema` 复跑结果 `2 passed`。
+- PR `#3` (`transformers>=5.12.0`) 只读复核完成，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，diff 仅 `requirements.txt` 一行；但该变更是生产依赖大版本更新。临时 venv 安装 `transformers>=5.12.0` 超过 120 秒无输出后已中止并清理，未完成 clean install/import 验证；PR worktree 中仅复跑现有 fallback 合约 `tests/test_clip_alignment.py`，结果 `4 passed`。暂不进入合并授权候选。
+- PR `#12` (`faster-whisper>=1.2.1`) CI 失败已完成只读诊断：Python 3.11 与 3.12 失败同源，均为 `tests/test_markdown_frontmatter_compliance.py::test_fully_compliant_frontmatter_values_use_project_vocab`，断言 `source: ai+human` 不在允许集合 `{human+ai, ai, human}`。该失败与 `faster-whisper` 变更无直接关系；`origin/main` 中 `docs/workflows/2026-06-14-s1-continuity-storyboard-branch-cleanup-stable.md` 仍为 `source: ai+human`，本地工作区已修为 `source: human+ai`，本地 `tests/test_markdown_frontmatter_compliance.py` 结果 `4 passed`。该 docs-only frontmatter 修复已纳入本轮提交/推送范围，推送后需观察 PR `#12` checks 是否自动重新触发；PR `#12` 暂不进入合并授权候选。
+
 ## 1.01 2026-06-11 L4B 生产只读回读已通过
 
 - **生产同步** — 已把本轮 L4A 产物同步到生产 Docker volume 的 `output/tenants/momcozy-marketing/pending_review/momcozy_sterilizer_smoke_20260611/`，并最小同步 `src/routers/portfolio.py` 到 Lighthouse 后端。远端原 `portfolio.py` 已备份为 `/opt/ai-video/src/routers/portfolio.py.bak-20260611160250`。
