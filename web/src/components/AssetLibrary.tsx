@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getMediaUrl, apiFetch } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
+import RuntimeMediaImage from "./RuntimeMediaImage";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface Asset {
   filename: string;
@@ -21,6 +23,8 @@ interface Props {
 
 export default function AssetLibrary({ onClose }: Props) {
   const { t, locale } = useI18n();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [filter, setFilter] = useState<"all" | "video" | "image" | "audio">("all");
   const [loading, setLoading] = useState(true);
@@ -88,8 +92,28 @@ export default function AssetLibrary({ onClose }: Props) {
     if (asset.mediaUrl) window.open(asset.mediaUrl, "_blank", "noopener,noreferrer");
   };
 
+  const closePreview = () => setPreview(null);
+
+  useModalBehavior({
+    open: !preview,
+    onClose,
+    initialFocusRef: closeButtonRef,
+  });
+
+  useModalBehavior({
+    open: Boolean(preview),
+    onClose: closePreview,
+    initialFocusRef: previewCloseRef,
+  });
+
   return (
-    <div className="apple-modal-overlay" onClick={onClose}>
+    <div
+      className="apple-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="asset-library-title"
+      onClick={onClose}
+    >
       <div
         className="apple-card w-full max-w-3xl max-h-[80vh] flex flex-col animate-scale-in"
         onClick={(e) => e.stopPropagation()}
@@ -104,9 +128,17 @@ export default function AssetLibrary({ onClose }: Props) {
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-[var(--text-h1)]">{t("asset.title")}</h2>
+            <h2 id="asset-library-title" className="text-base font-semibold text-[var(--text-h1)]">
+              {t("asset.title")}
+            </h2>
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-[var(--bg-panel)] flex items-center justify-center cursor-pointer">
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            aria-label={t("common.close")}
+            className="w-8 h-8 rounded-lg hover:bg-[var(--bg-panel)] flex items-center justify-center cursor-pointer"
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D2C3BE" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -185,7 +217,7 @@ export default function AssetLibrary({ onClose }: Props) {
                   <div className="aspect-video bg-[var(--bg-panel)] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom relative">
                     {asset.type === "image" ? (
                       asset.mediaUrl ? (
-                        <img
+                        <RuntimeMediaImage
                           src={asset.mediaUrl}
                           alt={asset.filename}
                           className="w-full h-full object-cover pointer-events-none select-none"
@@ -201,7 +233,7 @@ export default function AssetLibrary({ onClose }: Props) {
                     ) : asset.type === "video" ? (
                       asset.thumbnailUrl ? (
                         <>
-                          <img
+                          <RuntimeMediaImage
                             src={asset.thumbnailUrl}
                             alt={asset.filename}
                             className="w-full h-full object-cover pointer-events-none select-none"
@@ -260,8 +292,10 @@ export default function AssetLibrary({ onClose }: Props) {
       {preview && (
         <div
           className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/75 backdrop-blur-sm p-4"
-          onClick={() => setPreview(null)}
-          role="presentation"
+          onClick={closePreview}
+          role="dialog"
+          aria-modal="true"
+          aria-label={preview.filename}
         >
           <div
             className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl overflow-hidden bg-[var(--bg-page)] shadow-2xl"
@@ -280,10 +314,11 @@ export default function AssetLibrary({ onClose }: Props) {
                   {t("asset.openInNewTab")}
                 </button>
                 <button
+                  ref={previewCloseRef}
                   type="button"
                   className="w-8 h-8 rounded-lg bg-white/10 text-white flex items-center justify-center hover:bg-white/20"
-                  onClick={() => setPreview(null)}
-                  aria-label="Close"
+                  onClick={closePreview}
+                  aria-label={t("common.close")}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -303,7 +338,7 @@ export default function AssetLibrary({ onClose }: Props) {
                 />
               )}
               {preview.type === "image" && (
-                <img
+                <RuntimeMediaImage
                   src={preview.mediaUrl}
                   alt={preview.filename}
                   className="max-h-[75vh] max-w-full object-contain"

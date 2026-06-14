@@ -4,7 +4,7 @@ doc_type: workflow
 module: deploy
 status: stable
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-31
 owner: self
 source: human+ai
 ---
@@ -13,13 +13,19 @@ source: human+ai
 
 The project ships three deploy targets, in priority order:
 
-1. **Tencent Lighthouse (canonical)** — current production at `https://101.34.52.232`.
-  `deploy/lighthouse/` contains `docker-compose.prod.yml` (backend + frontend + nginx +
-   rendering), `nginx.conf` (with 1500s `proxy_read_timeout` for long-running pipelines),
-   and `.env.prod` (live secrets — gitignored). Deploy via `rsync --delete --chmod=F644,D755`
-   to `ubuntu@101.34.52.232:/opt/ai-video/`, excluding `.env.prod`, SSL cert files, `.pem`,
-   `.git`, build outputs, virtualenvs, and runtime output. Then run
-   `cd /opt/ai-video/deploy/lighthouse && bash deploy.sh`.
+1. **Tencent Lighthouse (canonical)** — current production at `https://video.lute-tlz-dddd.top`.
+   IP fallback is `https://101.34.52.232`. `deploy/lighthouse/` contains
+   `docker-compose.prod.yml` (backend + frontend + nginx +
+   rendering), `nginx.conf` (server blocks) and `ai_video_locations.conf`
+   (shared AI Video route rules; `/api/scenario/`, `/api/fast/`, and `/api/pipeline/`
+   keep `proxy_read_timeout 1500s`, `proxy_send_timeout 1500s`, and
+   `proxy_buffering off` for long-running pipelines),
+   `.env.prod` (live secrets — gitignored), `rsync-excludes.txt` (single source of truth for
+   safe sync exclusions), `build-and-deploy.sh` (local safe sync wrapper), and `deploy.sh`
+   (remote host build + container restart). Deploy from the local repo root via
+   `SSH_KEY=/path/to/ai_video.pem DRY_RUN=1 deploy/lighthouse/build-and-deploy.sh`, confirm the
+   dry-run has no unsafe `deleting ...` lines, then run
+   `SSH_KEY=/path/to/ai_video.pem deploy/lighthouse/build-and-deploy.sh`.
    Note: rsync to bind-mounted nginx.conf needs `--inplace --no-whole-file`. **Do not use**
    `docker restart ai_video_nginx` for volume mount changes (e.g. adding `proxy_params.conf`);
    `restart` reuses the existing container and ignores new volume declarations in
@@ -38,6 +44,17 @@ The project ships three deploy targets, in priority order:
    **2026-05-20 admin 拆包更新**: `src/routers/admin.py` 已拆为 `src/routers/admin/`
    包。部署同步必须带 `--delete`，且 `deploy.sh` 会额外删除服务器上的旧
    `/opt/ai-video/src/routers/admin.py`，防止 stale module 抢占 import。
+   **2026-05-27 部署同步治理**: `build-and-deploy.sh` 成为唯一推荐的手工同步入口；
+   安全排除规则集中在 `deploy/lighthouse/rsync-excludes.txt`，覆盖 `.env.prod`、证书、
+   pem、根层 `node_modules`、缓存目录、测试报告、`web/dist`、`web/.next`、`output` 和
+   `*.bak*`。`deploy.sh` 的 backend health check 改为最多 120 秒轮询，避免启动窗口内的
+   502 误报。
+   **2026-05-31 部署安全更新**: `deploy.sh` 和 `smoke.sh` 默认不调用
+   `/api/fast/generate`，避免未充值或不希望消耗外部额度时触发真实生成。充值后如需验证
+   真实生成链路，显式执行
+   `RUN_TOKEN_SMOKE=1 API_KEY=... BASE=https://video.lute-tlz-dddd.top bash smoke.sh`。
+   最近一次部署验证：`/` 200、`/api/health` 200、`persistence.backend=postgresql`、
+   `POST /api/pipeline/start` 无 key 返回 401。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
   `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.

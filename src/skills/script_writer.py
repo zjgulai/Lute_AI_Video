@@ -1,9 +1,4 @@
-"""Script writer skill — generates video scripts from content briefs.
-
-Uses LLM to produce structured 30-second short video scripts with
-hook/solution/CTA segments. Falls back to template-generated scripts
-when the LLM is unavailable.
-"""
+"""Script writer skill — generates video scripts from content briefs."""
 
 from __future__ import annotations
 
@@ -31,6 +26,52 @@ def _sanitize_prompt_value(value: str, max_len: int = 200) -> str:
     # Keep only safe characters
     safe = "".join(ch for ch in cleaned if _PROMPT_SAFE_PATTERN.match(ch))
     return safe[:max_len].strip()
+
+
+def _coerce_video_duration(value: Any) -> int:
+    try:
+        duration = int(value)
+    except (TypeError, ValueError):
+        return 30
+    return duration if duration in {15, 30, 45, 60, 90} else 30
+
+
+def _duration_plan(video_duration: int) -> dict[str, int]:
+    video_duration = _coerce_video_duration(video_duration)
+    hook_end = 3
+    cta_length = 3 if video_duration <= 15 else 5
+    cta_start = max(hook_end + 1, video_duration - cta_length)
+    return {"hook_end": hook_end, "cta_start": cta_start}
+
+
+def _normalize_script_duration(script: dict[str, Any], video_duration: int) -> dict[str, Any]:
+    segments = script.get("segments")
+    if not isinstance(segments, list) or not segments:
+        script["total_duration"] = video_duration
+        return script
+
+    try:
+        current_total = max(float(seg.get("end_time", 0)) for seg in segments if isinstance(seg, dict))
+    except (TypeError, ValueError):
+        current_total = 0.0
+    if current_total <= 0:
+        script["total_duration"] = video_duration
+        return script
+
+    if abs(current_total - video_duration) > 0.01:
+        scale = video_duration / current_total
+        for seg in segments:
+            if not isinstance(seg, dict):
+                continue
+            start = float(seg.get("start_time", 0))
+            end = float(seg.get("end_time", start + 1))
+            seg["start_time"] = round(start * scale, 2)
+            seg["end_time"] = round(max(end * scale, (start * scale) + 1), 2)
+        if isinstance(segments[-1], dict):
+            segments[-1]["end_time"] = video_duration
+
+    script["total_duration"] = video_duration
+    return script
 
 # ── System Prompts ──────────────────────────────────────────────────────
 
@@ -223,18 +264,32 @@ class ScriptWriterSkill(SkillCallable):
         languages = params.get("target_languages", DEFAULT_LANGUAGES)
         brand_guidelines = params.get("brand_guidelines", {})
         variant = params.get("variant", "standard")
-        logger.info("script-writer: generating", count=len(briefs), langs=languages, variant=variant)
+        video_duration = _coerce_video_duration(params.get("video_duration", 30))
+        logger.info(
+            "script-writer: generating",
+            count=len(briefs),
+            langs=languages,
+            variant=variant,
+            video_duration=video_duration,
+        )
 
         # Parallel LLM calls: each brief × language combination runs concurrently
         async def _gen_one(brief: dict[str, Any], lang: str) -> dict[str, Any]:
             try:
-                script = await self._call_llm(brief, brand_guidelines, lang, llm, variant=variant)
+                script = await self._call_llm(
+                    brief,
+                    brand_guidelines,
+                    lang,
+                    llm,
+                    variant=variant,
+                    video_duration=video_duration,
+                )
                 if script is None:
-                    script = self._gen_fallback(brief, lang)
+                    script = self._gen_fallback(brief, lang, video_duration=video_duration)
                 return script
             except Exception:
                 logger.warning("script-writer: LLM call failed, using fallback", brief_id=brief.get("id"), lang=lang)
-                return self._gen_fallback(brief, lang)
+                return self._gen_fallback(brief, lang, video_duration=video_duration)
 
         tasks = [_gen_one(brief, lang) for brief in briefs for lang in languages]
         scripts = await asyncio.gather(*tasks)
@@ -262,6 +317,7 @@ class ScriptWriterSkill(SkillCallable):
         language: str,
         llm: Any,
         variant: str = "standard",
+        video_duration: int = 30,
     ) -> dict[str, Any] | None:
         """Call the LLM to generate a script for one brief
 
@@ -298,6 +354,18 @@ class ScriptWriterSkill(SkillCallable):
         # Append variant-specific prompt suffix if non-empty
         if variant_suffix:
             system_prompt = system_prompt + "\n\n" + variant_suffix
+        timing = _duration_plan(video_duration)
+        system_prompt = (
+            system_prompt
+            + "\n\n"
+            + (
+                "Override the generic example timing above for this request: "
+                f"generate a strict {video_duration}-second script with segments "
+                f"Hook 0-{timing['hook_end']}s, Body {timing['hook_end']}-{timing['cta_start']}s, "
+                f"CTA {timing['cta_start']}-{video_duration}s. "
+                f"Set total_duration to {video_duration}."
+            )
+        )
 
         product_name = _sanitize_prompt_value(brief.get("product_name", brief.get("topic", "Product")))
         raw_usps = brief.get("usp_priority", brief.get("usps", ["quality"]))
@@ -315,7 +383,7 @@ class ScriptWriterSkill(SkillCallable):
             brand_guidelines=json.dumps(brand_guidelines, indent=2, ensure_ascii=False),
             platform=platform,
             language=language,
-        )
+        ).replace("30-second", f"{video_duration}-second")
 
         try:
             raw = await llm.invoke_json(system_prompt, user_message, model="deepseek-chat")
@@ -338,16 +406,21 @@ class ScriptWriterSkill(SkillCallable):
             "brand_name": brief.get("brand_name", ""),
             "language": language,
             "platform": platform,
-            "total_duration": raw.get("total_duration", 30),
+            "total_duration": raw.get("total_duration", video_duration),
             "segments": segments,
             "hashtags": raw.get("hashtags", []),
             "cta_text": raw.get("cta_text", ""),
             "hook_type": hook_type,
             "video_type": video_type,
         }
-        return enriched
+        return _normalize_script_duration(enriched, video_duration)
 
-    def _gen_fallback(self, brief: dict[str, Any], lang: str) -> dict[str, Any]:
+    def _gen_fallback(
+        self,
+        brief: dict[str, Any],
+        lang: str,
+        video_duration: int = 30,
+    ) -> dict[str, Any]:
         """Generate a structured script dict from template strings.
 
         Used when the LLM call fails or returns an invalid result.
@@ -365,28 +438,29 @@ class ScriptWriterSkill(SkillCallable):
 
         key = "zh" if lang.startswith("zh") else "en"
         tpl = FALLBACK_TEMPLATES.get(key, FALLBACK_TEMPLATES["en"])
+        timing = _duration_plan(video_duration)
 
         segments = [
             {
                 "segment_type": "hook",
                 "start_time": 0,
-                "end_time": 3,
+                "end_time": timing["hook_end"],
                 "voiceover": tpl["hook_voiceover"].format(problem=problem, product=pn),
                 "visual_description": tpl["hook_visual"].format(problem=problem, product=pn),
                 "text_overlay": pn[:6],
             },
             {
                 "segment_type": "solution",
-                "start_time": 3,
-                "end_time": 25,
+                "start_time": timing["hook_end"],
+                "end_time": timing["cta_start"],
                 "voiceover": tpl["body_voiceover"].format(usp1=usp1, usp2=usp2, product=pn),
                 "visual_description": tpl["body_visual"].format(usp1=usp1, product=pn),
                 "text_overlay": f"{usp1} + {usp2}"[:8],
             },
             {
                 "segment_type": "cta",
-                "start_time": 25,
-                "end_time": 30,
+                "start_time": timing["cta_start"],
+                "end_time": video_duration,
                 "voiceover": tpl["cta_voiceover"].format(product=pn),
                 "visual_description": tpl["cta_visual"].format(product=pn),
                 "text_overlay": "立即购买" if key == "zh" else "Shop Now",
@@ -400,7 +474,7 @@ class ScriptWriterSkill(SkillCallable):
             "brand_name": brand_name,
             "language": lang,
             "platform": platform,
-            "total_duration": 30,
+            "total_duration": video_duration,
             "segments": segments,
             "hashtags": [f"#{pn.replace(' ', '')}"] if key == "en" else [f"#{pn}"],
             "cta_text": tpl["cta_voiceover"].format(product=pn),

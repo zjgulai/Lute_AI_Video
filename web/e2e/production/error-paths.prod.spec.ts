@@ -5,13 +5,16 @@
  * Run: PLAYWRIGHT_PROD_URL=https://video.lute-tlz-dddd.top npm run e2e:prod -- error-paths
  */
 import { test, expect } from "@playwright/test";
+import { productionApiHeaders } from "./helpers";
 
-const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+function authHeaders(extra: Record<string, string> = {}) {
+  return productionApiHeaders(extra);
+}
 
 test.describe("P4-4 — Error paths", () => {
   test("invalid video_duration string returns 422 with field-level detail", async ({ request }) => {
     const r = await request.post("/api/scenario/s1/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       data: {
         product_catalog: { products: [{ name: "test", usps: [{ text: "x", priority: "P0" }] }] },
         target_platforms: ["tiktok"],
@@ -30,7 +33,7 @@ test.describe("P4-4 — Error paths", () => {
 
   test("fast/submit missing user_prompt returns 422", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       data: { duration: 15 },
     });
     expect(r.status()).toBe(422);
@@ -43,7 +46,7 @@ test.describe("P4-4 — Error paths", () => {
 
   test("fast/submit invalid duration type returns 422", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       data: { user_prompt: "test", duration: "abc" },
     });
     expect(r.status()).toBe(422);
@@ -67,14 +70,14 @@ test.describe("P4-4 — Error paths", () => {
 
   test("unknown fast task_id returns 404", async ({ request }) => {
     const r = await request.get("/api/fast/status/fast_0_deadbeef_unknown", {
-      headers: { "X-API-Key": API_KEY },
+      headers: authHeaders(),
     });
     expect(r.status()).toBe(404);
   });
 
   test("malformed JSON body returns 422", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       data: "not-json",
     });
     expect([400, 422]).toContain(r.status());

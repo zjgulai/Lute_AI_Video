@@ -57,6 +57,11 @@
 | `CORS_ORIGINS` | `https://zjgulai.github.io` |
 | `VIDEO_OUTPUT_DIR` | `/app/output` |
 | `DEFAULT_LLM_PROVIDER` | `deepseek` |
+| `DEEPSEEK_API_BASE` | `https://api.deepseek.com` |
+| `DEEPSEEK_MODEL` | `deepseek-v4-pro` |
+| `POYO_API_BASE_URL` | `https://api.poyo.ai` |
+| `POYO_IMAGE_MODEL` | `gpt-image-2` |
+| `POYO_VIDEO_MODEL` | `seedance-2` |
 | `LOG_LEVEL` | `INFO` |
 
 7. 点击「创建并部署」

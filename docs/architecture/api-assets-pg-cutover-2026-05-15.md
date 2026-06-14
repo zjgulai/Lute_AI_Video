@@ -1,12 +1,12 @@
 ---
 name: api-assets-pg-cutover-design-2026-05-15
-description: 设计文档 — api_assets.py 内存字典迁移到 PG 持久化。当评估 brand_packages / influencers 重启数据丢失问题、设计 cutover 路径、加 PG-backed 资产 CRUD 时使用。当前状态：表已存在，repository 骨架已存在，cutover 未做。
+description: 设计文档 — api_assets.py 内存字典迁移到 PG 持久化。当评估 brand_packages / influencers 重启数据丢失问题、设计 cutover 路径、加 PG-backed 资产 CRUD 时使用。当前状态：表、repository 与 feature-flagged store adapter 已存在；默认兼容路径仍是 in-memory。
 doc_type: design
 module: ai-video
 topic: api-assets-pg-cutover
-status: in-progress
+status: stable
 created: 2026-05-15
-updated: 2026-05-15
+updated: 2026-05-31
 owner: Sisyphus
 source: ai
 related:
@@ -16,7 +16,7 @@ related:
 
 # api_assets.py PG Cutover — 设计文档
 
-> **状态**: in-progress. NEXT-STEPS-2026-05-11 P2-2 / UNIFIED-ROADMAP TODO-16。当前提交不做 cutover —— 仅落 repository test coverage + 文档化路径，避免在 Phase 0 部署稳定期改 prod 写入路径。
+> **状态**: stable boundary. `BRAND_PACKAGE_USE_PG=1` 的 store adapter 已存在，默认仍保持 `/api/assets/*` in-memory 兼容路径。生产启用 PG 持久化前仍需要 staging 验证和重启后数据保留 smoke；不要在 `api_assets.py` 继续扩展新业务域。
 
 ## 一、问题陈述
 
@@ -45,11 +45,11 @@ _influencers: dict[str, InfluencerProfile] = {}
 | [InfluencerRepository](file:///Users/pray/project/hermes_evo/AI_vedio/src/storage/repository.py#L257) | ✅ 同上 |
 | `BaseRepository` CRUD | ✅ create / get_by_id / get_by_field / update / delete / list_all 全实现 |
 
-**结论**: 不需要新建表、不需要新建 alembic migration、不需要新写 repository。**只缺**：（1）测试覆盖 prove 骨架真的工作，（2）将 api_assets.py 的字典读写改为 repository 调用。
+**结论**: 不需要新建表、不需要新建 alembic migration、不需要新写 repository。当前已具备 `src/storage/asset_stores.py` 适配层：默认 `BRAND_PACKAGE_USE_PG=0` 时写入内存 dict；开启 `BRAND_PACKAGE_USE_PG=1` 时优先走 repository，PG 异常时回落到 dict。剩余缺口是生产启用前的 staging / restart smoke，而不是继续扩展 `api_assets.py`。
 
 ## 三、Cutover 计划（分 3 个 PR）
 
-### PR 1（本 PR）— Repository 测试覆盖
+### PR 1（已完成）— Repository 测试覆盖
 
 新建 [tests/test_brand_influencer_repository.py](file:///Users/pray/project/hermes_evo/AI_vedio/tests/test_brand_influencer_repository.py)：
 - 在 SQLite fallback 模式跑（PG 测试要 docker-compose，CI 慢；SQLite 同样覆盖逻辑）
@@ -62,23 +62,18 @@ _influencers: dict[str, InfluencerProfile] = {}
   6. get_by_field influencer.platform
   7. influencer profile JSONB roundtrip
 
-不动 api_assets.py。
+当时不动 api_assets.py。后续已补 `src/storage/asset_stores.py` feature-flag adapter 和 `tests/test_asset_stores_cutover.py`。
 
-### PR 2（跟进）— api_assets.py 改用 repository
+### PR 2（已实现为 feature-flag adapter）— api_assets.py 通过 store adapter 接入 repository
 
 ```python
 # Before:
 _brand_packages: dict[str, BrandAssetPackage] = {}
 _brand_packages[package.package_id] = package
 
-# After:
-_brand_repo = BrandPackageRepository()
-await _brand_repo.create({
-    "id": package.package_id,
-    "name": package.brand_name,
-    "brand_guidelines": package.dict(),
-    "assets": package.assets or [],
-})
+# Current:
+_brand_store = BrandPackageStore(_brand_packages)
+await _brand_store.create(package)
 ```
 
 注意：字段映射
@@ -87,22 +82,29 @@ await _brand_repo.create({
 - 整个 model 序列化到 `brand_guidelines` JSONB（重命名为 `payload` 更准确，但表已存在，保持兼容）
 
 风险：
-- 现在内存字典 ID 是 `BPKG-XXXXXX` 格式（来自 uuid hex slice），PG `id` 列是 UUID type → 需要保持 string 或迁移 schema 到 TEXT
-- 兼容方案：用 `get_by_field("name", brand_name)` 而不是 `get_by_id`，避开 UUID 冲突
+- 现在内存字典 ID 是 `BPKG-XXXXXX` 格式（来自 uuid hex slice），生产 PG `id` 列仍是 UUID type；SQLite 回归能证明 adapter 逻辑，但不能证明生产 PG 接受 `BPKG-*` id。
+- 当前 adapter 在 PG 写入失败时会 fallback 到 dict，因此打开 `BRAND_PACKAGE_USE_PG=1` 不等于生产持久化已验收。生产启用前必须先解决 UUID/TEXT 主键策略，或改为不向 `id` 写入业务 ID。
 
-### PR 3（跟进）— 数据迁移（生产已有数据）
+### PR 3（跟进）— 生产启用与数据迁移
 
 生产环境 backend 重启过几次，所以内存字典本来就空，不需要迁移已有数据。但需要：
 - 写 `scripts/migrate_brand_packages_to_pg.py` 用于读取任何遗留 JSON 文件备份（如果存在）
 - 加 e2e 测试：重启 backend 后 brand_package 列表非空
 
-## 四、为什么不在本会话做 cutover
+## 四、当前边界
+
+1. `/api/assets/*` 是 legacy compatibility surface，前端 OpenAPI types 与 `/library?tab=influencers` 仍依赖它。
+2. 新的上传、文件列表、portfolio、运行时媒体能力不进入 `api_assets.py`；分别使用 `src/routers/assets.py`、`src/routers/portfolio.py`、`src/routers/media.py`。
+3. 默认不启用 PG store，避免在未验收前改变生产写入语义。
+4. 删除或重命名 `/api/assets/*` 前必须先迁移前端调用、重新生成 OpenAPI types，并补生产 smoke。
+
+## 五、为什么不默认打开 PG cutover
 
 1. **scope**: 本会话已做 8 个 TODO，多个涉及生产 deploy。再加 cutover 涉及 prod 写路径变更，超出"focused session"范围
 2. **Phase 0 监控期**: cutover 后 24h 必须密切监控 brand_package CRUD 错误率。Phase 0 watchdog 当前监控的是 video pipeline 指标，没覆盖 asset CRUD
 3. **decoupling**: 测试 + 文档先行确保骨架可信，cutover 可以下个 sprint 单独 1h 完成
 
-## 五、验收标准
+## 六、验收标准
 
 ### PR 1（本 PR）
 
@@ -110,17 +112,22 @@ await _brand_repo.create({
 - ruff clean
 - 不改 production code path（api_assets.py 不动）
 
-### PR 2
+### Feature-flag adapter
+
+- `test_asset_stores_cutover.py` 覆盖 flag off dict 路径、flag on PG/SQLite 路径、PG failure fallback。
+- `test_api_assets_legacy_boundary.py` 覆盖 `/api/assets/*` legacy 路由与现代 `/api/upload` / `/api/files` 边界。
+
+### 生产启用
 
 - api_assets.py 4 个端点（create brand / list brand / create influencer / list influencer）走 repository
 - 现有 test_asset_models.py 测试不退化
 - 部署到 lighthouse 后重启 backend 验证：brand_package 列表持久化
 
-### PR 3
+### 数据迁移
 
 - e2e 测试覆盖 backend restart → brand_package list 不为空
 
-## 六、风险
+## 七、风险
 
 | 风险 | 缓解 |
 |---|---|
@@ -128,7 +135,7 @@ await _brand_repo.create({
 | **PR 2 cutover bug 影响生产** | 部署前 staging 验证 + 用 feature flag `BRAND_PACKAGE_USE_PG=1` 渐进 |
 | **测试不覆盖 PG-only 行为** (asyncpg vs sqlite3 SQL 方言) | 本 PR 测试默认 SQLite；后续可加 pytest-postgresql 跑 PG 测试 |
 
-## 七、相关代码
+## 八、相关代码
 
 - 内存字典：[src/api_assets.py:30-31](file:///Users/pray/project/hermes_evo/AI_vedio/src/api_assets.py#L30-L31)
 - 表 schema：[src/storage/migrations/001_init.sql:46-64](file:///Users/pray/project/hermes_evo/AI_vedio/src/storage/migrations/001_init.sql#L46-L64)

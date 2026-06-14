@@ -9,9 +9,8 @@ Usage:
     python scripts/e2e_influencer_remix.py
 """
 import asyncio
-import json
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

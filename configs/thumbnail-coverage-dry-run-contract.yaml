@@ -1,0 +1,45 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  dry_run_script: scripts/portfolio_thumbnail_coverage.py
+  generation_script: scripts/generate_portfolio_thumbnails.py
+  portfolio_listing: src.routers.portfolio._thumbnail_path_for
+  runbook: docs/runbooks/thumbnail-missing.md
+
+scope:
+  checked_categories:
+    - renders
+    - fast_mode
+    - seedance
+    - keyframes
+    - demo
+    - quality-test
+    - uploads
+    - assets
+  video_extensions:
+    - .mp4
+    - .mov
+    - .webm
+  min_video_bytes: 1048576
+
+rules:
+  no_generation: true
+  no_ffmpeg: true
+  no_provider_calls: true
+  no_output_writes: true
+  portfolio_listing_generate_missing: "generate_missing=false"
+  explicit_repair_script: scripts/generate_portfolio_thumbnails.py
+
+commands:
+  local_text: python scripts/portfolio_thumbnail_coverage.py --output-dir output
+  local_json: python scripts/portfolio_thumbnail_coverage.py --output-dir output --format json
+  threshold_check: python scripts/portfolio_thumbnail_coverage.py --output-dir output --min-coverage 95
+
+tests:
+  dry_run: tests/test_thumbnail_coverage_dry_run.py
+  portfolio_read_only: tests/test_portfolio_brand_meta.py::test_list_portfolio_does_not_generate_missing_video_poster
+
+no_token_boundary: true

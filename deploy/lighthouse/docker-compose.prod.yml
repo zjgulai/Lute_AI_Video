@@ -121,6 +121,13 @@ services:
       - ./server.crt:/etc/nginx/ssl/server.crt:ro
       - ./server.key:/etc/nginx/ssl/server.key:ro
       - ./landing:/var/www/landing:ro
+      - /opt/mkt53/html:/var/www/mkt53:ro
+      - /opt/voc-report/html:/var/www/voc-report:ro
+      - /opt/momcozy-audit/html:/var/www/momcozy-audit:ro
+      - /opt/business-insight-hub/html:/var/www/business-insight-hub:ro
+      - /opt/ai-product-select/html:/var/www/ai-product-select:ro
+      - /opt/ai-employ-platform/html:/var/www/ai-employ-platform:ro
+      - /opt/llm-compare-hub/html:/var/www/llm-compare-hub:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
       - backend_output:/var/www/media:ro

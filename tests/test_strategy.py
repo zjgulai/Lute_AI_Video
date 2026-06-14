@@ -1,6 +1,7 @@
 """Test Strategy Agent — mock mode."""
 
 import pytest
+
 from src.agents.strategy import StrategyAgent
 
 

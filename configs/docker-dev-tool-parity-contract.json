@@ -1,0 +1,35 @@
+{
+  "status": "stable",
+  "no_token_boundary": true,
+  "python_dev_tools": [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+    "pytest-timeout",
+    "pytest-cov",
+    "ruff"
+  ],
+  "frontend_dev_tools": [
+    "@playwright/test",
+    "eslint",
+    "eslint-config-next",
+    "typescript",
+    "vitest"
+  ],
+  "node_workflows": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/deploy.yml",
+    ".github/workflows/e2e-ui.yml",
+    ".github/workflows/e2e-prod.yml",
+    ".github/workflows/deploy-gh-pages.yml"
+  ],
+  "frontend_dockerfile": "web/Dockerfile",
+  "frontend_lockfile": "web/package-lock.json",
+  "rules": {
+    "frontend_docker_build_uses_npm_ci": true,
+    "frontend_docker_build_requires_exact_package_lock": true,
+    "frontend_docker_build_disallows_npm_install_fallback": true,
+    "workflow_node_cache_uses_package_lock": true,
+    "python_dev_deps_mirror_requirements": true
+  }
+}

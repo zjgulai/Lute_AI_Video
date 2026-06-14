@@ -20,11 +20,21 @@ services:
       - key: API_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "https://zjgulai.github.io"
+        value: ""  # Set to your production domain(s), comma-separated. Was "https://zjgulai.github.io" (legacy GitHub Pages).
       - key: VIDEO_OUTPUT_DIR
         value: /app/output
       - key: DEFAULT_LLM_PROVIDER
         value: deepseek
+      - key: DEEPSEEK_API_BASE
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-v4-pro
+      - key: POYO_API_BASE_URL
+        value: https://api.poyo.ai
+      - key: POYO_IMAGE_MODEL
+        value: gpt-image-2
+      - key: POYO_VIDEO_MODEL
+        value: seedance-2
       # PostgreSQL — Render will create a database and inject this automatically
       # if you add a PostgreSQL service to the Blueprint. Otherwise leave empty
       # for in-memory / stub mode.
@@ -32,6 +42,8 @@ services:
         value: ""
       # API keys — set manually in Render Dashboard → Environment for real
       # video generation / LLM calls. Leave empty for stub/demo responses.
+      - key: DEEPSEEK_API_KEY
+        value: ""
       - key: OPENAI_API_KEY
         value: ""
       - key: POYO_API_KEY

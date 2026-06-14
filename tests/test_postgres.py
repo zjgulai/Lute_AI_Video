@@ -125,6 +125,13 @@ class TestStateModuleUsesPostgresWhenDatabaseUrlSet:
         if not db_url or not db_url.startswith("postgresql"):
             pytest.skip("需要真实 DATABASE_URL 才能验 PostgresSaver 路径")
 
+        try:
+            import psycopg  # type: ignore[import-not-found]
+            with psycopg.connect(db_url, connect_timeout=2) as conn:
+                conn.close()
+        except Exception as exc:  # type: ignore[misc]
+            pytest.skip(f"DATABASE_URL 指向的 PG 当前不可达: {exc}")
+
         # 重新 import 触发模块顶部的 compile_pipeline(db_url=...)
         import importlib
 

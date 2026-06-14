@@ -1,0 +1,74 @@
+name: e2e-ui
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "web/src/**"
+      - "web/e2e/ui-only/**"
+      - "web/playwright.ui.config.ts"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - ".github/workflows/e2e-ui.yml"
+  push:
+    branches: [main]
+    paths:
+      - "web/src/**"
+      - "web/e2e/ui-only/**"
+      - "web/playwright.ui.config.ts"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - ".github/workflows/e2e-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-only:
+    name: UI-only visual regression
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      NEXT_PUBLIC_IS_DEMO: "true"
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Run UI-only E2E
+        run: npm run e2e:ui -- --reporter=list,html
+
+      - name: Upload Playwright HTML report on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-ui-report-${{ github.run_attempt }}
+          path: web/playwright-report/
+          retention-days: 14
+
+      - name: Upload UI-only traces on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-ui-traces-${{ github.run_attempt }}
+          path: web/test-results/ui-only/
+          retention-days: 7

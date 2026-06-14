@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.1",
+  "brand": "Momcozy",
+  "generated_at": "2026-06-04T00:00:00+00:00",
+  "token_layers": {
+    "brand_tokens": [
+      {
+        "id": "Momcozy.brand_tokens.brand_soul",
+        "type": "brand_soul",
+        "value": "Always Put Moms First. The Cozy Reformer.",
+        "source_path": "Momcozy/momcozy_quick_reference.md",
+        "source_field": "section:brand_soul",
+        "confidence": 0.9,
+        "quality_score": 0.96,
+        "applicable_channels": ["all"]
+      }
+    ],
+    "voice_tokens": [
+      {
+        "id": "Momcozy.voice_tokens.copy_rules",
+        "type": "copy_rules",
+        "value": ["Start with empathy", "No toxic positivity", "No preaching"],
+        "source_path": "Momcozy/momcozy_quick_reference.md",
+        "source_field": "section:copy_rules",
+        "confidence": 0.9,
+        "quality_score": 0.96,
+        "applicable_channels": ["pdp", "ads", "social"]
+      }
+    ],
+    "visual_tokens": [
+      {
+        "id": "Momcozy.visual_tokens.design_system",
+        "type": "design_system",
+        "value": {
+          "primary": "#E30022",
+          "surface": "#FDFBF7",
+          "lighting": "soft diffused natural light"
+        },
+        "source_path": "Momcozy/momcozy_ai_brand_knowledge_base.md",
+        "source_field": "section:visual_identity",
+        "confidence": 0.86,
+        "quality_score": 0.94,
+        "applicable_channels": ["ads", "video"]
+      }
+    ]
+  }
+}

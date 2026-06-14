@@ -40,7 +40,9 @@ build/
 
 # Test artifacts
 .pytest_cache/
+.ruff_cache/
 htmlcov/
+coverage/
 .coverage
 
 # Logs
@@ -83,6 +85,7 @@ security_self_check.py
 .sisyphus/
 .playwright-mcp/
 .omc/
+worktrees/
 
 # Archive / drafts (keep locally, not in git)
 tmp/
@@ -112,6 +115,10 @@ assets/portfolio/index.json
 # Next.js build cache
 .next/
 .next.old/
+web/blob-report/
+web/playwright-report/
+web/test-results/
+web/tmp/
 
 # Baidu Cloud Sync temp metadata
 *.baiduyun.uploading.cfg

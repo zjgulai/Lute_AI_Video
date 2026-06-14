@@ -4,9 +4,10 @@ import base64
 import hashlib
 import hmac
 import os
+import re
 import time
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -28,6 +29,7 @@ _ALLOWED_MEDIA_EXTS = {
     ".webm": "video/webm",
     ".pdf": "application/pdf",
 }
+_MEDIA_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
 
 def _sign_media_token(media_path: str, expires_at: int) -> str:
@@ -49,6 +51,27 @@ def _verify_media_token(media_path: str, token: str, expires_at: int) -> bool:
     return hmac.compare_digest(expected, token)
 
 
+def _validated_media_request_path(media_path: str) -> str:
+    normalized = media_path.replace("\\", "/")
+    decoded = normalized
+    for _ in range(3):
+        next_decoded = unquote(decoded)
+        if next_decoded == decoded:
+            break
+        decoded = next_decoded
+    candidates = {normalized, decoded}
+
+    for candidate in candidates:
+        if not candidate or "\x00" in candidate or "?" in candidate or "#" in candidate:
+            raise HTTPException(status_code=400, detail="Invalid path")
+        if candidate.startswith("/") or candidate.startswith("//") or _MEDIA_SCHEME_RE.match(candidate):
+            raise HTTPException(status_code=400, detail="Invalid path")
+        if any(part in {"", ".", ".."} for part in candidate.split("/")):
+            raise HTTPException(status_code=400, detail="Invalid path")
+
+    return decoded
+
+
 def sign_media_url(media_path: str, expires_in_sec: int = _MEDIA_TOKEN_TTL) -> str:
     """Generate a signed media URL with query token."""
     canonical_path, _ = _resolve_media_path(media_path)
@@ -61,10 +84,7 @@ def sign_media_url(media_path: str, expires_in_sec: int = _MEDIA_TOKEN_TTL) -> s
 def _resolve_media_path(media_path: str) -> tuple[str, Path]:
     """Validate and resolve a requested media path under OUTPUT_DIR."""
     root = OUTPUT_DIR.resolve()
-    if not media_path or media_path.startswith("/"):
-        raise HTTPException(status_code=400, detail="Invalid path")
-    if "\x00" in media_path:
-        raise HTTPException(status_code=400, detail="Invalid path")
+    media_path = _validated_media_request_path(media_path)
 
     rel = Path(media_path)
     if rel.is_absolute() or any(part in {"", ".", ".."} for part in rel.parts):
@@ -154,4 +174,3 @@ async def serve_media(request: Request, media_path: str):
         media_type=content_type,
         filename=candidate.name,
     )
-

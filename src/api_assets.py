@@ -1,9 +1,12 @@
-"""Asset management API endpoints.
+"""Legacy asset management API endpoints.
 
-Provides REST endpoints for:
-- Uploading video/image assets
-- Managing brand asset packages
-- Managing influencer profiles
+Compatibility surface:
+- Mounted at `/api/assets/*` for existing frontend OpenAPI types and library tabs.
+- Brand package / influencer CRUD is frozen here; new asset features belong in
+  `src/routers/assets.py`, `src/routers/portfolio.py`, or a new domain router.
+- Default storage remains in-memory for backwards compatibility. Setting
+  `BRAND_PACKAGE_USE_PG=1` routes brand package and influencer reads/writes
+  through `src.storage.asset_stores` adapters.
 """
 
 from __future__ import annotations
@@ -23,9 +26,9 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 
-# ── In-memory storage for brand packages and influencers ──
-# Kept for backwards compat (BRAND_PACKAGE_USE_PG=0). When the flag is on,
-# the *Store adapters route reads + writes to PG.
+# ── Legacy stores for brand packages and influencers ──
+# Default mode is intentionally in-memory to preserve `/api/assets/*` behavior.
+# The PG-backed path is feature-flagged; do not add new business domains here.
 _brand_packages: dict[str, BrandAssetPackage] = {}
 _influencers: dict[str, InfluencerProfile] = {}
 _brand_store = BrandPackageStore(_brand_packages)
@@ -274,4 +277,3 @@ async def delete_asset(asset_id: str):
 
 
 # ── Brand Asset Package Endpoints ──
-

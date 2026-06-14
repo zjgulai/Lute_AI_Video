@@ -1,306 +1,646 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>路特数据科学平台 / Lute Data Science Hub</title>
-<meta name="description" content="路特创新视频与商业智能平台入口 — Root Innovation Video Creation & Voice-of-Customer Analytics">
-<meta name="robots" content="noindex">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@500;600&family=Noto+Sans+SC:wght@400;500&display=swap">
+<title>LUTE AI Native Builder Lab</title>
+<meta name="description" content="LUTE AI Native Builder Lab for the data and digital development center.">
 <style>
   :root {
-    --fortune-red: #D75C70;
-    --fortune-red-100: #F9D0D6;
-    --fortune-red-200: #F4AFB9;
-    --fortune-red-600: #C44A5E;
-    --gold-foil: #D8BE78;
-    --jade-accent: #6E966E;
-    --pure-white: #FDF8F6;
-    --pure-white-300: #FCF5F2;
-    --bg-page: #FDF8F6;
-    --bg-card: #FFFFFF;
-    --bg-panel: #FCF5F2;
-    --text-h1: #35141A;
-    --text-body: #59585E;
-    --text-muted: #9B9795;
-    --border-default: rgba(53, 20, 26, 0.10);
-    --border-hover: rgba(215, 92, 112, 0.30);
-    --shadow-sm: 0 1px 2px rgba(53, 20, 26, 0.04);
-    --shadow-md: 0 4px 12px rgba(53, 20, 26, 0.06);
-    --shadow-lg: 0 12px 32px rgba(215, 92, 112, 0.10);
-    --font-display: 'Montserrat', -apple-system, sans-serif;
-    --font-body: 'Inter', -apple-system, 'Noto Sans SC', sans-serif;
+    --paper: #FDF8F6;
+    --paper-2: #FCF5F2;
+    --ink: #35141A;
+    --body: #59585E;
+    --muted: #9B9795;
+    --red: #D75C70;
+    --red-deep: #C44A5E;
+    --red-soft: #F9D0D6;
+    --gold: #D8BE78;
+    --jade: #6E966E;
+    --line: rgba(53, 20, 26, 0.10);
+    --line-strong: rgba(215, 92, 112, 0.26);
+    --serif: Georgia, "Times New Roman", "Noto Serif SC", serif;
+    --sans: "Avenir Next", "Helvetica Neue", "Noto Sans SC", sans-serif;
   }
+
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; min-height: 100%; }
   body {
-    font-family: var(--font-body);
-    background: radial-gradient(ellipse at 30% 20%, rgba(215,92,112,0.08) 0%, var(--bg-page) 55%, var(--pure-white-300) 100%);
-    color: var(--text-h1);
     min-height: 100vh;
+    overflow-x: hidden;
+    background:
+      radial-gradient(ellipse at 24% 18%, rgba(215, 92, 112, 0.16), transparent 34%),
+      radial-gradient(ellipse at 72% 78%, rgba(216, 190, 120, 0.20), transparent 44%),
+      radial-gradient(ellipse at 88% 18%, rgba(110, 150, 110, 0.13), transparent 30%),
+      linear-gradient(145deg, var(--paper) 0%, var(--paper-2) 70%, #F9ECEE 100%);
+    color: var(--ink);
+    font-family: var(--sans);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  .page {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 5vh 24px 8vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-  .badge {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 999px;
-    background: rgba(215, 92, 112, 0.10);
-    border: 1px solid rgba(215, 92, 112, 0.18);
-    color: var(--fortune-red);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    margin-bottom: 28px;
-    animation: fade-up 500ms 0ms ease-out both;
-  }
-  .brand {
-    font-family: var(--font-display);
-    font-size: clamp(48px, 7vw, 72px);
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    margin: 0 0 8px;
-    color: var(--text-h1);
-    animation: fade-up 500ms 80ms ease-out both;
-  }
-  .divider {
-    width: 48px;
-    height: 2px;
-    border-radius: 2px;
-    background: var(--fortune-red);
-    opacity: 0.7;
-    margin: 16px 0 12px;
-    animation: fade-up 500ms 140ms ease-out both;
-  }
-  .tagline {
-    font-size: 18px;
-    color: var(--text-body);
-    margin: 0;
-    font-weight: 400;
-    animation: fade-up 500ms 200ms ease-out both;
-  }
-  .tagline-en {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin: 4px 0 0;
-    letter-spacing: 0.02em;
-    animation: fade-up 500ms 240ms ease-out both;
-  }
-  .grid {
-    margin-top: 64px;
-    display: grid;
-    gap: 24px;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    width: 100%;
-    animation: fade-up 600ms 320ms ease-out both;
-  }
-  .card {
+  a { color: inherit; }
+
+  .cover {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-card);
-    border: 1px solid var(--border-default);
-    border-radius: 20px;
-    padding: 32px 28px 28px;
-    text-decoration: none;
-    color: inherit;
-    transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease;
-    box-shadow: var(--shadow-sm);
+    min-height: 100vh;
+    isolation: isolate;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding: 34px clamp(22px, 4vw, 58px);
     overflow: hidden;
   }
-  .card::before {
+
+  .cover::before {
+    content: "";
+    position: absolute;
+    inset: -20vh -10vw;
+    z-index: -3;
+    background:
+      radial-gradient(circle at 18% 34%, rgba(215, 92, 112, 0.13) 0 1px, transparent 2px),
+      radial-gradient(circle at 78% 62%, rgba(110, 150, 110, 0.12) 0 1px, transparent 2px),
+      repeating-linear-gradient(90deg, rgba(53,20,26,0.040) 0 1px, transparent 1px 42px),
+      repeating-linear-gradient(0deg, rgba(53,20,26,0.028) 0 1px, transparent 1px 42px);
+    background-size: 132px 132px, 156px 156px, auto, auto;
+    transform: translate3d(0, 0, 0) rotate(-3deg);
+    animation: grid-drift 24s linear infinite;
+    opacity: 0.9;
+  }
+
+  .cover::after {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(215,92,112,0.05) 0%, transparent 50%);
-    opacity: 0;
-    transition: opacity 250ms ease;
+    z-index: -2;
+    background:
+      linear-gradient(105deg, transparent 0%, transparent 36%, rgba(255,255,255,0.62) 48%, transparent 60%, transparent 100%);
+    transform: translateX(-120%);
+    animation: signal-sweep 9s ease-in-out infinite;
+    mix-blend-mode: screen;
+  }
+
+  .signal-lines {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .signal-lines span {
+    position: absolute;
+    left: -12vw;
+    right: -12vw;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(215, 92, 112, 0.30), rgba(216, 190, 120, 0.38), transparent);
+    transform: rotate(-12deg);
+    opacity: 0.55;
+    animation: line-rise 12s ease-in-out infinite;
+  }
+  .signal-lines span:nth-child(1) { top: 22%; animation-delay: -1s; }
+  .signal-lines span:nth-child(2) { top: 49%; animation-delay: -5s; opacity: 0.34; }
+  .signal-lines span:nth-child(3) { top: 72%; animation-delay: -8s; opacity: 0.42; }
+
+  .science-layer {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .science-layer::before,
+  .science-layer::after {
+    content: "";
+    position: absolute;
     pointer-events: none;
   }
-  .card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--border-hover);
+  .science-layer::before {
+    width: min(74vw, 820px);
+    aspect-ratio: 1;
+    right: -18vw;
+    top: -14vh;
+    border: 1px solid rgba(216, 190, 120, 0.22);
+    background:
+      linear-gradient(28deg, transparent 0 48%, rgba(215, 92, 112, 0.16) 49%, transparent 50% 100%),
+      linear-gradient(118deg, transparent 0 48%, rgba(110, 150, 110, 0.14) 49%, transparent 50% 100%),
+      repeating-radial-gradient(circle, rgba(53,20,26,0.055) 0 1px, transparent 1px 26px);
+    opacity: 0.74;
+    transform: rotate(12deg);
+    animation: mesh-turn 38s linear infinite;
+    mask-image: radial-gradient(circle at 50% 50%, black 0 48%, transparent 74%);
   }
-  .card:hover::before { opacity: 1; }
-  .card-icon {
-    width: 48px;
-    height: 48px;
+  .science-layer::after {
+    content: "DATA  SCIENCE  MODEL  VECTOR  SIGNAL  DDDD  DATA  SCIENCE";
+    left: -8vw;
+    right: -8vw;
+    bottom: 13vh;
+    color: rgba(53, 20, 26, 0.11);
+    font-size: 10px;
+    letter-spacing: 0.28em;
+    white-space: nowrap;
+    transform: rotate(-8deg);
+    animation: equation-flow 18s linear infinite;
+  }
+  .science-layer span {
+    position: absolute;
+    color: rgba(53, 20, 26, 0.12);
+    font-family: var(--serif);
+    font-size: clamp(24px, 5vw, 68px);
+    line-height: 1;
+    transform: translate3d(0, 0, 0);
+    animation: symbol-float 16s ease-in-out infinite;
+  }
+  .science-layer span:nth-child(1) { left: 7%; top: 18%; color: rgba(215, 92, 112, 0.15); animation-delay: -2s; }
+  .science-layer span:nth-child(2) { right: 11%; top: 15%; color: rgba(216, 190, 120, 0.24); animation-delay: -6s; }
+  .science-layer span:nth-child(3) { left: 13%; bottom: 18%; color: rgba(110, 150, 110, 0.16); animation-delay: -10s; }
+  .science-layer span:nth-child(4) { right: 31%; bottom: 12%; color: rgba(215, 92, 112, 0.10); animation-delay: -4s; }
+  .science-layer span:nth-child(5) { left: 44%; top: 10%; color: rgba(53, 20, 26, 0.08); animation-delay: -12s; }
+
+  .logic-mesh {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .logic-mesh::before {
+    content: "";
+    position: absolute;
+    left: 14%;
+    top: 22%;
+    width: 72%;
+    height: 58%;
+    background:
+      linear-gradient(23deg, transparent 0 49.6%, rgba(215, 92, 112, 0.16) 49.8% 50.2%, transparent 50.4% 100%),
+      linear-gradient(153deg, transparent 0 49.6%, rgba(216, 190, 120, 0.18) 49.8% 50.2%, transparent 50.4% 100%),
+      linear-gradient(6deg, transparent 0 49.7%, rgba(110, 150, 110, 0.12) 49.9% 50.1%, transparent 50.3% 100%);
+    opacity: 0.62;
+    animation: mesh-breathe 8s ease-in-out infinite;
+    mask-image: radial-gradient(ellipse at 50% 50%, black 0 44%, transparent 73%);
+  }
+  .logic-mesh span {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border: 1px solid rgba(53, 20, 26, 0.18);
+    background: rgba(253, 248, 246, 0.76);
+    box-shadow: 0 0 0 5px rgba(216, 190, 120, 0.08);
+    animation: node-pulse 5.5s ease-in-out infinite;
+  }
+  .logic-mesh span:nth-child(1) { left: 18%; top: 28%; animation-delay: -1s; }
+  .logic-mesh span:nth-child(2) { left: 31%; top: 42%; animation-delay: -3s; }
+  .logic-mesh span:nth-child(3) { right: 27%; top: 30%; animation-delay: -4s; }
+  .logic-mesh span:nth-child(4) { right: 17%; bottom: 30%; animation-delay: -2s; }
+  .logic-mesh span:nth-child(5) { left: 42%; bottom: 23%; animation-delay: -5s; }
+
+  .masthead {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    border-radius: 12px;
-    background: rgba(215, 92, 112, 0.10);
-    color: var(--fortune-red);
-    margin-bottom: 20px;
-  }
-  .card-icon.voc {
-    background: rgba(110, 150, 110, 0.12);
-    color: var(--jade-accent);
-  }
-  .card-title {
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: 600;
-    margin: 0 0 4px;
-    color: var(--text-h1);
-  }
-  .card-subtitle {
+    gap: 24px;
     font-size: 12px;
-    font-weight: 600;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--fortune-red);
-    margin: 0 0 14px;
+    color: var(--red-deep);
   }
-  .card-subtitle.voc { color: var(--jade-accent); }
-  .card-desc {
+  .mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 13px;
+    font-weight: 700;
+  }
+  .brand-inline {
+    font-family: var(--serif);
     font-size: 14px;
-    color: var(--text-body);
-    margin: 0 0 24px;
-    line-height: 1.6;
+    color: var(--ink);
+    letter-spacing: 0.08em;
   }
-  .card-desc-en {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin: 0 0 24px;
-    line-height: 1.6;
-    letter-spacing: 0.01em;
+  .lab-inline {
+    color: var(--red-deep);
+    letter-spacing: 0.04em;
+    text-transform: none;
   }
-  .card-cta {
+  .mark::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--ink);
+    background: var(--red);
+    box-shadow: 6px 6px 0 var(--gold);
+  }
+  .mast-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+  }
+  .auth-nav {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    margin-top: auto;
-    font-size: 14px;
+    min-height: 34px;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .auth-link,
+  .auth-pill,
+  .auth-button {
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(196, 74, 94, 0.24);
+    border-radius: 999px;
+    padding: 7px 12px;
+    background: rgba(255, 255, 255, 0.44);
+    color: var(--red-deep);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .auth-pill {
+    background: var(--red-deep);
+    color: #fff;
+    border-color: var(--red-deep);
+  }
+  .auth-email {
+    max-width: 220px;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hero {
+    align-self: center;
+    width: min(100%, 1120px);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(230px, 340px);
+    gap: clamp(34px, 7vw, 96px);
+    align-items: end;
+    padding: 8vh 0 7vh;
+  }
+  .kicker {
+    margin: 0 0 24px;
+    color: var(--red);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0;
+    max-width: 780px;
     font-weight: 500;
-    color: var(--fortune-red);
+    letter-spacing: 0;
   }
-  .card-cta.voc { color: var(--jade-accent); }
-  .card-cta-arrow {
-    transition: transform 250ms ease;
+  h1 span {
+    display: block;
   }
-  .card:hover .card-cta-arrow { transform: translateX(4px); }
-  .card-meta {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border-default);
+  .brand-word {
+    font-family: var(--serif);
+    font-size: clamp(46px, 6.2vw, 76px);
+    line-height: 0.96;
+    color: var(--ink);
+  }
+  .lab-word {
+    margin-top: 12px;
+    font-family: var(--sans);
+    font-size: clamp(19px, 2.6vw, 34px);
+    line-height: 1.12;
+    font-weight: 700;
+    color: var(--red-deep);
+  }
+  .copy {
+    margin: 30px 0 0;
+    max-width: 720px;
+    color: var(--body);
+    font-size: clamp(16px, 1.8vw, 18px);
+    line-height: 1.9;
+  }
+  .creed {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 9px;
   }
-  .chip {
-    font-size: 11px;
-    padding: 4px 10px;
+  .creed span {
+    padding: 6px 11px;
+    border: 1px solid rgba(215, 92, 112, 0.18);
+    background: rgba(255, 255, 255, 0.52);
+    color: var(--ink);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  }
+  .creed-source {
+    display: block;
+    margin-top: 14px;
+    color: var(--red-deep);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .action-row {
+    margin-top: 34px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+  }
+  .enter {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 19px;
+    border: 1px solid var(--red-deep);
     border-radius: 999px;
-    background: var(--bg-panel);
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-  .footer {
-    margin-top: 64px;
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 12px;
-    animation: fade-up 600ms 480ms ease-out both;
-  }
-  .footer a {
-    color: var(--text-muted);
+    background: var(--red-deep);
+    color: #fff;
     text-decoration: none;
-    border-bottom: 1px solid transparent;
-    transition: border-color 200ms ease, color 200ms ease;
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: 0 16px 40px rgba(215, 92, 112, 0.22);
+    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
   }
-  .footer a:hover {
-    color: var(--text-h1);
-    border-bottom-color: var(--text-muted);
+  .enter:hover {
+    transform: translateY(-2px);
+    background: var(--ink);
+    box-shadow: 0 18px 44px rgba(53, 20, 26, 0.18);
   }
-  @keyframes fade-up {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
+  .hint {
+    color: var(--muted);
+    font-size: 12px;
   }
+
+  .brand-panel {
+    position: relative;
+    min-height: 360px;
+    border: 1px solid var(--line);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(253, 248, 246, 0.38)),
+      rgba(255, 255, 255, 0.48);
+    box-shadow: 0 32px 94px rgba(215, 92, 112, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.74);
+    padding: 20px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+  }
+  .brand-panel::before {
+    content: "";
+    position: absolute;
+    inset: 18px;
+    border: 1px solid rgba(216, 190, 120, 0.38);
+  }
+  .brand-panel::after {
+    content: "";
+    position: absolute;
+    width: 180%;
+    height: 1px;
+    left: -40%;
+    top: 55%;
+    background: linear-gradient(90deg, transparent, rgba(215,92,112,.42), transparent);
+    transform: rotate(-18deg);
+    animation: panel-line 7s ease-in-out infinite;
+  }
+  .data-field {
+    position: absolute;
+    inset: 32px;
+    z-index: 0;
+    overflow: hidden;
+    opacity: 0.78;
+  }
+  .data-field::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, rgba(215,92,112,.24) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(216,190,120,.24) 1px, transparent 1px),
+      radial-gradient(circle at 25% 30%, rgba(110,150,110,.22) 0 2px, transparent 3px),
+      radial-gradient(circle at 72% 66%, rgba(215,92,112,.24) 0 2px, transparent 3px),
+      linear-gradient(35deg, transparent 0 48%, rgba(53,20,26,.10) 49%, transparent 50% 100%);
+    background-size: 24px 24px, 24px 24px, 72px 72px, 64px 64px, 96px 96px;
+    mask-image: radial-gradient(circle at 50% 50%, black 0%, transparent 72%);
+    animation: data-grid-shift 11s linear infinite;
+  }
+  .data-field::after {
+    content: "0101  VECTOR  P95  SIGNAL  DELTA 028  DATA  SCIENCE";
+    position: absolute;
+    left: -18%;
+    right: -18%;
+    top: 44%;
+    color: rgba(53, 20, 26, 0.18);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    white-space: nowrap;
+    transform: rotate(-22deg);
+    animation: data-strip 14s linear infinite;
+  }
+  .data-chip {
+    position: absolute;
+    z-index: 1;
+    color: rgba(53, 20, 26, 0.36);
+    font-size: 9px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+  }
+  .data-chip:nth-child(1) { left: 8%; top: 10%; color: rgba(215, 92, 112, 0.50); }
+  .data-chip:nth-child(2) { right: 8%; top: 18%; color: rgba(110, 150, 110, 0.56); }
+  .data-chip:nth-child(3) { left: 12%; bottom: 16%; color: rgba(216, 190, 120, 0.72); }
+  .data-chip:nth-child(4) { right: 9%; bottom: 10%; color: rgba(53, 20, 26, 0.30); }
+  .panel-top,
+  .panel-bottom {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .panel-core {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+  }
+  .monogram {
+    width: min(64%, 190px);
+    aspect-ratio: 1;
+    border: 1px solid var(--line-strong);
+    display: grid;
+    place-items: center;
+    color: var(--red-deep);
+    font-family: var(--serif);
+    font-size: 86px;
+    background:
+      radial-gradient(circle at 52% 52%, rgba(255,255,255,.78), transparent 48%),
+      linear-gradient(135deg, rgba(249,208,214,.36), transparent 52%),
+      rgba(253,248,246,.58);
+    animation: monogram-breathe 6s ease-in-out infinite;
+    position: relative;
+    z-index: 2;
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+  }
+  .monogram::before {
+    content: "Σ  λ  DATA  Δ  ∞  01  SCIENCE";
+    position: absolute;
+    left: -34%;
+    right: -34%;
+    top: 24%;
+    z-index: 0;
+    color: rgba(53, 20, 26, 0.12);
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    white-space: nowrap;
+    transform: rotate(-28deg);
+    animation: monogram-data 9s linear infinite;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  @keyframes grid-drift {
+    0% { transform: translate3d(0, 0, 0) rotate(-3deg); }
+    100% { transform: translate3d(46px, 46px, 0) rotate(-3deg); }
+  }
+  @keyframes signal-sweep {
+    0%, 46% { transform: translateX(-120%); opacity: 0; }
+    56% { opacity: 0.85; }
+    76%, 100% { transform: translateX(120%); opacity: 0; }
+  }
+  @keyframes line-rise {
+    0%, 100% { transform: translateY(0) rotate(-12deg); }
+    50% { transform: translateY(-18px) rotate(-12deg); }
+  }
+  @keyframes symbol-float {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.70; }
+    50% { transform: translate3d(0, -16px, 0) scale(1.04); opacity: 0.96; }
+  }
+  @keyframes mesh-turn {
+    0% { transform: rotate(12deg); }
+    100% { transform: rotate(372deg); }
+  }
+  @keyframes equation-flow {
+    0% { transform: translateX(-8%) rotate(-8deg); }
+    100% { transform: translateX(8%) rotate(-8deg); }
+  }
+  @keyframes node-pulse {
+    0%, 100% { transform: scale(1); border-color: rgba(53, 20, 26, 0.16); }
+    50% { transform: scale(1.35); border-color: rgba(215, 92, 112, 0.44); }
+  }
+  @keyframes mesh-breathe {
+    0%, 100% { opacity: 0.34; transform: scale(0.99); }
+    50% { opacity: 0.70; transform: scale(1.01); }
+  }
+  @keyframes panel-line {
+    0%, 100% { transform: translateX(-18px) rotate(-18deg); opacity: 0.25; }
+    50% { transform: translateX(18px) rotate(-18deg); opacity: 0.72; }
+  }
+  @keyframes data-grid-shift {
+    0% { transform: translate3d(0, 0, 0); }
+    100% { transform: translate3d(24px, 24px, 0); }
+  }
+  @keyframes data-strip {
+    0% { transform: translateX(-12%) rotate(-22deg); }
+    100% { transform: translateX(12%) rotate(-22deg); }
+  }
+  @keyframes monogram-breathe {
+    0%, 100% { transform: scale(1); border-color: rgba(215, 92, 112, 0.26); }
+    50% { transform: scale(1.025); border-color: rgba(216, 190, 120, 0.65); }
+  }
+  @keyframes monogram-data {
+    0% { transform: translateX(-7%) rotate(-28deg); }
+    100% { transform: translateX(7%) rotate(-28deg); }
+  }
+
+  @media (max-width: 860px) {
+    .cover { padding: 24px 18px; }
+    .masthead { align-items: flex-start; flex-wrap: wrap; font-size: 11px; }
+    .mast-actions { margin-left: auto; flex-wrap: wrap; gap: 10px; }
+    .mast-actions > span:first-child { text-align: right; }
+    .auth-email { max-width: 180px; }
+    .hero {
+      grid-template-columns: 1fr;
+      gap: 34px;
+      padding: 6vh 0 5vh;
+    }
+    .brand-panel { min-height: 230px; }
+    .monogram { width: min(46%, 150px); font-size: 74px; }
+    .science-layer::before { width: 110vw; right: -44vw; top: -10vh; }
+    .logic-mesh { opacity: 0.55; }
+    .footer { flex-direction: column; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
-      animation: none !important;
-      transition: none !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
     }
-  }
-  @media (max-width: 640px) {
-    .page { padding: 4vh 20px 6vh; }
-    .grid { margin-top: 40px; }
   }
 </style>
 </head>
 <body>
-  <main class="page">
-    <span class="badge">Root Innovation · Lute Data Science</span>
-    <h1 class="brand">Lute</h1>
-    <div class="divider"></div>
-    <p class="tagline">数据 · 创新 · 共创</p>
-    <p class="tagline-en">Data Science Hub for Cross-Border E-Commerce</p>
+  <main class="cover">
+    <div class="signal-lines" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="science-layer" aria-hidden="true"><span>∞</span><span>Σ</span><span>Δ</span><span>λ</span><span>01</span></div>
+    <div class="logic-mesh" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
 
-    <div class="grid">
-      <a class="card" href="https://video.lute-tlz-dddd.top">
-        <div class="card-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M5 4l14 8-14 8V4z" fill="currentColor"/>
-          </svg>
-        </div>
-        <p class="card-subtitle">AI Video Pipeline</p>
-        <h2 class="card-title">短视频创作平台</h2>
-        <p class="card-desc">16 步 AI 评审管线 · 多场景自动出片 · 多平台分发</p>
-        <p class="card-desc-en">Multi-agent video creation: strategy → script → storyboard → keyframe → seedance → audio → caption → thumbnail → distribution</p>
-        <div class="card-meta">
-          <span class="chip">S1-S5 + Fast Mode</span>
-          <span class="chip">DeepSeek + POYO</span>
-          <span class="chip">Remotion Render</span>
-        </div>
-        <span class="card-cta">
-          打开视频平台
-          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-      </a>
+    <header class="masthead">
+      <div class="mark"><span class="brand-inline">LUTE</span><span class="lab-inline">AI Native Builder Lab</span></div>
+      <div class="mast-actions">
+        <span>AI DATA SCIENCE</span>
+        <nav class="auth-nav" data-auth-nav aria-label="登录状态">
+          <a class="auth-link" href="https://lute-tlz-dddd.top/login.html?v=20260606-auth-mail">登录</a>
+          <a class="auth-pill" href="https://lute-tlz-dddd.top/register.html?v=20260606-auth-mail">注册</a>
+        </nav>
+      </div>
+    </header>
 
-      <a class="card" href="https://voc.lute-tlz-dddd.top">
-        <div class="card-icon voc">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+    <section class="hero" aria-labelledby="hero-title">
+      <div>
+        <p class="kicker">DDDD DATA SCIENCE</p>
+        <h1 id="hero-title"><span class="brand-word">LUTE</span><span class="lab-word">AI Native Builder Lab</span></h1>
+        <div class="copy">
+          <div class="creed"><span>敬畏数据</span><span>崇尚科学</span><span>自我革命</span><span>无私奉献</span><span>DDDD</span></div>
+          <span class="creed-source">数据及数字化发展中心宣</span>
         </div>
-        <p class="card-subtitle voc">Voice of Customer</p>
-        <h2 class="card-title">客户声音分析平台</h2>
-        <p class="card-desc">Apache Superset · 跨境电商 NLP 增量处理 · 评论/反馈/舆情挖掘</p>
-        <p class="card-desc-en">Customer review analytics &amp; sentiment dashboards on Apache Superset</p>
-        <div class="card-meta">
-          <span class="chip">Apache Superset</span>
-          <span class="chip">VOC NLP</span>
-          <span class="chip">PostgreSQL</span>
+        <div class="action-row">
+          <a class="enter" href="https://lute-tlz-dddd.top/login.html?next=/systems.html&v=20260606-auth-mail">进入主页</a>
+          <span class="hint">先进入原卡片链接页 再选择具体系统</span>
         </div>
-        <span class="card-cta voc">
-          打开数据平台
-          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-      </a>
-    </div>
+      </div>
 
-    <p class="footer">
-      © 2026 Lute · Digital &amp; Data Science Dept. · Powered by
-      <a href="https://video.lute-tlz-dddd.top">video.lute</a> &middot;
-      <a href="https://voc.lute-tlz-dddd.top">voc.lute</a>
-    </p>
+      <aside class="brand-panel" aria-label="LUTE brand signal">
+        <div class="panel-top"><span>Signal</span><span>Live</span></div>
+        <div class="data-field" aria-hidden="true">
+          <span class="data-chip">latency 18ms</span>
+          <span class="data-chip">vector 1024d</span>
+          <span class="data-chip">confidence 92</span>
+          <span class="data-chip">ops index</span>
+        </div>
+        <div class="panel-core"><div class="monogram" aria-hidden="true">∞</div></div>
+        <div class="panel-bottom"><span>Insight</span><span>Systems</span></div>
+      </aside>
+    </section>
+
+    <footer class="footer">
+      <span>DATA AND DIGITAL DEVELOPMENT CENTER</span>
+      <span>DDDD BRAND SYSTEM</span>
+    </footer>
   </main>
+  <script src="https://lute-tlz-dddd.top/lute-auth.js?v=20260606-auth-mail" defer></script>
 </body>
 </html>

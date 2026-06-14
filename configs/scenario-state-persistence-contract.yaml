@@ -1,0 +1,61 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-06-01"
+
+scenarios:
+  - s1
+  - s2
+  - s3
+  - s4
+  - s5
+
+allowed_modes:
+  - auto
+  - step_by_step
+
+required_top_level_keys:
+  - schema_version
+  - label
+  - scenario
+  - tenant_id
+  - config
+  - steps
+  - current_step
+  - mode
+  - trace_id
+  - errors
+  - media_synthesis_errors
+  - gates
+  - pipeline_degraded
+  - degraded_reason
+  - structured_errors
+
+json_object_keys:
+  - config
+  - steps
+  - gates
+
+json_array_keys:
+  - errors
+  - media_synthesis_errors
+  - structured_errors
+
+step_record_required_keys:
+  - status
+  - output
+  - edited
+  - edited_output
+  - started_at
+  - completed_at
+  - duration_ms
+
+initial_state_defaults:
+  errors: []
+  media_synthesis_errors: []
+  gates: {}
+  pipeline_degraded: false
+  degraded_reason: null
+  structured_errors: []
+
+no_token_boundary: true

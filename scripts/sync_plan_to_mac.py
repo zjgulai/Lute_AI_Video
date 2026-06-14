@@ -12,10 +12,8 @@ Usage:
 
 import base64
 import gzip
-import json
 import sys
 from pathlib import Path
-
 
 PLAN_PATH = Path("/workspace/projects/hermes_evo/AI_vedio/.hermes/plans/multi-scenario-execution-plan-20260426.md")
 MAC_PATH = Path("/Users/pray/project/hermes_evo/AI_vedio/.hermes/plans/multi-scenario-execution-plan-20260426.md")

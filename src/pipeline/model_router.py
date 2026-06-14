@@ -57,28 +57,28 @@ class ModelChain:
 _SCENARIO_CHAINS: dict[ScenarioId, ModelChain] = {
     "s1": ModelChain(
         preferred="seedance-2",
-        fallback="kling-3-0/pro",
-        budget="wan-2-7-video",
+        fallback="kling-3.0/pro",
+        budget="wan2.7-text-to-video",
     ),
     "s2": ModelChain(
-        preferred="kling-3-0/pro",
-        fallback="runway-gen-4-5",
-        budget="wan-2-7-video",
+        preferred="kling-3.0/pro",
+        fallback="runway-gen-4.5",
+        budget="wan2.7-text-to-video",
     ),
     "s3": ModelChain(
-        preferred="kling-3-0/standard",
+        preferred="kling-3.0/standard",
         fallback="seedance-2",
-        budget="wan-2-6",
+        budget="wan2.6-text-to-video",
     ),
     "s4": ModelChain(
         preferred="seedance-2-fast",
-        fallback="kling-2-5-turbo-pro",
-        budget="wan-2-2-fast",
+        fallback="kling-2.5-turbo-pro",
+        budget="wan2.5-text-to-video",
     ),
     "s5": ModelChain(
         preferred="seedance-2",
-        fallback="kling-3-0/pro",
-        budget="wan-2-7-video",
+        fallback="kling-3.0/pro",
+        budget="wan2.7-text-to-video",
     ),
 }
 

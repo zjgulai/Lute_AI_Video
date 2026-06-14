@@ -1,7 +1,7 @@
 """Model-aware Gate score thresholds (Decision F, 2026-05-13).
 
 Decouples Gate min-score threshold from the global hardcoded value so that
-candidates produced by less-strict models (e.g., wan-2-2-fast) are not
+candidates produced by less-strict models (e.g., wan2.5-text-to-video) are not
 rejected by the same bar that applies to Seedance 2.
 
 Lookup contract:
@@ -25,21 +25,19 @@ _MODEL_THRESHOLDS: dict[str, float] = {
     "seedance-1-5-pro": 0.62,
     "seedance-1-0-pro": 0.55,
     "seedance-2.0": 0.65,
-    "kling-3-0/standard": 0.60,
-    "kling-3-0/pro": 0.60,
-    "kling-3-0/4k": 0.60,
-    "kling-o3": 0.58,
-    "kling-o3-4k": 0.58,
-    "kling-2-6": 0.58,
-    "kling-2-5-turbo-pro": 0.55,
-    "kling-2-1": 0.55,
-    "runway-gen-4-5": 0.62,
+    "kling-3.0/standard": 0.60,
+    "kling-3.0/pro": 0.60,
+    "kling-3.0/4k": 0.60,
+    "kling-o3/standard": 0.58,
+    "kling-o3/4k": 0.58,
+    "kling-2.6": 0.58,
+    "kling-2.5-turbo-pro": 0.55,
+    "runway-gen-4.5": 0.62,
     "veo-3-1": 0.58,
-    "wan-2-7-video": 0.55,
-    "wan-2-6": 0.55,
-    "wan-2-5": 0.55,
-    "wan-2-2-fast": 0.50,
-    "hailuo-2-3": 0.55,
+    "wan2.7-text-to-video": 0.55,
+    "wan2.6-text-to-video": 0.55,
+    "wan2.5-text-to-video": 0.55,
+    "hailuo-2.3": 0.55,
     "happy-horse": 0.55,
     "gpt-image-2": 0.65,
     "gpt-4o-image": 0.65,

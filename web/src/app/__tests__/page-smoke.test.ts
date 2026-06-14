@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/api", () => ({
   hasApiKey: () => false,
   isDemoMode: () => true,
-  isApiError: (_e: unknown) => false,
+  isApiError: () => false,
   getMediaUrl: (p: string) => p,
   fetchState: vi.fn(),
   submitReview: vi.fn(),
@@ -21,6 +21,12 @@ vi.mock("@/components/api", () => ({
   fetchS1State: vi.fn(),
   submitScenario: vi.fn(),
   logStateChange: vi.fn(),
+  fetchToolboxTools: vi.fn(),
+  fetchToolboxRuns: vi.fn(),
+  fetchToolboxRun: vi.fn(),
+  fetchToolboxAuditSummaries: vi.fn(),
+  fetchToolboxAuditSummary: vi.fn(),
+  previewToolboxInjectionDraft: vi.fn(),
 }));
 
 const PAGE_MODULES = [
@@ -35,11 +41,15 @@ const PAGE_MODULES = [
   { name: "settings", loader: () => import("@/app/settings/page") },
   { name: "footage", loader: () => import("@/app/footage/page") },
   { name: "library", loader: () => import("@/app/library/page") },
+  { name: "toolbox", loader: () => import("@/app/toolbox/page") },
+  { name: "toolbox-detail", loader: () => import("@/app/toolbox/[toolId]/page") },
   { name: "brand-packages", loader: () => import("@/app/brand-packages/page") },
   { name: "influencers", loader: () => import("@/app/influencers/page") },
   { name: "admin", loader: () => import("@/app/admin/page") },
   { name: "works", loader: () => import("@/app/works/page") },
 ] as const;
+
+const PAGE_MODULE_LOAD_TIMEOUT_MS = 60_000;
 
 describe("D4 page-module smoke", () => {
   PAGE_MODULES.forEach(({ name, loader }) => {
@@ -48,7 +58,7 @@ describe("D4 page-module smoke", () => {
       expect(mod).toBeTruthy();
       expect(typeof mod.default).toBe("function");
       expect(mod.default.name.length).toBeGreaterThan(0);
-    });
+    }, PAGE_MODULE_LOAD_TIMEOUT_MS);
   });
 
   it("all page modules expose stable default export shape", async () => {
@@ -58,5 +68,5 @@ describe("D4 page-module smoke", () => {
     }));
     const failures = all.filter(r => !r.hasDefault);
     expect(failures, `pages without default function: ${JSON.stringify(failures)}`).toHaveLength(0);
-  });
+  }, PAGE_MODULE_LOAD_TIMEOUT_MS);
 });

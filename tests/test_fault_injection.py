@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.pipeline.step_runner import StepRunner
 from src.pipeline.state_manager import PipelineStateManager
+from src.pipeline.step_runner import StepRunner
 from src.telemetry import error_collector, pipeline_metrics
 
 
@@ -174,6 +174,7 @@ class TestTelemetryEndpoint:
         """POST a failing scenario then GET /telemetry/errors sees the error."""
         try:
             from httpx import ASGITransport, AsyncClient
+
             from src.api import app
             from src.routers._deps import verify_api_key
         except ImportError:

@@ -1,11 +1,11 @@
 """Tests for RemotionRenderer — environment validation, export, and error handling."""
 
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-from pathlib import Path
 
-from src.tools.remotion_renderer import RemotionRenderer, RemotionEnvironmentError
+from src.tools.remotion_renderer import RemotionEnvironmentError, RemotionRenderer
 
 
 class TestRemotionIsAvailable:

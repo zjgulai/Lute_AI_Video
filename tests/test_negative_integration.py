@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
+from pathlib import Path
 
 import httpx
 import pytest
@@ -12,6 +14,13 @@ from src.storage.db import _create_sqlite_tables
 from src.storage.repository import PipelineStateRepository
 from src.tools.error_classifier import classify_error
 from src.tools.poyo_safety import sanitize_for_poyo
+
+
+def _load_poyo_rejection_messages() -> list[str]:
+    path = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "commercial_video" / "poyo_content_rejection_samples.json"
+    with path.open(encoding="utf-8") as f:
+        payload = json.load(f)
+    return [item["raw_message"] for item in payload.get("runtime_rejection_messages", [])]
 
 
 @pytest.fixture
@@ -97,12 +106,14 @@ class TestPoyoContentRejectionNegative:
         assert out == ""
         assert applied == []
 
-    def test_poyo_runtime_error_classifies_to_unknown_node_error(self):
-        exc = RuntimeError("poyo task failed: content_moderation_failed")
+    @pytest.mark.parametrize("message", _load_poyo_rejection_messages())
+    def test_poyo_runtime_error_classifies_to_content_moderation_rejection(self, message: str):
+        exc = RuntimeError(message)
         err = classify_error(exc, context="poyo_video_generate", node="seedance_clips")
-        assert err.code == ErrorCode.UNKNOWN_NODE_ERROR
+        assert err.code == ErrorCode.CONTENT_MODERATION_REJECTED
         assert err.node == "seedance_clips"
-        assert "poyo" in err.detail["exc_msg"].lower()
+        assert err.recoverable is False
+        assert "poyo" in err.detail["exc_msg"].lower() or "content" in err.detail["exc_msg"].lower()
 
 
 class TestDbPoolExhaustionNegative:

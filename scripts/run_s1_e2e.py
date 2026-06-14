@@ -30,6 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # Load .env before anything else
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # -- Pre-flight API key checks --
@@ -49,9 +50,8 @@ for key_name in [
 
 # -- Pipeline imports (will trigger skill auto-registration) --
 from src.config import OUTPUT_DIR
-from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
-from src.pipeline.step_runner import STEP_ORDER, StepRunner
 from src.pipeline.state_manager import PipelineStateManager
+from src.pipeline.step_runner import STEP_ORDER, StepRunner
 
 # ============================================================================
 #  Utilities
@@ -459,7 +459,7 @@ async def main() -> int:
 
     print(f"\n  Product: {BOLD}{config['product_catalog']['name']}{RESET}")
     print(f"  Brand:   {BOLD}{config['brand_guidelines']['brand_name']}{RESET}")
-    print(f"  Mode:    S1 Product Direct (brand_mode=False)")
+    print("  Mode:    S1 Product Direct (brand_mode=False)")
     print()
 
     # -- Pre-flight --

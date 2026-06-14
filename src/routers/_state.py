@@ -9,12 +9,14 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.graph.pipeline import compile_pipeline
+from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS
+from src.pipeline.step_utils import get_step_output_from_state
 
 # ── Pipeline state ──
 # P0-E: Pass DATABASE_URL so /pipeline/* uses PostgresSaver in production.
@@ -39,9 +41,6 @@ def get_pipeline():
 _active_threads: dict[str, dict[str, Any]] = {}
 _THREAD_INDEX_PATH = OUTPUT_DIR / ".thread_index.json"
 _pipeline_semaphore = asyncio.Semaphore(10)  # P3-4: Max 10 concurrent pipelines
-
-# Background task registry
-_background_tasks: dict[str, dict[str, Any]] = {}
 
 # Thread cache TTL
 _THREAD_CACHE_TTL_SEC = 24 * 3600  # 24 hours
@@ -72,6 +71,8 @@ class FastModeRequest(BaseModel):
     user_prompt: str
     duration: int = 5
     enable_tts: bool = True
+    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
+    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     # P1-C: 用户填的多供应商 key 通过此字段下发,scenario.py 入口注入 contextvars
     api_keys: dict[str, str] = {}
 
@@ -85,6 +86,38 @@ class S1StartRequest(BaseModel):
     video_duration: int = 30
     mode: str = "auto"
     brand_mode: bool = False
+    enable_media_synthesis: bool = True
+    continuity_mode: bool | str = True
+    continuity_generation_mode: str = "standard"
+    storyboard_grid: int = 12
+    clip_group_size: int = 3
+    transition_style: str = "match_cut"
+    commercial_injection_plan: dict[str, Any] | None = None
+    api_keys: dict[str, str] = {}
+
+
+class S2BrandCampaignRequest(BaseModel):
+    brand_package: dict[str, Any] = {}
+    target_platforms: list[str] = ["tiktok", "shopify"]
+    target_languages: list[str] = DEFAULT_LANGUAGES
+    week: str = ""
+    video_duration: int = 60
+    output_label: str | None = None
+    enable_media_synthesis: bool = True
+    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
+    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
+    commercial_injection_plan: dict[str, Any] | None = None
+    api_keys: dict[str, str] = {}
+
+
+class S5BrandVlogRequest(BaseModel):
+    brand_id: str = "momcozy"
+    product_sku: dict[str, Any] = {}
+    scene_id: str | None = None
+    selected_models: list[dict[str, Any]] = []
+    story_description: str = ""
+    video_duration: int = 30
+    commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 
 
@@ -190,30 +223,7 @@ from src.tasks.bg_registry import register_background_task as _register_backgrou
 # ── Scenario helpers ──
 
 _SCENARIO_STEP_ORDER: dict[str, list[str]] = {
-    "s1": [
-        "strategy", "scripts", "compliance", "storyboards",
-        "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
-        "tts_audio", "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s2": [  # S2 is S1 with brand_mode=True
-        "strategy", "scripts", "compliance", "storyboards",
-        "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
-        "tts_audio", "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s3": [
-        "video_analysis", "character_identity", "remix_script",
-        "storyboards", "keyframe_images", "video_prompts",
-        "thumbnail_prompts", "seedance_clips", "tts_audio",
-        "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s4": [
-        "scripts", "video_prompts", "thumbnails",
-        "seedance_clips", "tts_audio", "assemble_final", "audit",
-    ],
-    "s5": [
-        "vlog_strategy", "video_prompts", "seedance_clips",
-        "tts_audio", "assemble_final", "audit",
-    ],
+    scenario: list(order) for scenario, order in SCENARIO_STEP_ORDERS.items()
 }
 
 _STEP_DURATIONS: dict[str, str] = {
@@ -221,6 +231,7 @@ _STEP_DURATIONS: dict[str, str] = {
     "scripts": "~5s",
     "compliance": "~2s",
     "storyboards": "~4s",
+    "continuity_storyboard_grid": "~1s",
     "keyframe_images": "~5-60s",
     "video_prompts": "~3s",
     "thumbnail_prompts": "~3s",
@@ -255,14 +266,9 @@ def _get_step_deps(scenario: str, step_name: str) -> list[str]:
 def _get_step_output(state: dict[str, Any], step_name: str) -> Any:
     """Extract step output from pipeline state (prefers edited over original).
 
-    Reads from the StepRunner-native structure ``state.steps[step_name].edited_output``
-    so that user edits made through the gate approval flow are correctly picked up.
+    Delegates to the canonical shared implementation in step_utils.py.
     """
-    steps = state.get("steps", {})
-    step_data = steps.get(step_name, {})
-    if step_data.get("edited") and step_data.get("edited_output") is not None:
-        return step_data["edited_output"]
-    return step_data.get("output")
+    return get_step_output_from_state(state, step_name)
 
 
 VALID_VIDEO_DURATIONS = (15, 30, 45, 60, 90)

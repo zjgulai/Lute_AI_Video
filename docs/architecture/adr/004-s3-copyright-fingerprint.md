@@ -160,7 +160,7 @@ S3 流程中 **没有任何版权预审**。`viral_extractor.py` 只做内容质
 ## 九、相关文档
 
 - 排期计划：[2026-05-14-poyo-constrained-optimization-roadmap.md](file:///Users/pray/project/hermes_evo/AI_vedio/docs/workflows/2026-05-14-poyo-constrained-optimization-roadmap.md)（Sprint 3 P3-6）
-- TODO 总览：[UNIFIED-ROADMAP-2026-05-15.md](file:///Users/pray/project/hermes_evo/AI_vedio/.kiro/plan/UNIFIED-ROADMAP-2026-05-15.md)（TODO-11）
+- 历史 TODO 总览：[UNIFIED-ROADMAP-2026-05-15.md](file:///Users/pray/project/hermes_evo/AI_vedio/.kiro/plan/UNIFIED-ROADMAP-2026-05-15.md)（TODO-11，不作为当前执行入口）
 - 风险评估：[five-scenario-pipeline-risk-assessment-stable-20260513.md](file:///Users/pray/project/hermes_evo/AI_vedio/docs/workflows/five-scenario-pipeline-risk-assessment-stable-20260513.md) §COMP-CRIT-1
 
 ## 十、决策矩阵速查

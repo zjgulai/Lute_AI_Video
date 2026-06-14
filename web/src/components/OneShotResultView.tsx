@@ -13,6 +13,7 @@ import QualityDashboard from "./QualityDashboard";
 import PerformanceDashboard from "./PerformanceDashboard";
 import PublishPanel from "./PublishPanel";
 import DirectorPlayback from "./DirectorPlayback";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 
 import { errorMessage } from "@/lib/errors";
 const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
@@ -26,9 +27,79 @@ const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
 
 interface Props {
   scenario: string;
-  result: any;
+  result: unknown;
   onReset: () => void;
-  onEdit?: (tab: string, index: number, data: any) => void;
+  onEdit?: (tab: string, index: number, data: ResultItem) => void;
+}
+
+type TabId = "content" | "media" | "quality" | "data";
+type ContentSubId = "briefs" | "scripts" | "videos" | "thumbnails";
+
+type ResultItem = Record<string, unknown> & {
+  id?: string;
+  platform?: string;
+  hook_type?: string;
+  product_name?: string;
+  brand_name?: string;
+  description?: string;
+  key_message?: string;
+  hook?: string;
+  tags?: string[];
+  usp_priority?: string[];
+};
+
+type ScriptSegment = Record<string, unknown> & {
+  segment_type?: string;
+  start_time?: number;
+  end_time?: number;
+  description?: string;
+  voiceover?: string;
+  visual_description?: string;
+};
+
+type ScriptItem = ResultItem & {
+  segments?: ScriptSegment[];
+};
+
+type VideoPromptItem = Record<string, unknown> & {
+  script_id?: string;
+  prompt?: string | { seedance_prompt?: string };
+};
+
+type ThumbnailVariant = Record<string, unknown> & {
+  variant_type?: string;
+  prompt?: string;
+};
+
+type ThumbnailSet = Record<string, unknown> & {
+  script_id?: string;
+  variants?: ThumbnailVariant[];
+};
+
+type PublishRowResult = Record<string, unknown> & {
+  success: boolean;
+  error?: string;
+  url?: string;
+};
+
+type OneShotResult = Record<string, unknown> & {
+  success?: boolean;
+  steps_completed?: number;
+  briefs?: ResultItem[];
+  scripts?: ScriptItem[];
+  storyboards?: ResultItem[];
+  video_prompts?: VideoPromptItem[];
+  thumbnail_sets?: ThumbnailSet[];
+  thumbnails?: ThumbnailSet[];
+  final_video_path?: string;
+  thumbnail_image_paths?: string[];
+  audio_paths?: string[];
+  clip_paths?: string[];
+  audit_report?: AuditReport | null;
+};
+
+function asOneShotResult(value: unknown): OneShotResult {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as OneShotResult : {};
 }
 
 const SCENARIO_LABELS: Record<string, string> = {
@@ -59,19 +130,19 @@ function DemoPlaceholder({ label }: { label: string }) {
   );
 }
 
-export default function OneShotResultView({ scenario, result, onReset, onEdit }: Props) {
+export default function OneShotResultView({ scenario, result: rawResult, onReset, onEdit }: Props) {
   const { t } = useI18n();
+  const result = asOneShotResult(rawResult);
   // UI 2.0: Director Playback is the default narrative view
   const [viewMode, setViewMode] = useState<"director" | "classic">("director");
   // P0-2: Merged tabs — 8→4 with content sub-navigation
-  const [tab, setTab] = useState<"content" | "media" | "quality" | "data">("media");
-  const [contentSub, setContentSub] = useState<"briefs" | "scripts" | "videos" | "thumbnails">("briefs");
+  const [tab, setTab] = useState<TabId>("media");
+  const [contentSub, setContentSub] = useState<ContentSubId>("briefs");
 
-  const briefs: any[] = result?.briefs || [];
-  const scripts: any[] = result?.scripts || [];
-  const storyboards: any[] = result?.storyboards || [];
-  const videoPrompts: any[] = result?.video_prompts || [];
-  const thumbnails: any[] = result?.thumbnail_sets || result?.thumbnails || [];
+  const briefs = result?.briefs || [];
+  const scripts = result?.scripts || [];
+  const videoPrompts = result?.video_prompts || [];
+  const thumbnails = result?.thumbnail_sets || result?.thumbnails || [];
   const success: boolean = result?.success !== false;
   const stepsCompleted: number = result?.steps_completed || 0;
   const finalVideo: string = result?.final_video_path || "";
@@ -81,14 +152,14 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
   const audit: AuditReport | null = result?.audit_report || null;
   const mediaCount = (finalVideo ? 1 : 0) + thumbImages.length + audioPaths.length + clipPaths.length;
 
-  const TABS = [
+  const TABS: Array<{ id: TabId; label: string; count: number }> = [
     { id: "content", label: t("result.tab.content"), count: briefs.length + scripts.length + videoPrompts.length + thumbnails.length },
     { id: "media", label: t("result.tab.media"), count: mediaCount },
     { id: "quality", label: t("result.tab.quality"), count: audit ? (audit.criteria?.length || 0) : 0 },
     { id: "data", label: t("result.tab.data"), count: 0 },
   ];
 
-  const CONTENT_SUBTABS = [
+  const CONTENT_SUBTABS: Array<{ id: ContentSubId; label: string; count: number }> = [
     { id: "briefs", label: t("result.tab.briefs"), count: briefs.length },
     { id: "scripts", label: t("result.tab.scripts"), count: scripts.length },
     { id: "videos", label: t("result.tab.videos"), count: videoPrompts.length },
@@ -185,7 +256,7 @@ export default function OneShotResultView({ scenario, result, onReset, onEdit }:
             {TABS.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id as any)}
+                onClick={() => setTab(t.id)}
                 className={`flex-1 px-3 py-2.5 text-xs font-medium transition-all border-b-2 cursor-pointer ${
                   tab === t.id
                     ? "border-[var(--fortune-red)] text-[var(--fortune-red)] bg-[var(--bg-card)]"
@@ -252,19 +323,19 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function BriefsView({ briefs, onEdit }: { briefs: any[]; onEdit?: (index: number, data: any) => void }) {
+function BriefsView({ briefs, onEdit }: { briefs: ResultItem[]; onEdit?: (index: number, data: ResultItem) => void }) {
   const { t } = useI18n();
   if (briefs.length === 0) return <Empty text={t("step.noStrategy")} />;
   return (
     <div className="space-y-2">
-      {briefs.map((b: any, i: number) => (
+      {briefs.map((b, i) => (
         <BriefCard key={i} brief={b} index={i} onEdit={onEdit} />
       ))}
     </div>
   );
 }
 
-function BriefCard({ brief, index, onEdit }: { brief: any; index: number; onEdit?: (index: number, data: any) => void }) {
+function BriefCard({ brief, index, onEdit }: { brief: ResultItem; index: number; onEdit?: (index: number, data: ResultItem) => void }) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
 
@@ -317,19 +388,19 @@ function BriefCard({ brief, index, onEdit }: { brief: any; index: number; onEdit
   );
 }
 
-function ScriptsView({ scripts, onEdit }: { scripts: any[]; onEdit?: (index: number, data: any) => void }) {
+function ScriptsView({ scripts, onEdit }: { scripts: ScriptItem[]; onEdit?: (index: number, data: ScriptItem) => void }) {
   const { t } = useI18n();
   if (scripts.length === 0) return <Empty text={t("step.noScript")} />;
   return (
     <div className="space-y-2">
-      {scripts.map((s: any, i: number) => (
+      {scripts.map((s, i) => (
         <ScriptCard key={i} script={s} index={i} onEdit={onEdit} />
       ))}
     </div>
   );
 }
 
-function ScriptCard({ script, index, onEdit }: { script: any; index: number; onEdit?: (index: number, data: any) => void }) {
+function ScriptCard({ script, index, onEdit }: { script: ScriptItem; index: number; onEdit?: (index: number, data: ScriptItem) => void }) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
 
@@ -363,7 +434,7 @@ function ScriptCard({ script, index, onEdit }: { script: any; index: number; onE
             }}
           />
         ) : (
-          (script.segments || []).map((seg: any, j: number) => (
+          (script.segments || []).map((seg, j) => (
             <div key={j} className="pl-3 border-l-2 border-[rgba(215,92,112,0.18)]">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
@@ -383,12 +454,12 @@ function ScriptCard({ script, index, onEdit }: { script: any; index: number; onE
   );
 }
 
-function VideoPromptsView({ prompts, onRegenerate }: { prompts: any[]; onRegenerate?: (index: number) => void }) {
+function VideoPromptsView({ prompts, onRegenerate }: { prompts: VideoPromptItem[]; onRegenerate?: (index: number) => void }) {
   const { t } = useI18n();
   if (prompts.length === 0) return <Empty text={t("step.noData")} />;
   return (
     <div className="space-y-2">
-      {prompts.map((p: any, i: number) => {
+      {prompts.map((p, i) => {
         const txt = typeof p.prompt === "string" ? p.prompt : (p.prompt?.seedance_prompt || JSON.stringify(p.prompt, null, 2));
         return (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
@@ -420,7 +491,7 @@ function VideoPromptsView({ prompts, onRegenerate }: { prompts: any[]; onRegener
   );
 }
 
-function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thumbImages: string[]; onRegenerate?: (index: number) => void }) {
+function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: ThumbnailSet[]; thumbImages: string[]; onRegenerate?: (index: number) => void }) {
   const { t } = useI18n();
   // If we have real generated images, show them first
   const hasRealImages = thumbImages.length > 0;
@@ -435,7 +506,7 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-lg overflow-hidden aspect-[9/16]">
                 {getMediaUrl(p) ? (
-                  <img
+                  <RuntimeMediaImage
                     src={getMediaUrl(p)}
                     alt={`thumbnail-${i}`}
                     className="w-full h-full object-cover"
@@ -456,13 +527,13 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: any[]; thum
       {sets.length === 0 && !hasRealImages ? (
         <Empty text={t("result.empty")} />
       ) : (
-        sets.map((set: any, i: number) => {
+        sets.map((set, i) => {
           const variants = set.variants || (Array.isArray(set) ? set : [set]);
           return (
             <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
               <p className="text-[12px] font-mono text-[var(--text-muted)] mb-2">{set.script_id || `Set ${i + 1}`}</p>
               <div className="grid grid-cols-2 gap-2">
-                {variants.map((v: any, j: number) => (
+                {variants.map((v, j) => (
                   <div key={j} className="apple-card p-3 bg-[var(--bg-card)]">
                     <div className="bg-gradient-to-br from-[var(--bg-panel)] to-[rgba(215,92,112,0.18)] rounded-lg h-24 flex items-center justify-center mb-2">
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="var(--text-muted)">
@@ -504,7 +575,6 @@ function MediaView({
   audioPaths,
   clipPaths,
   audit,
-  scenario,
   result,
 }: {
   finalVideo: string;
@@ -513,7 +583,7 @@ function MediaView({
   clipPaths: string[];
   audit: AuditReport | null;
   scenario: string;
-  result: any;
+  result: OneShotResult;
 }) {
   const { t } = useI18n();
   const [showPublish, setShowPublish] = useState(false);
@@ -522,7 +592,7 @@ function MediaView({
 
   const briefs = result?.briefs || [];
   const targetPlatforms = briefs.length > 0
-    ? Array.from(new Set(briefs.flatMap((b: any) => b.platform ? [b.platform] : [])))
+    ? Array.from(new Set(briefs.flatMap((b) => typeof b.platform === "string" ? [b.platform] : [])))
     : ["tiktok", "shopify"];
 
   const firstBrief = briefs[0] || {};
@@ -637,7 +707,7 @@ function MediaView({
             {thumbImages.map((p, i) => (
               <div key={i} className="relative bg-black rounded-xl overflow-hidden aspect-[9/16] group">
                 {getMediaUrl(p) ? (
-                  <img
+                  <RuntimeMediaImage
                     src={getMediaUrl(p)}
                     alt={`thumbnail-${i}`}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -768,7 +838,7 @@ function MediaView({
   );
 }
 
-function RawView({ data }: { data: any }) {
+function RawView({ data }: { data: unknown }) {
   return (
     <pre className="text-[12px] font-mono text-[var(--text-body)] bg-[var(--bg-card)] p-3 rounded-lg overflow-auto max-h-[400px] whitespace-pre-wrap break-all">
       {JSON.stringify(data, null, 2)}
@@ -776,9 +846,9 @@ function RawView({ data }: { data: any }) {
   );
 }
 
-function PlatformPublishRow({ platform, result }: { platform: string; result: any }) {
+function PlatformPublishRow({ platform, result }: { platform: string; result: OneShotResult }) {
   const { t } = useI18n();
-  const [pubResult, setPubResult] = useState<any>(null);
+  const [pubResult, setPubResult] = useState<PublishRowResult | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
 
   const handlePublish = async () => {

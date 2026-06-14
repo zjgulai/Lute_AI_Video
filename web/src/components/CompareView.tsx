@@ -3,6 +3,13 @@
 import { useState, useMemo } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMediaUrl } from "./api";
+import InlineTooltip from "./InlineTooltip";
+import {
+  extractContinuityDiagnosticsFromAuditReport,
+  getContinuityDiagnosticsSummary,
+  hasContinuityDiagnostics,
+  normalizeContinuityDiagnostics,
+} from "@/lib/continuityDiagnostics";
 import { AuditReport } from "./types";
 
 export interface Version {
@@ -65,6 +72,28 @@ function StatusDot({ status }: { status: string }) {
   return <span className={`w-1.5 h-1.5 rounded-full ${color} shrink-0`} />;
 }
 
+function getContinuityVerdictText(
+  summary: string,
+  diagnostics: ReturnType<typeof normalizeContinuityDiagnostics>,
+  t: (key: string, fallback?: string) => string,
+): string {
+  const parts: string[] = [];
+  if (summary) parts.push(summary);
+  const firstDirection = diagnostics.clipDirections[0];
+  if (firstDirection?.sceneBeat) {
+    parts.push(`${t("continuity.sceneBeatLabel")} ${firstDirection.sceneBeat}`);
+  }
+  if (firstDirection?.transitionIntent) {
+    parts.push(`${t("continuity.transitionIntentLabel")} ${firstDirection.transitionIntent}`);
+  }
+  return parts.join(" · ");
+}
+
+function truncateContinuityVerdict(text: string, maxLength = 110): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
 export default function CompareView({
   versions,
   onSelect,
@@ -78,6 +107,19 @@ export default function CompareView({
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
   const [publishingVersion, setPublishingVersion] = useState<string | null>(null);
 
+  const getContinuityMeta = (version: Version | null | undefined) => {
+    const diagnostics = normalizeContinuityDiagnostics(
+      extractContinuityDiagnosticsFromAuditReport(
+        version?.auditReport as unknown as Record<string, unknown> | null | undefined,
+      ),
+    );
+    return {
+      diagnostics,
+      summary: getContinuityDiagnosticsSummary(diagnostics, t),
+      show: hasContinuityDiagnostics(diagnostics),
+    };
+  };
+
   // Safely derive all unique quality criteria across versions
   const allCriteria = useMemo(() => {
     const nameSet = new Set<string>();
@@ -90,6 +132,11 @@ export default function CompareView({
   }, [versions]);
 
   const hasMultipleVersions = versions.length >= 2;
+  const selectedVersionData = useMemo(
+    () => versions.find((version) => version.label === selectedVersion) ?? null,
+    [selectedVersion, versions],
+  );
+  const selectedContinuity = getContinuityMeta(selectedVersionData);
 
   // Empty state
   if (versions.length === 0) {
@@ -143,6 +190,7 @@ export default function CompareView({
           const overallScore = audit
             ? Math.round(Math.min(audit.overall_score, 1) * 100)
             : 0;
+          const continuity = getContinuityMeta(v);
 
           return (
             <div
@@ -280,6 +328,18 @@ export default function CompareView({
                       </span>
                     ))}
                   </div>
+                  {continuity.show && (
+                    <div className="mt-2 rounded-lg border border-[rgba(122,150,187,0.22)] bg-[rgba(122,150,187,0.08)] p-2.5">
+                      <p className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                        {t("continuity.diagnosticsTitle")}
+                      </p>
+                      {continuity.summary && (
+                        <p className="mt-1 text-[11px] text-[var(--text-body)]">
+                          {continuity.summary}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -361,6 +421,115 @@ export default function CompareView({
                 </tr>
               </thead>
               <tbody>
+                <tr className="bg-[rgba(122,150,187,0.08)] border-b border-[rgba(122,150,187,0.18)]">
+                  <td
+                    colSpan={versions.length + 1}
+                    className="py-2 pr-4 px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--cinema-azure)]"
+                  >
+                    {t("compare.continuitySection")}
+                  </td>
+                </tr>
+                <tr className="border-b border-[rgba(215,92,112,0.09)]">
+                  <td className="py-2 pr-4 text-[var(--text-h1)]">{t("compare.continuitySummary")}</td>
+                  {versions.map((v) => {
+                    const continuity = getContinuityMeta(v);
+                    const score = continuity.diagnostics.continuityScore;
+                    const status = continuity.diagnostics.directorIntentMetadata === true
+                      ? "PASS"
+                      : continuity.diagnostics.directorIntentMetadata === false
+                      ? "WARN"
+                      : "";
+                    const label = continuity.diagnostics.directorIntentMetadata === true
+                      ? t("continuity.directorIntentReady")
+                      : continuity.diagnostics.directorIntentMetadata === false
+                      ? t("continuity.directorIntentMissing")
+                      : "";
+                    if (!status && score === null) {
+                      return (
+                        <td key={`${v.label}-continuity-summary`} className="text-center py-2 px-3 text-[var(--text-muted)]">
+                          —
+                        </td>
+                      );
+                    }
+                    const scorePct = score === null ? null : Math.round(score * 100);
+                    const scoreStatus =
+                      score === null ? "" : score >= 0.8 ? "PASS" : score >= 0.6 ? "WARN" : "FAIL";
+                    return (
+                      <td
+                        key={`${v.label}-continuity-summary`}
+                        className="text-center py-2 px-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 text-[12px]">
+                          {status ? (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
+                                status === "PASS"
+                                  ? "bg-[rgba(120,175,140,0.10)] text-[var(--jade-accent)]"
+                                  : "bg-[rgba(220,190,120,0.10)] text-[var(--gold-foil)]"
+                              }`}
+                            >
+                              <StatusDot status={status} />
+                              <span>{label}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[var(--text-muted)]">—</span>
+                          )}
+                          {scorePct !== null && (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
+                                scoreStatus === "PASS"
+                                  ? "bg-[rgba(120,175,140,0.10)] text-[var(--jade-accent)]"
+                                  : scoreStatus === "WARN"
+                                  ? "bg-[rgba(220,190,120,0.10)] text-[var(--gold-foil)]"
+                                  : "bg-[rgba(208,78,90,0.10)] text-[var(--crimson-mist)]"
+                              }`}
+                            >
+                              <span className="tabular-nums">{scorePct}%</span>
+                              <StatusDot status={scoreStatus || "FAIL"} />
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="border-b border-[rgba(215,92,112,0.09)]">
+                  <td className="py-2 pr-4 text-[var(--text-h1)]">{t("compare.continuityVerdict")}</td>
+                  {versions.map((v) => {
+                    const continuity = getContinuityMeta(v);
+                    const verdict = getContinuityVerdictText(
+                      continuity.summary,
+                      continuity.diagnostics,
+                      t,
+                    );
+                    const verdictPreview = truncateContinuityVerdict(verdict);
+                    return (
+                      <td
+                        key={`${v.label}-continuity-verdict`}
+                        className="py-2 px-3 text-center text-[12px] text-[var(--text-body)] align-top"
+                      >
+                        {verdict ? (
+                          <InlineTooltip
+                            label={verdictPreview}
+                            tooltip={verdict}
+                            className="max-w-[220px] align-top text-left"
+                            tooltipClassName="w-72"
+                          />
+                        ) : (
+                          <span className="text-[var(--text-muted)]">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="bg-[rgba(215,92,112,0.05)] border-b border-[rgba(215,92,112,0.12)]">
+                  <td
+                    colSpan={versions.length + 1}
+                    className="py-2 pr-4 px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--text-body)]"
+                  >
+                    {t("compare.qualityCriteriaSection")}
+                  </td>
+                </tr>
                 {allCriteria.map((name, rowIdx) => (
                   <tr
                     key={name}
@@ -420,6 +589,29 @@ export default function CompareView({
             {t("compare.backToGates")}
           </span>
         </button>
+        {selectedVersionData && selectedContinuity.show && (
+          <div className="flex-1 min-w-[260px] rounded-lg border border-[rgba(122,150,187,0.22)] bg-[rgba(122,150,187,0.08)] px-3 py-2">
+            <p className="text-[11px] font-medium text-[var(--cinema-azure)]">
+              {selectedVersionData.label} · {t("continuity.diagnosticsTitle")}
+            </p>
+            {selectedContinuity.summary && (
+              <p className="mt-1 text-[11px] text-[var(--text-body)]">
+                {selectedContinuity.summary}
+              </p>
+            )}
+            {selectedContinuity.diagnostics.clipDirections.slice(0, 1).map((direction, index) => (
+              <div
+                key={`${direction.sceneBeat}-${index}`}
+                className="mt-1 text-[11px] leading-relaxed text-[var(--text-body)]"
+              >
+                <div>{t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}</div>
+                {direction.transitionIntent && (
+                  <div>{t("continuity.transitionIntentLabel")} {direction.transitionIntent}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {selectedVersion && (
             <button

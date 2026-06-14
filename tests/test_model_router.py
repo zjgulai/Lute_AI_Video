@@ -36,10 +36,10 @@ class TestSelectModel:
         assert select_model("s1") == "seedance-2"
 
     def test_s2_preferred_is_kling_3_0_pro(self):
-        assert select_model("s2") == "kling-3-0/pro"
+        assert select_model("s2") == "kling-3.0/pro"
 
     def test_s3_preferred_is_kling_3_0_standard(self):
-        assert select_model("s3") == "kling-3-0/standard"
+        assert select_model("s3") == "kling-3.0/standard"
 
     def test_s4_preferred_is_seedance_2_fast(self):
         assert select_model("s4") == "seedance-2-fast"
@@ -64,8 +64,8 @@ class TestGetChain:
     def test_s1_chain_is_seedance_kling_wan(self):
         chain = get_chain("s1")
         assert chain.preferred == "seedance-2"
-        assert chain.fallback == "kling-3-0/pro"
-        assert chain.budget == "wan-2-7-video"
+        assert chain.fallback == "kling-3.0/pro"
+        assert chain.budget == "wan2.7-text-to-video"
 
     def test_s5_chain_matches_s1_for_video_gen_path(self):
         # S5 (brand VLOG) uses same model tier as S1 (product direct)
@@ -85,13 +85,13 @@ class TestNextModel:
             if m is None:
                 break
             walk.append(m)
-        assert walk == ["seedance-2", "kling-3-0/pro", "wan-2-7-video"]
+        assert walk == ["seedance-2", "kling-3.0/pro", "wan2.7-text-to-video"]
 
     def test_next_model_unknown_current_returns_preferred(self):
         assert next_model("s1", "completely-fake-model") == "seedance-2"
 
     def test_next_model_at_budget_returns_none(self):
-        assert next_model("s4", "wan-2-2-fast") is None
+        assert next_model("s4", "wan2.5-text-to-video") is None
 
 
 class TestAllScenarios:

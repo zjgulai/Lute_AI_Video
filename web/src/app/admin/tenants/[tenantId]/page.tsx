@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { adminFetchJson } from "@/components/api";
 import { errorMessage } from "@/lib/errors";
@@ -48,14 +48,13 @@ export default function AdminTenantDetailPage({
   const [keyLabel, setKeyLabel] = useState("");
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
-  const [newKeyId, setNewKeyId] = useState<string | null>(null);
   const [keyVisible, setKeyVisible] = useState(false);
 
   // Disable confirm
   const [showDisable, setShowDisable] = useState(false);
   const [disableConfirm, setDisableConfirm] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -68,12 +67,12 @@ export default function AdminTenantDetailPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [tenantId]);
+    void load();
+  }, [load]);
 
   const handleCreateKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +86,6 @@ export default function AdminTenantDetailPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: keyLabel.trim() }),
       });
-      setNewKeyId(result.id);
       setNewKey(result.api_key);
       setKeyVisible(false);
     } catch (err: unknown) {
@@ -104,7 +102,7 @@ export default function AdminTenantDetailPage({
         `/api/admin/tenants/${tenantId}/keys/${keyId}/revoke`,
         { method: "POST" }
       );
-      load();
+      void load();
     } catch (err: unknown) {
       alert(errorMessage(err, "Failed to revoke key"));
     }
@@ -126,7 +124,7 @@ export default function AdminTenantDetailPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      load();
+      void load();
       setShowDisable(false);
     } catch (err: unknown) {
       alert(errorMessage(err, "Failed to update tenant"));
@@ -323,7 +321,7 @@ export default function AdminTenantDetailPage({
               <button
                 onClick={() => {
                   setShowCreateKey(false);
-                  if (newKey) load();
+                  if (newKey) void load();
                 }}
                 className="cursor-pointer"
               >

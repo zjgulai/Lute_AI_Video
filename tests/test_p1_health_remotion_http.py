@@ -13,8 +13,9 @@ real node/remotion/ffmpeg status.
 
 from __future__ import annotations
 
-import pytest
 from typing import Any
+
+import pytest
 
 
 class _FakeResponse:

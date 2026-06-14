@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from src.skills.remotion_assemble import RemotionAssembleSkill
 from src.config import QUALITY_MODE
+from src.skills.remotion_assemble import RemotionAssembleSkill
 
 
 class TestAVSync:

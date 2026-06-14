@@ -8,9 +8,9 @@ import TopHeader from "@/components/TopHeader";
 import MaterialsTab from "./MaterialsTab";
 import BrandKitTab from "./BrandKitTab";
 import InfluencersTab from "./InfluencersTab";
+import { RoutePageSkeleton } from "@/components/Skeleton";
 
 type TabId = "materials" | "brand_kit" | "influencers";
-const TAB_IDS: TabId[] = ["materials", "brand_kit", "influencers"];
 const DEFAULT_TAB: TabId = "materials";
 
 function isTabId(v: string | null): v is TabId {
@@ -123,7 +123,7 @@ function LibraryContent() {
 
 export default function LibraryPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<RoutePageSkeleton />}>
       <LibraryContent />
     </Suspense>
   );

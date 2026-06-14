@@ -7,13 +7,12 @@ Usage:
     python scripts/run_pipeline.py --step strategy    # Run up to a specific step
 """
 
-import asyncio
 import argparse
+import asyncio
 import json
-import structlog
 from pathlib import Path
 
-from langgraph.checkpoint.memory import MemorySaver
+import structlog
 
 from src.graph.pipeline import compile_pipeline
 from src.models.state import VideoPipelineState
@@ -111,7 +110,7 @@ def print_state_summary(state: dict, step_name: str):
         print(f"  ERRORS: {state['errors']}")
 
     if state.get("pipeline_complete"):
-        print(f"\n  ✅ PIPELINE COMPLETE")
+        print("\n  ✅ PIPELINE COMPLETE")
 
 
 def simulate_human_approval(app, config: dict, review_nodes: list[str]):
@@ -122,7 +121,7 @@ def simulate_human_approval(app, config: dict, review_nodes: list[str]):
         human_reviews = snapshot.get("human_reviews", {})
 
         # Set approval
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         if node_name == "strategy_node":
             review = HumanReview(

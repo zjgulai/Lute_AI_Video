@@ -9,16 +9,14 @@ Verifies:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import Any
 
 import pytest
 
 from src.skills.base import SkillCallable, SkillResult
-from src.skills.registry import SkillRegistry
 from src.skills.llm_skill import LLMSkill
+from src.skills.registry import SkillRegistry
 from src.tools.product_catalog import Product, ProductCatalog
-from typing import Any
-
 
 # ==============================================================================
 # Fixtures

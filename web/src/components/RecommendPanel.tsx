@@ -5,24 +5,101 @@ import { Sparkle } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import DurationSlider from "./DurationSlider";
 import { startS1StepByStep, runS1Step, isDemoMode } from "./api";
-
-
-
 import { errorMessage } from "@/lib/errors";
+
 interface Props {
   config: Record<string, unknown>;  // The config from SceneForm
   onBack: () => void;
   onStart: (finalConfig: Record<string, unknown>) => void;
 }
 
+type LocalRecommendation = {
+  summary: string;
+  tone: string;
+  platforms: string[];
+  duration: number;
+};
+
+function textValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function firstProductName(productCatalog: unknown): string {
+  if (!productCatalog || typeof productCatalog !== "object") return "";
+  const catalog = productCatalog as Record<string, unknown>;
+  const products = catalog.products;
+  if (!Array.isArray(products) || products.length === 0) return "";
+  const first = products[0];
+  if (!first || typeof first !== "object") return "";
+  const product = first as Record<string, unknown>;
+  return textValue(product.name) || textValue(product.product_name);
+}
+
+function toneFromGuidelines(brandGuidelines: unknown): string {
+  if (!brandGuidelines || typeof brandGuidelines !== "object") return "";
+  const guidelines = brandGuidelines as Record<string, unknown>;
+  const tone = guidelines.tone_of_voice;
+  if (typeof tone === "string") return tone.trim();
+  if (!tone || typeof tone !== "object") return "";
+  const toneObject = tone as Record<string, unknown>;
+  const keywords = toneObject.keywords;
+  if (Array.isArray(keywords)) {
+    return keywords.map((item) => textValue(item)).filter(Boolean).join(", ");
+  }
+  return textValue(toneObject.archetype);
+}
+
+export function buildLocalRecommendation(config: Record<string, unknown>): LocalRecommendation {
+  const scenario = textValue(config.content_scenario);
+  const productName = firstProductName(config.product_catalog);
+  const platforms = Array.isArray(config.target_platforms)
+    ? config.target_platforms.map((item) => textValue(item)).filter(Boolean)
+    : ["tiktok", "shopify"];
+  const duration = typeof config.video_duration === "number" ? config.video_duration : 30;
+
+  if (scenario === "brand_campaign") {
+    return {
+      summary: textValue(config.key_message) || textValue(config.campaign_theme) || "Brand campaign auto execution",
+      tone: toneFromGuidelines(config.brand_guidelines),
+      platforms,
+      duration,
+    };
+  }
+  if (scenario === "influencer_remix") {
+    return {
+      summary: productName
+        ? `Remix creator content around ${productName}`
+        : "Influencer remix auto execution",
+      tone: textValue(config.influencer_name),
+      platforms,
+      duration,
+    };
+  }
+  if (scenario === "brand_vlog") {
+    return {
+      summary: textValue(config.story_description) || "Brand VLOG auto execution",
+      tone: textValue(config.scene_id),
+      platforms,
+      duration,
+    };
+  }
+  return {
+    summary: productName ? `Product direct story for ${productName}` : "Product direct workflow",
+    tone: toneFromGuidelines(config.brand_guidelines),
+    platforms,
+    duration,
+  };
+}
+
 export default function RecommendPanel({ config, onBack, onStart }: Props) {
   const { t } = useI18n();
+  const stepByStepSupported = config.content_scenario === "product_direct";
   const [loading, setLoading] = useState(true);
   const [duration, setDuration] = useState(30);
   const [platforms, setPlatforms] = useState<string[]>((config.target_platforms as string[]) || []);
   const [summary, setSummary] = useState("");
   const [tone, setTone] = useState("");
-  const [mode, setMode] = useState<"expert" | "smart">("expert");
+  const [mode, setMode] = useState<"expert" | "smart">(stepByStepSupported ? "expert" : "smart");
   const [error, setError] = useState("");
 
   const [starting, setStarting] = useState(false);
@@ -47,6 +124,16 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
         setError(errorMessage(e, "Failed to load demo recommendation"));
         setLoading(false);
       }
+      return;
+    }
+
+    if (!stepByStepSupported) {
+      const localRecommendation = buildLocalRecommendation(config);
+      setSummary(localRecommendation.summary);
+      setTone(localRecommendation.tone);
+      setPlatforms(localRecommendation.platforms);
+      setDuration(localRecommendation.duration);
+      setLoading(false);
       return;
     }
 
@@ -76,7 +163,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
       setError(errorMessage(e, "Failed to get recommendation"));
       setLoading(false);
     }
-  }, [config]);
+  }, [config, stepByStepSupported]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -86,11 +173,12 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   function handleStart() {
     if (starting) return;
     setStarting(true);
+    const selectedMode = stepByStepSupported ? mode : "smart";
     onStart({
       ...config,
       video_duration: duration,
       target_platforms: platforms,
-      mode: mode === "smart" ? "auto" : "step_by_step",
+      mode: selectedMode === "smart" ? "auto" : "step_by_step",
     });
   }
 
@@ -176,14 +264,20 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
             {t("mode.smartCreate")}
           </button>
           <button
-            onClick={() => setMode("expert")}
+            onClick={() => stepByStepSupported && setMode("expert")}
+            disabled={!stepByStepSupported}
             className={`text-xs px-3 py-1.5 rounded-full transition-all ${
+              !stepByStepSupported ? "opacity-50 cursor-not-allowed" : ""
+            } ${
               mode === "expert" ? "bg-[var(--fortune-red)] text-white" : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[var(--border-default)]"
             }`}
           >
             {t("mode.expertStudio")}
           </button>
         </div>
+        {!stepByStepSupported && (
+          <p className="text-[11px] text-[var(--text-muted)] mb-4">{t("pipeline.stepByStepS1Only")}</p>
+        )}
       </div>
 
       {/* Action Buttons */}

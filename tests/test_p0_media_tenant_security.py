@@ -35,6 +35,26 @@ def test_media_sign_rejects_path_traversal(tmp_path, monkeypatch):
     assert exc.value.status_code == 400
 
 
+def test_media_sign_rejects_url_schemes_and_encoded_traversal(tmp_path, monkeypatch):
+    from src.routers import media
+
+    target = tmp_path / "renders" / "secret.mp4"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"fake mp4")
+    monkeypatch.setattr(media, "OUTPUT_DIR", tmp_path)
+
+    for bad_path in (
+        "https://evil.example/secret.mp4",
+        "//evil.example/secret.mp4",
+        "javascript:alert(1)",
+        "renders/%2e%2e/secret.mp4",
+        "renders/%252e%252e/secret.mp4",
+    ):
+        with pytest.raises(HTTPException) as exc:
+            media.sign_media_url(bad_path)
+        assert exc.value.status_code == 400
+
+
 def test_media_sign_uses_canonical_path_for_nested_file(tmp_path, monkeypatch):
     from src.routers import media
 
@@ -56,8 +76,11 @@ async def test_portfolio_filters_and_caches_by_tenant(tmp_path, monkeypatch):
 
     tenant_a_file = tmp_path / "uploads" / "tenant-a" / "a.mp4"
     tenant_b_file = tmp_path / "uploads" / "tenant-b" / "b.mp4"
+    tenant_a_pending = tmp_path / "tenants" / "tenant-a" / "pending_review" / "smoke" / "a.png"
+    tenant_b_pending = tmp_path / "tenants" / "tenant-b" / "pending_review" / "smoke" / "b.png"
+    default_pending = tmp_path / "pending_review" / "legacy" / "default.png"
     brand_file = tmp_path / "brand_assets" / "momcozy" / "sku" / "images" / "p.png"
-    for path in (tenant_a_file, tenant_b_file, brand_file):
+    for path in (tenant_a_file, tenant_b_file, tenant_a_pending, tenant_b_pending, default_pending, brand_file):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"x" * (1024 * 1024 + 1))
 
@@ -76,9 +99,17 @@ async def test_portfolio_filters_and_caches_by_tenant(tmp_path, monkeypatch):
     paths_b = {f.path for f in resp_b.files}
     assert "uploads/tenant-a/a.mp4" in paths_a
     assert "uploads/tenant-b/b.mp4" not in paths_a
+    assert "tenants/tenant-a/pending_review/smoke/a.png" in paths_a
+    assert "tenants/tenant-b/pending_review/smoke/b.png" not in paths_a
+    assert "pending_review/legacy/default.png" not in paths_a
     assert "brand_assets/momcozy/sku/images/p.png" in paths_a
     assert "uploads/tenant-b/b.mp4" in paths_b
     assert "uploads/tenant-a/a.mp4" not in paths_b
+    assert "tenants/tenant-b/pending_review/smoke/b.png" in paths_b
+    assert "tenants/tenant-a/pending_review/smoke/a.png" not in paths_b
+    assert "pending_review/legacy/default.png" not in paths_b
+    pending_a = {f.review_status for f in resp_a.files if f.category == "pending_review"}
+    assert pending_a == {"pending_review"}
 
 
 def test_assets_file_listing_rejects_other_tenant_paths():

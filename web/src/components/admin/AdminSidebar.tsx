@@ -34,7 +34,7 @@ export default function AdminSidebar() {
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1" aria-label="Admin navigation">
         {NAV_ITEMS.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -51,6 +51,7 @@ export default function AdminSidebar() {
                   ? "bg-[rgba(215,92,112,0.1)] text-[var(--fortune-red)] font-medium"
                   : "text-[var(--text-body)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)]"
               }`}
+              aria-current={isActive ? "page" : undefined}
             >
               <Icon size={18} weight={isActive ? "fill" : "regular"} />
               {item.label}

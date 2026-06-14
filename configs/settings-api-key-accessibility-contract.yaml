@@ -1,0 +1,44 @@
+version: 1
+owner: frontend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  settings_panel: web/src/components/SettingsPanel.tsx
+  settings_tests: web/src/components/SettingsPanel.test.tsx
+  runbook: docs/runbooks/settings-api-key-accessibility.md
+
+api_key_input:
+  id: settings-api-key
+  label_for: settings-api-key
+  hint_id: settings-api-key-hint
+  described_by: settings-api-key-hint
+  type: password
+  autocomplete: current-password
+
+connection_status:
+  role_status_on_success: true
+  aria_live_success: polite
+  role_alert_on_failure: true
+  aria_live_failure: assertive
+
+actions:
+  save_button_type_button: true
+  save_trims_api_key: true
+  close_button_has_aria_label: true
+  dialog_role: dialog
+  dialog_modal: true
+
+rules:
+  never_render_full_api_key: true
+  no_generation_endpoints: true
+  no_provider_calls: true
+
+tests:
+  accessibility_guard: web/src/components/SettingsPanel.test.tsx
+
+commands:
+  focused_test: npm test -- --run src/components/SettingsPanel.test.tsx
+  type_check: npx tsc --noEmit -p tsconfig.json
+
+no_token_boundary: true

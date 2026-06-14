@@ -8,19 +8,20 @@ sys.modules['structlog'].get_logger.return_value = unittest.mock.MagicMock()
 
 import asyncio
 from pathlib import Path
+
 from src.skills.base import SkillResult
-from src.skills.registry import SkillRegistry
 from src.skills.character_identity import CharacterIdentitySkill
 from src.skills.keyframe_images import KeyframeImagesSkill
-
+from src.skills.registry import SkillRegistry
 
 # ──────────────────────────────────────────
 # CharacterIdentitySkill tests
 # ──────────────────────────────────────────
 
 def _make_dummy_images(count: int = 3, tmp_path: Path | None = None) -> list[str]:
-    import PIL.Image
     import tempfile
+
+    import PIL.Image
     if tmp_path is None:
         tmp_path = Path(tempfile.mkdtemp())
     paths = []

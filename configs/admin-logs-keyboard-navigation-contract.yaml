@@ -1,0 +1,43 @@
+version: 1
+owner: frontend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  admin_logs_page: web/src/app/admin/logs/page.tsx
+  admin_logs_tests: web/src/app/admin/logs/page.test.tsx
+  modal_behavior: web/src/hooks/useModalBehavior.ts
+  runbook: docs/runbooks/admin-logs-keyboard-navigation.md
+
+log_row:
+  row_role_button: true
+  row_tabindex_zero: true
+  row_has_accessible_label: true
+  enter_space_open_detail: true
+  click_open_detail: true
+
+detail_dialog:
+  role_dialog: true
+  aria_modal: true
+  labelled_by_title: admin-log-detail-title
+  described_by_summary: admin-log-detail-description
+  initial_focus_close_button: true
+  close_button_type_button: true
+  escape_closes_detail: true
+  overlay_click_closes_detail: true
+  restore_focus_to_row: true
+
+rules:
+  no_generation_endpoints: true
+  no_provider_calls: true
+  no_backend_required: true
+  mocked_admin_fetch_only: true
+
+tests:
+  keyboard_navigation_guard: web/src/app/admin/logs/page.test.tsx
+
+commands:
+  focused_test: npm test -- --run src/app/admin/logs/page.test.tsx
+  type_check: npx tsc --noEmit -p tsconfig.json
+
+no_token_boundary: true

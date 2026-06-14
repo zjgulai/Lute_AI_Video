@@ -14,6 +14,7 @@ import logging
 import os
 import time
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from dotenv import load_dotenv
@@ -46,10 +47,7 @@ if HAS_FASTAPI:
     assert Depends is not None
     assert CORSMiddleware is not None
 
-    app = FastAPI(title="Short Video Agent API", version=APP_VERSION)
-
-    @app.on_event("startup")
-    async def startup():
+    async def _run_startup() -> None:
         if HAS_STORAGE:
             assert init_db is not None
             await init_db()
@@ -164,6 +162,17 @@ if HAS_FASTAPI:
             logging.getLogger("api.startup").warning(
                 "admin background tasks registration failed: %s", _exc
             )
+
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI):
+        await _run_startup()
+        try:
+            yield
+        finally:
+            from src.tasks.bg_registry import cancel_background_tasks
+            await cancel_background_tasks()
+
+    app = FastAPI(title="Short Video Agent API", version=APP_VERSION, lifespan=_lifespan)
 
     # CORS: allow comma-separated origins via CORS_ORIGINS env var
     _cors_env = os.getenv("CORS_ORIGINS", "")
@@ -344,6 +353,9 @@ if HAS_FASTAPI:
 
     from src.routers import portfolio
     app.include_router(portfolio.router, dependencies=[Depends(verify_api_key)])
+
+    from src.routers import toolbox
+    app.include_router(toolbox.router, dependencies=[Depends(verify_api_key)])
 
     # Mount legacy asset management endpoints
     try:

@@ -3,7 +3,8 @@
 import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMediaUrl } from "./api";
-import { Play, Article, MusicNotes, Image, VideoCamera, FileImage } from "@phosphor-icons/react";
+import RuntimeMediaImage from "./RuntimeMediaImage";
+import { Play, Article, MusicNotes, VideoCamera, FileImage } from "@phosphor-icons/react";
 
 export type AssetType = "video" | "image" | "audio" | "text";
 export type AssetSource = "ai" | "manual" | "imported";
@@ -18,7 +19,7 @@ export interface AssetItem {
   duration?: number;
   textContent?: string;
   createdAt: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 interface Props {
@@ -67,7 +68,7 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Thumbnail — 3:2 ratio */}
       <div className="relative aspect-[3/2] bg-black overflow-hidden">
         {asset.thumbnail && !posterFailed ? (
-          <img
+          <RuntimeMediaImage
             src={getMediaUrl(asset.thumbnail)}
             alt={asset.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -123,7 +124,7 @@ function ImageCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Square thumbnail */}
       <div className="relative aspect-square bg-[var(--color-bg-secondary)] overflow-hidden">
         {asset.thumbnail || asset.filePath ? (
-          <img
+          <RuntimeMediaImage
             src={(() => {
               const raw = asset.thumbnail || asset.filePath || "";
               return raw.startsWith("/") && !raw.startsWith("/api/")
@@ -181,7 +182,7 @@ function AudioCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       {/* Waveform placeholder */}
       <div className="mt-2 h-6 flex items-end gap-[2px]">
         {Array.from({ length: 24 }).map((_, i) => {
-          const h = 30 + Math.sin(i * 0.8) * 20 + Math.random() * 30;
+          const h = 30 + Math.sin(i * 0.8) * 20 + ((i * 37) % 30);
           return (
             <div
               key={i}

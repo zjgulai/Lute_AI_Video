@@ -13,9 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from src.tools.video_downloader import VideoDownloader, TranscribeSegment, VideoMetadata
-from src.tools.asset_storage import AssetStorage, AssetRecord
-
+from src.tools.asset_storage import AssetStorage
+from src.tools.video_downloader import TranscribeSegment, VideoDownloader, VideoMetadata
 
 # ==============================================================================
 # VideoDownloader Tests
@@ -54,39 +53,44 @@ class TestVideoDownloaderMockMode:
     def dl(self, tmp_path):
         return VideoDownloader(output_dir=tmp_path)
 
-    def test_download_returns_mock_metadata(self, dl):
+    @pytest.mark.asyncio
+    async def test_download_returns_mock_metadata(self, dl):
         """Without yt-dlp, download should return mock metadata."""
-        metadata = dl.download("https://www.tiktok.com/@user/video/123")
+        metadata = await dl.download("https://www.tiktok.com/@user/video/123")
         assert isinstance(metadata, VideoMetadata)
         assert metadata.source_url == "https://www.tiktok.com/@user/video/123"
         assert "[MOCK]" in metadata.title
         assert metadata.platform == "tiktok"
         assert "[MOCK_DOWNLOAD" in metadata.local_path
 
-    def test_transcribe_returns_mock_segments(self, dl):
+    @pytest.mark.asyncio
+    async def test_transcribe_returns_mock_segments(self, dl):
         """Without whisper, transcribe should return mock segments."""
-        segments = dl.transcribe("/fake/path.mp4")
+        segments = await dl.transcribe("/fake/path.mp4")
         assert len(segments) == 6
         assert all(isinstance(s, TranscribeSegment) for s in segments)
         assert segments[0].start == 0.0
         assert segments[0].text.startswith("Hey everyone")
 
-    def test_download_and_transcribe_returns_both(self, dl):
+    @pytest.mark.asyncio
+    async def test_download_and_transcribe_returns_both(self, dl):
         """download_and_transcribe should return metadata + segments."""
-        result = dl.download_and_transcribe("https://www.douyin.com/video/456")
+        result = await dl.download_and_transcribe("https://www.douyin.com/video/456")
         assert "metadata" in result
         assert "segments" in result
         assert result["metadata"]["platform"] == "douyin"
         assert len(result["segments"]) == 6
 
-    def test_mock_metadata_from_douyin(self, dl):
+    @pytest.mark.asyncio
+    async def test_mock_metadata_from_douyin(self, dl):
         """Mock metadata should preserve URL platform info."""
-        meta = dl.download("https://www.douyin.com/video/test123")
+        meta = await dl.download("https://www.douyin.com/video/test123")
         assert meta.platform == "douyin"
 
-    def test_mock_metadata_unknown_platform(self, dl):
+    @pytest.mark.asyncio
+    async def test_mock_metadata_unknown_platform(self, dl):
         """Unknown URLs should get 'unknown' platform."""
-        meta = dl.download("https://random-site.com/video")
+        meta = await dl.download("https://random-site.com/video")
         assert meta.platform == "unknown"
 
 

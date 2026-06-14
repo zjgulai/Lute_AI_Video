@@ -1,0 +1,44 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-05-31"
+
+cookie_name: admin_csrf
+request_header: X-CSRF-Token
+fastapi_header_param: x_csrf_token
+frontend_helper: adminFetch
+
+read_only_methods:
+  - GET
+  - HEAD
+  - OPTIONS
+
+state_changing_methods:
+  - POST
+  - PUT
+  - PATCH
+  - DELETE
+
+cookie:
+  path: /
+  http_only: false
+  same_site: lax
+  secure_when_https: true
+  max_age_sec: 86400
+
+session_cookie:
+  name: admin_session
+  path: /api/admin
+  http_only: true
+
+csrf_exempt_routes:
+  - method: POST
+    path: /api/admin/auth/login
+    reason: Login has no session yet; it creates admin_session and admin_csrf cookies.
+
+frontend_requirements:
+  - adminFetch must use credentials=include.
+  - adminFetch must strip X-API-Key.
+  - adminFetch must attach X-CSRF-Token for POST/PUT/PATCH/DELETE.
+  - adminFetch must not attach X-CSRF-Token for GET/HEAD/OPTIONS.
+  - Admin page mutating calls must use adminFetch or adminFetchJson.

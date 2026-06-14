@@ -5,12 +5,14 @@ module: governance
 topic: type-safety-roadmap
 status: stable
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-31
 owner: self
 source: human+ai
 ---
 
 # pyright Strict 模式技术债专项排期
+
+> **历史语境（2026-05-31）**：本文是 2026-05-07 的 pyright strict 专项排期。当前仓库已进入渐进式类型治理阶段，实际启用规则以 `pyproject.toml` 的 `[tool.pyright]` 为准；近期类型边界收口以 [`docs/claude/known-gaps-stable.md`](../claude/known-gaps-stable.md) 的 P1-4 记录为准。本文不再作为当前执行计划。
 
 ## 1. 现状快照（2026-05-07）
 

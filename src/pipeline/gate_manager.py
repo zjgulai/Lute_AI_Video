@@ -22,8 +22,10 @@ import structlog
 
 from src.config import DEFAULT_LANGUAGES
 from src.pipeline.candidate_scorer import score_candidate
+from src.pipeline.continuity_utils import extract_continuity_diagnostics
 from src.pipeline.model_router import select_model
 from src.pipeline.model_thresholds import get_threshold, is_acceptable
+from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS, get_scenario_step_order
 from src.pipeline.state_manager import PipelineStateManager
 from src.skills.registry import SkillRegistry
 
@@ -156,31 +158,6 @@ STEP_TO_SKILL_NAME: dict[str, str | None] = {
     "thumbnails": None,
 }
 
-# Per-scenario step orders — must match step_runner.py _SCENARIO_CONFIGS
-SCENARIO_STEP_ORDERS: dict[str, list[str]] = {
-    "s1": [
-        "strategy", "scripts", "compliance", "storyboards", "keyframe_images",
-        "video_prompts", "thumbnail_prompts", "seedance_clips", "tts_audio",
-        "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s2": [
-        "strategy", "scripts", "compliance", "storyboards", "keyframe_images",
-        "video_prompts", "thumbnail_prompts", "seedance_clips", "tts_audio",
-        "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s3": [
-        "video_analysis", "character_identity", "remix_script", "storyboards",
-        "keyframe_images", "video_prompts", "thumbnail_prompts", "seedance_clips",
-        "tts_audio", "thumbnail_images", "assemble_final", "audit",
-    ],
-    "s4": ["scripts", "video_prompts", "thumbnails"],
-    "s5": [
-        "vlog_strategy", "video_prompts", "seedance_clips", "tts_audio",
-        "assemble_final", "audit",
-    ],
-}
-
-# Backward-compatible alias
 STEP_ORDER = SCENARIO_STEP_ORDERS["s1"]
 
 
@@ -196,7 +173,7 @@ def _get_gate_defs(scenario: str) -> dict[str, dict[str, Any]]:
 
 def _get_step_order(scenario: str) -> list[str]:
     """Return step order for a scenario, falling back to s1."""
-    return SCENARIO_STEP_ORDERS.get(scenario, SCENARIO_STEP_ORDERS["s1"])
+    return get_scenario_step_order(scenario)
 
 
 def _get_next_step(step_name: str, scenario: str = "s1") -> str | None:
@@ -239,6 +216,7 @@ async def get_gate_state(label: str, gate_id: str) -> dict[str, Any]:
 
     gates_state = state.get("gates", {})
     gate_state = gates_state.get(gate_id, {})
+    audit_report = state.get("steps", {}).get("audit", {}).get("output") or {}
 
     return {
         "gate_id": gate_id,
@@ -249,6 +227,7 @@ async def get_gate_state(label: str, gate_id: str) -> dict[str, Any]:
         "approved": gate_state.get("approved", False),
         "max_selections": definition["max_selections"],
         "after_step": definition["after_step"],
+        "continuity_diagnostics": extract_continuity_diagnostics(audit_report),
     }
 
 
@@ -282,41 +261,10 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
 
     candidate_step = definition.get("candidate_step")
 
-    # ── Gate 4: Final Review — no skill generation, assemble from state ──
-    if gate_id == "gate_4_final":
+    # ── State-assembled final/manual-review gates ──
+    if gate_id in {"gate_4_final", "gate_3_final", "gate_3_thumbnails"}:
         steps_data = state.get("steps", {})
-        assemble_out = steps_data.get("assemble_final", {}).get("output")
-        audit_out = steps_data.get("audit", {}).get("output") or {}
-        thumbnail_out = steps_data.get("thumbnail_images", {}).get("output") or []
-        seedance_out = steps_data.get("seedance_clips", {}).get("output") or {}
-
-        video_path = ""
-        if isinstance(assemble_out, (list, tuple)) and len(assemble_out) >= 1:
-            video_path = assemble_out[0]
-        elif isinstance(assemble_out, dict):
-            video_path = assemble_out.get("video_path", "")
-
-        total_duration = 0
-        if isinstance(seedance_out, dict):
-            total_duration = seedance_out.get("total_duration", 0)
-        if not total_duration and isinstance(audit_out, dict):
-            total_duration = audit_out.get("duration_seconds", 0)
-
-        candidate = {
-            "id": "gate_4_final_c0",
-            "variant": "standard",
-            "data": {
-                "final_video_path": video_path,
-                "audit_report": audit_out,
-                "thumbnail_image_paths": thumbnail_out if isinstance(thumbnail_out, list) else [],
-                "duration": total_duration,
-            },
-            "score": {
-                "overall": 0.9,
-                "explanation": "Final assembled video ready for review",
-            },
-            "recommended": True,
-        }
+        candidate = _build_state_assembled_candidate(gate_id, steps_data)
 
         gates_state = dict(state.get("gates", {}))
         gates_state[gate_id] = {
@@ -525,11 +473,30 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
 
     gates_state = dict(state.get("gates", {}))
     gate_state = gates_state.get(gate_id, {})
+    candidates = gate_state.get("candidates", [])
+    candidate_map = {c["id"]: c for c in candidates}
 
-    # Verify gate is awaiting approval
+    # Treat identical retries as idempotent: network retries or double-clicks
+    # must not re-write approval timestamps or trigger another resume.
     if gate_state.get("approved", False):
+        existing_selected_ids = gate_state.get("selected_ids", [])
+        if selected_ids == existing_selected_ids:
+            selected_variants = [
+                candidate_map[cid].get("variant", "unknown")
+                for cid in existing_selected_ids
+                if cid in candidate_map
+            ]
+            return {
+                "gate_id": gate_id,
+                "label": label,
+                "approved": True,
+                "idempotent": True,
+                "selected_ids": existing_selected_ids,
+                "selected_variants": selected_variants,
+                "next_step": state.get("current_step"),
+            }
         return {
-            "error": f"Gate {gate_id} is already approved",
+            "error": f"Gate {gate_id} is already approved with different selected_ids",
             "gate_id": gate_id,
             "label": label,
             "approved": True,
@@ -542,9 +509,6 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
             "label": label,
             "status": gate_state.get("status", "unknown"),
         }
-
-    candidates = gate_state.get("candidates", [])
-    candidate_map = {c["id"]: c for c in candidates}
 
     # Validate selected IDs
     invalid_ids = [cid for cid in selected_ids if cid not in candidate_map]
@@ -671,6 +635,7 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
         "gate_id": gate_id,
         "label": label,
         "approved": True,
+        "idempotent": False,
         "selected_ids": selected_ids,
         "selected_variants": [c["variant"] for c in selected_candidates],
         "next_step": state.get("current_step"),
@@ -862,6 +827,62 @@ def _step_index(step_name: str | None, scenario: str = "s1") -> int:
         return order.index(step_name)
     except ValueError:
         return -1
+
+
+def _build_state_assembled_candidate(
+    gate_id: str,
+    steps_data: dict[str, Any],
+) -> dict[str, Any]:
+    """Assemble final/manual-review candidates directly from persisted state."""
+    if gate_id == "gate_3_thumbnails":
+        thumbnail_out = steps_data.get("thumbnails", {}).get("output") or []
+        scripts_out = steps_data.get("scripts", {}).get("output") or []
+        return {
+            "id": "gate_3_thumbnails_c0",
+            "variant": "standard",
+            "data": {
+                "thumbnail_sets": thumbnail_out if isinstance(thumbnail_out, list) else [],
+                "script_count": len(scripts_out) if isinstance(scripts_out, list) else 0,
+            },
+            "score": {
+                "overall": 0.9,
+                "explanation": "Thumbnail review bundle ready",
+            },
+            "recommended": True,
+        }
+
+    assemble_out = steps_data.get("assemble_final", {}).get("output")
+    audit_out = steps_data.get("audit", {}).get("output") or {}
+    thumbnail_out = steps_data.get("thumbnail_images", {}).get("output") or []
+    seedance_out = steps_data.get("seedance_clips", {}).get("output") or {}
+
+    video_path = ""
+    if isinstance(assemble_out, (list, tuple)) and len(assemble_out) >= 1:
+        video_path = assemble_out[0]
+    elif isinstance(assemble_out, dict):
+        video_path = assemble_out.get("video_path", "")
+
+    total_duration = 0
+    if isinstance(seedance_out, dict):
+        total_duration = seedance_out.get("total_duration", 0)
+    if not total_duration and isinstance(audit_out, dict):
+        total_duration = audit_out.get("duration_seconds", 0)
+
+    return {
+        "id": f"{gate_id}_c0",
+        "variant": "standard",
+        "data": {
+            "final_video_path": video_path,
+            "audit_report": audit_out,
+            "thumbnail_image_paths": thumbnail_out if isinstance(thumbnail_out, list) else [],
+            "duration": total_duration,
+        },
+        "score": {
+            "overall": 0.9,
+            "explanation": "Final assembled video ready for review",
+        },
+        "recommended": True,
+    }
 
 
 def _extract_step_input(state: dict[str, Any], step_name: str) -> Any:

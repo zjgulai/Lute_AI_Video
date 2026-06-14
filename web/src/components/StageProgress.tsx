@@ -1,16 +1,32 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import InlineTooltip from "@/components/InlineTooltip";
 import { getScenarioStatus } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
+import {
+  getContinuityDiagnosticsSummary,
+  hasContinuityDiagnostics,
+  normalizeContinuityDiagnostics,
+  type ContinuityDiagnosticsPayload,
+} from "@/lib/continuityDiagnostics";
+import { truncateDiagnosticText } from "@/lib/diagnosticText";
+import { normalizePipelineResult, normalizePipelineSteps } from "@/lib/pipelineResult";
+import { getSoftDegradedSummary } from "@/lib/softDegraded";
+import type { PipelineResult } from "@/stores/usePipelineStore";
 
 interface Props {
   label: string;
   scenario: string;
-  onComplete: (result: unknown) => void;
+  onComplete: (result: PipelineResult) => void;
   onGatePause?: (gateId: string | null) => void;
   onError?: (errors: string[]) => void;
 }
+
+const POLL_FAILURE_THRESHOLD = 10;
+const POLL_BASE_INTERVAL_MS = 2000;
+const POLL_PAUSED_INTERVAL_MS = 10000;
+const POLL_MAX_INTERVAL_MS = 30000;
 
 // Per-scenario stage definitions (steps grouped into 3 narrative stages)
 const SCENARIO_STAGES: Record<string, Array<{ id: string; label: string; narrative: string; steps: string[]; estimatedSeconds: number }>> = {
@@ -89,6 +105,112 @@ function getStageProgress(stage: ReturnType<typeof getStages>[0], steps: Record<
   return total === 0 ? 0 : Math.round((done / total) * 100);
 }
 
+type StageDefinition = ReturnType<typeof getStages>[number];
+type StageRuntimeState = StageDefinition & {
+  progress: number;
+  allDone: boolean;
+  anyStarted: boolean;
+};
+
+type CommercialInjectionSummary = {
+  hard_token_ids?: unknown;
+  soft_token_ids?: unknown;
+  source_token_ids?: unknown;
+  bundle_refs?: unknown;
+  toolbox_refs?: unknown;
+  contract_refs?: unknown;
+  gate_checks?: unknown;
+};
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeCommercialInjection(value: unknown): CommercialInjectionSummary | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as CommercialInjectionSummary : null;
+}
+
+export function deriveStageRuntimeState(
+  stageDefs: StageDefinition[],
+  steps: Record<string, Record<string, unknown>>,
+): {
+  stageStates: StageRuntimeState[];
+  activeStageIdx: number;
+  allComplete: boolean;
+  stageCompletionKey: string;
+} {
+  const stageStates = stageDefs.map((stage) => {
+    const progress = getStageProgress(stage, steps);
+    const allDone = stage.steps.every((s) => steps[s]?.status === "done");
+    const anyStarted = stage.steps.some((s) => steps[s]?.status && steps[s]?.status !== "pending");
+    return { ...stage, progress, allDone, anyStarted };
+  });
+  const currentStageIdx = stageStates.findIndex((s) => !s.allDone && s.anyStarted);
+  const activeStageIdx = currentStageIdx >= 0 ? currentStageIdx : (stageStates.every((s) => s.allDone) ? stageDefs.length - 1 : 0);
+  const allComplete = stageStates.every((s) => s.allDone);
+  const stageCompletionKey = stageStates.map((s) => (s.allDone ? "1" : "0")).join(",");
+  return { stageStates, activeStageIdx, allComplete, stageCompletionKey };
+}
+
+export function estimateRemainingSeconds({
+  allComplete,
+  elapsed,
+  stageDefs,
+  steps,
+}: {
+  allComplete: boolean;
+  elapsed: number;
+  stageDefs: StageDefinition[];
+  steps: Record<string, Record<string, unknown>>;
+}): number | null {
+  if (allComplete) return 0;
+  if (elapsed < 5) return null;
+
+  let completedActual = 0;
+  let completedFallback = 0;
+  let remainingEstimate = 0;
+
+  for (const stage of stageDefs) {
+    for (const st of stage.steps) {
+      const stepData = steps[st];
+      const isDone = stepData?.status === "done";
+      const durationMs = typeof stepData?.duration_ms === "number" ? stepData.duration_ms : 0;
+      const hasDuration = durationMs > 0;
+
+      if (isDone) {
+        if (hasDuration) {
+          completedActual += durationMs / 1000;
+        } else {
+          completedFallback += stage.estimatedSeconds / stage.steps.length;
+        }
+      } else {
+        const sameTypeAvg = getAverageDurationForStepType(st, steps, stageDefs);
+        remainingEstimate += sameTypeAvg || (stage.estimatedSeconds / stage.steps.length);
+      }
+    }
+  }
+
+  const completedTotal = completedActual + completedFallback;
+  if (completedTotal <= 0) return null;
+  const pace = elapsed / completedTotal;
+  const remaining = Math.round(remainingEstimate * pace);
+  return Math.max(remaining, 0);
+}
+
+export function deriveTotalProgress(
+  stageDefs: StageDefinition[],
+  steps: Record<string, Record<string, unknown>>,
+): {
+  totalSteps: number;
+  totalDone: number;
+  totalProgress: number;
+} {
+  const totalSteps = stageDefs.reduce((sum, s) => sum + s.steps.length, 0);
+  const totalDone = stageDefs.reduce((sum, s) => sum + s.steps.filter((st) => steps[st]?.status === "done").length, 0);
+  const totalProgress = totalSteps === 0 ? 0 : Math.round((totalDone / totalSteps) * 100);
+  return { totalSteps, totalDone, totalProgress };
+}
+
 function getStageStatus(
   stageId: string,
   steps: Record<string, Record<string, unknown>>,
@@ -123,49 +245,91 @@ function getStageStatus(
 
 export default function StageProgress({ label, scenario, onComplete, onGatePause, onError }: Props) {
   const { t } = useI18n();
-  const STAGES = getStages(scenario);
+  const stageDefs = getStages(scenario);
 
   const [steps, setSteps] = useState<Record<string, Record<string, unknown>>>({});
   const [status, setStatus] = useState<string>("running");
   const [gateStatus, setGateStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [currentStepInjection, setCurrentStepInjection] = useState<CommercialInjectionSummary | null>(null);
+  const [softDegradedReasons, setSoftDegradedReasons] = useState<Array<{ step?: string; reason?: string; detail?: string }>>([]);
+  const [continuityDiagnostics, setContinuityDiagnostics] = useState<ContinuityDiagnosticsPayload | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifiedErrorSignatureRef = useRef<string | null>(null);
+  const notifiedGatePauseSignatureRef = useRef<string | null>(null);
 
   // P1-6: Exponential backoff for polling
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failureCountRef = useRef(0);
-  const POLL_FAILURE_THRESHOLD = 10;
-  const POLL_BASE_INTERVAL_MS = 2000;
-  const POLL_MAX_INTERVAL_MS = 30000;
   const [pollError, setPollError] = useState<string | null>(null);
 
-  const [prevComplete, setPrevComplete] = useState<boolean[]>([false, false, false]);
+  const prevCompleteRef = useRef<boolean[]>([false, false, false]);
   const [celebrations, setCelebrations] = useState<boolean[]>([false, false, false]);
 
-  const stageStates = STAGES.map((stage) => {
-    const progress = getStageProgress(stage, steps);
-    const allDone = stage.steps.every((s) => steps[s]?.status === "done");
-    const anyStarted = stage.steps.some((s) => steps[s]?.status && steps[s]?.status !== "pending");
-    return { ...stage, progress, allDone, anyStarted };
-  });
+  const { stageStates, activeStageIdx, allComplete, stageCompletionKey } = deriveStageRuntimeState(stageDefs, steps);
 
-  const currentStageIdx = stageStates.findIndex((s) => !s.allDone && s.anyStarted);
-  const activeStageIdx = currentStageIdx >= 0 ? currentStageIdx : (stageStates.every((s) => s.allDone) ? STAGES.length - 1 : 0);
-  const allComplete = stageStates.every((s) => s.allDone);
+  const clearPollTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  const stopElapsedTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const clearCelebrationTimeout = useCallback(() => {
+    if (celebrationTimeoutRef.current) {
+      clearTimeout(celebrationTimeoutRef.current);
+      celebrationTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearCompletionTimeout = useCallback(() => {
+    if (completionTimeoutRef.current) {
+      clearTimeout(completionTimeoutRef.current);
+      completionTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearStageTimers = useCallback(() => {
+    clearPollTimeout();
+    stopElapsedTimer();
+    clearCelebrationTimeout();
+    clearCompletionTimeout();
+  }, [clearCelebrationTimeout, clearCompletionTimeout, clearPollTimeout, stopElapsedTimer]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearStageTimers();
+    };
+  }, [clearStageTimers]);
 
   // Trigger celebration animation when a stage completes
   useEffect(() => {
-    const newComplete = stageStates.map((s) => s.allDone);
+    const newComplete = stageCompletionKey.split(",").map((value) => value === "1");
+    const prevComplete = prevCompleteRef.current;
     const triggered = newComplete.map((c, i) => c && !prevComplete[i]);
     if (triggered.some(Boolean)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCelebrations(triggered);
-      setTimeout(() => setCelebrations([false, false, false]), 1200);
+      clearCelebrationTimeout();
+      celebrationTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) setCelebrations([false, false, false]);
+      }, 1200);
     }
-    setPrevComplete(newComplete);
-  }, [stageStates.map((s) => s.allDone).join(",")]);
+    prevCompleteRef.current = newComplete;
+  }, [clearCelebrationTimeout, stageCompletionKey]);
 
   // Elapsed time counter
   useEffect(() => {
@@ -173,70 +337,100 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       setElapsed((prev) => prev + 1);
     }, 1000);
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      stopElapsedTimer();
     };
-  }, []);
+  }, [stopElapsedTimer]);
 
   // Polling with exponential backoff
   // Use ref for self-reference (react-hooks/no-use-before-define safe)
   const pollRef = useRef<() => Promise<void>>(() => Promise.resolve());
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const poll = useCallback(async () => {
-    if (completedRef.current || pollError) return;
+    if (!mountedRef.current || completedRef.current || pollError) return;
+    clearPollTimeout();
+    let nextPollIntervalMs = POLL_BASE_INTERVAL_MS;
 
     try {
       const data = await getScenarioStatus(scenario, label);
+      if (!mountedRef.current) return;
       failureCountRef.current = 0;
       setPollError(null);
 
-      const newSteps = (data.steps as Record<string, Record<string, unknown>>) || {};
+      const newSteps = normalizePipelineSteps(data.steps);
       setSteps(newSteps);
       setStatus(data.status);
       setGateStatus(data.gate_status);
-      setErrors(data.errors || []);
+      setCurrentStepInjection(normalizeCommercialInjection(data.current_step_injection));
+      const currentErrors = data.errors || [];
+      const isServerError = data.status === "error" || Boolean(data.pipeline_degraded);
+      setErrors(currentErrors);
+      setSoftDegradedReasons(data.soft_degraded_reasons || []);
+      setContinuityDiagnostics(data.continuity_diagnostics || null);
+
+      const gatePauseSignature =
+        data.status === "paused" && data.gate_status === "awaiting_approval"
+          ? data.current_step || "unknown"
+          : null;
+      if (gatePauseSignature) {
+        nextPollIntervalMs = POLL_PAUSED_INTERVAL_MS;
+      }
 
       // Notify parent of gate pause
-      if (data.status === "paused" && data.gate_status === "awaiting_approval" && onGatePause) {
-        onGatePause(data.current_step);
+      if (gatePauseSignature && onGatePause) {
+        if (notifiedGatePauseSignatureRef.current !== gatePauseSignature) {
+          notifiedGatePauseSignatureRef.current = gatePauseSignature;
+          onGatePause(data.current_step);
+        }
+      } else if (!gatePauseSignature) {
+        notifiedGatePauseSignatureRef.current = null;
       }
 
       // Notify parent of error
-      if ((data.status === "error" || data.pipeline_degraded) && onError && (data.errors || []).length > 0) {
-        onError(data.errors);
+      if (isServerError && onError && currentErrors.length > 0) {
+        const errorSignature = currentErrors.join("\n");
+        if (notifiedErrorSignatureRef.current !== errorSignature) {
+          notifiedErrorSignatureRef.current = errorSignature;
+          onError(currentErrors);
+        }
+      } else if (!isServerError) {
+        notifiedErrorSignatureRef.current = null;
       }
 
       // Check completion
-      const allDone = STAGES.every((stage) =>
-        stage.steps.every((s) => newSteps[s]?.status === "done")
+      const allDone = getStages(scenario).every((stage) =>
+        stage.steps.every((stepName) => newSteps[stepName]?.status === "done")
       );
       if ((allDone || data.status === "completed") && !completedRef.current) {
         completedRef.current = true;
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        if (timerRef.current) clearInterval(timerRef.current);
-        setTimeout(() => onComplete(data.result || newSteps), 1500);
+        clearPollTimeout();
+        stopElapsedTimer();
+        completionTimeoutRef.current = setTimeout(() => {
+          if (mountedRef.current) onComplete(normalizePipelineResult(data.result || newSteps));
+        }, 1500);
         return;
       }
 
       // Check error — stop polling but don't call onComplete
-      if (data.status === "error" || data.pipeline_degraded) {
-        // Keep polling for recovery? No — stop and show error banner
-        // But don't clear timeout so the error banner stays visible
+      if (isServerError) {
+        stopElapsedTimer();
         return;
       }
     } catch {
+      if (!mountedRef.current) return;
       failureCountRef.current += 1;
       if (failureCountRef.current >= POLL_FAILURE_THRESHOLD) {
+        clearPollTimeout();
         setPollError(t("stage.pollingError") || "Connection lost. Please refresh to retry.");
         return;
       }
+      nextPollIntervalMs = Math.min(
+        POLL_BASE_INTERVAL_MS * Math.pow(2, failureCountRef.current),
+        POLL_MAX_INTERVAL_MS
+      );
     }
 
-    const backoffMs = Math.min(
-      POLL_BASE_INTERVAL_MS * Math.pow(2, failureCountRef.current),
-      POLL_MAX_INTERVAL_MS
-    );
-    timeoutRef.current = setTimeout(() => pollRef.current(), backoffMs);
-  }, [label, scenario, onComplete, onGatePause, onError, pollError, t, STAGES]);
+    if (!mountedRef.current) return;
+    timeoutRef.current = setTimeout(() => pollRef.current(), nextPollIntervalMs);
+  }, [clearPollTimeout, label, onComplete, onError, onGatePause, pollError, scenario, stopElapsedTimer, t]);
 
   // Keep ref synced with latest poll callback.
   useEffect(() => {
@@ -244,12 +438,11 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
   }, [poll]);
 
   useEffect(() => {
-    timeoutRef.current = setTimeout(poll, POLL_BASE_INTERVAL_MS);
+    timeoutRef.current = setTimeout(() => pollRef.current(), POLL_BASE_INTERVAL_MS);
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      clearPollTimeout();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clearPollTimeout]);
 
   const formatTime = (seconds: number): string => {
     const m = Math.floor(seconds / 60);
@@ -257,47 +450,17 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const estimatedRemaining = (() => {
-    if (allComplete) return 0;
-    if (elapsed < 5) return null;
+  const estimatedRemaining = estimateRemainingSeconds({ allComplete, elapsed, stageDefs, steps });
 
-    let completedActual = 0;
-    let completedFallback = 0;
-    let remainingEstimate = 0;
-
-    for (const stage of STAGES) {
-      for (const st of stage.steps) {
-        const stepData = steps[st];
-        const isDone = stepData?.status === "done";
-        const durationMs = typeof stepData?.duration_ms === "number" ? stepData.duration_ms : 0;
-        const hasDuration = durationMs > 0;
-
-        if (isDone) {
-          if (hasDuration) {
-            completedActual += durationMs / 1000;
-          } else {
-            completedFallback += stage.estimatedSeconds / stage.steps.length;
-          }
-        } else {
-          const sameTypeAvg = getAverageDurationForStepType(st, steps, STAGES);
-          remainingEstimate += sameTypeAvg || (stage.estimatedSeconds / stage.steps.length);
-        }
-      }
-    }
-
-    const completedTotal = completedActual + completedFallback;
-    if (completedTotal <= 0) return null;
-    const pace = elapsed / completedTotal;
-    const remaining = Math.round(remainingEstimate * pace);
-    return Math.max(remaining, 0);
-  })();
-
-  const totalSteps = STAGES.reduce((sum, s) => sum + s.steps.length, 0);
-  const totalDone = STAGES.reduce((sum, s) => sum + s.steps.filter((st) => steps[st]?.status === "done").length, 0);
-  const totalProgress = totalSteps === 0 ? 0 : Math.round((totalDone / totalSteps) * 100);
+  const { totalSteps, totalDone, totalProgress } = deriveTotalProgress(stageDefs, steps);
 
   const isError = status === "error" || errors.length > 0;
   const isPaused = status === "paused";
+  const softDegradedSummary = softDegradedReasons[0];
+  const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
+  const continuityDisplay = normalizeContinuityDiagnostics(continuityDiagnostics);
+  const showContinuityDiagnostics = hasContinuityDiagnostics(continuityDiagnostics);
+  const continuitySummary = getContinuityDiagnosticsSummary(continuityDisplay, t);
 
   return (
     <div className="apple-card p-6 space-y-5 relative overflow-hidden">
@@ -343,7 +506,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
             </h3>
             {!allComplete && (
               <p className="text-[11px] text-[var(--text-muted)] leading-tight">
-                {totalProgress}% &middot; {stageStates.filter((s) => s.allDone).length}/{STAGES.length} {t("step.items")}
+                {totalProgress}% &middot; {stageStates.filter((s) => s.allDone).length}/{stageDefs.length} {t("step.items")}
               </p>
             )}
           </div>
@@ -367,6 +530,76 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
             </svg>
             {t("gate.awaitingApproval") || "Awaiting approval — please review candidates in Expert Studio"}
           </p>
+        </div>
+      )}
+
+      {currentStepInjection && !isError && (
+        <CurrentCommercialInjectionSummary injection={currentStepInjection} />
+      )}
+
+      {softDegradedReasons.length > 0 && !isError && (
+        <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+          <p className="text-[11px] text-amber-800 flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
+              <circle cx="6" cy="6" r="5.5" stroke="currentColor" />
+              <path d="M6 3.5v3M6 8v.5" stroke="currentColor" strokeLinecap="round" />
+            </svg>
+            {t("degraded.softTitle")}
+            {softDegradedDisplay.stepLabel ? ` · ${softDegradedDisplay.stepLabel}` : ""}
+            {softDegradedDisplay.reasonLabel ? ` · ${softDegradedDisplay.reasonLabel}` : ""}
+          </p>
+          {softDegradedDisplay.detail ? (
+            <p className="mt-1 text-[11px] text-amber-700">{softDegradedDisplay.detail}</p>
+          ) : null}
+        </div>
+      )}
+
+      {showContinuityDiagnostics && !isError && (
+        <div className="p-3 rounded-lg border border-[rgba(122,150,187,0.28)] bg-[rgba(122,150,187,0.10)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[11px] text-[var(--cinema-azure)] font-medium">
+              {t("continuity.diagnosticsTitle")}
+            </p>
+            {continuitySummary && (
+              <span className="text-[11px] text-[var(--text-body)]">{continuitySummary}</span>
+            )}
+          </div>
+          {continuityDisplay.clipDirections.length > 0 && (
+            <div className="mt-2 space-y-1.5">
+              {continuityDisplay.clipDirections.slice(0, 2).map((direction, index) => (
+                <div
+                  key={`${direction.sceneBeat}-${direction.transitionIntent}-${index}`}
+                  className="rounded-md bg-white/60 px-2.5 py-2 text-[11px] text-[var(--text-body)]"
+                >
+                  <div className="font-medium text-[var(--text-h1)]">
+                    {t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}
+                  </div>
+                  {direction.beatSummary && (
+                    <div className="mt-0.5">
+                      {t("continuity.beatSummaryLabel")}{" "}
+                      <InlineTooltip
+                        label={truncateDiagnosticText(direction.beatSummary)}
+                        tooltip={direction.beatSummary}
+                        className="max-w-[280px] align-top"
+                        tooltipClassName="w-72"
+                      />
+                    </div>
+                  )}
+                  {direction.transitionIntent && (
+                    <div className="mt-0.5">
+                      {t("continuity.transitionIntentLabel")}{" "}
+                      <InlineTooltip
+                        label={truncateDiagnosticText(direction.transitionIntent)}
+                        tooltip={direction.transitionIntent}
+                        className="max-w-[280px] align-top"
+                        tooltipClassName="w-72"
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -397,12 +630,12 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
           }}
         />
         <div className="space-y-5">
-          {STAGES.map((stage, idx) => {
+          {stageDefs.map((stage, idx) => {
             const isActive = idx === activeStageIdx && !allComplete;
             const isComplete = stageStates[idx].allDone;
             const isWaiting = !stageStates[idx].anyStarted && !isComplete;
             const progress = stageStates[idx].progress;
-            const statusText = getStageStatus(stage.id, steps, t, STAGES, stage.narrative);
+            const statusText = getStageStatus(stage.id, steps, t, stageDefs, stage.narrative);
             const celebrating = celebrations[idx];
 
             return (
@@ -563,6 +796,59 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
 }
 
 // ═══ Stage Icon — visual metaphors per stage ═══
+
+function CurrentCommercialInjectionSummary({ injection }: { injection: CommercialInjectionSummary }) {
+  const { t } = useI18n();
+  const groups = [
+    { label: t("commercialInjection.bundle"), values: stringList(injection.bundle_refs) },
+    { label: t("commercialInjection.toolbox"), values: stringList(injection.toolbox_refs) },
+    { label: t("commercialInjection.contract"), values: stringList(injection.contract_refs) },
+    { label: t("commercialInjection.gate"), values: stringList(injection.gate_checks) },
+    {
+      label: t("commercialInjection.tokens"),
+      values: [
+        ...stringList(injection.hard_token_ids),
+        ...stringList(injection.soft_token_ids),
+        ...stringList(injection.source_token_ids),
+      ],
+    },
+  ].filter((group) => group.values.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-[rgba(220,190,120,0.24)] bg-[rgba(220,190,120,0.07)] px-3 py-2">
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-semibold text-[var(--gold-foil)]">
+          {t("commercialInjection.currentStep")}
+        </span>
+        <span className="rounded-full bg-[rgba(220,190,120,0.12)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.02em] text-[var(--text-muted)]">
+          {t("commercialInjection.readOnly")}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {groups.map((group) => (
+          <div key={group.label} className="flex min-w-0 max-w-full items-center gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.02em] text-[var(--text-muted)]">
+              {group.label}
+            </span>
+            <div className="flex min-w-0 flex-wrap gap-1">
+              {group.values.slice(0, 3).map((value) => (
+                <span
+                  key={`${group.label}-${value}`}
+                  className="max-w-[160px] truncate rounded-md bg-[var(--bg-panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-h1)]"
+                  title={value}
+                >
+                  {value}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StageIcon({
   stageId,

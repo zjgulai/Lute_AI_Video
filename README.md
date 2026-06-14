@@ -5,19 +5,19 @@ Automates the full content production workflow: strategy → script → complian
 
 Built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints.
 
-**Live:** [https://101.34.52.232](https://101.34.52.232) (Tencent Lighthouse)
+**Live:** [https://video.lute-tlz-dddd.top](https://video.lute-tlz-dddd.top) (Tencent Lighthouse canonical domain). IP fallback: [https://101.34.52.232](https://101.34.52.232).
 
 ---
 
 ## Prerequisites
 
 - **Python 3.12+**
-- **Node.js 22+** with pnpm (for WebUI + Remotion rendering)
+- **Node.js 22+** with npm (for WebUI + Remotion rendering)
 
 ```bash
 python3 --version  # >= 3.12
 node --version     # >= 22
-pnpm --version
+npm --version
 ```
 
 ---
@@ -37,7 +37,7 @@ pip install -r requirements.txt
 
 # Frontend
 cd web
-pnpm install
+npm ci
 ```
 
 ### 2. Environment
@@ -57,7 +57,7 @@ uvicorn src.api:app --reload --port 8001
 
 # Terminal 2: Frontend
 cd web
-pnpm dev
+npm run dev
 ```
 
 Backend: http://localhost:8001<br>
@@ -146,19 +146,22 @@ See [docs/reference/api-endpoints.md](docs/reference/api-endpoints.md) for full 
 ```bash
 # Backend
 make test           # pytest
-make lint           # ruff
-make typecheck      # pyright
+make lint           # ruff over src, tests, and scripts
 make ci             # lint + test
 
 # Frontend
 cd web
-pnpm test           # vitest
-pnpm lint           # eslint
+npx tsc --noEmit -p tsconfig.json
+npm test -- --run   # vitest
+npm run lint        # eslint
+npm run build       # Next.js production build
 
 # E2E
 cd web
-pnpm e2e            # Playwright local
-pnpm e2e:prod       # Playwright production
+npm run e2e         # Playwright local
+npm run e2e:ui      # UI-only visual/interaction regression, no poyo.ai token usage
+npm run e2e:prod    # Playwright production, skips @token-smoke by default
+RUN_TOKEN_SMOKE=1 npm run e2e:prod  # Explicit real task / provider-credit smoke
 ```
 
 ---
@@ -166,7 +169,8 @@ pnpm e2e:prod       # Playwright production
 ## Project Status
 
 - **v0.2.7** — Brand assets Phase 2-4, portfolio API, quick templates
-- 6 scenarios (Fast Mode + S1-S5) verified end-to-end in production
+- **2026-05-31 production deploy** — Lighthouse live at `https://video.lute-tlz-dddd.top`; latest deployed commits include `306b86f`, `95c2925`, and `d62a3ac`
+- 6 scenarios (Fast Mode + S1-S5) verified end-to-end in production; real token-consuming generation smoke is opt-in via `RUN_TOKEN_SMOKE=1`
 - Quality system in observe mode (frame variance, AV sync, video specs)
 - Admin Panel Phase 1 operational (tenants, logs, health, auth)
 - 380+ tests, CI/CD via GitHub Actions

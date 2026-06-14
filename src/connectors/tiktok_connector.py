@@ -7,22 +7,22 @@ Falls back to mock mode when TIKTOK_ACCESS_TOKEN is not set.
 import asyncio
 import logging
 import os
-import random
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
 import httpx
 
+from src.config import TIKTOK_API_UPLOAD_URL
 from src.connectors.base import PlatformConnector
 
 logger = logging.getLogger(__name__)
 
 # TikTok Content Posting API endpoints
 # Docs: https://developers.tiktok.com/doc/content-posting-api-overview/
-_TIKTOK_UPLOAD_URL = "https://open-api.tiktok.com/video/upload/"
-_TIKTOK_PUBLISH_URL = "https://open-api.tiktok.com/video/publish/"
-_TIKTOK_QUERY_URL = "https://open-api.tiktok.com/video/query/"
+_TIKTOK_UPLOAD_URL = TIKTOK_API_UPLOAD_URL + "/video/upload/"
+_TIKTOK_PUBLISH_URL = TIKTOK_API_UPLOAD_URL + "/video/publish/"
+_TIKTOK_QUERY_URL = TIKTOK_API_UPLOAD_URL + "/video/query/"
 
 
 def _is_mock_mode() -> bool:
@@ -255,14 +255,6 @@ class TikTokConnector(PlatformConnector):
     async def _mock_publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Simulate a TikTok publish (used when credentials are absent)."""
         await asyncio.sleep(1.5)
-
-        if random.random() < 0.1:
-            return {
-                "success": False,
-                "error": "Mock: TikTok API rate limit exceeded",
-                "status": "failed",
-                "platform": "tiktok",
-            }
 
         mock_id = f"tt_mock_{uuid4().hex[:8]}"
         return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { adminFetchJson } from "@/components/api";
 import { Plus, MagnifyingGlass, Circle, X } from "@phosphor-icons/react";
@@ -23,6 +23,7 @@ export default function AdminTenantsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -32,14 +33,14 @@ export default function AdminTenantsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async (pageOverride = page) => {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
-      params.set("page", String(page));
+      params.set("page", String(pageOverride));
       params.set("limit", "20");
-      if (q) params.set("q", q);
+      if (appliedQ) params.set("q", appliedQ);
       const data = await adminFetchJson<{
         items: Tenant[];
         total: number;
@@ -51,12 +52,12 @@ export default function AdminTenantsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, appliedQ]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [page]);
+    void load();
+  }, [load]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +77,7 @@ export default function AdminTenantsPage() {
       setNewTenantId("");
       setNewDisplayName("");
       setNewContactEmail("");
-      load();
+      void load();
     } catch (err: unknown) {
       setCreateError(errorMessage(err, "Failed to create tenant"));
     } finally {
@@ -107,15 +108,21 @@ export default function AdminTenantsPage() {
           />
           <input
             type="text"
+            aria-label="Search tenants"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setPage(1);
+                setAppliedQ(q);
+              }
+            }}
             placeholder="Search tenants..."
             className="apple-input text-xs pl-7 w-full"
           />
         </div>
         <button
-          onClick={() => { setPage(1); load(); }}
+          onClick={() => { setPage(1); setAppliedQ(q); }}
           className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
         >
           Search
@@ -126,19 +133,30 @@ export default function AdminTenantsPage() {
       {showCreate && (
         <div className="apple-modal-overlay" onClick={() => setShowCreate(false)}>
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-new-tenant-title"
             className="apple-card w-full max-w-sm mx-4 p-4 animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">
+              <h2 id="admin-new-tenant-title" className="text-sm font-semibold text-[var(--text-h1)]">
                 New Tenant
               </h2>
-              <button onClick={() => setShowCreate(false)} className="cursor-pointer">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="cursor-pointer"
+                aria-label="Close new tenant dialog"
+              >
                 <X size={16} weight="fill" className="text-[var(--text-muted)]" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="space-y-3">
+              <label htmlFor="admin-new-tenant-id" className="sr-only">
+                Tenant ID
+              </label>
               <input
+                id="admin-new-tenant-id"
                 type="text"
                 value={newTenantId}
                 onChange={(e) => setNewTenantId(e.target.value)}
@@ -147,7 +165,11 @@ export default function AdminTenantsPage() {
                 pattern="^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$"
                 className="apple-input text-xs w-full"
               />
+              <label htmlFor="admin-new-display-name" className="sr-only">
+                Display name
+              </label>
               <input
+                id="admin-new-display-name"
                 type="text"
                 value={newDisplayName}
                 onChange={(e) => setNewDisplayName(e.target.value)}
@@ -155,7 +177,11 @@ export default function AdminTenantsPage() {
                 required
                 className="apple-input text-xs w-full"
               />
+              <label htmlFor="admin-new-contact-email" className="sr-only">
+                Contact email
+              </label>
               <input
+                id="admin-new-contact-email"
                 type="email"
                 value={newContactEmail}
                 onChange={(e) => setNewContactEmail(e.target.value)}
@@ -163,7 +189,7 @@ export default function AdminTenantsPage() {
                 className="apple-input text-xs w-full"
               />
               {createError && (
-                <p className="text-xs text-[var(--crimson-mist)]">{createError}</p>
+                <p role="alert" className="text-xs text-[var(--crimson-mist)]">{createError}</p>
               )}
               <button
                 type="submit"
@@ -181,7 +207,7 @@ export default function AdminTenantsPage() {
       {error && (
         <div className="text-center py-8">
           <p className="text-xs text-[var(--text-muted)] mb-2">{error}</p>
-          <button onClick={load} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
+          <button onClick={() => void load()} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
             Retry
           </button>
         </div>

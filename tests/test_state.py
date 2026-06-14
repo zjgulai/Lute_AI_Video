@@ -1,10 +1,19 @@
 """Test Pydantic state models — schema validation."""
 
-import pytest
 from src.models import (
-    Brief, WeeklyCalendar, Script, ScriptSegment, ComplianceReport,
-    ComplianceFlag, ComplianceStatus, Severity, Storyboard, Shot,
-    VideoType, Platform, Language,
+    Brief,
+    ComplianceFlag,
+    ComplianceReport,
+    ComplianceStatus,
+    Language,
+    Platform,
+    Script,
+    ScriptSegment,
+    Severity,
+    Shot,
+    Storyboard,
+    VideoType,
+    WeeklyCalendar,
 )
 
 

@@ -1,0 +1,44 @@
+{
+  "template_only": true,
+  "scope": "l4c-token-smoke",
+  "status": "draft",
+  "created": "2026-06-11",
+  "updated": "2026-06-11",
+  "owner": "self",
+  "target_base_url": "https://video.lute-tlz-dddd.top",
+  "allowed_specs": [
+    "fast-mode-submit.prod.spec.ts"
+  ],
+  "budget_limit_usd": 0,
+  "per_spec_budget_usd": {
+    "fast-mode-submit.prod.spec.ts": 0
+  },
+  "max_auto_retries": 0,
+  "max_submit_count": 0,
+  "provider_max_retries": 0,
+  "serial_workers_required": true,
+  "run_token_smoke_required": true,
+  "media_generation": {
+    "s1_allowed": false,
+    "s5_allowed": false,
+    "notes": "Set explicit booleans before L4C. Do not infer media generation permission from spec names."
+  },
+  "artifact_policy": {
+    "asset_status": "pending_review",
+    "storage_scope": "tenant_pending_review",
+    "delivery_accepted": false,
+    "publish_allowed": false,
+    "approved_brand_token_write": false
+  },
+  "approval": {
+    "approved_by": "",
+    "checked_by": "",
+    "approval_record_ref": "",
+    "provider_account_readiness_record_ref": ""
+  },
+  "notes": [
+    "Copy this template to tmp/outputs/ or a private location before filling it.",
+    "Do not store API keys or provider secrets in this file.",
+    "template_only must be false and status must be approved before the validator can pass."
+  ]
+}

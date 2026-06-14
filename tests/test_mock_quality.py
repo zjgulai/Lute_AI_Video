@@ -18,17 +18,15 @@ import pytest
 from src.agents.auditor import AuditorAgent
 from src.data.mock_quality import (
     QualityLevel,
-    degrade_strategy,
-    degrade_scripts,
-    degrade_thumbnails,
     degrade_edits,
+    degrade_scripts,
+    degrade_strategy,
+    degrade_thumbnails,
 )
 from src.models import (
     AuditCheckpoint,
-    AuditCriterionStatus,
     AuditReport,
 )
-
 
 # ── Shared fixture ──
 
@@ -127,7 +125,7 @@ def test_strategy_audit_criterion_degradation(
     "level,expected_hook_score,expected_cta_score,expected_completeness",
     [
         (QualityLevel.PERFECT, 1.0, 1.0, 1.0),
-        (QualityLevel.MEDIUM, 0.0, 0.5, 0.8),
+        (QualityLevel.MEDIUM, 0.5, 0.5, 0.8),
         (QualityLevel.POOR, 0.0, 0.0, 0.6),
     ],
 )

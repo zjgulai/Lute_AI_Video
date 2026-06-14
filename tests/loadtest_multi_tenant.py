@@ -59,8 +59,7 @@ from __future__ import annotations
 import secrets
 from typing import ClassVar
 
-from locust import HttpUser, between, task, events
-
+from locust import HttpUser, between, events, task
 
 SYNTHETIC_TENANTS: list[dict[str, str]] = [
     {"name": "tenant_a", "api_key": "ai_video_demo_2026"},
@@ -78,14 +77,14 @@ _trace_id_collisions: int = 0
 @events.test_stop.add_listener
 def report_trace_id_audit(environment, **_kwargs):
     """Print trace-id collision summary at end of run."""
-    print(f"\n=== Trace ID audit ===")
+    print("\n=== Trace ID audit ===")
     print(f"  unique trace_ids: {len(_trace_ids_seen)}")
     print(f"  collisions: {_trace_id_collisions}")
     if _trace_id_collisions > 0:
-        print(f"  ❌ FAIL: response middleware is reusing trace_ids under load")
+        print("  ❌ FAIL: response middleware is reusing trace_ids under load")
         environment.process_exit_code = 1
     else:
-        print(f"  ✅ PASS: all trace_ids unique")
+        print("  ✅ PASS: all trace_ids unique")
 
 
 class MultiTenantUser(HttpUser):

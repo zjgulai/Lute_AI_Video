@@ -16,23 +16,60 @@ Steps (7):
 
 from __future__ import annotations
 
+import asyncio
+import importlib
 import time
 from typing import Any
 
 import structlog
 
+import src.skills.continuity_storyboard_grid  # noqa: F401
 import src.skills.script_writer  # noqa: F401
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.thumbnail_prompt  # noqa: F401
 from src.config import DEFAULT_LANGUAGES
+from src.pipeline.artifact_paths import extract_assemble_paths
+from src.pipeline.continuity_utils import (
+    build_continuity_audit_summary,
+    build_transitions_from_clip_details,
+)
+from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
+from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
 
 # Caps for demo runs
 MAX_SCRIPTS_PER_RUN = 3
+
+_LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
+    "video_prompts": (
+        ("src.skills.seedance_prompt", "seedance-video-prompt"),
+    ),
+    "thumbnails": (
+        ("src.skills.thumbnail_prompt", "gpt-image-thumbnail-prompt"),
+    ),
+    "seedance_clips": (
+        ("src.skills.seedance_video_generate", "seedance-video-generate-skill"),
+    ),
+    "tts_audio": (
+        ("src.skills.elevenlabs_tts", "elevenlabs-tts-skill"),
+    ),
+    "assemble_final": (
+        ("src.skills.remotion_assemble", "remotion-assemble-skill"),
+    ),
+    "audit": (
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+}
+
+
+def _ensure_step_skills_registered(step_name: str) -> None:
+    """Register media-step skills only when that step is actually executed."""
+    for module_name, skill_name in _LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()):
+        module = importlib.import_module(module_name)
+        if skill_name not in SkillRegistry._global_skills:
+            importlib.reload(module)
 
 
 class S4LiveShootPipeline:
@@ -97,6 +134,7 @@ class S4LiveShootPipeline:
         appropriate _step_* method, and returns the step output.
         """
         config = state["config"]
+        _ensure_step_skills_registered(step_name)
         reg = SkillRegistry()
         steps = state["steps"]
         errors = state["errors"]
@@ -104,8 +142,25 @@ class S4LiveShootPipeline:
         if step_name == "scripts":
             return await self._step_scripts(reg, config, steps, errors)
 
+        if step_name == "continuity_storyboard_grid":
+            scripts = self._get_step_output(steps, "scripts") or []
+            product_name = config.get("product_name", "Product")
+            return await self._step_continuity_storyboard_grid(
+                reg=reg,
+                scripts=scripts,
+                product_name=product_name,
+                topic=config.get("topic", ""),
+                product_info=config.get("product_info", {}),
+                brand_guidelines=config.get("brand_guidelines", {}),
+                errors=errors,
+            )
+
         if step_name == "video_prompts":
-            return await self._step_video_prompts(reg, config, steps, errors)
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
+            return await self._step_video_prompts(
+                reg=reg, config=config, steps=steps, errors=errors,
+                continuity_storyboard_grid=continuity_grid,
+            )
 
         if step_name == "thumbnails":
             return await self._step_thumbnails(reg, config, steps, errors)
@@ -136,24 +191,22 @@ class S4LiveShootPipeline:
             lyrics_paths = tts_output.get("lyrics_paths", []) if isinstance(tts_output, dict) else []
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
+            clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
             return await self._step_assemble_final(
                 reg=reg,
                 scripts=scripts,
                 audio_paths=audio_paths,
                 lyrics_paths=lyrics_paths,
                 clip_paths=clip_paths,
+                clip_details=clip_details,
                 brand_guidelines=config.get("brand_guidelines") or {},
                 label=config.get("output_label", "s4"),
                 errors=errors,
             )
 
         if step_name == "audit":
-            final_video = ""
             assemble_output = self._get_step_output(steps, "assemble_final")
-            if isinstance(assemble_output, tuple) and len(assemble_output) > 0:
-                final_video = assemble_output[0]
-            elif isinstance(assemble_output, dict):
-                final_video = assemble_output.get("video_path", "")
+            final_video, _ = extract_assemble_paths(assemble_output)
             tts_output = self._get_step_output(steps, "tts_audio") or {}
             audio_paths = tts_output.get("audio_paths", []) if isinstance(tts_output, dict) else []
             thumbnail_sets = self._get_step_output(steps, "thumbnails") or []
@@ -161,17 +214,21 @@ class S4LiveShootPipeline:
             scripts = self._get_step_output(steps, "scripts") or []
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
+            clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
             return await self._step_audit(
                 reg=reg,
                 video_path=final_video,
                 audio_paths=audio_paths,
                 thumbnail_paths=[],
                 clip_paths=clip_paths,
+                clip_details=clip_details,
                 product_name=product_name,
                 scripts=scripts,
                 thumbnail_sets=thumbnail_sets,
                 language=config.get("target_language", "en"),
                 errors=errors,
+                continuity_grid=continuity_grid,
             )
 
         raise ValueError(f"Unknown step name: {step_name}")
@@ -253,6 +310,7 @@ class S4LiveShootPipeline:
             "briefs": [brief_data],
             "brand_guidelines": {"footage_available": len(footage_assets_used)},
             "target_languages": DEFAULT_LANGUAGES,
+            "video_duration": config.get("video_duration", 30),
         })
         if scr.success and scr.data:
             scripts = scr.data.get("scripts", [])
@@ -269,12 +327,167 @@ class S4LiveShootPipeline:
             return [soft_signal]
         return []
 
+    async def _step_continuity_storyboard_grid(
+        self,
+        reg: SkillRegistry,
+        scripts: list[dict[str, Any]],
+        product_name: str,
+        topic: str,
+        product_info: dict[str, Any],
+        brand_guidelines: dict[str, Any],
+        errors: list[str],
+    ) -> dict[str, Any]:
+        """Build continuity clip groups from S4 scripts.
+
+        Delegates to continuity-storyboard-grid skill, falling back to
+        synthetic clip_groups derived from script segments.
+        """
+        logger.info("s4: step 1b — continuity storyboard grid")
+
+        # Derive shots from scripts for the skill
+        shots: list[dict[str, Any]] = []
+        for script in scripts[:MAX_SCRIPTS_PER_RUN]:
+            for seg in script.get("segments", []):
+                shots.append({
+                    "id": len(shots) + 1,
+                    "start_time": seg.get("start_time", 0),
+                    "end_time": seg.get("end_time", 5),
+                    "text_overlay": seg.get("text_overlay", ""),
+                    "visual": seg.get("visual_description", ""),
+                    "shot_type": seg.get("segment_type", "body"),
+                })
+
+        stock_urls = self._extract_stock_footage_urls(brand_guidelines)
+        raw_visual_constraints = brand_guidelines.get("visual_constraints")
+        visual_constraints: list[str] = []
+        if isinstance(raw_visual_constraints, str) and raw_visual_constraints.strip():
+            visual_constraints.extend(
+                part.strip()
+                for part in raw_visual_constraints.replace(";", ",").split(",")
+                if part.strip()
+            )
+        elif isinstance(raw_visual_constraints, list):
+            visual_constraints.extend(
+                item.strip()
+                for item in raw_visual_constraints
+                if isinstance(item, str) and item.strip()
+            )
+        if stock_urls:
+            visual_constraints.append(
+                f"use authentic live-shoot continuity grounded in {len(stock_urls)} approved stock footage reference(s)"
+            )
+
+        product_catalog = {
+            "product_name": product_name,
+            "name": product_name,
+            "category": "product",
+            "brand_name": (
+                product_info.get("brand_name")
+                if isinstance(product_info.get("brand_name"), str)
+                else brand_guidelines.get("brand_name", "")
+            ),
+            "usage_scenario": topic or product_info.get("usage_scenario", ""),
+            "usps": product_info.get("usps", []),
+            "colors": brand_guidelines.get("colors") or {},
+            "tone_of_voice": brand_guidelines.get("tone_of_voice") or {},
+            "voice_guidelines": brand_guidelines.get("voice_guidelines", ""),
+            "values": brand_guidelines.get("values") or brand_guidelines.get("brand_values") or [],
+            "visual_constraints": visual_constraints,
+        }
+        res = await reg.execute("continuity-storyboard-grid", {
+            "product_catalog": product_catalog,
+            "storyboards": [{"shots": shots}] if shots else [],
+            "storyboard_grid": "12",
+            "clip_group_size": 3,
+            "transition_style": "match_cut",
+        })
+        if res.success and res.data and isinstance(res.data, dict):
+            if res.metadata.get("is_fallback") is True:
+                logger.warning(
+                    "s4: continuity grid fallback used",
+                    reason=res.metadata.get("fallback_reason", ""),
+                )
+                return {
+                    **res.data,
+                    "_soft_degraded": True,
+                    "_degraded_reason": "continuity_skill_fallback",
+                    "_degraded_detail": str(
+                        res.metadata.get("fallback_reason", "fallback_used")
+                    )[:200],
+                    "degraded": True,
+                }
+            logger.info("s4: continuity grid done", clip_groups=len(res.data.get("clip_groups", [])))
+            return res.data
+        errors.append(f"continuity_storyboard_grid_failed: {res.error}")
+        return {
+            "grid_type": "12-grid",
+            "product_name": product_name,
+            "visual_identity": {},
+            "micro_shots": [],
+            "clip_groups": self._s4_fallback_clip_groups(
+                shots,
+                product_name,
+                topic=topic,
+                stock_footage_count=len(stock_urls),
+            ),
+            "_soft_degraded": True,
+            "_degraded_reason": "continuity_skill_execution_failed",
+            "_degraded_detail": str(res.error or "unknown")[:200],
+            "degraded": True,
+        }
+
+    @staticmethod
+    def _s4_fallback_clip_groups(
+        shots: list[dict[str, Any]],
+        product_name: str,
+        topic: str = "",
+        stock_footage_count: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Derive clip_groups from script shots when skill fails."""
+        groups: list[dict[str, Any]] = []
+        group_size = 3
+        for idx in range(0, len(shots), group_size):
+            chunk = shots[idx:idx + group_size]
+            group_idx = len(groups) + 1
+            shot_indices = list(range(idx + 1, idx + len(chunk) + 1))
+            duration = sum(
+                float(s.get("end_time", 0)) - float(s.get("start_time", 0))
+                for s in chunk
+            )
+            duration = max(duration, 1.0)
+            prompt_parts = [
+                (s.get("visual", "") or s.get("text_overlay", ""))[:80]
+                for s in chunk
+            ]
+            topic_clause = f" Topic: {topic}." if topic else ""
+            stock_clause = (
+                f" Preserve continuity against {stock_footage_count} approved stock/live reference asset(s)."
+                if stock_footage_count > 0
+                else ""
+            )
+            group = {
+                "clip_index": group_idx,
+                "shot_indices": shot_indices,
+                "duration": duration,
+                "purpose": f"group_{group_idx}",
+                "seedance_prompt": (
+                    f"{product_name} live shoot scene: {'; '.join(p for p in prompt_parts if p)}. "
+                    f"Natural lighting, authentic usage footage.{topic_clause}{stock_clause}"
+                ),
+                "transition_type": "match_cut",
+            }
+            if idx + group_size < len(shots):
+                group["transition_to_next"] = "match cut to next scene"
+            groups.append(group)
+        return groups
+
     async def _step_video_prompts(
         self,
         reg: SkillRegistry,
         config: dict[str, Any],
         steps: dict[str, Any],
         errors: list[str],
+        continuity_storyboard_grid: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate Seedance video prompts referencing footage assets.
 
@@ -282,6 +495,16 @@ class S4LiveShootPipeline:
         S1's _step_video_prompts so downstream _step_seedance_clips can use
         vp.get("segment_prompt") directly.
         """
+        # Priority: continuity_grid clip_groups > segment-based fallback
+        if continuity_storyboard_grid and continuity_storyboard_grid.get("clip_groups"):
+            result = await reg.execute("seedance-video-prompt", {
+                "continuity_storyboard_grid": continuity_storyboard_grid,
+                "product_name": config.get("product_name", "Product"),
+            })
+            if result.success and result.data and isinstance(result.data, list):
+                return result.data
+            logger.warning("s4: continuity video_prompts failed, falling back", error=result.error)
+
         scripts_dict = self._get_step_output(steps, "scripts") or []
         footage_assets = config.get("footage_assets", [])
 
@@ -349,11 +572,11 @@ class S4LiveShootPipeline:
 
     @staticmethod
     def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
-        """Retrieve output from a step, preferring edited_output if edited."""
-        step_data = steps.get(step_name, {})
-        if step_data.get("edited") and step_data.get("edited_output") is not None:
-            return step_data["edited_output"]
-        return step_data.get("output")
+        """Retrieve output from a step, preferring edited_output if edited.
+
+        Delegates to the canonical shared implementation in step_utils.py.
+        """
+        return get_step_output(steps, step_name)
 
     # ═══ Video synthesis steps (added to complete the video pipeline) ═══
 
@@ -372,50 +595,64 @@ class S4LiveShootPipeline:
         Phase 2 prereq (Oracle review #4): route through ModelRouter.
         Default S4 model is seedance-2-fast (cheap turbo for live-shoot iteration).
         """
-        import asyncio
-
         from src.pipeline.model_router import select_model
 
         s4_model = select_model("s4")
         clip_paths: list[str] = []
         clip_details: list[dict[str, Any]] = []
-        _sem = asyncio.Semaphore(2)
 
-        async def _gen(i: int, vp: dict[str, Any]) -> tuple[int, Any]:
-            async with _sem:
+        # P0-2: S4 clips 并发化 — Live Shoot 场景各 clip 为独立使用场景，无需 clip-to-clip 连续性
+        _seedance_sem = asyncio.Semaphore(4)
+
+        async def _gen_concurrent(i: int, vp: dict[str, Any]) -> tuple[int, Any]:
+            async with _seedance_sem:
                 prompt_text = vp.get("prompt", "") or vp.get("segment_prompt", "")
                 if isinstance(prompt_text, dict):
                     prompt_text = prompt_text.get("prompt", "")
                 if not prompt_text:
                     prompt_text = f"{product_name} in natural usage scene"
-                res = await reg.execute("seedance-video-generate-skill", {
+                raw_duration = vp.get("duration_seconds", 5)
+                try:
+                    duration = int(float(raw_duration))
+                except (TypeError, ValueError):
+                    duration = 5
+                duration = max(4, min(duration, 15))
+                params: dict[str, Any] = {
                     "prompt": prompt_text,
-                    "duration": 5,
+                    "duration": duration,
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
                     "model": s4_model,
-                })
+                }
+                res = await reg.execute("seedance-video-generate-skill", params)
                 return i, res
 
-        tasks = [_gen(i, vp) for i, vp in enumerate(video_prompts)]
+        tasks = [_gen_concurrent(i, vp) for i, vp in enumerate(video_prompts)]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for raw in raw_results:
             if isinstance(raw, Exception):
                 errors.append(f"clip_failed_with_exception: {raw}")
-
-        for i, skill_result in sorted(
-            [r for r in raw_results if isinstance(r, tuple)],
-            key=lambda x: x[0],
-        ):
+                continue
+            i, skill_result = raw
             if skill_result.success and skill_result.data:
                 p = skill_result.data.get("video_path", "")
                 if p:
                     clip_paths.append(p)
                     clip_details.append({
                         "path": p,
+                        "duration": skill_result.data.get("duration_seconds", 0),
                         "is_stub": skill_result.data.get("is_stub", False),
                         "verification": skill_result.data.get("verification", {}),
+                        "continuity_frame_used": None,
+                        "transition_to_next": video_prompts[i].get("transition_to_next", ""),
+                        "transition_type": video_prompts[i].get("transition_type", "clean"),
+                        "scene_beat": video_prompts[i].get("scene_beat", ""),
+                        "beat_summary": video_prompts[i].get("beat_summary", ""),
+                        "transition_intent": video_prompts[i].get("transition_intent", ""),
+                        "clip_index": video_prompts[i].get("clip_index", i + 1),
+                        "segment_type": video_prompts[i].get("segment_type", "body"),
+                        "shot_type": video_prompts[i].get("shot_type", ""),
                     })
             else:
                 errors.append(f"clip_{i}_failed: {skill_result.error}")
@@ -469,6 +706,7 @@ class S4LiveShootPipeline:
         audio_paths: list[str],
         lyrics_paths: list[str],
         clip_paths: list[str],
+        clip_details: list[dict[str, Any]],
         brand_guidelines: dict[str, Any],
         label: str,
         errors: list[str],
@@ -499,6 +737,8 @@ class S4LiveShootPipeline:
 
         total_duration = max((s.get("end_time", 0) for s in shots), default=30.0)
 
+        transitions = build_transitions_from_clip_details(clip_details or [])
+
         res = await reg.execute("remotion-assemble-skill", {
             "shots": shots,
             "captions": captions,
@@ -508,6 +748,7 @@ class S4LiveShootPipeline:
             "brand_guidelines": brand_guidelines,
             "output_label": label,
             "total_duration": total_duration,
+            "transitions": transitions,
         })
         if res.success and res.data:
             return res.data.get("video_path", ""), res.data.get("render_json_path", "")
@@ -521,11 +762,13 @@ class S4LiveShootPipeline:
         audio_paths: list[str],
         thumbnail_paths: list[str],
         clip_paths: list[str],
+        clip_details: list[dict[str, Any]],
         product_name: str,
         scripts: list[dict[str, Any]],
         thumbnail_sets: list[dict[str, Any]],
         language: str,
         errors: list[str],
+        continuity_grid: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run quality audit on final outputs."""
         script_text = " ".join([
@@ -557,7 +800,13 @@ class S4LiveShootPipeline:
             "thumbnail_prompts": flat_thumb_prompts,
         })
         if res.success and res.data:
-            return res.data
+            base_audit = res.data
+            return build_continuity_audit_summary(
+                base_audit=base_audit,
+                clip_details=clip_details or [],
+                continuity_grid=continuity_grid,
+                final_video_path=video_path or "",
+            )
         errors.append(f"audit_failed: {res.error}")
         return {}
 
@@ -569,6 +818,10 @@ class S4LiveShootPipeline:
         product_info: dict[str, Any],
         topic: str = "",
         target_platforms: list[str] | None = None,
+        brand_guidelines: dict[str, Any] | None = None,
+        video_duration: int = 30,
+        enable_media_synthesis: bool = True,
+        output_label: str | None = None,
     ) -> dict[str, Any]:
         """Run the full S4 pipeline end-to-end.
 
@@ -578,7 +831,8 @@ class S4LiveShootPipeline:
         platforms = target_platforms or ["tiktok", "shopify"]
         product_name = product_info.get("name", "Product")
         brand_name = product_info.get("brand_name", "")
-        label = f"s4_{int(time.time())}"
+        video_duration = video_duration if video_duration in {15, 30, 45, 60, 90} else 30
+        label = output_label or f"s4_{int(time.time())}"
 
         config = {
             "footage_assets": footage_assets,
@@ -587,33 +841,43 @@ class S4LiveShootPipeline:
             "target_platforms": platforms,
             "product_name": product_name,
             "brand_name": brand_name,
+            "brand_guidelines": brand_guidelines or {},
+            "video_duration": video_duration,
+            "enable_media_synthesis": enable_media_synthesis,
+            "output_label": label,
+            "target_language": "en",
         }
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s4")
-        final_state = await runner.resume(label)
+        if enable_media_synthesis:
+            final_state = await runner.resume(label)
+        else:
+            final_state = await self._resume_without_media_synthesis(runner, label)
 
         # Convert final state back to the legacy result dict
         steps = final_state.get("steps", {})
         seedance_out = self._get_step_output(steps, "seedance_clips") or {}
+        tts_out = self._get_step_output(steps, "tts_audio") or {}
         assemble_out = self._get_step_output(steps, "assemble_final")
-        final_video = ""
-        if isinstance(assemble_out, tuple) and len(assemble_out) > 0:
-            final_video = assemble_out[0]
-        elif isinstance(assemble_out, dict):
-            final_video = assemble_out.get("video_path", "")
+        final_video, render_json_path = extract_assemble_paths(assemble_out)
 
         result: dict[str, Any] = {
             "success": True,
             "scenario": "s4_live_shoot",
+            "video_duration": video_duration,
             "scripts": self._get_step_output(steps, "scripts") or [],
             "video_prompts": self._get_step_output(steps, "video_prompts") or [],
             "thumbnail_sets": self._get_step_output(steps, "thumbnails") or [],
             "seedance_clips": seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else [],
+            "clip_paths": seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else [],
+            "audio_paths": tts_out.get("audio_paths", []) if isinstance(tts_out, dict) else [],
             "final_video_path": final_video,
-            "steps_completed": 7,
+            "render_json_path": render_json_path,
+            "steps_completed": 7 if enable_media_synthesis else 2,
             "errors": final_state.get("errors", []),
+            "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
         }
 
         if final_state.get("pipeline_degraded"):
@@ -632,3 +896,19 @@ class S4LiveShootPipeline:
             errors=len(result.get("errors", [])),
         )
         return result
+
+    async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
+        """Run only S4 pre-media steps; stop before Seedance prompt generation."""
+        final_state: dict[str, Any] = {}
+        for step_name in get_scenario_step_order("s4"):
+            if step_name == "video_prompts":
+                break
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+        if final_state and not final_state.get("pipeline_degraded"):
+            final_state["current_step"] = None
+            save = getattr(runner.state_manager, "save", None)
+            if callable(save):
+                await save(label, final_state)
+        return final_state

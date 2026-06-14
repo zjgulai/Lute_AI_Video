@@ -291,7 +291,7 @@ def _perfect_scripts() -> list[Script]:
     ids = [f"BRIEF-{i:03d}" for i in range(1, 6)]
     perfect_hook = _mock_segment(
         "hook",
-        "Pumping at work doesn't have to mean hiding in a supply closet.",
+        "Stop: what 3 pump-cleaning mistakes are costing your workday today?",
         "Split screen: woman at desk smiling vs empty storage room",
         "Clean in 2 min? Yes.",
         start=0.0, end=3.0,

@@ -1,0 +1,28 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-05-31"
+
+scope: fastapi_fallback_middleware
+primary_runtime_limiter: nginx
+
+window_sec: 60
+max_requests_per_ip: 120
+max_tracked_ips: 1000
+
+client_ip:
+  header: X-Forwarded-For
+  behavior: use_first_ip_when_present
+  fallback: request.client.host
+
+skip_paths:
+  - /health
+
+skip_prefixes:
+  - /api/media/
+
+response:
+  status_code: 429
+  detail: Too many requests. Please slow down.
+  retry_after_sec: 60
+  wrapped_with_meta: true

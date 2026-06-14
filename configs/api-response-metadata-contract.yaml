@@ -1,0 +1,31 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-05-31"
+
+json_meta:
+  required_keys:
+    - trace_id
+    - duration_ms
+    - version
+    - timestamp
+  skip_meta_paths:
+    - /health
+
+trace_header:
+  request_header: X-Client-Trace-Id
+  response_header: X-Trace-Id
+  echo_client_trace_id: true
+
+error_responses:
+  http_exception_required_keys:
+    - detail
+    - _meta
+  rate_limit_429_required_keys:
+    - detail
+    - retry_after_sec
+    - _meta
+
+non_json_responses:
+  inject_meta: false
+  keep_trace_header: true

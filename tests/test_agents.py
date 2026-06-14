@@ -8,12 +8,14 @@ Each test verifies:
 """
 
 import pytest
+
 from src.models import (
-    Storyboard, Script, ScriptSegment, AssetPlan, ShotAssetPlan,
-    AssetCandidate, EditComposition, EditTimelineEvent,
-    AudioPlan, AudioSegment, CaptionPlan, CaptionEntry,
-    DistributionPlan, PlatformPost, AnalyticsReport, VideoMetrics,
-    Platform, Language, VideoType,
+    AssetPlan,
+    Language,
+    Platform,
+    Script,
+    ScriptSegment,
+    Storyboard,
 )
 
 

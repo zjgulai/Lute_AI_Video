@@ -1,24 +1,24 @@
 """Unit tests for self-audit AuditorAgent — 4 checkpoints, 6-7 criteria each."""
 
-import pytest
-from datetime import datetime
 
-from src.agents.auditor import AuditorAgent, _score_to_status, _overall_status
+import pytest
+
+from src.agents.auditor import AuditorAgent, _overall_status, _score_to_status
 from src.models import (
-    AuditCriterionStatus,
     AuditCheckpoint,
+    AuditCriterionStatus,
     AuditReport,
-    WeeklyCalendar,
     Brief,
-    VideoType,
-    Platform,
-    Language,
-    Script,
-    ScriptSegment,
     EditComposition,
     EditTimelineEvent,
+    Language,
+    Platform,
+    Script,
+    ScriptSegment,
     ThumbnailSet,
     ThumbnailVariant,
+    VideoType,
+    WeeklyCalendar,
 )
 
 

@@ -1,13 +1,16 @@
 """Tests for the FastAPI backend — pipeline endpoints, review submission, health check."""
 
+import importlib.util
 import os
 
 import pytest
 
 # ── Skip all tests if fastapi not installed ──
 try:
+    if importlib.util.find_spec("httpx") is None:
+        pytest.skip("httpx not installed", allow_module_level=True)
+
     from src.api import app
-    from httpx import ASGITransport, AsyncClient
     if app is None:
         pytest.skip("fastapi not installed", allow_module_level=True)
 except (ImportError, ModuleNotFoundError):
@@ -19,8 +22,9 @@ AUTH_HEADERS = {"X-API-Key": os.environ["API_KEY"]}
 
 @pytest.mark.asyncio
 async def test_health_returns_ok():
-    from src.api import app
     from httpx import ASGITransport, AsyncClient
+
+    from src.api import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -35,8 +39,9 @@ async def test_health_returns_ok():
 @pytest.mark.asyncio
 async def test_health_includes_remotion_report():
     """Health response includes full Remotion environment validation."""
-    from src.api import app
     from httpx import ASGITransport, AsyncClient
+
+    from src.api import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -51,8 +56,9 @@ async def test_health_includes_remotion_report():
 @pytest.mark.asyncio
 async def test_start_pipeline_returns_thread_id():
     """Starting a pipeline should return a thread_id immediately."""
-    from src.api import app
     from httpx import ASGITransport, AsyncClient
+
+    from src.api import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -76,8 +82,9 @@ async def test_start_pipeline_returns_thread_id():
 @pytest.mark.asyncio
 async def test_get_state_returns_structured_response():
     """State endpoint should return thread_id, status, current_review, state."""
-    from src.api import app
     from httpx import ASGITransport, AsyncClient
+
+    from src.api import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -103,8 +110,9 @@ async def test_get_state_returns_structured_response():
 @pytest.mark.asyncio
 async def test_submit_approve_returns_compat():
     """P4-4: StepRunner proxy layer returns idempotent_skip for all reviews."""
-    from src.api import app
     from httpx import ASGITransport, AsyncClient
+
+    from src.api import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -129,8 +137,9 @@ async def test_submit_approve_returns_compat():
 
 @pytest.mark.asyncio
 async def test_submit_reject_returns_resumed():
-    from src.api import app
     from httpx import ASGITransport, AsyncClient
+
+    from src.api import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -152,8 +161,9 @@ async def test_submit_reject_returns_resumed():
 
 @pytest.mark.asyncio
 async def test_get_output_returns_pipeline_data():
-    from src.api import app
     from httpx import ASGITransport, AsyncClient
+
+    from src.api import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

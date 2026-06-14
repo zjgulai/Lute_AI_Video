@@ -4,35 +4,36 @@ Covers every branch in every route function.
 State can be either dict or VideoPipelineState (both forms used by LangGraph).
 """
 
-import re
 
 from datetime import datetime
-
-import pytest
+from typing import Any
 
 from src.graph.routing import (
-    route_after_strategy,
-    route_after_script,
-    route_after_compliance,
-    route_after_asset_sourcing,
-    route_after_editing,
-    route_after_thumbnail,
-    _audit_guard,
-    _retry_guard,
-    _get_approval_status,
-    _get_compliance_status,
     AUTO_APPROVE_THRESHOLD,
     AUTO_REJECT_THRESHOLD,
     MAX_RETRIES,
+    _audit_guard,
+    _get_approval_status,
+    _get_compliance_status,
+    _retry_guard,
+    route_after_asset_sourcing,
+    route_after_compliance,
+    route_after_editing,
+    route_after_script,
+    route_after_strategy,
+    route_after_thumbnail,
 )
 from src.models import (
-    AuditReport, AuditCriterionStatus, AuditCriterion,
-    HumanReview, ApprovalStatus,
-    ComplianceReport, ComplianceStatus, AssetPlan, AuditCheckpoint,
+    ApprovalStatus,
+    AssetPlan,
+    AuditCheckpoint,
+    AuditCriterion,
+    AuditCriterionStatus,
+    AuditReport,
+    ComplianceReport,
+    ComplianceStatus,
+    HumanReview,
 )
-from src.models.state import VideoPipelineState
-from typing import Any
-
 
 # ── Audit report fixtures ──
 

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { adminFetchJson } from "@/components/api";
 import { SignOut } from "@phosphor-icons/react";
@@ -56,7 +55,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg-page)] flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-[var(--fortune-red)] border-t-transparent rounded-full animate-spin" />
+        <div
+          role="status"
+          aria-label="Loading admin session"
+          className="w-5 h-5 border-2 border-[var(--fortune-red)] border-t-transparent rounded-full animate-spin"
+        />
       </div>
     );
   }
@@ -78,6 +81,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           <button
             onClick={handleLogout}
+            aria-label="Logout admin session"
             className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
           >
             <SignOut size={14} weight="fill" />

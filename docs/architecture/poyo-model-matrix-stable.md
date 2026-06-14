@@ -6,7 +6,7 @@ module: ai-video
 topic: model-matrix
 status: stable
 created: 2026-05-14
-updated: 2026-05-14
+updated: 2026-05-31
 owner: AIVideoIntel
 source: ai
 related:
@@ -17,6 +17,8 @@ related:
 ---
 
 # poyo.ai 模型库速查表（2026-05）
+
+> **快照边界（2026-05-31）**：本文记录 2026-05 的 poyo.ai 模型目录与本项目阈值映射，不保证代表 poyo.ai 当前最新目录、价格或审核规则。任何真实 token 消耗、部署默认模型切换或成本测算前，先重新核对 poyo.ai 当前产品页面/API 文档，并同步 `src/pipeline/model_thresholds.py` 与本表。
 
 > **目的**：把 poyo.ai 在售模型 + 我们的 Gate 阈值 + 场景适配建议 整合成单页速查。代码层面对应 [`src/pipeline/model_thresholds.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/pipeline/model_thresholds.py)。
 > **数据来源**：poyo.ai 官网 / docs / changelog 2026-05 snapshot + [优化排期路线图](../workflows/2026-05-14-poyo-constrained-optimization-roadmap.md) 决策 D/F。
@@ -31,14 +33,14 @@ related:
 | Model ID | Provider | Max | 特色 | Gate 阈值 | 场景首选 |
 |:---|:---|:---|:---|:---:|:---|
 | `seedance-2` | ByteDance | 15s / 1080p | 原生音视频联合生成；8+ 语言唇形同步；多镜头叙事；最多 12 参考资产 | **0.65** | **S1 / S5** |
-| `kling-3-0/standard` | Kuaishou | 15s / 720p | 多镜头（6 shot）；3 人角色一致性；6+ 语言原生音频；运动控制 | **0.60** | **S3** |
-| `kling-3-0/pro` | Kuaishou | 15s / 1080p | Kling 3.0 全部能力 + 增强写实度 | **0.60** | **S2** |
-| `kling-3-0/4k` | Kuaishou | 15s / 4K | 4K 原生输出 | 0.60 | 高端 hero shot |
+| `kling-3.0/standard` | Kuaishou | 15s / 720p | 多镜头（6 shot）；3 人角色一致性；6+ 语言原生音频；运动控制 | **0.60** | **S3** |
+| `kling-3.0/pro` | Kuaishou | 15s / 1080p | Kling 3.0 全部能力 + 增强写实度 | **0.60** | **S2** |
+| `kling-3.0/4k` | Kuaishou | 15s / 4K | 4K 原生输出 | 0.60 | 高端 hero shot |
 | `sora-2-official` | OpenAI | 4/8/12/16/20s / 1024p | 固定时长档位；同步音频；改进物理引擎 | 0.62 | hero shot 备选 |
 | `sora-2-pro-official` | OpenAI | tiers / 1080p | Pro 输出 | 0.62 | 高端短片 |
 | `veo-3-1` | Google | **8s** / 4K | lite/fast/high-quality 三档；4K 原生 | **0.58** | 8s 内短片 hero shot（**非长视频**） |
-| `runway-gen-4-5` | Runway | 10s / 1080p | 专业运动；可选参考图 | **0.62** | **S2 备选** |
-| `wan-2-7-video` | Alibaba | 15s / 1080p | 多镜头；最广宽高比支持；面部运动控制 | **0.55** | S1/S2 降级 |
+| `runway-gen-4.5` | Runway | 10s / 1080p | 专业运动；可选参考图 | **0.62** | **S2 备选** |
+| `wan2.7-text-to-video` | Alibaba | 15s / 1080p | 多镜头；最广宽高比支持；面部运动控制 | **0.55** | S1/S2 降级 |
 
 ### 1.2 Mid 档（备选 / 降级）
 
@@ -46,18 +48,18 @@ related:
 |:---|:---|:---|:---|:---:|:---|
 | `seedance-2-fast` | ByteDance | 15s / 720p | Seedance 2 fast variant，30% 折扣 | **0.65** | S4 快创首选 |
 | `seedance-1-5-pro` | ByteDance | 15s / 1080p | Seedance 2 前代 | 0.62 | legacy |
-| `kling-o3` / `kling-o3-4k` | Kuaishou | 8s / 1080p~4K | 高语义理解；运动控制 | 0.58 | 短场景 |
-| `kling-2-6` | Kuaishou | 10s / 1080p | 2 人角色一致性；原生 CN/EN 音频 | 0.58 | legacy mid |
-| `kling-2-5-turbo-pro` | Kuaishou | 10s / 1080p | Turbo 草稿模式；50% 折扣 | **0.55** | **S4 turbo / 草稿** |
-| `wan-2-6` | Alibaba | 15s / 1080p | 多镜头序列 | **0.55** | **S3 降级** |
-| `wan-2-5` | Alibaba | 3-15s | 灵活时长按秒计费 | 0.55 | 按需 |
+| `kling-o3/standard` / `kling-o3/4k` | Kuaishou | 8s / 1080p~4K | 高语义理解；运动控制 | 0.58 | 短场景 |
+| `kling-2.6` | Kuaishou | 10s / 1080p | 2 人角色一致性；原生 CN/EN 音频 | 0.58 | legacy mid |
+| `kling-2.5-turbo-pro` | Kuaishou | 10s / 1080p | Turbo 草稿模式；50% 折扣 | **0.55** | **S4 turbo / 草稿** |
+| `wan2.6-text-to-video` | Alibaba | 15s / 1080p | 多镜头序列 | **0.55** | **S3 降级** |
+| `wan2.5-text-to-video` | Alibaba | 3-15s | 灵活时长按秒计费 | 0.55 | 按需 |
 
 ### 1.3 Budget 档（最后降级）
 
 | Model ID | Provider | Max | 特色 | Gate 阈值 | 用途 |
 |:---|:---|:---|:---|:---:|:---|
-| `wan-2-2-fast` | Alibaba | 480p/720p | 极速；40% 折扣 | **0.50** | **S4 budget 降级** |
-| `hailuo-2-3` | MiniMax | 10s / 768p~1080p | 可选首帧引导 | 0.55 | 替代 budget 选项 |
+| `wan2.5-text-to-video` | Alibaba | 480p/720p | 极速；40% 折扣 | **0.50** | **S4 budget 降级** |
+| `hailuo-2.3` | MiniMax | 10s / 768p~1080p | 可选首帧引导 | 0.55 | 替代 budget 选项 |
 | `happy-horse` | Alibaba | 8s / 1080p | 原 default；运动好；参考视频支持 | 0.55 | **已退役** 仅兼容入口 |
 
 ---
@@ -87,11 +89,11 @@ related:
 
 | 场景 | 首选 | 备选 | 降级 | 时长能力 |
 |:---|:---|:---|:---|:---|
-| **S1 商品直拍** | `seedance-2` | `kling-3-0/pro` | `wan-2-7-video` | 15s × 4-6 段 = 60-90s |
-| **S2 品牌宣传** | `kling-3-0/pro` | `runway-gen-4-5` | `wan-2-7-video` | 15s × 4 段 = 60s |
-| **S3 网红二创** | `kling-3-0/standard` | `seedance-2` | `wan-2-6` | 15s × 2 段 = 30s |
-| **S4 直播拍摄** | `seedance-2-fast` | `kling-2-5-turbo-pro` | `wan-2-2-fast` | 10-15s × 6 段 |
-| **S5 品牌VLOG** | `seedance-2` | `kling-3-0/pro` | `wan-2-7-video` | 15s × 6 段 = 90s |
+| **S1 商品直拍** | `seedance-2` | `kling-3.0/pro` | `wan2.7-text-to-video` | 15s × 4-6 段 = 60-90s |
+| **S2 品牌宣传** | `kling-3.0/pro` | `runway-gen-4.5` | `wan2.7-text-to-video` | 15s × 4 段 = 60s |
+| **S3 网红二创** | `kling-3.0/standard` | `seedance-2` | `wan2.6-text-to-video` | 15s × 2 段 = 30s |
+| **S4 直播拍摄** | `seedance-2-fast` | `kling-2.5-turbo-pro` | `wan2.5-text-to-video` | 10-15s × 6 段 |
+| **S5 品牌VLOG** | `seedance-2` | `kling-3.0/pro` | `wan2.7-text-to-video` | 15s × 6 段 = 90s |
 
 ---
 
@@ -103,7 +105,7 @@ related:
 from src.pipeline.model_thresholds import get_threshold, is_acceptable
 
 get_threshold("seedance_clips", model_id="seedance-2")   # 0.65
-get_threshold("seedance_clips", model_id="wan-2-2-fast") # 0.50
+get_threshold("seedance_clips", model_id="wan2.5-text-to-video") # 0.50
 get_threshold("scripts")                                  # 0.60 (LLM-backed)
 
 is_acceptable(0.48, "seedance_clips", model_id="seedance-2")  # False

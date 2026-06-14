@@ -4,9 +4,10 @@ import { act } from "react";
 import { I18nProvider } from "@/i18n/I18nProvider";
 
 vi.mock("./api", () => ({
-  isDemoMode: () => true,
+  isDemoMode: vi.fn(() => true),
   fetchS1State: vi.fn(),
   apiFetch: vi.fn(),
+  fetchGateState: vi.fn(),
 }));
 
 vi.mock("@/demo-data", () => ({
@@ -37,6 +38,7 @@ vi.mock("@/demo-data", () => ({
 }));
 
 import GatePanel from "./GatePanel";
+import { apiFetch, fetchGateState, isDemoMode } from "./api";
 
 async function renderGate(props: React.ComponentProps<typeof GatePanel>) {
   const container = document.createElement("div");
@@ -75,6 +77,7 @@ const baseProps: React.ComponentProps<typeof GatePanel> = {
 describe("GatePanel — demo mode rendering (D3)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isDemoMode).mockReturnValue(true);
   });
 
   it("renders without crashing and shows candidate cards for gate_1_script", async () => {
@@ -206,6 +209,45 @@ describe("GatePanel — demo mode rendering (D3)", () => {
       });
       expect(onBack).toHaveBeenCalled();
     }
+    cleanup();
+  });
+
+  it("renders tooltip-backed continuity diagnostics for long gate text", async () => {
+    vi.mocked(isDemoMode).mockReturnValue(false);
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+    const longBeatSummary =
+      "context setup into product introduction with layered proof beats and detail emphasis for continuity review";
+    const longTransitionIntent =
+      "bridge setup into product interaction with extended pacing control and closing recall emphasis for approval";
+    vi.mocked(fetchGateState).mockResolvedValue({
+      candidates: [],
+      continuity_diagnostics: {
+        continuity_score: 0.82,
+        director_intent_metadata: true,
+        clip_directions: [
+          {
+            scene_beat: "context_setup",
+            beat_summary: longBeatSummary,
+            transition_intent: longTransitionIntent,
+          },
+        ],
+      },
+    } as never);
+
+    const { container, cleanup } = await renderGate(baseProps);
+    const tooltipTrigger = container.querySelector(
+      `[aria-label*="${longTransitionIntent.slice(0, 24)}"]`,
+    ) as HTMLElement | null;
+    const tooltips = Array.from(container.querySelectorAll('[role="tooltip"]')) as HTMLElement[];
+
+    expect(container.textContent).toContain("Director intent diagnostics");
+    expect(tooltipTrigger).not.toBeNull();
+    expect(tooltipTrigger?.textContent).toContain("…");
+    expect(tooltips.some((node) => (node.textContent || "").includes(longBeatSummary))).toBe(true);
+    expect(tooltips.some((node) => (node.textContent || "").includes(longTransitionIntent))).toBe(true);
     cleanup();
   });
 });

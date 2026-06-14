@@ -1,0 +1,27 @@
+version: 1
+owner: backend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  router: src.routers.scenario.regenerate_step
+  invalidation_function: src.pipeline.step_editor.invalidate_downstream
+  step_runner_function: src.pipeline.step_runner.StepRunner.regenerate_step
+
+step_rule: invalidate_steps_after_regenerated_step
+gate_rule: invalidate_gates_at_or_after_regenerated_step
+
+state_effects:
+  regenerated_step_status: unchanged_before_regenerate
+  downstream_steps_status: pending
+  downstream_steps_output: null
+  downstream_steps_invalidated_by: regenerated_step
+  current_step: first_pending_step_after_regenerated_step
+  invalidated_gate_entries: state.invalidated_gates
+
+gate_effects:
+  remove_gate_entries: true
+  preserve_upstream_gates: true
+  clear_gate_status_when_no_awaiting_gate_remains: true
+
+no_token_boundary: true

@@ -7,6 +7,7 @@ on:
       - "web/e2e/production/**"
       - "web/playwright.prod.config.ts"
       - "web/package.json"
+      - "web/package-lock.json"
       - ".github/workflows/e2e-prod.yml"
   workflow_dispatch:
     inputs:
@@ -14,6 +15,11 @@ on:
         description: "Base URL to test (defaults to https://video.lute-tlz-dddd.top)"
         required: false
         default: "https://video.lute-tlz-dddd.top"
+      run_token_smoke:
+        description: "Run @token-smoke specs that can create real provider tasks"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -25,6 +31,7 @@ jobs:
     env:
       PLAYWRIGHT_PROD_URL: ${{ github.event.inputs.base_url || 'https://video.lute-tlz-dddd.top' }}
       PLAYWRIGHT_API_KEY: ${{ secrets.PROD_DEMO_API_KEY || 'ai_video_demo_2026' }}
+      RUN_TOKEN_SMOKE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_token_smoke || false }}
       CI: "true"
     defaults:
       run:
@@ -43,6 +50,14 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Verify token smoke opt-in key
+        if: ${{ env.RUN_TOKEN_SMOKE == 'true' }}
+        run: |
+          if [ "$PLAYWRIGHT_API_KEY" = "ai_video_demo_2026" ]; then
+            echo "::error::run_token_smoke=true requires PROD_DEMO_API_KEY to be configured with a non-demo production key"
+            exit 1
+          fi
 
       - name: Run production E2E suite
         run: npx playwright test -c playwright.prod.config.ts --reporter=list,html

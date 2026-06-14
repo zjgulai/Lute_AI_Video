@@ -6,6 +6,27 @@ import os
 # 导致请求 header 与 verify_api_key 比对失败。设在文件最顶部以保证
 # src.api / src.routers 在测试 import 时拿到稳定的 API_KEY。
 os.environ.setdefault("API_KEY", "test-api-key-for-pytest")
+os.environ["ENVIRONMENT"] = "test"
+os.environ["ALLOW_MOCK_MODE"] = "1"
+os.environ["RUN_TOKEN_SMOKE"] = "0"
+
+PROVIDER_KEY_ENV_NAMES = (
+    "DEEPSEEK_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENAI_ADMIN_KEY",
+    "ANTHROPIC_API_KEY",
+    "KIMI_API_KEY",
+    "POYO_API_KEY",
+    "SEEDANCE_API_KEY",
+    "SILICONFLOW_API_KEY",
+    "ELEVENLABS_API_KEY",
+)
+
+# Pytest must stay hermetic by default. src.config calls load_dotenv(), so these
+# empty values intentionally shadow any local .env provider keys before app
+# modules import configuration.
+for _provider_key in PROVIDER_KEY_ENV_NAMES:
+    os.environ[_provider_key] = ""
 
 # ADR-004 Option D: production default is disabled. Tests that need the
 # live path either patch the flag explicitly or rely on this default-off.
@@ -14,6 +35,41 @@ os.environ.setdefault("S3_VIRAL_EXTRACT_DISABLED", "0")
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+
+def _restore_default_skill_registry() -> None:
+    """Restore default auto-registered skills after registry isolation tests."""
+    try:
+        from src.skills.continuity_storyboard_grid import ContinuityStoryboardGridSkill
+        from src.skills.registry import SkillRegistry
+        from src.skills.seedance_prompt import SeedancePromptSkill
+        from src.skills.viral_extractor import ViralExtractorSkill
+    except ImportError:
+        return
+
+    for skill in (
+        ContinuityStoryboardGridSkill(),
+        SeedancePromptSkill(),
+        ViralExtractorSkill(),
+    ):
+        if SkillRegistry().get_skill(skill.name) is not None:
+            continue
+        try:
+            SkillRegistry.register(skill)
+        except ValueError:
+            pass
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Default to the fast hermetic subset unless the caller opts into slow tests.
+
+    `PYTEST_INCLUDE_HERMETIC_SLOW=1` keeps historical behavior for full local
+    regression runs. An explicit `-m ...` also wins over this default.
+    """
+    if os.getenv("PYTEST_INCLUDE_HERMETIC_SLOW") == "1":
+        return
+    if not config.option.markexpr:
+        config.option.markexpr = "not hermetic_slow"
 
 
 @pytest.fixture
@@ -26,6 +82,32 @@ def auth_headers() -> dict[str, str]:
 def auditor():
     from src.agents.auditor import AuditorAgent
     return AuditorAgent()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_provider_test_context(monkeypatch):
+    """Keep provider credentials and request-scoped keys out of default tests."""
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("ALLOW_MOCK_MODE", "1")
+    monkeypatch.setenv("RUN_TOKEN_SMOKE", "0")
+    for provider_key in PROVIDER_KEY_ENV_NAMES:
+        monkeypatch.setenv(provider_key, "")
+
+    request_token = None
+    try:
+        from src.tools.llm_client import _request_api_keys
+    except ImportError:
+        _request_api_keys = None
+    if _request_api_keys is not None:
+        request_token = _request_api_keys.set({})
+
+    yield
+
+    if _request_api_keys is not None and request_token is not None:
+        _request_api_keys.reset(request_token)
+    for provider_key in PROVIDER_KEY_ENV_NAMES:
+        os.environ[provider_key] = ""
+    _restore_default_skill_registry()
 
 
 @pytest.fixture(autouse=True)

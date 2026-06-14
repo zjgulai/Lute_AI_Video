@@ -16,6 +16,8 @@ import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import { errorMessage } from "@/lib/errors";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
+import RuntimeMediaImage from "@/components/RuntimeMediaImage";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface MaterialAsset {
   id: string;
@@ -28,14 +30,26 @@ interface MaterialAsset {
   tags: string[];
   producedAt: string;
   isAiGenerated: boolean;
+  reviewStatus: "pending_review" | null;
 }
 
 type TypeFilter = "all" | "video" | "image" | "audio";
 const TYPE_FILTER_IDS: TypeFilter[] = ["all", "video", "image", "audio"];
+const AI_GENERATED_CATEGORIES = new Set([
+  "audio",
+  "character_identity",
+  "gpt_images",
+  "keyframes",
+  "pending_review",
+  "seedance",
+  "thumbnails",
+]);
 
 function isVideoMime(m: string) { return m.startsWith("video/"); }
 function isImageMime(m: string) { return m.startsWith("image/"); }
 function isAudioMime(m: string) { return m.startsWith("audio/"); }
+function isAiGeneratedCategory(category: string) { return AI_GENERATED_CATEGORIES.has(category); }
+function reviewPriority(asset: MaterialAsset) { return asset.reviewStatus === "pending_review" ? 0 : 1; }
 
 function formatSize(bytes: number): string {
   if (!bytes) return "";
@@ -56,10 +70,12 @@ export default function MaterialsTab() {
   const [failedUploads, setFailedUploads] = useState<{ file: File; error: string }[]>([]);
   const [preview, setPreview] = useState<MaterialAsset | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 24;
 
-  const fetchAssets = useCallback(async () => {
+  const fetchAssets = useCallback(async (shouldCommit: () => boolean = () => true) => {
     setLoading(true);
     setError(null);
 
@@ -77,12 +93,15 @@ export default function MaterialsTab() {
           tags: (a.tags as string[]) || [],
           producedAt: ((a.metadata as Record<string, unknown> | undefined)?.uploaded_at as string) || new Date().toISOString(),
           isAiGenerated: ((a.tags as string[]) || []).some((tg: string) => tg.includes("ai-") || tg.includes("seedance")),
+          reviewStatus: null,
         }));
-        setAssets(mapped.filter((m) => !isVideoMime(m.mimeType) || m.sizeBytes === 0 || m.tags.every((t) => t !== "renders")));
+        if (shouldCommit()) {
+          setAssets(mapped.filter((m) => !isVideoMime(m.mimeType) || m.sizeBytes === 0 || m.tags.every((t) => t !== "renders")));
+        }
       } catch (e: unknown) {
-        setError(errorMessage(e, t("common.fetchFailed")));
+        if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
       } finally {
-        setLoading(false);
+        if (shouldCommit()) setLoading(false);
       }
       return;
     }
@@ -105,9 +124,10 @@ export default function MaterialsTab() {
             thumbnailPath: f.thumbnail_path as string | null,
             tags: [f.category as string],
             producedAt: f.produced_at as string,
-            isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category as string),
+            isAiGenerated: isAiGeneratedCategory(f.category as string),
+            reviewStatus: (f.review_status as MaterialAsset["reviewStatus"]) ?? null,
           }));
-        setAssets(mapped);
+        if (shouldCommit()) setAssets(mapped);
         return;
       }
       const data = await res.json();
@@ -121,18 +141,35 @@ export default function MaterialsTab() {
         thumbnailPath: f.thumbnail_path as string | null,
         tags: [f.category as string],
         producedAt: f.produced_at as string,
-        isAiGenerated: ["seedance", "gpt_images", "audio", "keyframes", "character_identity", "thumbnails"].includes(f.category as string),
+        isAiGenerated: isAiGeneratedCategory(f.category as string),
+        reviewStatus: (f.review_status as MaterialAsset["reviewStatus"]) ?? null,
       }));
-      setAssets(mapped);
+      if (shouldCommit()) setAssets(mapped);
     } catch (e: unknown) {
-      setError(errorMessage(e, t("common.fetchFailed")));
+      if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
     } finally {
-      setLoading(false);
+      if (shouldCommit()) setLoading(false);
     }
   }, [t]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchAssets(); }, [fetchAssets]);
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchAssets(() => !cancelled);
+    return () => { cancelled = true; };
+  }, [fetchAssets]);
+
+  useEffect(() => () => {
+    uploadAbortRef.current?.abort();
+  }, []);
+
+  const closePreview = () => setPreview(null);
+
+  useModalBehavior({
+    open: Boolean(preview),
+    onClose: closePreview,
+    initialFocusRef: previewCloseRef,
+  });
 
   const filteredAssets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -146,7 +183,7 @@ export default function MaterialsTab() {
         a.filename.toLowerCase().includes(q) ||
         a.tags.some((tag) => tag.toLowerCase().includes(q))
       );
-    });
+    }).sort((a, b) => reviewPriority(a) - reviewPriority(b));
   }, [assets, typeFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAssets.length / PAGE_SIZE));
@@ -166,33 +203,46 @@ export default function MaterialsTab() {
   };
 
   const uploadFiles = async (files: File[]) => {
+    if (uploading) return;
     if (isDemoMode()) {
       setError(t("library.demoModeUploadDisabled"));
       return;
     }
     setUploading(true);
     setError(null);
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
     const newFailures: { file: File; error: string }[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      setUploadProgress(`${t("footage.uploading")} (${i + 1}${t("footage.of")}${files.length}): ${file.name}`);
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("tags", "materials,user_upload");
-        formData.append("metadata", JSON.stringify({ source: "library-materials" }));
-        const res = await apiFetch("/api/upload", { method: "POST", body: formData });
-        if (!res.ok) throw new Error(`${t("footage.uploadFailed")} (${res.status})`);
-      } catch (e: unknown) {
-        newFailures.push({ file, error: errorMessage(e, t("footage.uploadFailed")) });
+    let completedCount = 0;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        if (controller.signal.aborted) break;
+        const file = files[i];
+        setUploadProgress(`${t("footage.uploading")} (${i + 1}${t("footage.of")}${files.length}): ${file.name}`);
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("tags", "materials,user_upload");
+          formData.append("metadata", JSON.stringify({ source: "library-materials" }));
+          const res = await apiFetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
+          if (!res.ok) throw new Error(`${t("footage.uploadFailed")} (${res.status})`);
+          completedCount += 1;
+        } catch (e: unknown) {
+          if (controller.signal.aborted) break;
+          newFailures.push({ file, error: errorMessage(e, t("footage.uploadFailed")) });
+        }
       }
+    } finally {
+      if (uploadAbortRef.current === controller) uploadAbortRef.current = null;
+      setUploadProgress(null);
+      setUploading(false);
     }
-    setUploadProgress(null);
-    setUploading(false);
     if (newFailures.length > 0) {
       setFailedUploads((prev) => [...prev, ...newFailures]);
     }
-    await fetchAssets();
+    if (!controller.signal.aborted || completedCount > 0) {
+      await fetchAssets();
+    }
   };
 
   const retryFailedUploads = async () => {
@@ -203,6 +253,10 @@ export default function MaterialsTab() {
 
   const dismissFailedUploads = () => {
     setFailedUploads([]);
+  };
+
+  const cancelUpload = () => {
+    uploadAbortRef.current?.abort();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -282,7 +336,14 @@ export default function MaterialsTab() {
       {(uploading || uploadProgress) && (
         <div className="apple-card p-3 border-l-4 border-[var(--fortune-red)] bg-[var(--bg-panel)] flex items-center gap-2">
           <Spinner size={16} weight="fill" className="text-[var(--fortune-red)] animate-spin shrink-0" />
-          <span className="text-xs text-[var(--jade-accent)] font-medium">{uploadProgress || t("footage.uploadProgress")}</span>
+          <span className="text-xs text-[var(--jade-accent)] font-medium flex-1">{uploadProgress || t("footage.uploadProgress")}</span>
+          <button
+            type="button"
+            onClick={cancelUpload}
+            className="apple-btn text-xs py-1 px-2 border border-[var(--border-default)]"
+          >
+            {t("upload.cancel", "取消上传")}
+          </button>
         </div>
       )}
 
@@ -390,15 +451,16 @@ export default function MaterialsTab() {
                 key={asset.id}
                 data-asset-card
                 data-kind="creation_intermediate"
+                data-review-status={asset.reviewStatus ?? undefined}
                 onClick={() => setPreview(asset)}
                 className="apple-card overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md group text-left"
               >
                 <div className="aspect-video bg-[var(--cinema-black)] relative flex items-center justify-center overflow-hidden">
                   {isImage && url ? (
-                    <img src={url} alt={asset.originalName} className="w-full h-full object-cover" loading="lazy" />
+                    <RuntimeMediaImage src={url} alt={asset.originalName} className="w-full h-full object-cover" />
                   ) : isVideo ? (
                     thumb ? (
-                      <img src={thumb} alt={asset.originalName} className="w-full h-full object-cover" loading="lazy" />
+                      <RuntimeMediaImage src={thumb} alt={asset.originalName} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-[var(--bg-panel)] flex items-center justify-center">
                         <Video size={28} weight="fill" className="text-[var(--text-muted)]" />
@@ -420,6 +482,11 @@ export default function MaterialsTab() {
                     {asset.isAiGenerated && (
                       <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)] font-medium">
                         {t("brand.filter.ai")}
+                      </span>
+                    )}
+                    {asset.reviewStatus === "pending_review" && (
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[rgba(199,151,76,0.16)] text-[var(--gold-foil)] font-medium">
+                        {t("library.materials.pendingReview")}
                       </span>
                     )}
                     {!asset.isAiGenerated && asset.tags.length > 0 && (
@@ -445,14 +512,18 @@ export default function MaterialsTab() {
 
       {preview && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={preview.originalName}
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 backdrop-blur-sm"
-          onClick={() => setPreview(null)}
+          onClick={closePreview}
         >
           <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setPreview(null)}
+              ref={previewCloseRef}
+              onClick={closePreview}
               className="absolute -top-10 right-0 p-2 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all cursor-pointer z-10"
-              aria-label="Close"
+              aria-label={t("common.close")}
             >
               <X size={20} weight="fill" />
             </button>
@@ -469,7 +540,7 @@ export default function MaterialsTab() {
                   className="max-w-[85vw] max-h-[75vh] object-contain"
                 />
               ) : isImageMime(preview.mimeType) ? (
-                <img src={getMediaUrl(preview.filePath)} alt={preview.originalName} className="max-w-[85vw] max-h-[75vh] object-contain" />
+                <RuntimeMediaImage src={getMediaUrl(preview.filePath)} alt={preview.originalName} className="max-w-[85vw] max-h-[75vh] object-contain" />
               ) : (
                 <div className="px-12 py-16 text-center">
                   <MusicNotes size={48} weight="fill" className="text-white/40 mx-auto mb-4" />

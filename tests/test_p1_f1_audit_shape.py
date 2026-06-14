@@ -9,8 +9,9 @@ even when audio files actually exist on disk.
 
 from __future__ import annotations
 
-import pytest
 from typing import Any
+
+import pytest
 
 
 @pytest.mark.asyncio

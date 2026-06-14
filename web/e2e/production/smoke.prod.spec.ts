@@ -1,6 +1,20 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import {
+  expectOkJsonWith429Retry,
+  hasNonDemoProductionApiKey,
+  isExpectedProductionPageNoise,
+  PRODUCTION_API_KEY,
+  productionApiHeaders,
+} from "./helpers";
 
-const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+const TOKEN_CONSUMING_ENDPOINT_PATTERNS = [
+  /\/(?:api\/)?fast\/(?:generate|submit|status)/,
+  /\/(?:api\/)?scenario\/[^/]+(?:$|\/(?:submit|start|step|resume|regenerate|gate))/,
+  /\/(?:api\/)?pipeline\/(?:start|[^/]+\/(?:review|distribution|output))/,
+  /\/(?:api\/)?distribution\/publish/,
+  /\/publish\//,
+  /\/api\/upload/,
+];
 
 const TOP_PAGES = [
   { path: "/", name: "Home" },
@@ -14,24 +28,34 @@ const TOP_PAGES = [
   { path: "/works", name: "Works" },
 ];
 
-function isInfraNoise(msg: string): boolean {
-  const lower = msg.toLowerCase();
-  return (
-    lower.includes("favicon")
-    || lower.includes("hydrat")
-    || lower.includes("404")
-    || lower.includes("preload")
-    || lower.includes("fonts.gstatic")
-    || lower.includes("fonts.googleapis")
-    || lower.includes("cors policy")
-    || lower.includes("err_failed")
-    || lower.includes("401")
-    || lower.includes("unauthorized")
-    || lower.includes("net::err_failed")
-  );
+function isTokenConsumingEndpoint(url: string): boolean {
+  const pathname = new URL(url).pathname;
+  return TOKEN_CONSUMING_ENDPOINT_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+async function installTokenConsumptionGuard(page: Page): Promise<string[]> {
+  const violations: string[] = [];
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    if (!isTokenConsumingEndpoint(request.url())) {
+      await route.continue();
+      return;
+    }
+
+    const pathname = new URL(request.url()).pathname;
+    violations.push(`${request.method().toUpperCase()} ${pathname}`);
+    await route.fulfill({
+      status: 451,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Production non-token smoke blocked a token-consuming request" }),
+    });
+  });
+  return violations;
 }
 
 test.describe("Production smoke — top-level pages", () => {
+  test.describe.configure({ mode: "serial" });
+
   for (const page of TOP_PAGES) {
     test(`${page.name} loads (${page.path})`, async ({ page: pw }) => {
       const errors: string[] = [];
@@ -48,27 +72,27 @@ test.describe("Production smoke — top-level pages", () => {
 
       await expect(pw.locator("body")).toBeVisible();
 
-      const blocking = errors.filter((e) => !isInfraNoise(e));
+      const blocking = errors.filter((e) => !isExpectedProductionPageNoise(e));
       expect(blocking, `blocking errors on ${page.path}:\n${blocking.join("\n")}`).toEqual([]);
     });
   }
 });
 
 test.describe("Production smoke — backend API connectivity", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("GET /api/portfolio/ returns valid JSON with files array", async ({ request }) => {
-    const r = await request.get("/api/portfolio/?limit=5", {
-      headers: { "X-API-Key": API_KEY },
+    const body = await expectOkJsonWith429Retry(request, "/api/portfolio/?limit=5", {
+      headers: productionApiHeaders(),
     });
-    expect(r.status()).toBe(200);
-    const body = await r.json();
     expect(body).toHaveProperty("files");
-    expect(Array.isArray(body.files)).toBe(true);
+    expect(Array.isArray((body as { files?: unknown }).files)).toBe(true);
     expect(body).toHaveProperty("_meta");
-    expect(body._meta).toHaveProperty("version");
+    expect((body as { _meta?: unknown })._meta).toHaveProperty("version");
   });
 
-  test("GET /health returns version 0.2.x with media_tools all true", async ({ request }) => {
-    const r = await request.get("/health");
+  test("GET /api/health returns version 0.2.x with media_tools all true", async ({ request }) => {
+    const r = await request.get("/api/health");
     expect(r.status()).toBe(200);
     const body = await r.json();
     expect(body.status).toBe("ok");
@@ -79,13 +103,13 @@ test.describe("Production smoke — backend API connectivity", () => {
     expect(body.media_tools.clip_available).toBe(true);
   });
 
-  test("_meta.version is consistent across /health and /api/portfolio", async ({ request }) => {
-    const r1 = await request.get("/health");
-    const r2 = await request.get("/api/portfolio/?limit=1", {
-      headers: { "X-API-Key": API_KEY },
+  test("_meta.version is consistent across /api/health and /api/portfolio", async ({ request }) => {
+    const r1 = await request.get("/api/health");
+    const portfolio = await expectOkJsonWith429Retry(request, "/api/portfolio/?limit=1", {
+      headers: productionApiHeaders(),
     });
     const v1 = (await r1.json()).version;
-    const v2 = (await r2.json())._meta.version;
+    const v2 = (portfolio as { _meta: { version: string } })._meta.version;
     expect(v1).toBe(v2);
   });
 });
@@ -101,6 +125,53 @@ test.describe("Production smoke — navigation", () => {
       `Expected /settings or session_expired redirect, got: ${url}`,
     ).toBe(true);
     await expect(page.locator("body")).toBeVisible();
+  });
+
+  test("Settings provider configuration is covered by default non-token smoke", async ({ page }) => {
+    test.skip(
+      !hasNonDemoProductionApiKey(),
+      "A non-demo PLAYWRIGHT_API_KEY is required to unlock production Settings UI",
+    );
+    const violations = await installTokenConsumptionGuard(page);
+    await page.addInitScript((apiKey) => {
+      localStorage.setItem("ai_video_api_key", apiKey || "production-non-token-placeholder");
+      localStorage.setItem("ai_video_demo_mode", "true");
+      localStorage.setItem("app-locale", "en");
+      localStorage.setItem("ai-video-app-store", JSON.stringify({
+        state: {
+          mode: "expert",
+          pipelineMode: "step_by_step",
+          videoDuration: 30,
+        },
+        version: 1,
+      }));
+    }, PRODUCTION_API_KEY);
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    const enterButton = page.getByRole("button", { name: /Get Started|开始|进入/ });
+    if (await enterButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await enterButton.click();
+    }
+    const apiKeyInput = page.locator("#apikey-input");
+    if (await apiKeyInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await apiKeyInput.fill(PRODUCTION_API_KEY);
+      await page.getByRole("button", { name: /Enter|进入|验证|Verify/ }).click();
+      await expect(apiKeyInput).toBeHidden({ timeout: 15_000 });
+    }
+    await page.getByRole("link", { name: /Settings|设置/ }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: /Settings|设置/ })).toBeVisible();
+    await dialog.getByRole("button", { name: /Providers|提供方/ }).click();
+    await expect(page.getByText(/Provider API keys|Provider API Keys/)).toBeVisible();
+    await expect(page.getByText(/Model route catalog|模型路由清单/)).toBeVisible();
+    await expect(page.getByText("DEEPSEEK_API_KEY").first()).toBeVisible();
+    await expect(page.getByText("POYO_API_KEY").first()).toBeVisible();
+    await expect(page.getByText("SILICONFLOW_API_KEY").first()).toBeVisible();
+
+    expect(violations, "default production settings smoke must not touch token-consuming endpoints").toEqual([]);
   });
 
   test("Fast Mode page reachable via direct goto (handles session redirect)", async ({ page }) => {

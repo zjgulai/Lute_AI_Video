@@ -47,11 +47,16 @@ class GPTImageGenerateSkill(SkillCallable):
         quality = params.get("quality", "high")
         style_ref = params.get("style_ref")
         image_id = params.get("image_id", "img_001")
+        output_dir = Path(params["output_dir"]) if params.get("output_dir") else None
+        provider_max_retries = params.get("provider_max_retries")
 
         from src.config import OPENAI_API_KEY, POYO_API_KEY
         from src.tools.gpt_image_client import GPTImageClient
 
-        client = GPTImageClient()
+        client = GPTImageClient(
+            output_dir=output_dir,
+            max_retries=provider_max_retries,
+        )
         try:
             api_result = await client.generate(
                 prompt=prompt,
@@ -193,11 +198,13 @@ class GPTImageGenerateSkill(SkillCallable):
         return errors
 
     def fallback(self, params: dict[str, Any]) -> SkillResult:
-        from src.config import OUTPUT_DIR
-
         image_id = params.get("image_id", "fallback")
         prompt = params.get("prompt", "")
-        out_dir = OUTPUT_DIR / "gpt_images"
+        if params.get("output_dir"):
+            out_dir = Path(params["output_dir"])
+        else:
+            from src.config import OUTPUT_DIR
+            out_dir = OUTPUT_DIR / "gpt_images"
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"fallback_{image_id}_{abs(hash(prompt)) & 0xFFFF:04x}.png"
         self._build_stub_png(path)

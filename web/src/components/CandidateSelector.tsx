@@ -2,17 +2,31 @@
 
 import { useMemo } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import {
+  extractContinuityDirections,
+  truncatePreview as getDataPreview,
+} from "@/lib/continuityDirections";
+import type { ContinuityDirection } from "@/lib/continuityDirections";
+
+type CandidatePrimitive = string | number | boolean | null;
+export type CandidateData = CandidatePrimitive | CandidateData[] | { [key: string]: CandidateData };
+export type CandidateVariant = "standard" | "creative" | "conservative";
+
+type CandidateScoreBreakdown = {
+  director_intent?: number;
+  [key: string]: CandidatePrimitive | undefined;
+};
 
 interface Score {
   overall: number;
-  breakdown?: Record<string, unknown>;
+  breakdown?: CandidateScoreBreakdown;
   explanation?: string;
 }
 
 export interface Candidate {
   id: string;
-  variant: "standard" | "creative" | "conservative";
-  data: unknown;
+  variant: CandidateVariant;
+  data: CandidateData;
   score: Score;
   recommended: boolean;
 }
@@ -56,11 +70,119 @@ function getVariantLabelKey(variant: string): string {
   }
 }
 
-function getDataPreview(data: unknown): string {
-  if (!data) return "";
-  if (typeof data === "string") return data.slice(0, 100);
-  const str = JSON.stringify(data, null, 2);
-  return str.slice(0, 100);
+export type { ContinuityDirection };
+
+export function normalizeCandidateData(value: unknown): CandidateData {
+  if (value === null) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map(normalizeCandidateData);
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeCandidateData(item)]),
+    );
+  }
+  return null;
+}
+
+function normalizeVariant(value: unknown, index: number): CandidateVariant {
+  if (value === "standard" || value === "creative" || value === "conservative") return value;
+  return (["standard", "creative", "conservative"] as const)[index % 3];
+}
+
+function normalizeOverallScore(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function normalizeScoreBreakdown(value: unknown): CandidateScoreBreakdown | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const breakdown: CandidateScoreBreakdown = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === "director_intent") {
+      if (typeof item === "number" && Number.isFinite(item)) breakdown.director_intent = item;
+      continue;
+    }
+    if (item === null || typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+      breakdown[key] = item;
+    }
+  }
+
+  return Object.keys(breakdown).length > 0 ? breakdown : undefined;
+}
+
+function normalizeScore(value: unknown): Score {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { overall: 0 };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    overall: normalizeOverallScore(record.overall),
+    breakdown: normalizeScoreBreakdown(record.breakdown),
+    explanation: typeof record.explanation === "string" ? record.explanation : undefined,
+  };
+}
+
+export function normalizeCandidates(value: unknown): Candidate[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index): Candidate | null => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+
+      const record = item as Record<string, unknown>;
+      const rawId = typeof record.id === "string" ? record.id.trim() : "";
+      return {
+        id: rawId || `candidate-${index + 1}`,
+        variant: normalizeVariant(record.variant, index),
+        data: normalizeCandidateData(record.data),
+        score: normalizeScore(record.score),
+        recommended: record.recommended === true,
+      };
+    })
+    .filter((candidate): candidate is Candidate => candidate !== null);
+}
+
+function extractDirectorIntentScore(score: Score | undefined): number | null {
+  const value = score?.breakdown?.director_intent;
+  return typeof value === "number" ? value : null;
+}
+
+function prioritizeDirectorIntentExplanation(
+  explanation: string | undefined,
+  directorIntentScore: number | null,
+): string {
+  const text = String(explanation || "").trim();
+  if (!text) return "";
+
+  const colonIndex = text.indexOf(":");
+  const prefix = colonIndex >= 0 ? text.slice(0, colonIndex + 1) : "";
+  const body = colonIndex >= 0 ? text.slice(colonIndex + 1) : text;
+  const segments = body
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  const directorIntentIndex = segments.findIndex((segment) =>
+    segment.includes("director_intent="),
+  );
+  if (directorIntentIndex >= 0) {
+    const prioritized = [
+      segments[directorIntentIndex],
+      ...segments.filter((_, index) => index !== directorIntentIndex),
+    ].join(", ");
+    return prefix ? `${prefix} ${prioritized}` : prioritized;
+  }
+
+  if (directorIntentScore !== null) {
+    const directorIntentLead = `director_intent=${directorIntentScore.toFixed(2)}`;
+    return prefix
+      ? `${prefix} ${directorIntentLead}, ${segments.join(", ")}`
+      : `${directorIntentLead}, ${segments.join(", ")}`;
+  }
+
+  return text;
 }
 
 function SkeletonCard() {
@@ -136,6 +258,12 @@ export default function CandidateSelector({
         const score = candidate.score?.overall ?? 0;
         const scorePct = Math.round(score * 100);
         const preview = getDataPreview(candidate.data);
+        const continuityDirections = extractContinuityDirections(candidate.data);
+        const directorIntentScore = extractDirectorIntentScore(candidate.score);
+        const prioritizedExplanation = prioritizeDirectorIntentExplanation(
+          candidate.score?.explanation,
+          directorIntentScore,
+        );
 
         let borderClass = "border-[rgba(215,92,112,0.18)]";
         if (isSelected) borderClass = "border-[var(--fortune-red)]";
@@ -212,10 +340,40 @@ export default function CandidateSelector({
             </div>
 
             {/* Score explanation */}
-            {candidate.score?.explanation && (
+            {prioritizedExplanation && (
               <p className="text-[12px] text-[var(--text-muted)] mb-2 leading-relaxed line-clamp-2">
-                {candidate.score.explanation}
+                {prioritizedExplanation}
               </p>
+            )}
+
+            {continuityDirections.length > 0 && (
+              <div className="mb-3 rounded-lg bg-[rgba(122,150,187,0.10)] border border-[rgba(122,150,187,0.22)] p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                    {t("continuity.diagnosticsTitle")}
+                  </p>
+                  {directorIntentScore !== null && (
+                    <span className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                      {t("continuity.directorIntentScoreLabel")} {Math.round(directorIntentScore * 100)}%
+                    </span>
+                  )}
+                </div>
+                {continuityDirections.slice(0, 2).map((direction, index) => (
+                  <div
+                    key={`${direction.sceneBeat}-${direction.transitionIntent}-${index}`}
+                    className="text-[11px] text-[var(--text-body)] leading-relaxed"
+                  >
+                    <div>
+                      {t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}
+                    </div>
+                    {direction.transitionIntent && (
+                      <div>
+                        {t("continuity.transitionIntentLabel")} {direction.transitionIntent}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
             {/* Select button */}

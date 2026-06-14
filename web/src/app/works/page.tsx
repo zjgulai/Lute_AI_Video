@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FilmSlate, MagnifyingGlass, WarningCircle, X } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import TopHeader from "@/components/TopHeader";
 import EmptyState from "@/components/EmptyState";
-import { ListSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
+import RuntimeMediaImage from "@/components/RuntimeMediaImage";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 import { errorMessage } from "@/lib/errors";
 interface FinalWork {
@@ -23,23 +24,75 @@ interface FinalWork {
   thumbnailPath: string | null;
 }
 
-const SCENE_FILTER_IDS = ["all", "product_direct", "brand_campaign", "influencer_remix", "brand_vlog"] as const;
+type DemoFootageAsset = {
+  original_name?: string;
+  filename?: string;
+  file_path: string;
+  file_size?: number;
+  mime_type?: string;
+  thumbnail_path?: string | null;
+  metadata?: {
+    scenario?: string;
+    label?: string;
+    produced_at?: string;
+    uploaded_at?: string;
+  };
+};
+
+type PortfolioFile = {
+  id: string;
+  filename: string;
+  path: string;
+  category?: string;
+  scenario?: string | null;
+  label?: string | null;
+  produced_at?: string;
+  size_bytes?: number;
+  mime_type?: string;
+  thumbnail_path?: string | null;
+};
+
+type PortfolioResponse = {
+  files?: PortfolioFile[];
+};
+
+const SCENE_FILTER_IDS = ["all", "product_direct", "brand_campaign", "influencer_remix", "live_shoot", "brand_vlog"] as const;
 type SceneFilter = typeof SCENE_FILTER_IDS[number];
 
-const SCENE_ID_BY_PREFIX: Record<string, SceneFilter> = {
+const SCENE_FILTER_BY_SCENARIO: Record<string, SceneFilter> = {
+  s1: "product_direct",
+  product_direct: "product_direct",
+  s2: "brand_campaign",
+  brand_campaign: "brand_campaign",
+  s3: "influencer_remix",
+  influencer_remix: "influencer_remix",
+  s4: "live_shoot",
+  live_shoot: "live_shoot",
+  live_shoot_to_video: "live_shoot",
+  s4_live_shoot: "live_shoot",
+  s5: "brand_vlog",
+  brand_vlog: "brand_vlog",
+};
+
+const SCENE_FILTER_BY_FILENAME_PREFIX: Record<string, SceneFilter> = {
   s1: "product_direct",
   s2: "brand_campaign",
   s3: "influencer_remix",
+  s4: "live_shoot",
+  live_shoot: "live_shoot",
+  live_shoot_to_video: "live_shoot",
+  s4_live_shoot: "live_shoot",
   s5: "brand_vlog",
 };
 
 function inferSceneFilter(work: FinalWork): SceneFilter | "other" {
-  if (work.scenario && work.scenario in SCENE_ID_BY_PREFIX) {
-    return SCENE_ID_BY_PREFIX[work.scenario];
+  const scenario = work.scenario?.toLowerCase();
+  if (scenario && scenario in SCENE_FILTER_BY_SCENARIO) {
+    return SCENE_FILTER_BY_SCENARIO[scenario];
   }
   const stem = work.filename.toLowerCase();
   if (stem.startsWith("vlog")) return "brand_vlog";
-  for (const [prefix, scene] of Object.entries(SCENE_ID_BY_PREFIX)) {
+  for (const [prefix, scene] of Object.entries(SCENE_FILTER_BY_FILENAME_PREFIX)) {
     if (stem.startsWith(prefix + "_") || stem.startsWith(prefix + ".")) return scene;
   }
   return "other";
@@ -85,6 +138,7 @@ export default function WorksPage() {
   const [sceneFilter, setSceneFilter] = useState<SceneFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [preview, setPreview] = useState<FinalWork | null>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 24;
 
@@ -95,9 +149,9 @@ export default function WorksPage() {
     if (isDemoMode()) {
       try {
         const { DEMO_FOOTAGE_ASSETS } = await import("@/demo-data");
-        const demoFinals: FinalWork[] = (DEMO_FOOTAGE_ASSETS || [])
-          .filter((a: any) => a.mime_type?.startsWith("video/"))
-          .map((a: any, i: number) => ({
+        const demoFinals: FinalWork[] = ((DEMO_FOOTAGE_ASSETS || []) as DemoFootageAsset[])
+          .filter((a) => a.mime_type?.startsWith("video/"))
+          .map((a, i) => ({
             id: `demo-${i}`,
             filename: a.original_name || a.filename || `demo_${i}.mp4`,
             path: a.file_path,
@@ -122,34 +176,34 @@ export default function WorksPage() {
       if (!res.ok) {
         const res2 = await apiFetch("/portfolio/?limit=500&sort=size_desc");
         if (!res2.ok) throw new Error(`${t("common.fetchFailed")} (${res2.status})`);
-        const data = await res2.json();
+        const data = await res2.json() as PortfolioResponse;
         const mapped: FinalWork[] = (data.files || [])
-          .filter((f: any) => f.category === "renders" || f.category === "fast_mode")
-          .map((f: any) => ({
+          .filter((f) => f.category === "renders" || f.category === "fast_mode")
+          .map((f) => ({
             id: f.id,
             filename: f.filename,
             path: f.path,
-            scenario: f.scenario,
-            label: f.label,
-            producedAt: f.produced_at,
-            sizeBytes: f.size_bytes,
-            mimeType: f.mime_type,
-            thumbnailPath: f.thumbnail_path,
+            scenario: f.scenario || null,
+            label: f.label || null,
+            producedAt: f.produced_at || "",
+            sizeBytes: f.size_bytes || 0,
+            mimeType: f.mime_type || "video/mp4",
+            thumbnailPath: f.thumbnail_path || null,
           }));
         setWorks(mapped);
         return;
       }
-      const data = await res.json();
-      const mapped: FinalWork[] = (data.files || []).map((f: any) => ({
+      const data = await res.json() as PortfolioResponse;
+      const mapped: FinalWork[] = (data.files || []).map((f) => ({
         id: f.id,
         filename: f.filename,
         path: f.path,
-        scenario: f.scenario,
-        label: f.label,
-        producedAt: f.produced_at,
-        sizeBytes: f.size_bytes,
-        mimeType: f.mime_type,
-        thumbnailPath: f.thumbnail_path,
+        scenario: f.scenario || null,
+        label: f.label || null,
+        producedAt: f.produced_at || "",
+        sizeBytes: f.size_bytes || 0,
+        mimeType: f.mime_type || "video/mp4",
+        thumbnailPath: f.thumbnail_path || null,
       }));
       setWorks(mapped);
     } catch (e: unknown) {
@@ -175,6 +229,7 @@ export default function WorksPage() {
       product_direct: 0,
       brand_campaign: 0,
       influencer_remix: 0,
+      live_shoot: 0,
       brand_vlog: 0,
     };
     for (const { scene } of enrichedWorks) {
@@ -211,6 +266,13 @@ export default function WorksPage() {
     setSearchQuery(q);
     setPage(1);
   };
+  const closePreview = () => setPreview(null);
+
+  useModalBehavior({
+    open: Boolean(preview),
+    onClose: closePreview,
+    initialFocusRef: previewCloseRef,
+  });
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] overflow-x-hidden">
@@ -334,7 +396,7 @@ export default function WorksPage() {
                 >
                   <div className="aspect-video bg-[var(--cinema-black)] relative flex items-center justify-center overflow-hidden">
                     {thumbUrl ? (
-                      <img
+                      <RuntimeMediaImage
                         src={thumbUrl}
                         alt={title}
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -387,14 +449,18 @@ export default function WorksPage() {
 
       {preview && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={preview.label || humanizeFilename(preview.filename)}
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 backdrop-blur-sm"
-          onClick={() => setPreview(null)}
+          onClick={closePreview}
         >
           <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setPreview(null)}
+              ref={previewCloseRef}
+              onClick={closePreview}
               className="absolute -top-10 right-0 p-2 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all cursor-pointer z-10"
-              aria-label="Close"
+              aria-label={t("common.close")}
             >
               <X size={20} weight="fill" />
             </button>

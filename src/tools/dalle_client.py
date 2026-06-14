@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 import structlog
 
-from src.config import OPENAI_API_KEY, OUTPUT_DIR
+from src.config import OPENAI_API_KEY, OPENAI_IMAGE_API_BASE, OUTPUT_DIR
 
 logger = structlog.get_logger()
 
@@ -36,7 +36,7 @@ class DalleClient:
         self.output_dir = output_dir or OUTPUT_DIR / "thumbnails"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._client = httpx.AsyncClient(
-            base_url="https://api.openai.com/v1",
+            base_url=OPENAI_IMAGE_API_BASE,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",

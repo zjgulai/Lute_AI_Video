@@ -1,12 +1,12 @@
-"""S2 backwards-compat shim — re-exports S2BrandCampaignPipeline from the
-independent v2 implementation introduced in Sprint 2 P2-1/P2-2.
+"""Frozen S2 backwards-compat shim.
 
-The canonical import path is now ``src.pipeline.s2_brand_pipeline_v2``.
-This module is retained so older imports (notebooks, scripts/, external
-tooling) continue to work without changes.
+The canonical import path is ``src.pipeline.s2_brand_pipeline_v2``. This
+module exists only so older imports from notebooks, scripts, or external
+tooling continue to resolve while emitting ``DeprecationWarning``.
 
-Will be removed in a future sprint once all known callers migrate. New
-code should import from ``s2_brand_pipeline_v2`` directly.
+Do not add pipeline behavior here. Removal requires a separate compatibility
+decision after internal runtime imports are clean and external callers have a
+migration window.
 """
 
 from __future__ import annotations
@@ -15,9 +15,15 @@ import warnings
 
 from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
 
+CANONICAL_IMPORT_PATH = "src.pipeline.s2_brand_pipeline_v2"
+REMOVAL_POLICY = (
+    "Frozen compatibility shim; delete only after explicit approval and an "
+    "external import migration window."
+)
+
 warnings.warn(
     "src.pipeline.s2_brand_pipeline is deprecated; "
-    "import S2BrandCampaignPipeline from src.pipeline.s2_brand_pipeline_v2.",
+    f"import S2BrandCampaignPipeline from {CANONICAL_IMPORT_PATH}.",
     DeprecationWarning,
     stacklevel=2,
 )

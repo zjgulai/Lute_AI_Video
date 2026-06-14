@@ -3,7 +3,15 @@
 import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMediaUrl } from "./api";
-import { Play, Article, Image, ChartBar, DownloadSimple, CaretDown, CaretUp, PaperPlaneRight, Sparkle } from "@phosphor-icons/react";
+import InlineTooltip from "./InlineTooltip";
+import {
+  extractContinuityDiagnosticsFromAuditReport,
+  getContinuityDiagnosticsSummary,
+  hasContinuityDiagnostics,
+  normalizeContinuityDiagnostics,
+} from "@/lib/continuityDiagnostics";
+import { truncateDiagnosticText } from "@/lib/diagnosticText";
+import { Play, Article, Image as ImageIcon, ChartBar, DownloadSimple, CaretDown, CaretUp, PaperPlaneRight, Sparkle } from "@phosphor-icons/react";
 import PublishFlow from "./PublishFlow";
 import InsightReport from "./InsightReport";
 
@@ -14,17 +22,16 @@ interface Props {
 
 export default function DirectorPlayback({ result, scenario }: Props) {
   const { t } = useI18n();
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
   const videoPath = (result.final_video_path as string) || (result.clip_paths as string[] | undefined)?.[0] || "";
   const scripts = (result.scripts as Record<string, unknown>[]) || [];
   const storyboards = (result.storyboards as Record<string, unknown>[]) || [];
   const audit = result.audit_report as Record<string, unknown> | undefined;
-  const briefs = (result.briefs as Record<string, unknown>[]) || [];
-
-  const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? null : section);
-  };
+  const continuityDiagnostics = normalizeContinuityDiagnostics(
+    extractContinuityDiagnosticsFromAuditReport(audit),
+  );
+  const continuitySummary = getContinuityDiagnosticsSummary(continuityDiagnostics, t);
+  const showContinuityDiagnostics = hasContinuityDiagnostics(continuityDiagnostics);
 
   return (
     <div className="space-y-8">
@@ -85,7 +92,7 @@ export default function DirectorPlayback({ result, scenario }: Props) {
       {/* Section 3: Keyframe Gallery */}
       {storyboards.length > 0 && (
         <PlaybackSection
-          icon={<Image size={16} weight="fill" />}
+          icon={<ImageIcon size={16} weight="fill" />}
           title={t("playback.keyframes")}
         >
           <div className="grid grid-cols-2 gap-3">
@@ -134,6 +141,34 @@ export default function DirectorPlayback({ result, scenario }: Props) {
                 </span>
               </div>
             ))}
+            {showContinuityDiagnostics && (
+              <div className="mt-3 rounded-lg border border-[rgba(122,150,187,0.28)] bg-[rgba(122,150,187,0.10)] p-3">
+                <p className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                  {t("continuity.diagnosticsTitle")}
+                </p>
+                {continuitySummary && (
+                  <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                    {continuitySummary}
+                  </p>
+                )}
+                {continuityDiagnostics.clipDirections.slice(0, 1).map((direction, index) => (
+                  <div key={`${direction.sceneBeat}-${index}`} className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
+                    <div>{t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}</div>
+                    {direction.transitionIntent && (
+                      <div>
+                        {t("continuity.transitionIntentLabel")}{" "}
+                        <InlineTooltip
+                          label={truncateDiagnosticText(direction.transitionIntent)}
+                          tooltip={direction.transitionIntent}
+                          className="max-w-[280px] align-top"
+                          tooltipClassName="w-72"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </PlaybackSection>
       )}
@@ -205,8 +240,4 @@ function PlaybackSection({
       {isOpen && <div className="animate-fade-in">{children}</div>}
     </div>
   );
-}
-
-function useState<T>(initial: T): [T, (v: T | ((prev: T) => T)) => void] {
-  return React.useState(initial);
 }

@@ -18,14 +18,11 @@
 # --- Sync from laptop (run on your local machine) ---
 #   rsync -avz --delete --chmod=F644,D755 \
 #     -e "ssh -i ~/Downloads/ai_video.pem" \
-#     --exclude='.git' --exclude='web/node_modules' --exclude='web/.next' \
-#     --exclude='rendering/node_modules' --exclude='.venv' \
-#     --exclude='output' --exclude='tmp' --exclude='__pycache__' \
-#     --exclude='deploy/lighthouse/.env.prod' \
-#     --exclude='deploy/lighthouse/server.crt' \
-#     --exclude='deploy/lighthouse/server.key' \
-#     --exclude='deploy/lighthouse/*.pem' \
+#     --exclude-from='deploy/lighthouse/rsync-excludes.txt' \
 #     ./ ubuntu@101.34.52.232:/opt/ai-video/
+#   Or use the canonical wrapper:
+#     SSH_KEY=~/Downloads/ai_video.pem DRY_RUN=1 deploy/lighthouse/build-and-deploy.sh
+#     SSH_KEY=~/Downloads/ai_video.pem deploy/lighthouse/build-and-deploy.sh
 #
 # IMPORTANT: --chmod=F644 forces world-readable perms on rsync. Without it,
 # any local file with mode 0600 (e.g. src/routers/admin.py historically) gets
@@ -36,11 +33,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-COMPOSE="sudo docker-compose -f docker-compose.prod.yml"
-DEPLOY_API_KEY="${API_KEY:-}"
-if [ -z "$DEPLOY_API_KEY" ] && [ -f ".env.prod" ]; then
-  DEPLOY_API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"
-fi
+COMPOSE="sudo docker compose -f docker-compose.prod.yml"
+REBUILD_BACKEND="${REBUILD_BACKEND:-0}"
+REBUILD_RENDERING="${REBUILD_RENDERING:-0}"
+
+# Deployment root (was hardcoded /opt/ai-video; now configurable)
+DEPLOY_ROOT="${DEPLOY_ROOT:-/opt/ai-video}"
 
 echo "========================================"
 echo "  AI Video Fast Deploy"
@@ -59,16 +57,33 @@ if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
   echo "  ⚠ requirements.txt 与当前 backend image 不一致"
   echo "  ⚠ 本地 hash: ${LOCAL_REQ_SHA:-(无法计算)}"
   echo "  ⚠ 镜像 hash: ${IMG_REQ_SHA:-(首次部署或镜像不存在)}"
-  echo "  ⚠ 强烈建议先 rebuild image,否则可能进 restart loop:"
-  echo "      sudo docker compose -f docker-compose.prod.yml build backend"
-  echo ""
-  read -p "  继续 deploy 不 rebuild? [y/N] " -r REPLY
-  if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
-    echo "  Aborted. Run 'docker compose ... build backend' then re-run deploy.sh"
+  if [ "$REBUILD_BACKEND" = "1" ]; then
+    echo "  REBUILD_BACKEND=1 set; rebuilding backend image..."
+    $COMPOSE build backend
+    IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest cat /app/.requirements_sha256 2>/dev/null | awk '{print $1}')
+    if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
+      echo "  ❌ backend rebuild finished but requirements hash still differs"
+      echo "  ❌ 镜像 hash: ${IMG_REQ_SHA:-(无法计算)}"
+      exit 1
+    fi
+    echo "  ✓ backend image rebuilt and requirements hash matched"
+  else
+    echo "  ❌ Aborted before container restart."
+    echo "  ❌ Re-run with REBUILD_BACKEND=1 to rebuild backend image automatically."
     exit 1
   fi
 else
   echo "  ✓ requirements.txt 与 backend image 一致"
+fi
+echo ""
+
+echo "[0.1/5] Rendering image rebuild check..."
+if [ "$REBUILD_RENDERING" = "1" ]; then
+  echo "  REBUILD_RENDERING=1 set; rebuilding rendering image..."
+  $COMPOSE build rendering
+  echo "  ✓ rendering image rebuilt"
+else
+  echo "  ✓ rendering rebuild skipped (set REBUILD_RENDERING=1 after rendering/ changes)"
 fi
 echo ""
 
@@ -77,7 +92,7 @@ echo ""
 # Belt-and-suspenders: normalize perms before backend restart so even a forgetful
 # rsync survives. Cost: ~50ms. Benefit: never see /app/src/routers/admin.py 502 again.
 echo "[0.5/5] Normalizing src/ file permissions..."
-sudo find /opt/ai-video/src -type f -name '*.py' ! -perm 644 -exec chmod 644 {} \; 2>/dev/null || true
+sudo find "$DEPLOY_ROOT/src" -type f -name '*.py' ! -perm 644 -exec chmod 644 {} \; 2>/dev/null || true
 echo "  ✓ src/**.py normalized to 0644"
 echo ""
 
@@ -86,7 +101,7 @@ echo ""
 # If an incremental rsync left the old file on the server, Python may import
 # the stale module instead of the package. Delete this one known legacy file.
 echo "[0.6/5] Removing stale split-module files..."
-sudo rm -f /opt/ai-video/src/routers/admin.py
+sudo rm -f "$DEPLOY_ROOT/src/routers/admin.py"
 echo "  ✓ stale src/routers/admin.py removed if present"
 echo ""
 
@@ -115,6 +130,7 @@ export NEXT_PUBLIC_API_BASE_URL=/api
 # 与已验证的 5 场景非 demo 端到端结果冲突。
 # GitHub Pages demo 部署单独构建脚本里设 true。
 export NEXT_PUBLIC_IS_DEMO=false
+unset NEXT_PUBLIC_API_KEY
 npm run build 2>&1 | tail -5
 
 # Verify build succeeded — critical files must exist
@@ -134,6 +150,7 @@ echo ""
 # -- Phase 2: Restart containers --
 echo "[2/5] Restarting containers..."
 cd ../deploy/lighthouse
+$COMPOSE up -d --force-recreate rendering 2>&1 | tail -3
 $COMPOSE up -d --force-recreate backend 2>&1 | tail -3
 $COMPOSE up -d --force-recreate frontend 2>&1 | tail -3
 # Recreate nginx to pick up nginx.conf changes AND volume mount changes.
@@ -146,13 +163,20 @@ echo ""
 
 # -- Phase 3: Health checks --
 echo "[3/5] Health checks..."
-sleep 5
 
 # Check backend
-BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/api/health || echo "000")
-if [ "$BACKEND_STATUS" = "200" ]; then
-  echo "  Backend /api/health: 200"
-else
+BACKEND_STATUS="000"
+for attempt in $(seq 1 24); do
+  BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --cacert /etc/letsencrypt/live/lute-tlz-dddd.top/fullchain.pem https://localhost/api/health || echo "000")
+  if [ "$BACKEND_STATUS" = "200" ]; then
+    echo "  Backend /api/health: 200 (attempt $attempt/24)"
+    break
+  fi
+  if [ "$attempt" != "24" ]; then
+    sleep 5
+  fi
+done
+if [ "$BACKEND_STATUS" != "200" ]; then
   echo "  ❌ Backend /api/health: $BACKEND_STATUS"
   echo "  --- 最近 30 行 backend logs (定位启动失败原因) ---"
   sudo docker logs --tail 30 ai_video_backend 2>&1 | tail -30
@@ -169,16 +193,50 @@ else
   echo "  ❌ Frontend /: $FRONTEND_STATUS"
 fi
 
-# Check Fast Mode API
-FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $DEPLOY_API_KEY" \
-  -d '{"user_prompt":"test","duration":10}' \
-  https://localhost/api/fast/generate || echo "000")
-if [ "$FAST_STATUS" = "200" ]; then
-  echo "  Fast Mode API: 200"
+# Check rendering service directly inside the container because it is only
+# exposed on the Docker network.
+RENDERING_STATUS="000"
+for attempt in $(seq 1 12); do
+  if sudo docker exec ai_video_rendering wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1; then
+    RENDERING_STATUS="200"
+    echo "  Rendering /health: 200 (attempt $attempt/12)"
+    break
+  fi
+  if [ "$attempt" != "12" ]; then
+    sleep 5
+  fi
+done
+if [ "$RENDERING_STATUS" != "200" ]; then
+  echo "  ❌ Rendering /health: $RENDERING_STATUS"
+  echo "  --- 最近 30 行 rendering logs ---"
+  sudo docker logs --tail 30 ai_video_rendering 2>&1 | tail -30
+fi
+
+# Check Fast Mode API only when explicitly requested.
+# The generate endpoint can consume external provider credits, so deployment
+# defaults to non-token health checks.
+if [ "${RUN_TOKEN_SMOKE:-0}" = "1" ]; then
+  DEPLOY_API_KEY="${API_KEY:-}"
+  if [ -z "$DEPLOY_API_KEY" ] && [ -f ".env.prod" ]; then
+    DEPLOY_API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"
+  fi
+  if [ -z "$DEPLOY_API_KEY" ]; then
+    echo "  ❌ Fast Mode API token smoke requested but API_KEY is missing"
+    FAST_STATUS="000"
+  else
+    FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
+      -H "Content-Type: application/json" \
+      -H "X-API-Key: $DEPLOY_API_KEY" \
+      -d '{"user_prompt":"test","duration":10}' \
+      https://localhost/api/fast/generate || echo "000")
+  fi
+  if [ "$FAST_STATUS" = "200" ]; then
+    echo "  Fast Mode API: 200"
+  else
+    echo "  ⚠ Fast Mode API: $FAST_STATUS (200/500 都可,500 = LLM 不可用但路径通)"
+  fi
 else
-  echo "  ⚠ Fast Mode API: $FAST_STATUS (200/500 都可,500 = LLM 不可用但路径通)"
+  echo "  Fast Mode API: skipped (set RUN_TOKEN_SMOKE=1 to run token smoke)"
 fi
 echo ""
 

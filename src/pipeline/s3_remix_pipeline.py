@@ -18,7 +18,7 @@ Self-verification runs inside each media skill; cross-artifact audit runs at the
 from __future__ import annotations
 
 import asyncio
-import subprocess
+import importlib
 import time
 from pathlib import Path
 from typing import Any
@@ -26,17 +26,20 @@ from typing import Any
 import structlog
 
 import src.skills.character_identity  # noqa: F401 — auto-register (NEW)
-import src.skills.elevenlabs_tts  # noqa: F401 — auto-register (NEW)
-import src.skills.gpt_image_generate  # noqa: F401 — auto-register (NEW)
-import src.skills.keyframe_images  # noqa: F401 — auto-register (NEW)
-import src.skills.media_quality_audit  # noqa: F401 — auto-register (NEW)
+import src.skills.continuity_storyboard_grid  # noqa: F401 — auto-register
 import src.skills.remix_script  # noqa: F401 — auto-register
-import src.skills.remotion_assemble  # noqa: F401 — auto-register (NEW)
-import src.skills.seedance_prompt  # noqa: F401 — auto-register
-import src.skills.seedance_video_generate  # noqa: F401 — auto-register (NEW)
-import src.skills.thumbnail_prompt  # noqa: F401 — auto-register
 import src.skills.video_analysis  # noqa: F401 — auto-register
 from src.config import OUTPUT_DIR, S3_VIRAL_EXTRACT_DISABLED
+from src.pipeline.artifact_paths import extract_assemble_paths
+from src.pipeline.continuity_utils import (
+    build_continuity_audit_summary,
+    build_transitions_from_clip_details,
+    extract_clip_last_frame,
+)
+from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.state_manager import PipelineStateManager
+from src.pipeline.step_runner import StepRunner
+from src.pipeline.step_utils import get_step_output
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -45,6 +48,43 @@ logger = structlog.get_logger()
 # Caps to keep demo timeline sane (each Seedance call ~30-60s)
 MAX_CLIPS_PER_DEMO = 3
 MAX_THUMBNAILS_PER_DEMO = 4
+
+_LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
+    "keyframe_images": (
+        ("src.skills.gpt_image_generate", "gpt-image-generate-skill"),
+        ("src.skills.keyframe_images", "keyframe-images"),
+    ),
+    "video_prompts": (
+        ("src.skills.seedance_prompt", "seedance-video-prompt"),
+    ),
+    "thumbnail_prompts": (
+        ("src.skills.thumbnail_prompt", "gpt-image-thumbnail-prompt"),
+    ),
+    "seedance_clips": (
+        ("src.skills.seedance_video_generate", "seedance-video-generate-skill"),
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+    "tts_audio": (
+        ("src.skills.elevenlabs_tts", "elevenlabs-tts-skill"),
+    ),
+    "thumbnail_images": (
+        ("src.skills.gpt_image_generate", "gpt-image-generate-skill"),
+    ),
+    "assemble_final": (
+        ("src.skills.remotion_assemble", "remotion-assemble-skill"),
+    ),
+    "audit": (
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+}
+
+
+def _ensure_step_skills_registered(step_name: str) -> None:
+    """Register provider-backed skills only when their step actually runs."""
+    for module_name, skill_name in _LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()):
+        module = importlib.import_module(module_name)
+        if skill_name not in SkillRegistry._global_skills:
+            importlib.reload(module)
 
 
 class S3Result:
@@ -63,6 +103,7 @@ class S3Result:
         self.audio_paths: list[str] = []
         self.thumbnail_image_paths: list[str] = []
         self.final_video_path: str = ""
+        self.render_json_path: str = ""
         self.audit_report: dict[str, Any] | None = None
         self.media_synthesis_errors: list[str] = []
         self.errors: list[str] = []
@@ -90,6 +131,7 @@ class S3Result:
             "audio_paths": self.audio_paths,
             "thumbnail_image_paths": self.thumbnail_image_paths,
             "final_video_path": self.final_video_path,
+            "render_json_path": self.render_json_path,
             "audit_report": self.audit_report,
             "media_synthesis_errors": self.media_synthesis_errors,
             "errors": self.errors,
@@ -119,6 +161,9 @@ class S3InfluencerRemixPipeline:
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step (used by StepRunner)."""
         config = state["config"]
+        _ensure_step_skills_registered(step_name)
+        if step_name in _LAZY_SKILL_MODULES_BY_STEP:
+            self._registry = SkillRegistry()
         reg = SkillRegistry()
         steps = state["steps"]
         errors = state["errors"]
@@ -132,7 +177,8 @@ class S3InfluencerRemixPipeline:
             )
             if not res.success:
                 disabled_by_policy = res.error == "s3_viral_extract_disabled_by_policy"
-                errors.append(f"video_analysis_failed: {res.error}")
+                if not disabled_by_policy:
+                    errors.append(f"video_analysis_failed: {res.error}")
                 return {
                     "_soft_degraded": True,
                     "_degraded_reason": (
@@ -175,6 +221,20 @@ class S3InfluencerRemixPipeline:
             script = self._get_step_output(steps, "remix_script") or {}
             return await self._step_storyboards(remix_script=script)
 
+        if step_name == "continuity_storyboard_grid":
+            storyboard = self._get_step_output(steps, "storyboards") or {}
+            remix_script = self._get_step_output(steps, "remix_script") or {}
+            return await self._step_continuity_storyboard_grid(
+                reg=reg,
+                storyboard=storyboard,
+                remix_script=remix_script,
+                product=config["product"],
+                influencer_name=config.get("influencer_name", "Influencer"),
+                source_platform=self._resolve_source_platform(config),
+                target_platforms=self._resolve_target_platforms(config),
+                errors=errors,
+            )
+
         if step_name == "keyframe_images":
             storyboard = self._get_step_output(steps, "storyboards") or {}
             identity = self._get_step_output(steps, "character_identity") or {}
@@ -182,7 +242,12 @@ class S3InfluencerRemixPipeline:
 
         if step_name == "video_prompts":
             script = self._get_step_output(steps, "remix_script") or {}
-            return await self._step_video_prompts(remix_script=script, product=config["product"])
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
+            return await self._step_video_prompts(
+                remix_script=script,
+                product=config["product"],
+                continuity_storyboard_grid=continuity_grid,
+            )
 
         if step_name == "thumbnail_prompts":
             script = self._get_step_output(steps, "remix_script") or {}
@@ -221,11 +286,13 @@ class S3InfluencerRemixPipeline:
             audio_paths = audio if isinstance(audio, list) else []
             clips = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
+            clip_details = clips.get("clip_details", []) if isinstance(clips, dict) else []
             res = await self._step_assemble_final(
                 remix_script=script,
                 captions=self._extract_captions(script),
                 audio_paths=audio_paths,
                 clip_paths=clip_paths,
+                clip_details=clip_details,
                 label=config.get("output_label", "s3"),
             )
             if res.success and res.data:
@@ -236,19 +303,23 @@ class S3InfluencerRemixPipeline:
         if step_name == "audit":
             script = self._get_step_output(steps, "remix_script") or {}
             assemble = self._get_step_output(steps, "assemble_final") or {}
-            video_path = assemble.get("video_path", "") if isinstance(assemble, dict) else ""
+            video_path, _ = extract_assemble_paths(assemble)
             audio = self._get_step_output(steps, "tts_audio") or []
             audio_paths = audio if isinstance(audio, list) else []
             thumbnails = self._get_step_output(steps, "thumbnail_images") or []
             thumb_paths = thumbnails if isinstance(thumbnails, list) else []
             clips = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
+            clip_details = clips.get("clip_details", []) if isinstance(clips, dict) else []
             thumb_prompts = self._get_step_output(steps, "thumbnail_prompts") or []
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
             res = await self._step_audit(
                 video_path=video_path,
                 audio_paths=audio_paths,
                 thumbnail_paths=thumb_paths,
                 clip_paths=clip_paths,
+                clip_details=clip_details,
+                continuity_grid=continuity_grid,
                 product=config["product"],
                 remix_script=script,
                 thumbnail_prompts=thumb_prompts,
@@ -263,11 +334,11 @@ class S3InfluencerRemixPipeline:
 
     @staticmethod
     def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
-        """Retrieve output from a step, preferring edited_output if edited."""
-        step_data = steps.get(step_name, {})
-        if step_data.get("edited") and step_data.get("edited_output") is not None:
-            return step_data["edited_output"]
-        return step_data.get("output")
+        """Retrieve output from a step, preferring edited_output if edited.
+
+        Delegates to the canonical shared implementation in step_utils.py.
+        """
+        return get_step_output(steps, step_name)
 
     # ═══ Backwards-compatible full pipeline ═══
 
@@ -304,17 +375,18 @@ class S3InfluencerRemixPipeline:
             "target_language": target_language,
             "video_duration": self._video_duration,
             "output_label": label,
+            "enable_media_synthesis": enable_media_synthesis,
         }
-
-        from src.pipeline.state_manager import PipelineStateManager
-        from src.pipeline.step_runner import StepRunner
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s3")
 
         try:
-            final_state = await runner.resume(label)
+            if enable_media_synthesis:
+                final_state = await runner.resume(label)
+            else:
+                final_state = await self._resume_without_media_synthesis(runner, label)
         except Exception as e:
             logger.error("s3: pipeline failed", error=str(e))
             result = S3Result()
@@ -340,8 +412,7 @@ class S3InfluencerRemixPipeline:
             thumbs = self._get_step_output(steps, "thumbnail_images") or []
             result.thumbnail_image_paths = thumbs if isinstance(thumbs, list) else []
             assemble = self._get_step_output(steps, "assemble_final") or {}
-            if isinstance(assemble, dict):
-                result.final_video_path = assemble.get("video_path", "")
+            result.final_video_path, result.render_json_path = extract_assemble_paths(assemble)
             result.audit_report = self._get_step_output(steps, "audit")
             result.media_synthesis_errors = final_state.get("media_synthesis_errors", [])
 
@@ -357,6 +428,22 @@ class S3InfluencerRemixPipeline:
                     audit=result.audit_report and result.audit_report.get("overall_status"),
                     errors=len(result.errors))
         return result
+
+    async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
+        """Run only S3 pre-media steps; stop before provider-backed asset generation."""
+        final_state: dict[str, Any] = {}
+        for step_name in get_scenario_step_order("s3"):
+            if step_name == "keyframe_images":
+                break
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+        if final_state and not final_state.get("pipeline_degraded"):
+            final_state["current_step"] = None
+            save = getattr(runner.state_manager, "save", None)
+            if callable(save):
+                await save(label, final_state)
+        return final_state
 
     # ═══ Step 1-4: existing data-producing steps ═══
 
@@ -416,9 +503,25 @@ class S3InfluencerRemixPipeline:
         self,
         remix_script: dict[str, Any],
         product: dict[str, Any],
+        continuity_storyboard_grid: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        """Generate Seedance video prompts from remix segments."""
+        """Generate Seedance video prompts from remix segments.
+
+        When continuity_storyboard_grid has clip_groups, use the skill's
+        continuity path (same as S1) for grouped prompt generation.
+        """
         logger.info("s3: step 3 — video prompts")
+
+        # Priority: continuity_grid clip_groups > segment-based fallback
+        if continuity_storyboard_grid and continuity_storyboard_grid.get("clip_groups"):
+            result = await self._registry.execute("seedance-video-prompt", {
+                "continuity_storyboard_grid": continuity_storyboard_grid,
+                "product_name": product.get("name", "Product"),
+            })
+            if result.success and result.data and isinstance(result.data, list):
+                return result.data
+            logger.warning("s3: continuity video_prompts failed, falling back", error=result.error)
+
         segments = remix_script.get("segments", [])
         if not segments:
             return []
@@ -572,6 +675,138 @@ class S3InfluencerRemixPipeline:
         logger.info("s3: storyboards done", shots=len(shots))
         return storyboard
 
+    # ═══ Step 4b: Continuity Storyboard Grid ═══
+
+    async def _step_continuity_storyboard_grid(
+        self,
+        reg: SkillRegistry,
+        storyboard: dict[str, Any],
+        remix_script: dict[str, Any],
+        product: dict[str, Any],
+        influencer_name: str,
+        source_platform: str,
+        target_platforms: list[str],
+        errors: list[str],
+    ) -> dict[str, Any]:
+        """Build continuity micro-shots and clip groups from S3 storyboard.
+
+        Delegates to continuity-storyboard-grid skill, falling back to a
+        synthetic grid derived from the remix script segments.
+        """
+        logger.info("s3: step 4b — continuity storyboard grid")
+        product_catalog = {
+            "product_name": product.get("name", "Product"),
+            "name": product.get("name", "Product"),
+            "brand_name": product.get("brand_name", ""),
+            "category": product.get("category", "baby product"),
+            "usage_scenario": product.get("usage_scenario", ""),
+            "usps": product.get("usps", []),
+            "creator_name": influencer_name,
+            "source_platform": source_platform,
+            "distribution_platforms": target_platforms,
+            "creator_style": remix_script.get("original_style_preserved", ""),
+            "voice_guidelines": self._extract_creator_style_notes(remix_script),
+        }
+        res = await reg.execute("continuity-storyboard-grid", {
+            "product_catalog": product_catalog,
+            "storyboards": [storyboard] if storyboard else [],
+            "storyboard_grid": "12",
+            "clip_group_size": 3,
+            "transition_style": "match_cut",
+            "video_duration": self._video_duration,
+        })
+        if res.success and res.data and isinstance(res.data, dict):
+            if res.metadata.get("is_fallback") is True:
+                logger.warning(
+                    "s3: continuity grid fallback used",
+                    reason=res.metadata.get("fallback_reason", ""),
+                )
+                return {
+                    **res.data,
+                    "_soft_degraded": True,
+                    "_degraded_reason": "continuity_skill_fallback",
+                    "_degraded_detail": str(
+                        res.metadata.get("fallback_reason", "fallback_used")
+                    )[:200],
+                    "degraded": True,
+                }
+            logger.info("s3: continuity grid done", clip_groups=len(res.data.get("clip_groups", [])))
+            return res.data
+        errors.append(f"continuity_storyboard_grid_failed: {res.error}")
+        # Fallback: derive clip_groups from remix script segments
+        shots = storyboard.get("shots", [])
+        if not shots:
+            shots = self._extract_shots(remix_script)
+        product_name = product.get("name", "Product")
+        return {
+            "grid_type": "12-grid",
+            "product_name": product_name,
+            "visual_identity": {},
+            "micro_shots": [],
+            "clip_groups": self._s3_fallback_clip_groups(
+                shots,
+                product_name,
+                influencer_name=influencer_name,
+                source_platform=source_platform,
+            ),
+            "_soft_degraded": True,
+            "_degraded_reason": "continuity_skill_execution_failed",
+            "_degraded_detail": str(res.error or "unknown")[:200],
+            "degraded": True,
+        }
+
+    def _resolve_source_platform(self, config: dict[str, Any]) -> str:
+        explicit_platform = config.get("platform") or config.get("target_platform")
+        if isinstance(explicit_platform, str) and explicit_platform.strip():
+            return explicit_platform.strip().lower()
+
+        target_platforms = config.get("target_platforms")
+        if isinstance(target_platforms, list):
+            for item in target_platforms:
+                if isinstance(item, str) and item.strip():
+                    return item.strip().lower()
+
+        video_url = config.get("video_url")
+        if isinstance(video_url, str):
+            url = video_url.lower()
+            if "instagram" in url:
+                return "instagram"
+            if "youtube" in url or "youtu.be" in url:
+                return "youtube"
+            if "tiktok" in url:
+                return "tiktok"
+
+        return "tiktok"
+
+    def _resolve_target_platforms(self, config: dict[str, Any]) -> list[str]:
+        raw = config.get("target_platforms")
+        if isinstance(raw, list):
+            platforms = [
+                item.strip().lower()
+                for item in raw
+                if isinstance(item, str) and item.strip()
+            ]
+            if platforms:
+                return platforms[:3]
+        return [self._resolve_source_platform(config)]
+
+    def _extract_creator_style_notes(self, remix_script: dict[str, Any]) -> str:
+        notes: list[str] = []
+        original_style = remix_script.get("original_style_preserved")
+        if isinstance(original_style, str) and original_style.strip():
+            notes.append(original_style.strip())
+
+        for segment in remix_script.get("segments", []):
+            if not isinstance(segment, dict):
+                continue
+            keep_notes = segment.get("keep_notes")
+            if isinstance(keep_notes, str) and keep_notes.strip():
+                notes.append(keep_notes.strip())
+            if len(notes) >= 3:
+                break
+
+        return "; ".join(notes[:3])
+
     # ═══ Step 5: Keyframe Images ═══
 
     async def _step_keyframe_images(
@@ -613,47 +848,6 @@ class S3InfluencerRemixPipeline:
 
     # ═══ Step 8-12: NEW media-producing steps ═══
 
-    @staticmethod
-    def _extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
-        """Extract the last frame of a video clip as a JPEG for continuity.
-
-        Uses ffmpeg to seek to the last frame: ffmpeg -sseof -1 -i {video_path}
-        -frames:v 1 -q:v 2 {output_path}.
-
-        Args:
-            video_path: Absolute path to the source .mp4 clip.
-            output_dir: Directory to write the extracted frame into.
-
-        Returns:
-            Absolute path to the extracted JPEG, or None on any failure (missing
-            ffmpeg, corrupt file, etc.).
-        """
-        src = Path(video_path)
-        if not src.exists() or src.stat().st_size < 100:
-            return None
-
-        out_dir = Path(output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        frame_path = out_dir / f"last_frame_{src.stem}.jpg"
-
-        try:
-            cmd = [
-                "ffmpeg", "-y",
-                "-sseof", "-1",
-                "-i", str(src),
-                "-frames:v", "1",
-                "-q:v", "2",
-                str(frame_path),
-            ]
-            subprocess.run(cmd, capture_output=True, timeout=15, check=True)
-            if frame_path.exists() and frame_path.stat().st_size > 100:
-                return str(frame_path)
-        except (FileNotFoundError, subprocess.TimeoutExpired,
-                subprocess.CalledProcessError, Exception) as e:
-            logger.warning("s3: _extract_clip_last_frame ffmpeg failed",
-                           video_path=str(video_path), error=str(e)[:200])
-        return None
-
     async def _step_seedance_clips(
         self,
         video_prompts: list[dict[str, Any]],
@@ -681,7 +875,7 @@ class S3InfluencerRemixPipeline:
         product_name = product.get("name", "Product")
 
         # Phase 2 prereq (Oracle review #4): route S3 through ModelRouter.
-        # Default S3 model is kling-3-0/standard (character consistency for
+        # Default S3 model is kling-3.0/standard (character consistency for
         # influencer remix). Without this, S3 inherited POYO_VIDEO_MODEL env
         # default, producing diagnostic R-VENDOR-LOCK mixed-state.
         from src.pipeline.model_router import select_model
@@ -697,14 +891,20 @@ class S3InfluencerRemixPipeline:
                     kf_image_paths.append(path)
 
         capped = video_prompts[:MAX_CLIPS_PER_DEMO]
-        VIDEO_MAX_DURATION = 15
-        clip_duration = min(VIDEO_MAX_DURATION, max(4, self._video_duration // max(len(capped), 1)))
+        video_max_duration = 15
+        fallback_clip_duration = min(video_max_duration, max(4, self._video_duration // max(len(capped), 1)))
 
         _sem = asyncio.Semaphore(4)
 
         async def _gen_single(i: int, vp: dict[str, Any], last_frame: str | None) -> tuple[int, Any, str | None]:
             async with _sem:
                 prompt = vp.get("segment_prompt", "") or vp.get("prompt", "") or f"{product_name} in natural usage scene, authentic real-world context"
+                raw_duration = vp.get("duration_seconds", fallback_clip_duration)
+                try:
+                    clip_duration = int(float(raw_duration))
+                except (TypeError, ValueError):
+                    clip_duration = fallback_clip_duration
+                clip_duration = max(4, min(clip_duration, video_max_duration))
                 gen_params: dict[str, Any] = {
                     "prompt": prompt,
                     "duration": clip_duration,
@@ -724,7 +924,7 @@ class S3InfluencerRemixPipeline:
                 if res.success and res.data:
                     path = res.data.get("video_path", "")
                     if path:
-                        frame = self._extract_clip_last_frame(
+                        frame = extract_clip_last_frame(
                             video_path=path,
                             output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
                         )
@@ -745,10 +945,19 @@ class S3InfluencerRemixPipeline:
                     clip_paths.append(path)
                     clip_details.append({
                         "path": path,
-                        "duration": res.data.get("duration_seconds", clip_duration),
+                        "duration": res.data.get("duration_seconds", fallback_clip_duration),
                         "is_stub": res.data.get("is_stub", False),
                         "verification": res.data.get("verification", {}),
                         "prompt_used": res.data.get("prompt_used", ""),
+                        "segment_type": video_prompts[i].get("segment_type", "body"),
+                        "shot_type": video_prompts[i].get("shot_type", ""),
+                        "clip_index": video_prompts[i].get("clip_index", i + 1),
+                        "transition_to_next": video_prompts[i].get("transition_to_next", ""),
+                        "transition_type": video_prompts[i].get("transition_type", "clean"),
+                        "scene_beat": video_prompts[i].get("scene_beat", ""),
+                        "beat_summary": video_prompts[i].get("beat_summary", ""),
+                        "transition_intent": video_prompts[i].get("transition_intent", ""),
+                        "continuity_frame": bool(next_frame),
                     })
                     last_frame_path = next_frame
 
@@ -758,7 +967,7 @@ class S3InfluencerRemixPipeline:
                 errors.append(f"clip_{i}_failed: {res.error}")
                 last_frame_path = None
 
-        total_duration = sum(d.get("duration", clip_duration) for d in clip_details)
+        total_duration = sum(d.get("duration", fallback_clip_duration) for d in clip_details)
         logger.info("s3: step 8 done", produced=len(clip_paths), capped_to=MAX_CLIPS_PER_DEMO)
         return {"clip_paths": clip_paths, "clip_details": clip_details, "total_duration": total_duration}
 
@@ -860,10 +1069,12 @@ class S3InfluencerRemixPipeline:
         audio_paths: list[str],
         clip_paths: list[str],
         label: str,
+        clip_details: list[dict[str, Any]] | None = None,
     ) -> SkillResult:
         """Step 8: invoke remotion-assemble-skill to produce final mp4."""
         logger.info("s3: step 8 — assemble final video")
         shots = self._extract_shots(remix_script)
+        transitions = build_transitions_from_clip_details(clip_details or [])
         return await self._registry.execute("remotion-assemble-skill", {
             "shots": shots,
             "captions": captions,
@@ -872,6 +1083,7 @@ class S3InfluencerRemixPipeline:
             "brand_guidelines": {},
             "output_label": label,
             "total_duration": self._compute_total_duration(shots),
+            "transitions": transitions,
         })
 
     async def _step_audit(
@@ -880,12 +1092,14 @@ class S3InfluencerRemixPipeline:
         audio_paths: list[str],
         thumbnail_paths: list[str],
         clip_paths: list[str],
+        clip_details: list[dict[str, Any]],
+        continuity_grid: dict[str, Any],
         product: dict[str, Any],
         remix_script: dict[str, Any],
         thumbnail_prompts: list[dict[str, Any]],
         language: str,
     ) -> SkillResult:
-        """Step 9: invoke media-quality-audit-skill."""
+        """Step 9: invoke media-quality-audit-skill with continuity split."""
         logger.info("s3: step 9 — audit")
         # Compose a flat script_text for content-mention checks
         script_text = " ".join([
@@ -894,7 +1108,7 @@ class S3InfluencerRemixPipeline:
         ])
         expected_duration = self._compute_total_duration(self._extract_shots(remix_script))
 
-        return await self._registry.execute("media-quality-audit-skill", {
+        base_audit_res = await self._registry.execute("media-quality-audit-skill", {
             "video_path": video_path,
             "audio_paths": audio_paths,
             "thumbnail_paths": thumbnail_paths,
@@ -905,6 +1119,17 @@ class S3InfluencerRemixPipeline:
             "script_text": script_text,
             "thumbnail_prompts": thumbnail_prompts,
         })
+        if base_audit_res.success and base_audit_res.data and isinstance(base_audit_res.data, dict):
+            return SkillResult(
+                success=True,
+                data=build_continuity_audit_summary(
+                    base_audit=base_audit_res.data,
+                    clip_details=clip_details,
+                    continuity_grid=continuity_grid,
+                    final_video_path=video_path,
+                ),
+            )
+        return base_audit_res
 
     # ═══ Helpers ═══
 
@@ -970,6 +1195,49 @@ class S3InfluencerRemixPipeline:
         if not shots:
             return 30.0
         return max((float(s.get("end_time", 0)) for s in shots), default=30.0)
+
+    @staticmethod
+    def _s3_fallback_clip_groups(
+        shots: list[dict[str, Any]],
+        product_name: str,
+        influencer_name: str = "Influencer",
+        source_platform: str = "tiktok",
+    ) -> list[dict[str, Any]]:
+        """Derive clip_groups from storyboard shots when skill fails.
+
+        Groups shots in chunks of 3 (or fewer for last group).
+        """
+        groups: list[dict[str, Any]] = []
+        group_size = 3
+        for idx in range(0, len(shots), group_size):
+            chunk = shots[idx:idx + group_size]
+            group_idx = len(groups) + 1
+            shot_indices = list(range(idx + 1, idx + len(chunk) + 1))
+            duration = sum(
+                float(s.get("end_time", 0)) - float(s.get("start_time", 0))
+                for s in chunk
+            )
+            duration = max(duration, 1.0)
+            prompt_parts = [
+                (s.get("visual", "") or s.get("text_overlay", ""))[:80]
+                for s in chunk
+            ]
+            group = {
+                "clip_index": group_idx,
+                "shot_indices": shot_indices,
+                "duration": duration,
+                "purpose": f"group_{group_idx}",
+                "seedance_prompt": (
+                    f"{product_name} scene: {'; '.join(p for p in prompt_parts if p)}. "
+                    f"Keep {influencer_name}'s creator pacing, direct-to-camera energy, "
+                    f"and product appearance consistent for {source_platform}."
+                ),
+                "transition_type": "match_cut",
+            }
+            if idx + group_size < len(shots):
+                group["transition_to_next"] = "match cut to next scene"
+            groups.append(group)
+        return groups
 
     def _map_segment_to_video_type(self, seg_type: str) -> str:
         """Map remix segment type to SeedancePromptSkill video_type."""
@@ -1057,4 +1325,3 @@ class S3InfluencerRemixPipeline:
         # Fallback: if we can't extract frames, return empty
         logger.warning("extract_frames: no frames extracted")
         return []
-

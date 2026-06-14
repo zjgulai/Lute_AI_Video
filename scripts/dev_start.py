@@ -5,7 +5,12 @@ Kills stale processes, starts uvicorn (backend) + next.js (frontend).
 Cross-platform (macOS + Linux).
 Usage: python3 scripts/dev_start.py [port_frontend]
 """
-import subprocess, time, os, signal, socket, sys
+import os
+import signal
+import socket
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 # Resolve project root from this script's location (works anywhere).
@@ -90,6 +95,6 @@ subprocess.Popen(
 )
 
 log("=== READY ===")
-log(f"Backend:  http://localhost:8001/docs")
+log("Backend:  http://localhost:8001/docs")
 log(f"Frontend: http://localhost:{PORT}")
 log("(wait ~20s for next.js compilation, then open in browser)")

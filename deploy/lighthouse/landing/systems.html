@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>路特数据科学平台 / Lute Data Science Hub</title>
+<meta name="description" content="路特创新视频与商业智能平台入口 — Root Innovation Video Creation & Voice-of-Customer Analytics">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@500;600&family=Noto+Sans+SC:wght@400;500&display=swap">
+<style>
+  :root {
+    --fortune-red: #D75C70;
+    --fortune-red-100: #F9D0D6;
+    --fortune-red-200: #F4AFB9;
+    --fortune-red-600: #C44A5E;
+    --gold-foil: #D8BE78;
+    --jade-accent: #6E966E;
+    --pure-white: #FDF8F6;
+    --pure-white-300: #FCF5F2;
+    --bg-page: #FDF8F6;
+    --bg-card: #FFFFFF;
+    --bg-panel: #FCF5F2;
+    --text-h1: #35141A;
+    --text-body: #59585E;
+    --text-muted: #9B9795;
+    --border-default: rgba(53, 20, 26, 0.10);
+    --border-hover: rgba(215, 92, 112, 0.30);
+    --shadow-sm: 0 1px 2px rgba(53, 20, 26, 0.04);
+    --shadow-md: 0 4px 12px rgba(53, 20, 26, 0.06);
+    --shadow-lg: 0 12px 32px rgba(215, 92, 112, 0.10);
+    --font-display: 'Montserrat', -apple-system, sans-serif;
+    --font-body: 'Inter', -apple-system, 'Noto Sans SC', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-body);
+    background: radial-gradient(ellipse at 30% 20%, rgba(215,92,112,0.08) 0%, var(--bg-page) 55%, var(--pure-white-300) 100%);
+    color: var(--text-h1);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 5vh 24px 8vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(215, 92, 112, 0.10);
+    border: 1px solid rgba(215, 92, 112, 0.18);
+    color: var(--fortune-red);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 28px;
+    animation: fade-up 500ms 0ms ease-out both;
+  }
+  .brand {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 7vw, 72px);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    margin: 0 0 8px;
+    color: var(--text-h1);
+    animation: fade-up 500ms 80ms ease-out both;
+  }
+  .divider {
+    width: 48px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--fortune-red);
+    opacity: 0.7;
+    margin: 16px 0 12px;
+    animation: fade-up 500ms 140ms ease-out both;
+  }
+  .tagline {
+    font-size: 18px;
+    color: var(--text-body);
+    margin: 0;
+    font-weight: 400;
+    animation: fade-up 500ms 200ms ease-out both;
+  }
+  .tagline-en {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 4px 0 0;
+    letter-spacing: 0.02em;
+    animation: fade-up 500ms 240ms ease-out both;
+  }
+  .grid {
+    margin-top: 64px;
+    display: grid;
+    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    width: 100%;
+    animation: fade-up 600ms 320ms ease-out both;
+  }
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: 20px;
+    padding: 32px 28px 28px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(215,92,112,0.05) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 250ms ease;
+    pointer-events: none;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--border-hover);
+  }
+  .card:hover::before { opacity: 1; }
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(215, 92, 112, 0.10);
+    color: var(--fortune-red);
+    margin-bottom: 20px;
+  }
+  .card-icon.voc {
+    background: rgba(110, 150, 110, 0.12);
+    color: var(--jade-accent);
+  }
+  .card-icon.report {
+    background: rgba(216, 190, 120, 0.15);
+    color: var(--gold-foil);
+  }
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    color: var(--text-h1);
+  }
+  .card-subtitle {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fortune-red);
+    margin: 0 0 14px;
+  }
+  .card-subtitle.voc { color: var(--jade-accent); }
+  .card-subtitle.report { color: var(--gold-foil); }
+  .card-desc {
+    font-size: 14px;
+    color: var(--text-body);
+    margin: 0 0 24px;
+    line-height: 1.6;
+  }
+  .card-desc-en {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 24px;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+  }
+  .card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--fortune-red);
+  }
+  .card-cta.voc { color: var(--jade-accent); }
+  .card-cta.report { color: var(--gold-foil); }
+  .card.report:hover { border-color: rgba(216, 190, 120, 0.40); }
+  .card.report::before { background: linear-gradient(135deg, rgba(216,190,120,0.06) 0%, transparent 50%); }
+  .card-cta-arrow {
+    transition: transform 250ms ease;
+  }
+  .card:hover .card-cta-arrow { transform: translateX(4px); }
+  .card-meta {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-default);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .footer {
+    margin-top: 64px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    animation: fade-up 600ms 480ms ease-out both;
+  }
+  .footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 200ms ease, color 200ms ease;
+  }
+  .footer a:hover {
+    color: var(--text-h1);
+    border-bottom-color: var(--text-muted);
+  }
+  .card-icon.shopify {
+    background: rgba(74, 53, 112, 0.12);
+    color: #4A3570;
+  }
+  .card-subtitle.shopify { color: #4A3570; }
+  .card-cta.shopify { color: #4A3570; }
+  .card.shopify:hover { border-color: rgba(74, 53, 112, 0.30); }
+  .card.shopify::before { background: linear-gradient(135deg, rgba(74,53,112,0.05) 0%, transparent 50%); }
+  .card-icon.mkt {
+    background: rgba(139, 53, 74, 0.12);
+    color: #8B354A;
+  }
+  .card-subtitle.mkt { color: #8B354A; }
+  .card-cta.mkt { color: #8B354A; }
+  .card.mkt:hover { border-color: rgba(139, 53, 74, 0.30); }
+  .card.mkt::before { background: linear-gradient(135deg, rgba(139,53,74,0.05) 0%, transparent 50%); }
+  .card-icon.business {
+    background: rgba(166, 126, 117, 0.12);
+    color: #A67E75;
+  }
+  .card-subtitle.business { color: #A67E75; }
+  .card-cta.business { color: #A67E75; }
+  .card.business:hover { border-color: rgba(166, 126, 117, 0.35); }
+  .card.business::before { background: linear-gradient(135deg, rgba(201,169,161,0.07) 0%, transparent 50%); }
+  .card-icon.kg {
+    background: rgba(59, 91, 140, 0.12);
+    color: #3B5B8C;
+  }
+  .card-subtitle.kg { color: #3B5B8C; }
+  .card-cta.kg { color: #3B5B8C; }
+  .card.kg:hover { border-color: rgba(59, 91, 140, 0.30); }
+  .card.kg::before { background: linear-gradient(135deg, rgba(59,91,140,0.05) 0%, transparent 50%); }
+  .card-icon.person {
+    background: rgba(59, 140, 130, 0.12);
+    color: #3B8C82;
+  }
+  .card-subtitle.person { color: #3B8C82; }
+  .card-cta.person { color: #3B8C82; }
+  .card.person:hover { border-color: rgba(59, 140, 130, 0.30); }
+  .card.person::before { background: linear-gradient(135deg, rgba(59,140,130,0.05) 0%, transparent 50%); }
+  .card-icon.brand {
+    background: rgba(215, 92, 112, 0.12);
+    color: #D75C70;
+  }
+  .card-subtitle.brand { color: #D75C70; }
+  .card-cta.brand { color: #D75C70; }
+  .card.brand:hover { border-color: rgba(215, 92, 112, 0.30); }
+  .card.brand::before { background: linear-gradient(135deg, rgba(215,92,112,0.05) 0%, transparent 50%); }
+  .card-icon.mas {
+    background: rgba(90, 82, 148, 0.12);
+    color: #5A5294;
+  }
+  .card-subtitle.mas { color: #5A5294; }
+  .card-cta.mas { color: #5A5294; }
+  .card.mas:hover { border-color: rgba(90, 82, 148, 0.30); }
+  .card.mas::before { background: linear-gradient(135deg, rgba(90,82,148,0.05) 0%, transparent 50%); }
+  .card-icon.product {
+    background: rgba(88, 124, 93, 0.12);
+    color: #587C5D;
+  }
+  .card-subtitle.product { color: #587C5D; }
+  .card-cta.product { color: #587C5D; }
+  .card.product:hover { border-color: rgba(88, 124, 93, 0.30); }
+  .card.product::before { background: linear-gradient(135deg, rgba(88,124,93,0.05) 0%, transparent 50%); }
+  .card-icon.llm {
+    background: rgba(93, 93, 93, 0.12);
+    color: #5D5D5D;
+  }
+  .card-subtitle.llm { color: #5D5D5D; }
+  .card-cta.llm { color: #5D5D5D; }
+  .card.llm:hover { border-color: rgba(93, 93, 93, 0.30); }
+  .card.llm::before { background: linear-gradient(135deg, rgba(93,93,93,0.05) 0%, transparent 50%); }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+  @media (max-width: 640px) {
+    .page { padding: 4vh 20px 6vh; }
+    .grid { margin-top: 40px; }
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+    <span class="badge">Root Innovation · Lute Data Science</span>
+    <h1 class="brand">Lute</h1>
+    <div class="divider"></div>
+    <p class="tagline">数据 · 创新 · 共创</p>
+    <p class="tagline-en">Data Science Hub for Cross-Border E-Commerce</p>
+
+    <div class="grid">
+      <a class="card" href="https://video.lute-tlz-dddd.top">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 4l14 8-14 8V4z" fill="currentColor"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">AI Video Pipeline</p>
+        <h2 class="card-title">短视频创作平台</h2>
+        <p class="card-desc">16 步 AI 评审管线 · 多场景自动出片 · 多平台分发</p>
+        <p class="card-desc-en">Multi-agent video creation: strategy → script → storyboard → keyframe → seedance → audio → caption → thumbnail → distribution</p>
+        <div class="card-meta">
+          <span class="chip">S1-S5 + Fast Mode</span>
+          <span class="chip">DeepSeek + POYO</span>
+          <span class="chip">Remotion Render</span>
+        </div>
+        <span class="card-cta">
+          打开视频平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://voc.lute-tlz-dddd.top">
+        <div class="card-icon voc">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle voc">Voice of Customer</p>
+        <h2 class="card-title">客户声音分析平台</h2>
+        <p class="card-desc">Apache Superset · 跨境电商 NLP 增量处理 · 评论/反馈/舆情挖掘</p>
+        <p class="card-desc-en">Customer review analytics &amp; sentiment dashboards on Apache Superset</p>
+        <div class="card-meta">
+          <span class="chip">Apache Superset</span>
+          <span class="chip">VOC NLP</span>
+          <span class="chip">PostgreSQL</span>
+        </div>
+        <span class="card-cta voc">
+          打开数据平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card report" href="https://report.lute-tlz-dddd.top">
+        <div class="card-icon report">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M9 17H7A5 5 0 0 1 7 7h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M15 7h2a5 5 0 0 1 0 10h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle report">VOC Insight Report</p>
+        <h2 class="card-title">E2E 洞察报告</h2>
+        <p class="card-desc">Momcozy 喂养电器全链路洞察 · 六源交叉验证 · ECharts 可视化</p>
+        <p class="card-desc-en">End-to-end insight report: 19,098 Amazon reviews × Meltwater 75,291 posts × 6-source cross-validation</p>
+        <div class="card-meta">
+          <span class="chip">Amazon VOC 19,098</span>
+          <span class="chip">Meltwater 75,291</span>
+          <span class="chip">Stage 1–7</span>
+        </div>
+        <span class="card-cta report">
+          查看洞察报告
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card shopify" href="https://shopify.lute-tlz-dddd.top">
+        <div class="card-icon shopify">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M3 3h18v4H3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M3 7l2 14h14l2-14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle shopify">Shopify Audit Report</p>
+        <h2 class="card-title">独立站监控</h2>
+        <p class="card-desc">Momcozy M1 v2.0 · Top 15 病灶 · 15 条 Liquid PR 代码 · 8 站竞品对标</p>
+        <p class="card-desc-en">Playwright performance audit: LCP 4.92s → 2s roadmap, CVR 0.88% fix plan, estimated +.7M/month revenue recovery</p>
+        <div class="card-meta">
+          <span class="chip">Playwright 实测</span>
+          <span class="chip">Top 15 病灶</span>
+          <span class="chip">.7M ROI</span>
+        </div>
+        <span class="card-cta shopify">
+          查看诊断报告
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card mkt" href="https://mkt.lute-tlz-dddd.top">
+        <div class="card-icon mkt">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M3 20h18M5 20V10l4-4 4 4 4-6v16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle mkt">Market Insight Platform</p>
+        <h2 class="card-title">市场洞察工作台</h2>
+        <p class="card-desc">Momcozy 母婴品牌全球市场分析 · 竞品追踪 · 用户画像 · 行业趋势</p>
+        <p class="card-desc-en">Global baby care market intelligence: competitive analysis, consumer profiles, industry trends &amp; Momcozy brand deep-dive</p>
+        <div class="card-meta">
+          <span class="chip">竞品分析</span>
+          <span class="chip">用户画像</span>
+          <span class="chip">市场趋势</span>
+        </div>
+        <span class="card-cta mkt">
+          打开市场看板
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card brand" href="https://brand.lute-tlz-dddd.top">
+        <div class="card-icon brand">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M17 12l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle brand">Brand Strategy Engine</p>
+        <h2 class="card-title">品牌战略引擎</h2>
+        <p class="card-desc">品牌资产管理 · 品牌 Campaign · 统一视觉与内容策略入口</p>
+        <p class="card-desc-en">Brand packages, campaign strategy, visual consistency and content planning inside the AI Video platform</p>
+        <div class="card-meta">
+          <span class="chip">Brand Kit</span>
+          <span class="chip">Campaign</span>
+          <span class="chip">Strategy</span>
+        </div>
+        <span class="card-cta brand">
+          打开品牌引擎
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card mas" href="https://mas.lute-tlz-dddd.top">
+        <div class="card-icon mas">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="6" cy="7" r="3" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="18" cy="7" r="3" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="12" cy="17" r="3" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M8.5 9.5l2 4M15.5 9.5l-2 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle mas">Multi-Agent System</p>
+        <h2 class="card-title">多智能体系统</h2>
+        <p class="card-desc">策略 · 脚本 · 分镜 · 审核 · 渲染 · 分发的多智能体协作系统</p>
+        <p class="card-desc-en">Multi-agent workflow for strategy, script, storyboard, review, rendering and distribution</p>
+        <div class="card-meta">
+          <span class="chip">S1-S5</span>
+          <span class="chip">Review Gates</span>
+          <span class="chip">Pipeline</span>
+        </div>
+        <span class="card-cta mas">
+          打开多智能体系统
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card business" href="https://business.lute-tlz-dddd.top">
+        <div class="card-icon business">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M2 20h20M4 20V10l8-7 8 7v10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 20v-6h6v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle business">Business Insight Hub</p>
+        <h2 class="card-title">商业机会点</h2>
+        <p class="card-desc">566 亿母婴 AI 市场 · 五大反直觉创新方案 · 六大洞察框架</p>
+        <p class="card-desc-en">NurtureLink: Heartbeat Cocoon · DadQuest · SafeBox · WarmMom · FamilyBridge — market research to product strategy</p>
+        <div class="card-meta">
+          <span class="chip">5 创新方案</span>
+          <span class="chip">React + Vite</span>
+          <span class="chip">市场洞察</span>
+        </div>
+        <span class="card-cta business">
+          打开洞察平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card product" href="https://product.lute-tlz-dddd.top">
+        <div class="card-icon product">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 6h16v12H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle product">AI Product Selection</p>
+        <h2 class="card-title">AI 选品平台</h2>
+        <p class="card-desc">全球智能选品中心 · 店铺/商品/达人资产 · 跨境电商机会筛选</p>
+        <p class="card-desc-en">AI product selection workspace with shop, product and creator assets for cross-border e-commerce decisions</p>
+        <div class="card-meta">
+          <span class="chip">Product Assets</span>
+          <span class="chip">Shop Data</span>
+          <span class="chip">Selection</span>
+        </div>
+        <span class="card-cta product">
+          打开选品平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card kg" href="https://kg.lute-tlz-dddd.top">
+        <div class="card-icon kg">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle kg">AI Knowledge Garden</p>
+        <h2 class="card-title">AI 知识图谱</h2>
+        <p class="card-desc">803 条精选 AI 提示词与技能 · 六维分类 · 全文搜索 · 角色筛选</p>
+        <p class="card-desc-en">Curated prompts, skills, hooks, MCP tools, agents &amp; open-source projects — 14 professional roles, instant search</p>
+        <div class="card-meta">
+          <span class="chip">193 提示词</span>
+          <span class="chip">610 技能</span>
+          <span class="chip">React + tRPC</span>
+        </div>
+        <span class="card-cta kg">
+          打开知识库
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card person" href="https://person.lute-tlz-dddd.top">
+        <div class="card-icon person">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M16 11l1.5 1.5L21 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle person">AI Digital Employee</p>
+        <h2 class="card-title">数字员工</h2>
+        <p class="card-desc">55 种专业 AI 数字员工 · 2721 个业务模型 · 战略 / 数据 / 营销 / 法律 / 财务全覆盖</p>
+        <p class="card-desc-en">On-demand AI employee rental: 55 roles, 2,721 models across strategy, data science, marketing, legal &amp; finance</p>
+        <div class="card-meta">
+          <span class="chip">55 专业角色</span>
+          <span class="chip">2721 业务模型</span>
+          <span class="chip">React + Vite</span>
+        </div>
+        <span class="card-cta person">
+          进入数字员工平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+      <a class="card llm" href="https://llm.lute-tlz-dddd.top">
+        <div class="card-icon llm">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 6h16M4 10h10M4 14h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="19" cy="10" r="3" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </div>
+        <p class="card-subtitle llm">LLM Compare Hub</p>
+        <h2 class="card-title">大模型选型</h2>
+        <p class="card-desc">PoYo.ai vs 硅基流动 · BAI · EasyRouter · 4 平台横向对比 · API 文档 · 费用计算</p>
+        <p class="card-desc-en">Multi-platform LLM API explorer: pricing, capabilities &amp; curl examples across 130+ models — text, image, video, music &amp; more</p>
+        <div class="card-meta">
+          <span class="chip">130+ 模型</span>
+          <span class="chip">API Explorer</span>
+          <span class="chip">React + Vite</span>
+        </div>
+        <span class="card-cta llm">
+          打开选型指南
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+    </div>
+
+    <p class="footer">
+      © 2026 Lute · Digital &amp; Data Science Dept. · Powered by
+      <a href="https://video.lute-tlz-dddd.top">video.lute</a> &middot;
+      <a href="https://voc.lute-tlz-dddd.top">voc.lute</a> &middot;
+      <a href="https://mkt.lute-tlz-dddd.top">mkt.lute</a> &middot;
+      <a href="https://brand.lute-tlz-dddd.top">brand.lute</a> &middot;
+      <a href="https://shopify.lute-tlz-dddd.top">shopify.lute</a> &middot;
+      <a href="https://mas.lute-tlz-dddd.top">mas.lute</a> &middot;
+      <a href="https://report.lute-tlz-dddd.top">report.lute</a> &middot;
+      <a href="https://business.lute-tlz-dddd.top">business.lute</a> &middot;
+      <a href="https://product.lute-tlz-dddd.top">product.lute</a> &middot;
+      <a href="https://kg.lute-tlz-dddd.top">kg.lute</a> &middot;
+      <a href="https://person.lute-tlz-dddd.top">person.lute</a> &middot;
+      <a href="https://llm.lute-tlz-dddd.top">llm.lute</a>
+    </p>
+  </main>
+</body>
+</html>

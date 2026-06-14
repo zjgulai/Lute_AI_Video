@@ -14,6 +14,7 @@ import {
 import type { IconProps } from "@phosphor-icons/react";
 import AssetUploader from "./AssetUploader";
 import { setApiKey, getMediaUrl } from "./api";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 import { useI18n } from "@/i18n/I18nProvider";
 
 const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
@@ -104,12 +105,19 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
   }, []);
 
   const scenario = CONTENT_SCENARIOS.find((s) => s.id === selectedScenario);
+  const stepByStepSupported = selectedScenario === "product_direct";
   useEffect(() => {
     if (scenario) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedPlatforms([...scenario.platforms]);
     }
-  }, [selectedScenario]);
+  }, [scenario, selectedScenario]);
+
+  useEffect(() => {
+    if (!stepByStepSupported && pipelineMode === "step_by_step") {
+      onModeChange?.("auto");
+    }
+  }, [onModeChange, pipelineMode, stepByStepSupported]);
 
   const apiFields = [
     { key: "POYO_API_KEY", labelKey: "apikey.poyo", noteKey: "apikey.poyoNote", url: "https://poyo.ai" },
@@ -143,7 +151,6 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
   const detail = SCENARIO_DETAILS[selectedScenario] || SCENARIO_DETAILS.product_direct;
   // Resolve translated scene details
   const detailDesc = t(detail.descKey);
-  const detailPlatforms = t(detail.platformsKey);
   const detailExample = t(detail.exampleKey);
 
   return (
@@ -156,8 +163,11 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
             <h3 className="text-[11px] font-semibold text-[var(--text-body)] uppercase tracking-wider">{t("scene.contentScenario")}</h3>
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => onModeChange?.("step_by_step")}
-                className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
+                onClick={() => stepByStepSupported && onModeChange?.("step_by_step")}
+                disabled={!stepByStepSupported}
+                className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-all ${
+                  stepByStepSupported ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                } ${
                   pipelineMode === "step_by_step"
                     ? "bg-[var(--fortune-red)] text-white"
                     : "bg-[var(--bg-panel)] text-[var(--text-body)] hover:bg-[rgba(215,92,112,0.18)]"
@@ -318,7 +328,9 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
         <p className="text-[11px] text-[var(--text-muted)]">
           {pipelineMode === "step_by_step"
             ? t("pipeline.stepByStepHint")
-            : t("pipeline.autoHint")}
+            : stepByStepSupported
+              ? t("pipeline.autoHint")
+              : t("pipeline.stepByStepS1Only")}
         </p>
       </div>
 
@@ -430,9 +442,9 @@ export default function SceneSelector({ onStart, loading, pipelineMode = "step_b
                     >
                       <div className="aspect-[4/3] relative">
                         {Boolean(item.thumbnail) ? (
-                          <img
+                          <RuntimeMediaImage
                             src={getMediaUrl(item.thumbnail as string)}
-                            alt={item.title as string | undefined}
+                            alt={typeof item.title === "string" ? item.title : ""}
                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                             loading="lazy"
                           />

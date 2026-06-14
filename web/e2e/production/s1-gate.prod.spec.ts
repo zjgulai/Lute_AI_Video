@@ -2,11 +2,10 @@
  * P4-2 — Production S1 Gate panel spec.
  * Backend API contract: gate/{gate_id}/generate (3 candidates), gate/{gate_id}/approve.
  * Regression guard for INTEGRATION-3 (product_catalog nested-name schema).
- * Run: PLAYWRIGHT_PROD_URL=https://video.lute-tlz-dddd.top npm run e2e:prod -- s1-gate
+ * Run: PLAYWRIGHT_PROD_URL=https://video.lute-tlz-dddd.top PLAYWRIGHT_API_KEY=<production-api-key> npm run e2e:prod -- s1-gate
  */
 import { test, expect } from "@playwright/test";
-
-const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+import { productionApiHeaders } from "./helpers";
 
 const S1_PAYLOAD = {
   product_catalog: {
@@ -29,9 +28,9 @@ const S1_PAYLOAD = {
 };
 
 test.describe("P4-2 — S1 Gate panel flow", () => {
-  test("step 1: start S1 and run strategy step without INTEGRATION-3 regression", async ({ request }) => {
+  test("step 1: start S1 and run strategy step without INTEGRATION-3 regression @token-smoke", async ({ request }) => {
     const initR = await request.post("/api/scenario/s1/start", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: S1_PAYLOAD,
     });
     expect(initR.status()).toBe(200);
@@ -39,7 +38,7 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
     expect(label).toMatch(/^s1_\d+_[a-f0-9]+$/);
 
     const stepR = await request.post("/api/scenario/s1/step/strategy", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: { label },
       timeout: 30_000,
     });
@@ -52,22 +51,22 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
     expect(integ3, "INTEGRATION-3 regression: nested products[].name not accepted").toBeUndefined();
   });
 
-  test("step 2: gate exists after strategy and exposes 3 candidates", async ({ request }) => {
+  test("step 2: gate exists after strategy and exposes 3 candidates @token-smoke", async ({ request }) => {
     const initR = await request.post("/api/scenario/s1/start", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: S1_PAYLOAD,
     });
     const { label } = await initR.json();
 
     const strategyR = await request.post("/api/scenario/s1/step/strategy", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: { label },
       timeout: 30_000,
     });
     expect(strategyR.status()).toBe(200);
 
     const stateR = await request.get(`/api/scenario/s1/state/${label}`, {
-      headers: { "X-API-Key": API_KEY },
+      headers: productionApiHeaders(),
     });
     expect(stateR.status()).toBe(200);
     const state = await stateR.json();
@@ -83,7 +82,7 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
     const genR = await request.post(
       `/api/scenario/s1/gate/${label}/${gateId}/generate`,
       {
-        headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+        headers: productionApiHeaders({ "Content-Type": "application/json" }),
         data: {},
         timeout: 60_000,
       },

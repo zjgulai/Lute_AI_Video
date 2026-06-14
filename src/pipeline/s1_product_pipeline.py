@@ -23,7 +23,7 @@ keep working unchanged.
 from __future__ import annotations
 
 import asyncio
-import subprocess
+import importlib
 import time
 from pathlib import Path
 from typing import Any
@@ -32,29 +32,100 @@ import structlog
 
 import src.skills.brand_compliance  # noqa: F401
 import src.skills.character_identity  # noqa: F401          ← Track 3: character identity
-import src.skills.elevenlabs_tts  # noqa: F401              ← NEW media
-import src.skills.gpt_image_generate  # noqa: F401          ← NEW media
-import src.skills.keyframe_images  # noqa: F401             ← Track 3: keyframe images
-import src.skills.media_quality_audit  # noqa: F401         ← NEW audit
+import src.skills.continuity_storyboard_grid  # noqa: F401
 
-# Import-time skill auto-registration
+# Import-time pre-media skill auto-registration. Provider-backed media skills
+# are registered lazily only when their steps run, so no-media S1 submits keep
+# the production log window free of media skill registration noise.
 import src.skills.product_strategy  # noqa: F401
-import src.skills.remotion_assemble  # noqa: F401           ← NEW media
 import src.skills.script_writer  # noqa: F401
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.seedance_video_generate  # noqa: F401  ← NEW media
 import src.skills.storyboard  # noqa: F401  (best-effort; may not exist in repo)
-import src.skills.thumbnail_prompt  # noqa: F401
-from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
+from src.config import DEFAULT_LANGUAGES, MAX_CLIPS_PER_DEMO, MAX_THUMBNAILS_PER_DEMO, OUTPUT_DIR
+from src.pipeline.artifact_paths import extract_assemble_paths
+from src.pipeline.continuity_utils import (
+    all_clips_are_stubs,
+    build_continuity_audit_summary,
+    collect_captions,
+    collect_shots,
+    compute_expected_duration,
+    extract_clip_last_frame,
+    normalize_continuity_config,
+)
+from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
+from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
 
+
+def _safe_path_segment(value: Any, fallback: str) -> str:
+    segment = str(value or fallback).strip() or fallback
+    return segment.replace("/", "_").replace("\\", "_")
+
+
+def _artifact_media_output_dir(
+    state: dict[str, Any],
+    config: dict[str, Any],
+    media_kind: str,
+) -> str | None:
+    disposition = config.get("artifact_disposition", "default")
+    if disposition not in {"pending_review", "quarantine"}:
+        return None
+
+    tenant_id = _safe_path_segment(state.get("tenant_id") or config.get("tenant_id"), "default")
+    label = _safe_path_segment(config.get("output_label") or state.get("label"), "run")
+    return str(OUTPUT_DIR / "tenants" / tenant_id / disposition / label / media_kind)
+
+_LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
+    "keyframe_images": (
+        ("src.skills.gpt_image_generate", "gpt-image-generate-skill"),
+        ("src.skills.keyframe_images", "keyframe-images"),
+    ),
+    "video_prompts": (
+        ("src.skills.seedance_prompt", "seedance-video-prompt"),
+    ),
+    "thumbnail_prompts": (
+        ("src.skills.thumbnail_prompt", "gpt-image-thumbnail-prompt"),
+    ),
+    "seedance_clips": (
+        ("src.skills.seedance_video_generate", "seedance-video-generate-skill"),
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+    "tts_audio": (
+        ("src.skills.elevenlabs_tts", "elevenlabs-tts-skill"),
+    ),
+    "thumbnail_images": (
+        ("src.skills.gpt_image_generate", "gpt-image-generate-skill"),
+    ),
+    "assemble_final": (
+        ("src.skills.remotion_assemble", "remotion-assemble-skill"),
+    ),
+    "audit": (
+        ("src.skills.media_quality_audit", "media-quality-audit-skill"),
+    ),
+}
+
+
+def _ensure_step_skills_registered(step_name: str, config: dict[str, Any] | None = None) -> None:
+    """Register media-step skills only when that step is actually executed."""
+    modules = list(_LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()))
+    if step_name == "seedance_clips" and (config or {}).get("seedance_quality_gate_enabled") is False:
+        modules = [
+            module
+            for module in modules
+            if module[1] != "media-quality-audit-skill"
+        ]
+    for module_name, skill_name in modules:
+        module = importlib.import_module(module_name)
+        if skill_name not in SkillRegistry._global_skills:
+            importlib.reload(module)
+
 # Caps (each Seedance call is ~30-60s; cap for sane demo runs)
-MAX_CLIPS_PER_DEMO = 3
-MAX_THUMBNAILS_PER_DEMO = 2
+# Now configurable via MAX_CLIPS_PER_DEMO / MAX_THUMBNAILS_PER_DEMO env vars
+# Defaults: 3 clips, 2 thumbnails
 
 
 class S1ProductDirectPipeline:
@@ -83,6 +154,12 @@ class S1ProductDirectPipeline:
         enable_media_synthesis: bool = True,
         output_label: str | None = None,
         video_duration: int = 30,
+        continuity_mode: bool = True,
+        continuity_generation_mode: str = "standard",
+        storyboard_grid: int | str = 12,
+        clip_group_size: int = 3,
+        transition_style: str = "match_cut",
+        commercial_injection_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run the full S1 pipeline end-to-end.
 
@@ -116,12 +193,25 @@ class S1ProductDirectPipeline:
             "product_name": product_name,
             "brand_name": brand_name,
             "target_language": target_language,
+            "continuity_mode": continuity_mode,
+            "continuity_generation_mode": continuity_generation_mode,
+            "storyboard_grid": storyboard_grid,
+            "clip_group_size": clip_group_size,
+            "transition_style": transition_style,
         }
+        config = with_optional_injection_config(
+            config,
+            commercial_injection_plan,
+            expected_scenario="s1",
+        )
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label)
-        final_state = await runner.resume(label)
+        if enable_media_synthesis:
+            final_state = await runner.resume(label)
+        else:
+            final_state = await self._resume_without_media_synthesis(runner, label)
 
         # Convert final state back to the legacy result dict for backwards compat
         steps = final_state.get("steps", {})
@@ -161,15 +251,9 @@ class S1ProductDirectPipeline:
         result["thumbnail_image_paths"] = self._get_step_output(steps, "thumbnail_images") or []
 
         assemble_output = self._get_step_output(steps, "assemble_final") or {}
-        if isinstance(assemble_output, tuple):
-            result["final_video_path"] = assemble_output[0] if len(assemble_output) > 0 else ""
-            result["render_json_path"] = assemble_output[1] if len(assemble_output) > 1 else ""
-        elif isinstance(assemble_output, dict):
-            result["final_video_path"] = assemble_output.get("video_path", "")
-            result["render_json_path"] = assemble_output.get("render_json_path", "")
-        else:
-            result["final_video_path"] = ""
-            result["render_json_path"] = ""
+        final_video_path, render_json_path = self._extract_assemble_paths(assemble_output)
+        result["final_video_path"] = final_video_path
+        result["render_json_path"] = render_json_path
 
         result["audit_report"] = self._get_step_output(steps, "audit") or {}
         result["steps_completed"] = 12
@@ -214,31 +298,77 @@ class S1ProductDirectPipeline:
 
         return result
 
+    async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
+        """Run only pre-media steps; stop before provider-backed asset generation."""
+        final_state: dict[str, Any] = {}
+        for step_name in get_scenario_step_order("s1"):
+            if step_name == "keyframe_images":
+                break
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+        if final_state and not final_state.get("pipeline_degraded"):
+            final_state["current_step"] = None
+            save = getattr(runner.state_manager, "save", None)
+            if callable(save):
+                await save(label, final_state)
+        return final_state
+
     @staticmethod
     def _get_step_output(steps: dict[str, Any], step_name: str) -> Any:
-        """Retrieve output from a step, preferring edited_output if edited."""
-        step_data = steps.get(step_name, {})
-        if step_data.get("edited") and step_data.get("edited_output") is not None:
-            return step_data["edited_output"]
-        return step_data.get("output")
+        """Retrieve output from a step, preferring edited_output if edited.
+
+        Delegates to the canonical shared implementation in step_utils.py.
+        """
+        return get_step_output(steps, step_name)
 
     @staticmethod
-    def _all_clips_are_stubs(clip_paths: list[str], clip_details: list[dict[str, Any]] | None = None) -> bool:
-        """Detect whether every clip is a stub file.
+    def _extract_assemble_paths(output: Any) -> tuple[str, str]:
+        return extract_assemble_paths(output)
 
-        Uses explicit is_stub metadata from clip_details when available,
-        falling back to filename-based detection (stub files start with 'stub_').
-        This avoids false positives from legitimate paths containing 'stub'
-        as a substring (e.g. '/data/stubborn/product.mp4').
-        """
-        if not clip_paths:
-            return True
-        if clip_details and len(clip_details) == len(clip_paths):
-            return all(d.get("is_stub", False) for d in clip_details)
-        # Filename fallback: stub files generated by SeedanceClient._stub_result
-        # follow the pattern 'stub_<mode>_<hash>.mp4'
-        import os
-        return all(os.path.basename(str(p)).lower().startswith("stub_") for p in clip_paths)
+    @staticmethod
+    def _transition_plan_from_clip_groups(clip_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "from_clip": group.get("clip_index"),
+                "to_clip": int(group.get("clip_index", 0)) + 1,
+                "transition": group.get("transition_to_next"),
+                "transition_type": group.get("transition_type"),
+            }
+            for group in clip_groups
+            if group.get("transition_to_next")
+        ]
+
+    @staticmethod
+    def _continuity_output(
+        grid: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        clip_groups = grid.get("clip_groups", [])
+        if not isinstance(clip_groups, list):
+            clip_groups = []
+        micro_shots = grid.get("micro_shots", [])
+        if not isinstance(micro_shots, list):
+            micro_shots = []
+        output_metadata = metadata or {}
+        status = "skipped" if grid.get("skipped") or output_metadata.get("skipped") else "done"
+        continuity_grid = {
+            **grid,
+            "metadata": output_metadata,
+            "status": status,
+        }
+        transition_plan = S1ProductDirectPipeline._transition_plan_from_clip_groups(
+            [group for group in clip_groups if isinstance(group, dict)]
+        )
+        return {
+            **continuity_grid,
+            "continuity_storyboard_grid": continuity_grid,
+            "continuity_micro_shots": micro_shots,
+            "clip_groups": clip_groups,
+            "transition_plan": transition_plan,
+            "metadata": output_metadata,
+            "status": status,
+        }
 
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step given the current state dict.
@@ -248,6 +378,7 @@ class S1ProductDirectPipeline:
         appropriate internal _step_* method, and returns the step output.
         """
         config = state["config"]
+        _ensure_step_skills_registered(step_name, config)
         reg = SkillRegistry()
         steps = state["steps"]
         errors = state["errors"]
@@ -270,8 +401,10 @@ class S1ProductDirectPipeline:
             return await self._step_scripts(
                 reg=reg,
                 briefs=briefs,
+                product_name=config.get("product_name", "Product"),
                 brand_guidelines=config.get("brand_guidelines"),
                 languages=config["target_languages"],
+                video_duration=config.get("video_duration", 30),
                 errors=errors,
             )
 
@@ -292,24 +425,50 @@ class S1ProductDirectPipeline:
                 errors=errors,
             )
 
+        if step_name == "continuity_storyboard_grid":
+            scripts = self._get_step_output(steps, "scripts") or []
+            storyboards = self._get_step_output(steps, "storyboards") or []
+            continuity_config = normalize_continuity_config(config)
+            return await self._step_continuity_storyboard_grid(
+                reg=reg,
+                product_catalog=config.get("product_catalog", {}),
+                brand_guidelines=config.get("brand_guidelines") or {},
+                target_platforms=config.get("target_platforms") or [],
+                scripts=scripts,
+                storyboards=storyboards,
+                errors=errors,
+                continuity_mode=continuity_config["continuity_mode"],
+                storyboard_grid=continuity_config["storyboard_grid"],
+                clip_group_size=continuity_config["clip_group_size"],
+                transition_style=continuity_config["transition_style"],
+                video_duration=config.get("video_duration", 30),
+            )
+
         if step_name == "keyframe_images":
             storyboards = self._get_step_output(steps, "storyboards") or []
             quality_attempt = int(steps.get("storyboards", {}).get("_quality_attempt", 0))
             if quality_attempt and storyboards:
                 storyboards = [{**sb, "_quality_attempt": quality_attempt} for sb in storyboards]
+            provider_job_caps = config.get("provider_job_caps") or {}
             return await self._step_keyframe_images(
                 reg=reg,
                 storyboards=storyboards,
                 errors=errors,
+                config=config,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "keyframes"),
+                provider_max_retries=config.get("provider_max_retries"),
+                image_job_cap=provider_job_caps.get("image"),
             )
 
         if step_name == "video_prompts":
             scripts = self._get_step_output(steps, "scripts") or []
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
             return await self._step_video_prompts(
                 reg=reg,
                 scripts=scripts,
                 product_name=config.get("product_name", "Product"),
                 errors=errors,
+                continuity_storyboard_grid=continuity_grid,
             )
 
         if step_name == "thumbnail_prompts":
@@ -325,6 +484,8 @@ class S1ProductDirectPipeline:
         if step_name == "seedance_clips":
             prompts = self._get_step_output(steps, "video_prompts") or []
             keyframes = self._get_step_output(steps, "keyframe_images") or []
+            continuity_config = normalize_continuity_config(config)
+            provider_job_caps = config.get("provider_job_caps") or {}
             return await self._step_seedance_clips(
                 reg=reg,
                 video_prompts=prompts,
@@ -333,6 +494,11 @@ class S1ProductDirectPipeline:
                 label=config.get("output_label", "s1"),
                 errors=media_errors,
                 video_duration=config.get("video_duration", 30),
+                continuity_mode=continuity_config["continuity_generation_mode"],
+                artifact_output_dir=_artifact_media_output_dir(state, config, "clips"),
+                provider_max_retries=config.get("provider_max_retries"),
+                video_job_cap=provider_job_caps.get("video"),
+                quality_gate_enabled=config.get("seedance_quality_gate_enabled", True),
             )
 
         if step_name == "tts_audio":
@@ -367,7 +533,7 @@ class S1ProductDirectPipeline:
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else (seedance_out if isinstance(seedance_out, list) else [])
             clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
             # Guard: if all clips are stubs, skip assembly — nothing to assemble
-            if not clip_paths or self._all_clips_are_stubs(clip_paths, clip_details):
+            if not clip_paths or all_clips_are_stubs(clip_paths, clip_details):
                 media_errors.append("all_seedance_clips_are_stubs; skipping assembly")
                 return "", ""
             return await self._step_assemble_final(
@@ -377,6 +543,7 @@ class S1ProductDirectPipeline:
                 audio_paths=audio_paths,
                 lyrics_paths=lyrics_paths,
                 clip_paths=clip_paths,
+                clip_details=clip_details,
                 brand_guidelines=config.get("brand_guidelines") or {},
                 label=config.get("output_label", "s1"),
                 errors=media_errors,
@@ -385,10 +552,7 @@ class S1ProductDirectPipeline:
         if step_name == "audit":
             final_video = ""
             assemble_output = self._get_step_output(steps, "assemble_final")
-            if isinstance(assemble_output, tuple) and len(assemble_output) > 0:
-                final_video = assemble_output[0]
-            elif isinstance(assemble_output, dict):
-                final_video = assemble_output.get("video_path", "")
+            final_video, _ = self._extract_assemble_paths(assemble_output)
 
             # tts_audio 返回 {"audio_paths": [...], "lyrics_paths": [...]};
             # 直接传 dict 给 audit 会被 isinstance 检查拒掉 → audio_coverage 误报 FAIL
@@ -398,17 +562,18 @@ class S1ProductDirectPipeline:
             else:
                 audio_paths = tts_output if isinstance(tts_output, list) else []
             thumb_image_paths = self._get_step_output(steps, "thumbnail_images") or []
+            continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else (seedance_out if isinstance(seedance_out, list) else [])
             clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
             scripts = self._get_step_output(steps, "scripts") or []
             thumbnails = self._get_step_output(steps, "thumbnail_prompts") or []
             # Guard: if all clips are stubs, audit is meaningless
-            if not clip_paths or self._all_clips_are_stubs(clip_paths, clip_details):
+            if not clip_paths or all_clips_are_stubs(clip_paths, clip_details):
                 media_errors.append("all_seedance_clips_are_stubs; skipping audit")
                 return {}
 
-            return await self._step_audit(
+            base_audit = await self._step_audit(
                 reg=reg,
                 video_path=final_video,
                 audio_paths=audio_paths,
@@ -418,12 +583,143 @@ class S1ProductDirectPipeline:
                 scripts=scripts,
                 thumbnail_sets=thumbnails,
                 language=config.get("target_language", "en"),
+                expected_duration_seconds=float(config.get("video_duration", 30)),
                 errors=errors,
+            )
+            return build_continuity_audit_summary(
+                base_audit=base_audit,
+                clip_details=clip_details,
+                continuity_grid=continuity_grid,
+                final_video_path=final_video,
             )
 
         raise ValueError(f"Unknown step name: {step_name}")
 
     # ═══ Step implementations ═══
+
+    async def _step_continuity_storyboard_grid(
+        self,
+        reg: SkillRegistry,
+        product_catalog: dict[str, Any],
+        brand_guidelines: dict[str, Any],
+        target_platforms: list[str],
+        scripts: list[dict[str, Any]],
+        storyboards: list[dict[str, Any]],
+        errors: list[str],
+        continuity_mode: bool,
+        storyboard_grid: int,
+        clip_group_size: int,
+        transition_style: str,
+        video_duration: int,
+    ) -> dict[str, Any]:
+        if not continuity_mode:
+            product_name = product_catalog.get("product_name") or product_catalog.get("name") or "Product"
+            skipped_grid = {
+                "grid_type": "skipped",
+                "product_name": product_name,
+                "visual_identity": {},
+                "micro_shots": [],
+                "clip_groups": [],
+                "storyboards": storyboards,
+                "skipped": True,
+            }
+            return self._continuity_output(
+                skipped_grid,
+                {
+                    "skipped": True,
+                    "reason": "continuity_mode=false",
+                    "storyboard_grid": storyboard_grid,
+                    "clip_group_size": clip_group_size,
+                },
+            )
+
+        continuity_catalog = self._build_continuity_product_context(
+            product_catalog=product_catalog,
+            brand_guidelines=brand_guidelines,
+            target_platforms=target_platforms,
+        )
+
+        res = await reg.execute(
+            "continuity-storyboard-grid",
+            {
+                "product_catalog": continuity_catalog,
+                "scripts": scripts,
+                "storyboards": storyboards,
+                "storyboard_grid": storyboard_grid,
+                "clip_group_size": clip_group_size,
+                "continuity_mode": continuity_mode,
+                "transition_style": transition_style,
+                "video_duration": video_duration,
+            },
+        )
+        if res.success and isinstance(res.data, dict):
+            metadata = {
+                **res.metadata,
+                "storyboard_grid": storyboard_grid,
+                "clip_group_size": clip_group_size,
+                "continuity_mode": continuity_mode,
+            }
+            return self._continuity_output(res.data, metadata)
+
+        errors.append(f"continuity_storyboard_grid_failed: {res.error}")
+        fallback_grid = {
+            "grid_type": "12-grid",
+            "product_name": product_catalog.get("product_name") or product_catalog.get("name") or "Product",
+            "visual_identity": {},
+            "micro_shots": [],
+            "clip_groups": [],
+            "degraded": True,
+        }
+        return self._continuity_output(
+            fallback_grid,
+            {
+                "degraded": True,
+                "error": res.error,
+                "storyboard_grid": storyboard_grid,
+                "clip_group_size": clip_group_size,
+                "continuity_mode": continuity_mode,
+            },
+        )
+
+    @staticmethod
+    def _build_continuity_product_context(
+        product_catalog: dict[str, Any],
+        brand_guidelines: dict[str, Any],
+        target_platforms: list[str],
+    ) -> dict[str, Any]:
+        catalog = dict(product_catalog)
+
+        if brand_guidelines.get("brand_name") and not catalog.get("brand_name"):
+            catalog["brand_name"] = brand_guidelines["brand_name"]
+
+        tone = brand_guidelines.get("tone")
+        if isinstance(tone, str) and tone.strip():
+            catalog.setdefault("tone_of_voice", tone.strip())
+            catalog.setdefault("voice_guidelines", tone.strip())
+
+        target_audience = brand_guidelines.get("target_audience")
+        if isinstance(target_audience, str) and target_audience.strip():
+            catalog.setdefault("target_audience", target_audience.strip())
+
+        primary_color = brand_guidelines.get("primary_color")
+        secondary_color = brand_guidelines.get("secondary_color")
+        palette = [
+            color.strip()
+            for color in (primary_color, secondary_color)
+            if isinstance(color, str) and color.strip()
+        ]
+        if palette and "color_palette" not in catalog:
+            catalog["color_palette"] = palette
+
+        distribution_platforms = [
+            platform.strip().lower()
+            for platform in target_platforms
+            if isinstance(platform, str) and platform.strip()
+        ]
+        if distribution_platforms:
+            catalog["distribution_platforms"] = distribution_platforms[:3]
+
+        return catalog
 
     async def _step_strategy(
         self,
@@ -466,14 +762,25 @@ class S1ProductDirectPipeline:
         self,
         reg: SkillRegistry,
         briefs: list[dict[str, Any]],
+        product_name: str,
         brand_guidelines: dict[str, Any] | None,
         languages: list[str],
+        video_duration: int,
         errors: list[str],
     ) -> list[dict[str, Any]]:
+        enriched_briefs = []
+        for brief in briefs:
+            if isinstance(brief, dict):
+                enriched = dict(brief)
+                enriched.setdefault("product_name", product_name)
+                enriched_briefs.append(enriched)
+            else:
+                enriched_briefs.append(brief)
         res = await reg.execute("script-writer-skill", {
-            "briefs": briefs,
+            "briefs": enriched_briefs,
             "brand_guidelines": brand_guidelines or {},
             "target_languages": languages,
+            "video_duration": video_duration,
         })
         if res.success and res.data:
             return res.data.get("scripts", [])
@@ -524,6 +831,10 @@ class S1ProductDirectPipeline:
         reg: SkillRegistry,
         storyboards: list[dict[str, Any]],
         errors: list[str],
+        config: dict[str, Any] | None = None,
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        image_job_cap: int | None = None,
     ) -> list[dict[str, Any]]:
         """Generate keyframe images for each storyboard's shots.
 
@@ -536,13 +847,27 @@ class S1ProductDirectPipeline:
         """
         keyframe_results: list[dict[str, Any]] = []
         regenerate_signal: dict[str, Any] | None = None
+        # P2-1: Estimate needed keyframes from video_duration (~10s per clip)
+        estimated_clips = max(3, (config or {}).get("video_duration", 30) // 10)
+        remaining_image_jobs = None if image_job_cap is None else max(0, int(image_job_cap))
         for sb in storyboards[:MAX_CLIPS_PER_DEMO]:
-            res = await reg.execute("keyframe-images", {
+            if remaining_image_jobs is not None and remaining_image_jobs <= 0:
+                break
+            shot_cap = estimated_clips
+            if remaining_image_jobs is not None:
+                shot_cap = min(shot_cap, remaining_image_jobs)
+            params: dict[str, Any] = {
                 "storyboard": sb,
                 "size": "1024x1792",
                 "quality": "high",
                 "_quality_attempt": sb.get("_quality_attempt", 0),
-            })
+                "_max_shots": shot_cap,
+            }
+            if artifact_output_dir:
+                params["output_dir"] = artifact_output_dir
+            if provider_max_retries is not None:
+                params["provider_max_retries"] = provider_max_retries
+            res = await reg.execute("keyframe-images", params)
             if (
                 not res.success
                 and isinstance(res.data, dict)
@@ -568,6 +893,8 @@ class S1ProductDirectPipeline:
                 for shot in fallback_sb.get("shots", []):
                     shot["keyframe_image_path"] = ""
                 keyframe_results.append(fallback_sb)
+            if remaining_image_jobs is not None:
+                remaining_image_jobs -= shot_cap
         return keyframe_results
 
     async def _step_quality_gate(
@@ -578,6 +905,7 @@ class S1ProductDirectPipeline:
         storyboards: list[dict[str, Any]],
         product_name: str,
         errors: list[str],
+        video_duration: int,
     ) -> dict[str, Any]:
         """Run quality gate on generated clips AFTER seedance step.
 
@@ -593,7 +921,7 @@ class S1ProductDirectPipeline:
             "clip_paths": clip_paths,
             "clip_video_paths": clip_video_paths,
             "expected_product_name": product_name,
-            "expected_duration_seconds": 30.0,
+            "expected_duration_seconds": float(video_duration),
             "expected_language": "en",
             "script_text": "",
             "thumbnail_prompts": [],
@@ -616,12 +944,31 @@ class S1ProductDirectPipeline:
         scripts: list[dict[str, Any]],
         product_name: str,
         errors: list[str],
+        continuity_storyboard_grid: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate per-segment structured video prompts (narrative shot architecture).
 
         Each script segment produces one prompt dict with shot_type, camera,
         action, lighting, and full visual_description — never a concatenated string.
         """
+        if continuity_storyboard_grid and continuity_storyboard_grid.get("clip_groups"):
+            res = await reg.execute(
+                "seedance-video-prompt",
+                {
+                    "continuity_storyboard_grid": continuity_storyboard_grid,
+                    "product_name": product_name,
+                },
+            )
+            if res.success and res.data and isinstance(res.data, list):
+                if not res.metadata.get("is_fallback"):
+                    return res.data
+            reason = (
+                res.error
+                or res.metadata.get("fallback_reason")
+                or "fallback_result"
+            )
+            errors.append(f"video_prompts_continuity_failed: {reason}")
+
         all_prompts: list[dict[str, Any]] = []
         for script in scripts[:MAX_CLIPS_PER_DEMO]:
             segments = script.get("segments", [])
@@ -679,46 +1026,6 @@ class S1ProductDirectPipeline:
 
     # ═══ Media synthesis steps (NEW) ═══
 
-    @staticmethod
-    def _extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
-        """Extract the last frame of a video clip as a JPEG for continuity.
-
-        Uses ffmpeg to seek to the last frame: ffmpeg -sseof -1 -i {video_path}
-        -frames:v 1 -q:v 2 {output_path}.
-
-        Args:
-            video_path: Absolute path to the source .mp4 clip.
-            output_dir: Directory to write the extracted frame into.
-
-        Returns:
-            Absolute path to the extracted JPEG, or None on any failure (missing
-            ffmpeg, corrupt file, etc.).
-        """
-        src = Path(video_path)
-        if not src.exists() or src.stat().st_size < 100:
-            return None
-
-        out_dir = Path(output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        frame_path = out_dir / f"last_frame_{src.stem}.jpg"
-
-        try:
-            cmd = [
-                "ffmpeg", "-y",
-                "-sseof", "-1",
-                "-i", str(src),
-                "-frames:v", "1",
-                "-q:v", "2",
-                str(frame_path),
-            ]
-            subprocess.run(cmd, capture_output=True, timeout=15, check=True)
-            if frame_path.exists() and frame_path.stat().st_size > 100:
-                return str(frame_path)
-        except (FileNotFoundError, subprocess.TimeoutExpired,
-                subprocess.CalledProcessError, Exception):
-            pass
-        return None
-
     async def _step_seedance_clips(
         self,
         reg: SkillRegistry,
@@ -728,6 +1035,11 @@ class S1ProductDirectPipeline:
         errors: list[str],
         video_duration: int = 30,
         keyframe_images: list[dict[str, Any]] | None = None,
+        continuity_mode: str = "standard",
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        video_job_cap: int | None = None,
+        quality_gate_enabled: bool = True,
     ) -> dict[str, Any]:
         """Generate video clips per segment using Sora 2 Pro (25s cap).
 
@@ -741,6 +1053,10 @@ class S1ProductDirectPipeline:
         """
         from src.pipeline.model_router import select_model
         s1_model = select_model("s1")
+        continuity_mode = continuity_mode if continuity_mode == "high_quality" else "standard"
+        active_video_prompts = list(video_prompts)
+        if video_job_cap is not None:
+            active_video_prompts = active_video_prompts[: max(0, int(video_job_cap))]
 
         clip_paths: list[str] = []
 
@@ -763,6 +1079,12 @@ class S1ProductDirectPipeline:
 
         clip_durations: list[float] = []
         clip_details: list[dict[str, Any]] = []
+        continuity_frame_by_index: dict[int, bool] = {}
+        continuity_frame_output_dir = (
+            str(Path(artifact_output_dir).parent / "continuity_frames")
+            if artifact_output_dir
+            else str(OUTPUT_DIR / "seedance" / "continuity_frames")
+        )
 
         # P1-16 (2026-05-10 OPT-E): Bounded concurrent clip generation.
         # poyo.ai default observed limit was 2; raised to 4 after 5000-log-line
@@ -789,6 +1111,10 @@ class S1ProductDirectPipeline:
                     "output_label": f"{label}_seg_{i}",
                     "model": s1_model,
                 }
+                if artifact_output_dir:
+                    gen_params["output_dir"] = artifact_output_dir
+                if provider_max_retries is not None:
+                    gen_params["provider_max_retries"] = provider_max_retries
 
                 # P1-16: In concurrent mode we rely on keyframe anchoring.
                 # If no keyframe is available, the clip generates from text prompt.
@@ -796,16 +1122,46 @@ class S1ProductDirectPipeline:
                 if kf_path:
                     gen_params["keyframe_image_path"] = kf_path
 
+                continuity_frame = vp.get("_continuity_frame_path")
+                if continuity_frame:
+                    gen_params["continuity_frame_path"] = continuity_frame
+                    continuity_frame_by_index[i] = True
+                else:
+                    continuity_frame_by_index[i] = False
+
                 res = await reg.execute("seedance-video-generate-skill", gen_params)
                 return i, res
 
-        # Launch all clips concurrently (max 2 in flight at any time)
-        clip_tasks = []
-        for i, vp in enumerate(video_prompts):
-            kf_path = kf_image_paths[i] if i < len(kf_image_paths) and kf_image_paths[i] else None
-            clip_tasks.append(_gen_single_clip(i, vp, kf_path))
+        if continuity_mode == "high_quality":
+            raw_results: list[Any] = []
+            for i, vp in enumerate(active_video_prompts):
+                kf_path = kf_image_paths[i] if i < len(kf_image_paths) and kf_image_paths[i] else None
+                next_prompt = dict(vp)
+                if last_frame_path:
+                    next_prompt["_continuity_frame_path"] = last_frame_path
+                try:
+                    result = await _gen_single_clip(i, next_prompt, kf_path)
+                except Exception as exc:
+                    raw_results.append(exc)
+                    last_frame_path = None
+                    continue
+                raw_results.append(result)
+                if isinstance(result, tuple) and result[1].success and result[1].data:
+                    generated_path = result[1].data.get("video_path", "")
+                    last_frame_path = extract_clip_last_frame(
+                        video_path=generated_path,
+                        output_dir=continuity_frame_output_dir,
+                    )
+                else:
+                    last_frame_path = None
+        else:
+            # Launch all clips concurrently (max 4 in flight at any time)
+            clip_tasks = []
+            for i, vp in enumerate(active_video_prompts):
+                kf_path = kf_image_paths[i] if i < len(kf_image_paths) and kf_image_paths[i] else None
+                clip_tasks.append(_gen_single_clip(i, vp, kf_path))
 
-        raw_results = await asyncio.gather(*clip_tasks, return_exceptions=True)
+            raw_results = await asyncio.gather(*clip_tasks, return_exceptions=True)
 
         # Surface any unhandled exceptions raised by clip generators
         for raw in raw_results:
@@ -830,9 +1186,15 @@ class S1ProductDirectPipeline:
                         "file_size": skill_result.data.get("file_size_bytes", 0),
                         "verification": skill_result.data.get("verification", {}),
                         "prompt_used": skill_result.data.get("prompt_used", ""),
-                        "segment_type": video_prompts[i].get("segment_type", "body"),
-                        "shot_type": video_prompts[i].get("shot_type", ""),
-                        "continuity_frame": False,  # P1-16: keyframe-based in concurrent mode
+                        "segment_type": active_video_prompts[i].get("segment_type", "body"),
+                        "shot_type": active_video_prompts[i].get("shot_type", ""),
+                        "clip_index": active_video_prompts[i].get("clip_index", i + 1),
+                        "transition_to_next": active_video_prompts[i].get("transition_to_next", ""),
+                        "transition_type": active_video_prompts[i].get("transition_type", "clean"),
+                        "scene_beat": active_video_prompts[i].get("scene_beat", ""),
+                        "beat_summary": active_video_prompts[i].get("beat_summary", ""),
+                        "transition_intent": active_video_prompts[i].get("transition_intent", ""),
+                        "continuity_frame": continuity_frame_by_index.get(i, False),
                     })
 
                     if not skill_result.data.get("verification", {}).get("all_ok", True):
@@ -842,20 +1204,21 @@ class S1ProductDirectPipeline:
 
         # P1-16: Post-generation: extract last frames from completed clips in order
         # for potential filler generation or downstream continuity needs.
-        for p in clip_paths:
-            frame = self._extract_clip_last_frame(
-                video_path=p,
-                output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
-            )
-            if frame:
-                last_frame_path = frame
-            else:
-                last_frame_path = None
+        if continuity_mode == "standard":
+            for p in clip_paths:
+                frame = extract_clip_last_frame(
+                    video_path=p,
+                    output_dir=continuity_frame_output_dir,
+                )
+                if frame:
+                    last_frame_path = frame
+                else:
+                    last_frame_path = None
 
         # ── Duration fallback: if total clip duration < 80% target, generate filler ──
         total_clip_duration = sum(clip_durations)
         min_required = video_duration * 0.8
-        if total_clip_duration < min_required and clip_paths:
+        if video_job_cap is None and total_clip_duration < min_required and clip_paths:
             logger.warning(
                 "seedance: total duration insufficient, generating filler",
                 total=total_clip_duration,
@@ -863,7 +1226,7 @@ class S1ProductDirectPipeline:
                 target=video_duration,
             )
             # Build filler from the last segment's prompt
-            last_prompt = video_prompts[-1].get("segment_prompt", "") if video_prompts else ""
+            last_prompt = active_video_prompts[-1].get("segment_prompt", "") if active_video_prompts else ""
             filler_prompt = str(last_prompt) + " (extended continuation, seamless extension of previous scene)" if last_prompt else f"{product_name} natural usage scene, extended"
             filler_params: dict[str, Any] = {
                 "prompt": filler_prompt,
@@ -872,6 +1235,10 @@ class S1ProductDirectPipeline:
                 "output_label": f"{label}_clip_filler",
                 "model": s1_model,
             }
+            if artifact_output_dir:
+                filler_params["output_dir"] = artifact_output_dir
+            if provider_max_retries is not None:
+                filler_params["provider_max_retries"] = provider_max_retries
             if last_frame_path:
                 filler_params["continuity_frame_path"] = last_frame_path
             elif len(kf_image_paths) > len(clip_paths) and kf_image_paths[len(clip_paths)]:
@@ -891,6 +1258,9 @@ class S1ProductDirectPipeline:
                         "file_size": res.data.get("file_size_bytes", 0),
                         "verification": res.data.get("verification", {}),
                         "prompt_used": res.data.get("prompt_used", ""),
+                        "scene_beat": "",
+                        "beat_summary": "",
+                        "transition_intent": "",
                         "continuity_frame": bool(last_frame_path),
                         "is_filler": True,
                     })
@@ -903,14 +1273,17 @@ class S1ProductDirectPipeline:
                 errors.append(f"filler_clip_failed: {res.error}")
 
         # ── Quality gate: run on generated clips, NEVER blocks pipeline ──
-        quality_report = await self._step_quality_gate(
-            reg=reg,
-            video_path="",
-            clip_paths=clip_paths,
-            storyboards=keyframe_images or [],
-            product_name=product_name,
-            errors=errors,
-        )
+        quality_report = {}
+        if quality_gate_enabled:
+            quality_report = await self._step_quality_gate(
+                reg=reg,
+                video_path="",
+                clip_paths=clip_paths,
+                storyboards=keyframe_images or [],
+                product_name=product_name,
+                errors=errors,
+                video_duration=video_duration,
+            )
         if quality_report:
             status = quality_report.get("overall_status", "N/A")
             logger.info("seedance_clips: quality gate complete", status=status)
@@ -1049,14 +1422,28 @@ class S1ProductDirectPipeline:
         brand_guidelines: dict[str, Any],
         label: str,
         errors: list[str],
+        clip_details: list[dict[str, Any]] | None = None,
     ) -> tuple[str, str]:
         # Flatten storyboards into a single shot list. If no storyboards, derive from scripts.
-        shots = self._collect_shots(storyboards, scripts)
-        captions = self._collect_captions(scripts)
+        shots = collect_shots(storyboards, scripts)
+        captions = collect_captions(scripts)
         total_duration = max(
             (float(s.get("end_time", 0)) for s in shots),
             default=30.0,
         )
+        transitions = []
+        for idx, detail in enumerate(clip_details or []):
+            transition_to_next = detail.get("transition_to_next", "")
+            if idx >= len(clip_paths) - 1 or not transition_to_next:
+                continue
+            transition_type = detail.get("transition_type", "clean")
+            transitions.append({
+                "from_clip": idx + 1,
+                "to_clip": idx + 2,
+                "type": transition_type,
+                "duration_frames": 12 if transition_type == "soft_crossfade" else 8,
+                "description": transition_to_next,
+            })
 
         res = await reg.execute("remotion-assemble-skill", {
             "shots": shots,
@@ -1067,6 +1454,7 @@ class S1ProductDirectPipeline:
             "brand_guidelines": brand_guidelines,
             "output_label": label,
             "total_duration": total_duration,
+            "transitions": transitions,
         })
         if res.success and res.data:
             return res.data.get("video_path", ""), res.data.get("render_json_path", "")
@@ -1084,6 +1472,7 @@ class S1ProductDirectPipeline:
         scripts: list[dict[str, Any]],
         thumbnail_sets: list[dict[str, Any]],
         language: str,
+        expected_duration_seconds: float,
         errors: list[str],
     ) -> dict[str, Any]:
         # Compose a flat script_text for content checks
@@ -1099,7 +1488,7 @@ class S1ProductDirectPipeline:
                 if isinstance(v, dict):
                     flat_thumb_prompts.append(v)
 
-        expected_duration = self._compute_expected_duration(scripts)
+        expected_duration = expected_duration_seconds or compute_expected_duration(scripts)
 
         res = await reg.execute("media-quality-audit-skill", {
             "video_path": video_path,
@@ -1116,69 +1505,6 @@ class S1ProductDirectPipeline:
             return res.data
         errors.append(f"audit_failed: {res.error}")
         return {}
-
-    # ═══ Helpers ═══
-
-    @staticmethod
-    def _collect_shots(storyboards: list[dict[str, Any]], scripts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Flatten storyboards into a single shot list with absolute timing."""
-        shots: list[dict[str, Any]] = []
-        cursor = 0.0
-
-        if storyboards:
-            for board in storyboards:
-                for shot in board.get("shots", []):
-                    duration = float(shot.get("end_time", 0)) - float(shot.get("start_time", 0))
-                    duration = max(duration, 1.0)
-                    shots.append({
-                        "id": len(shots) + 1,
-                        "start_time": cursor,
-                        "end_time": cursor + duration,
-                        "text_overlay": shot.get("text_overlay", "") or shot.get("description", ""),
-                        "visual": shot.get("visual", "") or shot.get("description", ""),
-                    })
-                    cursor += duration
-        else:
-            # Derive shots from the first 3 scripts' segments
-            for script in scripts[:3]:
-                for seg in script.get("segments", []):
-                    duration = float(seg.get("end_time", 5)) - float(seg.get("start_time", 0))
-                    duration = max(duration, 1.0)
-                    shots.append({
-                        "id": len(shots) + 1,
-                        "start_time": cursor,
-                        "end_time": cursor + duration,
-                        "text_overlay": seg.get("description", "")[:60],
-                        "visual": seg.get("visual_description", "") or seg.get("description", ""),
-                    })
-                    cursor += duration
-        return shots
-
-    @staticmethod
-    def _collect_captions(scripts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        captions: list[dict[str, Any]] = []
-        cursor = 0.0
-        for script in scripts[:MAX_CLIPS_PER_DEMO]:
-            for seg in script.get("segments", []):
-                duration = float(seg.get("end_time", 5)) - float(seg.get("start_time", 0))
-                text = seg.get("voiceover", "") or seg.get("description", "")
-                if text:
-                    captions.append({
-                        "start_time": cursor,
-                        "end_time": cursor + max(duration, 1.0),
-                        "text": text[:80],
-                    })
-                cursor += max(duration, 1.0)
-        return captions
-
-    @staticmethod
-    def _compute_expected_duration(scripts: list[dict[str, Any]]) -> float:
-        total = 0.0
-        for script in scripts[:MAX_CLIPS_PER_DEMO]:
-            for seg in script.get("segments", []):
-                duration = float(seg.get("end_time", 5)) - float(seg.get("start_time", 0))
-                total += max(duration, 1.0)
-        return total or 30.0
 
     @staticmethod
     def _fallback_briefs(product_name: str, brand_name: str, platform: str) -> list[dict[str, Any]]:

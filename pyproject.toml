@@ -22,6 +22,7 @@ dependencies = [
     "supabase>=2.0",
     "asyncpg>=0.29",
     "bcrypt>=4.2",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-mock>=3.12",
+    "pytest-timeout>=2.3",
     "pytest-cov>=4.1",
     "ruff>=0.3",
 ]
@@ -60,6 +62,7 @@ markers = [
     "e2e: 端到端测试,需要真实 API key / platform credentials / webhook URL",
     "llm_stability: 标记 LLM 非确定性测试 — 同 prompt 跑 N 次,验证输出 schema/字段稳定。CI 默认 skip(需 DEEPSEEK/OPENAI key + 配额),手动触发:`pytest -m llm_stability`",
     "media_stability: 标记媒体生成非确定性测试 — 同 prompt 生成 N 次,验证 duration/file_size 一致性。CI 默认 skip(需 POYO key + 配额),手动触发:`pytest -m media_stability`",
+    "hermetic_slow: 本地 hermetic 慢回归。默认 pytest 不跑；显式传 `-m hermetic_slow` 或 `PYTEST_INCLUDE_HERMETIC_SLOW=1` 时启用",
 ]
 
 [tool.pyright]
@@ -78,10 +81,20 @@ exclude = [
 reportMissingTypeArgument = true
 reportPossiblyUnboundVariable = true
 # Phase C/D: Unknown 类型治理 — 经评估，reportUnknown* 规则在 dict[str,Any] 为主
-# 的代码库中噪音远大于价值，暂不启用。核心收益已在 A+B 中捕获。
+# 的代码库中噪音远大于价值，暂不全局启用。核心收益已在 A+B 中捕获。
 # 2026-05-07 评估: 启用后 1258 错误(631 unknownVariable + 627 unknownMember),
 # 其中 60%+ 来自 dict/list[Any] 推断限制，非真实缺陷。修复 ROI 为负。
-# Phase D: full strict
+# 2026-06-09: 对已收敛的模块（step_utils.py, config.py）启用严格检查防止回退。
+[tool.pyright.executionEnvironments]
+  [tool.pyright.executionEnvironments.strict_modules]
+  root = "."
+  extraPaths = ["."]
+  reportUnknownMemberType = true
+  reportUnknownVariableType = true
+  include = [
+    "src/pipeline/step_utils.py",
+    "src/config.py",
+  ]
 
 [tool.coverage.run]
 source = ["src"]
@@ -90,3 +103,6 @@ omit = [
     "*/prompts/*",
     "*/__init__.py",
 ]
+
+[tool.coverage.report]
+fail_under = 35

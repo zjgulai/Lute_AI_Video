@@ -22,6 +22,8 @@ from typing import Any
 
 import structlog
 
+from src.models.runtime_contracts import TelemetryErrorEntry, TelemetryStepStats, TelemetrySummary
+
 logger = structlog.get_logger()
 
 # ── Trace ID generation ──
@@ -142,7 +144,7 @@ class PipelineMetrics:
                 error=str(exc)[:200],
             )
 
-    def get_summary(self) -> dict[str, Any]:
+    def get_summary(self) -> TelemetrySummary:
         """Return aggregated stats for all recorded metrics.
 
         Returns:
@@ -165,7 +167,7 @@ class PipelineMetrics:
         success_rate = total_success / total_runs if total_runs > 0 else 0.0
 
         # Per-step stats
-        per_step_stats: dict[str, dict[str, Any]] = {}
+        per_step_stats: dict[str, TelemetryStepStats] = {}
         for label, steps in self._step_metrics.items():
             for s in steps:
                 if s.step_name not in per_step_stats:
@@ -194,6 +196,26 @@ class PipelineMetrics:
             "labels": list(self._pipeline_metrics.keys()),
         }
 
+    def get_run_summary(self, label: str) -> dict[str, Any]:
+        """Return metrics for one pipeline run label."""
+        steps = self._step_metrics.get(label, [])
+        total_duration_ms = sum(step.duration_ms for step in steps)
+        return {
+            "trace_id": label,
+            "node_count": len(steps),
+            "total_duration_ms": round(total_duration_ms, 2),
+            "error_count": sum(1 for step in steps if not step.success),
+            "steps": [
+                {
+                    "step_name": step.step_name,
+                    "duration_ms": round(step.duration_ms, 2),
+                    "success": step.success,
+                    "timestamp": step.timestamp,
+                }
+                for step in steps
+            ],
+        }
+
 
 # ── Error Persistence (Admin Panel Phase 1) ──
 
@@ -213,7 +235,8 @@ def _persist_error_to_db(
     try:
         import asyncio
 
-        asyncio.ensure_future(
+        loop = asyncio.get_running_loop()
+        loop.create_task(
             _persist_error_async(label, step, error, context)
         )
     except Exception as exc:
@@ -279,7 +302,7 @@ class ErrorCollector:
     _MAX_ERRORS = 100
 
     def __init__(self) -> None:
-        self._errors: deque[dict[str, Any]] = deque(maxlen=self._MAX_ERRORS)
+        self._errors: deque[TelemetryErrorEntry] = deque(maxlen=self._MAX_ERRORS)
 
     def collect(
         self,
@@ -312,7 +335,7 @@ class ErrorCollector:
         # Persist to admin error_logs table (fire-and-forget, never blocks)
         _persist_error_to_db(label, step, error, dict(context))
 
-    def get_errors(self, label: str | None = None) -> list[dict[str, Any]]:
+    def get_errors(self, label: str | None = None) -> list[TelemetryErrorEntry]:
         """Return filtered errors.
 
         Args:
@@ -368,12 +391,20 @@ def timed_node(func):
                     context={"node": node_name},
                 )
 
+        def _attach_state_metrics(result: Any) -> Any:
+            if not isinstance(result, dict):
+                return result
+            updated = dict(result)
+            updated.setdefault("trace_id", trace_id)
+            updated["pipeline_metrics"] = pipeline_metrics.get_run_summary(trace_id)
+            return updated
+
         if asyncio.iscoroutinefunction(func):
             async def async_wrapper(*a, **kw):
                 try:
                     result = await func(*a, **kw)
                     _record(success=True)
-                    return result
+                    return _attach_state_metrics(result)
                 except Exception as exc:
                     _record(success=False, exc=exc)
                     raise
@@ -382,7 +413,7 @@ def timed_node(func):
             try:
                 result = func(state, *args, **kwargs)
                 _record(success=True)
-                return result
+                return _attach_state_metrics(result)
             except Exception as exc:
                 _record(success=False, exc=exc)
                 raise

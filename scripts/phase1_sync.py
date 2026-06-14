@@ -5,7 +5,7 @@ Usage: cd ~/project/hermes_evo/AI_vedio && python3 scripts/phase1_sync.py
 Then restart: source .venv/bin/activate && uvicorn src.api:app --reload --port 8001
 """
 
-import os, sys
+import os
 
 PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

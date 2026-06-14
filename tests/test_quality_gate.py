@@ -1,11 +1,8 @@
 """Tests for the extended media quality audit — quality gate checks."""
 
 import asyncio
-from pathlib import Path
-from unittest.mock import patch
 
 from src.skills.media_quality_audit import MediaQualityAuditSkill
-from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
 
 

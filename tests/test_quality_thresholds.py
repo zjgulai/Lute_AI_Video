@@ -51,6 +51,7 @@ class TestThresholdConfigurability:
         monkeypatch.setenv(env_var, override_value)
         # Force re-import by clearing cache
         import importlib
+
         import src.config as config_mod
 
         importlib.reload(config_mod)
@@ -66,8 +67,8 @@ class TestEnforceModeBehavior:
     def _patch_mode(monkeypatch, mode: str):
         """Patch QUALITY_MODE on imported modules without full reload."""
         import src.config as config_mod
-        import src.skills.seedance_video_generate as sdg_mod
         import src.skills.remotion_assemble as ra_mod
+        import src.skills.seedance_video_generate as sdg_mod
 
         monkeypatch.setattr(config_mod, "QUALITY_MODE", mode)
         monkeypatch.setattr(sdg_mod, "QUALITY_MODE", mode)
@@ -108,12 +109,13 @@ class TestEnforceModeBehavior:
         assert result["audio_dur"] == 0.0
 
     def test_observe_mode_does_not_block_variance(self, sample_videos, monkeypatch):
-        """In observe mode, black screen video should still pass all_ok."""
+        """In observe mode, variance is skipped for speed and never blocks all_ok."""
         _, sdg_mod, _ = self._patch_mode(monkeypatch, "observe")
         skill = sdg_mod.SeedanceVideoGenerateSkill()
         verification = skill._self_verify(sample_videos["black"], is_stub=False)
-        # In observe mode all_ok ignores variance; verify by checking the 4 base flags
-        assert verification["variance_ok"] is False
+        # P0-3 speed contract: observe/off mode does not run ffmpeg frame variance.
+        assert verification["variance_ok"] is True
+        assert verification["variance_details"] is None
         assert verification["all_ok"] == (
             verification["size_ok"]
             and verification["header_ok"]

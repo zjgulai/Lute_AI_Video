@@ -7,26 +7,30 @@ them with products. Falls back to mock mode when credentials are absent.
 import asyncio
 import logging
 import os
-import random
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
 import httpx
 
+from src.config import SHOPIFY_GRAPHQL_URL_TEMPLATE
 from src.connectors.base import PlatformConnector
 
 logger = logging.getLogger(__name__)
 
 # Shopify Admin GraphQL endpoint (version 2024-07 or later supports fileCreate)
-_SHOPIFY_GRAPHQL_URL = "https://{store}/admin/api/2024-07/graphql.json"
+_SHOPIFY_GRAPHQL_URL = SHOPIFY_GRAPHQL_URL_TEMPLATE
 
 
 def _is_mock_mode() -> bool:
-    """Return True when no real Shopify API credentials are available."""
-    api_key = os.environ.get("SHOPIFY_API_KEY", "")
+    """Return True when no real Shopify API credentials are available.
+
+    Checks SHOPIFY_ACCESS_TOKEN (canonical), falls back to SHOPIFY_API_KEY (legacy).
+    Ref: debt-audit-report-2026-06-09.md item CFG-2.
+    """
+    token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get("SHOPIFY_API_KEY", "")
     store_url = os.environ.get("SHOPIFY_STORE_URL", "")
-    return not api_key or not store_url
+    return not token or not store_url
 
 
 def _admin_url() -> str:
@@ -508,14 +512,6 @@ class ShopifyConnector(PlatformConnector):
     async def _mock_publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Simulate a Shopify publish (used when credentials are absent)."""
         await asyncio.sleep(1.5)
-
-        if random.random() < 0.1:
-            return {
-                "success": False,
-                "error": "Mock: Shopify API rate limit exceeded",
-                "status": "failed",
-                "platform": "shopify",
-            }
 
         mock_id = f"sp_mock_{uuid4().hex[:8]}"
         return {

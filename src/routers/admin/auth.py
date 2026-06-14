@@ -127,7 +127,7 @@ async def admin_login(request: Request, response: Response) -> dict[str, Any]:
         httponly=False,
         secure=request.url.scheme == "https",
         samesite="lax",
-        path="/api/admin",
+        path="/",
         max_age=86400,
     )
 
@@ -183,7 +183,7 @@ async def admin_logout(
     )
     response.delete_cookie(
         key=CSRF_COOKIE_NAME,
-        path="/api/admin",
+        path="/",
     )
     from src.storage.audit_logger import audit_log
     await audit_log(

@@ -1,11 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import Nav from "./Nav";
 import PipelineStatusBar from "./PipelineStatusBar";
 import { useI18n } from "@/i18n/I18nProvider";
 
-export default function TopHeader() {
+interface TopHeaderProps {
+  actions?: ReactNode;
+}
+
+export default function TopHeader({ actions }: TopHeaderProps) {
   const { t } = useI18n();
   return (
     <header className="sticky top-0 z-40 bg-[var(--bg-page)]/85 backdrop-blur-xl border-b border-[var(--divider-subtle)]">
@@ -23,6 +28,11 @@ export default function TopHeader() {
           </Link>
           <Nav />
         </div>
+        {actions ? (
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {actions}
+          </div>
+        ) : null}
       </div>
       <PipelineStatusBar />
     </header>

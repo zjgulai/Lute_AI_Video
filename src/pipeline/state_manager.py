@@ -36,6 +36,22 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _LABEL_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+_STATE_REPOSITORY_FIELDS = (
+    "scenario",
+    "config",
+    "steps",
+    "current_step",
+    "mode",
+    "errors",
+    "media_synthesis_errors",
+    "gates",
+    "schema_version",
+    "pipeline_degraded",
+    "degraded_reason",
+    "trace_id",
+    "structured_errors",
+    "tenant_id",
+)
 
 
 def _validate_label(label: str) -> None:
@@ -75,6 +91,11 @@ def _check_schema_version(state: dict[str, Any] | None, label: str) -> None:
             "(loading proceeds; consider migration)",
             label, persisted, STATE_SCHEMA_VERSION,
         )
+
+
+def _repository_payload(state: dict[str, Any]) -> dict[str, Any]:
+    """Build the canonical PG projection for persisted scenario state."""
+    return {field: state.get(field) for field in _STATE_REPOSITORY_FIELDS}
 
 
 class PipelineStateManager:
@@ -146,25 +167,7 @@ class PipelineStateManager:
             try:
                 repo = PipelineStateRepository()
                 existing = await repo.get_by_label(label)
-                data = {
-                    "scenario": state.get("scenario"),
-                    "config": state.get("config"),
-                    "steps": state.get("steps"),
-                    "current_step": state.get("current_step"),
-                    "mode": state.get("mode"),
-                    "errors": state.get("errors"),
-                    "media_synthesis_errors": state.get("media_synthesis_errors"),
-                    "gates": state.get("gates"),
-                    # Phase 0 #1 (2026-05-15): persist runtime state fields
-                    # that previously vanished on PG round-trip. All 5 are
-                    # nullable in PG schema (migration 7a2f4b8c9d12).
-                    "schema_version": state.get("schema_version"),
-                    "pipeline_degraded": state.get("pipeline_degraded"),
-                    "degraded_reason": state.get("degraded_reason"),
-                    "trace_id": state.get("trace_id"),
-                    "structured_errors": state.get("structured_errors"),
-                    "tenant_id": state.get("tenant_id"),
-                }
+                data = _repository_payload(state)
                 if existing:
                     await repo.update(existing["id"], data)
                 else:
@@ -253,18 +256,7 @@ class PipelineStateManager:
             )
             try:
                 repo = PipelineStateRepository()
-                await repo.create({
-                    "label": label,
-                    "scenario": fs_state.get("scenario"),
-                    "config": fs_state.get("config"),
-                    "steps": fs_state.get("steps"),
-                    "current_step": fs_state.get("current_step"),
-                    "mode": fs_state.get("mode"),
-                    "errors": fs_state.get("errors"),
-                    "media_synthesis_errors": fs_state.get("media_synthesis_errors"),
-                    "gates": fs_state.get("gates"),
-                    "tenant_id": fs_state.get("tenant_id"),
-                })
+                await repo.create({"label": label, **_repository_payload(fs_state)})
             except Exception as e:
                 logger.warning("PG backfill failed for %s: %s", label, str(e)[:100])
             _check_schema_version(fs_state, label)
@@ -306,27 +298,11 @@ class PipelineStateManager:
             label = f.stem
             with open(f, encoding="utf-8") as fh:
                 state = json.load(fh)
+            data = _repository_payload(state)
             existing = await repo.get_by_label(label)
             if existing:
-                await repo.update(existing["id"], {
-                    "scenario": state.get("scenario"),
-                    "config": state.get("config"),
-                    "steps": state.get("steps"),
-                    "current_step": state.get("current_step"),
-                    "mode": state.get("mode"),
-                    "errors": state.get("errors"),
-                    "media_synthesis_errors": state.get("media_synthesis_errors"),
-                })
+                await repo.update(existing["id"], data)
             else:
-                await repo.create({
-                    "label": label,
-                    "scenario": state.get("scenario"),
-                    "config": state.get("config"),
-                    "steps": state.get("steps"),
-                    "current_step": state.get("current_step"),
-                    "mode": state.get("mode"),
-                    "errors": state.get("errors"),
-                    "media_synthesis_errors": state.get("media_synthesis_errors"),
-                })
+                await repo.create({"label": label, **data})
             count += 1
         return count

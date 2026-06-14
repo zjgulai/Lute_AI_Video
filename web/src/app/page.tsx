@@ -9,13 +9,20 @@ import { ShieldCheck } from "@phosphor-icons/react";
 import type { AuditReport, ReviewState } from "@/components/types";
 import { REVIEW_NODES } from "@/components/types";
 import { errorMessage } from "@/lib/errors";
+import { handleSmartCreateStageError } from "@/lib/smartCreateError";
+import { withScenarioContinuityConfig } from "@/lib/scenarioContinuity";
+import { sceneToPath, sceneToScenarioId } from "@/lib/scenarioRouting";
+import { extractGalleryResultFields, normalizePipelineResult } from "@/lib/pipelineResult";
+import {
+  normalizeStepByStepState,
+  normalizeWorkflowState,
+} from "@/lib/pipelineState";
 import {
   fetchState,
   submitReview,
   runS1ProductDirect,
   runS5BrandVlog,
   startS1StepByStep,
-  resumeS1,
   fetchS1State,
   getMediaUrl,
   isDemoMode,
@@ -26,7 +33,6 @@ import {
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
 import PipelineMonitor from "@/components/PipelineMonitor";
-import PipelineStatusBar from "@/components/PipelineStatusBar";
 import ReviewPanel from "@/components/ReviewPanel";
 import DistributionView from "@/components/DistributionView";
 import OneShotResultView from "@/components/OneShotResultView";
@@ -40,14 +46,14 @@ import SplashScreen from "@/components/SplashScreen";
 import ApiKeyGate from "@/components/ApiKeyGate";
 import RecommendPanel from "@/components/RecommendPanel";
 import FastModePanel from "@/components/FastModePanel";
-import Nav from "@/components/Nav";
+import TopHeader from "@/components/TopHeader";
 import SettingsPanel from "@/components/SettingsPanel";
 import ExecutionBar from "@/components/ExecutionBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useI18n } from "@/i18n/I18nProvider";
 import { DEMO_RESULT_1, DEMO_RESULT_2, DEMO_RESULT_VLOG } from "@/demo-data";
 import { useAppStore } from "@/stores/useAppStore";
-import { usePipelineStore } from "@/stores/usePipelineStore";
+import { usePipelineStore, type PipelineResult } from "@/stores/usePipelineStore";
 import { useExpertStore } from "@/stores/useExpertStore";
 import { useExecutionBar } from "@/hooks/useExecutionBar";
 import { useSubmitting } from "@/hooks/useSubmitting";
@@ -82,15 +88,12 @@ type SceneConfig = UnknownRecord & {
   scene_id?: string;
   selected_models?: unknown[];
   story_description?: string;
-};
-
-type GalleryResult = {
-  briefs?: UnknownRecord[];
-  scripts?: UnknownRecord[];
-  thumbnail_image_paths?: string[];
-  final_video_path?: string;
-  video_duration?: number;
-  audit_report?: { overall_score?: number };
+  enable_media_synthesis?: boolean;
+  continuity_mode?: boolean | string;
+  continuity_generation_mode?: string;
+  storyboard_grid?: number | string;
+  clip_group_size?: number;
+  transition_style?: string;
 };
 
 function asRecord(value: unknown): UnknownRecord {
@@ -103,6 +106,10 @@ function asAuditReport(value: unknown): AuditReport | null {
     return value as AuditReport;
   }
   return null;
+}
+
+function supportsStepByStep(contentScenario: string): boolean {
+  return contentScenario === "product_direct";
 }
 
 function extractVersions(state: PipelineStateLike): Version[] {
@@ -246,15 +253,15 @@ export default function Home() {
     workflowLabel, setWorkflowLabel,
     workflowState, setWorkflowState,
     showWorkflow, setShowWorkflow,
-    currentStepIdx, setCurrentStepIdx,
-    showSteps, setShowSteps,
+    currentStepIdx,
+    showSteps,
     startActivePipeline,
     clearActivePipeline,
   } = usePipelineStore();
 
   const {
     currentGate, setCurrentGate,
-    showStageProgress, setShowStageProgress,
+    setShowStageProgress,
     compareVersions, setCompareVersions,
     showCompare, setShowCompare,
   } = useExpertStore();
@@ -290,19 +297,20 @@ export default function Home() {
   }, [t, showToast, setDisconnected]);
 
   // v2.0: Save completed creations to gallery (localStorage)
-  const saveToGallery = useCallback((result: GalleryResult, scenario: string) => {
+  const saveToGallery = useCallback((result: PipelineResult, scenario: string) => {
     try {
-      const brief = result?.briefs?.[0] || {};
-      const script = result?.scripts?.[0] || {};
+      const galleryFields = extractGalleryResultFields(result);
+      const brief = galleryFields.briefs[0] || {};
+      const script = galleryFields.scripts[0] || {};
       const item = {
         id: `${scenario}-${Date.now()}`,
         title: brief.product_name || brief.brand_name || script.product_name || t("gallery.untitled") || "Untitled",
         scene: scenario,
         videoType: brief.video_type || "default",
-        thumbnail: result?.thumbnail_image_paths?.[0] || "",
-        videoPath: result?.final_video_path || "",
-        duration: result?.video_duration || 0,
-        score: result?.audit_report?.overall_score || 0,
+        thumbnail: galleryFields.thumbnailImagePaths[0] || "",
+        videoPath: galleryFields.finalVideoPath,
+        duration: galleryFields.videoDuration,
+        score: galleryFields.auditScore,
         createdAt: new Date().toISOString(),
       };
       const stored = JSON.parse(localStorage.getItem("hermes_gallery_items") || "[]");
@@ -315,6 +323,12 @@ export default function Home() {
 
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname !== "/settings") return;
+    setShowSplash(false);
+    setShowSettings(true);
+  }, [pathname, setShowSettings, setShowSplash]);
 
   // Expert Studio gate progression
   const GATE_SEQUENCE = [
@@ -337,10 +351,18 @@ export default function Home() {
     if (stepByStepLabel) {
       try {
         const partial = await fetchS1State(stepByStepLabel);
-        if (partial) { setStepByStepState(partial); setShowStepByStep(true); }
+        if (partial) { setStepByStepState(normalizeStepByStepState(partial)); setShowStepByStep(true); }
       } catch { showToast(t("toast.cancelNoPartial"), "info"); }
     }
-  }, [stepByStepLabel, t]);
+  }, [
+    setLoading,
+    setShowStageProgress,
+    setShowStepByStep,
+    setStepByStepState,
+    showToast,
+    stepByStepLabel,
+    t,
+  ]);
 
   const S1_STEPS = [
     { label: t("wstep.strategy"), duration: 5000 },
@@ -400,7 +422,7 @@ export default function Home() {
           setShowWorkflow(true);
           // Restore workflow state asynchronously; clear stale session on failure
           fetchS1State(session.workflowLabel)
-            .then((state) => setWorkflowState(state))
+            .then((state) => setWorkflowState(normalizeWorkflowState(state)))
             .catch(() => {
               localStorage.removeItem("ai_video_expert_session");
               setWorkflowLabel(null);
@@ -413,7 +435,16 @@ export default function Home() {
         localStorage.removeItem("ai_video_expert_session");
       }
     }
-  }, []);
+  }, [
+    setCurrentGate,
+    setMode,
+    setReviewState,
+    setShowWorkflow,
+    setStage,
+    setThreadId,
+    setWorkflowLabel,
+    setWorkflowState,
+  ]);
 
   // showToast is now useAppStore.getState().showToast
 
@@ -449,7 +480,7 @@ export default function Home() {
         setDisconnected(true);
       }
     }
-  }, [threadId]);
+  }, [setDisconnected, setReviewState, setThreadId, threadId]);
 
   // P3-2: Adaptive polling — active 3s, complete 10s, disconnected 30s
   const getPollInterval = useCallback((): number => {
@@ -488,23 +519,11 @@ export default function Home() {
       setMode(sceneConfig.mode);
     }
     setStage("recommend");
-  }, []);
-
-  // Map frontend content_scenario to backend scenario ID
-  const scenarioToId = (scenario: string): string => {
-    const map: Record<string, string> = {
-      product_direct: "s1",
-      brand_campaign: "s2",
-      influencer_remix: "s3",
-      live_shoot: "s4",
-      brand_vlog: "s5",
-    };
-    return map[scenario] || "s1";
-  };
+  }, [setMode, setStage]);
 
   const startSmartCreate = (config: SceneConfig) => wrapStart(async () => {
     const scenario = config.content_scenario || "product_direct";
-    const scenarioId = scenarioToId(scenario);
+    const scenarioId = sceneToScenarioId(scenario);
     setFieldErrors({});
 
     // Demo mode: skip API calls, serve mock data instantly
@@ -524,17 +543,18 @@ export default function Home() {
     setShowStageProgress(true);
     startGenerating(t("exec.narrative.analyzing"));
     try {
+      const submitPayload = {
+        product_catalog: config.product_catalog,
+        brand_guidelines: config.brand_guidelines,
+        target_platforms: config.target_platforms,
+        target_languages: config.target_languages || ["en"],
+        week: config.content_calendar_week || "",
+        video_duration: config.video_duration || 30,
+      };
       // Phase 1B: Unified async submit — returns label immediately, pipeline runs in background
       const submitResult = await submitScenario(
         scenarioId,
-        {
-          product_catalog: config.product_catalog,
-          brand_guidelines: config.brand_guidelines,
-          target_platforms: config.target_platforms,
-          target_languages: config.target_languages || ["en"],
-          week: config.content_calendar_week || "",
-          video_duration: config.video_duration || 30,
-        },
+        withScenarioContinuityConfig(config, submitPayload),
         { signal: abortRef.current?.signal }
       );
       setSmartCreateLabel(submitResult.label);
@@ -549,14 +569,17 @@ export default function Home() {
       // Fallback: legacy blocking endpoint for s1 only
       if (scenarioId === "s1") {
         try {
-          const result = await runS1ProductDirect({
-            product_catalog: config.product_catalog,
-            brand_guidelines: config.brand_guidelines,
-            target_platforms: config.target_platforms,
-            target_languages: config.target_languages || ["en"],
-            week: config.content_calendar_week || "",
-            video_duration: config.video_duration || 30,
-          }, { signal: abortRef.current?.signal });
+          const result = await runS1ProductDirect(
+            withScenarioContinuityConfig(config, {
+              product_catalog: config.product_catalog,
+              brand_guidelines: config.brand_guidelines,
+              target_platforms: config.target_platforms,
+              target_languages: config.target_languages || ["en"],
+              week: config.content_calendar_week || "",
+              video_duration: config.video_duration || 30,
+            }),
+            { signal: abortRef.current?.signal }
+          );
           const label = result?.label || `s1_${Date.now()}`;
           setSmartCreateLabel(label);
           startActivePipeline({
@@ -578,6 +601,15 @@ export default function Home() {
       }
     }
   });
+
+  const handleSmartCreateError = useCallback((errors: string[]) => {
+    handleSmartCreateStageError(errors, {
+      stopGenerating,
+      clearActivePipeline,
+      showToast,
+      t,
+    });
+  }, [clearActivePipeline, showToast, stopGenerating, t]);
 
   const handleStart = (config: SceneConfig) => wrapStart(async () => {
     setFieldErrors({});
@@ -629,7 +661,11 @@ export default function Home() {
     setLoading(true);
     const scenario = config.content_scenario || "product_direct";
 
-    const effectiveMode = config.mode || pipelineMode;
+    const effectiveModeRaw = config.mode || pipelineMode;
+    const effectiveMode = supportsStepByStep(scenario) ? effectiveModeRaw : "auto";
+    if (effectiveModeRaw === "step_by_step" && !supportsStepByStep(scenario)) {
+      showToast(t("toast.stepByStepS1Only"), "info");
+    }
     if (scenario === "brand_vlog") {
       // S5 Brand VLOG — dedicated endpoint
       setLoadingText(t("app.loading"));
@@ -641,6 +677,7 @@ export default function Home() {
           selected_models: config.selected_models || [],
           story_description: config.story_description || "",
           video_duration: config.video_duration || 30,
+          ...withScenarioContinuityConfig(config, {}),
         }, { signal: abortRef.current?.signal });
         setOneshotResult(result);
         setOneshotScenario(scenario);
@@ -657,19 +694,22 @@ export default function Home() {
       // Auto mode: run all steps in one shot
       setLoadingText(t("app.loading"));
       try {
-        const result = await runS1ProductDirect({
-          product_catalog: {
-            name: config.product_catalog?.products?.[0]?.name
-              || config.product_catalog?.name
-              || "Product",
-            ...(config.product_catalog || {}),
-          },
-          brand_guidelines: config.brand_guidelines,
-          target_platforms: config.target_platforms || ["tiktok", "shopify"],
-          target_languages: config.target_languages || ["en"],
-          week: config.content_calendar_week || "",
-          video_duration: config.video_duration || videoDuration,
-        }, { signal: abortRef.current?.signal });
+        const result = await runS1ProductDirect(
+          withScenarioContinuityConfig(config, {
+            product_catalog: {
+              name: config.product_catalog?.products?.[0]?.name
+                || config.product_catalog?.name
+                || "Product",
+              ...(config.product_catalog || {}),
+            },
+            brand_guidelines: config.brand_guidelines,
+            target_platforms: config.target_platforms || ["tiktok", "shopify"],
+            target_languages: config.target_languages || ["en"],
+            week: config.content_calendar_week || "",
+            video_duration: config.video_duration || videoDuration,
+          }),
+          { signal: abortRef.current?.signal }
+        );
 
         setOneshotResult(result);
         setOneshotScenario(scenario);
@@ -685,24 +725,27 @@ export default function Home() {
     // Step-by-step mode
     try {
       setLoadingText(t("app.loading"));
-      const result = await startS1StepByStep({
-        product_catalog: {
-          name: config.product_catalog?.products?.[0]?.name
-            || config.product_catalog?.name
-            || "Product",
-          brand_name: config.brand_guidelines?.brand_name || "",
-          usps: config.product_catalog?.products?.[0]?.usps
-            || config.product_catalog?.usps
-            || [],
-          // Preserve all product context fields from SceneForm
-          ...(config.product_catalog?.products?.[0] || {}),
-        },
-        brand_guidelines: config.brand_guidelines,
-        target_platforms: config.target_platforms || ["tiktok", "shopify"],
-        target_languages: config.target_languages || ["en"],
-        week: config.content_calendar_week || "",
-        video_duration: config.video_duration || videoDuration,
-      }, { signal: abortRef.current?.signal });
+      const result = await startS1StepByStep(
+        withScenarioContinuityConfig(config, {
+          product_catalog: {
+            name: config.product_catalog?.products?.[0]?.name
+              || config.product_catalog?.name
+              || "Product",
+            brand_name: config.brand_guidelines?.brand_name || "",
+            usps: config.product_catalog?.products?.[0]?.usps
+              || config.product_catalog?.usps
+              || [],
+            // Preserve all product context fields from SceneForm
+            ...(config.product_catalog?.products?.[0] || {}),
+          },
+          brand_guidelines: config.brand_guidelines,
+          target_platforms: config.target_platforms || ["tiktok", "shopify"],
+          target_languages: config.target_languages || ["en"],
+          week: config.content_calendar_week || "",
+          video_duration: config.video_duration || videoDuration,
+        }),
+        { signal: abortRef.current?.signal }
+      );
       if (!result || !result.label) {
         showToast(t("toast.abnormalData"), "error");
         setLoading(false);
@@ -710,7 +753,7 @@ export default function Home() {
       }
       setWorkflowConfig(config);
       setWorkflowLabel(result.label);
-      setWorkflowState(result.state || {});
+      setWorkflowState(normalizeWorkflowState(result.state || {}));
       setShowWorkflow(true);
       setCurrentGate(1);
       startActivePipeline({
@@ -915,19 +958,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* Header */}
-        <header className="sticky top-0 z-40 bg-[var(--bg-page)]/85 backdrop-blur-xl border-b border-[var(--divider-subtle)]">
-          <div className="max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-[var(--fortune-red)] flex items-center justify-center">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M8 5v14l11-7z" fill="white" />
-                </svg>
-              </div>
-              <span className="text-sm font-semibold text-[var(--text-h1)] tracking-tight">{t("app.title")}</span>
-              <Nav />
-            </div>
-            <div className="flex items-center gap-2">
+        <TopHeader
+          actions={
+            <>
               <Link
                 href="/admin/dashboard"
                 aria-label={t("nav.admin")}
@@ -938,16 +971,16 @@ export default function Home() {
               </Link>
               {Boolean(threadId || oneshotResult) && (
                 <button
+                  type="button"
                   onClick={requestAbandon}
                   className="text-xs text-[var(--text-muted)] hover:text-[var(--text-h1)] transition-colors px-3 py-1.5 rounded-lg hover:bg-[rgba(53,20,26,0.06)] cursor-pointer"
                 >
                   {t("app.abandon")}
                 </button>
               )}
-            </div>
-          </div>
-          <PipelineStatusBar />
-        </header>
+            </>
+          }
+        />
 
         <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 overflow-x-hidden">
           <div key={stage + (activeScene || "")}>
@@ -1104,11 +1137,12 @@ export default function Home() {
           {stage === "generate" && mode === "smart" && smartCreateLabel !== null ? (
             <StageProgress
               label={smartCreateLabel}
-              scenario={scenarioToId(activeScene || "product_direct")}
+              scenario={sceneToScenarioId(activeScene || "product_direct")}
+              onError={handleSmartCreateError}
               onComplete={(result) => {
                 setOneshotResult(result);
                 setOneshotScenario(activeScene || "product_direct");
-                saveToGallery(result as GalleryResult, activeScene || "product_direct");
+                saveToGallery(result, activeScene || "product_direct");
                 setStage("result");
                 setShowStageProgress(false);
                 clearActivePipeline();
@@ -1131,12 +1165,12 @@ export default function Home() {
           {showStepByStep && stepByStepLabel !== null && stepByStepState !== null ? (
             <StepByStepView
               label={stepByStepLabel}
-              state={stepByStepState as Record<string, unknown>}
+              state={stepByStepState}
               onStepComplete={(newState) => setStepByStepState(newState)}
               onResume={(finalState) => {
                 setStepByStepState(finalState);
                 setShowStepByStep(false);
-                setOneshotResult(finalState);
+                setOneshotResult(normalizePipelineResult(finalState));
                 setOneshotScenario("product_direct");
                 showToast(t("toast.stepByStepDone"), "success");
               }}
@@ -1154,7 +1188,7 @@ export default function Home() {
               onStateChange={(newState) => setWorkflowState(newState)}
               onComplete={(finalState) => {
                 setShowWorkflow(false);
-                setOneshotResult(finalState);
+                setOneshotResult(normalizePipelineResult(finalState));
                 setOneshotScenario("product_direct");
                 showToast(t("toast.workflowDone"), "success");
               }}
@@ -1258,6 +1292,7 @@ export default function Home() {
           confirmLabel={t("confirm.abandon.yes")}
           confirmVariant="danger"
           cancelLabel={t("confirm.cancel")}
+          closeLabel={t("common.close")}
           onConfirm={confirmAbandon}
           onCancel={() => setShowAbandonConfirm(false)}
         />
@@ -1284,16 +1319,8 @@ function URLSync({
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (showSplash) return;
-    const sceneToPath: Record<string, string> = {
-      product_direct: "/s1",
-      brand_campaign: "/s2",
-      influencer_remix: "/s3",
-      live_shoot: "/s4",
-      brand_vlog: "/s5",
-      fast_mode: "/fast",
-    };
-    const targetPath = sceneToPath[activeScene];
+    if (showSplash || pathname === "/settings") return;
+    const targetPath = sceneToPath(activeScene);
     if (targetPath && pathname !== targetPath) {
       const params = new URLSearchParams(searchParams.toString());
       if (mode) params.set("mode", mode);

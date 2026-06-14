@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { UploadSimple, Image as ImageIcon, WarningCircle, ArrowSquareOut } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
 import EmptyState from "@/components/EmptyState";
+import RuntimeMediaImage from "@/components/RuntimeMediaImage";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface BrandPreset {
   id: string;
@@ -63,6 +66,10 @@ function prettifySlug(slug: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function productGroupKey(group: Pick<ProductGroup, "brand" | "slug">): string {
+  return `${group.brand}/${group.slug}`;
+}
+
 function groupByProduct(files: PortfolioFile[]): ProductGroup[] {
   const map = new Map<string, ProductGroup>();
   for (const f of files) {
@@ -108,7 +115,8 @@ export default function BrandKitTab() {
   const [files, setFiles] = useState<PortfolioFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
+  const [expandedProductKey, setExpandedProductKey] = useState<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,9 +143,16 @@ export default function BrandKitTab() {
   const productGroups = useMemo(() => groupByProduct(files), [files]);
   const totalImages = files.length;
 
-  const expandedGroup = expandedSlug
-    ? productGroups.find((g) => g.slug === expandedSlug)
+  const expandedGroup = expandedProductKey
+    ? productGroups.find((g) => productGroupKey(g) === expandedProductKey)
     : null;
+  const closeExpandedGroup = () => setExpandedProductKey(null);
+
+  useModalBehavior({
+    open: Boolean(expandedGroup),
+    onClose: closeExpandedGroup,
+    initialFocusRef: closeButtonRef,
+  });
 
   return (
     <div className="space-y-6">
@@ -160,7 +175,13 @@ export default function BrandKitTab() {
             >
               <div className="aspect-square bg-[var(--bg-panel)] flex items-center justify-center overflow-hidden">
                 {item.type === "logo" && item.preview ? (
-                  <img src={item.preview} alt={item.title} className="max-w-[60%] max-h-[60%] object-contain" />
+                  <Image
+                    src={item.preview}
+                    alt={item.title}
+                    width={160}
+                    height={160}
+                    className="max-w-[60%] max-h-[60%] object-contain"
+                  />
                 ) : (
                   <div className="w-full h-full flex flex-col">
                     <div className="flex-1" style={{ background: "#6A2B3A" }} />
@@ -249,15 +270,14 @@ export default function BrandKitTab() {
                 data-kind="brand_kit"
                 data-brand={g.brand}
                 data-slug={g.slug}
-                onClick={() => setExpandedSlug(g.slug)}
+                onClick={() => setExpandedProductKey(productGroupKey(g))}
                 className="apple-card overflow-hidden hover:shadow-md transition-all duration-200 text-left cursor-pointer"
               >
                 <div className="aspect-square bg-[var(--bg-panel)] overflow-hidden">
-                  <img
+                  <RuntimeMediaImage
                     src={getMediaUrl(g.coverPath)}
                     alt={g.prettyName}
                     className="w-full h-full object-cover"
-                    loading="lazy"
                   />
                 </div>
                 <div className="p-3">
@@ -284,8 +304,11 @@ export default function BrandKitTab() {
 
       {expandedGroup && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="brand-kit-preview-title"
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setExpandedSlug(null)}
+          onClick={closeExpandedGroup}
         >
           <div
             className="apple-card max-w-5xl max-h-[90vh] overflow-y-auto"
@@ -294,7 +317,7 @@ export default function BrandKitTab() {
             <header className="sticky top-0 z-10 px-5 py-4 bg-[var(--bg-card)]/95 backdrop-blur-md border-b border-[var(--border-default)]">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <h4 className="text-[15px] font-semibold text-[var(--text-h1)]">
+                  <h4 id="brand-kit-preview-title" className="text-[15px] font-semibold text-[var(--text-h1)]">
                     {expandedGroup.prettyName}
                   </h4>
                   <div className="flex items-center gap-3 mt-1 text-[11px] text-[var(--text-muted)]">
@@ -329,7 +352,8 @@ export default function BrandKitTab() {
                     </a>
                   )}
                   <button
-                    onClick={() => setExpandedSlug(null)}
+                    ref={closeButtonRef}
+                    onClick={closeExpandedGroup}
                     className="text-[12px] text-[var(--text-muted)] hover:text-[var(--text-h1)] px-2 py-1"
                     aria-label={t("guide.back")}
                   >
@@ -348,11 +372,10 @@ export default function BrandKitTab() {
                   className="apple-card overflow-hidden hover:shadow-md transition-all"
                 >
                   <div className="aspect-square bg-[var(--bg-panel)]">
-                    <img
+                    <RuntimeMediaImage
                       src={getMediaUrl(f.path)}
                       alt={f.filename}
                       className="w-full h-full object-cover"
-                      loading="lazy"
                     />
                   </div>
                   <div className="px-2 py-1.5 flex items-center justify-between">

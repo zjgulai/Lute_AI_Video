@@ -1,0 +1,82 @@
+{
+  "fixture_id": "c5_c7_quality_gate_cases_20260604",
+  "evidence_level": "L2-fixture-or-dry-run",
+  "cases": [
+    {
+      "case_id": "s1_claim_missing_blocks_delivery",
+      "scenario": "s1",
+      "stage": "final_video",
+      "blocking_checks": ["claim_substantiation_pass"],
+      "required_evidence": ["claim_evidence_refs"],
+      "expected_gate_status": "blocked",
+      "expected_repair_checks": ["required_evidence", "claim_substantiation_pass"]
+    },
+    {
+      "case_id": "s3_source_fingerprint_missing_blocks_remix",
+      "scenario": "s3",
+      "stage": "final_video",
+      "blocking_checks": ["source_fingerprint_pass"],
+      "required_evidence": ["source_fingerprint_refs"],
+      "expected_gate_status": "blocked",
+      "expected_repair_checks": ["required_evidence", "source_fingerprint_pass"]
+    },
+    {
+      "case_id": "s3_longform_missing_timeline_edl_blocks",
+      "scenario": "s3",
+      "stage": "final_video",
+      "blocking_checks": [
+        "source_rights_pass",
+        "source_fingerprint_pass",
+        "timeline_manifest_pass",
+        "edl_pass"
+      ],
+      "required_evidence": ["rights_evidence_refs", "timeline_manifest_refs", "edit_decision_list_refs"],
+      "expected_gate_status": "blocked",
+      "expected_repair_checks": [
+        "required_evidence",
+        "source_rights_pass",
+        "source_fingerprint_pass",
+        "timeline_manifest_pass",
+        "edl_pass"
+      ]
+    },
+    {
+      "case_id": "s4_footage_rights_missing_blocks_cutdown",
+      "scenario": "s4",
+      "stage": "final_video",
+      "blocking_checks": ["footage_rights_pass"],
+      "required_evidence": ["rights_evidence_refs"],
+      "expected_gate_status": "blocked",
+      "expected_repair_checks": ["required_evidence", "footage_rights_pass"]
+    },
+    {
+      "case_id": "s4_caption_safe_zone_missing_blocks_reframe",
+      "scenario": "s4",
+      "stage": "post_production",
+      "blocking_checks": ["caption_safe_zone_pass", "edl_pass"],
+      "required_evidence": ["caption_safe_zone_refs", "edit_decision_list_refs"],
+      "expected_gate_status": "blocked",
+      "expected_repair_checks": ["required_evidence", "caption_safe_zone_pass", "edl_pass"]
+    },
+    {
+      "case_id": "s5_children_direct_reference_blocks_vlog",
+      "scenario": "s5",
+      "stage": "final_video",
+      "blocking_checks": ["children_safety_pass"],
+      "required_evidence": [],
+      "expected_gate_status": "blocked",
+      "expected_repair_checks": ["children_safety_pass"]
+    },
+    {
+      "case_id": "caption_safe_zone_low_score_requires_review",
+      "scenario": "s4",
+      "stage": "post_production",
+      "blocking_checks": [],
+      "advisory_checks": ["caption_safe_zone_score"],
+      "thresholds": {"caption_safe_zone_score": 0.8},
+      "scores": {"caption_safe_zone_score": 0.55},
+      "expected_gate_status": "review_required",
+      "expected_repair_checks": ["caption_safe_zone_score"]
+    }
+  ]
+}

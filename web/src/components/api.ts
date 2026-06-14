@@ -2,11 +2,294 @@
 // Runtime-configurable via localStorage (with cookie fallback) or build-time env vars.
 
 import { errorMessage } from "@/lib/errors";
+import type { ContinuityDiagnosticsPayload } from "@/lib/continuityDiagnostics";
+import type { ReviewState } from "@/components/types";
+import type { components } from "@/types/api.generated";
+import {
+  PROVIDER_API_KEY_NAMES,
+  REQUEST_PROVIDER_API_KEY_NAMES,
+  type ProviderApiKeyName,
+} from "@/lib/modelProviderConfig";
 
 const STORAGE_KEYS = {
   apiBase: "ai_video_api_base",
   apiKey: "ai_video_api_key",
   demoMode: "ai_video_demo_mode",
+  providerConfig: "ai_video_provider_config",
+};
+
+// Direct references are required for Next.js client-side build-time inlining.
+const BUILD_TIME_API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+
+type ScenarioRunResult = {
+  label?: string;
+  briefs?: Record<string, unknown>[];
+  scripts?: Record<string, unknown>[];
+  thumbnail_image_paths?: string[];
+  final_video_path?: string;
+  video_duration?: number;
+  audit_report?: { overall_score?: number };
+};
+
+type PipelineStepState = Record<string, unknown> & {
+  status?: string;
+  output?: unknown;
+};
+
+type StepRunnerState = Record<string, unknown> & {
+  current_step?: string | null;
+  gates?: Record<string, Record<string, unknown> & { status?: string }>;
+  steps?: Record<string, PipelineStepState>;
+};
+
+type StepRunnerResponse = Record<string, unknown> & {
+  label: string;
+  state?: StepRunnerState;
+  data?: unknown;
+  steps?: Record<string, PipelineStepState>;
+};
+
+type PublishResult = Record<string, unknown> & {
+  platform: string;
+  success: boolean;
+  post_id?: string;
+  post_url?: string;
+  error?: string;
+};
+
+type DistributionResponse = {
+  distribution_plans?: Array<Record<string, unknown>>;
+};
+
+export type ModelProviderConfig = {
+  apiKeys: Partial<Record<ProviderApiKeyName, string>>;
+  enabledProviders?: Partial<Record<ProviderApiKeyName, boolean>>;
+  updatedAt?: string;
+};
+
+type DashboardOverview = {
+  videos: Array<{
+    video_id: string;
+    title: string;
+    scenario: string;
+    platform: string;
+    ctr: number;
+    cvr: number;
+    watch_rate: number;
+    followers_gained: number;
+    sales: number;
+    views: number;
+    history?: { pulled_at: string; ctr: number; watch_rate: number }[];
+  }>;
+  scenarios: Array<{
+    scenario: string;
+    avg_watch_rate: number;
+    avg_ctr: number;
+    avg_cvr: number;
+    total_videos: number;
+    total_sales: number;
+  }>;
+  platforms: Array<{
+    platform: string;
+    avg_ctr: number;
+    avg_cvr: number;
+    avg_watch_rate: number;
+    total_views: number;
+    scenario_breakdown: Record<string, { avg_ctr: number; avg_cvr: number; avg_watch_rate: number }>;
+  }>;
+};
+
+export type ToolboxToolId = components["schemas"]["ToolboxToolId"];
+
+export type ToolboxRunMode = "dry_run" | "authorized_live";
+
+export type ToolboxRunStatus =
+  | "not_configured"
+  | "prepared"
+  | "blocked"
+  | "review_required"
+  | "accepted_dry_run"
+  | "authorized_live_ready"
+  | "failed";
+
+export type ToolboxPlatformTarget = {
+  platform: string;
+  aspect_ratio?: string;
+  locale?: string;
+  duration_seconds?: number;
+};
+
+export type ToolboxAssetRef = {
+  asset_ref: string;
+  asset_kind: "image" | "video" | "audio" | "text" | "structured_data" | "mixed";
+  rights_ref?: string | null;
+  source_token_ids?: string[];
+};
+
+export type ToolboxToolInput = Record<string, unknown> & {
+  tool_id: ToolboxToolId;
+};
+
+export type ToolboxRequestPayload = {
+  request_id: string;
+  tool_id: ToolboxToolId;
+  brand_id: string;
+  platform_target: ToolboxPlatformTarget;
+  brand_bundle_ref?: string | null;
+  asset_refs?: ToolboxAssetRef[];
+  target_scenario?: string | null;
+  tool_input: ToolboxToolInput;
+};
+
+export type ToolboxToolSummary = {
+  tool_id: ToolboxToolId;
+  label: string;
+  description?: string;
+  output_types?: string[];
+  injectable_scenarios?: string[];
+  default_checks?: string[];
+  evidence_level?: string;
+};
+
+export type ToolboxToolsResponse = {
+  evidence_level: "L2-fixture-or-dry-run";
+  tools: ToolboxToolSummary[];
+};
+
+export type ToolboxPlanResponse = {
+  plan_id: string;
+  request_id: string;
+  tool_id: ToolboxToolId;
+  mode: ToolboxRunMode;
+  evidence_level: "L2-fixture-or-dry-run" | "L4-authorized-live";
+  provider_call: boolean;
+  delivery_accepted: boolean;
+  provider_profile_id?: string | null;
+  prompt_hash?: string | null;
+  required_checks?: string[];
+  artifact_manifest_id?: string | null;
+  injection_target_refs?: string[];
+};
+
+export type ToolboxPromptPreviewResponse = {
+  preview_id: string;
+  request_id: string;
+  tool_id: ToolboxToolId;
+  prompt_hash?: string | null;
+  prompt_preview_allowed: boolean;
+  sanitized_prompt_blocks?: string[];
+  compile_warnings?: string[];
+  blocked_reasons?: string[];
+};
+
+export type ToolboxArtifact = {
+  artifact_id: string;
+  tool_id: ToolboxToolId;
+  artifact_type: string;
+  artifact_ref: string;
+  source_job_id?: string | null;
+  manifest_ref?: string | null;
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+};
+
+export type ToolboxInjectionTarget = {
+  target_ref: string;
+  scenario: string;
+  step_name: string;
+  artifact_refs: string[];
+  contract_refs: string[];
+  bundle_refs?: string[];
+};
+
+export type ToolboxJobRecord = {
+  job_id: string;
+  status: "prepared" | "blocked" | "submitted" | "failed" | "succeeded";
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+  blocked_reasons?: string[];
+  failure_reason?: string | null;
+  artifact_paths?: Record<string, string>;
+  spec?: Record<string, unknown>;
+};
+
+export type ToolboxRunResponse = {
+  run_id: string;
+  request_id: string;
+  tool_id: ToolboxToolId;
+  brand_id: string;
+  brand_bundle_ref?: string | null;
+  target_scenario?: string | null;
+  asset_refs?: ToolboxAssetRef[];
+  status: ToolboxRunStatus;
+  plan: ToolboxPlanResponse;
+  prompt_preview?: ToolboxPromptPreviewResponse | null;
+  job_record?: ToolboxJobRecord | null;
+  artifacts: ToolboxArtifact[];
+  injection_targets?: ToolboxInjectionTarget[];
+};
+
+export type ToolboxRunsResponse = {
+  evidence_level: "L2-fixture-or-dry-run";
+  runs: ToolboxRunResponse[];
+};
+
+export type ToolboxArtifactsResponse = {
+  run_id: string;
+  tool_id: ToolboxToolId;
+  artifacts: ToolboxArtifact[];
+};
+
+export type ToolboxInjectionDraftResponse = {
+  draft_id: string;
+  draft_ref: string;
+  run_id: string;
+  tool_id: ToolboxToolId;
+  mode: "read_only";
+  evidence_level: "L2-fixture-or-dry-run";
+  state_write: boolean;
+  provider_call: boolean;
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+  injection_targets: ToolboxInjectionTarget[];
+  artifact_refs: string[];
+  contract_refs: string[];
+  bundle_refs: string[];
+  blocked_reasons?: string[];
+  warnings?: string[];
+};
+
+export type ToolboxInjectionAuditCheck = {
+  check_id: string;
+  label: string;
+  status: "passed" | "advisory" | "blocked";
+  evidence_refs?: string[];
+  message?: string | null;
+};
+
+export type ToolboxInjectionAuditSummaryResponse = {
+  summary_id: string;
+  run_id: string;
+  tool_id: ToolboxToolId;
+  evidence_level: "L2-fixture-or-dry-run";
+  ready_for_scenario_injection: boolean;
+  state_write: boolean;
+  provider_call: boolean;
+  delivery_accepted: boolean;
+  publish_allowed: boolean;
+  injection_draft_ref?: string | null;
+  target_count: number;
+  artifact_ref_count: number;
+  contract_ref_count: number;
+  bundle_ref_count: number;
+  checks: ToolboxInjectionAuditCheck[];
+  blocking_reasons?: string[];
+  advisory_reasons?: string[];
+};
+
+export type ToolboxAuditSummariesResponse = {
+  evidence_level: "L2-fixture-or-dry-run";
+  summaries: ToolboxInjectionAuditSummaryResponse[];
 };
 
 // ── P3-5: Cookie fallback for privacy / incognito mode ──
@@ -35,7 +318,7 @@ function storageGet(key: string): string | null {
   try {
     const val = localStorage.getItem(key);
     if (val !== null) return val;
-  } catch (_) { /* localStorage unavailable (privacy mode) */ }
+  } catch { /* localStorage unavailable (privacy mode) */ }
   return getCookie(key) ?? null;
 }
 
@@ -43,14 +326,117 @@ function storageSet(key: string, value: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(key, value);
-  } catch (_) { /* fall through to cookie */ }
+    removeCookie(key);
+    return;
+  } catch { /* fall through to cookie */ }
   setCookie(key, value);
 }
 
 function storageRemove(key: string): void {
   if (typeof window === "undefined") return;
-  try { localStorage.removeItem(key); } catch (_) {}
+  try { localStorage.removeItem(key); } catch {}
   removeCookie(key);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeProviderConfig(value: unknown): ModelProviderConfig {
+  if (!isRecord(value)) {
+    return { apiKeys: {} };
+  }
+  const rawApiKeys = isRecord(value.apiKeys) ? value.apiKeys : {};
+  const apiKeys: Partial<Record<ProviderApiKeyName, string>> = {};
+  for (const keyName of PROVIDER_API_KEY_NAMES) {
+    const rawValue = rawApiKeys[keyName];
+    if (typeof rawValue === "string" && rawValue.trim()) {
+      apiKeys[keyName] = rawValue.trim();
+    }
+  }
+  const rawEnabledProviders = isRecord(value.enabledProviders) ? value.enabledProviders : {};
+  const enabledProviders: Partial<Record<ProviderApiKeyName, boolean>> = {};
+  for (const keyName of PROVIDER_API_KEY_NAMES) {
+    const rawValue = rawEnabledProviders[keyName];
+    if (typeof rawValue === "boolean") {
+      enabledProviders[keyName] = rawValue;
+    }
+  }
+  const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : undefined;
+  const normalized: ModelProviderConfig = { apiKeys };
+  if (Object.keys(enabledProviders).length > 0) {
+    normalized.enabledProviders = enabledProviders;
+  }
+  if (updatedAt) {
+    normalized.updatedAt = updatedAt;
+  }
+  return normalized;
+}
+
+export function getModelProviderConfig(): ModelProviderConfig {
+  if (typeof window === "undefined") {
+    return { apiKeys: {} };
+  }
+  const raw = storageGet(STORAGE_KEYS.providerConfig);
+  if (!raw) {
+    return { apiKeys: {} };
+  }
+  try {
+    return normalizeProviderConfig(JSON.parse(raw));
+  } catch {
+    return { apiKeys: {} };
+  }
+}
+
+export function setModelProviderConfig(config: ModelProviderConfig): void {
+  if (typeof window === "undefined") return;
+  const normalized = normalizeProviderConfig({
+    ...config,
+    updatedAt: new Date().toISOString(),
+  });
+  const hasProviderState =
+    Object.keys(normalized.apiKeys).length > 0
+    || Object.keys(normalized.enabledProviders ?? {}).length > 0;
+  if (!hasProviderState) {
+    storageRemove(STORAGE_KEYS.providerConfig);
+    return;
+  }
+  storageSet(STORAGE_KEYS.providerConfig, JSON.stringify(normalized));
+}
+
+export function resetModelProviderConfig(): void {
+  if (typeof window === "undefined") return;
+  storageRemove(STORAGE_KEYS.providerConfig);
+}
+
+export function getProviderApiKeysForRequest(): Record<string, string> {
+  const config = getModelProviderConfig();
+  const apiKeys: Record<string, string> = {};
+  for (const keyName of REQUEST_PROVIDER_API_KEY_NAMES) {
+    if (config.enabledProviders?.[keyName] === false) {
+      continue;
+    }
+    const value = config.apiKeys[keyName]?.trim();
+    if (value) {
+      apiKeys[keyName] = value;
+    }
+  }
+  return apiKeys;
+}
+
+export function withProviderApiKeys(body: unknown): unknown {
+  const apiKeys = getProviderApiKeysForRequest();
+  if (Object.keys(apiKeys).length === 0 || !isRecord(body)) {
+    return body;
+  }
+  const existing = isRecord(body.api_keys) ? body.api_keys : {};
+  return {
+    ...body,
+    api_keys: {
+      ...apiKeys,
+      ...existing,
+    },
+  };
 }
 
 // ── Runtime configuration ──
@@ -90,7 +476,7 @@ export function getApiKey(): string {
     const stored = storageGet(STORAGE_KEYS.apiKey);
     if (stored) return stored;
   }
-  return readEnv("NEXT_PUBLIC_API_KEY") || "";
+  return BUILD_TIME_API_KEY;
 }
 
 export function hasApiKey(): boolean {
@@ -99,8 +485,20 @@ export function hasApiKey(): boolean {
 
 export function setApiKey(key: string) {
   if (typeof window !== "undefined") {
-    storageSet(STORAGE_KEYS.apiKey, key);
+    const trimmed = key.trim();
+    if (!trimmed) {
+      storageRemove(STORAGE_KEYS.apiKey);
+      return;
+    }
+    storageSet(STORAGE_KEYS.apiKey, trimmed);
   }
+}
+
+export function maskApiKeyForDisplay(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "Not set";
+  if (trimmed.length <= 8) return "Set";
+  return `${trimmed.slice(0, 4)}····${trimmed.slice(-3)}`;
 }
 
 /** Demo mode detection.
@@ -145,6 +543,7 @@ export function resetApiConfig() {
     storageRemove(STORAGE_KEYS.apiBase);
     storageRemove(STORAGE_KEYS.apiKey);
     storageRemove(STORAGE_KEYS.demoMode);
+    storageRemove(STORAGE_KEYS.providerConfig);
   }
 }
 
@@ -554,14 +953,18 @@ export function isApiError(e: unknown): e is ApiError {
   return e instanceof ApiError;
 }
 
+async function throwApiError(res: Response): Promise<never> {
+  throw new ApiError(await parseApiError(res));
+}
+
 // ── Core pipeline APIs ──
 
 /** @deprecated Use /scenario/s1 (StepRunner) instead. LangGraph proxy layer only. */
-export async function startPipeline(body: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function startPipeline(body: unknown, options?: { signal?: AbortSignal }): Promise<unknown> {
   const res = await apiFetch("/pipeline/start", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Pipeline start failed (" + res.status + ")");
@@ -569,7 +972,7 @@ export async function startPipeline(body: unknown, options?: { signal?: AbortSig
 }
 
 /** @deprecated StepRunner pipelines do not use LangGraph checkpoint state. */
-export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchState(threadId: string, options?: { signal?: AbortSignal }): Promise<ReviewState> {
   const res = await apiFetch("/pipeline/" + threadId + "/state", {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -585,7 +988,7 @@ export async function submitReview(
   action: string,
   reviewerNotes: string,
   options?: { signal?: AbortSignal }
-): Promise<any> {
+): Promise<ReviewState> {
   const res = await apiFetch("/pipeline/" + threadId + "/review/" + reviewNode, {
     method: "POST",
     headers: getHeaders(),
@@ -597,7 +1000,7 @@ export async function submitReview(
 }
 
 /** @deprecated Use /scenario/{s}/state/{label} instead. */
-export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchDistribution(threadId: string, options?: { signal?: AbortSignal }): Promise<DistributionResponse> {
   const res = await apiFetch("/pipeline/" + threadId + "/distribution", {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -607,7 +1010,7 @@ export async function fetchDistribution(threadId: string, options?: { signal?: A
 }
 
 /** @deprecated Use /scenario/{s}/state/{label} instead. */
-export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchOutput(threadId: string, options?: { signal?: AbortSignal }): Promise<unknown> {
   const res = await apiFetch("/pipeline/" + threadId + "/output", {
     headers: getHeaders(false),
     signal: options?.signal,
@@ -618,11 +1021,11 @@ export async function fetchOutput(threadId: string, options?: { signal?: AbortSi
 
 // ── Scenario pipelines (skill-based, no LangGraph) ──
 
-export async function runS1ProductDirect(config: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function runS1ProductDirect(config: unknown, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s1", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(config),
+    body: JSON.stringify(withProviderApiKeys(config)),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
@@ -635,11 +1038,11 @@ export async function runS2BrandCampaign(body: {
   target_platforms?: string[];
   target_languages?: string[];
   week?: string;
-}, options?: { signal?: AbortSignal }): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s2", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Brand campaign scenario failed (" + res.status + ")");
@@ -653,11 +1056,11 @@ export async function runS3InfluencerRemix(body: {
   influencer_name?: string;
   brief_id?: string;
   video_duration?: number;
-}, options?: { signal?: AbortSignal }): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s3", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Influencer remix scenario failed (" + res.status + ")");
@@ -669,11 +1072,11 @@ export async function runS4LiveShoot(body: {
   product_info: unknown;
   topic?: string;
   target_platforms?: string[];
-}, options?: { signal?: AbortSignal }): Promise<any> {
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s4", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Live shoot scenario failed (" + res.status + ")");
@@ -682,67 +1085,67 @@ export async function runS4LiveShoot(body: {
 
 // ── S1 Step-by-step pipeline APIs ──
 
-export async function startS1StepByStep(config: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function startS1StepByStep(config: unknown, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/start", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({ ...(config as Record<string, unknown>), mode: "step_by_step" }),
+    body: JSON.stringify(withProviderApiKeys({ ...(config as Record<string, unknown>), mode: "step_by_step" })),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 step-by-step start failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
-export async function runS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function runS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/step/" + stepName, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 step " + stepName + " failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
-export async function regenerateS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function regenerateS1Step(label: string, stepName: string, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/regenerate", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label, step: stepName }),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 regenerate " + stepName + " failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
-export async function resumeS1(label: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function resumeS1(label: string, options?: { signal?: AbortSignal }): Promise<StepRunnerResponse> {
   const res = await apiFetch("/scenario/s1/resume", {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ label }),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 resume failed: " + res.statusText);
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
-export async function fetchS1State(label: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchS1State(label: string, options?: { signal?: AbortSignal }): Promise<StepRunnerState> {
   const res = await apiFetch("/scenario/s1/state/" + label, {
     headers: getHeaders(false),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 fetch state failed (" + res.status + ")");
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
-export async function updateS1State(label: string, updates: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function updateS1State(label: string, updates: unknown, options?: { signal?: AbortSignal }): Promise<StepRunnerState> {
   const res = await apiFetch("/scenario/s1/state/" + label, {
     method: "PUT",
     headers: getHeaders(),
     body: JSON.stringify(updates),
     signal: options?.signal,
   });
-  if (!res.ok) throw new Error("S1 update state failed (" + res.status + ")");
+  if (!res.ok) return throwApiError(res);
   return res.json();
 }
 
@@ -770,24 +1173,67 @@ export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<u
   return data.files || [];
 }
 
+const MEDIA_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+
+function decodeMediaPath(raw: string): string | null {
+  let decoded = raw;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) return decoded;
+      decoded = next;
+    } catch {
+      return null;
+    }
+  }
+  return decoded;
+}
+
+function hasUnsafeMediaInput(rawPath: string): boolean {
+  const normalized = rawPath.trim().replace(/\\/g, "/");
+  const decoded = decodeMediaPath(normalized);
+  const candidates = decoded && decoded !== normalized ? [normalized, decoded] : [normalized];
+  return candidates.some((path) => {
+    if (!path || path.includes("\x00") || path.includes("?") || path.includes("#")) return true;
+    if (path.startsWith("//") || MEDIA_SCHEME_RE.test(path)) return true;
+    return path.split("/").some((segment) => segment === "." || segment === "..");
+  });
+}
+
+function encodeSafeMediaPath(filePath: string): string {
+  if (!filePath || hasUnsafeMediaInput(filePath)) return "";
+
+  let mediaRel = filePath.trim().replace(/\\/g, "/");
+  if (mediaRel.startsWith("/api/media/")) {
+    mediaRel = mediaRel.slice("/api/media/".length);
+  } else if (mediaRel.startsWith("api/media/")) {
+    mediaRel = mediaRel.slice("api/media/".length);
+  } else if (mediaRel.startsWith("/")) {
+    return "";
+  }
+
+  const decoded = decodeMediaPath(mediaRel);
+  if (!decoded) return "";
+  mediaRel = decoded.startsWith("output/") ? decoded.slice("output/".length) : decoded;
+
+  const segments = mediaRel.split("/");
+  if (
+    segments.length === 0 ||
+    segments.some((segment) => !segment || segment === "." || segment === ".." || segment.includes(":"))
+  ) {
+    return "";
+  }
+  return segments.map((s) => encodeURIComponent(s)).join("/");
+}
+
 export function getMediaUrl(filePath: string, forceReal: boolean = false): string {
-  if (!filePath) return "";
+  if (!filePath || hasUnsafeMediaInput(filePath)) return "";
   if (!forceReal && isDemoMode()) {
-    const name = filePath.replace(/\\/g, "/").split("/").pop() || "";
+    const name = filePath.trim().replace(/\\/g, "/").split("/").pop() || "";
     const prefix = readEnv("NEXT_PUBLIC_ASSET_PREFIX") || "";
     return prefix + "/portfolio/" + encodeURIComponent(name);
   }
-  let mediaRel = filePath.replace(/\\/g, "/");
-  if (mediaRel.startsWith("/api/media/")) {
-    mediaRel = mediaRel.slice("/api/media/".length);
-  }
-  try {
-    mediaRel = decodeURIComponent(mediaRel);
-  } catch {
-    /* keep encoded segments */
-  }
-  const segments = mediaRel.split("/").filter(Boolean);
-  const encodedPath = segments.map((s) => encodeURIComponent(s)).join("/");
+  const encodedPath = encodeSafeMediaPath(filePath);
   if (!encodedPath) return "";
   const base = getApiBase().replace(/\/$/, "");
   if (base.startsWith("http")) {
@@ -802,18 +1248,7 @@ export function getMediaUrl(filePath: string, forceReal: boolean = false): strin
  * control is needed. Falls back to unsigned URL on signing failure.
  */
 export async function getSignedMediaUrl(filePath: string): Promise<string> {
-  if (!filePath) return "";
-  let mediaRel = filePath.replace(/\\/g, "/");
-  if (mediaRel.startsWith("/api/media/")) {
-    mediaRel = mediaRel.slice("/api/media/".length);
-  }
-  try {
-    mediaRel = decodeURIComponent(mediaRel);
-  } catch {
-    /* keep encoded segments */
-  }
-  const segments = mediaRel.split("/").filter(Boolean);
-  const encodedPath = segments.map((s) => encodeURIComponent(s)).join("/");
+  const encodedPath = encodeSafeMediaPath(filePath);
   if (!encodedPath) return "";
 
   try {
@@ -951,11 +1386,17 @@ export async function runS5BrandVlog(body: {
   selected_models: unknown[];
   story_description: string;
   video_duration: number;
-}, options?: { signal?: AbortSignal }): Promise<any> {
+  enable_media_synthesis?: unknown;
+  continuity_mode?: unknown;
+  continuity_generation_mode?: string;
+  storyboard_grid?: string | number;
+  clip_group_size?: number;
+  transition_style?: string;
+}, options?: { signal?: AbortSignal }): Promise<ScenarioRunResult> {
   const res = await apiFetch("/scenario/s5", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
@@ -977,7 +1418,7 @@ export async function submitScenario(
   const res = await apiFetch("/scenario/" + scenario + "/submit", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
@@ -997,8 +1438,11 @@ export async function getScenarioStatus(
   scenario: string;
   status: string;
   current_step: string | null;
+  current_step_injection?: Record<string, unknown> | null;
   progress: number;
   pipeline_degraded: boolean;
+  soft_degraded_reasons?: Array<{ step?: string; reason?: string; detail?: string }>;
+  continuity_diagnostics?: ContinuityDiagnosticsPayload;
   gate_status: string | null;
   errors: string[];
   steps?: Record<string, unknown>;
@@ -1009,6 +1453,33 @@ export async function getScenarioStatus(
     signal: options?.signal,
   });
   if (!res.ok) throw new Error(`Status check failed (${res.status})`);
+  return res.json();
+}
+
+export async function fetchGateState(
+  scenario: string,
+  label: string,
+  gateId: string,
+  options?: { signal?: AbortSignal },
+): Promise<{
+  gate_id: string;
+  label: string;
+  status: string;
+  candidates: unknown[];
+  selected_ids: string[];
+  approved: boolean;
+  max_selections: number;
+  after_step: string;
+  continuity_diagnostics?: ContinuityDiagnosticsPayload;
+}> {
+  const res = await apiFetch(
+    `/scenario/${scenario}/gate/${encodeURIComponent(label)}/${gateId}`,
+    {
+      headers: getHeaders(false),
+      signal: options?.signal,
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch gate state (${res.status})`);
   return res.json();
 }
 
@@ -1024,7 +1495,7 @@ export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promis
   return data.platforms || [];
 }
 
-export async function publishContent(platform: string, content: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function publishContent(platform: string, content: unknown, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
   const res = await apiFetch("/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
@@ -1035,7 +1506,7 @@ export async function publishContent(platform: string, content: unknown, options
   return res.json();
 }
 
-export async function fetchPublishStatus(platform: string, postId: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchPublishStatus(platform: string, postId: string, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
   const res = await apiFetch(
     getApiBase() + "/distribution/status/" + encodeURIComponent(platform) + "/" + encodeURIComponent(postId),
     { headers: getHeaders(false), signal: options?.signal }
@@ -1046,7 +1517,7 @@ export async function fetchPublishStatus(platform: string, postId: string, optio
 
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
-export async function publishVideo(videoId: string, platforms: string[], metadata: unknown, options?: { signal?: AbortSignal }): Promise<any> {
+export async function publishVideo(videoId: string, platforms: string[], metadata: unknown, options?: { signal?: AbortSignal }): Promise<PublishResult | PublishResult[]> {
   const res = await apiFetch("/publish/" + videoId, {
     method: "POST", headers: getHeaders(),
     body: JSON.stringify({ platforms, metadata }),
@@ -1056,20 +1527,171 @@ export async function publishVideo(videoId: string, platforms: string[], metadat
   return res.json();
 }
 
-export async function fetchVideoMetrics(videoId: string, platform?: string, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchVideoMetrics(videoId: string, platform?: string, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
   const params = platform ? "?platform=" + platform : "";
   const res = await apiFetch("/metrics/" + videoId + params, { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch metrics");
   return res.json();
 }
 
-export async function fetchDashboardOverview(scenario?: string, platform?: string, days?: number, options?: { signal?: AbortSignal }): Promise<any> {
+export async function fetchDashboardOverview(scenario?: string, platform?: string, days?: number, options?: { signal?: AbortSignal }): Promise<DashboardOverview> {
   const params = new URLSearchParams();
   if (scenario) params.set("scenario", scenario);
   if (platform) params.set("platform", platform);
   if (days) params.set("days", String(days));
   const res = await apiFetch("/dashboard/overview?" + params.toString(), { headers: getHeaders(false), signal: options?.signal });
   if (!res.ok) throw new Error("Failed to fetch dashboard");
+  return res.json();
+}
+
+// ── AI Video 2.0 Toolbox dry-run APIs ──
+
+function toolboxUrl(toolId: ToolboxToolId, action: "plan" | "prompt-preview" | "run"): string {
+  return `/toolbox/${encodeURIComponent(toolId)}/${action}`;
+}
+
+function assertToolboxRequest(toolId: ToolboxToolId, body: ToolboxRequestPayload): void {
+  if (body.tool_id !== toolId) {
+    throw new Error(`Toolbox request mismatch: path=${toolId}, body=${body.tool_id}`);
+  }
+  if (body.tool_input?.tool_id !== toolId) {
+    throw new Error(`Toolbox input mismatch: path=${toolId}, input=${String(body.tool_input?.tool_id)}`);
+  }
+}
+
+export async function fetchToolboxTools(options?: { signal?: AbortSignal }): Promise<ToolboxToolsResponse> {
+  const res = await apiFetch("/toolbox/tools", {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function planToolboxRun(
+  toolId: ToolboxToolId,
+  body: ToolboxRequestPayload,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxPlanResponse> {
+  assertToolboxRequest(toolId, body);
+  const res = await apiFetch(toolboxUrl(toolId, "plan"), {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function previewToolboxPrompt(
+  toolId: ToolboxToolId,
+  body: ToolboxRequestPayload,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxPromptPreviewResponse> {
+  assertToolboxRequest(toolId, body);
+  const res = await apiFetch(toolboxUrl(toolId, "prompt-preview"), {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function runToolboxDryRun(
+  toolId: ToolboxToolId,
+  body: ToolboxRequestPayload,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxRunResponse> {
+  assertToolboxRequest(toolId, body);
+  const res = await apiFetch(toolboxUrl(toolId, "run"), {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxRun(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxRunResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxRuns(
+  options?: { limit?: number; toolId?: ToolboxToolId; signal?: AbortSignal },
+): Promise<ToolboxRunsResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.toolId) params.set("tool_id", options.toolId);
+  const query = params.toString();
+  const res = await apiFetch(`/toolbox/runs${query ? `?${query}` : ""}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxAuditSummaries(
+  options?: { limit?: number; toolId?: ToolboxToolId; signal?: AbortSignal },
+): Promise<ToolboxAuditSummariesResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.toolId) params.set("tool_id", options.toolId);
+  const query = params.toString();
+  const res = await apiFetch(`/toolbox/runs/audit-summaries${query ? `?${query}` : ""}`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxArtifacts(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxArtifactsResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/artifacts`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function previewToolboxInjectionDraft(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxInjectionDraftResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/inject`, {
+    method: "POST",
+    headers: getHeaders(),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function fetchToolboxAuditSummary(
+  runId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ToolboxInjectionAuditSummaryResponse> {
+  const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/audit-summary`, {
+    headers: getHeaders(false),
+    signal: options?.signal,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
 }
 
@@ -1215,7 +1837,7 @@ export function logStateChange(store: string, key: string, oldVal: unknown, newV
 }
 
 /** 辅助：生成 bug 检测日志（用于断言失败时） */
-export function logBug(assertion: string, expected: string, actual: string, context?: Record<string, any>) {
+export function logBug(assertion: string, expected: string, actual: string, context?: Record<string, unknown>) {
   const traceId = genTraceId();
    
   console.error(

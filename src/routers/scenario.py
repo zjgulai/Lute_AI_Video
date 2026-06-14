@@ -4,7 +4,8 @@ import asyncio
 import time
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 
 logger = structlog.get_logger()
 
@@ -16,6 +17,16 @@ except ImportError:
 from typing import Any
 
 from src.config import DEFAULT_LANGUAGES
+from src.models.commercial_contracts import PromptCompileInput, QualityContract
+from src.pipeline.prompt_preview_audit_workflow import build_prompt_preview_audit_workflow
+from src.pipeline.runtime_injection_executor import RuntimeInjectionResult
+from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.scenario_injection_plan import (
+    CURRENT_STEP_INJECTION_KEY,
+    STEP_INJECTION_DATA_KEY,
+    project_state_injection_visibility,
+    with_optional_injection_config,
+)
 from src.routers._deps import (
     _classified_error,
     _inject_api_keys,
@@ -28,6 +39,8 @@ from src.routers._state import (
     _STEP_DURATIONS,
     FastModeRequest,
     S1StartRequest,
+    S2BrandCampaignRequest,
+    S5BrandVlogRequest,
     _get_step_deps,
     _get_step_output,
     _register_background_task,
@@ -36,6 +49,13 @@ from src.routers._state import (
 )
 
 router = APIRouter()
+
+
+class PromptPreviewAuditRequest(BaseModel):
+    contract: QualityContract
+    compile_input: PromptCompileInput
+    runtime_injection: RuntimeInjectionResult
+    planned_injection: dict[str, Any] | None = None
 
 
 def _validate_s5_scene_id(scene_id: Any) -> str:
@@ -73,6 +93,58 @@ def _assert_state_access(state: dict[str, Any] | None) -> None:
         raise HTTPException(status_code=404, detail="State not found")
     if state_tenant != ctx.tenant_id:
         raise HTTPException(status_code=404, detail="State not found")
+
+
+def _with_commercial_injection_config(
+    config: dict[str, Any],
+    plan_payload: dict[str, Any] | None,
+    *,
+    expected_scenario: str,
+) -> dict[str, Any]:
+    try:
+        return with_optional_injection_config(
+            config,
+            plan_payload,
+            expected_scenario=expected_scenario,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+async def _resume_s1_without_media_synthesis(step_runner: Any, label: str) -> dict[str, Any]:
+    """Run S1 only through pre-media steps; stop before provider-backed generation."""
+    final_state: dict[str, Any] = {}
+    for step_name in get_scenario_step_order("s1"):
+        if step_name == "keyframe_images":
+            break
+        final_state = await step_runner.run_step(label, step_name)
+        if final_state.get("pipeline_degraded"):
+            break
+    if final_state and not final_state.get("pipeline_degraded"):
+        final_state["current_step"] = None
+        save = getattr(step_runner.state_manager, "save", None)
+        if callable(save):
+            await save(label, final_state)
+    return final_state
+
+
+def _assert_prompt_preview_scenario_match(
+    scenario: str,
+    body: PromptPreviewAuditRequest,
+) -> None:
+    mismatches: list[str] = []
+    if body.contract.scenario != scenario:
+        mismatches.append(f"contract.scenario={body.contract.scenario}")
+    if body.compile_input.scenario != scenario:
+        mismatches.append(f"compile_input.scenario={body.compile_input.scenario}")
+    if body.runtime_injection.scenario != scenario:
+        mismatches.append(f"runtime_injection.scenario={body.runtime_injection.scenario}")
+    if mismatches:
+        raise HTTPException(
+            status_code=422,
+            detail=f"prompt preview audit scenario mismatch: expected {scenario}; "
+            + ", ".join(mismatches),
+        )
 
 
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
@@ -116,7 +188,17 @@ async def run_s1_product_direct(body: dict[str, Any]):
         "video_duration": coerce_video_duration(body),
         "brand_mode": body.get("brand_mode", False),
         "enable_media_synthesis": body.get("enable_media_synthesis", True),
+        "continuity_mode": body.get("continuity_mode", True),
+        "continuity_generation_mode": body.get("continuity_generation_mode", "standard"),
+        "storyboard_grid": body.get("storyboard_grid", 12),
+        "clip_group_size": body.get("clip_group_size", 3),
+        "transition_style": body.get("transition_style", "match_cut"),
     }
+    config = _with_commercial_injection_config(
+        config,
+        body.get("commercial_injection_plan"),
+        expected_scenario="s1",
+    )
 
     state_manager = PipelineStateManager()
     step_runner = StepRunner(state_manager)
@@ -126,7 +208,10 @@ async def run_s1_product_direct(body: dict[str, Any]):
     from src.tools.cost_tracker import set_thread_id
     set_thread_id(label)
     try:
-        final_state = await step_runner.resume(label)
+        if config["enable_media_synthesis"]:
+            final_state = await step_runner.resume(label)
+        else:
+            final_state = await _resume_s1_without_media_synthesis(step_runner, label)
     except TypeError as te:
         # structlog kwarg compatibility — fall back to legacy pipeline
         import logging as _log
@@ -142,17 +227,22 @@ async def run_s1_product_direct(body: dict[str, Any]):
             brand_mode=body.get("brand_mode", False),
             enable_media_synthesis=body.get("enable_media_synthesis", True),
             video_duration=coerce_video_duration(body),
+            continuity_mode=body.get("continuity_mode", True),
+            continuity_generation_mode=body.get("continuity_generation_mode", "standard"),
+            storyboard_grid=body.get("storyboard_grid", 12),
+            clip_group_size=body.get("clip_group_size", 3),
+            transition_style=body.get("transition_style", "match_cut"),
+            commercial_injection_plan=body.get("commercial_injection_plan"),
         )
         # S1ProductDirectPipeline returns a dict differently — extract steps from the state
         return final_state
 
     # Convert back to the result dict format expected by frontend
-    steps = final_state.get("steps", {})
-    seedance_raw = _get_step_output(steps, "seedance_clips") or {}
+    seedance_raw = _get_step_output(final_state, "seedance_clips") or {}
     seedance_output = seedance_raw if isinstance(seedance_raw, dict) else {}
     clip_paths = seedance_output.get("clip_paths", []) if isinstance(seedance_raw, dict) else (seedance_raw if isinstance(seedance_raw, list) else [])
 
-    tts_raw = _get_step_output(steps, "tts_audio") or {}
+    tts_raw = _get_step_output(final_state, "tts_audio") or {}
     if isinstance(tts_raw, dict):
         audio_paths = tts_raw.get("audio_paths", [])
         lyrics_paths = tts_raw.get("lyrics_paths", [])
@@ -167,23 +257,23 @@ async def run_s1_product_direct(body: dict[str, Any]):
         "video_duration": config["video_duration"],
         "errors": final_state.get("errors", []),
         "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
-        "briefs": _get_step_output(steps, "strategy") or [],
-        "scripts": _get_step_output(steps, "scripts") or [],
-        "storyboards": _get_step_output(steps, "storyboards") or [],
-        "keyframe_images": _get_step_output(steps, "keyframe_images") or [],
-        "video_prompts": _get_step_output(steps, "video_prompts") or [],
-        "thumbnail_sets": _get_step_output(steps, "thumbnail_prompts") or [],
+        "briefs": _get_step_output(final_state, "strategy") or [],
+        "scripts": _get_step_output(final_state, "scripts") or [],
+        "storyboards": _get_step_output(final_state, "storyboards") or [],
+        "keyframe_images": _get_step_output(final_state, "keyframe_images") or [],
+        "video_prompts": _get_step_output(final_state, "video_prompts") or [],
+        "thumbnail_sets": _get_step_output(final_state, "thumbnail_prompts") or [],
         "seedance_output": seedance_output,
         "clip_paths": clip_paths,
         "audio_paths": audio_paths,
         "lyrics_paths": lyrics_paths,
-        "thumbnail_image_paths": _get_step_output(steps, "thumbnail_images") or [],
+        "thumbnail_image_paths": _get_step_output(final_state, "thumbnail_images") or [],
         "steps_completed": len(_SCENARIO_STEP_ORDER.get("s1", [])),
     }
 
     # Extract assemble_final output (may be tuple or dict)
-    assemble = _get_step_output(steps, "assemble_final")
-    if isinstance(assemble, tuple):
+    assemble = _get_step_output(final_state, "assemble_final")
+    if isinstance(assemble, (list, tuple)):
         result["final_video_path"] = assemble[0] if len(assemble) > 0 else ""
         result["render_json_path"] = assemble[1] if len(assemble) > 1 else ""
     elif isinstance(assemble, dict):
@@ -193,16 +283,22 @@ async def run_s1_product_direct(body: dict[str, Any]):
         result["final_video_path"] = ""
         result["render_json_path"] = ""
 
-    result["audit_report"] = _get_step_output(steps, "audit") or {}
+    result["audit_report"] = _get_step_output(final_state, "audit") or {}
     return result
 
 
 @router.post("/scenario/s2", dependencies=[Depends(verify_api_key)])
-async def run_s2_brand_campaign(body: dict[str, Any]):
+async def run_s2_brand_campaign(body: S2BrandCampaignRequest):
     """Run S2 Brand Campaign pipeline."""
-    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
+    _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
+    body_data = body.model_dump()
+    commercial_injection_plan = _with_commercial_injection_config(
+        {},
+        body.commercial_injection_plan,
+        expected_scenario="s2",
+    ).get("commercial_injection_plan")
 
-    brand_package = body.get("brand_package", {})
+    brand_package = body.brand_package
     # P3-4: Bind pipeline context to all downstream structlog calls
     structlog.contextvars.bind_contextvars(
         product_name=brand_package.get("brand_name", "unknown"),
@@ -214,10 +310,16 @@ async def run_s2_brand_campaign(body: dict[str, Any]):
     from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
     p = S2BrandCampaignPipeline()
     r = await p.run(
-        brand_package=body.get("brand_package", {}),
-        target_platforms=body.get("target_platforms", ["tiktok", "shopify"]),
-        target_languages=body.get("target_languages", DEFAULT_LANGUAGES),
-        week=body.get("week", ""),
+        brand_package=body.brand_package,
+        target_platforms=body.target_platforms,
+        target_languages=body.target_languages,
+        week=body.week,
+        video_duration=coerce_video_duration(body_data, default=60),
+        enable_media_synthesis=body.enable_media_synthesis,
+        artifact_disposition=body.artifact_disposition,
+        provider_max_retries=body.provider_max_retries,
+        output_label=body.output_label,
+        commercial_injection_plan=commercial_injection_plan,
     )
     return r
 
@@ -262,6 +364,7 @@ async def run_s3_influencer_remix(body: dict[str, Any]):
         influencer_name=body.get("influencer_name", "Influencer"),
         brief_id=body.get("brief_id", ""),
         video_duration=coerce_video_duration(body),
+        enable_media_synthesis=body.get("enable_media_synthesis", True),
     )
     return r.to_dict()
 
@@ -285,12 +388,15 @@ async def run_s4_live_shoot(body: dict[str, Any]):
         product_info=product_info,
         topic=body.get("topic", ""),
         target_platforms=body.get("target_platforms", ["tiktok"]),
+        brand_guidelines=body.get("brand_guidelines", {}),
+        video_duration=coerce_video_duration(body),
+        enable_media_synthesis=body.get("enable_media_synthesis", True),
     )
     return r
 
 
 @router.post("/scenario/s5", dependencies=[Depends(verify_api_key)])
-async def run_s5_brand_vlog(body: dict[str, Any]):
+async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
     """Run S5 Brand VLOG pipeline.
 
     Request body:
@@ -301,10 +407,20 @@ async def run_s5_brand_vlog(body: dict[str, Any]):
         story_description: str — user's story direction (max 300 chars)
         video_duration: int — target video seconds (15/30/45/60/90)
     """
-    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
-    product_sku = body.get("product_sku", {})
-    brand_id = body.get("brand_id", "momcozy")
-    scene_id = _validate_s5_scene_id(body.get("scene_id"))
+    _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
+    body_data = body.model_dump()
+    raw_body = await request.json() if request is not None else {}
+    enable_media_synthesis = True
+    if isinstance(raw_body, dict):
+        enable_media_synthesis = raw_body.get("enable_media_synthesis", True) is not False
+    commercial_injection_plan = _with_commercial_injection_config(
+        {},
+        body.commercial_injection_plan,
+        expected_scenario="s5",
+    ).get("commercial_injection_plan")
+    product_sku = body.product_sku
+    brand_id = body.brand_id
+    scene_id = _validate_s5_scene_id(body.scene_id)
     structlog.contextvars.bind_contextvars(
         product_name=product_sku.get("name", "unknown") if isinstance(product_sku, dict) else "unknown",
         brand_name=brand_id,
@@ -314,12 +430,14 @@ async def run_s5_brand_vlog(body: dict[str, Any]):
     from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
     p = S5BrandVlogPipeline()
     r = await p.run(
-        brand_id=body.get("brand_id", "momcozy"),
-        product_sku=body.get("product_sku", {}),
+        brand_id=body.brand_id,
+        product_sku=body.product_sku,
         scene_id=scene_id,
-        selected_models=body.get("selected_models", []),
-        story_description=body.get("story_description", ""),
-        video_duration=coerce_video_duration(body),
+        selected_models=body.selected_models,
+        story_description=body.story_description,
+        video_duration=coerce_video_duration(body_data),
+        commercial_injection_plan=commercial_injection_plan,
+        enable_media_synthesis=enable_media_synthesis,
     )
     return r
 
@@ -357,11 +475,17 @@ async def fast_generate(req: FastModeRequest):
     from src.services.fast_mode import get_fast_mode_service
 
     service = get_fast_mode_service()
+    ctx = get_auth_context()
+    tenant_id = ctx.tenant_id if ctx is not None else "default"
     try:
         result = await service.generate(
             user_prompt=req.user_prompt,
             duration=max(10, min(15, req.duration)),
             enable_tts=req.enable_tts,
+            artifact_disposition=req.artifact_disposition,
+            tenant_id=tenant_id,
+            artifact_run_id=f"fast_generate_{int(time.time())}",
+            provider_max_retries=req.provider_max_retries,
         )
         return result
     except Exception as e:
@@ -388,9 +512,13 @@ async def fast_submit(req: FastModeRequest):
     )
 
     service = get_fast_mode_service()
+    ctx = get_auth_context()
+    tenant_id = ctx.tenant_id if ctx is not None else "default"
     duration = max(10, min(15, req.duration))
     enable_tts = req.enable_tts
     user_prompt = req.user_prompt
+    artifact_disposition = req.artifact_disposition
+    provider_max_retries = req.provider_max_retries
 
     task_id_holder: dict[str, str] = {}
 
@@ -406,6 +534,10 @@ async def fast_submit(req: FastModeRequest):
             duration=duration,
             enable_tts=enable_tts,
             on_stage=_on_stage,
+            artifact_disposition=artifact_disposition,
+            tenant_id=tenant_id,
+            artifact_run_id=tid or None,
+            provider_max_retries=provider_max_retries,
         )
 
     task = asyncio.create_task(_run())
@@ -474,11 +606,17 @@ async def start_s1_pipeline(body: S1StartRequest):
 
     try:
         step_runner = StepRunner(PipelineStateManager())
-        config = body.model_dump()
+        config = _with_commercial_injection_config(
+            body.model_dump(),
+            body.commercial_injection_plan,
+            expected_scenario="s1",
+        )
         label = await step_runner.init_state(config=config, mode=body.mode)
 
         if body.mode == "auto":
-            return await step_runner.resume(label)
+            if body.enable_media_synthesis:
+                return await step_runner.resume(label)
+            return await _resume_s1_without_media_synthesis(step_runner, label)
 
         return {
             "label": label,
@@ -486,6 +624,8 @@ async def start_s1_pipeline(body: S1StartRequest):
             "status": "initialized",
             "current_step": None,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("s1 pipeline failed", error=str(e))
         raise HTTPException(status_code=500, detail=_classified_error(e))
@@ -605,7 +745,7 @@ async def get_s1_state(label: str):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
-        result = dict(state)
+        result = project_state_injection_visibility(state)
         result["meta"] = {
             "step_order": _SCENARIO_STEP_ORDER.get("s1", []),
             "step_durations": _STEP_DURATIONS,
@@ -682,7 +822,8 @@ async def list_steps(scenario: str, label: str):
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
 
-        steps_data = state.get("steps", {})
+        projected_state = project_state_injection_visibility(state)
+        steps_data = projected_state.get("steps", {})
         order = _SCENARIO_STEP_ORDER[scenario]
         result = []
         for step_name in order:
@@ -709,19 +850,24 @@ async def list_steps(scenario: str, label: str):
                 else:
                     preview = str(display_output)[:80]
 
-            result.append({
+            item = {
                 "step_name": step_name,
                 "status": status,
                 "preview": preview,
                 "has_output": output is not None,
                 "is_edited": sd.get("edited", False),
                 "completed_at": sd.get("completed_at", ""),
-            })
+            }
+            commercial_injection = sd.get(STEP_INJECTION_DATA_KEY)
+            if commercial_injection is not None:
+                item[STEP_INJECTION_DATA_KEY] = commercial_injection
+            result.append(item)
 
         return {
             "label": label,
             "scenario": scenario,
-            "current_step": state.get("current_step"),
+            "current_step": projected_state.get("current_step"),
+            CURRENT_STEP_INJECTION_KEY: projected_state.get(CURRENT_STEP_INJECTION_KEY),
             "steps": result,
             "meta": {
                 "step_order": _SCENARIO_STEP_ORDER.get(scenario, []),
@@ -792,26 +938,45 @@ async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
                 "data": output,
             }
 
-        # For S1, use StepRunner; other scenarios can be extended
-        if scenario == "s1":
-            step_runner = StepRunner(state_manager)
-            updated_state = await step_runner.run_step(label, step_name)
-            updated_step = updated_state.get("steps", {}).get(step_name, {})
-            output = updated_step.get("edited_output") if updated_step.get("edited") else updated_step.get("output")
-            step_status = updated_step.get("status", "failed")
-            return {
-                "step": step_name,
-                "status": "completed" if step_status == "done" else "failed",
-                "data": output,
-            }
-
-        raise HTTPException(status_code=501, detail=f"Step execution not implemented for scenario: {scenario}")
+        step_runner = StepRunner(state_manager)
+        updated_state = await step_runner.run_step(label, step_name)
+        updated_step = updated_state.get("steps", {}).get(step_name, {})
+        output = updated_step.get("edited_output") if updated_step.get("edited") else updated_step.get("output")
+        step_status = updated_step.get("status", "failed")
+        return {
+            "step": step_name,
+            "status": "completed" if step_status == "done" else "failed",
+            "data": output,
+        }
 
     except HTTPException:
         raise
     except Exception as e:
         import logging
         logging.error("execute_step failed: %s", e)
+        raise HTTPException(status_code=500, detail=_safe_error(e))
+
+
+@router.post("/scenario/{scenario}/prompt-preview/audit", dependencies=[Depends(verify_api_key)])
+async def audit_prompt_preview(scenario: str, body: PromptPreviewAuditRequest):
+    """Build a dry-run prompt preview audit bundle without exposing prompt payload."""
+    _validate_scenario(scenario)
+    _assert_prompt_preview_scenario_match(scenario, body)
+
+    try:
+        bundle = build_prompt_preview_audit_workflow(
+            contract=body.contract,
+            compile_input=body.compile_input,
+            runtime_injection=body.runtime_injection,
+            planned_injection=body.planned_injection,
+        )
+        return bundle.model_dump(mode="json")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.error("audit_prompt_preview failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
@@ -888,15 +1053,11 @@ async def regenerate_step(scenario: str, label: str, step_name: str):
 
         downstream = order[step_idx + 1:]
 
-        # For S1, use StepRunner's regenerate_step
-        if scenario == "s1":
-            step_runner = StepRunner(state_manager)
-            # invalidate_downstream marks steps as pending
-            await invalidate_downstream(label, step_name, state_manager)
-            # Then regenerate the specified step
-            await step_runner.regenerate_step(label, step_name)
-        else:
-            raise HTTPException(status_code=501, detail=f"Regeneration not implemented for scenario: {scenario}")
+        step_runner = StepRunner(state_manager)
+        # invalidate_downstream marks steps as pending
+        await invalidate_downstream(label, step_name, state_manager)
+        # Then regenerate the specified step
+        await step_runner.regenerate_step(label, step_name)
 
         return {
             "label": label,
@@ -1015,6 +1176,10 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
             if "already approved" in result.get("error", ""):
                 status_code = 409
             raise HTTPException(status_code=status_code, detail=result["error"])
+        if result.get("idempotent") is True:
+            result["resumed"] = False
+            result["resuming"] = False
+            return result
 
         # Auto-resume pipeline after gate approval (step-by-step mode)
         # Resume runs from current_step until the next gate or completion.
@@ -1136,7 +1301,17 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "video_duration": coerce_video_duration(body),
             "brand_mode": body.get("brand_mode", False),
             "enable_media_synthesis": body.get("enable_media_synthesis", True),
+            "continuity_mode": body.get("continuity_mode", True),
+            "continuity_generation_mode": body.get("continuity_generation_mode", "standard"),
+            "storyboard_grid": body.get("storyboard_grid", 12),
+            "clip_group_size": body.get("clip_group_size", 3),
+            "transition_style": body.get("transition_style", "match_cut"),
         }
+        config = _with_commercial_injection_config(
+            config,
+            body.get("commercial_injection_plan"),
+            expected_scenario="s1",
+        )
     elif scenario == "s2":
         brand_package = body.get("brand_package", {})
         brand_name = brand_package.get("brand_name", "Brand")
@@ -1158,6 +1333,11 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "week": body.get("week", ""),
             "enable_media_synthesis": True,
         }
+        config = _with_commercial_injection_config(
+            config,
+            body.get("commercial_injection_plan"),
+            expected_scenario="s2",
+        )
     elif scenario == "s3":
         from src.tools.translate import translate_catalog_to_english
         product = body.get("product", {})
@@ -1186,6 +1366,11 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
             "story_description": body.get("story_description", ""),
             "video_duration": coerce_video_duration(body),
         }
+        config = _with_commercial_injection_config(
+            config,
+            body.get("commercial_injection_plan"),
+            expected_scenario="s5",
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
 
@@ -1195,7 +1380,10 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
     # Start pipeline in background so HTTP returns immediately
     async def _background_run() -> None:
         try:
-            await step_runner.resume(label)
+            if scenario == "s1" and config.get("enable_media_synthesis") is False:
+                await _resume_s1_without_media_synthesis(step_runner, label)
+            else:
+                await step_runner.resume(label)
         except Exception as e:
             logger.error("background_run_failed", label=label, scenario=scenario, error=str(e)[:200])
 
@@ -1223,6 +1411,7 @@ async def get_scenario_status(scenario: str, label: str):
             gate_status, result, errors
         }
     """
+    from src.pipeline.continuity_utils import extract_continuity_diagnostics
     from src.pipeline.state_manager import PipelineStateManager
 
     _validate_scenario(scenario)
@@ -1233,9 +1422,11 @@ async def get_scenario_status(scenario: str, label: str):
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
 
+        projected_state = project_state_injection_visibility(state)
         step_order = _SCENARIO_STEP_ORDER.get(scenario, [])
-        current_step = state.get("current_step", "")
-        steps = state.get("steps", {})
+        current_step = projected_state.get("current_step", "")
+        steps = projected_state.get("steps", {})
+        audit_report = steps.get("audit", {}).get("output") or {}
 
         # Calculate progress: done steps / total steps
         done_count = sum(1 for s in steps.values() if s.get("status") == "done")
@@ -1261,11 +1452,14 @@ async def get_scenario_status(scenario: str, label: str):
             "scenario": scenario,
             "status": status,
             "current_step": current_step,
+            CURRENT_STEP_INJECTION_KEY: projected_state.get(CURRENT_STEP_INJECTION_KEY),
             "progress": progress,
-            "pipeline_degraded": state.get("pipeline_degraded", False),
-            "gate_status": state.get("gate_status"),
-            "errors": state.get("errors", []),
-            "result": state.get("result"),
+            "pipeline_degraded": projected_state.get("pipeline_degraded", False),
+            "soft_degraded_reasons": projected_state.get("soft_degraded_reasons", []),
+            "continuity_diagnostics": extract_continuity_diagnostics(audit_report),
+            "gate_status": projected_state.get("gate_status"),
+            "errors": projected_state.get("errors", []),
+            "result": projected_state.get("result"),
             "steps": steps,
         }
     except HTTPException:

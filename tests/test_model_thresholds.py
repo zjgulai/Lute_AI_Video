@@ -2,8 +2,6 @@
 
 import os
 
-import pytest
-
 from src.pipeline.model_thresholds import (
     _DEFAULT_THRESHOLD,
     _LLM_STEP_THRESHOLD,
@@ -45,13 +43,13 @@ class TestGetThreshold:
         assert get_threshold("seedance_clips", model_id="seedance-2") == 0.65
 
     def test_kling_3_0_threshold_is_060(self):
-        assert get_threshold("seedance_clips", model_id="kling-3-0/pro") == 0.60
+        assert get_threshold("seedance_clips", model_id="kling-3.0/pro") == 0.60
 
     def test_wan_2_7_threshold_is_055(self):
-        assert get_threshold("seedance_clips", model_id="wan-2-7-video") == 0.55
+        assert get_threshold("seedance_clips", model_id="wan2.7-text-to-video") == 0.55
 
-    def test_wan_2_2_fast_threshold_is_050(self):
-        assert get_threshold("seedance_clips", model_id="wan-2-2-fast") == 0.50
+    def test_wan_2_5_threshold_is_055(self):
+        assert get_threshold("seedance_clips", model_id="wan2.5-text-to-video") == 0.55
 
     def test_veo_3_1_threshold_is_058(self):
         assert get_threshold("seedance_clips", model_id="veo-3-1") == 0.58
@@ -61,7 +59,7 @@ class TestGetThreshold:
 
     def test_explicit_model_id_overrides_step_default(self):
         seedance_default = get_threshold("seedance_clips")
-        kling_override = get_threshold("seedance_clips", model_id="kling-2-5-turbo-pro")
+        kling_override = get_threshold("seedance_clips", model_id="kling-2.5-turbo-pro")
         assert kling_override == 0.55
         assert kling_override != seedance_default
 
@@ -83,16 +81,16 @@ class TestIsAcceptable:
         assert not is_acceptable(0.64, "seedance_clips", model_id="seedance-2")
 
     def test_above_threshold_wan_budget(self):
-        assert is_acceptable(0.50, "seedance_clips", model_id="wan-2-2-fast")
+        assert is_acceptable(0.55, "seedance_clips", model_id="wan2.5-text-to-video")
 
     def test_below_threshold_wan_budget(self):
-        assert not is_acceptable(0.49, "seedance_clips", model_id="wan-2-2-fast")
+        assert not is_acceptable(0.54, "seedance_clips", model_id="wan2.5-text-to-video")
 
     def test_diagnostic_double_door_bypass_now_rejects(self):
         """诊断 §3.2 中举的 0.42/0.45/0.48 全部 sub-threshold 案例必须全员 reject。"""
         for s in (0.42, 0.45, 0.48):
             assert not is_acceptable(s, "seedance_clips", model_id="seedance-2"), s
-            assert not is_acceptable(s, "seedance_clips", model_id="wan-2-2-fast"), s
+            assert not is_acceptable(s, "seedance_clips", model_id="wan2.5-text-to-video"), s
 
     def test_llm_step_uses_060_baseline(self):
         assert is_acceptable(0.60, "scripts")
@@ -103,8 +101,8 @@ class TestThresholdCoverage:
     def test_all_premium_models_present(self):
         """Sanity check: poyo's 2026-05 premium catalog has thresholds defined."""
         for premium_model in (
-            "seedance-2", "kling-3-0/pro", "veo-3-1", "runway-gen-4-5",
-            "wan-2-7-video", "gpt-image-2",
+            "seedance-2", "kling-3.0/pro", "veo-3-1", "runway-gen-4.5",
+            "wan2.7-text-to-video", "gpt-image-2",
         ):
             assert premium_model in _MODEL_THRESHOLDS, premium_model
 
@@ -113,5 +111,5 @@ class TestThresholdCoverage:
             assert 0.0 <= thr <= 1.0, f"{model}: {thr} out of [0,1]"
 
     def test_premium_higher_than_budget(self):
-        assert _MODEL_THRESHOLDS["seedance-2"] > _MODEL_THRESHOLDS["wan-2-2-fast"]
-        assert _MODEL_THRESHOLDS["kling-3-0/pro"] >= _MODEL_THRESHOLDS["kling-2-5-turbo-pro"]
+        assert _MODEL_THRESHOLDS["seedance-2"] > _MODEL_THRESHOLDS["wan2.5-text-to-video"]
+        assert _MODEL_THRESHOLDS["kling-3.0/pro"] >= _MODEL_THRESHOLDS["kling-2.5-turbo-pro"]

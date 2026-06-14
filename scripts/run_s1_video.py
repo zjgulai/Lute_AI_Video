@@ -12,6 +12,7 @@ Output: prints JSON response and saves to /tmp/s1_video_response.json
 import json
 import sys
 import time
+
 import requests
 
 API_BASE = "http://127.0.0.1:8001"

@@ -10,6 +10,7 @@ Every public method has asyncio.timeout() protection (120s default).
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ import structlog
 
 from src.config import (
     OPENAI_API_KEY,
+    OPENAI_IMAGE_API_BASE,
     OUTPUT_DIR,
     POYO_API_KEY,
     POYO_IMAGE_MODEL,
@@ -27,6 +29,14 @@ logger = structlog.get_logger()
 
 GPT_IMAGE_TIMEOUT_SECONDS = 120.0
 MAX_RETRIES = 3
+
+
+def _poyo_image_max_polls() -> int:
+    try:
+        value = int(os.getenv("POYO_IMAGE_MAX_POLLS", "72"))
+    except ValueError:
+        value = 72
+    return max(40, value)
 
 
 class GPTImageTimeoutError(asyncio.TimeoutError):
@@ -45,6 +55,7 @@ class GPTImageClient:
         self,
         api_key: str | None = None,
         output_dir: Path | None = None,
+        max_retries: int | None = None,
     ):
         _openai_key = api_key or OPENAI_API_KEY
         self._is_poyo = False
@@ -60,13 +71,14 @@ class GPTImageClient:
         self.api_key = POYO_API_KEY or _openai_key
         self.output_dir = output_dir or OUTPUT_DIR / "gpt_images"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.max_attempts = max(1, int(max_retries) + 1) if max_retries is not None else MAX_RETRIES
 
         if self._is_poyo:
             from src.tools.poyo_client import PoyoClient
             self._poyo = PoyoClient()
         else:
             self._client = httpx.AsyncClient(
-                base_url="https://api.openai.com/v1",
+                base_url=OPENAI_IMAGE_API_BASE,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
@@ -138,7 +150,7 @@ class GPTImageClient:
                 input_payload=input_payload,
                 output_path=filepath,
                 poll_interval=5.0,
-                max_polls=40,  # 200s max — image gen can take 2-3min
+                max_polls=_poyo_image_max_polls(),
             )
             logger.info("gpt_image: poyo generated", image_id=image_id, file=filename)
             return {
@@ -196,9 +208,9 @@ class GPTImageClient:
                 }
 
         last_error = None
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(self.max_attempts):
             try:
-                return await retry_with_backoff(_do_generate)
+                return await retry_with_backoff(_do_generate, max_retries=0)
             except TimeoutError:
                 logger.error("gpt_image: timed out", image_id=image_id, attempt=attempt + 1)
                 last_error = "timeout"
@@ -211,7 +223,7 @@ class GPTImageClient:
                 logger.error("gpt_image: error", image_id=image_id, error=str(e))
                 last_error = str(e)
 
-            if attempt < MAX_RETRIES - 1:
+            if attempt < self.max_attempts - 1:
                 await asyncio.sleep(2.0 ** attempt)
 
         logger.warning("gpt_image: all retries exhausted, returning stub", image_id=image_id)

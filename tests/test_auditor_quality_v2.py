@@ -1,9 +1,7 @@
 """Tests for auditor P1 quality criteria: hook text, emotional arc, information density."""
 
-import pytest
 
-from src.agents.auditor import AuditorAgent, _score_to_status
-from src.models import Script, ScriptSegment
+from src.agents.auditor import AuditorAgent
 
 
 class TestHookTextScoring:

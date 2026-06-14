@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { House, FilmSlate, FolderOpen, Gear, ShieldCheck } from "@phosphor-icons/react";
+import { House, FilmSlate, FolderOpen, Gear, ShieldCheck, Toolbox } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useAppStore } from "@/stores/useAppStore";
 import { usePipelineStore } from "@/stores/usePipelineStore";
@@ -54,7 +54,6 @@ export default function Nav() {
       resetApp();
     }
     if (typeof window !== "undefined") {
-      // eslint-disable-next-line no-console
       console.log("[HERMES:UI] NAV Home", hasActiveRun ? "preserve activeRun" : "→ resetAll stage=home");
     }
   };
@@ -63,6 +62,7 @@ export default function Nav() {
     { href: "/", label: t("nav.home"), icon: House, onClick: handleHomeClick, match: (p: string) => p === "/" || p.startsWith("/s") || p === "/fast" || p === "/result" },
     { href: "/works", label: t("nav.works"), icon: FilmSlate, match: (p: string) => p === "/works" || p.startsWith("/works/") },
     { href: "/library", label: t("nav.library"), icon: FolderOpen, match: (p: string) => p === "/library" || p.startsWith("/library/") },
+    { href: "/toolbox", label: t("nav.toolbox"), icon: Toolbox, match: (p: string) => p === "/toolbox" || p.startsWith("/toolbox/") },
     ...(adminVisible ? [{ href: "/admin/dashboard", label: t("nav.admin"), icon: ShieldCheck, match: (p: string) => p.startsWith("/admin") }] : []),
     { href: "/settings", label: t("nav.settings"), icon: Gear, match: (p: string) => p === "/settings" },
   ];

@@ -65,6 +65,11 @@
 | `CORS_ORIGINS` | `https://zjgulai.github.io` | 允许 GitHub Pages 跨域访问 |
 | `VIDEO_OUTPUT_DIR` | `/app/output` | 视频输出目录 |
 | `DEFAULT_LLM_PROVIDER` | `deepseek` | 默认 LLM 提供商（与 `src/config.py` 默认一致） |
+| `DEEPSEEK_API_BASE` | `https://api.deepseek.com` | DeepSeek API base URL（非 secret 默认值） |
+| `DEEPSEEK_MODEL` | `deepseek-v4-pro` | DeepSeek 主模型默认值 |
+| `POYO_API_BASE_URL` | `https://api.poyo.ai` | POYO API base URL（非 secret 默认值） |
+| `POYO_IMAGE_MODEL` | `gpt-image-2` | POYO 图片模型默认值 |
+| `POYO_VIDEO_MODEL` | `seedance-2` | POYO 视频模型默认值 |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 
 > ⚠️ **重要**：`CORS_ORIGINS` 必须填 `https://zjgulai.github.io`，否则前端无法连接！

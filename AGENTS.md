@@ -2,13 +2,13 @@
 
 ## Overview
 
-**Short Video Agent** (v0.2.6) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
+**Short Video Agent** (v0.2.7) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status (2026-05-17, v0.2.7):** Production live at `https://video.lute-tlz-dddd.top` (Let's Encrypt cert, canonical) on Tencent Lighthouse since 2026-05-03. IP `https://101.34.52.232` remains as a self-signed fallback. The apex `https://lute-tlz-dddd.top` serves a static landing page that routes to either video.lute (this project) or voc.lute (Apache Superset BI, separate service). 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
+**Current status (2026-05-31, v0.2.7):** Production live at `https://video.lute-tlz-dddd.top` (Let's Encrypt cert, canonical) on Tencent Lighthouse since 2026-05-03. IP `https://101.34.52.232` remains as a self-signed fallback. The apex `https://lute-tlz-dddd.top` serves a static landing page that routes to either video.lute (this project) or voc.lute (Apache Superset BI, separate service). 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode, but production deploy smoke defaults to non-token checks until `RUN_TOKEN_SMOKE=1` is explicitly set. CloudBase / Render are documented as alternative deploy paths but are not the canonical target.
 
-**Recent releases (v0.2.0 → v0.2.7):** Tier-2 submit-lock + 422/429 error rendering, Tier-3 3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT, HU-05 cardCopyEn 100-string zh→en, Creation Guide 5-tab redesign, Brand Kit tab API wiring (137 momcozy product images now visible), product metadata API (title/price/source URL), `/api/portfolio/brand-presets` endpoint, deploy.sh Phase 0.5 defensive chmod. **2026-05-17 v0.2.5**: ADR-004 Accepted Option D (`S3_VIRAL_EXTRACT_DISABLED=1` default — closes S3 KOL viral extraction by policy), `/health` `media_tools` observability for yt-dlp/whisper/clip availability, transformers+torch+Pillow added to image (~600MB) for `src/quality/clip_alignment.py`, frontend eslint sweep (~245 → ~30 errors via `any → unknown`). **2026-05-17 v0.2.6**: ADR-005 Accepted (poster extraction at every video producer + portfolio router backstop, `src/tools/poster_extractor.py`); /works and /library video thumbnails now reach 100% coverage in production (verified 86/86 final_works); `/api/assets/` nginx burst raised 20→100 to fix 429 on `/library?tab=influencers` after consecutive tab switches; new `docs/runbooks/thumbnail-missing.md`. **2026-05-17 v0.2.7**: ADR-006 Accepted (C2PA Content Credentials for AI-generated videos, EU AI Act 2026-08-02 deadline); S5 `vlog_strategy` `'str' object has no attribute 'get'` bug fix (`selected_models` schema tolerance: str/dict/empty all valid input now); 4 new prod Playwright specs (38 tests across user-journey/s1-gate/i18n/error-paths) + `.github/workflows/e2e-prod.yml` CI; `docs/runbooks/key-rotation.md` precise leak audit (POYO_API_KEY only — DEEPSEEK/SILICONFLOW/API_KEY history-clean); 3 user-action runbooks (c2pa-cert-application / phase1-signoff-checklist / github-deploy-secrets-setup); `CLAUDE.md` SSOT divergence section pruned. See `.kiro/plan/TODO-2026-05-17.md` + `.kiro/plan/MASTER-PLAN-STATUS-2026-05-17.md` + `.kiro/plan/PLAN-2026-05-18.md` (next-day execution plan).
+**Recent releases (v0.2.0 → v0.2.7):** Tier-2 submit-lock + 422/429 error rendering, Tier-3 3 ADRs + 4 runbooks + DEFAULT_LLM_PROVIDER SSOT, HU-05 cardCopyEn 100-string zh→en, Creation Guide 5-tab redesign, Brand Kit tab API wiring (137 momcozy product images now visible), product metadata API (title/price/source URL), `/api/portfolio/brand-presets` endpoint, deploy.sh Phase 0.5 defensive chmod. **2026-05-17 v0.2.5**: ADR-004 Accepted Option D (`S3_VIRAL_EXTRACT_DISABLED=1` default — closes S3 KOL viral extraction by policy), `/health` `media_tools` observability for yt-dlp/whisper/clip availability, transformers+torch+Pillow added to image (~600MB) for `src/quality/clip_alignment.py`, frontend eslint sweep (~245 → ~30 errors via `any → unknown`). **2026-05-17 v0.2.6**: ADR-005 Accepted (poster extraction at every video producer + portfolio router backstop, `src/tools/poster_extractor.py`); /works and /library video thumbnails now reach 100% coverage in production (verified 86/86 final_works); `/api/assets/` nginx burst raised 20→100 to fix 429 on `/library?tab=influencers` after consecutive tab switches; new `docs/runbooks/thumbnail-missing.md`. **2026-05-17 v0.2.7**: ADR-006 Accepted (C2PA Content Credentials for AI-generated videos, EU AI Act 2026-08-02 deadline); S5 `vlog_strategy` `'str' object has no attribute 'get'` bug fix (`selected_models` schema tolerance: str/dict/empty all valid input now); 4 new prod Playwright specs (38 tests across user-journey/s1-gate/i18n/error-paths) + `.github/workflows/e2e-prod.yml` CI; `docs/runbooks/key-rotation.md` precise leak audit (POYO_API_KEY only — DEEPSEEK/SILICONFLOW/API_KEY history-clean); 3 user-action runbooks (c2pa-cert-application / phase1-signoff-checklist / github-deploy-secrets-setup); `CLAUDE.md` SSOT divergence section pruned. **2026-05-31 deployment hardening**: commits `306b86f`, `95c2925`, `d62a3ac` deployed to Lighthouse; `deploy.sh` and `smoke.sh` now skip `/api/fast/generate` unless `RUN_TOKEN_SMOKE=1`; `/works` includes S4 `live_shoot` filtering.
 
 ---
 
@@ -514,12 +514,12 @@ The project ships three deploy targets, in priority order:
    `deploy/lighthouse/` contains `docker-compose.prod.yml` (backend + frontend + nginx +
    rendering), `nginx.conf` (3 server blocks: video / voc / IP-fallback, with 1500s
    `proxy_read_timeout` for long-running pipelines), `ai_video_locations.conf` (shared
-   location snippet), and `.env.prod` (live secrets — gitignored). Deploy via
-   `rsync -e "ssh -i ai_video.pem"` to `ubuntu@101.34.52.232:/opt/ai-video/` then
-   `docker compose up -d --force-recreate`.
-   Note: rsync to bind-mounted nginx.conf needs `--inplace --no-whole-file` or an explicit
-   `docker restart ai_video_nginx` afterwards (nginx locks the inode at startup, so a
-   default rename-based rsync makes `nginx -s reload` a no-op).
+   location snippet), and `.env.prod` (live secrets — gitignored). Deploy from the local
+   repo root with `SSH_KEY=/path/to/ai_video.pem DRY_RUN=1 deploy/lighthouse/build-and-deploy.sh`
+   first, then `SSH_KEY=/path/to/ai_video.pem deploy/lighthouse/build-and-deploy.sh`.
+   `deploy/lighthouse/rsync-excludes.txt` is the safe sync SSOT. Default deploy smoke does
+   not consume external provider credits; set `RUN_TOKEN_SMOKE=1` only after poyo.ai is
+   intentionally funded for real generation tests.
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
    `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.
@@ -603,7 +603,7 @@ Key test areas:
 
 ## Known Gaps and TODOs
 
-Last updated: **2026-05-17 evening** (after v0.2.7 — S5 vlog_strategy bug fix + 4 prod e2e specs + e2e-prod CI + 3 user-action runbooks + ADR-006 C2PA shipped & deployed).
+Last updated: **2026-06-09** (after comprehensive debt audit — 221 findings, 33+ remediation tasks completed across config, LLM URL centralization, step_utils dedup, deploy.sh modernization, nginx security headers, frontend i18n fixes, except Exception reduction, docs archiving, and standard project files).
 
 ### ✅ Resolved since 2026-05-03 baseline
 

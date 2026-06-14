@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminFetchJson } from "@/components/api";
 import { X } from "@phosphor-icons/react";
 import { TableRowSkeleton } from "@/components/Skeleton";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface LogEntry {
   id: string;
@@ -26,6 +27,10 @@ const TIME_RANGES = [
   { label: "7d", value: "7d" },
 ];
 
+function getLogRowLabel(log: LogEntry): string {
+  return `Open log detail for ${log.error_code || log.id}`;
+}
+
 export default function AdminLogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -34,9 +39,11 @@ export default function AdminLogsPage() {
   const [error, setError] = useState("");
   const [scenario, setScenario] = useState("");
   const [tenantFilter, setTenantFilter] = useState("");
+  const [appliedScenario, setAppliedScenario] = useState("");
+  const [appliedTenantFilter, setAppliedTenantFilter] = useState("");
   const [timeRange, setTimeRange] = useState("24h");
   const [detail, setDetail] = useState<LogDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const detailCloseRef = useRef<HTMLButtonElement>(null);
 
   const getTimeFrom = (range: string): string => {
     const now = new Date();
@@ -49,15 +56,15 @@ export default function AdminLogsPage() {
     }
   };
 
-  const load = async () => {
+  const load = useCallback(async (pageOverride = page) => {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
-      params.set("page", String(page));
+      params.set("page", String(pageOverride));
       params.set("limit", "50");
-      if (scenario) params.set("scenario", scenario);
-      if (tenantFilter) params.set("tenant_id", tenantFilter);
+      if (appliedScenario) params.set("scenario", appliedScenario);
+      if (appliedTenantFilter) params.set("tenant_id", appliedTenantFilter);
       const from = getTimeFrom(timeRange);
       if (from) params.set("from", from);
 
@@ -72,24 +79,28 @@ export default function AdminLogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, appliedScenario, appliedTenantFilter, timeRange]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [page, timeRange]);
+    void load();
+  }, [load]);
 
   const openDetail = async (logId: string) => {
-    setDetailLoading(true);
     try {
       const data = await adminFetchJson<LogDetail>(`/api/admin/logs/${logId}`);
       setDetail(data);
     } catch {
-      // silently fail
-    } finally {
-      setDetailLoading(false);
+      setError("Failed to load log detail");
     }
   };
+  const closeDetail = () => setDetail(null);
+
+  useModalBehavior({
+    open: Boolean(detail),
+    onClose: closeDetail,
+    initialFocusRef: detailCloseRef,
+  });
 
   return (
     <div className="space-y-4">
@@ -98,6 +109,7 @@ export default function AdminLogsPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <select
+          aria-label="Filter logs by scenario"
           value={scenario}
           onChange={(e) => { setScenario(e.target.value); setPage(1); }}
           className="apple-input text-xs py-1.5"
@@ -108,6 +120,7 @@ export default function AdminLogsPage() {
         </select>
         <input
           type="text"
+          aria-label="Filter logs by tenant ID"
           value={tenantFilter}
           onChange={(e) => setTenantFilter(e.target.value)}
           placeholder="Tenant ID"
@@ -118,6 +131,7 @@ export default function AdminLogsPage() {
             <button
               key={tr.value}
               onClick={() => { setTimeRange(tr.value); setPage(1); }}
+              aria-pressed={timeRange === tr.value}
               className={`text-xs px-2.5 py-1.5 transition-colors ${
                 timeRange === tr.value
                   ? "bg-[var(--fortune-red)] text-white"
@@ -129,7 +143,11 @@ export default function AdminLogsPage() {
           ))}
         </div>
         <button
-          onClick={() => { setPage(1); load(); }}
+          onClick={() => {
+            setPage(1);
+            setAppliedScenario(scenario);
+            setAppliedTenantFilter(tenantFilter);
+          }}
           className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
         >
           Apply Filters
@@ -140,7 +158,7 @@ export default function AdminLogsPage() {
       {error && (
         <div className="text-center py-8">
           <p className="text-xs text-[var(--text-muted)] mb-2">{error}</p>
-          <button onClick={load} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
+          <button onClick={() => void load()} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
             Retry
           </button>
         </div>
@@ -189,8 +207,17 @@ export default function AdminLogsPage() {
                   {logs.map((log) => (
                     <tr
                       key={log.id}
-                      onClick={() => openDetail(log.id)}
-                      className="border-b border-[var(--divider-light)] last:border-0 hover:bg-[var(--bg-panel)] transition-colors cursor-pointer"
+                      role="button"
+                      aria-label={getLogRowLabel(log)}
+                      onClick={() => void openDetail(log.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          void openDetail(log.id);
+                        }
+                      }}
+                      tabIndex={0}
+                      className="border-b border-[var(--divider-light)] last:border-0 hover:bg-[var(--bg-panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--fortune-red)] focus-visible:outline-offset-[-2px] transition-colors cursor-pointer"
                     >
                       <td className="p-3 text-[var(--text-muted)] whitespace-nowrap">
                         {log.created_at
@@ -242,16 +269,29 @@ export default function AdminLogsPage() {
 
       {/* Detail modal */}
       {detail && (
-        <div className="apple-modal-overlay" onClick={() => setDetail(null)}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-log-detail-title"
+          aria-describedby="admin-log-detail-description"
+          className="apple-modal-overlay"
+          onClick={closeDetail}
+        >
           <div
             className="apple-card w-full max-w-lg mx-4 p-4 animate-scale-in max-h-[80vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">
+              <h2 id="admin-log-detail-title" className="text-sm font-semibold text-[var(--text-h1)]">
                 Error Detail
               </h2>
-              <button onClick={() => setDetail(null)} className="cursor-pointer">
+              <button
+                type="button"
+                ref={detailCloseRef}
+                onClick={closeDetail}
+                className="cursor-pointer"
+                aria-label="Close log detail"
+              >
                 <X size={16} weight="fill" className="text-[var(--text-muted)]" />
               </button>
             </div>
@@ -284,6 +324,9 @@ export default function AdminLogsPage() {
                   </pre>
                 </div>
               )}
+              <p id="admin-log-detail-description" className="sr-only">
+                Log detail for {detail.error_code}: {detail.message}
+              </p>
             </div>
           </div>
         </div>

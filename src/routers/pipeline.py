@@ -25,6 +25,18 @@ except ImportError:
 
 from src.config import DEFAULT_LANGUAGES
 from src.models import REVIEW_NODES, ApprovalStatus
+from src.pipeline.runtime_injection_executor import (
+    CURRENT_RUNTIME_INJECTION_KEY,
+    STEP_RUNTIME_INJECTION_DATA_KEY,
+)
+from src.pipeline.scenario_injection_plan import (
+    CURRENT_STEP_INJECTION_KEY,
+    STEP_INJECTION_DATA_KEY,
+    project_current_runtime_injection_visibility,
+    project_current_step_injection_visibility,
+    project_step_injection_visibility,
+    project_step_runtime_injection_visibility,
+)
 from src.routers._deps import _inject_api_keys, _safe_error, get_auth_context, verify_api_key
 from src.routers._state import (
     PipelineStartRequest,
@@ -38,6 +50,43 @@ from src.routers._state import (
 )
 
 router = APIRouter()
+
+LEGACY_PROXY_STEP_OUTPUT_MAP = {
+    "strategy": "briefs",
+    "scripts": "scripts",
+    "compliance": "compliance_report",
+    "storyboards": "storyboards",
+    "keyframe_images": "keyframe_images",
+    "video_prompts": "video_prompts",
+    "thumbnail_prompts": "thumbnail_sets",
+    "seedance_clips": "seedance_output",
+    "tts_audio": "audio_paths",
+    "thumbnail_images": "thumbnail_image_paths",
+    "assemble_final": "final_video_path",
+    "audit": "audit_report",
+}
+
+LEGACY_PROXY_REQUIRED_STATE_FIELDS = (
+    "product_catalog",
+    "brand_guidelines",
+    "target_platforms",
+    "target_languages",
+    "content_calendar_week",
+    "content_scenario",
+    "current_step",
+    CURRENT_STEP_INJECTION_KEY,
+    CURRENT_RUNTIME_INJECTION_KEY,
+    "errors",
+    "structured_errors",
+    "pipeline_complete",
+    "steps",
+    "step_commercial_injections",
+    "step_runtime_injections",
+    "human_reviews",
+    "distribution_plans",
+    "analytics_reports",
+    *LEGACY_PROXY_STEP_OUTPUT_MAP.values(),
+)
 
 
 # ── State conversion helpers ──
@@ -64,27 +113,35 @@ def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dic
         "content_calendar_week": config.get("week", ""),
         "content_scenario": config.get("content_scenario", "product_direct"),
         "current_step": state.get("current_step", ""),
+        CURRENT_STEP_INJECTION_KEY: project_current_step_injection_visibility(state),
+        CURRENT_RUNTIME_INJECTION_KEY: project_current_runtime_injection_visibility(state),
         "errors": state.get("errors", []),
         "structured_errors": [],
         "pipeline_complete": False,
     }
 
-    # Map step outputs to legacy field names
-    step_output_map = {
-        "strategy": "briefs",
-        "scripts": "scripts",
-        "compliance": "compliance_report",
-        "storyboards": "storyboards",
-        "keyframe_images": "keyframe_images",
-        "video_prompts": "video_prompts",
-        "thumbnail_prompts": "thumbnail_sets",
-        "seedance_clips": "seedance_output",
-        "tts_audio": "audio_paths",
-        "thumbnail_images": "thumbnail_image_paths",
-        "assemble_final": "final_video_path",
-        "audit": "audit_report",
-    }
-    for step_name, legacy_key in step_output_map.items():
+    step_commercial_injections: dict[str, dict[str, Any]] = {}
+    step_runtime_injections: dict[str, dict[str, Any]] = {}
+    legacy_steps: dict[str, dict[str, Any]] = {}
+    for step_name, step_data in steps.items():
+        if not isinstance(step_data, dict):
+            continue
+        legacy_step = {"status": step_data.get("status", "pending")}
+        injection = project_step_injection_visibility(state, step_name)
+        if injection is not None:
+            legacy_step[STEP_INJECTION_DATA_KEY] = injection
+            step_commercial_injections[step_name] = injection
+        runtime_injection = project_step_runtime_injection_visibility(state, step_name)
+        if runtime_injection is not None:
+            legacy_step[STEP_RUNTIME_INJECTION_DATA_KEY] = runtime_injection
+            step_runtime_injections[step_name] = runtime_injection
+        legacy_steps[step_name] = legacy_step
+    legacy_state["steps"] = legacy_steps
+    legacy_state["step_commercial_injections"] = step_commercial_injections
+    legacy_state["step_runtime_injections"] = step_runtime_injections
+
+    # Map StepRunner step outputs to the historical /pipeline/* field names.
+    for step_name, legacy_key in LEGACY_PROXY_STEP_OUTPUT_MAP.items():
         step_data = steps.get(step_name, {})
         if isinstance(step_data, dict):
             legacy_state[legacy_key] = step_data.get("output")
@@ -92,6 +149,7 @@ def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dic
             legacy_state[legacy_key] = step_data
 
     # Distribution plans (may be in assemble_final or a separate step)
+    legacy_state["distribution_plans"] = []
     assemble = steps.get("assemble_final", {})
     if isinstance(assemble, dict):
         legacy_state["distribution_plans"] = assemble.get("output", {}).get("distribution_plans", []) if isinstance(assemble.get("output"), dict) else []

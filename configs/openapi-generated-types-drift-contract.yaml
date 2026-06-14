@@ -1,0 +1,35 @@
+version: 1
+owner: frontend-backend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  drift_guard: scripts/check_openapi_types_drift.py
+  generated_types: web/src/types/api.generated.ts
+  package_scripts: web/package.json
+  backend_app: src.api.app
+  runbook: docs/runbooks/openapi-generated-types-drift.md
+
+generator:
+  package: openapi-typescript
+  version: "7.13.0"
+  binary: web/node_modules/.bin/openapi-typescript
+
+rules:
+  no_remote_schema: true
+  no_localhost_schema: true
+  no_provider_calls: true
+  default_check_read_only: true
+  write_requires_flag: --write
+  schema_source: local_fastapi_app_import
+
+commands:
+  root_check: .venv/bin/python scripts/check_openapi_types_drift.py
+  root_write: .venv/bin/python scripts/check_openapi_types_drift.py --write
+  web_check: npm run check:api-types
+  web_write: npm run typegen:api
+
+tests:
+  drift_guard: tests/test_openapi_types_drift_guard.py
+
+no_token_boundary: true

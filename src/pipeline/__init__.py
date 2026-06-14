@@ -1,13 +1,6 @@
-"""Pipeline orchestrators — S2 (Brand), S3 (Remix), S4 (Live-Shoot)."""
+"""Pipeline orchestrators package.
 
-# Import all skills to trigger auto-registration at app startup
-import src.skills.brand_compliance  # noqa: F401
-import src.skills.llm_skill  # noqa: F401 — base LLM skill
-import src.skills.product_strategy  # noqa: F401
-import src.skills.remix_script  # noqa: F401
-import src.skills.script_writer  # noqa: F401
-import src.skills.seedance_prompt  # noqa: F401
-import src.skills.storyboard  # noqa: F401
-import src.skills.thumbnail_prompt  # noqa: F401
-import src.skills.video_analysis  # noqa: F401
-import src.skills.viral_extractor  # noqa: F401
+Importing ``src.pipeline`` must not register scenario or media skills. Scenario
+modules own their required skill registrations, and S1 media skills are lazy
+registered by step so no-media production smokes keep clean log windows.
+"""

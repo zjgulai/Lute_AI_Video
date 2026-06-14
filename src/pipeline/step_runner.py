@@ -6,6 +6,7 @@ S1ProductDirectPipeline methods, and persists the updated state back to disk.
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from datetime import datetime
@@ -14,6 +15,8 @@ from typing import Any
 import structlog
 
 from src.pipeline.gate_manager import SCENARIO_GATE_DEFINITIONS
+from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.scenario_injection_plan import attach_step_injection_visibility
 from src.pipeline.state_manager import PipelineStateManager
 from src.telemetry import error_collector, generate_trace_id, pipeline_metrics
 
@@ -109,6 +112,7 @@ STEP_ORDER = [
     "scripts",
     "compliance",
     "storyboards",
+    "continuity_storyboard_grid",
     "keyframe_images",
     "video_prompts",
     "thumbnail_prompts",
@@ -125,6 +129,7 @@ STEP_METHOD_MAP = {
     "scripts": "_step_scripts",
     "compliance": "_step_compliance",
     "storyboards": "_step_storyboards",
+    "continuity_storyboard_grid": "_step_continuity_storyboard_grid",
     "keyframe_images": "_step_keyframe_images",
     "video_prompts": "_step_video_prompts",
     "thumbnail_prompts": "_step_thumbnail_prompts",
@@ -138,52 +143,24 @@ STEP_METHOD_MAP = {
 # ── Scenario configurations ──
 _SCENARIO_CONFIGS: dict[str, dict[str, Any]] = {
     "s1": {
-        "step_order": STEP_ORDER,
+        "step_order": get_scenario_step_order("s1"),
         "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
     },
     "s2": {
         # S2 Brand Campaign is an S1 wrapper (brand_mode=True) — same steps, same class
-        "step_order": STEP_ORDER,
+        "step_order": get_scenario_step_order("s2"),
         "pipeline_class": "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline",
     },
     "s4": {
-        "step_order": [
-            "scripts",
-            "video_prompts",
-            "thumbnails",
-            "seedance_clips",
-            "tts_audio",
-            "assemble_final",
-            "audit",
-        ],
+        "step_order": get_scenario_step_order("s4"),
         "pipeline_class": "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
     },
     "s3": {
-        "step_order": [
-            "video_analysis",
-            "character_identity",
-            "remix_script",
-            "storyboards",
-            "keyframe_images",
-            "video_prompts",
-            "thumbnail_prompts",
-            "seedance_clips",
-            "tts_audio",
-            "thumbnail_images",
-            "assemble_final",
-            "audit",
-        ],
+        "step_order": get_scenario_step_order("s3"),
         "pipeline_class": "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
     },
     "s5": {
-        "step_order": [
-            "vlog_strategy",
-            "video_prompts",
-            "seedance_clips",
-            "tts_audio",
-            "assemble_final",
-            "audit",
-        ],
+        "step_order": get_scenario_step_order("s5"),
         "pipeline_class": "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline",
     },
 }
@@ -218,6 +195,31 @@ def _get_step_input(state: dict[str, Any], step_name: str, input_key: str) -> An
     return step_data.get("output")
 
 
+def _with_continuity_defaults(config: dict[str, Any], scenario: str) -> dict[str, Any]:
+    """Attach S1/S2 continuity defaults without changing caller-owned config."""
+    if scenario not in {"s1", "s2"}:
+        return config
+
+    normalized = dict(config)
+    normalized.setdefault("continuity_mode", True)
+    normalized.setdefault("storyboard_grid", 12)
+    normalized.setdefault("clip_group_size", 3)
+    return normalized
+
+
+def _mirror_continuity_output(state: dict[str, Any], result: Any) -> None:
+    """Expose continuity output at top level for consumers that do not read steps."""
+    if not isinstance(result, dict):
+        return
+
+    state["continuity_storyboard_grid"] = result.get("continuity_storyboard_grid", result)
+    state["continuity_micro_shots"] = result.get("continuity_micro_shots", result.get("micro_shots", []))
+    state["clip_groups"] = result.get("clip_groups", [])
+    state["transition_plan"] = result.get("transition_plan", [])
+    if result.get("metadata"):
+        state["continuity_storyboard_metadata"] = result["metadata"]
+
+
 class StepRunner:
     """Runs individual steps of the S1 pipeline using state persistence."""
 
@@ -238,6 +240,7 @@ class StepRunner:
 
         scenario_cfg = _get_scenario_config(scenario)
         step_order = scenario_cfg["step_order"]
+        config = _with_continuity_defaults(config, scenario)
 
         # Build empty step statuses
         steps = {}
@@ -269,6 +272,10 @@ class StepRunner:
             "trace_id": trace_id,
             "errors": [],
             "media_synthesis_errors": [],
+            "gates": {},
+            "pipeline_degraded": False,
+            "degraded_reason": None,
+            "structured_errors": [],
         }
 
         await self.state_manager.save(label, state)
@@ -410,10 +417,35 @@ class StepRunner:
             await self.state_manager.save(state["label"], state)
             return state
 
+        # P1-2: In auto mode, thumbnail generation is a sidecar artifact.
+        # Skip it when SKIP_THUMBNAIL_IN_AUTO env is set to reduce pipeline latency.
+        # Thumbnails can be regenerated later without affecting the video.
+        _skip_thumbnail = (
+            step_name == "thumbnail_images"
+            and state.get("mode") == "auto"
+            and os.environ.get("SKIP_THUMBNAIL_IN_AUTO", "").lower() in ("1", "true", "yes")
+        )
+        if _skip_thumbnail:
+            logger.info("step_runner: skipping thumbnail_images in auto mode (SKIP_THUMBNAIL_IN_AUTO)")
+            step_data["status"] = "done"
+            step_data["output"] = []
+            step_data["completed_at"] = datetime.now().isoformat()
+            next_step = _get_next_step(step_name, step_order)
+            state["current_step"] = next_step
+            await self.state_manager.save(state["label"], state)
+            return state
+
+        state = attach_step_injection_visibility(state, step_name)
+        step_data = state["steps"][step_name]
+
         # Mark step as started
         step_data["status"] = "pending"
         step_data["started_at"] = datetime.now().isoformat()
-        await self.state_manager.save(state["label"], state)
+        # P1-1: In auto mode, skip intermediate save to reduce I/O.
+        # The final save on step completion is sufficient for recovery.
+        # step_by_step mode still saves so human review sees the latest state.
+        if state.get("mode") != "auto":
+            await self.state_manager.save(state["label"], state)
 
         # Instantiate pipeline and run the step (lazy import to avoid circular dep)
         pipeline_module, pipeline_class_name = scenario_cfg["pipeline_class"].rsplit(".", 1)
@@ -481,6 +513,9 @@ class StepRunner:
         step_data["status"] = "done"
         step_data["completed_at"] = datetime.now().isoformat()
         step_data["duration_ms"] = round(step_duration_ms)
+
+        if step_name == "continuity_storyboard_grid":
+            _mirror_continuity_output(state, result)
 
         if step_name == "seedance_clips" and _result_indicates_all_stubs(result):
             state["pipeline_degraded"] = True

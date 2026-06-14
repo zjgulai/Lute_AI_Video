@@ -6,14 +6,13 @@ Tests audit nodes directly with pre-built mock state — no pipeline compile nee
 import pytest
 
 from src.graph.nodes import (
-    strategy_audit_node,
-    script_audit_node,
-    editing_audit_node,
-    thumbnail_audit_node,
     _inject_rejection_feedback,
     _make_self_verification,
+    editing_audit_node,
+    script_audit_node,
+    strategy_audit_node,
+    thumbnail_audit_node,
 )
-
 
 # ── L5.x: _make_self_verification unit tests ──
 
@@ -65,7 +64,7 @@ class TestInjectRejectionFeedback:
         assert result == {"strategy": "Previous feedback"}
 
     def test_review_as_pydantic_model(self):
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
         state = {"human_reviews": {"script_review": HumanReview(
             node="script_review",
             status=ApprovalStatus.CHANGES_REQUESTED,
@@ -85,7 +84,7 @@ class TestInjectRejectionFeedback:
 
 
 def _make_weekly_calendar():
-    from src.models import WeeklyCalendar, Brief, VideoType, Platform, Language
+    from src.models import Brief, Language, Platform, VideoType, WeeklyCalendar
     return WeeklyCalendar(
         week="2026-W18",
         briefs=[
@@ -104,7 +103,7 @@ def _make_weekly_calendar():
 
 
 def _make_scripts():
-    from src.models import Script, ScriptSegment, Platform, Language
+    from src.models import Language, Platform, Script, ScriptSegment
     return [
         Script(
             id="S-001",

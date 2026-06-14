@@ -1,20 +1,21 @@
 """Probe Sora 2 Pro availability via poyo.ai — stdlib only (urllib).
 
 ad-hoc API 探查脚本,不是单元测试。需要真实 POYO_API_KEY + 联网。
+会 submit 真实 poyo.ai generation task,可能消耗 credits。
+Run only after recharge with CONFIRM_POYO_PROBE=1 and POYO_API_KEY set.
 原本错误地放在 tests/test_sora2pro.py 里被 pytest 当成测试 collect,
 2026-05-05 迁到 scripts/ 修正定位。
 
 Usage:
-    python scripts/probe_sora2pro.py
+    CONFIRM_POYO_PROBE=1 POYO_API_KEY=... python scripts/probe_sora2pro.py
 """
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
 
 # Load .env manually (stdlib)
 env_path = Path(__file__).parent.parent / ".env"
@@ -27,6 +28,7 @@ if env_path.exists():
 
 POYO_API_KEY = os.getenv("POYO_API_KEY", "")
 POYO_API_BASE = os.getenv("POYO_API_BASE_URL", "https://api.poyo.ai").rstrip("/")
+CONFIRM_ENV = "CONFIRM_POYO_PROBE"
 OUTPUT_DIR = Path(__file__).parent.parent / "output" / "seedance"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -49,6 +51,20 @@ TEST_PROMPT = (
     "Camera: handheld intimate. "
     "Pacing: quick, authentic."
 )
+
+
+def require_probe_confirmation() -> None:
+    if os.getenv(CONFIRM_ENV) != "1":
+        raise SystemExit(
+            f"{CONFIRM_ENV}=1 is required because this script submits real poyo.ai generation requests "
+            "and may consume credits."
+        )
+
+
+def mask_key(key: str) -> str:
+    if len(key) <= 10:
+        return "***"
+    return f"{key[:6]}...{key[-4:]}"
 
 
 def api_post(url: str, body: dict) -> dict:
@@ -114,7 +130,7 @@ def test_model(model_name: str):  # -> dict | None
     }
 
     # Step 1: Submit
-    print(f"  Submitting...")
+    print("  Submitting...")
     print(f"  URL: {POYO_API_BASE}/api/generate/submit")
     submit_url = f"{POYO_API_BASE}/api/generate/submit"
     data = api_post(submit_url, submit_body)
@@ -131,7 +147,7 @@ def test_model(model_name: str):  # -> dict | None
 
     task_id = data.get("data", {}).get("task_id", "")
     if not task_id:
-        print(f"  ❌ No task_id")
+        print("  ❌ No task_id")
         return None
 
     print(f"  ✅ Task submitted: {task_id}")
@@ -167,7 +183,7 @@ def test_model(model_name: str):  # -> dict | None
                 else:
                     return {"model": model_name, "task_id": task_id, "status": "download_failed"}
             else:
-                print(f"  ⚠️ Finished but no files in response")
+                print("  ⚠️ Finished but no files in response")
                 return {"model": model_name, "task_id": task_id, "status": "no_files"}
 
         if status == "failed":
@@ -206,11 +222,12 @@ def quick_submit(model_name: str) -> str | None:
 def main():
     print("Sora 2 Pro Availability Test via poyo.ai")
     print(f"Base URL: {POYO_API_BASE}")
-    print(f"API Key: {'SET' if POYO_API_KEY else 'NOT SET'} ({POYO_API_KEY[:12]}...{POYO_API_KEY[-4:]})")
 
     if not POYO_API_KEY:
         print("❌ POYO_API_KEY not set. Check .env file.")
         return
+    require_probe_confirmation()
+    print(f"API Key: SET ({mask_key(POYO_API_KEY)})")
 
     # Phase 1: Quick submit test for all models
     print("\n─── Phase 1: Submit test ───")
@@ -222,11 +239,11 @@ def main():
 
     if not candidates:
         print(f"\n❌ No model accepted. All tried: {SORA_MODELS}")
-        print(f"   Possible causes: API key lacks Sora access, or wrong base URL.")
+        print("   Possible causes: API key lacks Sora access, or wrong base URL.")
         return
 
     # Phase 2: Poll the first accepted model
-    print(f"\n─── Phase 2: Poll first accepted model ───")
+    print("\n─── Phase 2: Poll first accepted model ───")
     model, task_id = next(iter(candidates.items()))
     print(f"  Polling {model} task {task_id}...")
     status_url = f"{POYO_API_BASE}/api/generate/status/{task_id}"
@@ -247,19 +264,19 @@ def main():
                 if download_file(video_url, filepath):
                     size_mb = filepath.stat().st_size / (1024 * 1024)
                     print(f"\n{'='*70}")
-                    print(f"✅ SUCCESS!")
+                    print("✅ SUCCESS!")
                     print(f"   Model: '{model}'")
                     print(f"   Output: {filepath} ({size_mb:.2f} MB)")
                     print(f"{'='*70}")
                 return
             else:
-                print(f"  ⚠️ Finished but no files")
+                print("  ⚠️ Finished but no files")
                 return
         if status == "failed":
             err = task.get("error_message", "unknown")
             print(f"  ❌ Task failed: {err}")
             return
-    print(f"  ⏰ Poll timeout")
+    print("  ⏰ Poll timeout")
 
 
 if __name__ == "__main__":

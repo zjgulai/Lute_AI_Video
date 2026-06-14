@@ -4,6 +4,7 @@ import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMediaUrl } from "./api";
 import { Play, Clock, Eye, Heart, ShareNetwork, ChartBar } from "@phosphor-icons/react";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 
 interface GalleryItem {
   id: string;
@@ -107,11 +108,10 @@ export default function GalleryGrid({ items, onPlay }: Props) {
                 <div className="relative aspect-[3/2] bg-black overflow-hidden"
                 >
                   {item.thumbnail ? (
-                    <img
+                    <RuntimeMediaImage
                       src={getMediaUrl(item.thumbnail)}
                       alt={item.title}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      loading="lazy"
                     />
                   ) : (
                     <div className="w-full h-full bg-[var(--color-bg-secondary)] flex items-center justify-center"

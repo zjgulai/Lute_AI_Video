@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
-import CandidateSelector, { type Candidate } from "./CandidateSelector";
+import CandidateSelector, { normalizeCandidates, type Candidate } from "./CandidateSelector";
 import { I18nProvider } from "@/i18n/I18nProvider";
 
 function makeCandidate(id: string, overall = 0.85, recommended = false): Candidate {
@@ -36,6 +36,32 @@ function renderSelector(props: React.ComponentProps<typeof CandidateSelector>) {
 }
 
 describe("CandidateSelector", () => {
+  it("normalizes backend candidate payloads before they enter the UI contract", () => {
+    const normalized = normalizeCandidates([
+      {
+        id: "  ",
+        variant: "experimental",
+        data: { hook: "demo", missing: undefined, nested: { enabled: true } },
+        score: {
+          overall: 1.8,
+          explanation: 42,
+          breakdown: { director_intent: "bad", continuity: 0.7 },
+        },
+        recommended: "yes",
+      },
+      null,
+    ]);
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      id: "candidate-1",
+      variant: "standard",
+      data: { hook: "demo", missing: null, nested: { enabled: true } },
+      score: { overall: 1, breakdown: { continuity: 0.7 } },
+      recommended: false,
+    });
+  });
+
   it("renders 3 skeleton placeholders when candidates list is empty", () => {
     const { container, cleanup } = renderSelector({
       candidates: [],

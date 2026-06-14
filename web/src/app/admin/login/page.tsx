@@ -72,7 +72,11 @@ export default function AdminLoginPage() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
+            <label htmlFor="admin-email" className="sr-only">
+              Admin email
+            </label>
             <input
+              id="admin-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -84,7 +88,11 @@ export default function AdminLoginPage() {
           </div>
 
           <div>
+            <label htmlFor="admin-password" className="sr-only">
+              Admin password
+            </label>
             <input
+              id="admin-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -95,7 +103,11 @@ export default function AdminLoginPage() {
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[rgba(208,78,90,0.1)] text-[var(--crimson-mist)] text-xs">
+            <div
+              id="admin-login-error"
+              role="alert"
+              className="flex items-center gap-2 p-2.5 rounded-lg bg-[rgba(208,78,90,0.1)] text-[var(--crimson-mist)] text-xs"
+            >
               <WarningCircle size={14} weight="fill" className="shrink-0" />
               <span>
                 {retryAfter > 0
@@ -108,6 +120,7 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading || !email || !password || retryAfter > 0}
+            aria-describedby={error ? "admin-login-error" : undefined}
             className="apple-btn apple-btn-primary text-sm w-full py-2.5 disabled:opacity-50"
           >
             {loading ? (

@@ -74,6 +74,7 @@ class RemotionAssembleSkill(SkillCallable):
         audio_paths = params.get("audio_paths") or []
         lyrics_paths = params.get("lyrics_paths") or []
         clip_paths = params.get("clip_paths") or []
+        transitions = params.get("transitions") or []
         brand_guidelines = params.get("brand_guidelines") or {}
         output_label = params.get("output_label", f"video_{int(time.time())}")
         total_duration = params.get("total_duration") or self._compute_total_duration(shots)
@@ -104,6 +105,7 @@ class RemotionAssembleSkill(SkillCallable):
             total_duration=total_duration,
             label=output_label,
             clip_paths=clip_paths,
+            transitions=transitions,
         )
 
         # Write JSON to disk (for debugging / future Remotion use)
@@ -394,6 +396,7 @@ class RemotionAssembleSkill(SkillCallable):
         total_duration: float,
         label: str,
         clip_paths: list[str] | None = None,
+        transitions: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Produce JSON that matches buildRenderProps() in rendering/src/render.ts."""
         clip_paths = clip_paths or []
@@ -461,6 +464,7 @@ class RemotionAssembleSkill(SkillCallable):
             "audio_plans": [{"segments": audio_segments}] if audio_segments else [],
             "brand_guidelines": brand_guidelines,
             "clip_paths": clip_paths,
+            "transitions": transitions or [],
         }
 
     @staticmethod

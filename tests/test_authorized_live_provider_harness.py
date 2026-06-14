@@ -1,0 +1,190 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from src.models.toolbox_contracts import ToolboxToolId
+from src.pipeline.token_smoke_preflight import (
+    ACCOUNT_READINESS_RECORD_ENV,
+    ACCOUNT_READINESS_SCOPE,
+    APPROVAL_RECORD_ENV,
+    APPROVAL_SCOPE,
+    APPROVAL_STATEMENT_TEMPLATE,
+    DEFAULT_AUTH_BUDGET_LIMIT,
+    DEFAULT_AUTH_BUDGET_LIMIT_USD,
+    DEFAULT_AUTH_MODEL,
+    DEFAULT_AUTH_PROVIDER,
+    DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
+    DEFAULT_AUTH_TEST_SCOPE,
+    PROVIDER_REVALIDATION_REF,
+    REQUIRED_API_KEY_ENVS,
+    RUN_TOKEN_SMOKE_ENV,
+    SAMPLE_PLAN_REF,
+)
+from src.pipeline.toolbox.provider_readiness import (
+    TOOLBOX_TOOL_SCOPE_FIELD,
+    build_toolbox_provider_readiness,
+)
+
+
+def test_toolbox_provider_readiness_blocks_by_default_without_provider_call():
+    readiness = build_toolbox_provider_readiness(ToolboxToolId.PRODUCT_IMAGE, env={})
+
+    assert readiness.evidence_level == "L2-fixture-or-dry-run"
+    assert readiness.ready_for_dry_run is True
+    assert readiness.ready_for_authorized_live is False
+    assert readiness.provider_call_allowed is False
+    assert readiness.approval_record_ref is None
+    assert any("RUN_TOKEN_SMOKE=1" in reason for reason in readiness.blocker_reasons)
+    assert any("approval record" in reason for reason in readiness.blocker_reasons)
+
+
+def test_toolbox_provider_readiness_requires_tool_scoped_approval(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path, toolbox_tool_ids=[])
+    env = _ready_env(approval_record)
+
+    readiness = build_toolbox_provider_readiness(ToolboxToolId.PRODUCT_IMAGE, env=env)
+
+    assert readiness.ready_for_authorized_live is False
+    assert readiness.provider_call_allowed is False
+    assert readiness.approved_provider == "poyo"
+    assert readiness.approved_model == "seedance-2"
+    assert readiness.approved_budget_limit_usd == 3.0
+    assert readiness.blocker_reasons == [
+        f"approval record sample_plan.{TOOLBOX_TOOL_SCOPE_FIELD} must include product-image"
+    ]
+
+
+def test_toolbox_provider_readiness_passes_for_approved_tool_without_provider_call(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path, toolbox_tool_ids=["product-image", "ecommerce-visual", "storyboard"])
+    env = _ready_env(approval_record)
+
+    readiness = build_toolbox_provider_readiness(ToolboxToolId.PRODUCT_IMAGE, env=env)
+
+    assert readiness.evidence_level == "L2-fixture-or-dry-run"
+    assert readiness.ready_for_dry_run is True
+    assert readiness.ready_for_authorized_live is True
+    assert readiness.provider_call_allowed is True
+    assert readiness.approval_record_ref == str(approval_record)
+    assert readiness.approved_provider == "poyo"
+    assert readiness.approved_model == "seedance-2"
+    assert readiness.approved_budget_limit_usd == 3.0
+    assert readiness.preflight_report_id is not None
+    assert readiness.blocker_reasons == []
+    assert "sk_fixture_secret" not in readiness.model_dump_json()
+
+
+def test_toolbox_provider_readiness_does_not_cross_authorized_tool_scope(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path, toolbox_tool_ids=["product-image"])
+    env = _ready_env(approval_record)
+
+    readiness = build_toolbox_provider_readiness(ToolboxToolId.DIGITAL_HUMAN, env=env)
+
+    assert readiness.ready_for_authorized_live is False
+    assert readiness.provider_call_allowed is False
+    assert readiness.blocker_reasons == [
+        f"approval record sample_plan.{TOOLBOX_TOOL_SCOPE_FIELD} must include digital-human"
+    ]
+
+
+def _ready_env(approval_record: Path) -> dict[str, str]:
+    account_readiness = _write_account_readiness_record(approval_record.parent)
+    env = {
+        RUN_TOKEN_SMOKE_ENV: "1",
+        APPROVAL_RECORD_ENV: str(approval_record),
+        ACCOUNT_READINESS_RECORD_ENV: str(account_readiness),
+    }
+    for key_name in REQUIRED_API_KEY_ENVS:
+        env[key_name] = f"sk_fixture_secret_{key_name.lower()}"
+    return env
+
+
+def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
+    path = tmp_path / "authorized-live-toolbox-approval.json"
+    provider = str(overrides.get("provider", DEFAULT_AUTH_PROVIDER))
+    model = str(overrides.get("model", DEFAULT_AUTH_MODEL))
+    provider_model_scope = str(overrides.get("provider_model_scope", DEFAULT_AUTH_PROVIDER_MODEL_SCOPE))
+    test_scope = str(overrides.get("test_scope", DEFAULT_AUTH_TEST_SCOPE))
+    budget_limit = str(overrides.get("budget_limit", DEFAULT_AUTH_BUDGET_LIMIT))
+    toolbox_tool_ids = overrides.pop("toolbox_tool_ids", ["product-image"])
+    payload: dict[str, Any] = {
+        "approval_id": "approval_toolbox_fixture",
+        "scope": APPROVAL_SCOPE,
+        "evidence_level": "L4-authorized-live",
+        "provider_calls_allowed": True,
+        "approved_by": "user",
+        "approved_at": "2026-06-06T00:00:00Z",
+        "provider": provider,
+        "model": model,
+        "provider_model_scope": provider_model_scope,
+        "test_scope": test_scope,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
+        "budget_limit": budget_limit,
+        "budget_limit_usd": DEFAULT_AUTH_BUDGET_LIMIT_USD,
+        "sample_plan": {
+            "max_sample_count": 4,
+            "max_provider_calls": 4,
+            "scenarios": ["toolbox"],
+            "sample_ids": [
+                "momcozy-sterilizer-main-45-gpt-image-2",
+                "momcozy-sterilizer-uv-benefit-gpt-image-2",
+                "momcozy-sterilizer-kitchen-scene-gpt-image-2",
+                "momcozy-sterilizer-i2v-15s-seedance-2",
+            ],
+            "asset_package": {
+                "brand": "momcozy",
+                "product": "sterilizer",
+                "image_count": 3,
+                "video_count": 1,
+                "asset_status": "pending_review",
+                "delivery_accepted": False,
+                "publish_allowed": False,
+                "approved_brand_token_write": False,
+            },
+            "s5_requires_separate_confirmation": True,
+            TOOLBOX_TOOL_SCOPE_FIELD: toolbox_tool_ids,
+        },
+        "budget_stop_loss": {
+            "max_total_cost_usd": 3.0,
+            "per_job_cost_ceiling_usd": 2.5,
+            "max_retry_count": 0,
+            "stop_on_first_failure": True,
+            "halt_on_rate_limit": True,
+            "halt_on_quota_error": True,
+            "halt_on_content_rejection": True,
+            "halt_on_missing_artifact": True,
+        },
+        "approval_statement": APPROVAL_STATEMENT_TEMPLATE.format(
+            provider_model_scope=provider_model_scope,
+            test_scope=test_scope,
+            budget_limit=budget_limit,
+        ),
+    }
+    payload.update(overrides)
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    return path
+
+
+def _write_account_readiness_record(tmp_path: Path) -> Path:
+    path = tmp_path / "provider-account-readiness.json"
+    payload: dict[str, Any] = {
+        "template_only": False,
+        "readiness_id": "account_readiness_provider_fixture",
+        "scope": ACCOUNT_READINESS_SCOPE,
+        "evidence_level": "L3-production-read-only",
+        "no_provider_call": True,
+        "provider": "poyo",
+        "checked_by": "user",
+        "checked_at": "2026-06-06T00:00:00Z",
+        "provider_dashboard_balance_confirmed": True,
+        "api_key_configured_in_runtime_env": True,
+        "api_key_secret_not_recorded": True,
+        "available_credit_usd": 3.0,
+        "minimum_required_credit_usd": 3.0,
+        "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
+        "sample_plan_ref": SAMPLE_PLAN_REF,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    return path

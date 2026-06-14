@@ -6,7 +6,7 @@ module: ai-video
 topic: sprint-rollout
 status: stable
 created: 2026-05-15
-updated: 2026-05-15
+updated: 2026-05-31
 owner: Sisyphus
 source: ai
 related:
@@ -17,6 +17,8 @@ related:
 ---
 
 # Sprint 0-3 PR Review + 部署计划
+
+> **历史语境（2026-05-31）**：本文是 2026-05-15 Sprint 0-3 上线审查与渐进部署计划，保留为发布复盘、回滚策略和风险来源证据。它不再是当前部署或技术债执行计划；当前 TODO 入口是 [`docs/claude/known-gaps-stable.md`](../claude/known-gaps-stable.md)，当前 Lighthouse 部署 SOP 以 [`deploy-lighthouse-stable.md`](./deploy-lighthouse-stable.md) 为准。
 
 > **范围**: 17 commits (5905958 → fd9b236), 36 files, +4726/-142 行。覆盖诊断 R-GATE-SCORE / R-VENDOR-LOCK / R-S5-DURA / R-S2-ARCH / R-S1/S2/S3-COMP / R-DEGRADE-L2 / R-COST-EXP / R-SCHEMA-VERSION / EU AI Act 9 个 P0/P1 风险。
 >
@@ -129,7 +131,7 @@ c09ab46 feat(gate): model-aware score thresholds (Decision F, Sprint 0 S0-3)
 
 **影响范围**:
 - 生产 `.env.prod=happy-horse` + ModelRouter 部分启用 = **混合状态**：
-  - S2 → kling-3-0/pro ✅
+  - S2 → kling-3.0/pro ✅
   - S5 → seedance-2 ✅
   - S1/S3/S4 → happy-horse（8s 限制）⚠️
   - Fast mode → happy-horse ⚠️
@@ -192,7 +194,7 @@ c09ab46 feat(gate): model-aware score thresholds (Decision F, Sprint 0 S0-3)
 ```
 1) S2 auto 一单：
    curl POST /scenario/s2 with minimal brand_package
-   断言 result.model_id == "kling-3-0/pro"
+   断言 result.model_id == "kling-3.0/pro"
    断言 result.scenario == "brand_campaign"
 
 2) PG round-trip (若 PG 启用):
@@ -229,7 +231,7 @@ c09ab46 feat(gate): model-aware score thresholds (Decision F, Sprint 0 S0-3)
 **范围**:
 - 风险 #1/#2/#3 已修复
 - 仍保持 `POYO_VIDEO_MODEL=happy-horse`（S1/S3/S4 用旧模型）
-- S2/S5 通过 ModelRouter 用 kling-3-0/pro 和 seedance-2
+- S2/S5 通过 ModelRouter 用 kling-3.0/pro 和 seedance-2
 - Expert mode 仍限内部用户
 
 **Prereq**:

@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { logStateChange } from "@/components/api";
+import {
+  APP_STORE_PERSIST_VERSION,
+  createSafeJSONStorage,
+  migrateAppStorePersistence,
+  partializeAppStorePersistence,
+} from "./persistence";
+import type { PersistedAppState } from "./persistence";
 
 export type Stage = "home" | "recommend" | "generate" | "result";
 export type Mode = "expert" | "smart";
@@ -65,7 +72,7 @@ function loggedSet(
 }
 
 export const useAppStore = create<AppState>()(
-  persist(
+  persist<AppState, [], [], PersistedAppState>(
     (set, get) => {
       const lset = loggedSet(set, get);
       return {
@@ -118,12 +125,11 @@ export const useAppStore = create<AppState>()(
     },
     {
       name: "ai-video-app-store",
+      storage: createSafeJSONStorage<PersistedAppState>(() => localStorage),
+      version: APP_STORE_PERSIST_VERSION,
+      migrate: migrateAppStorePersistence,
       // P3-5: 只持久化用户偏好设置，不持久化运行时状态
-      partialize: (state) => ({
-        mode: state.mode,
-        pipelineMode: state.pipelineMode,
-        videoDuration: state.videoDuration,
-      }),
+      partialize: partializeAppStorePersistence,
     }
   )
 );

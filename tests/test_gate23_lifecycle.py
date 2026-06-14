@@ -26,7 +26,6 @@ from src.pipeline.gate_manager import (
 )
 from src.pipeline.state_manager import PipelineStateManager
 
-
 # ── Gate 2 keyframe ──
 
 

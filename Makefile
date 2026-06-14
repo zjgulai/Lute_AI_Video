@@ -1,26 +1,34 @@
-.PHONY: install test lint coverage clean ci portfolio portfolio-sync
+.PHONY: install test test-hermetic-scenarios test-hermetic-full lint coverage clean ci portfolio portfolio-sync
+
+PYTHON ?= .venv/bin/python
 
 # ── Setup ──
 
 install:
-	pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev]"
 
 # ── Testing ──
 
 test:
-	python -m pytest tests/ --tb=short -v
+	$(PYTHON) -m pytest tests/ --tb=short -v
+
+test-hermetic-scenarios:
+	bash scripts/run_s1_s5_hermetic_regression.sh
+
+test-hermetic-full:
+	bash scripts/run_s1_s5_hermetic_regression.sh
 
 coverage:
-	python -m pytest tests/ --tb=short --cov=src --cov-report=html --cov-report=xml
+	$(PYTHON) -m pytest tests/ --tb=short --cov=src --cov-report=html --cov-report=xml
 	@echo "=== Coverage HTML: htmlcov/index.html ==="
 
 # ── Linting ──
 
 lint:
-	ruff check src/
+	$(PYTHON) -m ruff check src tests scripts
 
 lint-fix:
-	ruff check src/ --fix
+	$(PYTHON) -m ruff check src tests scripts --fix
 
 # ── Cleanup ──
 
@@ -41,8 +49,8 @@ ci: lint test
 # 这条 target 用于手动重建,例如直接跑 scripts/test_*_e2e.py 后
 
 portfolio:
-	python scripts/portfolio_index.py
-	python scripts/generate_portfolio_thumbnails.py
+	$(PYTHON) scripts/portfolio_index.py
+	$(PYTHON) scripts/generate_portfolio_thumbnails.py
 
 # rsync 本地 output/ 到 Lighthouse 服务器 backend_output volume。
 # rsync 天然增量:只传改动文件,docker cp -rn no-clobber 不覆盖已上传同名。

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Key, ArrowRight, WarningCircle, Clock } from "@phosphor-icons/react";
-import { setApiKey, apiFetch } from "./api";
+import { getApiKey, setApiKey, apiFetch } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 
 export default function ApiKeyGate({ onUnlock }: Props) {
   const { t } = useI18n();
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => getApiKey());
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);

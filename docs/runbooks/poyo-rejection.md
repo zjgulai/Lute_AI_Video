@@ -50,7 +50,7 @@ sudo docker exec ai_video_backend grep -nE "^[[:space:]]*\"" src/tools/poyo_safe
      text = '<paste prompt>'
      print(sanitize_for_poyo(text))"`
   2. 如果 sanitized 输出不变 → 关键词未被覆盖，需添加
-  3. 编辑 [`src/tools/poyo_safety.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/tools/poyo_safety.py) `_REPLACEMENTS` 字典，添加 `"<触发词>": "<中性替代>"`
+  3. 编辑 [`src/tools/poyo_safety.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/tools/poyo_safety.py) `_SUBSTITUTIONS`，添加 `"<触发词>": "<中性替代>"`
   4. 写单测（参考 `tests/test_poyo_safety.py`）保护新规则
   5. 提交 → push → 灰度部署：`rsync src/tools/poyo_safety.py + docker compose restart backend`
   6. 验证：重新跑失败 pipeline → 应通过
@@ -65,18 +65,21 @@ sudo docker exec ai_video_backend grep -nE "^[[:space:]]*\"" src/tools/poyo_safe
 
 ## 四、规避词维护原则
 
-`_REPLACEMENTS` 字典是核心。规则：
+`_SUBSTITUTIONS` 是核心规则：
 
 - **目标**：保留 prompt 语义，仅替换触发审核的词
 - **优先级**：母婴/喂养场景词汇（"breast", "nursing", "feeding", "newborn"）→ 友好替代（"caring", "comfort", "infant")
 - **测试**：每次新加规则必须配套 `tests/test_poyo_safety.py` 测试
-- **同步**：规则更新后在 [`docs/poyo-trigger-words.md`](../poyo-trigger-words.md) 同步（如已存在）
+- **同步**：规则更新后在 [`docs/poyo-trigger-words.md`](../poyo-trigger-words.md) 和
+  `tests/fixtures/commercial_video/poyo_content_rejection_samples.json` 同步
 
 ## 五、根因记录
 
 故障恢复后：
 
-1. 命中新触发词的 prompt 记录到 [`docs/poyo-trigger-words.md`](../poyo-trigger-words.md)
+1. 命中新触发词的 prompt 先在
+   `tests/fixtures/commercial_video/poyo_content_rejection_samples.json` 记录，再同步到
+   [`docs/poyo-trigger-words.md`](../poyo-trigger-words.md)
 2. 如果一周内新增 ≥ 5 个触发词：评估是否需要主动联系 poyo 平台沟通母婴场景白名单
 3. 关注 [`src/agents/strategy.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/agents/strategy.py) 的 LLM 是否在生成 prompt 时本身就过激（前移防御）
 

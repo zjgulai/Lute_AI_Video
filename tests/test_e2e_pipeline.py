@@ -4,19 +4,28 @@ Runs the complete pipeline with mock data, simulates human approval
 at each checkpoint, and verifies all intermediate and final outputs.
 """
 
+from typing import Any
+
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.graph.pipeline import compile_pipeline
-from typing import Any
-
 from src.models import (
-    WeeklyCalendar, Script, ComplianceReport, ComplianceStatus,
-    Storyboard, AssetPlan, EditComposition, AudioPlan,
-    CaptionPlan, ThumbnailSet, DistributionPlan, AnalyticsReport,
-    HumanReview, ApprovalStatus,
+    AnalyticsReport,
+    ApprovalStatus,
+    AssetPlan,
+    AudioPlan,
+    CaptionPlan,
+    ComplianceReport,
+    ComplianceStatus,
+    DistributionPlan,
+    EditComposition,
+    HumanReview,
+    Script,
+    Storyboard,
+    ThumbnailSet,
+    WeeklyCalendar,
 )
-
 
 REVIEW_NODES = ["strategy_review", "script_review", "edit_review", "thumbnail_review"]
 AUDIT_CHECKPOINTS = ["strategy", "script", "edit", "thumbnail"]
@@ -251,7 +260,7 @@ class TestE2EPipeline:
 
         # Verify pipeline complete
         assert state.get("pipeline_complete") is True
-        print(f"  ✓ Pipeline Complete: True")
+        print("  ✓ Pipeline Complete: True")
 
     # ── Full end-to-end ──
 
@@ -330,7 +339,7 @@ class TestE2EPipeline:
         assert state.get("distribution_plans") is not None
         assert state.get("analytics_reports") is not None
 
-        print(f"\n  ✅ FULL E2E COMPLETE — 16 nodes, 4 self-audits, 4 human checkpoints, pipeline finished")
+        print("\n  ✅ FULL E2E COMPLETE — 16 nodes, 4 self-audits, 4 human checkpoints, pipeline finished")
 
 
 class TestE2EComplianceBlock:
@@ -366,7 +375,7 @@ class TestE2EComplianceBlock:
 
     def _inject_blocking_script(self, pipeline, config):
         """Replace the scripts in state with one that triggers a HIGH severity compliance rule."""
-        from src.models import Script, ScriptSegment, Platform, Language
+        from src.models import Language, Platform, Script, ScriptSegment
 
         bad_script = Script(
             id="SCRIPT-BLOCKED-001",
@@ -424,7 +433,7 @@ class TestE2EComplianceBlock:
             pass
 
         # Approve strategy review so it proceeds to script_node
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
         snap = pipeline.get_state(config)
         reviews = dict(snap.values.get("human_reviews", {}))
         reviews["strategy_review"] = HumanReview(
@@ -485,9 +494,9 @@ class TestE2EComplianceBlock:
         # Verify compliance DID execute (and consumed our injected script)
         assert "compliance_node" in nodes_seen
 
-        print(f"  ✓ Pipeline terminated after compliance. No downstream nodes executed.")
+        print("  ✓ Pipeline terminated after compliance. No downstream nodes executed.")
         print(f"  ✓ Compliance report: {blocked_reports[0].script_id} = {blocked_reports[0].status.value}")
-        print(f"  ✅ COMPLIANCE BLOCKED TEST PASSED")
+        print("  ✅ COMPLIANCE BLOCKED TEST PASSED")
 
 
 class TestE2EComplianceShortcut:
@@ -532,7 +541,10 @@ class TestE2EComplianceShortcut:
         can read it and decide whether to short-circuit.
         """
         from src.models import (
-            AuditReport, AuditCheckpoint, AuditCriterion, AuditCriterionStatus,
+            AuditCheckpoint,
+            AuditCriterion,
+            AuditCriterionStatus,
+            AuditReport,
         )
 
         pass_status = status if status is not None else AuditCriterionStatus.PASS
@@ -571,7 +583,7 @@ class TestE2EComplianceShortcut:
         async for _ in pipeline.astream(initial_state, config):
             pass
 
-        from src.models import HumanReview, ApprovalStatus, AuditCriterionStatus
+        from src.models import ApprovalStatus, AuditCriterionStatus, HumanReview
 
         def approve(node):
             snap = pipeline.get_state(config)
@@ -620,8 +632,8 @@ class TestE2EComplianceShortcut:
         # Pipeline continued to storyboard (not blocked)
         assert "storyboard_node" in nodes_seen
         print(f"  ✓ Pre-check PASS → compliance short-circuited, {len(reports)} reports all PASS with 0 flags")
-        print(f"  ✓ Pipeline continued to storyboard_node")
-        print(f"  ✅ COMPLIANCE SHORTCUT (PASS) TEST PASSED")
+        print("  ✓ Pipeline continued to storyboard_node")
+        print("  ✅ COMPLIANCE SHORTCUT (PASS) TEST PASSED")
 
     @pytest.mark.asyncio
     async def test_precheck_warn_still_runs_full_compliance(self, pipeline, config, initial_state):
@@ -629,7 +641,7 @@ class TestE2EComplianceShortcut:
         async for _ in pipeline.astream(initial_state, config):
             pass
 
-        from src.models import HumanReview, ApprovalStatus, AuditCriterionStatus
+        from src.models import ApprovalStatus, AuditCriterionStatus, HumanReview
 
         def approve(node):
             snap = pipeline.get_state(config)
@@ -673,8 +685,8 @@ class TestE2EComplianceShortcut:
 
         # Pipeline continued (normal mock scripts are clean)
         assert "storyboard_node" in nodes_seen
-        print(f"  ✓ Pre-check WARN → full compliance engine ran")
-        print(f"  ✅ COMPLIANCE SHORTCUT (WARN) TEST PASSED")
+        print("  ✓ Pre-check WARN → full compliance engine ran")
+        print("  ✅ COMPLIANCE SHORTCUT (WARN) TEST PASSED")
 
 
 class TestE2EAssetSourcingShortcut:
@@ -712,7 +724,8 @@ class TestE2EAssetSourcingShortcut:
     def _run_through_script(self, pipeline, config, initial_state):
         """Run strategy → script → both approved, returning the next interrupt state."""
         import asyncio
-        from src.models import HumanReview, ApprovalStatus
+
+        from src.models import ApprovalStatus, HumanReview
 
         async def _run():
             async for _ in pipeline.astream(initial_state, config):
@@ -744,7 +757,7 @@ class TestE2EAssetSourcingShortcut:
         # Phase 1: strategy → strategy_audit
         async for _ in pipeline.astream(initial_state, config):
             pass
-        from src.models import HumanReview, ApprovalStatus
+        from src.models import ApprovalStatus, HumanReview
 
         def approve(node):
             snap = pipeline.get_state(config)
@@ -785,7 +798,7 @@ class TestE2EAssetSourcingShortcut:
         assert "media_generation_node" in nodes_seen, (
             f"media_generation_node NOT executed despite gaps. Nodes: {sorted(nodes_seen)}"
         )
-        print(f"  ✓ Gaps forced → media_generation executed")
+        print("  ✓ Gaps forced → media_generation executed")
         print(f"  ✓ Nodes in this phase: {sorted(nodes_seen)}")
 
     @pytest.mark.asyncio
@@ -794,7 +807,7 @@ class TestE2EAssetSourcingShortcut:
         # Phase 1: strategy → strategy_audit
         async for _ in pipeline.astream(initial_state, config):
             pass
-        from src.models import HumanReview, ApprovalStatus, AssetPlan, ShotAssetPlan, AssetCandidate
+        from src.models import ApprovalStatus, AssetCandidate, AssetPlan, HumanReview, ShotAssetPlan
 
         def approve(node):
             snap = pipeline.get_state(config)
@@ -865,7 +878,7 @@ class TestE2EAssetSourcingShortcut:
         assert "editing_node" in nodes_seen, (
             f"editing_node not reached after skipping media_gen. Nodes: {sorted(nodes_seen)}"
         )
-        print(f"  ✓ No gaps -> media_generation skipped, editing_node reached")
+        print("  ✓ No gaps -> media_generation skipped, editing_node reached")
         print(f"  ✓ Nodes in this phase: {sorted(nodes_seen)}")
 
 

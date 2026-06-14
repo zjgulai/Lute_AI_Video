@@ -1,11 +1,22 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import CandidateSelector, { type Candidate } from "@/components/CandidateSelector";
+import CandidateSelector, {
+  normalizeCandidateData,
+  normalizeCandidates,
+  type Candidate,
+  type CandidateVariant,
+} from "@/components/CandidateSelector";
+import InlineTooltip from "@/components/InlineTooltip";
 import { useI18n } from "@/i18n/I18nProvider";
-import { isDemoMode, fetchS1State, apiFetch } from "./api";
-
-
+import { isDemoMode, fetchS1State, apiFetch, fetchGateState } from "./api";
+import {
+  getContinuityDiagnosticsSummary,
+  hasContinuityDiagnostics,
+  normalizeContinuityDiagnostics,
+  type ContinuityDiagnosticsPayload,
+} from "@/lib/continuityDiagnostics";
+import { truncateDiagnosticText } from "@/lib/diagnosticText";
 import { errorMessage } from "@/lib/errors";
 // P1-A: 删除本地 getHeaders + 硬编码 demo key,
 // 全部走 apiFetch() 自动注入 X-API-Key + 自动拼 base URL,
@@ -21,34 +32,34 @@ async function generateDemoCandidates(gateId: string): Promise<Candidate[]> {
     case "gate_1_script": {
       const scripts = demo.scripts || [];
       if (scripts.length === 0) return [];
-      const variants: Array<"standard" | "creative" | "conservative"> = ["standard", "creative", "conservative"];
-      return scripts.slice(0, 3).map((s: Record<string, unknown>, i: number) => ({
+      const variants: CandidateVariant[] = ["standard", "creative", "conservative"];
+      return scripts.slice(0, 3).map((s, i) => ({
         id: `script-${i + 1}`,
         variant: variants[i % variants.length],
         score: { overall: 0.85 + Math.random() * 0.12, explanation: "Strong script with clear structure" },
-        data: s,
+        data: normalizeCandidateData(s),
         recommended: i === 0,
       }));
     }
     case "gate_2_keyframe": {
       const boards = demo.storyboards || [];
       if (boards.length === 0) return [];
-      return boards.slice(0, 3).map((b: Record<string, unknown>, i: number) => ({
+      return boards.slice(0, 3).map((b, i) => ({
         id: `keyframe-${i + 1}`,
-        variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as "standard" | "creative" | "conservative",
+        variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as CandidateVariant,
         score: { overall: 0.82 + Math.random() * 0.15, explanation: "Good visual composition" },
-        data: b,
+        data: normalizeCandidateData(b),
         recommended: i === 0,
       }));
     }
     case "gate_3_clips": {
       const clips = demo.seedance_output?.clip_details || [];
       if (clips.length === 0) return [];
-      return clips.slice(0, 3).map((c: Record<string, unknown>, i: number) => ({
+      return clips.slice(0, 3).map((c, i) => ({
         id: `clip-${i + 1}`,
-        variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as "standard" | "creative" | "conservative",
+        variant: (i === 0 ? "standard" : i === 1 ? "creative" : "conservative") as CandidateVariant,
         score: { overall: 0.88 + Math.random() * 0.1, explanation: "High quality clip generation" },
-        data: c,
+        data: normalizeCandidateData(c),
         recommended: i === 0,
       }));
     }
@@ -58,12 +69,12 @@ async function generateDemoCandidates(gateId: string): Promise<Candidate[]> {
           id: "final-1",
           variant: "standard" as const,
           score: { overall: 0.91, explanation: "Excellent final output" },
-          data: {
+          data: normalizeCandidateData({
             final_video_path: demo.final_video_path,
             audit_report: demo.audit_report,
             thumbnail_image_paths: demo.thumbnail_image_paths,
             duration: demo.seedance_output?.total_duration || demo.video_duration,
-          },
+          }),
           recommended: true,
         },
       ];
@@ -91,6 +102,17 @@ interface Props {
   onBack: () => void;
 }
 
+function getRuntimeStatus(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const status = (value as { status?: unknown }).status;
+  return typeof status === "string" ? status : "";
+}
+
+function summarizeRuntimeStatuses(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value).map(([key, item]) => `${key}:${getRuntimeStatus(item)}`);
+}
+
 export default function GatePanel({
   label,
   gateId,
@@ -112,10 +134,17 @@ export default function GatePanel({
   const [approved, setApproved] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [editCandidateId, setEditCandidateId] = useState<string | null>(null);
+  const [continuityDiagnostics, setContinuityDiagnostics] = useState<ContinuityDiagnosticsPayload | null>(null);
   const hasGenerated = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scenario = label.startsWith("s") ? label.charAt(0) + label.charAt(1) : "s1";
+
+  const loadGateState = useCallback(async () => {
+    const stateData = await fetchGateState(scenario, label, gateId);
+    setCandidates(normalizeCandidates(stateData.candidates));
+    setContinuityDiagnostics(stateData.continuity_diagnostics || null);
+  }, [scenario, label, gateId]);
 
   // Generate candidates on mount
   const generateCandidates = useCallback(async () => {
@@ -129,6 +158,7 @@ export default function GatePanel({
       try {
         const demoCandidates = await generateDemoCandidates(gateId);
         setCandidates(demoCandidates);
+        setContinuityDiagnostics(null);
       } catch (e: unknown) {
         console.error("GatePanel demo generate error:", e);
         setError(errorMessage(e));
@@ -147,15 +177,14 @@ export default function GatePanel({
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody?.detail || `Generate failed (${res.status})`);
       }
-      const data = await res.json();
-      setCandidates(data.candidates || []);
+      await loadGateState();
     } catch (e: unknown) {
       console.error("GatePanel generate error:", e);
       setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [scenario, label, gateId, t]);
+  }, [gateId, loadGateState, scenario, label, t]);
 
   useEffect(() => {
     if (!hasGenerated.current) {
@@ -192,6 +221,7 @@ export default function GatePanel({
             },
           }))
         );
+        setContinuityDiagnostics(null);
       } catch (e: unknown) {
         console.error("GatePanel demo regenerate error:", e);
         setError(errorMessage(e));
@@ -210,14 +240,7 @@ export default function GatePanel({
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody?.detail || `Regenerate failed (${res.status})`);
       }
-      // Refresh all candidates after regeneration
-      const stateRes = await apiFetch(
-        `/scenario/${scenario}/gate/${label}/${gateId}`,
-      );
-      if (stateRes.ok) {
-        const stateData = await stateRes.json();
-        setCandidates(stateData.candidates || []);
-      }
+      await loadGateState();
     } catch (e: unknown) {
       console.error("GatePanel regenerate error:", e);
       setError(errorMessage(e));
@@ -317,8 +340,8 @@ export default function GatePanel({
             // Completion check 4: state has stabilized (no changes for 3 consecutive polls)
             const stateHash = JSON.stringify({
               current_step: currentStepName,
-              gates: Object.entries(gates).map(([k, v]) => `${k}:${(v as Record<string, unknown>)?.status}`),
-              steps: Object.entries(state.steps || {}).map(([k, v]) => `${k}:${(v as Record<string, unknown>)?.status}`),
+              gates: summarizeRuntimeStatuses(gates),
+              steps: summarizeRuntimeStatuses(state.steps),
             });
             if (stateHash === lastStateHash) {
               stableCount++;
@@ -360,6 +383,9 @@ export default function GatePanel({
   // ── Progress indicator ──
 
   const progressLabel = `${t("app.step")} ${currentStep} / ${totalSteps}`;
+  const continuityDisplay = normalizeContinuityDiagnostics(continuityDiagnostics);
+  const showContinuityDiagnostics = hasContinuityDiagnostics(continuityDiagnostics);
+  const continuitySummary = getContinuityDiagnosticsSummary(continuityDisplay, t);
 
   // ── Gate-specific label keys ──
   const gateLabelKey = (() => {
@@ -413,6 +439,54 @@ export default function GatePanel({
             </div>
           </div>
         </div>
+        {showContinuityDiagnostics && (
+          <div className="mt-3 rounded-lg border border-[rgba(122,150,187,0.28)] bg-[rgba(122,150,187,0.10)] p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium text-[var(--cinema-azure)]">
+                {t("continuity.diagnosticsTitle")}
+              </span>
+              {continuitySummary && (
+                <span className="text-[11px] text-[var(--text-body)]">{continuitySummary}</span>
+              )}
+            </div>
+            {continuityDisplay.clipDirections.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {continuityDisplay.clipDirections.slice(0, 2).map((direction, index) => (
+                  <div
+                    key={`${direction.sceneBeat}-${direction.transitionIntent}-${index}`}
+                    className="rounded-md bg-white/60 px-2.5 py-2 text-[11px] text-[var(--text-body)]"
+                  >
+                    <div className="font-medium text-[var(--text-h1)]">
+                      {t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}
+                    </div>
+                    {direction.beatSummary && (
+                      <div className="mt-0.5">
+                        {t("continuity.beatSummaryLabel")}{" "}
+                        <InlineTooltip
+                          label={truncateDiagnosticText(direction.beatSummary)}
+                          tooltip={direction.beatSummary}
+                          className="max-w-[280px] align-top"
+                          tooltipClassName="w-72"
+                        />
+                      </div>
+                    )}
+                    {direction.transitionIntent && (
+                      <div className="mt-0.5">
+                        {t("continuity.transitionIntentLabel")}{" "}
+                        <InlineTooltip
+                          label={truncateDiagnosticText(direction.transitionIntent)}
+                          tooltip={direction.transitionIntent}
+                          className="max-w-[280px] align-top"
+                          tooltipClassName="w-72"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Loading state */}

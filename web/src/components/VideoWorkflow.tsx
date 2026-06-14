@@ -2,15 +2,90 @@
 
 import { useState, useCallback } from "react";
 import { getMediaUrl } from "./api";
+import RuntimeMediaImage from "./RuntimeMediaImage";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
+import {
+  extractFinalVideoPath,
+  extractSeedanceClipOutput,
+  extractThumbnailImagePaths,
+  extractTtsAudioPaths,
+} from "@/lib/pipelineStepOutput";
+import {
+  extractPipelineSteps,
+  extractPipelineStepDurations,
+  extractPipelineStepOrder,
+  extractSoftDegradedReasons,
+  normalizeWorkflowState,
+  normalizeWorkflowStatePayload,
+} from "@/lib/pipelineState";
+import { getSoftDegradedSummary } from "@/lib/softDegraded";
+import type { WorkflowState } from "@/stores/usePipelineStore";
+
+type UnknownRecord = Record<string, unknown>;
+
+type WorkflowConfig = UnknownRecord & {
+  product_catalog?: {
+    name?: string;
+    products?: Array<{ name?: string }>;
+  };
+  brand_guidelines?: { brand_name?: string };
+  target_platforms?: string[];
+  video_duration?: number;
+  content_scenario?: string;
+};
+
+type StepItem = UnknownRecord & {
+  id?: string;
+  platform?: string;
+  hook_type?: string;
+  topic?: string;
+  product_name?: string;
+  brand_name?: string;
+  description?: string;
+  key_message?: string;
+  target_audience?: string;
+  script_id?: string;
+  prompt?: string;
+  text?: string;
+  scene_title?: string;
+  visual_description?: string;
+  shot_type?: string;
+};
+
+type ScriptSegment = UnknownRecord & {
+  segment_type?: string;
+  start_time?: number;
+  end_time?: number;
+  voiceover?: string;
+  description?: string;
+  visual_description?: string;
+  text_overlay?: string;
+};
+
+type ScriptItem = StepItem & {
+  segments?: ScriptSegment[];
+};
+
+type StoryboardItem = StepItem & {
+  shots?: unknown[];
+  total_duration?: number;
+};
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
 
 interface Props {
-  config: any;
+  config: unknown;
   label: string;
-  state: any;
-  onStateChange: (newState: any) => void;
-  onComplete: (finalState: any) => void;
+  state: unknown;
+  onStateChange: (newState: WorkflowState) => void;
+  onComplete: (finalState: WorkflowState) => void;
   onReset: () => void;
   loading: boolean;
   setLoading: (v: boolean) => void;
@@ -48,9 +123,9 @@ const _FALLBACK_STEP_DURATIONS: Record<string, string> = {
 };
 
 export default function VideoWorkflow({
-  config,
+  config: rawConfig,
   label,
-  state,
+  state: rawState,
   onStateChange,
   onComplete,
   onReset,
@@ -63,9 +138,15 @@ export default function VideoWorkflow({
   const [editingStep, setEditingStep] = useState<string | null>(null);
   const [runningStep, setRunningStep] = useState<string | null>(null);
 
-  const steps = state?.steps || {};
-  const stepOrder: string[] = state?.meta?.step_order || _FALLBACK_STEP_ORDER;
-  const stepDurations: Record<string, string> = state?.meta?.step_durations || _FALLBACK_STEP_DURATIONS;
+  const config = asRecord(rawConfig) as WorkflowConfig;
+  const state = normalizeWorkflowState(rawState);
+  const steps = extractPipelineSteps(state);
+  const stepOrder = extractPipelineStepOrder(state, _FALLBACK_STEP_ORDER);
+  const stepDurations = extractPipelineStepDurations(state, _FALLBACK_STEP_DURATIONS);
+  const errors = asArray<string>(state.errors);
+  const softDegradedReasons = extractSoftDegradedReasons(state.soft_degraded_reasons);
+  const softDegradedSummary = softDegradedReasons[0];
+  const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
 
   /** Format a duration from milliseconds to human-readable text.
    *  e.g. 5000 → "~5s", 180000 → "~3min"
@@ -81,7 +162,7 @@ export default function VideoWorkflow({
    */
   const getStepDurationLabel = (stepName: string): string => {
     const dur = steps[stepName]?.duration_ms;
-    if (dur && dur > 0) {
+    if (typeof dur === "number" && dur > 0) {
       return formatDuration(dur);
     }
     return stepDurations[stepName] || "";
@@ -102,7 +183,7 @@ export default function VideoWorkflow({
   const refreshState = useCallback(async () => {
     const { fetchS1State } = await import("./api");
     const fresh = await fetchS1State(label);
-    onStateChange(fresh.state || fresh);
+    onStateChange(normalizeWorkflowStatePayload(fresh));
   }, [label, onStateChange]);
 
   const handleRunStep = async (stepName: string) => {
@@ -112,7 +193,7 @@ export default function VideoWorkflow({
     try {
       const { runS1Step } = await import("./api");
       const result = await runS1Step(label, stepName);
-      const newState = result?.state || result;
+      const newState = normalizeWorkflowStatePayload(result);
       onStateChange(newState);
       setViewingStep(stepName);
     } catch (e: unknown) {
@@ -134,7 +215,7 @@ export default function VideoWorkflow({
     try {
       const { regenerateS1Step } = await import("./api");
       const result = await regenerateS1Step(label, stepName);
-      const newState = result?.state || result;
+      const newState = normalizeWorkflowStatePayload(result);
       onStateChange(newState);
       setViewingStep(stepName);
       setEditingStep(null);
@@ -150,7 +231,7 @@ export default function VideoWorkflow({
     }
   };
 
-  const handleSaveEdit = async (stepName: string, newOutput: any) => {
+  const handleSaveEdit = async (stepName: string, newOutput: unknown) => {
     setLoading(true);
     setLoadingText(t("editors.saving"));
     try {
@@ -182,7 +263,7 @@ export default function VideoWorkflow({
     try {
       const { resumeS1 } = await import("./api");
       const result = await resumeS1(label);
-      const finalState = result?.state || result;
+      const finalState = normalizeWorkflowStatePayload(result);
       onStateChange(finalState);
       onComplete(finalState);
     } catch (e: unknown) {
@@ -268,6 +349,19 @@ export default function VideoWorkflow({
             ))}
           </div>
         )}
+
+        {softDegradedReasons.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+            <p className="text-[12px] font-medium text-amber-800">
+              {t("degraded.softTitle")}
+              {softDegradedDisplay.stepLabel ? ` · ${softDegradedDisplay.stepLabel}` : ""}
+              {softDegradedDisplay.reasonLabel ? ` · ${softDegradedDisplay.reasonLabel}` : ""}
+            </p>
+            {softDegradedDisplay.detail ? (
+              <p className="mt-1 text-[12px] text-amber-700">{softDegradedDisplay.detail}</p>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {/* Steps Timeline */}
@@ -284,9 +378,8 @@ export default function VideoWorkflow({
             const stepData = steps[stepName] || { status: "pending" };
             const isDone = stepData.status === "done";
             const isCurrent = stepName === currentStep;
-            const isFuture = !isDone && !isCurrent;
             const isRunning = runningStep === stepName;
-            const hasError = stepData.status === "error" || (state?.errors || []).some((e: string) => e.includes(stepName));
+            const hasError = stepData.status === "error" || errors.some((e) => e.includes(stepName));
             const isEdited = stepData.edited === true;
 
             return (
@@ -409,7 +502,7 @@ export default function VideoWorkflow({
                   </div>
                 )}
 
-                {hasError && state?.errors?.filter((e: string) => e.includes(stepName)).map((err: string, i: number) => (
+                {hasError && errors.filter((e) => e.includes(stepName)).map((err, i) => (
                   <div key={i} className="ml-7 p-2 bg-[rgba(196,91,80,0.08)] rounded-lg border border-[rgba(196,91,80,0.20)]">
                     <p className="text-[12px] text-[var(--crimson-mist)]">{err}</p>
                   </div>
@@ -454,8 +547,8 @@ export default function VideoWorkflow({
 
 function StepEditor({ stepName, output, onSave, onCancel }: {
   stepName: string;
-  output: any;
-  onSave: (v: any) => void;
+  output: unknown;
+  onSave: (v: unknown) => void;
   onCancel: () => void;
 }) {
   const { t: te } = useI18n();
@@ -466,11 +559,12 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
   };
 
   if (stepName === "strategy" || stepName === "compliance") {
-    const briefs = Array.isArray(draft) ? draft : draft.briefs || [];
+    const draftRecord = asRecord(draft);
+    const briefs = Array.isArray(draft) ? asArray<StepItem>(draft) : asArray<StepItem>(draftRecord.briefs);
     return (
       <div className="space-y-2 p-2">
         <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.briefs")}</p>
-        {briefs.map((b: any, i: number) => (
+        {briefs.map((b, i) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
@@ -484,7 +578,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 onChange={(e) => {
                   const newBriefs = [...briefs];
                   newBriefs[i] = { ...b, topic: e.target.value };
-                  setDraft({ ...draft, briefs: newBriefs });
+                  setDraft({ ...asRecord(draft), briefs: newBriefs });
                 }}
                 className="apple-input text-xs w-full"
               />
@@ -497,7 +591,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 onChange={(e) => {
                   const newBriefs = [...briefs];
                   newBriefs[i] = { ...b, target_audience: e.target.value };
-                  setDraft({ ...draft, briefs: newBriefs });
+                  setDraft({ ...asRecord(draft), briefs: newBriefs });
                 }}
                 className="apple-input text-xs w-full"
               />
@@ -509,7 +603,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 onChange={(e) => {
                   const newBriefs = [...briefs];
                   newBriefs[i] = { ...b, key_message: e.target.value };
-                  setDraft({ ...draft, briefs: newBriefs });
+                  setDraft({ ...asRecord(draft), briefs: newBriefs });
                 }}
                 className="apple-input text-xs w-full resize-none"
                 rows={2}
@@ -523,7 +617,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 onChange={(e) => {
                   const newBriefs = [...briefs];
                   newBriefs[i] = { ...b, hook_type: e.target.value };
-                  setDraft({ ...draft, briefs: newBriefs });
+                  setDraft({ ...asRecord(draft), briefs: newBriefs });
                 }}
                 className="apple-input text-xs w-full"
               />
@@ -539,17 +633,18 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
   }
 
   if (stepName === "scripts") {
-    const scripts = Array.isArray(draft) ? draft : draft.scripts || [];
+    const draftRecord = asRecord(draft);
+    const scripts = Array.isArray(draft) ? asArray<ScriptItem>(draft) : asArray<ScriptItem>(draftRecord.scripts);
     return (
       <div className="space-y-2 p-2">
         <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.scripts")}</p>
-        {scripts.map((s: any, si: number) => (
+        {scripts.map((s, si) => (
           <div key={si} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">{s.id || `S${si + 1}`}</span>
               <span className="text-xs font-semibold text-[var(--text-h1)]">{s.product_name || s.brand_name || "Script"}</span>
             </div>
-            {(s.segments || []).map((seg: any, j: number) => (
+            {(s.segments || []).map((seg, j) => (
               <div key={j} className="pl-3 border-l-2 border-[var(--border-default)] space-y-1.5 py-1">
                 <div className="flex items-center gap-2">
                   <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
@@ -564,7 +659,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                       const newSegs = [...(s.segments || [])];
                       newSegs[j] = { ...seg, voiceover: e.target.value };
                       newScripts[si] = { ...s, segments: newSegs };
-                      setDraft({ ...draft, scripts: newScripts });
+                      setDraft({ ...asRecord(draft), scripts: newScripts });
                     }}
                     className="apple-input text-xs w-full resize-none"
                     rows={2}
@@ -579,7 +674,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                       const newSegs = [...(s.segments || [])];
                       newSegs[j] = { ...seg, visual_description: e.target.value };
                       newScripts[si] = { ...s, segments: newSegs };
-                      setDraft({ ...draft, scripts: newScripts });
+                      setDraft({ ...asRecord(draft), scripts: newScripts });
                     }}
                     className="apple-input text-xs w-full resize-none"
                     rows={2}
@@ -595,7 +690,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                       const newSegs = [...(s.segments || [])];
                       newSegs[j] = { ...seg, text_overlay: e.target.value };
                       newScripts[si] = { ...s, segments: newSegs };
-                      setDraft({ ...draft, scripts: newScripts });
+                      setDraft({ ...asRecord(draft), scripts: newScripts });
                     }}
                     placeholder={te("editors.text_overlay_placeholder")}
                     className="w-full bg-[var(--bg-card)] border border-[var(--border-default)] rounded-lg px-3 py-1.5 text-[13px] text-[var(--text-h1)] focus:outline-none focus:border-[var(--fortune-red)] transition-colors"
@@ -614,11 +709,12 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
   }
 
   if (stepName === "storyboards") {
-    const boards = Array.isArray(draft) ? draft : draft.storyboards || [];
+    const draftRecord = asRecord(draft);
+    const boards = Array.isArray(draft) ? asArray<StoryboardItem>(draft) : asArray<StoryboardItem>(draftRecord.storyboards);
     return (
       <div className="space-y-2 p-2">
         <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.storyboards")}</p>
-        {boards.map((b: any, i: number) => (
+        {boards.map((b, i) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
@@ -628,7 +724,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 onChange={(e) => {
                   const newBoards = [...boards];
                   newBoards[i] = { ...b, scene_title: e.target.value };
-                  setDraft({ ...draft, storyboards: newBoards });
+                  setDraft({ ...asRecord(draft), storyboards: newBoards });
                 }}
                 className="apple-input text-xs flex-1"
                 placeholder={te("editors.scene_title_placeholder")}
@@ -641,7 +737,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 onChange={(e) => {
                   const newBoards = [...boards];
                   newBoards[i] = { ...b, visual_description: e.target.value };
-                  setDraft({ ...draft, storyboards: newBoards });
+                  setDraft({ ...asRecord(draft), storyboards: newBoards });
                 }}
                 className="apple-input text-xs w-full resize-none"
                 rows={3}
@@ -655,7 +751,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 onChange={(e) => {
                   const newBoards = [...boards];
                   newBoards[i] = { ...b, shot_type: e.target.value };
-                  setDraft({ ...draft, storyboards: newBoards });
+                  setDraft({ ...asRecord(draft), storyboards: newBoards });
                 }}
                 className="apple-input text-xs w-full"
                 placeholder={te("editors.shot_type_placeholder")}
@@ -672,15 +768,16 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
   }
 
   if (stepName === "video_prompts" || stepName === "thumbnail_prompts") {
-    const prompts = Array.isArray(draft) ? draft : draft.prompts || [];
+    const draftRecord = asRecord(draft);
+    const prompts = Array.isArray(draft) ? asArray<StepItem | string>(draft) : asArray<StepItem | string>(draftRecord.prompts);
     return (
       <div className="space-y-2 p-2">
         <p className="text-[12px] text-[var(--text-body)] mb-1">{te("editors.prompts")}</p>
-        {prompts.map((p: any, i: number) => (
+        {prompts.map((p, i) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)] space-y-2">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
-              {p.platform && (
+              {typeof p !== "string" && p.platform && (
                 <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
                   {te("platform." + p.platform)}
                 </span>
@@ -695,7 +792,7 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
                 } else {
                   newPrompts[i] = { ...p, text: e.target.value, prompt: e.target.value };
                 }
-                setDraft({ ...draft, prompts: newPrompts });
+                  setDraft({ ...asRecord(draft), prompts: newPrompts });
               }}
               className="apple-input text-xs w-full resize-none"
               rows={4}
@@ -734,16 +831,17 @@ function StepEditor({ stepName, output, onSave, onCancel }: {
 
 /* ── Step Output (read-only) ── */
 
-function StepOutput({ stepName, output }: { stepName: string; output: any }) {
+function StepOutput({ stepName, output }: { stepName: string; output: unknown }) {
   const { t: to } = useI18n();
   if (!output) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noOutput")}</p>;
+  const outputRecord = asRecord(output);
 
   if (stepName === "strategy" || stepName === "compliance") {
-    const briefs = Array.isArray(output) ? output : output.briefs || [];
+    const briefs = Array.isArray(output) ? asArray<StepItem>(output) : asArray<StepItem>(outputRecord.briefs);
     if (briefs.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noStrategy")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {briefs.map((b: any, i: number) => (
+        {briefs.map((b, i) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-start gap-2 mb-1">
               {b.platform && (
@@ -768,11 +866,11 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "scripts") {
-    const scripts = Array.isArray(output) ? output : output.scripts || [];
+    const scripts = Array.isArray(output) ? asArray<ScriptItem>(output) : asArray<ScriptItem>(outputRecord.scripts);
     if (scripts.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noScript")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {scripts.map((s: any, i: number) => (
+        {scripts.map((s, i) => (
           <details key={i} className="apple-card overflow-hidden">
             <summary className="p-3 cursor-pointer flex items-center gap-2 list-none">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">{s.id || `S${i + 1}`}</span>
@@ -780,7 +878,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
               <span className="text-[12px] text-[var(--text-muted)]">{(s.segments || []).length}{to("step.segments")}</span>
             </summary>
             <div className="px-3 pb-3 space-y-2 border-t border-[var(--border-default)] pt-2">
-              {(s.segments || []).map((seg: any, j: number) => (
+              {(s.segments || []).map((seg, j) => (
                 <div key={j} className="pl-3 border-l-2 border-[var(--border-default)]">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-[12px] font-semibold text-[var(--fortune-red)] uppercase">{seg.segment_type}</span>
@@ -805,11 +903,11 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "storyboards") {
-    const boards = Array.isArray(output) ? output : output.storyboards || [];
+    const boards = Array.isArray(output) ? asArray<StoryboardItem>(output) : asArray<StoryboardItem>(outputRecord.storyboards);
     if (boards.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noStoryboard")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {boards.map((b: any, i: number) => (
+        {boards.map((b, i) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
@@ -824,18 +922,16 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "seedance_clips") {
-    // New format: {clip_paths, clip_details, total_duration, target_duration}
-    // Old format: string[]
-    const isNewFormat = output && !Array.isArray(output) && output.clip_paths;
-    const rawUrls = isNewFormat ? output.clip_paths : (Array.isArray(output) ? output : output.urls || []);
-    const details = isNewFormat ? (output.clip_details || []) : [];
-    const totalDur = isNewFormat ? (output.total_duration || 0) : 0;
-    const targetDur = isNewFormat ? (output.target_duration || 0) : 0;
+    const clipOutput = extractSeedanceClipOutput(output);
+    const rawUrls = clipOutput.paths;
+    const details = clipOutput.details;
+    const totalDur = clipOutput.totalDuration;
+    const targetDur = clipOutput.targetDuration;
     const urls = rawUrls.map((url: string) => getMediaUrl(url));
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
       <div className="space-y-2 p-2">
-        {isNewFormat && targetDur > 0 && (
+        {clipOutput.hasDurationTarget && (
           <div className="flex items-center gap-2 text-[12px]">
             <span className="text-[var(--text-body)]">
               {to("step.totalDuration")}: {totalDur.toFixed(1)}s / {targetDur}s
@@ -848,9 +944,10 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
         <div className="grid grid-cols-2 gap-2">
           {urls.map((url: string, i: number) => {
             const meta = details[i] || {};
+            const duration = meta.duration;
             const isStub = meta.is_stub;
             const isFiller = meta.is_filler;
-            const hasContinuity = meta.continuity_frame;
+            const hasContinuity = Boolean(meta.continuity_frame);
             const ver = meta.verification || {};
             const verOk = ver.all_ok !== false;
             return (
@@ -859,8 +956,8 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
                 <div className="p-2 space-y-1">
                   <div className="flex items-center gap-1 flex-wrap">
                     <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
-                    {meta.duration > 0 && (
-                      <span className="text-[12px] text-[var(--text-body)]">{meta.duration.toFixed(1)}s</span>
+                    {typeof duration === "number" && duration > 0 && (
+                      <span className="text-[12px] text-[var(--text-body)]">{duration.toFixed(1)}s</span>
                     )}
                     {isStub && (
                       <span className="text-[12px] px-1.5 py-0.5 rounded-full bg-[rgba(255,149,0,0.10)] text-[var(--gold-foil)] font-medium">
@@ -894,14 +991,14 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "thumbnail_images") {
-    const rawUrls = Array.isArray(output) ? output : output.urls || [];
+    const rawUrls = extractThumbnailImagePaths(output);
     const urls = rawUrls.map((url: string) => getMediaUrl(url));
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
       <div className="grid grid-cols-2 gap-2 p-2">
         {urls.map((url: string, i: number) => (
           <div key={i} className="apple-card overflow-hidden">
-            <img src={url} alt={`Asset ${i + 1}`} className="w-full h-32 object-cover" />
+            <RuntimeMediaImage src={url} alt={`Asset ${i + 1}`} className="w-full h-32 object-cover" />
             <p className="text-[12px] text-[var(--text-muted)] p-2 truncate">{url}</p>
           </div>
         ))}
@@ -910,10 +1007,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "tts_audio") {
-    // Format: {"audio_paths": [...], "lyrics_paths": [...]}
-    const rawUrls = Array.isArray(output)
-      ? output
-      : (output.audio_paths || output.urls || []);
+    const rawUrls = extractTtsAudioPaths(output);
     const urls = rawUrls.map((url: string) => getMediaUrl(url));
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
@@ -928,7 +1022,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: any }) {
   }
 
   if (stepName === "assemble_final") {
-    const rawUrl = typeof output === "string" ? output : output.final_video_url;
+    const rawUrl = extractFinalVideoPath(output);
     const finalUrl = getMediaUrl(rawUrl);
     if (!finalUrl) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noData")}</p>;
     return (

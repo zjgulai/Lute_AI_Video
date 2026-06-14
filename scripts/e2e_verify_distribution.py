@@ -5,8 +5,8 @@ Runs pipeline with resume loop (handles all interrupt_after points).
 Focuses on verifying distribution_node output with platform-specific posts.
 """
 import asyncio
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

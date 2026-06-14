@@ -1,0 +1,60 @@
+{
+  "template_only": true,
+  "approval_id": "replace-me-c21-token-smoke-20260606-001",
+  "scope": "c21-token-smoke",
+  "evidence_level": "L4-authorized-live",
+  "provider_calls_allowed": true,
+  "approved_by": "REPLACE_ME_USER_OR_OWNER",
+  "approved_at": "REPLACE_ME_ISO8601_TIMESTAMP",
+  "provider": "poyo",
+  "model": "seedance-2",
+  "provider_model_scope": "poyo/gpt-image-2 + poyo/seedance-2",
+  "test_scope": "Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频",
+  "provider_revalidation_ref": "configs/poyo-current-provider-revalidation-contract.json",
+  "sample_plan_ref": "configs/authorized-live-token-smoke-sample-plan-contract.json",
+  "budget_limit": "$3.00",
+  "budget_limit_usd": 3.0,
+  "sample_plan": {
+    "max_sample_count": 4,
+    "max_provider_calls": 4,
+    "scenarios": ["toolbox"],
+    "toolbox_tool_ids": ["product-image", "ecommerce-visual", "storyboard"],
+    "sample_ids": [
+      "momcozy-sterilizer-main-45-gpt-image-2",
+      "momcozy-sterilizer-uv-benefit-gpt-image-2",
+      "momcozy-sterilizer-kitchen-scene-gpt-image-2",
+      "momcozy-sterilizer-i2v-15s-seedance-2"
+    ],
+    "asset_package": {
+      "brand": "momcozy",
+      "product": "sterilizer",
+      "image_count": 3,
+      "video_count": 1,
+      "asset_status": "pending_review",
+      "delivery_accepted": false,
+      "publish_allowed": false,
+      "approved_brand_token_write": false
+    },
+    "s5_requires_separate_confirmation": true
+  },
+  "budget_stop_loss": {
+    "max_total_cost_usd": 3.0,
+    "per_job_cost_ceiling_usd": 2.5,
+    "max_retry_count": 0,
+    "stop_on_first_failure": true,
+    "halt_on_rate_limit": true,
+    "halt_on_quota_error": true,
+    "halt_on_content_rejection": true,
+    "halt_on_missing_artifact": true
+  },
+  "approval_statement": "我授权在生产环境 https://video.lute-tlz-dddd.top 使用 poyo image + poyo Seedance 执行 Momcozy 消毒器 3 张图片 + 1 条 15 秒竖版图片驱动视频的真实调用 smoke，预算上限 $3.00，自动重试 0，不发布、不写入正式 brand token，产物只进入待审素材库。",
+  "operator_notes": [
+    "Do not put provider API keys in this file.",
+    "Prefer scripts/build_authorized_live_approval_record.py to create the private approval record after exact user authorization.",
+    "Keep template_only=true until the user gives the exact authorization statement in the active session.",
+    "Keep provider_revalidation_ref bound to the current poyo public-doc revalidation contract unless that contract is refreshed first.",
+    "Keep sample_plan_ref bound to the current Momcozy sterilizer authorized-live sample plan unless the plan is refreshed first.",
+    "Generated image and video assets must enter pending_review only; do not write approved brand tokens, delivery acceptance, or publish approval from this smoke.",
+    "Store the filled approval record in a private, non-committed path and set AI_VIDEO_AUTHORIZED_LIVE_APPROVAL_RECORD to that path."
+  ]
+}

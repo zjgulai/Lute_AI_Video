@@ -1,0 +1,46 @@
+version: 1
+owner: frontend
+status: stable
+updated: "2026-06-01"
+
+entrypoints:
+  api_helpers: web/src/components/api.ts
+  settings_panel: web/src/components/SettingsPanel.tsx
+  api_key_gate: web/src/components/ApiKeyGate.tsx
+  runbook: docs/runbooks/api-key-storage-fallback.md
+
+storage:
+  key_name: ai_video_api_key
+  localStorage_primary: true
+  cookie_fallback_only: true
+  cookie_same_site: Lax
+  cookie_path: /
+
+rules:
+  localStorage_available:
+    - setApiKey writes localStorage
+    - setApiKey removes stale cookie fallback
+  localStorage_unavailable:
+    - setApiKey writes cookie fallback
+    - getApiKey reads cookie fallback
+  clear:
+    setApiKey_blank_clears_storage: true
+    resetApiConfig_clears_storage: true
+  display:
+    mask_helper: maskApiKeyForDisplay
+    never_render_full_secret: true
+    short_secret_label: Set
+    empty_secret_label: Not set
+  logging:
+    full_api_key_forbidden: true
+  no_provider_calls: true
+  no_generation_endpoints: true
+
+tests:
+  storage_guard: web/src/components/apiKeyStorage.test.ts
+
+commands:
+  focused_test: npm test -- --run src/components/apiKeyStorage.test.ts
+  type_check: npx tsc --noEmit -p tsconfig.json
+
+no_token_boundary: true

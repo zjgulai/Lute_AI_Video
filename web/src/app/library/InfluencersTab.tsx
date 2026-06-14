@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Users, Plus, PencilSimple, Trash, X, WarningCircle, Spinner } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { apiFetch, isDemoMode } from "@/components/api";
 import TagInput from "@/components/TagInput";
 import EmptyState from "@/components/EmptyState";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 import { errorMessage } from "@/lib/errors";
 interface InfluencerProfile {
@@ -36,18 +37,20 @@ export default function InfluencersTab() {
   const [formStyleTags, setFormStyleTags] = useState<string[]>([]);
   const [formNotes, setFormNotes] = useState("");
   const [formIsActive, setFormIsActive] = useState(true);
+  const formCloseRef = useRef<HTMLButtonElement>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
 
-  const fetchInfluencers = useCallback(async () => {
+  const fetchInfluencers = useCallback(async (shouldCommit: () => boolean = () => true) => {
     setLoading(true);
     setError(null);
     if (isDemoMode()) {
       try {
         const { DEMO_INFLUENCERS } = await import("@/demo-data");
-        setInfluencers(DEMO_INFLUENCERS || []);
+        if (shouldCommit()) setInfluencers(DEMO_INFLUENCERS || []);
       } catch (e: unknown) {
-        setError(errorMessage(e, t("common.fetchFailed")));
+        if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
       } finally {
-        setLoading(false);
+        if (shouldCommit()) setLoading(false);
       }
       return;
     }
@@ -55,16 +58,20 @@ export default function InfluencersTab() {
       const res = await apiFetch("/api/assets/influencers");
       if (!res.ok) throw new Error(`${t("common.fetchFailed")} (${res.status})`);
       const data = await res.json();
-      setInfluencers(data.influencers || []);
+      if (shouldCommit()) setInfluencers(data.influencers || []);
     } catch (e: unknown) {
-      setError(errorMessage(e, t("common.fetchFailed")));
+      if (shouldCommit()) setError(errorMessage(e, t("common.fetchFailed")));
     } finally {
-      setLoading(false);
+      if (shouldCommit()) setLoading(false);
     }
   }, [t]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchInfluencers(); }, [fetchInfluencers]);
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchInfluencers(() => !cancelled);
+    return () => { cancelled = true; };
+  }, [fetchInfluencers]);
 
   const openCreateForm = () => {
     setEditingId(null);
@@ -151,6 +158,22 @@ export default function InfluencersTab() {
       return dateStr;
     }
   };
+
+  const closeForm = () => {
+    if (!saving) setShowForm(false);
+  };
+  const closeDeleteConfirm = () => setDeleteConfirm(null);
+
+  useModalBehavior({
+    open: showForm,
+    onClose: closeForm,
+    initialFocusRef: formCloseRef,
+  });
+  useModalBehavior({
+    open: Boolean(deleteConfirm),
+    onClose: closeDeleteConfirm,
+    initialFocusRef: deleteCancelRef,
+  });
 
   return (
     <div className="space-y-4">
@@ -300,16 +323,22 @@ export default function InfluencersTab() {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="influencer-form-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        >
           <div className="apple-card w-full max-w-lg mx-4 p-5 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">
+              <h2 id="influencer-form-title" className="text-sm font-semibold text-[var(--text-h1)]">
                 {editingId ? t("inf.editProfile") : t("inf.addProfile")}
               </h2>
               <button
-                onClick={() => setShowForm(false)}
+                ref={formCloseRef}
+                onClick={closeForm}
                 className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-h1)] hover:bg-[var(--bg-panel)] transition-all cursor-pointer"
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -412,7 +441,7 @@ export default function InfluencersTab() {
 
             <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[rgba(215,92,112,0.18)]">
               <button
-                onClick={() => setShowForm(false)}
+                onClick={closeForm}
                 className="apple-btn text-xs py-2 px-3"
                 disabled={saving}
               >
@@ -441,20 +470,26 @@ export default function InfluencersTab() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="influencer-delete-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        >
           <div className="apple-card p-5 max-w-sm mx-4">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-8 h-8 rounded-full bg-[rgba(196,91,80,0.10)] flex items-center justify-center">
                 <WarningCircle size={16} weight="fill" className="text-[var(--crimson-mist)]" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-[var(--text-h1)]">{t("inf.deleteConfirm")}</h3>
+                <h3 id="influencer-delete-title" className="text-sm font-semibold text-[var(--text-h1)]">{t("inf.deleteConfirm")}</h3>
                 <p className="text-[12px] text-[var(--text-body)]">{t("inf.deleteHint")}</p>
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setDeleteConfirm(null)}
+                ref={deleteCancelRef}
+                onClick={closeDeleteConfirm}
                 className="apple-btn text-xs py-2 px-3"
               >
                 {t("common.cancel")}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Lightning, Clock, SpeakerHigh, CaretDown, CaretUp, Copy, ArrowCounterClockwise, Play, Article, Cpu, Timer, HardDrives } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { submitFastMode, pollFastStatus, getMediaUrl, isDemoMode, isApiError, type FastModeResult, type FastStatusResponse } from "./api";
+import { submitFastMode, pollFastStatus, isDemoMode, isApiError, type FastModeResult, type FastStatusResponse } from "./api";
 import { DEMO_FAST_MODE_RESULT } from "@/demo-data";
 import { useSubmitting } from "@/hooks/useSubmitting";
 
@@ -205,10 +205,10 @@ export default function FastModePanel() {
           <div className="text-xs text-[var(--text-body)] bg-[rgba(215,168,52,0.05)] px-3 py-2 rounded-lg">
             <div className="flex items-center justify-between">
               <span>
-                {progressStage === "queued" && "Submitting..."}
-                {progressStage === "llm" && "Enhancing prompt with DeepSeek..."}
-                {progressStage === "video" && "Generating video with Seedance..."}
-                {progressStage === "tts" && "Synthesizing voiceover..."}
+                {progressStage === "queued" && t("fastMode.progress.queued")}
+                {progressStage === "llm" && t("fastMode.progress.enhancingPrompt")}
+                {progressStage === "video" && t("fastMode.progress.generatingVideo")}
+                {progressStage === "tts" && t("fastMode.progress.synthesizingVoiceover")}
               </span>
               <span className="font-mono text-[var(--text-muted)]">{progressSec.toFixed(1)}s</span>
             </div>

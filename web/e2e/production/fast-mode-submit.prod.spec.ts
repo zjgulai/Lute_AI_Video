@@ -1,12 +1,15 @@
 import { test, expect } from "@playwright/test";
+import { productionApiHeaders } from "./helpers";
 
-const API_KEY = process.env.PLAYWRIGHT_API_KEY || "ai_video_demo_2026";
+function authHeaders(extra: Record<string, string> = {}) {
+  return productionApiHeaders(extra);
+}
 
 test.describe("Production smoke — Fast Mode async submit", () => {
-  test("POST /api/fast/submit returns task_id quickly (~2-5s)", async ({ request }) => {
+  test("POST /api/fast/submit returns task_id quickly (~2-5s) @token-smoke", async ({ request }) => {
     const start = Date.now();
     const r = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       data: {
         user_prompt: "a single red apple on white background",
         duration: 10,
@@ -26,21 +29,21 @@ test.describe("Production smoke — Fast Mode async submit", () => {
 
   test("GET /api/fast/status/{unknown_task} returns 404", async ({ request }) => {
     const r = await request.get("/api/fast/status/fast_does_not_exist_xyz", {
-      headers: { "X-API-Key": API_KEY },
+      headers: authHeaders(),
     });
     expect(r.status()).toBe(404);
   });
 
-  test("submit + status round-trip — task is queryable + has stage field", async ({ request }) => {
+  test("submit + status round-trip — task is queryable + has stage field @token-smoke", async ({ request }) => {
     const r1 = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       data: { user_prompt: "blue ocean wave", duration: 10, enable_tts: false },
     });
     expect(r1.status()).toBe(200);
     const taskId = (await r1.json()).task_id;
 
     const r2 = await request.get(`/api/fast/status/${taskId}`, {
-      headers: { "X-API-Key": API_KEY },
+      headers: authHeaders(),
     });
     expect(r2.status()).toBe(200);
     const snap = await r2.json();

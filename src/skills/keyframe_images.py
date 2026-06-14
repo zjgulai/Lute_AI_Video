@@ -11,6 +11,7 @@ Output: storyboard dict with each shot having keyframe_image_path added.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -39,6 +40,8 @@ class KeyframeImagesSkill(SkillCallable):
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         storyboard: dict[str, Any] = params["storyboard"]
+        output_dir = params.get("output_dir")
+        provider_max_retries = params.get("provider_max_retries")
 
         gate_attempt = int(params.get("_quality_attempt", 0))
         gate_decision, gate_score, gate_reason = evaluate_upstream_quality(
@@ -86,10 +89,12 @@ class KeyframeImagesSkill(SkillCallable):
         reg = SkillRegistry()
 
         # Safety cap: process at most MAX_SHOTS_PER_STORYBOARD shots
-        capped_shots = shots[:self.MAX_SHOTS_PER_STORYBOARD]
-        if len(shots) > self.MAX_SHOTS_PER_STORYBOARD:
+        # P2-1: Allow caller to override cap when clips count is known upfront
+        cap = self._resolve_shot_cap(params)
+        capped_shots = shots[:cap]
+        if len(shots) > cap:
             logger.warning("keyframe: capping shots",
-                           total=len(shots), cap=self.MAX_SHOTS_PER_STORYBOARD)
+                           total=len(shots), cap=cap)
 
         import asyncio
 
@@ -101,12 +106,17 @@ class KeyframeImagesSkill(SkillCallable):
                 identity_text=identity_text,
             )
             image_id = f"keyframe_{storyboard.get('script_id', 'sb')}_{i:03d}"
-            result = await reg.execute("gpt-image-generate-skill", {
+            generate_params: dict[str, Any] = {
                 "prompt": comp_prompt,
                 "size": params.get("size", "1024x1792"),
                 "quality": params.get("quality", "high"),
                 "image_id": image_id,
-            })
+            }
+            if output_dir:
+                generate_params["output_dir"] = output_dir
+            if provider_max_retries is not None:
+                generate_params["provider_max_retries"] = provider_max_retries
+            result = await reg.execute("gpt-image-generate-skill", generate_params)
             if result.success and result.data:
                 image_path = result.data.get("image_path", "")
                 logger.info("keyframe: generated", shot=i, image_path=image_path)
@@ -129,6 +139,7 @@ class KeyframeImagesSkill(SkillCallable):
             capped_shots[i]["keyframe_image_path"] = image_path
             capped_shots[i]["keyframe_prompt"] = comp_prompt
 
+        storyboard["shots"] = capped_shots
         storyboard["keyframes_generated"] = len(capped_shots)
         if params.get("_quality_warning"):
             storyboard["_quality_warning"] = params["_quality_warning"]
@@ -175,6 +186,14 @@ class KeyframeImagesSkill(SkillCallable):
             parts.append(f"Subject age: {age}")
         return "; ".join(parts)
 
+    @classmethod
+    def _resolve_shot_cap(cls, params: dict[str, Any]) -> int:
+        raw_cap = params.get("_max_shots", cls.MAX_SHOTS_PER_STORYBOARD)
+        try:
+            return max(0, int(raw_cap))
+        except (TypeError, ValueError):
+            return cls.MAX_SHOTS_PER_STORYBOARD
+
     # ── Fallback placeholder ──
 
     @staticmethod
@@ -184,9 +203,12 @@ class KeyframeImagesSkill(SkillCallable):
         params: dict[str, Any],
     ) -> str:
         """Write a placeholder PNG when GPT-Image call fails."""
-        from src.config import OUTPUT_DIR
-
-        out_dir = OUTPUT_DIR / "keyframes"
+        output_dir = params.get("output_dir")
+        if output_dir:
+            out_dir = Path(output_dir)
+        else:
+            from src.config import OUTPUT_DIR
+            out_dir = OUTPUT_DIR / "keyframes"
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"fallback_{image_id}.png"
 
@@ -216,8 +238,10 @@ class KeyframeImagesSkill(SkillCallable):
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors: list[str] = []
         sb = params.get("storyboard")
-        if not sb:
+        if sb is None:
             errors.append("missing 'storyboard' dict")
+        elif not isinstance(sb, dict):
+            errors.append("storyboard must be a dict")
         elif "shots" not in sb:
             errors.append("storyboard missing 'shots' list")
         elif not isinstance(sb["shots"], list):
@@ -240,14 +264,20 @@ class KeyframeImagesSkill(SkillCallable):
         """Return storyboard with placeholder image paths."""
         storyboard: dict[str, Any] = params.get("storyboard") or {"shots": []}
         shots: list[dict[str, Any]] = storyboard.get("shots", [])
-        from src.config import OUTPUT_DIR
+        output_dir = params.get("output_dir")
+        if output_dir:
+            out_dir = Path(output_dir)
+        else:
+            from src.config import OUTPUT_DIR
+            out_dir = OUTPUT_DIR / "keyframes"
 
         # Safety cap to prevent excessive fallback file writes
-        capped_shots = shots[:KeyframeImagesSkill.MAX_SHOTS_PER_STORYBOARD]
+        cap = KeyframeImagesSkill._resolve_shot_cap(params)
+        capped_shots = shots[:cap]
 
         for i, shot in enumerate(capped_shots):
             image_id = f"sb_fallback_{i:03d}"
-            path = OUTPUT_DIR / "keyframes" / f"fallback_{image_id}.png"
+            path = out_dir / f"fallback_{image_id}.png"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(
                 b"\x89PNG\r\n\x1a\n"
@@ -260,6 +290,7 @@ class KeyframeImagesSkill(SkillCallable):
             shot["keyframe_image_path"] = str(path)
             shot["keyframe_prompt"] = shot.get("visual", "")
 
+        storyboard["shots"] = capped_shots
         storyboard["keyframes_generated"] = len(capped_shots)
         return SkillResult(
             success=True,

@@ -1,12 +1,12 @@
 # Multi-stage Dockerfile for AI Video frontend
-# P3-3: Pre-built image — no runtime npm install/build
+# P3-3: Pre-built image — no runtime dependency install/build
 
 # ── Stage 1: Build ──
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
 
 COPY . .
 
@@ -14,8 +14,10 @@ COPY . .
 # Override with --build-arg at docker build time.
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8001
 ARG NEXT_PUBLIC_IS_DEMO=false
+ARG NEXT_PUBLIC_API_KEY=
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV NEXT_PUBLIC_IS_DEMO=${NEXT_PUBLIC_IS_DEMO}
+ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
 
 RUN npm run build
 
@@ -29,8 +31,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Re-declare build args so they are available as ENV at runtime
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_IS_DEMO
+ARG NEXT_PUBLIC_API_KEY
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV NEXT_PUBLIC_IS_DEMO=${NEXT_PUBLIC_IS_DEMO}
+ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
 
 # Copy only the production artifacts
 COPY --from=builder /app/.next/standalone ./

@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/api/assets/upload": {
+    "/api/admin/auth/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -14,20 +14,266 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Upload Asset
-         * @description Upload a video or image asset.
-         *
-         *     Stores the file and returns an asset_id for pipeline use.
+         * Admin Login
+         * @description Login with email + password. Returns admin session cookie.
+         */
+        post: operations["admin_login_api_admin_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Logout
+         * @description Logout — clear the admin session.
+         */
+        post: operations["admin_logout_api_admin_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Session Check
+         * @description Validate the current admin session.
+         */
+        get: operations["admin_session_check_api_admin_auth_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dashboard/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dashboard Summary
+         * @description Aggregated dashboard overview — tenant counts, pipeline runs, error rate.
+         */
+        get: operations["dashboard_summary_api_admin_dashboard_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/health/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health History
+         * @description Return recent health check history.
+         */
+        get: operations["health_history_api_admin_health_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/health/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Status
+         * @description Return current service health status. Triggers an immediate check.
+         */
+        get: operations["health_status_api_admin_health_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Logs
+         * @description List error logs with pagination and filters.
+         */
+        get: operations["list_logs_api_admin_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs/{log_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Log Detail
+         * @description Get full log entry including traceback.
+         */
+        get: operations["get_log_detail_api_admin_logs__log_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tenants
+         * @description List tenants with pagination and optional search.
+         */
+        get: operations["list_tenants_api_admin_tenants_get"];
+        put?: never;
+        /**
+         * Create Tenant
+         * @description Create a new tenant. Does NOT generate an API key — use
+         *     POST /tenants/{tenant_id}/keys for that.
+         */
+        post: operations["create_tenant_api_admin_tenants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tenant
+         * @description Get tenant detail including API keys and recent pipeline activity.
+         */
+        get: operations["get_tenant_api_admin_tenants__tenant_id__get"];
+        /**
+         * Update Tenant
+         * @description Update tenant info or enable/disable. Disabling cascades to revoke all API keys.
+         */
+        put: operations["update_tenant_api_admin_tenants__tenant_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenant_id}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Api Key
+         * @description Create a new API key for a tenant. Returns the plaintext key EXACTLY ONCE.
+         */
+        post: operations["create_api_key_api_admin_tenants__tenant_id__keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenant_id}/keys/{key_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Api Key
+         * @description Revoke an API key.
+         */
+        post: operations["revoke_api_key_api_admin_tenants__tenant_id__keys__key_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Assets
+         * @description List all assets, optionally filtered by tags.
          *
          *     Args:
-         *         file: Video (.mp4, .mov, .webm) or image (.jpg, .png, .gif) file.
-         *         tags: Comma-separated tags for search (e.g., "product,demo,lifestyle").
-         *         metadata: JSON string with arbitrary metadata.
+         *         tags: Comma-separated tags to filter by (AND logic).
+         *         limit: Max results.
          *
          *     Returns:
-         *         {asset_id, filename, file_size, mime_type, tags, metadata}
+         *         {assets: list[AssetRecord], total: int}
          */
-        post: operations["upload_asset_api_assets_upload_post"];
+        get: operations["list_assets_api_assets__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -183,6 +429,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Asset
+         * @description Upload a video or image asset.
+         *
+         *     Stores the file and returns an asset_id for pipeline use.
+         *
+         *     Args:
+         *         file: Video (.mp4, .mov, .webm) or image (.jpg, .png, .gif) file.
+         *         tags: Comma-separated tags for search (e.g., "product,demo,lifestyle").
+         *         metadata: JSON string with arbitrary metadata.
+         *
+         *     Returns:
+         *         {asset_id, filename, file_size, mime_type, tags, metadata}
+         */
+        post: operations["upload_asset_api_assets_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}": {
         parameters: {
             query?: never;
@@ -208,33 +484,6 @@ export interface paths {
          *         {deleted: true} or 404.
          */
         delete: operations["delete_asset_api_assets__asset_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/assets/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Assets
-         * @description List all assets, optionally filtered by tags.
-         *
-         *     Args:
-         *         tags: Comma-separated tags to filter by (AND logic).
-         *         limit: Max results.
-         *
-         *     Returns:
-         *         {assets: list[AssetRecord], total: int}
-         */
-        get: operations["list_assets_api_assets__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -267,7 +516,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/telemetry/metrics": {
+    "/api/files": {
         parameters: {
             query?: never;
             header?: never;
@@ -275,10 +524,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Metrics
-         * @description Return PipelineMetrics summary.
+         * List Files
+         * @description List media files under OUTPUT_DIR (recursive).
+         *
+         *     Video/image: strictly larger than 1 MiB. Audio: any positive size (no floor).
+         *     Documents (pdf, txt, etc.) are excluded — not treated as portfolio works.
          */
-        get: operations["get_metrics_telemetry_metrics_get"];
+        get: operations["list_files_api_files_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -287,7 +539,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/telemetry/errors": {
+    "/api/media/sign": {
         parameters: {
             query?: never;
             header?: never;
@@ -295,10 +547,315 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Errors
-         * @description Return ErrorCollector errors, optionally filtered by label.
+         * Get Signed Media Url
+         * @description Generate a short-lived signed URL for a media file.
+         *
+         *     P1-8: Returns a signed URL with token + expires query params.
+         *     The token is valid for 15 minutes and binds to the specific path.
          */
-        get: operations["get_errors_telemetry_errors_get"];
+        get: operations["get_signed_media_url_api_media_sign_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{media_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Serve Media
+         * @description Serve files from OUTPUT_DIR; media_path is relative to OUTPUT_DIR (posix subpaths allowed).
+         *
+         *     P1-8: Supports optional signed-token access. Anonymous access is allowed,
+         *     but signed URLs with ?token=&expires= provide path-level integrity.
+         */
+        get: operations["serve_media_api_media__media_path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload File
+         * @description Upload an asset file (video, image, audio, document) to uploads dir.
+         */
+        post: operations["upload_file_api_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Dashboard Overview
+         * @description Get aggregated dashboard data.
+         *
+         *     Query params:
+         *         scenario (optional): "S1", "S2", or "S3"
+         *         platform (optional): "tiktok" or "shopify"
+         *         days     (optional): time window in days (default 7)
+         */
+        get: operations["get_dashboard_overview_dashboard_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/distribution/platforms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Distribution Platforms
+         * @description List available distribution platforms and their connection status.
+         *
+         *     Returns:
+         *         Array of platform metadata dicts.
+         */
+        get: operations["distribution_platforms_distribution_platforms_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/distribution/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Distribution Publish
+         * @description Publish content to a platform (TikTok or Shopify).
+         *
+         *     Request body:
+         *         platform: "tiktok" | "shopify"
+         *         content: dict with platform-specific fields
+         *
+         *     Returns:
+         *         Publish result dict from the connector.
+         */
+        post: operations["distribution_publish_distribution_publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/distribution/status/{platform}/{post_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Distribution Status
+         * @description Get publish status for a post on a platform.
+         *
+         *     Returns:
+         *         Status dict from the connector.
+         */
+        get: operations["distribution_status_distribution_status__platform___post_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fast/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fast Generate
+         * @description Fast Mode: direct text-to-video generation without pipeline.
+         *
+         *     Uses LLM to enhance user prompt, then calls Seedance directly.
+         *     No LangGraph, no steps, no gates. Returns video + debug info.
+         *
+         *     Request:
+         *         user_prompt: Simple text description (any language)
+         *         duration: 10 or 15 seconds (default 15)
+         *         enable_tts: Whether to generate CosyVoice voiceover
+         *
+         *     Returns:
+         *         {
+         *             success: bool,
+         *             video_path: str,
+         *             video_url: str,
+         *             filename: str,
+         *             llm_prompt: str,
+         *             scene_description: str,
+         *             duration_seconds: int,
+         *             file_size_bytes: int,
+         *             generation_time_ms: int,
+         *             timing: { llm_ms, video_ms, tts_ms },
+         *             model_info: { llm, video, tts },
+         *             is_stub: bool,
+         *             tts_path: str | null,
+         *         }
+         */
+        post: operations["fast_generate_fast_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fast/status/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fast Status
+         * @description Poll Fast Mode async task progress.
+         *
+         *     Returns:
+         *         { task_id, status: "running"|"done"|"failed",
+         *           stage: "queued"|"llm"|"video"|"tts",
+         *           elapsed_sec, result?, error? }
+         *
+         *     HTTP semantics:
+         *         200 OK — task exists; check status field
+         *         404 Not Found — task_id unknown or expired (>10min after completion)
+         */
+        get: operations["fast_status_fast_status__task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fast/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fast Submit
+         * @description Fast Mode async submit — returns task_id immediately, status polled separately.
+         *
+         *     Companion to /fast/generate (sync, blocks 5-10 min). This endpoint kicks off
+         *     generation in a background task and returns within ~50ms with a task_id.
+         *     Frontend polls GET /fast/status/{task_id} to track progress.
+         *
+         *     Returns:
+         *         { task_id, status: "queued", started_at_unix }
+         */
+        post: operations["fast_submit_fast_submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health
+         * @description Health check with persistence and Remotion status.
+         */
+        get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/pull": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Metrics Pull
+         * @description Manually trigger metrics poll (debug endpoint).
+         */
+        post: operations["trigger_metrics_pull_metrics_pull_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{video_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Video Metrics
+         * @description Get metrics snapshots for a video. Optional platform filter.
+         */
+        get: operations["get_video_metrics_metrics__video_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -318,12 +875,10 @@ export interface paths {
         put?: never;
         /**
          * Start Pipeline
-         * @description Start a new pipeline run. Returns thread_id for tracking.
+         * @description Start a new pipeline run via StepRunner.
          *
-         *     Phase 2+3: Translates Chinese product inputs to English before
-         *     pipeline execution and forces target_languages to ``["en"]``.
-         *
-         *     Accepts optional api_keys dict to override .env values for this process.
+         *     Returns a synthetic thread_id for backward compatibility.
+         *     The actual execution is delegated to StepRunner.
          */
         post: operations["start_pipeline_pipeline_start_post"];
         delete?: never;
@@ -332,7 +887,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/pipeline/{thread_id}/state": {
+    "/pipeline/{thread_id}/distribution": {
         parameters: {
             query?: never;
             header?: never;
@@ -340,10 +895,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Pipeline State
-         * @description Get current pipeline state for a thread.
+         * Get Distribution Plans
+         * @description Get distribution plans with platform-specific post content.
          */
-        get: operations["get_pipeline_state_pipeline__thread_id__state_get"];
+        get: operations["get_distribution_plans_pipeline__thread_id__distribution_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -352,29 +907,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/pipeline/{thread_id}/review/{review_node}": {
+    "/pipeline/{thread_id}/export": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Submit Review
-         * @description Submit human review for a pipeline checkpoint. Resumes execution.
-         *
-         *     D9: Double-click guard — if the pipeline has already moved past the
-         *     requested review_node, return a no-op success to prevent double-resume.
-         *
-         *     IMPORTANT: For reject, the pipeline is terminated directly.
-         *     For other actions, we must use astream with the updated reviews
-         *     as input (not update_state + astream(None)) because LangGraph
-         *     checkpoint recovery does not preserve update_state across the
-         *     astream boundary in interrupt_after resume scenarios.
+         * Export Pipeline Output
+         * @description Clean export: only user-facing fields, no internal state.
          */
-        post: operations["submit_review_pipeline__thread_id__review__review_node__post"];
+        get: operations["export_pipeline_output_pipeline__thread_id__export_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -401,7 +947,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/pipeline/{thread_id}/distribution": {
+    "/pipeline/{thread_id}/review/{review_node}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Review
+         * @description Submit human review for a pipeline checkpoint.
+         *
+         *     P4-4: StepRunner does not use LangGraph checkpoint reviews.
+         *     All review submissions are treated as idempotent no-ops.
+         *     The pipeline continues autonomously; gate approvals use
+         *     /scenario/{s}/gate/{label}/{gate_id}/approve instead.
+         */
+        post: operations["submit_review_pipeline__thread_id__review__review_node__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipeline/{thread_id}/state": {
         parameters: {
             query?: never;
             header?: never;
@@ -409,14 +980,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Distribution Plans
-         * @description Get distribution plans with platform-specific post content.
-         *
-         *     Returns distribution_plans array, each with brief_id, script_id,
-         *     and 4 platform posts (shopify/amazon/tiktok/reddit) containing
-         *     CTA, video_format, product_link_placeholder, and platform-specific body.
+         * Get Pipeline State
+         * @description Get current pipeline state for a thread (proxied to StepRunner).
          */
-        get: operations["get_distribution_plans_pipeline__thread_id__distribution_get"];
+        get: operations["get_pipeline_state_pipeline__thread_id__state_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -425,7 +992,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/pipeline/{thread_id}/export": {
+    "/portfolio/": {
         parameters: {
             query?: never;
             header?: never;
@@ -433,15 +1000,28 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Export Pipeline Output
-         * @description Clean export: only user-facing fields, no internal state.
+         * List Portfolio
+         * @description Return pipeline-generated media files.
          *
-         *     Strips out internal-only fields: retry_counts, self_verifications,
-         *     rejection_feedback, pipeline_metrics, messages, errors, structured_errors.
-         *     Returns only what matters for rendering: scripts, captions, thumbnails,
-         *     distribution plans, analytics reports, and human review timeline.
+         *     Query params:
+         *     - `category`: filter to a single storage bucket (renders, seedance, ...).
+         *     - `kind`: filter by lifecycle stage (`final_work` | `creation_intermediate` | `brand_kit`).
+         *               Preferred over `category` for UI-oriented queries.
+         *     - `media_type`: filter by media family (`video` | `image` | `audio`).
+         *     - `limit`: cap number of files returned (after sort+filter+offset).
+         *     - `offset`: skip N files after sort+filter (for pagination). Default 0.
+         *     - `sort`: ordering mode. Options:
+         *               - `recent` (default): by produced_at desc
+         *               - `quality`: renders+fast_mode first, then produced_at desc
+         *               - `size_desc`: largest files first
+         *               - `size_asc`: smallest files first
+         *
+         *     `total` is the total count AFTER filter but BEFORE limit/offset — use it to drive
+         *     pagination controls.
+         *     `by_category` aggregates the *unfiltered* full set so UI can show overall counts
+         *     even when displaying a TOP-N slice.
          */
-        get: operations["export_pipeline_output_pipeline__thread_id__export_get"];
+        get: operations["list_portfolio_portfolio__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -450,7 +1030,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/health": {
+    "/portfolio/brand-presets": {
         parameters: {
             query?: never;
             header?: never;
@@ -458,12 +1038,47 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Health
-         * @description Health check with persistence and Remotion status.
+         * Get Brand Presets
+         * @description Return scraped quick-template presets for a brand.
+         *
+         *     Source of truth is the scraper output at
+         *     output/brand_assets/<brand>/<brand>_presets.json, written by
+         *     scripts/scrape_momcozy.py. Front-end QuickTemplate consumes this in
+         *     preference to the bundled demo-data fallback so a re-scrape is visible
+         *     without redeploying the web bundle.
+         *
+         *     404 if the brand directory or presets file is absent.
          */
-        get: operations["health_health_get"];
+        get: operations["get_brand_presets_portfolio_brand_presets_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publish/{video_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish Video
+         * @description Publish a video to selected platforms.
+         *
+         *     Request body:
+         *         platforms: ["tiktok", "shopify"]
+         *         metadata: { hook, hashtags, product_name, ... }
+         *
+         *     Returns:
+         *         [{ platform, success, post_id, post_url, error }]
+         */
+        post: operations["publish_video_publish__video_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -493,6 +1108,161 @@ export interface paths {
          *     the product_catalog so the frontend can display them.
          */
         post: operations["run_s1_product_direct_scenario_s1_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/s1/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate S1 Step
+         * @description Force re-execution of a specific step and invalidate all downstream.
+         *
+         *     Request body:
+         *         label: str — pipeline run label
+         *         step: str — step name to regenerate
+         *
+         *     Invalidates all downstream steps (marking them as pending) so they
+         *     are re-executed with the updated input.
+         *
+         *     Returns:
+         *         Updated pipeline state dict with regenerated step done and
+         *         downstream steps pending.
+         */
+        post: operations["regenerate_s1_step_scenario_s1_regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/s1/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume S1 Pipeline
+         * @description Resume execution from current_step to completion.
+         *
+         *     Request body:
+         *         label: str — pipeline run label
+         *
+         *     Returns:
+         *         Final pipeline state dict.
+         */
+        post: operations["resume_s1_pipeline_scenario_s1_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/s1/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start S1 Pipeline
+         * @description Start a new S1 pipeline run in either "auto" or "step_by_step" mode.
+         *
+         *     Request body:
+         *         product_catalog: dict (required)
+         *         brand_guidelines: dict
+         *         target_platforms: list[str]
+         *         target_languages: list[str]
+         *         week: str
+         *         video_duration: int
+         *         mode: "auto" | "step_by_step" (default: "auto")
+         *         brand_mode: bool (default: false)
+         *
+         *     Returns:
+         *         Initialized state dict with label, mode, status, and current_step.
+         *         If mode is "auto", runs to completion and returns final state.
+         */
+        post: operations["start_s1_pipeline_scenario_s1_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/s1/state/{label}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get S1 State
+         * @description Get the current pipeline state for a given label.
+         *
+         *     Returns:
+         *         Pipeline state dict, or 404 if not found.
+         */
+        get: operations["get_s1_state_scenario_s1_state__label__get"];
+        /**
+         * Update S1 State
+         * @description Update the pipeline state (used after user edits a step output).
+         *
+         *     Request body:
+         *         Partial or full state updates. Common use case:
+         *         { "steps": { "scripts": { "edited_output": {...}, "edited": true } } }
+         *
+         *     Logic:
+         *         Loads existing state, deep-merges request body, saves back.
+         *
+         *     Returns:
+         *         Updated pipeline state dict.
+         */
+        put: operations["update_s1_state_scenario_s1_state__label__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/s1/step/{step_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run S1 Step
+         * @description Execute a single step of the S1 pipeline.
+         *
+         *     Args:
+         *         step_name: One of the valid pipeline step names.
+         *         body: dict with "label" key.
+         *
+         *     Returns:
+         *         Updated pipeline state dict after executing the step.
+         */
+        post: operations["run_s1_step_scenario_s1_step__step_name__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -587,321 +1357,12 @@ export interface paths {
          *     Request body:
          *         brand_id: str — brand identifier (e.g. "momcozy")
          *         product_sku: dict — product SKU with views[] (six-view angles)
-         *         scene_id: str — scene identifier (office/living-room/bedroom/nursery/outdoor/kitchen)
+         *         scene_id: str — scene identifier (office/living-room/bedroom/outdoor/kitchen)
          *         selected_models: list[dict] — model profiles with name/role/description
          *         story_description: str — user's story direction (max 300 chars)
          *         video_duration: int — target video seconds (15/30/45/60/90)
          */
         post: operations["run_s5_brand_vlog_scenario_s5_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/fast/generate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Fast Generate
-         * @description Fast Mode: direct text-to-video generation without pipeline.
-         *
-         *     Uses LLM to enhance user prompt, then calls Seedance directly.
-         *     No LangGraph, no steps, no gates. Returns video + debug info.
-         *
-         *     Request:
-         *         user_prompt: Simple text description (any language)
-         *         duration: 10 or 15 seconds (default 15)
-         *         enable_tts: Whether to generate CosyVoice voiceover
-         *
-         *     Returns:
-         *         {
-         *             success: bool,
-         *             video_path: str,
-         *             video_url: str,
-         *             filename: str,
-         *             llm_prompt: str,
-         *             scene_description: str,
-         *             duration_seconds: int,
-         *             file_size_bytes: int,
-         *             generation_time_ms: int,
-         *             timing: { llm_ms, video_ms, tts_ms },
-         *             model_info: { llm, video, tts },
-         *             is_stub: bool,
-         *             tts_path: str | null,
-         *         }
-         */
-        post: operations["fast_generate_fast_generate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/s1/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start S1 Pipeline
-         * @description Start a new S1 pipeline run in either "auto" or "step_by_step" mode.
-         *
-         *     Request body:
-         *         product_catalog: dict
-         *         brand_guidelines: dict
-         *         target_platforms: list[str]
-         *         target_languages: list[str]
-         *         week: str
-         *         video_duration: int
-         *         mode: "auto" | "step_by_step" (default: "auto")
-         *         brand_mode: bool (default: false)
-         *
-         *     Returns:
-         *         Initialized state dict with label, mode, status, and current_step.
-         *         If mode is "auto", runs to completion and returns final state.
-         */
-        post: operations["start_s1_pipeline_scenario_s1_start_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/s1/step/{step_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run S1 Step
-         * @description Execute a single step of the S1 pipeline.
-         *
-         *     Args:
-         *         step_name: One of the valid pipeline step names.
-         *         body: dict with "label" key.
-         *
-         *     Returns:
-         *         Updated pipeline state dict after executing the step.
-         */
-        post: operations["run_s1_step_scenario_s1_step__step_name__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/s1/regenerate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Regenerate S1 Step
-         * @description Force re-execution of a specific step and invalidate all downstream.
-         *
-         *     Request body:
-         *         label: str — pipeline run label
-         *         step: str — step name to regenerate
-         *
-         *     Invalidates all downstream steps (marking them as pending) so they
-         *     are re-executed with the updated input.
-         *
-         *     Returns:
-         *         Updated pipeline state dict with regenerated step done and
-         *         downstream steps pending.
-         */
-        post: operations["regenerate_s1_step_scenario_s1_regenerate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/s1/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Resume S1 Pipeline
-         * @description Resume execution from current_step to completion.
-         *
-         *     Request body:
-         *         label: str — pipeline run label
-         *
-         *     Returns:
-         *         Final pipeline state dict.
-         */
-        post: operations["resume_s1_pipeline_scenario_s1_resume_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/s1/state/{label}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get S1 State
-         * @description Get the current pipeline state for a given label.
-         *
-         *     Returns:
-         *         Pipeline state dict, or 404 if not found.
-         */
-        get: operations["get_s1_state_scenario_s1_state__label__get"];
-        /**
-         * Update S1 State
-         * @description Update the pipeline state (used after user edits a step output).
-         *
-         *     Request body:
-         *         Partial or full state updates. Common use case:
-         *         { "steps": { "scripts": { "edited_output": {...}, "edited": true } } }
-         *
-         *     Logic:
-         *         Loads existing state, deep-merges request body, saves back.
-         *
-         *     Returns:
-         *         Updated pipeline state dict.
-         */
-        put: operations["update_s1_state_scenario_s1_state__label__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/{scenario}/state/{label}/steps": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Steps
-         * @description List all pipeline steps with status and brief output preview.
-         *
-         *     Args:
-         *         scenario: Scenario identifier (e.g., "s1").
-         *         label: Pipeline run label.
-         *
-         *     Returns:
-         *         Array of {step_name, status, preview, has_output, completed_at}.
-         */
-        get: operations["list_steps_scenario__scenario__state__label__steps_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/{scenario}/step/{step_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Step
-         * @description Execute a SINGLE step of the pipeline.
-         *
-         *     If the step has already completed, returns cached result.
-         *     If prior steps are not complete, returns 400 with listing of incomplete deps.
-         *
-         *     Request body:
-         *         label: str — pipeline run label
-         *
-         *     Returns:
-         *         { step, status, data } or error details.
-         */
-        post: operations["execute_step_scenario__scenario__step__step_name__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/{scenario}/state/{label}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Edit Step Output
-         * @description Update the state for a step's output (allows user editing).
-         *
-         *     Request body:
-         *         step_name: str — the step to update
-         *         updates: any — the updated step output data
-         *
-         *     Returns:
-         *         { label, updated_step, state }.
-         */
-        put: operations["edit_step_output_scenario__scenario__state__label__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/{scenario}/regenerate/{label}/{step_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Regenerate Step
-         * @description Re-run a specific step (e.g., after user edited its input).
-         *
-         *     Invalidates all downstream steps by marking them as "pending"
-         *     so they will be re-executed.
-         *
-         *     Returns:
-         *         { label, regenerated_step, invalidated: [...] }
-         */
-        post: operations["regenerate_step_scenario__scenario__regenerate__label___step_name__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -930,37 +1391,6 @@ export interface paths {
         get: operations["get_gate_scenario__scenario__gate__label___gate_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/scenario/{scenario}/gate/{label}/{gate_id}/generate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Generate Gate Candidates
-         * @description Generate 3 candidates (standard/creative/conservative) for a gate.
-         *
-         *     Each candidate is generated via the corresponding pipeline skill,
-         *     scored by the AI evaluator, and ranked with a recommendation.
-         *
-         *     Args:
-         *         scenario: Scenario identifier (e.g., "s1").
-         *         label: Pipeline run label.
-         *         gate_id: Gate identifier (e.g., "gate_1_script").
-         *
-         *     Returns:
-         *         dict with candidates array, gate_id, label.
-         */
-        post: operations["generate_gate_candidates_scenario__scenario__gate__label___gate_id__generate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1001,6 +1431,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scenario/{scenario}/gate/{label}/{gate_id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Gate Candidates
+         * @description Generate 3 candidates (standard/creative/conservative) for a gate.
+         *
+         *     Each candidate is generated via the corresponding pipeline skill,
+         *     scored by the AI evaluator, and ranked with a recommendation.
+         *
+         *     Args:
+         *         scenario: Scenario identifier (e.g., "s1").
+         *         label: Pipeline run label.
+         *         gate_id: Gate identifier (e.g., "gate_1_script").
+         *
+         *     Returns:
+         *         dict with candidates array, gate_id, label.
+         */
+        post: operations["generate_gate_candidates_scenario__scenario__gate__label___gate_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scenario/{scenario}/gate/{label}/{gate_id}/regenerate/{candidate_id}": {
         parameters: {
             query?: never;
@@ -1033,7 +1494,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/distribution/publish": {
+    "/scenario/{scenario}/prompt-preview/audit": {
         parameters: {
             query?: never;
             header?: never;
@@ -1043,24 +1504,70 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Distribution Publish
-         * @description Publish content to a platform (TikTok or Shopify).
+         * Audit Prompt Preview
+         * @description Build a dry-run prompt preview audit bundle without exposing prompt payload.
+         */
+        post: operations["audit_prompt_preview_scenario__scenario__prompt_preview_audit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/{scenario}/regenerate/{label}/{step_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Step
+         * @description Re-run a specific step (e.g., after user edited its input).
+         *
+         *     Invalidates all downstream steps by marking them as "pending"
+         *     so they will be re-executed.
+         *
+         *     Returns:
+         *         { label, regenerated_step, invalidated: [...] }
+         */
+        post: operations["regenerate_step_scenario__scenario__regenerate__label___step_name__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/{scenario}/state/{label}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit Step Output
+         * @description Update the state for a step's output (allows user editing).
          *
          *     Request body:
-         *         platform: "tiktok" | "shopify"
-         *         content: dict with platform-specific fields
+         *         step_name: str — the step to update
+         *         updates: any — the updated step output data
          *
          *     Returns:
-         *         Publish result dict from the connector.
+         *         { label, updated_step, state }.
          */
-        post: operations["distribution_publish_distribution_publish_post"];
+        put: operations["edit_step_output_scenario__scenario__state__label__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/distribution/status/{platform}/{post_id}": {
+    "/scenario/{scenario}/state/{label}/steps": {
         parameters: {
             query?: never;
             header?: never;
@@ -1068,13 +1575,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Distribution Status
-         * @description Get publish status for a post on a platform.
+         * List Steps
+         * @description List all pipeline steps with status and brief output preview.
+         *
+         *     Args:
+         *         scenario: Scenario identifier (e.g., "s1").
+         *         label: Pipeline run label.
          *
          *     Returns:
-         *         Status dict from the connector.
+         *         Array of {step_name, status, preview, has_output, completed_at}.
          */
-        get: operations["distribution_status_distribution_status__platform___post_id__get"];
+        get: operations["list_steps_scenario__scenario__state__label__steps_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1083,7 +1594,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/distribution/platforms": {
+    "/scenario/{scenario}/status/{label}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1091,13 +1602,20 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Distribution Platforms
-         * @description List available distribution platforms and their connection status.
+         * Get Scenario Status
+         * @description Get current execution status for a pipeline run.
+         *
+         *     Args:
+         *         scenario: Scenario identifier (e.g., "s1").
+         *         label: Pipeline run label from /submit.
          *
          *     Returns:
-         *         Array of platform metadata dicts.
+         *         {
+         *             label, status, current_step, progress, pipeline_degraded,
+         *             gate_status, result, errors
+         *         }
          */
-        get: operations["distribution_platforms_distribution_platforms_get"];
+        get: operations["get_scenario_status_scenario__scenario__status__label__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1106,7 +1624,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/publish/{video_id}": {
+    "/scenario/{scenario}/step/{step_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1116,69 +1634,26 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Publish Video
-         * @description Publish a video to selected platforms.
+         * Execute Step
+         * @description Execute a SINGLE step of the pipeline.
+         *
+         *     If the step has already completed, returns cached result.
+         *     If prior steps are not complete, returns 400 with listing of incomplete deps.
          *
          *     Request body:
-         *         platforms: ["tiktok", "shopify"]
-         *         metadata: { hook, hashtags, product_name, ... }
+         *         label: str — pipeline run label
          *
          *     Returns:
-         *         [{ platform, success, post_id, post_url, error }]
+         *         { step, status, data } or error details.
          */
-        post: operations["publish_video_publish__video_id__post"];
+        post: operations["execute_step_scenario__scenario__step__step_name__post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/metrics/{video_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Video Metrics
-         * @description Get metrics snapshots for a video. Optional platform filter.
-         */
-        get: operations["get_video_metrics_metrics__video_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/dashboard/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Dashboard Overview
-         * @description Get aggregated dashboard data.
-         *
-         *     Query params:
-         *         scenario (optional): "S1", "S2", or "S3"
-         *         platform (optional): "tiktok" or "shopify"
-         *         days     (optional): time window in days (default 7)
-         */
-        get: operations["get_dashboard_overview_dashboard_overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/metrics/pull": {
+    "/scenario/{scenario}/submit": {
         parameters: {
             query?: never;
             header?: never;
@@ -1188,17 +1663,172 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Trigger Metrics Pull
-         * @description Manually trigger metrics poll (debug endpoint).
+         * Submit Scenario
+         * @description Submit a scenario for async execution.
+         *
+         *     Initializes pipeline state and immediately returns a label.
+         *     The pipeline runs in the background — use GET /status/{label} to poll.
+         *
+         *     Args:
+         *         scenario: "s1", "s2", "s3", "s4", or "s5"
+         *         body: Scenario-specific config dict (same as /scenario/{s} endpoints)
+         *
+         *     Returns:
+         *         { label, status: "queued", trace_id }
          */
-        post: operations["trigger_metrics_pull_metrics_pull_post"];
+        post: operations["submit_scenario_scenario__scenario__submit_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/upload": {
+    "/telemetry/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Errors
+         * @description Return ErrorCollector errors, optionally filtered by label.
+         */
+        get: operations["get_errors_telemetry_errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/telemetry/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Metrics
+         * @description Return PipelineMetrics summary.
+         */
+        get: operations["get_metrics_telemetry_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/telemetry/prometheus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Prometheus
+         * @description Return Prometheus exposition format metrics for Grafana scraping.
+         */
+        get: operations["get_prometheus_telemetry_prometheus_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Toolbox Runs */
+        get: operations["list_toolbox_runs_toolbox_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/runs/audit-summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Toolbox Run Audit Summaries */
+        get: operations["list_toolbox_run_audit_summaries_toolbox_runs_audit_summaries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Run */
+        get: operations["get_toolbox_run_toolbox_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/runs/{run_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Run Artifacts */
+        get: operations["get_toolbox_run_artifacts_toolbox_runs__run_id__artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/runs/{run_id}/audit-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Run Audit Summary */
+        get: operations["get_toolbox_run_audit_summary_toolbox_runs__run_id__audit_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/runs/{run_id}/inject": {
         parameters: {
             query?: never;
             header?: never;
@@ -1207,32 +1837,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Upload File
-         * @description Upload an asset file (video, image, audio, document) to uploads dir.
-         */
-        post: operations["upload_file_api_upload_post"];
+        /** Preview Toolbox Injection Draft */
+        post: operations["preview_toolbox_injection_draft_toolbox_runs__run_id__inject_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/files": {
+    "/toolbox/tools": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Files
-         * @description List media files under OUTPUT_DIR (recursive).
-         *
-         *     Video/image: strictly larger than 1 MiB. Audio: any positive size (no floor).
-         *     Documents (pdf, txt, etc.) are excluded — not treated as portfolio works.
-         */
-        get: operations["list_files_api_files_get"];
+        /** List Tools */
+        get: operations["list_tools_toolbox_tools_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1241,21 +1862,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/media/{media_path}": {
+    "/toolbox/{tool_id}/plan": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Serve Media
-         * @description Serve files from OUTPUT_DIR; media_path is relative to OUTPUT_DIR (posix subpaths allowed).
-         *
-         *     P1-8: Supports optional signed-token access. Anonymous access is allowed,
-         *     but signed URLs with ?token=&expires= provide path-level integrity.
-         */
-        get: operations["serve_media_api_media__media_path__get"];
+        get?: never;
+        put?: never;
+        /** Plan Toolbox Run */
+        post: operations["plan_toolbox_run_toolbox__tool_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/{tool_id}/prompt-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Toolbox Prompt */
+        post: operations["preview_toolbox_prompt_toolbox__tool_id__prompt_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/toolbox/{tool_id}/provider-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Toolbox Provider Readiness */
+        get: operations["get_toolbox_provider_readiness_toolbox__tool_id__provider_readiness_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1264,23 +1913,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/media/sign": {
+    "/toolbox/{tool_id}/run": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Signed Media Url
-         * @description Generate a short-lived signed URL for a media file.
-         *
-         *     P1-8: Returns a signed URL with token + expires query params.
-         *     The token is valid for 15 minutes and binds to the specific path.
-         */
-        get: operations["get_signed_media_url_api_media_sign_get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** Run Toolbox Dry Run */
+        post: operations["run_toolbox_dry_run_toolbox__tool_id__run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1291,20 +1934,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AllowedUse
+         * @enum {string}
+         */
+        AllowedUse: "reference" | "generation" | "publishing" | "training";
         /** Body_upload_asset_api_assets_upload_post */
         Body_upload_asset_api_assets_upload_post: {
             /** File */
             file: string;
             /**
-             * Tags
-             * @default
-             */
-            tags: string;
-            /**
              * Metadata
              * @default {}
              */
             metadata: string;
+            /**
+             * Tags
+             * @default
+             */
+            tags: string;
         };
         /** Body_upload_file_api_upload_post */
         Body_upload_file_api_upload_post: {
@@ -1319,90 +1967,141 @@ export interface components {
          */
         BrandAssetPackage: {
             /**
-             * Package Id
-             * @default
-             */
-            package_id: string;
-            /**
              * Brand Name
              * @default
              */
             brand_name: string;
-            /**
-             * Description
-             * @default
-             */
-            description: string;
-            /**
-             * Logo Url
-             * @default
-             */
-            logo_url: string;
-            /**
-             * Logo Alt Text
-             * @default
-             */
-            logo_alt_text: string;
             /**
              * Colors
              * @default []
              */
             colors: components["schemas"]["BrandColor"][];
             /**
+             * Created At
+             * @default
+             */
+            created_at: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
              * Fonts
              * @default []
              */
             fonts: components["schemas"]["BrandFont"][];
-            /**
-             * Intro Video Id
-             * @default
-             */
-            intro_video_id: string;
-            /**
-             * Outro Video Id
-             * @default
-             */
-            outro_video_id: string;
-            /**
-             * Intro Duration Seconds
-             * @default 3
-             */
-            intro_duration_seconds: number;
-            /**
-             * Outro Duration Seconds
-             * @default 3
-             */
-            outro_duration_seconds: number;
-            /**
-             * Tone Of Voice
-             * @default
-             */
-            tone_of_voice: string;
             /**
              * Forbidden Content
              * @description Content that must be avoided (competitors, claims, etc.)
              */
             forbidden_content?: string[];
             /**
-             * Target Audience
+             * Intro Duration Seconds
+             * @default 3
+             */
+            intro_duration_seconds: number;
+            /**
+             * Intro Video Id
              * @default
              */
-            target_audience: string;
+            intro_video_id: string;
+            /**
+             * Logo Alt Text
+             * @default
+             */
+            logo_alt_text: string;
+            /**
+             * Logo Url
+             * @default
+             */
+            logo_url: string;
+            /**
+             * Outro Duration Seconds
+             * @default 3
+             */
+            outro_duration_seconds: number;
+            /**
+             * Outro Video Id
+             * @default
+             */
+            outro_video_id: string;
+            /**
+             * Package Id
+             * @default
+             */
+            package_id: string;
             /**
              * Selected Asset Ids
              * @description AssetStorage IDs of footage selected for this campaign
              */
             selected_asset_ids?: string[];
             /**
-             * Created At
+             * Target Audience
              * @default
              */
-            created_at: string;
+            target_audience: string;
+            /**
+             * Tone Of Voice
+             * @default
+             */
+            tone_of_voice: string;
             /**
              * Updated At
              * @default
              */
             updated_at: string;
+        };
+        /** BrandAssetToken */
+        BrandAssetToken: {
+            /** Allowed Uses */
+            allowed_uses?: components["schemas"]["AllowedUse"][];
+            /** Brand Id */
+            brand_id: string;
+            /** @default unknown */
+            license_status: components["schemas"]["LicenseStatus"];
+            /** Locale Scope */
+            locale_scope?: string[];
+            /**
+             * Modality
+             * @default text
+             */
+            modality: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Payload Summary */
+            payload_summary?: string[];
+            /** Platform Scope */
+            platform_scope?: string[];
+            /**
+             * Priority
+             * @default 50
+             */
+            priority: number;
+            provenance?: components["schemas"]["TokenProvenance"];
+            review?: components["schemas"]["TokenReview"];
+            /** Rights Gate */
+            rights_gate?: string | null;
+            /** Rights Ref */
+            rights_ref?: string | null;
+            /** Scenario Scope */
+            scenario_scope?: string[];
+            /** Source Asset Id */
+            source_asset_id?: string | null;
+            /** Source Refs */
+            source_refs?: string[];
+            /** @default candidate */
+            status: components["schemas"]["TokenStatus"];
+            /** Step Scope */
+            step_scope?: string[];
+            /** @default soft */
+            strength: components["schemas"]["TokenStrength"];
+            /** Token Id */
+            token_id: string;
+            /** Token Type */
+            token_type: string;
         };
         /**
          * BrandColor
@@ -1410,20 +2109,41 @@ export interface components {
          */
         BrandColor: {
             /**
-             * Name
-             * @default
-             */
-            name: string;
-            /**
              * Hex
              * @default #000000
              */
             hex: string;
             /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
              * Usage
              * @default primary
              */
             usage: string;
+        };
+        /** BrandConstraintBundle */
+        BrandConstraintBundle: {
+            /** Brand Id */
+            brand_id: string;
+            /** Bundle Id */
+            bundle_id: string;
+            /** Hard Tokens */
+            hard_tokens?: components["schemas"]["BrandAssetToken"][];
+            /** Platform */
+            platform?: string | null;
+            /** Rejected Token Ids */
+            rejected_token_ids?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Soft Tokens */
+            soft_tokens?: components["schemas"]["BrandAssetToken"][];
+            /** Source Token Ids */
+            source_token_ids?: string[];
+            /** Step */
+            step: string;
         };
         /**
          * BrandFont
@@ -1431,15 +2151,15 @@ export interface components {
          */
         BrandFont: {
             /**
-             * Name
-             * @default
-             */
-            name: string;
-            /**
              * Family
              * @default
              */
             family: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
             /**
              * Weights
              * @default [
@@ -1449,20 +2169,66 @@ export interface components {
              */
             weights: string[];
         };
+        /** BrandPresetsResponse */
+        BrandPresetsResponse: {
+            /** Brand */
+            brand: string;
+            /** Presets */
+            presets: {
+                [key: string]: unknown;
+            }[];
+            /** Scraped At */
+            scraped_at?: string | null;
+        };
+        /**
+         * CapabilityValue
+         * @enum {string}
+         */
+        CapabilityValue: "unknown" | "supported" | "unsupported";
+        /** CompileOptions */
+        CompileOptions: {
+            /**
+             * Allow Native Audio
+             * @default false
+             */
+            allow_native_audio: boolean;
+            /**
+             * Allow Soft Token Compression
+             * @default true
+             */
+            allow_soft_token_compression: boolean;
+            /**
+             * Max Prompt Chars
+             * @default 1800
+             */
+            max_prompt_chars: number;
+        };
+        /**
+         * EvidenceLevel
+         * @enum {string}
+         */
+        EvidenceLevel: "L0-unverified" | "aihot_signal" | "official_doc" | "supplier_backend" | "L1-public-or-runtime" | "L2-fixture-or-dry-run" | "L3-production-read-only" | "L4-authorized-live";
         /** FastModeRequest */
         FastModeRequest: {
-            /** User Prompt */
-            user_prompt: string;
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
             /**
              * Duration
-             * @default 15
+             * @default 5
              */
             duration: number;
             /**
              * Enable Tts
-             * @default false
+             * @default true
              */
             enable_tts: boolean;
+            /** User Prompt */
+            user_prompt: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1475,23 +2241,6 @@ export interface components {
          */
         InfluencerProductLink: {
             /**
-             * Product Id
-             * @default
-             */
-            product_id: string;
-            /**
-             * Product Name
-             * @default
-             */
-            product_name: string;
-            /**
-             * Platform Specific Urls
-             * @description URLs per platform: {shopify: url, amazon: url, tiktok: url}
-             */
-            platform_specific_urls?: {
-                [key: string]: string;
-            };
-            /**
              * Commission Rate
              * @default 0
              */
@@ -1501,6 +2250,23 @@ export interface components {
              * @default true
              */
             is_active: boolean;
+            /**
+             * Platform Specific Urls
+             * @description URLs per platform: {shopify: url, amazon: url, tiktok: url}
+             */
+            platform_specific_urls?: {
+                [key: string]: string;
+            };
+            /**
+             * Product Id
+             * @default
+             */
+            product_id: string;
+            /**
+             * Product Name
+             * @default
+             */
+            product_name: string;
         };
         /**
          * InfluencerProfile
@@ -1508,47 +2274,47 @@ export interface components {
          */
         InfluencerProfile: {
             /**
-             * Influencer Id
+             * Created At
              * @default
              */
-            influencer_id: string;
-            /**
-             * Name
-             * @default
-             */
-            name: string;
+            created_at: string;
             /**
              * Handle
              * @default
              */
             handle: string;
-            /** Platforms */
-            platforms?: string[];
             /**
-             * Style Tags
-             * @description Tags: unboxing, review, tutorial, lifestyle, comedy
-             */
-            style_tags?: string[];
-            style_profile?: components["schemas"]["InfluencerStyleProfile"];
-            /** Product Links */
-            product_links?: components["schemas"]["InfluencerProductLink"][];
-            /** Recent Video Urls */
-            recent_video_urls?: string[];
-            /**
-             * Notes
+             * Influencer Id
              * @default
              */
-            notes: string;
+            influencer_id: string;
             /**
              * Is Active
              * @default true
              */
             is_active: boolean;
             /**
-             * Created At
+             * Name
              * @default
              */
-            created_at: string;
+            name: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** Platforms */
+            platforms?: string[];
+            /** Product Links */
+            product_links?: components["schemas"]["InfluencerProductLink"][];
+            /** Recent Video Urls */
+            recent_video_urls?: string[];
+            style_profile?: components["schemas"]["InfluencerStyleProfile"];
+            /**
+             * Style Tags
+             * @description Tags: unboxing, review, tutorial, lifestyle, comedy
+             */
+            style_tags?: string[];
             /**
              * Updated At
              * @default
@@ -1568,10 +2334,20 @@ export interface components {
              */
             brief_id: string;
             /**
+             * Commission Rate
+             * @default 0
+             */
+            commission_rate: number;
+            /**
              * Influencer Id
              * @default
              */
             influencer_id: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
             /**
              * Original Video Url
              * @default
@@ -1583,11 +2359,6 @@ export interface components {
              */
             product_id: string;
             /**
-             * Product Name
-             * @default
-             */
-            product_name: string;
-            /**
              * Product Image Url
              * @default
              */
@@ -1598,17 +2369,12 @@ export interface components {
              */
             product_link: string;
             /**
-             * Commission Rate
-             * @default 0
-             */
-            commission_rate: number;
-            /** Target Platforms */
-            target_platforms?: string[];
-            /**
-             * Notes
+             * Product Name
              * @default
              */
-            notes: string;
+            product_name: string;
+            /** Target Platforms */
+            target_platforms?: string[];
         };
         /**
          * InfluencerStyleProfile
@@ -1618,20 +2384,10 @@ export interface components {
          */
         InfluencerStyleProfile: {
             /**
-             * Hook Type
-             * @default
-             */
-            hook_type: string;
-            /**
              * Avg Speech Speed
              * @default 0
              */
             avg_speech_speed: number;
-            /**
-             * Speech Style
-             * @default
-             */
-            speech_style: string;
             /** Catchphrases */
             catchphrases?: string[];
             /** Common Hooks */
@@ -1644,26 +2400,41 @@ export interface components {
                 [key: string]: unknown;
             }[];
             /**
+             * Hook Type
+             * @default
+             */
+            hook_type: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /**
+             * Speech Style
+             * @default
+             */
+            speech_style: string;
+            /**
              * Structure Segments
              * @description List of {type: str, start: float, end: float, description: str}
              */
             structure_segments?: {
                 [key: string]: unknown;
             }[];
-            /**
-             * Notes
-             * @default
-             */
-            notes: string;
         };
+        /**
+         * LicenseStatus
+         * @enum {string}
+         */
+        LicenseStatus: "unknown" | "review" | "approved" | "rejected" | "expired";
         /** PipelineStartRequest */
         PipelineStartRequest: {
             /**
-             * Product Catalog
+             * Api Keys
              * @default {}
              */
-            product_catalog: {
-                [key: string]: unknown;
+            api_keys: {
+                [key: string]: string;
             };
             /**
              * Brand Guidelines
@@ -1672,6 +2443,30 @@ export interface components {
             brand_guidelines: {
                 [key: string]: unknown;
             };
+            /**
+             * Content Calendar Week
+             * @default 2026-W17
+             */
+            content_calendar_week: string;
+            /**
+             * Content Scenario
+             * @default influencer_remix
+             */
+            content_scenario: string;
+            /**
+             * Product Catalog
+             * @default {}
+             */
+            product_catalog: {
+                [key: string]: unknown;
+            };
+            /**
+             * Target Languages
+             * @default [
+             *       "en"
+             *     ]
+             */
+            target_languages: string[];
             /**
              * Target Platforms
              * @default [
@@ -1682,30 +2477,207 @@ export interface components {
              *     ]
              */
             target_platforms: string[];
+        };
+        /** PlatformTarget */
+        PlatformTarget: {
             /**
-             * Target Languages
-             * @default [
-             *       "en"
-             *     ]
+             * Aspect Ratio
+             * @default 9:16
              */
-            target_languages: string[];
+            aspect_ratio: string;
             /**
-             * Content Calendar Week
-             * @default 2026-W17
+             * Duration Seconds
+             * @default 5
              */
-            content_calendar_week: string;
+            duration_seconds: number;
             /**
-             * Api Keys
-             * @default {}
+             * Locale
+             * @default en-US
              */
-            api_keys: {
-                [key: string]: string;
+            locale: string;
+            /** Platform */
+            platform: string;
+        };
+        /** PortfolioFile */
+        PortfolioFile: {
+            /** Category */
+            category: string;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @default creation_intermediate
+             * @enum {string}
+             */
+            kind: "final_work" | "creation_intermediate" | "brand_kit";
+            /** Label */
+            label?: string | null;
+            /** Mime Type */
+            mime_type: string;
+            /** Path */
+            path: string;
+            /** Produced At */
+            produced_at: string;
+            /** Product Brand */
+            product_brand?: string | null;
+            /** Product Description */
+            product_description?: string | null;
+            /** Product Price */
+            product_price?: string | null;
+            /** Product Slug */
+            product_slug?: string | null;
+            /** Product Source Url */
+            product_source_url?: string | null;
+            /** Product Title */
+            product_title?: string | null;
+            /** Review Status */
+            review_status?: "pending_review" | null;
+            /** Scenario */
+            scenario?: string | null;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Tenant Id */
+            tenant_id?: string | null;
+            /** Thumbnail Path */
+            thumbnail_path?: string | null;
+        };
+        /** PortfolioResponse */
+        PortfolioResponse: {
+            /** By Category */
+            by_category: {
+                [key: string]: {
+                    [key: string]: number;
+                };
             };
+            /** Files */
+            files: components["schemas"]["PortfolioFile"][];
+            /** Total */
+            total: number;
+        };
+        /** PromptCompileInput */
+        PromptCompileInput: {
+            brand_bundle: components["schemas"]["BrandConstraintBundle"];
+            /** Compile Id */
+            compile_id: string;
+            compile_options?: components["schemas"]["CompileOptions"];
+            platform_target: components["schemas"]["PlatformTarget"];
+            provider_capability: components["schemas"]["ProviderCapability"];
+            /** Scenario */
+            scenario: string;
+            shot: components["schemas"]["StoryboardShotSchema"];
+            /** Step Name */
+            step_name: string;
+        };
+        /** PromptPreviewAuditRequest */
+        PromptPreviewAuditRequest: {
+            compile_input: components["schemas"]["PromptCompileInput"];
+            contract: components["schemas"]["QualityContract"];
+            /** Planned Injection */
+            planned_injection?: {
+                [key: string]: unknown;
+            } | null;
+            runtime_injection: components["schemas"]["RuntimeInjectionResult"];
+        };
+        /** ProviderCapability */
+        ProviderCapability: {
             /**
-             * Content Scenario
-             * @default influencer_remix
+             * Async Required
+             * @default true
              */
-            content_scenario: string;
+            async_required: boolean;
+            /** @default unknown */
+            c2pa: components["schemas"]["CapabilityValue"];
+            /** Capability Id */
+            capability_id: string;
+            /** Content Filter Notes */
+            content_filter_notes?: string[];
+            /** Known Failure Modes */
+            known_failure_modes?: string[];
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /** Max Duration Seconds */
+            max_duration_seconds?: number | null;
+            /** Max Reference Assets */
+            max_reference_assets?: number | null;
+            /** Modalities */
+            modalities?: string[];
+            /** Model */
+            model: string;
+            /**
+             * Model Family
+             * @default
+             */
+            model_family: string;
+            /** Provider */
+            provider: string;
+            /** Recommended Scenarios */
+            recommended_scenarios?: string[];
+            /** Retention Days */
+            retention_days?: number | null;
+            /** Source Urls */
+            source_urls?: string[];
+            /** Supports Aspect Ratios */
+            supports_aspect_ratios?: string[];
+            /** @default unknown */
+            supports_first_frame: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_last_frame: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_lip_sync: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_native_audio: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_negative_prompt: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_reference_images: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_reference_video: components["schemas"]["CapabilityValue"];
+            /** @default unknown */
+            supports_seed: components["schemas"]["CapabilityValue"];
+        };
+        /** PublishPolicy */
+        PublishPolicy: {
+            /**
+             * Publish Allowed Default
+             * @default false
+             */
+            publish_allowed_default: boolean;
+            /**
+             * Requires Human Review
+             * @default true
+             */
+            requires_human_review: boolean;
+        };
+        /** QualityContract */
+        QualityContract: {
+            /** Advisory Checks */
+            advisory_checks?: string[];
+            /** Blocking Checks */
+            blocking_checks?: string[];
+            /** Brand Id */
+            brand_id: string;
+            /** Contract Id */
+            contract_id: string;
+            /**
+             * Locale
+             * @default en-US
+             */
+            locale: string;
+            /** Platform */
+            platform: string;
+            publish_policy?: components["schemas"]["PublishPolicy"];
+            /** Required Evidence */
+            required_evidence?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Stage */
+            stage: string;
+            /** Thresholds */
+            thresholds?: {
+                [key: string]: number;
+            };
         };
         /** ReviewAction */
         ReviewAction: {
@@ -1717,18 +2689,541 @@ export interface components {
              */
             reviewer_notes: string;
         };
+        /**
+         * RuntimeInjectionResult
+         * @description Sanitized runtime result; token prompt payloads are intentionally absent.
+         */
+        RuntimeInjectionResult: {
+            /** Blocked Reasons */
+            blocked_reasons?: string[];
+            /** Brand Bundle Id */
+            brand_bundle_id?: string | null;
+            /** Bundle Refs */
+            bundle_refs?: string[];
+            /** Contract Refs */
+            contract_refs?: string[];
+            /**
+             * Evidence Level
+             * @default L2-fixture-or-dry-run
+             */
+            evidence_level: string;
+            /** Gate Checks */
+            gate_checks?: string[];
+            /** Hard Token Ids */
+            hard_token_ids?: string[];
+            /**
+             * Mode
+             * @default reviewed_bundle_runtime_check
+             * @constant
+             */
+            mode: "reviewed_bundle_runtime_check";
+            /** Notes */
+            notes?: string[];
+            /**
+             * Prompt Injection Allowed
+             * @default false
+             */
+            prompt_injection_allowed: boolean;
+            /** Scenario */
+            scenario: string;
+            /** Soft Token Ids */
+            soft_token_ids?: string[];
+            /** Source Token Ids */
+            source_token_ids?: string[];
+            /** Step */
+            step: string;
+            /** Toolbox Refs */
+            toolbox_refs?: string[];
+        };
+        /** S1StartRequest */
+        S1StartRequest: {
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
+            /**
+             * Brand Guidelines
+             * @default {}
+             */
+            brand_guidelines: {
+                [key: string]: unknown;
+            };
+            /**
+             * Brand Mode
+             * @default false
+             */
+            brand_mode: boolean;
+            /**
+             * Clip Group Size
+             * @default 3
+             */
+            clip_group_size: number;
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Continuity Generation Mode
+             * @default standard
+             */
+            continuity_generation_mode: string;
+            /**
+             * Continuity Mode
+             * @default true
+             */
+            continuity_mode: boolean | string;
+            /**
+             * Enable Media Synthesis
+             * @default true
+             */
+            enable_media_synthesis: boolean;
+            /**
+             * Mode
+             * @default auto
+             */
+            mode: string;
+            /** Product Catalog */
+            product_catalog: {
+                [key: string]: unknown;
+            };
+            /**
+             * Storyboard Grid
+             * @default 12
+             */
+            storyboard_grid: number;
+            /**
+             * Target Languages
+             * @default [
+             *       "en"
+             *     ]
+             */
+            target_languages: string[];
+            /**
+             * Target Platforms
+             * @default []
+             */
+            target_platforms: string[];
+            /**
+             * Transition Style
+             * @default match_cut
+             */
+            transition_style: string;
+            /**
+             * Video Duration
+             * @default 30
+             */
+            video_duration: number;
+            /**
+             * Week
+             * @default
+             */
+            week: string;
+        };
+        /** S2BrandCampaignRequest */
+        S2BrandCampaignRequest: {
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
+            /**
+             * Brand Package
+             * @default {}
+             */
+            brand_package: {
+                [key: string]: unknown;
+            };
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Enable Media Synthesis
+             * @default true
+             */
+            enable_media_synthesis: boolean;
+            /**
+             * Target Languages
+             * @default [
+             *       "en"
+             *     ]
+             */
+            target_languages: string[];
+            /**
+             * Target Platforms
+             * @default [
+             *       "tiktok",
+             *       "shopify"
+             *     ]
+             */
+            target_platforms: string[];
+            /**
+             * Video Duration
+             * @default 60
+             */
+            video_duration: number;
+            /**
+             * Week
+             * @default
+             */
+            week: string;
+        };
+        /** S5BrandVlogRequest */
+        S5BrandVlogRequest: {
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
+            /**
+             * Brand Id
+             * @default momcozy
+             */
+            brand_id: string;
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Product Sku
+             * @default {}
+             */
+            product_sku: {
+                [key: string]: unknown;
+            };
+            /** Scene Id */
+            scene_id?: string | null;
+            /**
+             * Selected Models
+             * @default []
+             */
+            selected_models: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Story Description
+             * @default
+             */
+            story_description: string;
+            /**
+             * Video Duration
+             * @default 30
+             */
+            video_duration: number;
+        };
+        /** StoryboardShotSchema */
+        StoryboardShotSchema: {
+            /**
+             * Aspect Ratio
+             * @default 9:16
+             */
+            aspect_ratio: string;
+            /** Beat */
+            beat: string;
+            /**
+             * Camera
+             * @default static
+             */
+            camera: string;
+            /** Claim Evidence Refs */
+            claim_evidence_refs?: string[];
+            /**
+             * Contains Children Direct Reference
+             * @default false
+             */
+            contains_children_direct_reference: boolean;
+            /**
+             * Duration Seconds
+             * @default 5
+             */
+            duration_seconds: number;
+            /**
+             * Motion Description
+             * @default
+             */
+            motion_description: string;
+            /** Negative Constraints */
+            negative_constraints?: string[];
+            /** Reference Asset Ids */
+            reference_asset_ids?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Shot Id */
+            shot_id: string;
+            /** Visual Description */
+            visual_description: string;
+        };
+        /** TelemetryErrorEntry */
+        TelemetryErrorEntry: {
+            /** Context */
+            context: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string;
+            /** Label */
+            label: string;
+            /** Step */
+            step: string;
+            /** Timestamp */
+            timestamp: string;
+            /** Trace Id */
+            trace_id: string;
+        };
+        /** TelemetryErrorsResponse */
+        TelemetryErrorsResponse: {
+            /** Count */
+            count: number;
+            /** Errors */
+            errors: components["schemas"]["TelemetryErrorEntry"][];
+            /** Label Filter */
+            label_filter: string | null;
+        };
+        /** TelemetryStepStats */
+        TelemetryStepStats: {
+            /** Avg Duration Ms */
+            avg_duration_ms: number;
+            /** Failure Count */
+            failure_count: number;
+            /** Success Count */
+            success_count: number;
+            /** Total Duration Ms */
+            total_duration_ms: number;
+            /** Total Executions */
+            total_executions: number;
+        };
+        /** TelemetrySummary */
+        TelemetrySummary: {
+            /** Avg Duration Ms */
+            avg_duration_ms: number;
+            /** Labels */
+            labels: string[];
+            /** Per Step Stats */
+            per_step_stats: {
+                [key: string]: components["schemas"]["TelemetryStepStats"];
+            };
+            /** Success Rate */
+            success_rate: number;
+            /** Total Errors */
+            total_errors: number;
+            /** Total Runs */
+            total_runs: number;
+        };
+        /** TokenProvenance */
+        TokenProvenance: {
+            /** Extracted At */
+            extracted_at?: string | null;
+            /**
+             * Extraction Method
+             * @default rule-based
+             */
+            extraction_method: string;
+            /**
+             * Extractor Version
+             * @default spec-only
+             */
+            extractor_version: string;
+        };
+        /** TokenReview */
+        TokenReview: {
+            /** Review Notes */
+            review_notes?: string | null;
+            /**
+             * Review Status
+             * @default pending
+             * @enum {string}
+             */
+            review_status: "pending" | "approved" | "rejected";
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+        };
+        /**
+         * TokenStatus
+         * @enum {string}
+         */
+        TokenStatus: "candidate" | "review" | "approved" | "rejected" | "deprecated" | "expired";
+        /**
+         * TokenStrength
+         * @enum {string}
+         */
+        TokenStrength: "hard" | "soft" | "hard_for_review_only";
+        /** ToolboxInjectionAuditCheck */
+        ToolboxInjectionAuditCheck: {
+            /** Check Id */
+            check_id: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Label */
+            label: string;
+            /** Message */
+            message?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "advisory" | "blocked";
+        };
+        /** ToolboxInjectionAuditSummary */
+        ToolboxInjectionAuditSummary: {
+            /** Advisory Reasons */
+            advisory_reasons?: string[];
+            /**
+             * Artifact Ref Count
+             * @default 0
+             */
+            artifact_ref_count: number;
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /**
+             * Bundle Ref Count
+             * @default 0
+             */
+            bundle_ref_count: number;
+            /** Checks */
+            checks?: components["schemas"]["ToolboxInjectionAuditCheck"][];
+            /**
+             * Contract Ref Count
+             * @default 0
+             */
+            contract_ref_count: number;
+            /**
+             * Delivery Accepted
+             * @default false
+             */
+            delivery_accepted: boolean;
+            /** @default L2-fixture-or-dry-run */
+            evidence_level: components["schemas"]["EvidenceLevel"];
+            /** Injection Draft Ref */
+            injection_draft_ref?: string | null;
+            /**
+             * Provider Call
+             * @default false
+             */
+            provider_call: boolean;
+            /**
+             * Publish Allowed
+             * @default false
+             */
+            publish_allowed: boolean;
+            /**
+             * Ready For Scenario Injection
+             * @default false
+             */
+            ready_for_scenario_injection: boolean;
+            /** Run Id */
+            run_id: string;
+            /**
+             * State Write
+             * @default false
+             */
+            state_write: boolean;
+            /** Summary Id */
+            summary_id: string;
+            /**
+             * Target Count
+             * @default 0
+             */
+            target_count: number;
+            tool_id: components["schemas"]["ToolboxToolId"];
+        };
+        /** ToolboxInjectionAuditSummaryList */
+        ToolboxInjectionAuditSummaryList: {
+            /** @default L2-fixture-or-dry-run */
+            evidence_level: components["schemas"]["EvidenceLevel"];
+            /** Summaries */
+            summaries?: components["schemas"]["ToolboxInjectionAuditSummary"][];
+        };
+        /** ToolboxInjectionDraft */
+        ToolboxInjectionDraft: {
+            /** Artifact Refs */
+            artifact_refs?: string[];
+            /** Blocked Reasons */
+            blocked_reasons?: string[];
+            /** Bundle Refs */
+            bundle_refs?: string[];
+            /** Contract Refs */
+            contract_refs?: string[];
+            /**
+             * Delivery Accepted
+             * @default false
+             */
+            delivery_accepted: boolean;
+            /** Draft Id */
+            draft_id: string;
+            /** Draft Ref */
+            draft_ref: string;
+            /** @default L2-fixture-or-dry-run */
+            evidence_level: components["schemas"]["EvidenceLevel"];
+            /** Injection Targets */
+            injection_targets?: components["schemas"]["ToolboxInjectionTarget"][];
+            /**
+             * Mode
+             * @default read_only
+             * @constant
+             */
+            mode: "read_only";
+            /**
+             * Provider Call
+             * @default false
+             */
+            provider_call: boolean;
+            /**
+             * Publish Allowed
+             * @default false
+             */
+            publish_allowed: boolean;
+            /** Run Id */
+            run_id: string;
+            /**
+             * State Write
+             * @default false
+             */
+            state_write: boolean;
+            tool_id: components["schemas"]["ToolboxToolId"];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** ToolboxInjectionTarget */
+        ToolboxInjectionTarget: {
+            /** Artifact Refs */
+            artifact_refs?: string[];
+            /** Bundle Refs */
+            bundle_refs?: string[];
+            /** Contract Refs */
+            contract_refs?: string[];
+            /** Scenario */
+            scenario: string;
+            /** Step Name */
+            step_name: string;
+            /** Target Ref */
+            target_ref: string;
+        };
+        /**
+         * ToolboxToolId
+         * @enum {string}
+         */
+        ToolboxToolId: "product-image" | "six-view" | "ecommerce-visual" | "digital-human" | "storyboard";
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
             msg: string;
             /** Error Type */
             type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
         };
     };
     responses: never;
@@ -1739,20 +3234,496 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    upload_asset_api_assets_upload_post: {
+    admin_login_api_admin_auth_login_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    admin_logout_api_admin_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-csrf-token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+                admin_csrf?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_session_check_api_admin_auth_session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_summary_api_admin_dashboard_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_history_api_admin_health_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_status_api_admin_health_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_logs_api_admin_logs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_log_detail_api_admin_logs__log_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                log_id: string;
+            };
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tenants_api_admin_tenants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tenant_api_admin_tenants_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-csrf-token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                admin_session?: string | null;
+                admin_csrf?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tenant_api_admin_tenants__tenant_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                admin_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tenant_api_admin_tenants__tenant_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-csrf-token"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                admin_session?: string | null;
+                admin_csrf?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_api_key_api_admin_tenants__tenant_id__keys_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-csrf-token"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                admin_session?: string | null;
+                admin_csrf?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_api_key_api_admin_tenants__tenant_id__keys__key_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-csrf-token"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+                key_id: string;
+            };
+            cookie?: {
+                admin_session?: string | null;
+                admin_csrf?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_assets_api_assets__get: {
+        parameters: {
+            query?: {
+                tags?: string;
+                limit?: number;
+            };
             header?: {
                 "x-api-key"?: string | null;
             };
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_asset_api_assets_upload_post"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -2112,6 +4083,41 @@ export interface operations {
             };
         };
     };
+    upload_asset_api_assets_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_asset_api_assets_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_asset_api_assets__asset_id__get: {
         parameters: {
             query?: never;
@@ -2178,40 +4184,6 @@ export interface operations {
             };
         };
     };
-    list_assets_api_assets__get: {
-        parameters: {
-            query?: {
-                tags?: string;
-                limit?: number;
-            };
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     update_asset_tags_api_assets__asset_id__tags_put: {
         parameters: {
             query?: never;
@@ -2251,7 +4223,7 @@ export interface operations {
             };
         };
     };
-    get_metrics_telemetry_metrics_get: {
+    list_files_api_files_get: {
         parameters: {
             query?: never;
             header?: {
@@ -2268,9 +4240,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2284,11 +4254,109 @@ export interface operations {
             };
         };
     };
-    get_errors_telemetry_errors_get: {
+    get_signed_media_url_api_media_sign_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serve_media_api_media__media_path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_file_api_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_api_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dashboard_overview_dashboard_overview_get: {
         parameters: {
             query?: {
-                /** @description Filter errors by pipeline label */
-                label?: string | null;
+                scenario?: string | null;
+                platform?: string | null;
+                days?: number;
             };
             header?: {
                 "x-api-key"?: string | null;
@@ -2304,9 +4372,298 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    distribution_platforms_distribution_platforms_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    distribution_publish_distribution_publish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    distribution_status_distribution_status__platform___post_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                platform: string;
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fast_generate_fast_generate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FastModeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fast_status_fast_status__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fast_submit_fast_submit_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FastModeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    trigger_metrics_pull_metrics_pull_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_video_metrics_metrics__video_id__get: {
+        parameters: {
+            query?: {
+                platform?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2334,110 +4691,6 @@ export interface operations {
                 "application/json": components["schemas"]["PipelineStartRequest"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_pipeline_state_pipeline__thread_id__state_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    submit_review_pipeline__thread_id__review__review_node__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                thread_id: string;
-                review_node: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReviewAction"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_pipeline_output_pipeline__thread_id__output_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -2525,11 +4778,15 @@ export interface operations {
             };
         };
     };
-    health_health_get: {
+    get_pipeline_output_pipeline__thread_id__output_get: {
         parameters: {
             query?: never;
-            header?: never;
-            path?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                thread_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -2541,6 +4798,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_review_pipeline__thread_id__review__review_node__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                thread_id: string;
+                review_node: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewAction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pipeline_state_pipeline__thread_id__state_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_portfolio_portfolio__get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+                kind?: ("final_work" | "creation_intermediate" | "brand_kit") | null;
+                media_type?: ("video" | "image" | "audio") | null;
+                limit?: number | null;
+                offset?: number;
+                sort?: string;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_brand_presets_portfolio_brand_presets_get: {
+        parameters: {
+            query?: {
+                brand?: string;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandPresetsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_video_publish__video_id__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2582,7 +5029,7 @@ export interface operations {
             };
         };
     };
-    run_s2_brand_campaign_scenario_s2_post: {
+    regenerate_s1_step_scenario_s1_regenerate_post: {
         parameters: {
             query?: never;
             header?: {
@@ -2596,6 +5043,224 @@ export interface operations {
                 "application/json": {
                     [key: string]: unknown;
                 };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_s1_pipeline_scenario_s1_resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_s1_pipeline_scenario_s1_start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["S1StartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_s1_state_scenario_s1_state__label__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_s1_state_scenario_s1_state__label__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_s1_step_scenario_s1_step__step_name__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                step_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_s2_brand_campaign_scenario_s2_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["S2BrandCampaignRequest"];
             };
         };
         responses: {
@@ -2704,417 +5369,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["S5BrandVlogRequest"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    fast_generate_fast_generate_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FastModeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    start_s1_pipeline_scenario_s1_start_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    run_s1_step_scenario_s1_step__step_name__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                step_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    regenerate_s1_step_scenario_s1_regenerate_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    resume_s1_pipeline_scenario_s1_resume_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_s1_state_scenario_s1_state__label__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                label: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_s1_state_scenario_s1_state__label__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                label: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_steps_scenario__scenario__state__label__steps_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                scenario: string;
-                label: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_step_scenario__scenario__step__step_name__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                scenario: string;
-                step_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    edit_step_output_scenario__scenario__state__label__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                scenario: string;
-                label: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    regenerate_step_scenario__scenario__regenerate__label___step_name__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                scenario: string;
-                label: string;
-                step_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -3137,41 +5394,6 @@ export interface operations {
         };
     };
     get_gate_scenario__scenario__gate__label___gate_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path: {
-                scenario: string;
-                label: string;
-                gate_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    generate_gate_candidates_scenario__scenario__gate__label___gate_id__generate_post: {
         parameters: {
             query?: never;
             header?: {
@@ -3247,6 +5469,41 @@ export interface operations {
             };
         };
     };
+    generate_gate_candidates_scenario__scenario__gate__label___gate_id__generate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                scenario: string;
+                label: string;
+                gate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     regenerate_gate_candidate_scenario__scenario__gate__label___gate_id__regenerate__candidate_id__post: {
         parameters: {
             query?: never;
@@ -3283,20 +5540,20 @@ export interface operations {
             };
         };
     };
-    distribution_publish_distribution_publish_post: {
+    audit_prompt_preview_scenario__scenario__prompt_preview_audit_post: {
         parameters: {
             query?: never;
             header?: {
                 "x-api-key"?: string | null;
             };
-            path?: never;
+            path: {
+                scenario: string;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["PromptPreviewAuditRequest"];
             };
         };
         responses: {
@@ -3320,15 +5577,16 @@ export interface operations {
             };
         };
     };
-    distribution_status_distribution_status__platform___post_id__get: {
+    regenerate_step_scenario__scenario__regenerate__label___step_name__post: {
         parameters: {
             query?: never;
             header?: {
                 "x-api-key"?: string | null;
             };
             path: {
-                platform: string;
-                post_id: string;
+                scenario: string;
+                label: string;
+                step_name: string;
             };
             cookie?: never;
         };
@@ -3354,45 +5612,15 @@ export interface operations {
             };
         };
     };
-    distribution_platforms_distribution_platforms_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    publish_video_publish__video_id__post: {
+    edit_step_output_scenario__scenario__state__label__put: {
         parameters: {
             query?: never;
             header?: {
                 "x-api-key"?: string | null;
             };
             path: {
-                video_id: string;
+                scenario: string;
+                label: string;
             };
             cookie?: never;
         };
@@ -3424,16 +5652,15 @@ export interface operations {
             };
         };
     };
-    get_video_metrics_metrics__video_id__get: {
+    list_steps_scenario__scenario__state__label__steps_get: {
         parameters: {
-            query?: {
-                platform?: string;
-            };
+            query?: never;
             header?: {
                 "x-api-key"?: string | null;
             };
             path: {
-                video_id: string;
+                scenario: string;
+                label: string;
             };
             cookie?: never;
         };
@@ -3459,48 +5686,16 @@ export interface operations {
             };
         };
     };
-    get_dashboard_overview_dashboard_overview_get: {
-        parameters: {
-            query?: {
-                scenario?: string;
-                platform?: string;
-                days?: number;
-            };
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    trigger_metrics_pull_metrics_pull_post: {
+    get_scenario_status_scenario__scenario__status__label__get: {
         parameters: {
             query?: never;
             header?: {
                 "x-api-key"?: string | null;
             };
-            path?: never;
+            path: {
+                scenario: string;
+                label: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -3525,18 +5720,23 @@ export interface operations {
             };
         };
     };
-    upload_file_api_upload_post: {
+    execute_step_scenario__scenario__step__step_name__post: {
         parameters: {
             query?: never;
             header?: {
                 "x-api-key"?: string | null;
             };
-            path?: never;
+            path: {
+                scenario: string;
+                step_name: string;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_upload_file_api_upload_post"];
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -3560,44 +5760,117 @@ export interface operations {
             };
         };
     };
-    list_files_api_files_get: {
+    submit_scenario_scenario__scenario__submit_post: {
         parameters: {
             query?: never;
             header?: {
                 "x-api-key"?: string | null;
             };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    serve_media_api_media__media_path__get: {
-        parameters: {
-            query?: never;
-            header?: never;
             path: {
-                media_path: string;
+                scenario: string;
             };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_errors_telemetry_errors_get: {
+        parameters: {
+            query?: {
+                /** @description Filter errors by pipeline label */
+                label?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryErrorsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_metrics_telemetry_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetrySummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prometheus_telemetry_prometheus_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3622,7 +5895,213 @@ export interface operations {
             };
         };
     };
-    get_signed_media_url_api_media_sign_get: {
+    list_toolbox_runs_toolbox_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                tool_id?: components["schemas"]["ToolboxToolId"] | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_toolbox_run_audit_summaries_toolbox_runs_audit_summaries_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                tool_id?: components["schemas"]["ToolboxToolId"] | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolboxInjectionAuditSummaryList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_run_toolbox_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_run_artifacts_toolbox_runs__run_id__artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_run_audit_summary_toolbox_runs__run_id__audit_summary_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolboxInjectionAuditSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_toolbox_injection_draft_toolbox_runs__run_id__inject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolboxInjectionDraft"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tools_toolbox_tools_get: {
         parameters: {
             query?: never;
             header?: {
@@ -3639,7 +6118,167 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_toolbox_run_toolbox__tool_id__plan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_toolbox_prompt_toolbox__tool_id__prompt_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toolbox_provider_readiness_toolbox__tool_id__provider_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_toolbox_dry_run_toolbox__tool_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                tool_id: components["schemas"]["ToolboxToolId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

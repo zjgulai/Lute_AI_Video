@@ -26,12 +26,15 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.config import (
     ANTHROPIC_API_KEY,
+    ANTHROPIC_MODEL,
     DEEPSEEK_API_BASE,
     DEEPSEEK_API_KEY,
     DEEPSEEK_MODEL,
     DEFAULT_LLM_PROVIDER,
+    KIMI_API_BASE,
     KIMI_MODEL,
     OPENAI_API_KEY,
+    OPENAI_MODEL,
 )
 
 # Optional LLM provider imports — only needed when API keys are configured
@@ -158,7 +161,7 @@ class LLMClient:
                 if ChatAnthropic is None:
                     raise ImportError("langchain-anthropic is not installed")
                 self._clients[cache_key] = ChatAnthropic(  # type: ignore[reportCallIssue]
-                    model_name=model or "claude-sonnet-4-20250514",
+                    model_name=model or ANTHROPIC_MODEL,
                     api_key=self._resolve_api_key("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY,
                     temperature=0.7,
                     max_tokens_to_sample=4096,
@@ -170,7 +173,7 @@ class LLMClient:
                 self._clients[cache_key] = ChatOpenAI(
                     model=model or KIMI_MODEL,
                     api_key=self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY,  # type: ignore[reportArgumentType]
-                    base_url="https://api.moonshot.cn/v1",
+                    base_url=KIMI_API_BASE,
                     temperature=0.7,
                     max_completion_tokens=4096,
                     timeout=self.timeout,
@@ -191,7 +194,7 @@ class LLMClient:
                 # Default: OpenAI (or any OpenAI-compatible provider via base_url)
                 from langchain_openai import ChatOpenAI
                 kwargs = {
-                    "model": model or "gpt-4o",
+                    "model": model or OPENAI_MODEL,
                     "api_key": self._resolve_api_key("OPENAI_API_KEY") or OPENAI_API_KEY,
                     "temperature": 0.7,
                     "max_completion_tokens": 4096,

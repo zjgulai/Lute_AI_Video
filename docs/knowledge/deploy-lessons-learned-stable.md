@@ -2,11 +2,10 @@
 title: 腾讯云部署错误教训与根因分析
 doc_type: knowledge
 module: deploy
-module: deploy
 topic: lighthouse-deployment-mistakes
 status: stable
 created: 2026-04-30
-updated: 2026-04-30
+updated: 2026-05-31
 owner: self
 source: human+ai
 ---
@@ -27,6 +26,7 @@ source: human+ai
 | 4 | wget healthcheck 失败 (Connection refused) | Next.js standalone 绑定容器 IP 而非 0.0.0.0 | Day 2 | 严重 |
 | 5 | wget localhost 解析到 IPv6 ::1 | Alpine Linux wget 优先 IPv6 | Day 2 | 中等 |
 | 6 | 容器状态 unhealthy | 上述 4+5 叠加导致 | Day 2 | 严重 |
+| 7 | 部署 smoke 触发真实生成 | smoke.sh 默认调用 `/api/fast/generate`，未做 token-consuming opt-in | 2026-05-31 | 中等 |
 
 ---
 
@@ -233,11 +233,42 @@ curl http://localhost:8001/health
 
 ---
 
+## 错误 7: 部署 smoke 触发真实生成
+
+### 现象
+部署流程进入 Phase 5 后，`smoke.sh` 自动调用：
+
+```bash
+POST /api/fast/generate
+```
+
+在未准备好 poyo.ai 充值测试时仍触发了一次真实生成请求。
+
+### 根因
+1. `deploy.sh` 的 Fast Mode health check 已改为默认跳过，但它随后仍调用 `smoke.sh`
+2. `smoke.sh` 仍把 `/api/fast/generate` 作为默认检查点
+3. 生成类 endpoint 不是只读探活，会消耗外部 provider 额度，不能作为默认部署 smoke
+
+### 修复
+`deploy.sh` 和 `smoke.sh` 均改为仅在显式设置 `RUN_TOKEN_SMOKE=1` 时调用 `/api/fast/generate`。
+
+```bash
+RUN_TOKEN_SMOKE=1 BASE=https://video.lute-tlz-dddd.top bash smoke.sh
+```
+
+### 预防 (Checklist)
+- [ ] 部署默认 smoke 只允许 health/auth/read-only 检查
+- [ ] 任何真实生成、TTS、图像、视频、LLM 调用都必须用显式 opt-in 环境变量
+- [ ] 未充值或未进入真实生成测试窗口时，不设置 `RUN_TOKEN_SMOKE=1`
+
+---
+
 ## 教训总结
 
 1. **Docker 多阶段构建中 ARG/ENV 不跨 stage 传递** — 每个 stage 必须显式重新声明
 2. **NEXT_PUBLIC_* 是构建时变量** — 必须在 `docker build` 时通过 `--build-arg` 传入，运行时无法修改
 3. **Next.js standalone 默认绑定容器 IP** — 必须设置 `HOSTNAME=0.0.0.0`
-4. **Alpine wget localhost 优先 IPv6** — 容器内健康检查必须使用 `127.0.0.1`
-5. **部署前必须验证容器健康状态** — `docker ps` 中状态必须是 `(healthy)`，不是 `(health: starting)` 或 `(unhealthy)`
-6. **SSH 密钥必须清除 xattr 并显式指定路径** — 不要依赖默认搜索路径
+4. **部署 smoke 默认必须非消耗型** — 真实生成链路只能通过 `RUN_TOKEN_SMOKE=1` 显式开启
+5. **Alpine wget localhost 优先 IPv6** — 容器内健康检查必须使用 `127.0.0.1`
+6. **部署前必须验证容器健康状态** — `docker ps` 中状态必须是 `(healthy)`，不是 `(health: starting)` 或 `(unhealthy)`
+7. **SSH 密钥必须清除 xattr 并显式指定路径** — 不要依赖默认搜索路径

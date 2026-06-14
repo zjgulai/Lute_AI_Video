@@ -3,7 +3,7 @@
 import pytest
 
 from src.agents.caption import CaptionAgent
-from src.models import Script, ScriptSegment, CaptionPlan, Platform, Language, Script
+from src.models import Language, Platform, Script, ScriptSegment
 
 
 @pytest.fixture

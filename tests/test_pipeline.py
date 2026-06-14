@@ -9,8 +9,9 @@ import pytest
 
 class TestBuildPipeline:
     def test_build_pipeline_returns_graph(self):
-        from src.graph.pipeline import build_pipeline
         from langgraph.graph import StateGraph
+
+        from src.graph.pipeline import build_pipeline
 
         graph = build_pipeline()
         assert isinstance(graph, StateGraph)
@@ -63,8 +64,9 @@ class TestCompilePipeline:
         assert hasattr(compiled, "astream")
 
     def test_compile_with_custom_checkpointer(self):
-        from src.graph.pipeline import compile_pipeline
         from langgraph.checkpoint.memory import MemorySaver
+
+        from src.graph.pipeline import compile_pipeline
 
         checkpointer = MemorySaver()
         compiled = compile_pipeline(checkpointer=checkpointer)

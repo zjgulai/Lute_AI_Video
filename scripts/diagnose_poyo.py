@@ -1,16 +1,41 @@
 #!/usr/bin/env python3
-"""Quick diagnosis of poyo.ai connectivity for image/video/tts services."""
+"""Quick diagnosis of poyo.ai connectivity for image/video/tts services.
+
+This submits a real poyo.ai image generation request and may consume credits.
+Run only after recharge with CONFIRM_POYO_PROBE=1 and POYO_API_KEY set.
+"""
+
 import asyncio
 import os
 import sys
 
 sys.path.insert(0, "/Users/pray/project/hermes_evo/AI_vedio")
 
-from src.config import POYO_API_KEY, POYO_API_BASE_URL, POYO_IMAGE_MODEL
+from src.config import POYO_API_BASE_URL, POYO_API_KEY, POYO_IMAGE_MODEL  # noqa: I001
+
+CONFIRM_ENV = "CONFIRM_POYO_PROBE"
+
+
+def mask_key(key: str) -> str:
+    if len(key) <= 10:
+        return "***"
+    return f"{key[:6]}...{key[-4:]}"
+
+
+def require_probe_confirmation() -> None:
+    if os.getenv(CONFIRM_ENV) != "1":
+        raise SystemExit(
+            f"{CONFIRM_ENV}=1 is required because this script submits a real poyo.ai generation request "
+            "and may consume credits."
+        )
 
 
 async def main():
-    print(f"POYO_API_KEY:    {POYO_API_KEY[:20]}..." if POYO_API_KEY else "POYO_API_KEY:    NOT SET")
+    if not POYO_API_KEY:
+        raise SystemExit("POYO_API_KEY is required")
+    require_probe_confirmation()
+
+    print(f"POYO_API_KEY:    {mask_key(POYO_API_KEY)}")
     print(f"POYO_BASE_URL:   {POYO_API_BASE_URL}")
     print(f"POYO_IMAGE_MODEL: {POYO_IMAGE_MODEL}")
     print("-" * 50)

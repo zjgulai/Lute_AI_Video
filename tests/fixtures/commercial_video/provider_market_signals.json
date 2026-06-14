@@ -1,0 +1,26 @@
+{
+  "signals": [
+    {
+      "signal_id": "sig_aihot_seedance_20260604",
+      "provider": "poyo",
+      "model": "seedance-2",
+      "capability_hint": "image-to-video short clip generation",
+      "evidence_level": "aihot_signal",
+      "source_url": "https://aihot.virxact.com",
+      "observed_at": "2026-06-04T00:00:00+00:00",
+      "impact_scope": ["video_prompt_compiler", "experiment_backlog"],
+      "production_default_eligible": false
+    },
+    {
+      "signal_id": "sig_official_runway_20260604",
+      "provider": "runway",
+      "model": "gen-3",
+      "capability_hint": "director-style video generation profile",
+      "evidence_level": "official_doc",
+      "source_url": "https://runwayml.com",
+      "observed_at": "2026-06-04T00:00:00+00:00",
+      "impact_scope": ["provider_profile_fixture"],
+      "production_default_eligible": false
+    }
+  ]
+}

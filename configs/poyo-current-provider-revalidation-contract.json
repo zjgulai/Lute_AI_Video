@@ -1,0 +1,96 @@
+{
+  "status": "stable",
+  "evidence_level": "L1-public-doc-revalidation",
+  "checked_at": "2026-06-06",
+  "provider": "poyo",
+  "no_provider_call": true,
+  "source_urls": [
+    "https://docs.poyo.ai/api-manual/overview",
+    "https://docs.poyo.ai/api-manual/video-series/seedance-2",
+    "https://poyo.ai/models/seedance-2",
+    "https://docs.poyo.ai/api-manual/image-series/gpt-image-2",
+    "https://poyo.ai/models/gpt-image-2",
+    "https://poyo.ai/changelog"
+  ],
+  "api": {
+    "base_url": "https://api.poyo.ai",
+    "authentication": "Authorization: Bearer YOUR_API_KEY",
+    "submit_endpoint": "POST /api/generate/submit",
+    "status_endpoint": "GET /api/generate/status/{task_id}",
+    "architecture": "unified_async_submit_then_status"
+  },
+  "models": [
+    {
+      "model": "seedance-2",
+      "type": "video",
+      "available_model_ids": ["seedance-2", "seedance-2-fast"],
+      "workflows": [
+        "text-to-video",
+        "image-to-video",
+        "reference-to-video",
+        "video-to-video",
+        "audio-to-video"
+      ],
+      "duration_seconds": {"min": 4, "max": 15},
+      "resolutions": ["480p", "720p", "1080p"],
+      "reference_limits": {
+        "image_max": 9,
+        "video_max": 3,
+        "audio_max": 3,
+        "combined_max": 12
+      },
+      "pricing_usd": {
+        "seedance_2_480p_text_or_image_to_video_per_second": 0.1,
+        "seedance_2_720p_text_or_image_to_video_per_second": 0.2,
+        "seedance_2_1080p_text_or_image_to_video_per_second": 0.45,
+        "seedance_2_480p_with_video_input_per_second": 0.05,
+        "seedance_2_720p_with_video_input_per_second": 0.1,
+        "seedance_2_1080p_with_video_input_per_second": 0.225,
+        "seedance_2_fast_480p_text_or_image_to_video_per_second": 0.07,
+        "seedance_2_fast_720p_text_or_image_to_video_per_second": 0.14
+      },
+      "recommended_l4_smoke_default": {
+        "model": "seedance-2",
+        "resolution": "480p",
+        "duration_seconds": 4,
+        "video_input": false,
+        "estimated_provider_cost_usd": 0.4
+      }
+    },
+    {
+      "model": "gpt-image-2",
+      "type": "image",
+      "available_model_ids": ["gpt-image-2", "gpt-image-2-edit"],
+      "workflows": ["text-to-image", "reference-image-guided-generation", "multi-image-editing"],
+      "qualities": ["low", "medium", "high"],
+      "resolutions": ["1K", "2K", "4K"],
+      "sizes": ["auto", "1:1", "2:3", "3:2", "4:3", "3:4", "4:5", "5:4", "16:9", "9:16", "21:9", "WIDTHxHEIGHT"],
+      "prompt_max_chars": 20000,
+      "returns_per_request": 1,
+      "pricing_usd": {
+        "low_1k_per_generation": 0.01,
+        "low_2k_per_generation": 0.02,
+        "low_4k_per_generation": 0.04,
+        "medium_1k_per_generation": 0.042,
+        "medium_2k_per_generation": 0.045,
+        "medium_4k_per_generation": 0.081,
+        "high_1k_per_generation": 0.169,
+        "high_2k_per_generation": 0.178,
+        "high_4k_per_generation": 0.321
+      },
+      "recommended_l4_smoke_default": {
+        "model": "gpt-image-2",
+        "quality": "low",
+        "resolution": "1K",
+        "estimated_provider_cost_usd": 0.01
+      }
+    }
+  ],
+  "pre_live_constraints": [
+    "This record is public documentation evidence only; it does not prove account balance, key validity, or provider runtime success.",
+    "Before L4 execution, the private approval record must include provider_revalidation_ref with this exact config path.",
+    "Before L4 execution, confirm the poyo dashboard balance and current model availability without committing secrets.",
+    "If live execution happens after this dated check or the poyo docs/changelog change, refresh this record first."
+  ],
+  "required_approval_record_field": "provider_revalidation_ref"
+}

@@ -1,0 +1,126 @@
+{
+  "updated": "2026-06-01",
+  "runbook": "docs/runbooks/archive-draft-link-drift.md",
+  "active_docs_source": "configs/docs-link-check-scope.txt",
+  "historical_target_prefixes": [
+    "archive/",
+    "drafts/",
+    "tmp/",
+    ".kiro/",
+    "docs/research/",
+    "docs/superpowers/plans/",
+    "docs/superpowers/specs/",
+    "superpowers/plans/",
+    "superpowers/specs/"
+  ],
+  "historical_raw_target_fragments": [
+    "archive/",
+    "drafts/",
+    "tmp/",
+    ".kiro/",
+    "docs/research/",
+    "docs/superpowers/plans/",
+    "docs/superpowers/specs/",
+    "superpowers/plans/",
+    "superpowers/specs/"
+  ],
+  "required_context_markers": [
+    "历史",
+    "不作为当前执行入口",
+    "不作为当前入口",
+    "不再作为当前",
+    "更早盘点"
+  ],
+  "allowed_historical_references": [
+    {
+      "source_path": "docs/architecture/adr/004-s3-copyright-fingerprint.md",
+      "kind": "markdown_link",
+      "target_path": ".kiro/plan/UNIFIED-ROADMAP-2026-05-15.md",
+      "raw_target": "file:///Users/pray/project/hermes_evo/AI_vedio/.kiro/plan/UNIFIED-ROADMAP-2026-05-15.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Historical ADR traceability link; current execution uses docs/claude/known-gaps-stable.md."
+    },
+    {
+      "source_path": "docs/architecture/api-assets-pg-cutover-2026-05-15.md",
+      "kind": "frontmatter_file",
+      "target_path": ".kiro/plan/UNIFIED-ROADMAP-2026-05-15.md",
+      "raw_target": "../../.kiro/plan/UNIFIED-ROADMAP-2026-05-15.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Frontmatter provenance link to historical planning source; not a current execution entrypoint."
+    },
+    {
+      "source_path": "docs/claude/known-gaps-stable.md",
+      "kind": "markdown_link",
+      "target_path": "superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md",
+      "raw_target": "../../superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Historical rollout evidence link retained inside older-polling section."
+    },
+    {
+      "source_path": "docs/claude/updates/project-updates-202605-stable.md",
+      "kind": "markdown_link",
+      "target_path": ".kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md",
+      "raw_target": "../../../.kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Historical release evidence link in monthly update log."
+    },
+    {
+      "source_path": "docs/claude/updates/project-updates-202605-stable.md",
+      "kind": "markdown_link",
+      "target_path": ".kiro/plan/DEPLOY-CHECKLIST-2026-05-12.md",
+      "raw_target": "../../../.kiro/plan/DEPLOY-CHECKLIST-2026-05-12.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Historical release evidence link in monthly update log."
+    },
+    {
+      "source_path": "docs/claude/updates/project-updates-202605-stable.md",
+      "kind": "markdown_link",
+      "target_path": ".kiro/plan/NEXT-STEPS-2026-05-11.md",
+      "raw_target": "../../../.kiro/plan/NEXT-STEPS-2026-05-11.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Historical next-step source retained only with explicit current-entrypoint disclaimer."
+    },
+    {
+      "source_path": "docs/claude/updates/project-updates-202605-stable.md",
+      "kind": "markdown_link",
+      "target_path": ".kiro/plan/RECONCILIATION-2026-05-11.md",
+      "raw_target": "../../../.kiro/plan/RECONCILIATION-2026-05-11.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Historical release evidence link in monthly update log."
+    },
+    {
+      "source_path": "docs/claude/updates/project-updates-202605-stable.md",
+      "kind": "markdown_link",
+      "target_path": "tmp/outputs/production-qa-2026-05-11",
+      "raw_target": "../../../tmp/outputs/production-qa-2026-05-11/",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Historical QA output reference retained only inside release history."
+    },
+    {
+      "source_path": "docs/runbooks/key-rotation.md",
+      "kind": "frontmatter_file",
+      "target_path": ".kiro/plan/VULNERABILITIES-AND-PENDING-2026-05-15.md",
+      "raw_target": "../../.kiro/plan/VULNERABILITIES-AND-PENDING-2026-05-15.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Frontmatter provenance link to historical security planning source; not a current execution entrypoint."
+    },
+    {
+      "source_path": "docs/runbooks/phase1-signoff-checklist.md",
+      "kind": "frontmatter_file",
+      "target_path": ".kiro/plan/MASTER-PLAN-STATUS-2026-05-17.md",
+      "raw_target": "../../.kiro/plan/MASTER-PLAN-STATUS-2026-05-17.md",
+      "status": "historical_reference_only",
+      "current_entrypoint": false,
+      "reason": "Frontmatter provenance link to historical release planning source; not a current execution entrypoint."
+    }
+  ]
+}

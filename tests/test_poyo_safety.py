@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-import pytest
+import json
+from pathlib import Path
 
 from src.tools.poyo_safety import sanitize_for_poyo
+
+
+def _load_poyo_sanity_samples() -> list[dict]:
+    path = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "commercial_video" / "poyo_content_rejection_samples.json"
+    with path.open(encoding="utf-8") as f:
+        payload = json.load(f)
+    return list(payload.get("sanitization_cases", []))
 
 
 class TestSanitizeForPoyo:
@@ -112,3 +120,12 @@ class TestSanitizeForPoyo:
         assert "baby bottle" not in out.lower()
         assert "postpartum" not in out.lower()
         assert len(subs) >= 3
+
+    def test_fixture_terms_are_replaced(self):
+        for sample in _load_poyo_sanity_samples():
+            raw = sample["raw"]
+            expected = sample["expected_replacement"]
+            out, applied = sanitize_for_poyo(raw)
+            assert expected.lower() in out.lower()
+            assert sample["trigger"].lower() not in out.lower()
+            assert applied

@@ -28,7 +28,6 @@ import pytest
 from src.connectors.registry import get_connector
 from src.telemetry import ErrorCollector
 
-
 # ── connector registry ──
 
 class TestConnectorRegistry:
@@ -161,7 +160,7 @@ class TestTimedNodeErrorPath:
     """
 
     def test_decorator_collects_error_on_exception(self):
-        from src.telemetry import timed_node, error_collector
+        from src.telemetry import error_collector, timed_node
 
         # 清空 collector 避免被其他 test 污染断言
         error_collector._errors.clear()
@@ -188,7 +187,10 @@ class TestTimedNodeErrorPath:
             return {"ok": True}
 
         result = ok_node({"trace_id": "test-trace-2"})
-        assert result == {"ok": True}
+        assert result["ok"] is True
+        assert result["trace_id"] == "test-trace-2"
+        assert result["pipeline_metrics"]["node_count"] >= 1
+        assert result["pipeline_metrics"]["steps"][-1]["step_name"] == "ok_node"
 
     def test_re_raises_exception_after_collect(self):
         """timed_node 收集 error 后必须重抛,不能静默。"""

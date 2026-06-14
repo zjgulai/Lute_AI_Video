@@ -88,7 +88,7 @@ async def test_gate_1_script_generates_3_scored_candidates(app):
 
         # 2. 跑 strategy step
         r = await client.post(
-            f"/scenario/s1/step/strategy",
+            "/scenario/s1/step/strategy",
             headers=AUTH_HEADERS,
             json={"label": label},
         )
@@ -96,7 +96,7 @@ async def test_gate_1_script_generates_3_scored_candidates(app):
 
         # 3. 跑 scripts step(为 gate_1 准备 input)
         r = await client.post(
-            f"/scenario/s1/step/scripts",
+            "/scenario/s1/step/scripts",
             headers=AUTH_HEADERS,
             json={"label": label},
         )

@@ -1,0 +1,169 @@
+{
+  "schema_version": "1.0",
+  "matrix_id": "momcozy_toolbox_l2_fixture_matrix_20260606",
+  "evidence_level": "L2-fixture-or-dry-run",
+  "brand_id": "momcozy",
+  "brand_bundle_ref": "bundle_momcozy_candidate",
+  "approved_token_count": 0,
+  "provider_calls_allowed": false,
+  "delivery_accepted": false,
+  "source_refs": [
+    "docs/product/momcozy-brand-brief.md",
+    "tests/fixtures/commercial_video/momcozy_candidate_ledger.json",
+    "tests/fixtures/commercial_video/momcozy_token_vault_minimal.json"
+  ],
+  "scenario_cases": [
+    {
+      "case_id": "MOM-S5-001",
+      "scenario": "s5",
+      "sample_type": "brand_vlog_asset_injection",
+      "expected_status": "review_required",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "approved_brand_token": false,
+      "brand_asset_refs": [
+        "bundle_momcozy_candidate",
+        "asset://brand/momcozy/product/m9-front-candidate",
+        "asset://brand/momcozy/visual/soft-lighting-reference"
+      ],
+      "target_steps": [
+        "vlog_strategy",
+        "continuity_storyboard_grid",
+        "video_prompts",
+        "audit"
+      ],
+      "required_checks": [
+        "candidate_bundle_only",
+        "children_safety",
+        "claim_evidence_refs",
+        "no_voice_clone",
+        "no_provider_call"
+      ]
+    }
+  ],
+  "toolbox_image_cases": [
+    {
+      "case_id": "MOM-TBX-IMG-001",
+      "tool_id": "product-image",
+      "target_scenarios": ["s1", "s2", "s5"],
+      "expected_status": "accepted_dry_run",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "approved_brand_token": false,
+      "request": {
+        "request_id": "tbx_req_momcozy_product_image_l2",
+        "tool_id": "product-image",
+        "brand_id": "momcozy",
+        "platform_target": {
+          "platform": "shopify",
+          "aspect_ratio": "1:1"
+        },
+        "brand_bundle_ref": "bundle_momcozy_candidate",
+        "asset_refs": [
+          {
+            "asset_ref": "asset://brand/momcozy/product/m9-front-candidate",
+            "asset_kind": "image",
+            "rights_ref": "rights://candidate/momcozy/m9-front"
+          }
+        ],
+        "target_scenario": "s5",
+        "tool_input": {
+          "tool_id": "product-image",
+          "product_ref": "sku://momcozy/m9",
+          "image_type": "main_white_bg",
+          "aspect_ratio": "1:1",
+          "platform": "shopify",
+          "reference_asset_refs": [
+            "asset://brand/momcozy/product/m9-front-candidate"
+          ],
+          "claim_evidence_refs": [
+            "claim://momcozy/m9/product-truth-candidate"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "MOM-TBX-IMG-002",
+      "tool_id": "six-view",
+      "target_scenarios": ["s1", "s2", "s5"],
+      "expected_status": "accepted_dry_run",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "approved_brand_token": false,
+      "request": {
+        "request_id": "tbx_req_momcozy_six_view_l2",
+        "tool_id": "six-view",
+        "brand_id": "momcozy",
+        "platform_target": {
+          "platform": "shopify",
+          "aspect_ratio": "1:1"
+        },
+        "brand_bundle_ref": "bundle_momcozy_candidate",
+        "asset_refs": [
+          {
+            "asset_ref": "asset://brand/momcozy/product/m9-front-candidate",
+            "asset_kind": "image",
+            "rights_ref": "rights://candidate/momcozy/m9-front"
+          }
+        ],
+        "target_scenario": "s5",
+        "tool_input": {
+          "tool_id": "six-view",
+          "product_ref": "sku://momcozy/m9",
+          "seed_image_refs": [
+            "asset://brand/momcozy/product/m9-front-candidate"
+          ],
+          "required_views": ["front", "back", "left", "right", "top", "detail"],
+          "consistency_level": "strict"
+        }
+      }
+    },
+    {
+      "case_id": "MOM-TBX-IMG-003",
+      "tool_id": "ecommerce-visual",
+      "target_scenarios": ["s1", "s2", "s5"],
+      "expected_status": "accepted_dry_run",
+      "provider_call": false,
+      "delivery_accepted": false,
+      "approved_brand_token": false,
+      "request": {
+        "request_id": "tbx_req_momcozy_ecommerce_visual_l2",
+        "tool_id": "ecommerce-visual",
+        "brand_id": "momcozy",
+        "platform_target": {
+          "platform": "tiktok",
+          "aspect_ratio": "9:16"
+        },
+        "brand_bundle_ref": "bundle_momcozy_candidate",
+        "asset_refs": [
+          {
+            "asset_ref": "asset://brand/momcozy/product/m9-front-candidate",
+            "asset_kind": "image",
+            "rights_ref": "rights://candidate/momcozy/m9-front"
+          }
+        ],
+        "target_scenario": "s5",
+        "tool_input": {
+          "tool_id": "ecommerce-visual",
+          "campaign_brief": "fixture brief must stay out of public projections",
+          "channel": "tiktok",
+          "visual_format": "social_ad",
+          "copy_block_refs": [
+            "asset://copy/momcozy/empathy-hook-candidate"
+          ],
+          "product_image_refs": [
+            "asset://brand/momcozy/product/m9-front-candidate"
+          ],
+          "aspect_ratio": "9:16"
+        }
+      }
+    }
+  ],
+  "forbidden_claims": [
+    "provider job submitted",
+    "approved brand token available",
+    "delivery accepted",
+    "publish allowed",
+    "commercial production ready"
+  ]
+}

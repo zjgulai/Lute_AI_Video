@@ -47,9 +47,8 @@ class TestPrometheusEndpoint:
             assert metric in body, f"missing metric in /metrics output: {metric}"
 
     def test_metrics_does_not_collide_with_video_metrics_route(self, client):
-        from src.routers._deps import verify_api_key
-
         from src.api import app
+        from src.routers._deps import verify_api_key
 
         async def _ok() -> str:
             return "test"

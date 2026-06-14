@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { TEMPLATE_PRESETS } from "@/demo-data";
 import { apiFetch } from "@/components/api";
@@ -46,8 +46,18 @@ function mergePresets(apiPresets: TemplatePreset[] | null): TemplatePreset[] {
 
 export default function QuickTemplate({ scene, onApply }: Props) {
   const { t, locale } = useI18n();
+  const menuId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [livePresets, setLivePresets] = useState<TemplatePreset[] | null>(null);
+
+  const closeMenu = useCallback((restoreFocus = true) => {
+    setIsOpen(false);
+    if (restoreFocus) {
+      requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,16 +68,58 @@ export default function QuickTemplate({ scene, onApply }: Props) {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeMenu();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    requestAnimationFrame(() => itemRefs.current[0]?.focus());
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeMenu, isOpen]);
+
   const filteredPresets = useMemo(() => {
     const all = mergePresets(livePresets);
     return all.filter((p) => p.scene === scene || p.id === "blank");
   }, [livePresets, scene]);
 
+  const focusPreset = (index: number) => {
+    const next = itemRefs.current[index];
+    if (next) next.focus();
+  };
+
+  const handlePresetKeyDown = (index: number, event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusPreset((index + 1) % filteredPresets.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusPreset((index - 1 + filteredPresets.length) % filteredPresets.length);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      focusPreset(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      focusPreset(filteredPresets.length - 1);
+    }
+  };
+
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen((open) => !open)}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
         className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
       >
         <Sparkle size={12} weight="fill" />
@@ -83,21 +135,31 @@ export default function QuickTemplate({ scene, onApply }: Props) {
         <>
           <div
             className="fixed inset-0 z-[55]"
-            onClick={() => setIsOpen(false)}
+            onClick={() => closeMenu()}
           />
-          <div className="absolute top-full right-0 mt-1 w-72 max-h-[60vh] overflow-y-auto apple-card p-2 z-[60] animate-slide-down shadow-xl">
+          <div
+            id={menuId}
+            role="menu"
+            aria-label={t("template.title")}
+            className="absolute top-full right-0 mt-1 w-72 max-h-[60vh] overflow-y-auto apple-card p-2 z-[60] animate-slide-down shadow-xl"
+          >
             {filteredPresets.length === 0 ? (
               <div className="px-3 py-4 text-xs text-[var(--color-text-tertiary)] text-center">
                 {t("template.empty")}
               </div>
             ) : (
-              filteredPresets.map((preset) => (
+              filteredPresets.map((preset, index) => (
                 <button
+                  ref={(node) => {
+                    itemRefs.current[index] = node;
+                  }}
                   key={preset.id}
                   type="button"
+                  role="menuitem"
+                  onKeyDown={(event) => handlePresetKeyDown(index, event)}
                   onClick={() => {
                     onApply(preset.values);
-                    setIsOpen(false);
+                    closeMenu();
                   }}
                   className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--color-surface-secondary)] transition-colors"
                 >

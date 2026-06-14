@@ -1,6 +1,14 @@
 "use client";
 
 import { useI18n } from "@/i18n/I18nProvider";
+import InlineTooltip from "./InlineTooltip";
+import {
+  extractContinuityDiagnosticsFromAuditReport,
+  getContinuityDiagnosticsSummary,
+  hasContinuityDiagnostics,
+  normalizeContinuityDiagnostics,
+} from "@/lib/continuityDiagnostics";
+import { truncateDiagnosticText } from "@/lib/diagnosticText";
 import { AuditReport } from "./types";
 import { WarningCircle } from "@phosphor-icons/react";
 
@@ -99,6 +107,11 @@ export default function QualityDashboard({ qualityReport }: Props) {
   const overall = statusColor(qualityReport.overall_status);
   const overallScorePct = Math.round(Math.min(qualityReport.overall_score, 1) * 100);
   const criteria = qualityReport.criteria || [];
+  const continuityDiagnostics = normalizeContinuityDiagnostics(
+    extractContinuityDiagnosticsFromAuditReport(qualityReport as unknown as Record<string, unknown>),
+  );
+  const continuitySummary = getContinuityDiagnosticsSummary(continuityDiagnostics, t);
+  const showContinuityDiagnostics = hasContinuityDiagnostics(continuityDiagnostics);
 
   return (
     <div className="space-y-3">
@@ -178,6 +191,33 @@ export default function QualityDashboard({ qualityReport }: Props) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {showContinuityDiagnostics && (
+        <div className="apple-card p-3 border-l-4 border-[rgba(122,150,187,0.28)]">
+          <p className="text-[12px] font-semibold text-[var(--cinema-azure)] uppercase tracking-wider">
+            {t("continuity.diagnosticsTitle")}
+          </p>
+          {continuitySummary && (
+            <p className="text-[12px] text-[var(--text-muted)] mt-1">{continuitySummary}</p>
+          )}
+          {continuityDiagnostics.clipDirections.slice(0, 1).map((direction, index) => (
+            <div key={`${direction.sceneBeat}-${index}`} className="mt-2 text-[12px] text-[var(--text-muted)] leading-relaxed">
+              <div>{t("continuity.sceneBeatLabel")} {direction.sceneBeat || t("continuity.unknown")}</div>
+              {direction.transitionIntent && (
+                <div>
+                  {t("continuity.transitionIntentLabel")}{" "}
+                  <InlineTooltip
+                    label={truncateDiagnosticText(direction.transitionIntent)}
+                    tooltip={direction.transitionIntent}
+                    className="max-w-[280px] align-top"
+                    tooltipClassName="w-72"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

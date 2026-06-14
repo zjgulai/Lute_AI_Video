@@ -1,3 +1,20 @@
+-- SQL init for fresh `docker compose up` — provides a complete baseline schema.
+--
+-- IMPORTANT: Alembic (migrations/alembic/) is the authoritative schema manager.
+-- This file mirrors the Alembic head revision for convenience but should NOT
+-- contain DDL that hasn't been added via Alembic first. When adding new tables
+-- or columns:
+--   1. Create an Alembic migration:  alembic revision -m "description"
+--   2. Implement the migration in migrations/alembic/versions/
+--   3. Run alembic upgrade head to apply
+--   4. THEN mirror the final DDL here (with IF NOT EXISTS guards)
+--
+-- The backend entrypoint also runs `alembic upgrade head` on startup when PG
+-- is available (see src/storage/db.py), making the inlined DDL a belt-and-
+-- suspenders safety net rather than the primary schema pathway.
+--
+-- Ref: debt-audit-report-2026-06-09.md item E22, Phase2.3 remediation
+
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
