@@ -313,6 +313,33 @@ class TestCIWorkflow:
             "main CI must lint src, tests, and scripts to keep repo-wide ruff trustworthy"
         )
 
+    def test_ci_installs_media_tools_for_video_quality_tests(self):
+        with open(CI_YML) as f:
+            wf = yaml.safe_load(f)
+        steps = wf["jobs"]["test"].get("steps") or []
+        install_step = _step_by_name(steps, "Install media test tools")
+        run = install_step.get("run") or ""
+
+        assert "apt-get update" in run
+        assert "apt-get install -y --no-install-recommends ffmpeg" in run
+
+    def test_ci_installs_openapi_typegen_dependencies_before_pytest(self):
+        with open(CI_YML) as f:
+            wf = yaml.safe_load(f)
+        steps = wf["jobs"]["test"].get("steps") or []
+        step_names = [step.get("name") for step in steps]
+        node_step = _step_by_name(steps, "Set up Node.js for OpenAPI type drift guard")
+        install_step = _step_by_name(steps, "Install OpenAPI typegen dependencies")
+        pytest_step = _step_by_name(steps, "Run tests with coverage")
+
+        assert node_step["uses"] == "actions/setup-node@v4"
+        assert node_step["with"]["node-version"] == "22"
+        assert node_step["with"]["cache"] == "npm"
+        assert node_step["with"]["cache-dependency-path"] == "web/package-lock.json"
+        assert install_step["run"] == "cd web && npm ci"
+        assert step_names.index(node_step["name"]) < step_names.index(install_step["name"])
+        assert step_names.index(install_step["name"]) < step_names.index(pytest_step["name"])
+
     def test_ci_pytest_env_is_hermetic(self):
         with open(CI_YML) as f:
             wf = yaml.safe_load(f)

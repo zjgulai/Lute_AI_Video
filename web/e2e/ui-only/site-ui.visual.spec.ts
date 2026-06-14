@@ -117,14 +117,11 @@ async function primeUiState(page: Page) {
     localStorage.setItem("app-locale", "zh");
     localStorage.setItem("ai-video-app-store", JSON.stringify({
       state: {
-        activeScene: "product_direct",
         mode: "expert",
         pipelineMode: "step_by_step",
-        showSplash: false,
-        stage: "home",
         videoDuration: 30,
       },
-      version: 0,
+      version: 1,
     }));
   });
 }
@@ -132,6 +129,14 @@ async function primeUiState(page: Page) {
 async function openApp(page: Page, path: string) {
   await primeUiState(page);
   await page.goto(path, { waitUntil: "domcontentloaded" });
+
+  const splashMarker = page.getByText("Evolving for Mom and Cozy");
+  if (await splashMarker.isVisible().catch(() => false)) {
+    await page.getByRole("button", { name: /开始创作|Get Started/i }).evaluate((node) => {
+      (node as HTMLButtonElement).click();
+    });
+    await expect(splashMarker).toBeHidden({ timeout: 5_000 });
+  }
 
   const nav = page.locator("nav").first();
   await nav.waitFor({ state: "visible", timeout: 2_000 }).catch(() => { /* fallback to explicit splash dismissal */ });

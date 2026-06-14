@@ -91,6 +91,7 @@ def test_docs_link_check_keeps_offline_mode_and_local_excludes():
     assert "--no-progress" in args
     assert "--exclude" in args
     assert "^https?://(localhost|127\\.0\\.0\\.1|101\\.34\\.52\\.232)" in args
+    assert "^file://" in args
 
 
 def test_docs_link_check_uses_curated_scope_instead_of_broad_globs():

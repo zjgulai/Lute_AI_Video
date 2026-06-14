@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,10 +46,19 @@ LOCAL_SYNC_SIDECAR_SUFFIXES = (
 
 
 def _script_paths() -> set[str]:
+    result = subprocess.run(
+        ["git", "ls-files", "scripts"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     return {
-        path.relative_to(REPO_ROOT).as_posix()
-        for path in SCRIPTS_DIR.iterdir()
-        if path.is_file() and not path.name.endswith(LOCAL_SYNC_SIDECAR_SUFFIXES)
+        path
+        for path in result.stdout.splitlines()
+        if "/" in path
+        and Path(path).parent == Path("scripts")
+        and not path.endswith(LOCAL_SYNC_SIDECAR_SUFFIXES)
     }
 
 

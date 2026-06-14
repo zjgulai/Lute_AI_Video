@@ -56,6 +56,21 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
+      - name: Set up Node.js for OpenAPI type drift guard
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install media test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install OpenAPI typegen dependencies
+        run: cd web && npm ci
+
       - name: Install dependencies
         run: |
           pip install --upgrade pip
@@ -99,6 +114,7 @@ jobs:
             --offline
             --no-progress
             --exclude '^https?://(localhost|127\.0\.0\.1|101\.34\.52\.232)'
+            --exclude '^file://'
             README.md
             AGENTS.md
             docs/claude/known-gaps-stable.md

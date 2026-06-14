@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-06-13
+updated: 2026-06-14
 owner: self
 source: human+ai
 ---
@@ -16,7 +16,7 @@ source: human+ai
 
 `scripts/` 只保留可复用、可解释、可审计的项目脚本。一次性修复、机器同步、provider 探测、历史 E2E 工具必须被显式分类，禁止默认 CI、部署或 hermetic regression 隐式调用。
 
-治理契约在 `configs/scripts-governance-contract.json`。新增、迁移或归档脚本时，先更新契约，再运行 `tests/test_scripts_governance.py`。
+治理契约在 `configs/scripts-governance-contract.json`。新增、迁移或归档 git-tracked 脚本时，先更新契约，再运行 `tests/test_scripts_governance.py`。本地被 `.gitignore` 排除的 `scripts/test_*.py` provider 探针不进入正式契约。
 
 ## 2. 分类规则
 
@@ -92,14 +92,6 @@ source: human+ai
 | `scripts/diagnose_poyo.py` | provider_probe |
 | `scripts/discover_poyo_models.py` | provider_probe |
 | `scripts/probe_sora2pro.py` | provider_probe |
-| `scripts/test_poyo_all_media.py` | provider_probe |
-| `scripts/test_poyo_image.py` | provider_probe |
-| `scripts/test_poyo_image_models.py` | provider_probe |
-| `scripts/test_poyo_music.py` | provider_probe |
-| `scripts/test_poyo_music_detail.py` | provider_probe |
-| `scripts/test_poyo_music_status.py` | provider_probe |
-| `scripts/test_poyo_seedance.py` | provider_probe |
-| `scripts/test_poyo_tts.py` | provider_probe |
 
 ### legacy_one_off_scripts
 
@@ -132,9 +124,6 @@ source: human+ai
 | `scripts/e2e_verify_distribution.py` | historical_e2e |
 | `scripts/run_5scenario_e2e.py` | historical_e2e |
 | `scripts/run_s1_e2e.py` | historical_e2e |
-| `scripts/test_media_skills_e2e.py` | historical_e2e |
-| `scripts/test_pipeline_quality.py` | historical_e2e |
-| `scripts/test_s1_unified_e2e.py` | historical_e2e |
 
 ## 4. 执行边界
 

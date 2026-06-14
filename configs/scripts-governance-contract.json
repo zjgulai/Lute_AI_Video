@@ -1,11 +1,11 @@
 {
-  "updated": "2026-06-13",
+  "updated": "2026-06-14",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
     "scratch_or_one_off_location": "tmp/ or drafts/scripts/",
     "archive_location": "archive/scripts/",
-    "notes": "Top-level scripts must be reusable, named for stable purpose, and classified here before they are committed."
+    "notes": "Top-level git-tracked scripts must be reusable, named for stable purpose, and classified here before they are committed. Gitignored local probes such as scripts/test_*.py are intentionally excluded from this contract."
   },
   "active_reusable_scripts": [
     {
@@ -256,46 +256,6 @@
       "path": "scripts/probe_sora2pro.py",
       "status": "provider_probe",
       "reason": "Direct provider probe; may consume provider credits."
-    },
-    {
-      "path": "scripts/test_poyo_all_media.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai media probe kept out of default checks."
-    },
-    {
-      "path": "scripts/test_poyo_image.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai image probe kept out of default checks."
-    },
-    {
-      "path": "scripts/test_poyo_image_models.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai image model probe kept out of default checks."
-    },
-    {
-      "path": "scripts/test_poyo_music.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai music probe kept out of default checks."
-    },
-    {
-      "path": "scripts/test_poyo_music_detail.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai music detail probe kept out of default checks."
-    },
-    {
-      "path": "scripts/test_poyo_music_status.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai music status probe kept out of default checks."
-    },
-    {
-      "path": "scripts/test_poyo_seedance.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai Seedance probe kept out of default checks."
-    },
-    {
-      "path": "scripts/test_poyo_tts.py",
-      "status": "provider_probe",
-      "reason": "Historical poyo.ai TTS probe kept out of default checks."
     }
   ],
   "legacy_one_off_scripts": [
@@ -410,21 +370,6 @@
       "path": "scripts/run_s1_e2e.py",
       "status": "historical_e2e",
       "reason": "Legacy S1 E2E utility retained outside default CI."
-    },
-    {
-      "path": "scripts/test_media_skills_e2e.py",
-      "status": "historical_e2e",
-      "reason": "Legacy script-level E2E test; not a pytest suite entrypoint."
-    },
-    {
-      "path": "scripts/test_pipeline_quality.py",
-      "status": "historical_e2e",
-      "reason": "Legacy script-level pipeline quality check."
-    },
-    {
-      "path": "scripts/test_s1_unified_e2e.py",
-      "status": "historical_e2e",
-      "reason": "Legacy script-level S1 E2E check."
     }
   ],
   "generated_artifact_policies": [
