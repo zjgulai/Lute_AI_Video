@@ -7,6 +7,9 @@ import {
   UserFocus,
 } from "@phosphor-icons/react";
 import type { ToolboxToolId } from "@/components/api";
+import { TOOL_ORDER } from "@/components/toolbox/toolboxToolIds";
+
+export { TOOL_ORDER };
 
 export type ToolPresentation = {
   id: ToolboxToolId;
@@ -18,14 +21,6 @@ export type ToolPresentation = {
   fallbackScenarios: string[];
   fallbackChecks: string[];
 };
-
-export const TOOL_ORDER: ToolboxToolId[] = [
-  "product-image",
-  "six-view",
-  "ecommerce-visual",
-  "digital-human",
-  "storyboard",
-];
 
 export const TOOL_PRESENTATION: Record<ToolboxToolId, ToolPresentation> = {
   "product-image": {
