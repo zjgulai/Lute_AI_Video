@@ -30,6 +30,14 @@ SUMMARY_ZERO_COUNTERS = (
     "provider_submit_count",
     "media_generation_count",
     "publish_count",
+    "non_get_count",
+    "admin_session_count",
+    "media_get_count",
+    "delivery_count",
+    "delivery_acceptance_count",
+    "approved_brand_token_write_count",
+    "final_work_match_count",
+    "final_work_write_count",
 )
 
 ALLOWED_READONLY_PATHS = {
