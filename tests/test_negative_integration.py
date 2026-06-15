@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import warnings
 from pathlib import Path
 
 import httpx
@@ -152,10 +153,10 @@ class TestConcurrentStateWritesNegative:
     """Concurrent writes to pipeline_states must produce a deterministic
     last-write-wins outcome (no corruption, no partial JSON).
 
-    In SQLite-fallback mode, the shared sqlite3.Connection is single-writer
-    so we drive concurrent calls through a semaphore that mimics asyncpg's
-    pool serialization. The point is to prove the repository contract is
-    consistent, not to validate SQLite's own concurrency guarantees."""
+    SQLite fallback uses one shared connection, so repository calls must
+    serialize that connection before they enter the thread pool. The point is
+    to prove the repository contract is consistent, not to validate SQLite's
+    own concurrency guarantees."""
 
     @pytest.mark.asyncio
     async def test_serialized_writes_with_distinct_labels_all_persist(self, sqlite_db):
@@ -209,10 +210,8 @@ class TestConcurrentStateWritesNegative:
         assert 0 <= cfg["v"] <= 9
 
     @pytest.mark.asyncio
-    async def test_sqlite_native_concurrency_raises_predictable_error(self, sqlite_db):
-        """Documents the known SQLite limitation: parallel unserialized writes
-        to a shared connection raise sqlite3.InterfaceError. Production PG
-        path is unaffected — asyncpg pool serializes by connection."""
+    async def test_unserialized_repository_writes_are_serialized_by_sqlite_lock(self, sqlite_db):
+        """Repository fallback must not expose CPython sqlite3 thread races."""
         repo = PipelineStateRepository()
 
         async def _race(i: int) -> None:
@@ -230,6 +229,27 @@ class TestConcurrentStateWritesNegative:
         )
         successes = [r for r in results if r is None]
         failures = [r for r in results if isinstance(r, Exception)]
-        assert len(successes) >= 1
-        for f in failures:
-            assert isinstance(f, sqlite3.Error), f"expected sqlite3.Error, got {type(f).__name__}: {f}"
+        assert len(successes) == 5
+        assert failures == []
+        for i in range(5):
+            row = await repo.get_by_label(f"race_{i}")
+            assert row is not None
+
+    @pytest.mark.asyncio
+    async def test_sqlite_fallback_uses_qmark_placeholders_without_deprecation_warning(self, sqlite_db):
+        repo = PipelineStateRepository()
+        await repo.create({
+            "label": "test_sqlite_placeholder_compat",
+            "scenario": "s1",
+            "config": {},
+            "steps": [],
+            "mode": "auto",
+        })
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            row = await repo.get_by_label("test_sqlite_placeholder_compat")
+            rows = await repo.list_all(limit=1)
+
+        assert row is not None
+        assert rows

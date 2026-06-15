@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 _pool: asyncpg.Pool | None = None
 _sqlite_conn: sqlite3.Connection | None = None
+_sqlite_lock = threading.RLock()
 _pg_available: bool = False  # Set to True after successful PG connection + table verification
 
 
@@ -48,10 +50,14 @@ def _init_sqlite() -> None:
     global _sqlite_conn
     db_path = Path("./output/ai_video.db")
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    _sqlite_conn = sqlite3.connect(str(db_path))
+    _sqlite_conn = sqlite3.connect(str(db_path), check_same_thread=False)
     _sqlite_conn.row_factory = sqlite3.Row
     _create_sqlite_tables()
     logger.info(f"SQLite fallback initialized at {db_path}")
+
+
+def get_sqlite_lock() -> threading.RLock:
+    return _sqlite_lock
 
 
 def _create_sqlite_tables() -> None:
