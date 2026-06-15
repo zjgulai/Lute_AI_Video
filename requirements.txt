@@ -24,7 +24,7 @@ python-multipart>=0.0.9
 # Database (optional: skip if using mock only)
 supabase>=2.0
 asyncpg>=0.29
-alembic>=1.13  # 生产部署需要 alembic upgrade head 执行数据库迁移
+alembic>=1.18.4  # 生产部署需要 alembic upgrade head 执行数据库迁移
 
 # Admin panel auth (Phase 1)
 bcrypt>=4.2

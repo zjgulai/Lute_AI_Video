@@ -7,7 +7,7 @@ status: stable
 created: 2026-06-14
 updated: 2026-06-14
 owner: self
-source: ai+human
+source: human+ai
 ---
 
 ## 执行目标
@@ -43,4 +43,3 @@ source: ai+human
 
 - 未执行任何 provider 调用、提交、部署或生产环境操作。
 - 未推送除分支删除外的其他远端变更。
-
