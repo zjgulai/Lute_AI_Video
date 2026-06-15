@@ -5,14 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid
 from typing import Any
 
 import asyncpg
 
-from .db import get_pool, get_sqlite_conn
+from .db import get_pool, get_sqlite_conn, get_sqlite_lock
 
 logger = logging.getLogger(__name__)
+_PG_PARAM_RE = re.compile(r"\$(\d+)")
 
 
 class BaseRepository:
@@ -49,6 +51,17 @@ class BaseRepository:
                 return value
         return value
 
+    def _to_sqlite_query(self, query: str, args: tuple[Any, ...]) -> tuple[str, tuple[Any, ...]]:
+        ordered_args: list[Any] = []
+
+        def _replace(match: re.Match[str]) -> str:
+            index = int(match.group(1)) - 1
+            ordered_args.append(args[index])
+            return "?"
+
+        query_sql = _PG_PARAM_RE.sub(_replace, query)
+        return query_sql, tuple(ordered_args) if ordered_args else args
+
     async def _fetchrow(self, query: str, *args) -> asyncpg.Record | None:
         pool = await get_pool()
         if pool is not None:
@@ -60,11 +73,13 @@ class BaseRepository:
             return None
 
         def _sync_fetchrow():
-            cursor = conn.execute(query, args)
-            row = cursor.fetchone()
-            if row is None:
-                return None
-            return dict(row)
+            with get_sqlite_lock():
+                query_sql, args_sql = self._to_sqlite_query(query, args)
+                cursor = conn.execute(query_sql, args_sql)
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return dict(row)
 
         return await asyncio.to_thread(_sync_fetchrow)  # type: ignore[return-type]
 
@@ -79,9 +94,11 @@ class BaseRepository:
             return []
 
         def _sync_fetch():
-            cursor = conn.execute(query, args)
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+            with get_sqlite_lock():
+                query_sql, args_sql = self._to_sqlite_query(query, args)
+                cursor = conn.execute(query_sql, args_sql)
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
 
         return await asyncio.to_thread(_sync_fetch)
 
@@ -96,8 +113,10 @@ class BaseRepository:
         if conn is not None:
 
             def _sync_execute():
-                conn.execute(query, args)
-                conn.commit()
+                with get_sqlite_lock():
+                    query_sql, args_sql = self._to_sqlite_query(query, args)
+                    conn.execute(query_sql, args_sql)
+                    conn.commit()
 
             await asyncio.to_thread(_sync_execute)
 
@@ -122,18 +141,19 @@ class BaseRepository:
         conn = get_sqlite_conn()
         if conn is not None:
             def _sync_create():
-                placeholders_sql = ["?" for _ in columns]
-                query_sql = f"""
-                    INSERT INTO {self.table_name} ({', '.join(columns)})
-                    VALUES ({', '.join(placeholders_sql)})
-                """
-                conn.execute(query_sql, values)
-                conn.commit()
-                cursor = conn.execute(
-                    f"SELECT * FROM {self.table_name} WHERE id = ?", (record_id,)
-                )
-                row = cursor.fetchone()
-                return dict(row) if row else data
+                with get_sqlite_lock():
+                    placeholders_sql = ["?" for _ in columns]
+                    query_sql = f"""
+                        INSERT INTO {self.table_name} ({', '.join(columns)})
+                        VALUES ({', '.join(placeholders_sql)})
+                    """
+                    conn.execute(query_sql, values)
+                    conn.commit()
+                    cursor = conn.execute(
+                        f"SELECT * FROM {self.table_name} WHERE id = ?", (record_id,)
+                    )
+                    row = cursor.fetchone()
+                    return dict(row) if row else data
             return await asyncio.to_thread(_sync_create)
         return data
 
@@ -193,14 +213,15 @@ class BaseRepository:
         conn = get_sqlite_conn()
         if conn is not None:
             def _sync_update():
-                set_clause_sql = ", ".join([f"{col} = ?" for col in columns])
-                query_sql = f"""
-                    UPDATE {self.table_name}
-                    SET {set_clause_sql}, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """
-                conn.execute(query_sql, [self._to_json(v) for v in data.values()] + [id])
-                conn.commit()
+                with get_sqlite_lock():
+                    set_clause_sql = ", ".join([f"{col} = ?" for col in columns])
+                    query_sql = f"""
+                        UPDATE {self.table_name}
+                        SET {set_clause_sql}, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """
+                    conn.execute(query_sql, [self._to_json(v) for v in data.values()] + [id])
+                    conn.commit()
             await asyncio.to_thread(_sync_update)
             return await self.get_by_id(id)
         return None
@@ -216,9 +237,10 @@ class BaseRepository:
         conn = get_sqlite_conn()
         if conn is not None:
             def _sync_delete():
-                cursor = conn.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (id,))
-                conn.commit()
-                return cursor.rowcount > 0
+                with get_sqlite_lock():
+                    cursor = conn.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (id,))
+                    conn.commit()
+                    return cursor.rowcount > 0
             return await asyncio.to_thread(_sync_delete)
         return False
 
