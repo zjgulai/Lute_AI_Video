@@ -34,7 +34,7 @@ bcrypt>=4.2
 # faster-whisper: Python binding, ~200MB vs openai-whisper+torch ~1.8GB
 # (_real_transcribe uses faster_whisper.WhisperModel when available)
 yt-dlp>=2026.6.9
-faster-whisper>=1.0
+faster-whisper>=1.2.1
 
 # Quality module — CLIP text-image alignment (D15 Option CLIP-only)
 # transformers + torch + Pillow enable src/quality/clip_alignment.py to score
