@@ -41,7 +41,7 @@ faster-whisper>=1.2.1
 # keyframe/storyboard alignment. ~600MB image growth (torch CPU wheels).
 # Decision: keep CPU-only to stay under 4GB image budget. GPU users override
 # via PIP_INDEX_URL + cuda-aware torch in deploy/lighthouse/.env.prod.
-transformers>=4.40
+transformers>=5.12.0
 torch>=2.0
 Pillow>=10.0
 
