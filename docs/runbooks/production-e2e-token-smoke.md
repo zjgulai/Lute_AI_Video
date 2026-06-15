@@ -164,6 +164,8 @@ python scripts/production_readonly_log_gate.py \
 
 The gate allows only portfolio readback plus local health-check noise. It must fail on external browser/proxy `/api/admin/auth/session`, `/api/health`, `/health`, `/api/media`, scenario/Fast submit, provider generation, publish, delivery, `final_work`, or approved brand token logs. Do not use the older raw `forbidden_endpoint_count` summary alone for endpoint-clean acceptance; classify the backend log by request source.
 
+The summary file is also part of the read-only contract. The gate must fail if read-only regression summaries report non-zero `non_get_count`, `admin_session_count`, `media_get_count`, `delivery_acceptance_count`, `approved_brand_token_write_count`, `final_work_match_count`, or any scenario/Fast/provider/publish counter, even when the backend log snippet itself is clean.
+
 ## L4D Real Media Provider Staging
 
 Use `L4D` only after S1-S5 no-media clean-log baselines are already understood. `L4D` validates provider-backed media generation in isolation; it is not a shortcut to S1-S5 full media, gate, publish, delivery acceptance, or approved brand token writes.

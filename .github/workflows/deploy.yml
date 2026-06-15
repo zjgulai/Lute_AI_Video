@@ -24,8 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
       - uses: actions/setup-python@v5
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
         with:
           python-version: "3.12"
           cache: "pip"
@@ -57,6 +61,8 @@ jobs:
           SUPABASE_SERVICE_KEY: ""
 
       - uses: actions/setup-node@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
         with:
           node-version: "22"
           cache: "npm"
@@ -97,12 +103,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
       - name: Build backend image (cache only)
         uses: docker/build-push-action@v5
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
         with:
           context: .
           file: ./Dockerfile.backend
@@ -124,6 +136,8 @@ jobs:
       url: https://101.34.52.232
     steps:
       - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
       - name: Verify required secrets
         run: |
