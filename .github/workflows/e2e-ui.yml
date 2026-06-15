@@ -28,9 +28,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   ui-only:
     name: UI-only visual regression
@@ -44,8 +41,12 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
       - uses: actions/setup-node@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
         with:
           node-version: "22"
           cache: "npm"
@@ -63,6 +64,8 @@ jobs:
       - name: Upload Playwright HTML report on failure
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
         with:
           name: playwright-ui-report-${{ github.run_attempt }}
           path: web/playwright-report/
@@ -71,6 +74,8 @@ jobs:
       - name: Upload UI-only traces on failure
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
         with:
           name: playwright-ui-traces-${{ github.run_attempt }}
           path: web/test-results/ui-only/
