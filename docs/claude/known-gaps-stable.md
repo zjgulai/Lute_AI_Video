@@ -4,7 +4,7 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-12
+updated: 2026-06-14
 owner: self
 source: human+ai
 ---
@@ -15,6 +15,8 @@ source: human+ai
 
 本次新增状态：用户随后授权并执行 `L4C-4` S1 no-media clean-log single-submit token smoke。唯一一次 Playwright live spec 业务断言通过，`/scenario/s1` 返回 200，6 分钟窗口内 DeepSeek 文本请求 `2` 次，`api.poyo.ai`、`api.siliconflow.cn`、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate 的执行级计数均为 `0`；state 显示 `enable_media_synthesis=false`、媒体路径全空、`final_video_path` 为空、`delivery_accepted=false`、`publish_allowed=false`、`approved_brand_token_write=false`。但日志窗口仍出现 8 行媒体 skill `registered` 噪音，包含 Seedance/TTS/assemble/keyframe 词元，因此 `tmp/outputs/l4c-4-s1-no-media-clean-log-single-submit-summary-20260611-230535.json` 判定为 `failed_strict_clean_log_registration_noise`。随后用户授权 `L4C-4R-prep`，本轮只同步 `src/pipeline/__init__.py` 与 `src/pipeline/s1_product_pipeline.py`，远端原文件已备份到 `/opt/ai-video/backups/l4c4r-prep-s1-logging-20260612-000910/`，backend 已重启，生产 `/api/health` 返回 `ok`，本地/远端/容器 hash verify 通过；370 秒 no-submit 日志窗口内 `/scenario` submit、DeepSeek/poyo/SiliconFlow 外部 HTTP、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate 和媒体 skill `registered` 计数均为 `0`。证据摘要为 `tmp/outputs/l4c-4r-prep-s1-logging-import-hygiene-sync-summary-20260612-000910.json`，`decision=passed`。随后用户授权 `L4C-4R` 同一单 spec clean-log 复验；`tmp/outputs/l4c-4r-s1-no-media-clean-log-single-submit-summary-20260612-001.json` 固化 `decision=passed`，Playwright `1 passed (11.7s)`，spec 观察 submit 次数为 `1`，生产 label `s1_1781229202_7b5148d1`，370 秒窗口内 DeepSeek text calls `2`，`api.poyo.ai`、`api.siliconflow.cn`、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate、thumbnail media registration 和媒体 skill `registered` 均为 `0`。随后用户授权 `L4C-5` S2 no-media clean-log single-submit；`tmp/outputs/l4c-5-s2-no-media-clean-log-single-submit-summary-20260612-002.json` 固化 `decision=passed`，Playwright `1 passed (7.2s)`，spec 观察 submit 次数为 `1`，生产 label `s2_momcozy_1781230204`，370 秒窗口内 DeepSeek text calls `2`，`api.poyo.ai`、`api.siliconflow.cn`、poyo submit、Seedance/TTS/assemble/keyframe/gate candidate、thumbnail media registration 和媒体 skill `registered` 均为 `0`。当前可声明 L4C-4R S1 no-media 与 L4C-5 S2 no-media clean-log single-submit 通过；不得外推为 S1 media/gate、S3-S5、完整 token suite、发布、delivery acceptance 或 approved brand token。
 
+2026-06-14 补充收口：`L4C-6` S3 no-media、`L4C-7` S4 no-media 与 `L4C-8R` S5 no-media single-submit clean-log 均已完成并在 runbook 中登记；`L4D-5Y` 已完成 S2 bounded media provider smoke（1 次 scenario submit、1 个 poyo image job、1 个 poyo Seedance job，停在 `seedance_clips`），`L4D-5Z` 已完成同批产物的 `/api/portfolio` 与 `/library?tab=materials` 只读回归，matching `final_work=0`。PR `#2` 已合并，历史执行分支 `codex/s1-continuity-storyboard` 的本地与远端分支已删除，并以 `8d4d2c0` 归档分支清理记录。当前默认下一步不是追加 provider 消耗，而是 no-provider 的文档、CI/read-only guard 与证据索引收口；任何 S2 full media、S1/S3/S4/S5 media generation、TTS、assemble、quality audit、publish 或 delivery acceptance 都必须重新定义范围、预算、止损和精确授权。
+
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
 > 更早盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
@@ -22,12 +24,64 @@ source: human+ai
 ## 当前执行入口
 
 - **当前长期 TODO 来源**：本文件的“完整 TODO list”继续维护项目长期 P1/P2 缺口。
-- **当前 AI Video 2.0 执行入口**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的原始分步计划；[`docs/workflows/ai-video-toolbox-productization-plan-stable.md`](../workflows/ai-video-toolbox-productization-plan-stable.md) 追踪工具箱 T1-T9/C23；[`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`](../workflows/ai-video-project-2-0-e2e-test-plan-stable.md) 是“真实 provider + 前后端联动”E2E 正式计划，已拆分为 `L4A` 受控 provider smoke、`L4B` 前端只读回读和 `L4C` 扩展 token Playwright；[`docs/workflows/ai-video-project-2-0-final-self-proof-stable.md`](../workflows/ai-video-project-2-0-final-self-proof-stable.md) 记录 C1-C36 自证状态。`C1-C35` 中的基础层仍有 `L2-fixture-or-dry-run`；2026-06-07 与 2026-06-11 均完成 scoped `L4-authorized-live`（Momcozy 消毒器 3 图 + 1 视频）并保持 pending_review 边界；2026-06-11 已完成本轮 L4B 生产只读回读、`L4C-1` Fast Mode 最小 token smoke、`L4C-1R` Fast Mode single-submit pending_review token smoke、`L4C-2R` S2 no-media after-fix single-submit token smoke、`L4C-3R-prep` config/import gate、`L4C-3R` S1 no-media single-submit 业务路径和 `L4C-4` S1 no-media clean-log 单提交复测。`L4C-4` 业务路径与执行级 provider 边界通过，但 strict clean-log 因媒体 skill 注册日志污染失败；2026-06-12 的 `L4C-4R-prep` 已完成 import/logging hygiene 生产同步并通过 no-submit clean-log 验证；`L4C-4R` 已完成同一 S1 no-media 单 spec clean-log 复验并通过；`L4C-5` 已完成 S2 no-media clean-log 单提交复验并通过。后续继续扩大到 S1 media/gate、S3-S5、media/poster/quality 仍受 C21-C36 门禁与用户更新授权/records 的边界约束。
-- **L4C 下一阶段入口**：`configs/l4c-token-smoke-plan-template.json` + `scripts/l4c_token_smoke_plan.py` 是 no-execute 计划验证门。`L4C-1R` 已证明 single-submit / provider retry=0 / artifact disposition=pending_review 最小路径可跑通；`L4C-2` 首次执行已失败止损并暴露 S2 no-media 真实媒体越界，根因修复后 `L4C-2R` 与 `L4C-5` 已证明 S2 no-media 单提交只走 DeepSeek 文本且不触发媒体 provider 或媒体注册噪音。`L4C-3R`、`L4C-4` 与 `L4C-4R` 均证明 S1 no-media 单提交业务路径通过，媒体生成执行为 `0`；`L4C-3H-prep` 已把 admin provider health checks 隔离同步到生产并通过 370 秒 no-submit 日志验证；`L4C-4R-prep` 已消除 no-media S1 的媒体 skill `registered` 日志噪音；`L4C-4R` 已证明 submit 后 clean-log 窗口通过。下一片不应直接扩大到完整 token suite，应在 S3/S4/S5 no-media、S1 状态只读补证或其他最小风险切片中重新选择，重新生成 plan 并取得精确授权。
+- **当前 AI Video 2.0 执行入口**：`docs/superpowers/plans/2026-06-04-ai-video-2-0-remaining-implementation-plan.md` 是 C15-C22 的原始分步计划；[`docs/workflows/ai-video-toolbox-productization-plan-stable.md`](../workflows/ai-video-toolbox-productization-plan-stable.md) 追踪工具箱 T1-T9/C23；[`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`](../workflows/ai-video-project-2-0-e2e-test-plan-stable.md) 是“真实 provider + 前后端联动”E2E 正式计划；[`docs/workflows/l4d-real-media-provider-evidence-index-stable.md`](../workflows/l4d-real-media-provider-evidence-index-stable.md) 是当前 L4D 真实媒体证据索引；[`docs/workflows/ai-video-project-2-0-final-self-proof-stable.md`](../workflows/ai-video-project-2-0-final-self-proof-stable.md) 记录 C1-C36 自证状态。当前已完成 `L4C` S1-S5 no-media clean-log single-submit 阶段、Fast Mode single-submit pending_review token smoke、L4D image-only/video-only/image+video/S2 bounded media provider smoke 和 frontend read-only readback。仍不得外推为 S1/S3/S4/S5 media generation、S2 full media/final assembly、gate、TTS、assemble、quality audit、publish、delivery acceptance 或 approved brand token。
+- **L4C/L4D 下一阶段入口**：`configs/l4c-token-smoke-plan-template.json` + `scripts/l4c_token_smoke_plan.py` 仍是 L4C no-execute 计划验证门。L4D 当前默认停止在 S2 bounded media + frontend read-only readback，下一步只做 no-provider 的文档、CI/read-only guard 与证据索引收口。任何新的 provider submit、full media、poster/quality、publish 或 delivery acceptance 都必须重新定义目标、预算、submit/job cap、artifact disposition、失败止损和精确授权。
 - **历史计划文档用途**：`docs/workflows/`、`docs/architecture/`、`.kiro/plan/` 中的旧 Sprint / Phase / TODO 只保留为决策背景、事故复盘或历史证据；除非本文件重新引用，否则不作为当前执行计划。
 - **当前研究 / 架构 / 流程引用**：2026-06-03 至 2026-06-04 新增 `docs/research/ai-video-commercial-technology-research-review-20260603.md`、`docs/research/ai-video-longform-production-research-audit-review-20260603.md`、`docs/research/aihot-image-video-product-technology-research-review-20260604.md`、[`docs/architecture/ai-video-commercial-toolbox-architecture-review-20260603.md`](../architecture/ai-video-commercial-toolbox-architecture-review-20260603.md)、[`docs/architecture/brand-asset-token-contract-review-20260603.md`](../architecture/brand-asset-token-contract-review-20260603.md)、[`docs/architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md`](../architecture/provider-prompt-compiler-media-job-ledger-review-20260603.md)、[`docs/architecture/quality-contract-brand-rights-audit-review-20260603.md`](../architecture/quality-contract-brand-rights-audit-review-20260603.md)、[`docs/workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md`](../workflows/ai-video-commercial-toolbox-phase0-backlog-review-20260603.md)、[`docs/workflows/brand-data-asset-directory-intake-review-20260603.md`](../workflows/brand-data-asset-directory-intake-review-20260603.md)、[`docs/workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md`](../workflows/ai-video-project-2-0-cross-analysis-plan-review-20260603.md) 与 [`docs/workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md`](../workflows/ai-video-project-2-0-code-readiness-plan-review-20260604.md)，用于后续 S1-S5 工具库、Market Signal Intelligence、Brand Asset Token、Provider Prompt Compiler、Production Job Ledger、Quality Contract、长视频生产对象、品牌数据资产目录接入和 Project 2.0 代码前实施计划；十一份均为 `review` 状态，不替代本文件的 TODO list。
 - **真实调用授权边界**：L4A/L4B 首轮已完成；任何继续扩大到 S1-S5、Fast Mode、gate、media/poster/quality 的真实调用都归入 `L4C`，必须先通过 no-execute 计划验证并重新取得精确授权、预算和产物处置边界。
 - **50-loop 迭代边界**：P1-16~P1-65 只允许修 CI、测试、文档、静态防护、本地 hermetic 质量门；不得触发 `/api/fast/generate`、`/api/fast/submit`、`/scenario/*` 真实生成、gate candidate 生成、上传、发布或 POYO 直连脚本。该边界已在 `P1-65` 复核中闭环。
+
+## 2026-06-14 执行 TODO（当前权威）
+
+本节是 2026-06-14 之后的执行矩阵。执行原则保持“执行一步、测试一步、验收一步”：每一项只在对应证据通过后推进；任何生产 submit、provider 调用、发布、delivery acceptance 或 approved brand token 写入都必须另行取得精确授权。
+
+### P0：立即收口，不消耗 provider
+
+| ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
+|---|---|---|---|---|
+| TODO-P0-1 | Dependabot PR 分批复核与合并 | in_progress | 先处理 all-green 的低风险 PR；失败或 unstable PR 只记录阻塞，不合并 | 每个 PR 单独确认 diff、checks、mergeable、review/thread；本地目标测试通过；合并前需有明确授权 |
+| TODO-P0-2 | ToolBox 产品化计划 checklist 漂移收口 | pending | 只对齐 `docs/workflows/ai-video-toolbox-productization-plan-stable.md` 的状态表与 TODO；不改业务代码 | 文档不再同时表达“已实现”和“未完成”的冲突状态；markdown/frontmatter/link scope 测试通过 |
+| TODO-P0-3 | 默认生产 E2E no-provider baseline | pending | 只运行 `RUN_TOKEN_SMOKE=0` 生产 E2E；禁止 `@token-smoke`、provider、submit | 默认 suite 通过或给出精确失败；确认未触发 `/api/scenario/*`、Fast Mode submit、provider |
+| TODO-P0-4 | L4D-5Y/L4D-5Z 证据索引复核 | pending | 只读检查 `tmp/debug`、portfolio/read-only evidence 与 runbook 文档一致性 | 证据索引只声明 S2 bounded media 到 `seedance_clips`，不外推 full media/S1-S5/publish |
+| TODO-P0-5 | Production key 生命周期治理 | pending | 只读核对临时 key 创建、过期、撤销记录；不展示明文 key | 明确当前可用/已过期/已撤销状态；如需撤销须另行授权 |
+
+### P1：受控真实链路补证，需逐项授权
+
+| ID | 任务 | 当前状态 | 授权要求 | 验收口径 |
+|---|---|---|---|---|
+| TODO-P1-1 | S1 bounded media single-submit smoke | blocked_by_authorization | 需限定 submit=1、image/video job cap、预算、artifact_disposition=pending_review、retry=0 | 只进入 tenant-scoped `pending_review` 或 quarantine；`final_work=0`；无 publish/delivery/token write |
+| TODO-P1-2 | S3 bounded media single-submit smoke | blocked_by_authorization | 同上，且先做 no-provider readiness 与 import/log gate | 只证明 S3 bounded media，不外推 S1/S2/S4/S5 |
+| TODO-P1-3 | S4 bounded media single-submit smoke | blocked_by_authorization | 同上，重点验证 live-shoot continuity 输入和 media stop point | 无 TTS/assemble/audit/publish，产物 pending_review |
+| TODO-P1-4 | S5 bounded media single-submit smoke | blocked_by_authorization | 同上，重点验证 vlog strategy、model selector 与 keyframe input | 无 full-chain assembly，产物 pending_review |
+| TODO-P1-5 | S2 full-media 分段计划 | blocked_by_plan | 先拆成 TTS、thumbnail、assemble、media_quality_audit、final assembly 五个 stop point | 每个 stop point 单独 spec、单独预算、单独止损；不得一次跑完整链 |
+| TODO-P1-6 | S1 gate / step-by-step 真实 token flow | blocked_by_plan | 先做 no-provider readiness，再授权 gate candidate 单步 | gate candidate 数量、重试、产物处置和日志门禁全部可计数 |
+
+### P2：工程韧性与产品闭环
+
+| ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
+|---|---|---|---|---|
+| TODO-P2-1 | metrics / webhook / analytics 真实闭环 | pending | 先做本地/fixture，再做生产只读，再考虑真实事件 | 不把 mock metrics 当成真实业务效果 |
+| TODO-P2-2 | 多租户并发与 API key 隔离压测 | pending | 先本地并发与 request-context 隔离测试；生产只读压测需授权 | 无跨 tenant 数据泄漏；无 contextvar key 污染 |
+| TODO-P2-3 | Quality ML 依赖生产可用性验证 | pending | 先容器 import/runtime smoke；不触发 provider | CLIP/BRISQUE/PySceneDetect/MediaPipe/DeepFace 可用性被逐项记录 |
+| TODO-P2-4 | CloudBase / Render 替代部署路径复核 | pending | 只做文档和配置 drift 审计；不部署 | 明确哪些路径仍可用、哪些已历史化 |
+| TODO-P2-5 | publish / delivery acceptance / approved brand token 设计复核 | pending | 只做 dry-run contract 和人工确认字段隔离 | human-confirmed 字段与 LLM suggestion 字段不混用 |
+
+### 当前禁止外推
+
+- `L4D-5Y` 只证明 S2 bounded media 到 `seedance_clips`，不证明 S2 full media/final assembly。
+- `L4D-5Z` 只证明 portfolio/library read-only 可见性与 `final_work=0`，不证明发布可用。
+- `RUN_TOKEN_SMOKE=1 --list` 只证明 spec 可枚举，不证明真实 E2E 已执行。
+- Dependabot checks 绿色只证明对应 PR 的 CI 通过，不自动证明生产兼容；高风险依赖仍需本地目标测试和人工合并授权。
+
+### 本轮执行记录
+
+- `TODO-P0-1` 已开始：PR `#6` (`yt-dlp>=2026.6.9`) 只读复核通过，diff 仅 `requirements.txt` 一行，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，本地独立 worktree 目标测试 `tests/test_media_tools.py tests/test_health_media_tools.py` 结果 `39 passed`。尚未合并；合并需要下一步明确授权。
+- PR `#6` 已在用户授权后合并到 `main`，merge commit 为 `022b15dc5884aa267c05749f2e2fdda9cfe45ce2`；合并后本地 `main` 已 fast-forward 到 `origin/main`，目标测试 `tests/test_media_tools.py tests/test_health_media_tools.py` 复跑结果 `39 passed`。
+- PR `#5` (`@vitejs/plugin-react 6.0.1 -> 6.0.2`) 只读复核完成，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，diff 仅 `web/package.json` 与 `web/package-lock.json`。本地独立 worktree 的 clean `npm ci` 超过 150 秒无输出，已终止并清理 worktree；因此本地 clean-install 验证未完成，暂不进入合并授权候选。
+- PR `#10` (`alembic>=1.18.4`) 只读复核通过，diff 仅 `requirements.txt` 一行，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`。本地独立 worktree + 临时 venv 验证 Alembic `1.18.4` 可解析 migration tree（head `e4b9c1d2a6f0`，revision count `11`），并复跑 `tests/test_postgres.py::TestThreadIdSchema`，结果 `2 passed`。尚未合并；合并需要下一步明确授权。
+- PR `#10` 已在用户授权后合并到 `main`，merge commit 为 `dba3ea9d3af7bf84e13d69f128c0a10cea347dc8`；合并后本地 `main` 已 fast-forward 到 `origin/main`，Alembic `1.18.4` migration tree 解析复跑通过，`tests/test_postgres.py::TestThreadIdSchema` 复跑结果 `2 passed`。
+- PR `#3` (`transformers>=5.12.0`) 只读复核完成，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，diff 仅 `requirements.txt` 一行；但该变更是生产依赖大版本更新。临时 venv 安装 `transformers>=5.12.0` 超过 120 秒无输出后已中止并清理，未完成 clean install/import 验证；PR worktree 中仅复跑现有 fallback 合约 `tests/test_clip_alignment.py`，结果 `4 passed`。暂不进入合并授权候选。
+- PR `#12` (`faster-whisper>=1.2.1`) CI 失败已完成只读诊断：Python 3.11 与 3.12 失败同源，均为 `tests/test_markdown_frontmatter_compliance.py::test_fully_compliant_frontmatter_values_use_project_vocab`，断言 `source: ai+human` 不在允许集合 `{human+ai, ai, human}`。该失败与 `faster-whisper` 变更无直接关系；`origin/main` 中 `docs/workflows/2026-06-14-s1-continuity-storyboard-branch-cleanup-stable.md` 仍为 `source: ai+human`，本地工作区已修为 `source: human+ai`，本地 `tests/test_markdown_frontmatter_compliance.py` 结果 `4 passed`。该 docs-only frontmatter 修复已纳入本轮提交/推送范围，推送后需观察 PR `#12` checks 是否自动重新触发；PR `#12` 暂不进入合并授权候选。
 
 ## 1.01 2026-06-11 L4B 生产只读回读已通过
 
@@ -977,7 +1031,7 @@ source: human+ai
 - [x] **P1-63：Remotion no-provider-key guard** — 已确认 rendering build/test 不读取 provider API key，并固化静态守卫。
 - [x] **P1-64：C2PA runbook dry-run checklist** — 在不申请真实证书的前提下固化 C2PA 后续执行清单。
 - [x] **P1-65：50-loop checkpoint review** — 已对 P1-16~P1-64 执行结果复核并完成排序：当前未形成新增 P1 阻塞，执行入口切至 `P2-1`（充值后受控 live smoke/交付链路）。
-- [x] **P2-1：真实 provider + 前后端联动 E2E 执行** — 首轮已完成：`L4A` Momcozy 3 图 + 1 视频受控 provider smoke 通过，`L4B` `/library` 生产只读回读通过（证据 `tmp/outputs/l4b-production-readback-20260611-160827.json`）。Fast Mode、S1-S5、gate approve/regenerate、media/poster/quality 统一延后到 `L4C` 单独授权和预算后扩展。
+- [x] **P2-1：真实 provider + 前后端联动 E2E 执行** — 已完成分层闭环：`L4A` Momcozy 3 图 + 1 视频受控 provider smoke 通过；`L4B` `/library` 生产只读回读通过；`L4C` Fast Mode single-submit pending_review、S1-S5 no-media clean-log single-submit 均完成；`L4D` image-only、video-only、image+video paired、S2 bounded media provider smoke 与 frontend read-only readback 均完成。剩余的 S1/S3/S4/S5 media generation、S2 full media/final assembly、gate approve/regenerate、poster/quality、publish 和 delivery acceptance 必须另立阶段并重新授权。
 - [x] **P2-2：POYO 内容审核样本回灌** — 将真实失败 prompt / response 分类写入 hermetic fixture 或 sanitizer 规则，避免只靠生产人工观察。
 - [x] **P2-3：生产部署后回归证据固化** — 已新增 `production-post-deploy-regression-checklist.md`，覆盖 Lighthouse 健康检查、页面/API smoke、容器与日志核验、回归证据模板。
 

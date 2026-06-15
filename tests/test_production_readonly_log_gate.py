@@ -20,6 +20,14 @@ def _write_summary(path: Path, **overrides: object) -> None:
         "provider_submit_count": 0,
         "media_generation_count": 0,
         "publish_count": 0,
+        "non_get_count": 0,
+        "admin_session_count": 0,
+        "media_get_count": 0,
+        "delivery_count": 0,
+        "delivery_acceptance_count": 0,
+        "approved_brand_token_write_count": 0,
+        "final_work_match_count": 0,
+        "final_work_write_count": 0,
     }
     payload.update(overrides)
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -115,4 +123,48 @@ def test_blocks_provider_generation_and_mutating_summary(tmp_path: Path):
             "reason": "scenario_submit_count_non_zero",
             "value": 1,
         }
+    ]
+
+
+def test_blocks_readonly_summary_forbidden_counters_even_when_log_is_clean(tmp_path: Path):
+    result = _run_gate(
+        tmp_path,
+        "\n".join(
+            [
+                "GET /portfolio/ \u2192 200 (13ms)",
+                'INFO:     172.20.0.3:60404 - "GET /portfolio/?kind=creation_intermediate HTTP/1.1" 200 OK',
+            ]
+        ),
+        admin_session_count=1,
+        media_get_count=1,
+        delivery_acceptance_count=1,
+        approved_brand_token_write_count=1,
+        final_work_match_count=1,
+    )
+
+    assert result.returncode == 20
+    report = json.loads((tmp_path / "report.json").read_text())
+    assert report["decision"] == "fail"
+    assert report["external_forbidden_count"] == 0
+    assert report["summary_violations"] == [
+        {
+            "reason": "admin_session_count_non_zero",
+            "value": 1,
+        },
+        {
+            "reason": "media_get_count_non_zero",
+            "value": 1,
+        },
+        {
+            "reason": "delivery_acceptance_count_non_zero",
+            "value": 1,
+        },
+        {
+            "reason": "approved_brand_token_write_count_non_zero",
+            "value": 1,
+        },
+        {
+            "reason": "final_work_match_count_non_zero",
+            "value": 1,
+        },
     ]
