@@ -19,6 +19,8 @@ DEMO_API_KEY = "ai_video_demo_2026"
 TOKEN_SMOKE_ENV = "RUN_TOKEN_SMOKE"
 PLAYWRIGHT_KEY_ENV = "PLAYWRIGHT_API_KEY"
 API_KEY_ENV = "API_KEY"
+STRICT_READ_ONLY_GREP_INVERT = r"(@token-smoke|P4-4 — Error paths)"
+STRICT_READ_ONLY_ENV = "PLAYWRIGHT_PHASE_C_STRICT_READ_ONLY"
 
 
 def _is_truthy(value: str | None) -> bool:
@@ -42,7 +44,12 @@ def _playwright_key_status(env: dict[str, str]) -> tuple[str, str]:
     return ("pass", f"PLAYWRIGHT_API_KEY is set ({_mask(value)}).")
 
 
-def build_report(base_url: str, env: dict[str, str] | None = None) -> dict[str, Any]:
+def build_report(
+    base_url: str,
+    env: dict[str, str] | None = None,
+    *,
+    strict_read_only: bool = False,
+) -> dict[str, Any]:
     current_env = dict(os.environ if env is None else env)
     run_token_smoke_enabled = _is_truthy(current_env.get(TOKEN_SMOKE_ENV))
     playwright_status, playwright_detail = _playwright_key_status(current_env)
@@ -89,24 +96,39 @@ def build_report(base_url: str, env: dict[str, str] | None = None) -> dict[str, 
         "evidence_level": "L2-fixture-or-dry-run" if blocked else "L2-readiness-for-L3-production-read-only",
         "target_base_url": base_url,
         "run_token_smoke": run_token_smoke_enabled,
+        "strict_read_only": strict_read_only,
         "provider_call_allowed": False,
         "token_smoke_allowed": False,
+        "non_get_requests_allowed": not strict_read_only,
         "ready_for_phase_c_execution": not blocked,
         "blocked": blocked,
         "checks": checks,
         "execute_command_preview": (
             "cd web && RUN_TOKEN_SMOKE=0 "
             f"PLAYWRIGHT_PROD_URL={base_url} "
-            "PLAYWRIGHT_API_KEY=<non-demo-production-key> npm run e2e:prod"
+            "PLAYWRIGHT_API_KEY=<non-demo-production-key> "
+            f"npx playwright test --config=playwright.prod.config.ts --grep-invert '{STRICT_READ_ONLY_GREP_INVERT}'"
+            if strict_read_only
+            else (
+                "cd web && RUN_TOKEN_SMOKE=0 "
+                f"PLAYWRIGHT_PROD_URL={base_url} "
+                "PLAYWRIGHT_API_KEY=<non-demo-production-key> npm run e2e:prod"
+            )
         ),
         "supported_claims": [
             "This report can establish whether the formal Phase C no-token Playwright run is ready to execute.",
+            (
+                "Strict read-only mode excludes P4-4 error-path POST tests."
+                if strict_read_only
+                else "Default mode still includes 4xx error-path POST tests that do not create provider jobs."
+            ),
             "A passed report still does not prove provider runtime success or commercial delivery.",
         ],
         "forbidden_claims": [
-            "Do not claim Phase C passed until npm run e2e:prod completes with a non-demo production key.",
+            "Do not claim Phase C passed until the selected Playwright command completes with a non-demo production key.",
             "Do not claim L4A authorized-live provider evidence from this report.",
             "Do not claim delivery acceptance, publish allowed, or approved brand token.",
+            "Do not claim strict read-only execution unless --strict-read-only was used.",
         ],
     }
 
@@ -125,12 +147,24 @@ def _print_human(report: dict[str, Any]) -> None:
     print(report["execute_command_preview"])
 
 
-def _run_phase_c(base_url: str) -> int:
+def _run_phase_c(base_url: str, *, strict_read_only: bool = False) -> int:
     env = os.environ.copy()
     env[TOKEN_SMOKE_ENV] = "0"
     env["PLAYWRIGHT_PROD_URL"] = base_url
-    print("Running Phase C production non-token E2E...")
-    result = subprocess.run(("npm", "run", "e2e:prod"), cwd=WEB_DIR, env=env, check=False)
+    command: tuple[str, ...] = ("npm", "run", "e2e:prod")
+    if strict_read_only:
+        env[STRICT_READ_ONLY_ENV] = "1"
+        command = (
+            "npx",
+            "playwright",
+            "test",
+            "--config=playwright.prod.config.ts",
+            "--grep-invert",
+            STRICT_READ_ONLY_GREP_INVERT,
+        )
+    suffix = " (strict read-only)" if strict_read_only else ""
+    print(f"Running Phase C production non-token E2E{suffix}...")
+    result = subprocess.run(command, cwd=WEB_DIR, env=env, check=False)
     return result.returncode
 
 
@@ -143,12 +177,17 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run production no-token Playwright after readiness passes.",
     )
+    parser.add_argument(
+        "--strict-read-only",
+        action="store_true",
+        help="Exclude P4-4 POST error-path tests while keeping token-smoke specs skipped.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
-    report = build_report(args.base_url)
+    report = build_report(args.base_url, strict_read_only=args.strict_read_only)
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -162,7 +201,7 @@ def main() -> int:
         print("ERROR: Phase C production non-token E2E is blocked; not running Playwright.", file=sys.stderr)
         return 2
 
-    return _run_phase_c(args.base_url)
+    return _run_phase_c(args.base_url, strict_read_only=args.strict_read_only)
 
 
 if __name__ == "__main__":
