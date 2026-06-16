@@ -4,7 +4,7 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-16
+updated: 2026-06-17
 owner: self
 source: human+ai
 ---
@@ -26,6 +26,8 @@ source: human+ai
 2026-06-16 L4D-5Y/L4D-5Z 证据索引复核收口：按 `TODO-P0-4` 授权只读核对 `tmp/debug` 证据、portfolio/read-only evidence 与 runbook 文档一致性。`L4D-5Y` bounded S2 provider smoke 已由 final summary、readback 与 provider-boundary gate 交叉验证：仅 1 次 `/api/scenario/s2` submit，poyo HTTP submit 总数为 `2` 且仅对应本轮 1 个 image job + 1 个 Seedance video job，readback 计数 `image=1`、`video=1`，`provider_max_retries=0`，停止点为 `seedance_clips`，产物位于 tenant-scoped `pending_review`，`final_work` 匹配数为 `0`，publish/delivery/approved brand token 禁止项计数为 `0`。`L4D-5Z` frontend/library read-only regression 与 refined log gate 均通过：Playwright `3 passed`，只读验证同批 pending_review 视频/keyframe 可见，poster cache 仅作为 `thumbnail_path`，matching `final_work=0`，scenario/Fast submit、provider、mutating publish/delivery、admin health/media 背景请求禁止项均为 `0`。证据边界保持不变：本复核不代表 S2 full media/final assembly、S1/S3/S4/S5 media generation、TTS、thumbnail、assemble、media quality audit、publish 或 delivery acceptance 已执行。
 
 2026-06-16 Production key 生命周期治理收口：按 `TODO-P0-5R` 授权只处理 masked key `-NSK...4Y9A`。生产 DB 元数据确认该 key 属于 `momcozy-marketing`，描述为 `l4d5r-s2-bounded-media-smoke-20260612`，创建于 `2026-06-12T22:35:31.044877`，撤销前 `expires_at=null`、`revoked_at=null`、状态为 `active_no_expiry`。本轮已在生产 DB 将同一 key 的 `revoked_at` 设置为 `2026-06-16T23:55:49.350863`，撤销后只读 `GET /api/portfolio/?limit=1` 返回 `401 Invalid or expired API key`，并删除本地明文 env 文件 `tmp/debug/.l4d5r-playwright-key.env`。sanitized summary 为 `tmp/debug/todo-p0-5r-key-lifecycle-closeout-summary-20260616235720.json`，记录 `key_material_logged=false`、provider/scenario/Fast submit/publish/delivery/approved brand token 写入均为 `false`。
+
+2026-06-17 P2 多租户隔离本地层收口：`TODO-P2-2` 已完成第一层 no-provider 验收。只运行本地 unit/fixture 测试 `.venv/bin/pytest tests/test_concurrency_isolation.py tests/test_auth_context.py tests/test_p0_media_tenant_security.py tests/test_backend_route_auth_contract.py -q`，结果 `24 passed`。覆盖范围包括 request-scoped provider API key `contextvars` 并发隔离、tenant_id contextvar 并发隔离、auth tenant 持久化与 cross-tenant state 拒绝、tenant-scoped pending_review/portfolio/assets 隔离、metrics repository tenant filter，以及 backend route auth contract。`tests/loadtest_multi_tenant.py` 仍仅作为 locust soak/load 脚本保留；本轮未执行生产压测、未创建或使用 production API key、未触发 provider、未执行 `/api/scenario/*` submit 或 Fast Mode submit。
 
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
@@ -71,7 +73,7 @@ source: human+ai
 | ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
 |---|---|---|---|---|
 | TODO-P2-1 | metrics / webhook / analytics 真实闭环 | pending | 先做本地/fixture，再做生产只读，再考虑真实事件 | 不把 mock metrics 当成真实业务效果 |
-| TODO-P2-2 | 多租户并发与 API key 隔离压测 | pending | 先本地并发与 request-context 隔离测试；生产只读压测需授权 | 无跨 tenant 数据泄漏；无 contextvar key 污染 |
+| TODO-P2-2 | 多租户并发与 API key 隔离压测 | local_no_provider_passed | 本地 unit/fixture 层已通过；生产只读压测仍需单独授权，不运行 locust 生产压测 | `24 passed` 覆盖 provider API key/tenant contextvars 并发隔离、auth tenant 持久化、cross-tenant state 拒绝、portfolio/assets/metrics tenant filter 与 route auth contract；无 provider、submit、production key 或生产压测 |
 | TODO-P2-3 | Quality ML 依赖生产可用性验证 | pending | 先容器 import/runtime smoke；不触发 provider | CLIP/BRISQUE/PySceneDetect/MediaPipe/DeepFace 可用性被逐项记录 |
 | TODO-P2-4 | CloudBase / Render 替代部署路径复核 | pending | 只做文档和配置 drift 审计；不部署 | 明确哪些路径仍可用、哪些已历史化 |
 | TODO-P2-5 | publish / delivery acceptance / approved brand token 设计复核 | pending | 只做 dry-run contract 和人工确认字段隔离 | human-confirmed 字段与 LLM suggestion 字段不混用 |
