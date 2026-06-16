@@ -21,6 +21,8 @@ source: human+ai
 
 2026-06-16 ToolBox checklist 漂移收口：`docs/workflows/ai-video-toolbox-productization-plan-stable.md` 已将 T0-T8 checklist 从历史待办态同步为完成态，并补充边界说明。该完成态只表示工具箱 `L2-fixture-or-dry-run`、preflight、job ledger、audit summary 与 refs-only injection 已实现；真实 provider 调用、live smoke、approved brand token、delivery acceptance 和 publish 仍未授权、未执行。
 
+2026-06-16 默认生产 E2E strict read-only no-provider baseline 收口：先为 `scripts/production_non_token_e2e_check.py` 增加 `--strict-read-only`，在保持 `RUN_TOKEN_SMOKE=0` 与 `@token-smoke` 默认跳过的同时排除 `P4-4` error-path POST tests；随后用户授权执行 `TODO-P0-3 strict read-only no-provider baseline`。生产 Playwright 结果为 `46 passed, 2 skipped`，本地执行日志 `tmp/debug/todo-p0-3-strict-readonly-playwright-20260616162614.log`、本地摘要 `tmp/debug/todo-p0-3-strict-readonly-summary-20260616082614.json`、生产 backend 日志 `tmp/debug/todo-p0-3-strict-readonly-backend-20260616163427.log` 与结构化统计 `tmp/debug/todo-p0-3-strict-readonly-log-summary-20260616082614.json` 均已生成。统计显示 `non_get_count=0`、`scenario_submit_count=0`、`fast_submit_count=0`、provider/publish/delivery/approved brand token 禁止项计数为 `0`。边界：前端背景 `GET /api/admin/auth/session` 返回 `401` 共 `37` 次；portfolio 为验证待审素材未进入正式作品，执行 `GET /portfolio?...kind=final_work` 只读查询 `9` 次，`final_work` 写入/匹配仍为 `0`。本轮未执行 provider 调用、未触发 `/api/scenario/*` submit、未触发 Fast Mode submit、未发布、未做 delivery acceptance、未写入 approved brand token。
+
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
 > 更早盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
@@ -45,7 +47,7 @@ source: human+ai
 |---|---|---|---|---|
 | TODO-P0-1 | Dependabot PR 分批复核与合并 | closed_upstream_blocked | all-green 低风险 PR 已完成分批合并；失败或 unstable PR 已记录阻塞并关闭，不合并 | 当前 open Dependabot PR 为 `0`；PR `#13` 与 `#11` 已关闭为 upstream-blocked；恢复条件是上游发布兼容版本、Dependabot 重新开 PR 并重新跑绿 CI |
 | TODO-P0-2 | ToolBox 产品化计划 checklist 漂移收口 | completed_docs_sync | 已对齐 `docs/workflows/ai-video-toolbox-productization-plan-stable.md` 的状态表与 TODO；未改业务代码 | 文档不再同时表达“已实现”和“未完成”的冲突状态；真实 provider / live smoke / publish 边界仍为未授权 |
-| TODO-P0-3 | 默认生产 E2E no-provider baseline | pending | 只运行 `RUN_TOKEN_SMOKE=0` 生产 E2E；禁止 `@token-smoke`、provider、submit | 默认 suite 通过或给出精确失败；确认未触发 `/api/scenario/*`、Fast Mode submit、provider |
+| TODO-P0-3 | 默认生产 E2E no-provider baseline | strict_read_only_passed | 已用 `--strict-read-only` 运行 `RUN_TOKEN_SMOKE=0` 生产 E2E；排除 `@token-smoke` 与 `P4-4` POST error-path tests | Playwright `46 passed, 2 skipped`；`non_get_count=0`；scenario/Fast submit、provider、publish、delivery、approved brand token 均为 `0`；`GET /api/admin/auth/session` 401 背景请求 `37` 次，`GET /portfolio?...kind=final_work` 只读查询 `9` 次且 `final_work` 写入/匹配为 `0` |
 | TODO-P0-4 | L4D-5Y/L4D-5Z 证据索引复核 | pending | 只读检查 `tmp/debug`、portfolio/read-only evidence 与 runbook 文档一致性 | 证据索引只声明 S2 bounded media 到 `seedance_clips`，不外推 full media/S1-S5/publish |
 | TODO-P0-5 | Production key 生命周期治理 | pending | 只读核对临时 key 创建、过期、撤销记录；不展示明文 key | 明确当前可用/已过期/已撤销状态；如需撤销须另行授权 |
 
