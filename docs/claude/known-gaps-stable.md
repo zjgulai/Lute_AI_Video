@@ -25,6 +25,8 @@ source: human+ai
 
 2026-06-16 L4D-5Y/L4D-5Z 证据索引复核收口：按 `TODO-P0-4` 授权只读核对 `tmp/debug` 证据、portfolio/read-only evidence 与 runbook 文档一致性。`L4D-5Y` bounded S2 provider smoke 已由 final summary、readback 与 provider-boundary gate 交叉验证：仅 1 次 `/api/scenario/s2` submit，poyo HTTP submit 总数为 `2` 且仅对应本轮 1 个 image job + 1 个 Seedance video job，readback 计数 `image=1`、`video=1`，`provider_max_retries=0`，停止点为 `seedance_clips`，产物位于 tenant-scoped `pending_review`，`final_work` 匹配数为 `0`，publish/delivery/approved brand token 禁止项计数为 `0`。`L4D-5Z` frontend/library read-only regression 与 refined log gate 均通过：Playwright `3 passed`，只读验证同批 pending_review 视频/keyframe 可见，poster cache 仅作为 `thumbnail_path`，matching `final_work=0`，scenario/Fast submit、provider、mutating publish/delivery、admin health/media 背景请求禁止项均为 `0`。证据边界保持不变：本复核不代表 S2 full media/final assembly、S1/S3/S4/S5 media generation、TTS、thumbnail、assemble、media quality audit、publish 或 delivery acceptance 已执行。
 
+2026-06-16 Production key 生命周期治理收口：按 `TODO-P0-5R` 授权只处理 masked key `-NSK...4Y9A`。生产 DB 元数据确认该 key 属于 `momcozy-marketing`，描述为 `l4d5r-s2-bounded-media-smoke-20260612`，创建于 `2026-06-12T22:35:31.044877`，撤销前 `expires_at=null`、`revoked_at=null`、状态为 `active_no_expiry`。本轮已在生产 DB 将同一 key 的 `revoked_at` 设置为 `2026-06-16T23:55:49.350863`，撤销后只读 `GET /api/portfolio/?limit=1` 返回 `401 Invalid or expired API key`，并删除本地明文 env 文件 `tmp/debug/.l4d5r-playwright-key.env`。sanitized summary 为 `tmp/debug/todo-p0-5r-key-lifecycle-closeout-summary-20260616235720.json`，记录 `key_material_logged=false`、provider/scenario/Fast submit/publish/delivery/approved brand token 写入均为 `false`。
+
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
 > 更早盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
@@ -51,7 +53,7 @@ source: human+ai
 | TODO-P0-2 | ToolBox 产品化计划 checklist 漂移收口 | completed_docs_sync | 已对齐 `docs/workflows/ai-video-toolbox-productization-plan-stable.md` 的状态表与 TODO；未改业务代码 | 文档不再同时表达“已实现”和“未完成”的冲突状态；真实 provider / live smoke / publish 边界仍为未授权 |
 | TODO-P0-3 | 默认生产 E2E no-provider baseline | strict_read_only_passed | 已用 `--strict-read-only` 运行 `RUN_TOKEN_SMOKE=0` 生产 E2E；排除 `@token-smoke` 与 `P4-4` POST error-path tests | Playwright `46 passed, 2 skipped`；`non_get_count=0`；scenario/Fast submit、provider、publish、delivery、approved brand token 均为 `0`；`GET /api/admin/auth/session` 401 背景请求 `37` 次，`GET /portfolio?...kind=final_work` 只读查询 `9` 次且 `final_work` 写入/匹配为 `0` |
 | TODO-P0-4 | L4D-5Y/L4D-5Z 证据索引复核 | completed_evidence_index_verified | 已只读核对 `tmp/debug`、portfolio/read-only evidence 与 runbook 文档一致性；未执行 provider、submit、发布或生产部署 | `L4D-5Y` 仅证明 S2 bounded media 到 `seedance_clips`，image job=1、video job=1、provider retry=0、产物进入 tenant-scoped `pending_review`；`L4D-5Z` 仅证明 frontend/library read-only 可见性与 refined log gate 通过；不外推 full media/S1-S5/publish/delivery |
-| TODO-P0-5 | Production key 生命周期治理 | pending | 只读核对临时 key 创建、过期、撤销记录；不展示明文 key | 明确当前可用/已过期/已撤销状态；如需撤销须另行授权 |
+| TODO-P0-5 | Production key 生命周期治理 | completed_key_lifecycle_closed | 已撤销 active masked key `-NSK...4Y9A`，并删除本地明文 env 文件；未执行 provider、submit、发布或生产部署 | 撤销前生产 DB 显示该 key 为 `active_no_expiry`；撤销后 `revoked_at` 已设置，post-revoke 只读认证返回 `401 Invalid or expired API key`；sanitized summary 未记录明文 key/hash |
 
 ### P1：受控真实链路补证，需逐项授权
 
