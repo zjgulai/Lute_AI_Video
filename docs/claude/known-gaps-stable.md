@@ -4,7 +4,7 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-15
+updated: 2026-06-16
 owner: self
 source: human+ai
 ---
@@ -17,7 +17,7 @@ source: human+ai
 
 2026-06-14 补充收口：`L4C-6` S3 no-media、`L4C-7` S4 no-media 与 `L4C-8R` S5 no-media single-submit clean-log 均已完成并在 runbook 中登记；`L4D-5Y` 已完成 S2 bounded media provider smoke（1 次 scenario submit、1 个 poyo image job、1 个 poyo Seedance job，停在 `seedance_clips`），`L4D-5Z` 已完成同批产物的 `/api/portfolio` 与 `/library?tab=materials` 只读回归，matching `final_work=0`。PR `#2` 已合并，历史执行分支 `codex/s1-continuity-storyboard` 的本地与远端分支已删除，并以 `8d4d2c0` 归档分支清理记录。当前默认下一步不是追加 provider 消耗，而是 no-provider 的文档、CI/read-only guard 与证据索引收口；任何 S2 full media、S1/S3/S4/S5 media generation、TTS、assemble、quality audit、publish 或 delivery acceptance 都必须重新定义范围、预算、止损和精确授权。
 
-2026-06-15 Dependabot 补充收口：当前剩余 open Dependabot PR 仅 `#13` 与 `#11`，均已标记 `blocked-upstream` 并追加阻塞说明评论。PR `#13` (`eslint@10.5.0`) 的 `Frontend quality gate` 在 `react/display-name` 规则加载时报 `contextOrFilename.getFilename is not a function`，根因为当前 `eslint-config-next` 依赖链中的 `eslint-plugin-react` / `eslint-plugin-import` / `eslint-plugin-jsx-a11y` 尚未声明 ESLint 10 兼容；PR `#11` (`typescript@6.0.3`) 在 `npm ci` 阶段被 `openapi-typescript@7.13.0` 的 `typescript@^5.x` peer dependency 阻塞。两者均不得通过 `--force` 或 `--legacy-peer-deps` 绕过，后续只在上游依赖发布兼容版本后重新复核。
+2026-06-16 Dependabot 补充收口：Dependabot 队列当前 open PR 数为 `0`。PR `#13` (`eslint@10.5.0`) 与 PR `#11` (`typescript@6.0.3`) 已在最终复核后关闭为 `upstream-blocked`，均保留 `dependencies`、`frontend`、`blocked-upstream` 标签和 closeout 评论。PR `#13` 的 `Frontend quality gate` 在 `react/display-name` 规则加载时报 `contextOrFilename.getFilename is not a function`，根因为当前 `eslint-config-next` 依赖链中的 `eslint-plugin-react` / `eslint-plugin-import` / `eslint-plugin-jsx-a11y` 尚未声明 ESLint 10 兼容；PR `#11` 在 `npm ci` 阶段被 `openapi-typescript@7.13.0` 的 `typescript@^5.x` peer dependency 阻塞。两者均不得通过 `--force` 或 `--legacy-peer-deps` 绕过，后续只在上游依赖发布兼容版本并由 Dependabot 重新开 PR 后重新复核。
 
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
@@ -41,7 +41,7 @@ source: human+ai
 
 | ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
 |---|---|---|---|---|
-| TODO-P0-1 | Dependabot PR 分批复核与合并 | blocked_upstream | 先处理 all-green 的低风险 PR；失败或 unstable PR 只记录阻塞，不合并 | 当前剩余 open Dependabot PR 仅 `#13` 与 `#11`，均因上游 peer dependency 兼容性阻塞；恢复条件是上游发布兼容版本并重新跑绿 CI |
+| TODO-P0-1 | Dependabot PR 分批复核与合并 | closed_upstream_blocked | all-green 低风险 PR 已完成分批合并；失败或 unstable PR 已记录阻塞并关闭，不合并 | 当前 open Dependabot PR 为 `0`；PR `#13` 与 `#11` 已关闭为 upstream-blocked；恢复条件是上游发布兼容版本、Dependabot 重新开 PR 并重新跑绿 CI |
 | TODO-P0-2 | ToolBox 产品化计划 checklist 漂移收口 | pending | 只对齐 `docs/workflows/ai-video-toolbox-productization-plan-stable.md` 的状态表与 TODO；不改业务代码 | 文档不再同时表达“已实现”和“未完成”的冲突状态；markdown/frontmatter/link scope 测试通过 |
 | TODO-P0-3 | 默认生产 E2E no-provider baseline | pending | 只运行 `RUN_TOKEN_SMOKE=0` 生产 E2E；禁止 `@token-smoke`、provider、submit | 默认 suite 通过或给出精确失败；确认未触发 `/api/scenario/*`、Fast Mode submit、provider |
 | TODO-P0-4 | L4D-5Y/L4D-5Z 证据索引复核 | pending | 只读检查 `tmp/debug`、portfolio/read-only evidence 与 runbook 文档一致性 | 证据索引只声明 S2 bounded media 到 `seedance_clips`，不外推 full media/S1-S5/publish |
@@ -84,8 +84,8 @@ source: human+ai
 - PR `#10` 已在用户授权后合并到 `main`，merge commit 为 `dba3ea9d3af7bf84e13d69f128c0a10cea347dc8`；合并后本地 `main` 已 fast-forward 到 `origin/main`，Alembic `1.18.4` migration tree 解析复跑通过，`tests/test_postgres.py::TestThreadIdSchema` 复跑结果 `2 passed`。
 - PR `#3` (`transformers>=5.12.0`) 只读复核完成，GitHub checks 全绿，`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，diff 仅 `requirements.txt` 一行；但该变更是生产依赖大版本更新。临时 venv 安装 `transformers>=5.12.0` 超过 120 秒无输出后已中止并清理，未完成 clean install/import 验证；PR worktree 中仅复跑现有 fallback 合约 `tests/test_clip_alignment.py`，结果 `4 passed`。暂不进入合并授权候选。
 - PR `#12` (`faster-whisper>=1.2.1`) CI 失败已完成只读诊断：Python 3.11 与 3.12 失败同源，均为 `tests/test_markdown_frontmatter_compliance.py::test_fully_compliant_frontmatter_values_use_project_vocab`，断言 `source: ai+human` 不在允许集合 `{human+ai, ai, human}`。该失败与 `faster-whisper` 变更无直接关系；`origin/main` 中 `docs/workflows/2026-06-14-s1-continuity-storyboard-branch-cleanup-stable.md` 仍为 `source: ai+human`，本地工作区已修为 `source: human+ai`，本地 `tests/test_markdown_frontmatter_compliance.py` 结果 `4 passed`。该 docs-only frontmatter 修复已纳入本轮提交/推送范围，推送后需观察 PR `#12` checks 是否自动重新触发；PR `#12` 暂不进入合并授权候选。
-- PR `#13` (`eslint 9.39.4 -> 10.5.0`) 已完成 upstream-blocked 收口：diff 仅 `web/package.json` 与 `web/package-lock.json`；当前只有 `Frontend quality gate` 失败，其余 CI / e2e-ui checks 通过。失败日志为 `ESLint: 10.5.0` 加载 `react/display-name` 时抛 `contextOrFilename.getFilename is not a function`，堆栈位于 `eslint-config-next/node_modules/eslint-plugin-react`。2026-06-15 npm metadata 显示 `eslint-config-next@16.2.9` 仍依赖未声明 ESLint 10 兼容的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2`；PR 已添加 `blocked-upstream` 标签和阻塞评论，暂不合并。
-- PR `#11` (`typescript 5.9.3 -> 6.0.3`) 已完成 upstream-blocked 收口：diff 仅 `web/package.json` 与 `web/package-lock.json`；`Frontend quality gate`、Python 3.11、Python 3.12 与 UI-only visual regression 均在 `npm ci` 前置安装阶段失败。失败根因为 `openapi-typescript@7.13.0` peer dependency 仍要求 `typescript@^5.x`，而本 PR 安装 `typescript@6.0.3`；2026-06-15 npm metadata 显示 `openapi-typescript@7.13.0` 仍为 latest 且未支持 TypeScript 6。PR 已添加 `blocked-upstream` 标签和阻塞评论，暂不合并。
+- PR `#13` (`eslint 9.39.4 -> 10.5.0`) 已完成 upstream-blocked closeout：diff 仅 `web/package.json` 与 `web/package-lock.json`；最终复核时只有 `Frontend quality gate` 失败，其余 CI / e2e-ui checks 通过。失败日志为 `ESLint: 10.5.0` 加载 `react/display-name` 时抛 `contextOrFilename.getFilename is not a function`，堆栈位于 `eslint-config-next/node_modules/eslint-plugin-react`。2026-06-16 npm metadata 显示 `eslint-config-next@16.2.9` 仍依赖未声明 ESLint 10 兼容的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2`；PR 已保留 `blocked-upstream` 标签、追加 closeout 评论并关闭。
+- PR `#11` (`typescript 5.9.3 -> 6.0.3`) 已完成 upstream-blocked closeout：diff 仅 `web/package.json` 与 `web/package-lock.json`；最终复核时 `Frontend quality gate`、Python 3.11、Python 3.12 与 UI-only visual regression 均在 `npm ci` 前置安装阶段失败。失败根因为 `openapi-typescript@7.13.0` peer dependency 仍要求 `typescript@^5.x`，而本 PR 安装 `typescript@6.0.3`；2026-06-16 npm metadata 显示 `openapi-typescript@7.13.0` 仍为 latest 且未支持 TypeScript 6。PR 已保留 `blocked-upstream` 标签、追加 closeout 评论并关闭。
 
 ## 1.01 2026-06-11 L4B 生产只读回读已通过
 
