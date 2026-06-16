@@ -19,6 +19,8 @@ source: human+ai
 
 2026-06-16 Dependabot 补充收口：Dependabot 队列当前 open PR 数为 `0`。PR `#13` (`eslint@10.5.0`) 与 PR `#11` (`typescript@6.0.3`) 已在最终复核后关闭为 `upstream-blocked`，均保留 `dependencies`、`frontend`、`blocked-upstream` 标签和 closeout 评论。PR `#13` 的 `Frontend quality gate` 在 `react/display-name` 规则加载时报 `contextOrFilename.getFilename is not a function`，根因为当前 `eslint-config-next` 依赖链中的 `eslint-plugin-react` / `eslint-plugin-import` / `eslint-plugin-jsx-a11y` 尚未声明 ESLint 10 兼容；PR `#11` 在 `npm ci` 阶段被 `openapi-typescript@7.13.0` 的 `typescript@^5.x` peer dependency 阻塞。两者均不得通过 `--force` 或 `--legacy-peer-deps` 绕过，后续只在上游依赖发布兼容版本并由 Dependabot 重新开 PR 后重新复核。
 
+2026-06-16 ToolBox checklist 漂移收口：`docs/workflows/ai-video-toolbox-productization-plan-stable.md` 已将 T0-T8 checklist 从历史待办态同步为完成态，并补充边界说明。该完成态只表示工具箱 `L2-fixture-or-dry-run`、preflight、job ledger、audit summary 与 refs-only injection 已实现；真实 provider 调用、live smoke、approved brand token、delivery acceptance 和 publish 仍未授权、未执行。
+
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
 > 更早盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
@@ -42,7 +44,7 @@ source: human+ai
 | ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
 |---|---|---|---|---|
 | TODO-P0-1 | Dependabot PR 分批复核与合并 | closed_upstream_blocked | all-green 低风险 PR 已完成分批合并；失败或 unstable PR 已记录阻塞并关闭，不合并 | 当前 open Dependabot PR 为 `0`；PR `#13` 与 `#11` 已关闭为 upstream-blocked；恢复条件是上游发布兼容版本、Dependabot 重新开 PR 并重新跑绿 CI |
-| TODO-P0-2 | ToolBox 产品化计划 checklist 漂移收口 | pending | 只对齐 `docs/workflows/ai-video-toolbox-productization-plan-stable.md` 的状态表与 TODO；不改业务代码 | 文档不再同时表达“已实现”和“未完成”的冲突状态；markdown/frontmatter/link scope 测试通过 |
+| TODO-P0-2 | ToolBox 产品化计划 checklist 漂移收口 | completed_docs_sync | 已对齐 `docs/workflows/ai-video-toolbox-productization-plan-stable.md` 的状态表与 TODO；未改业务代码 | 文档不再同时表达“已实现”和“未完成”的冲突状态；真实 provider / live smoke / publish 边界仍为未授权 |
 | TODO-P0-3 | 默认生产 E2E no-provider baseline | pending | 只运行 `RUN_TOKEN_SMOKE=0` 生产 E2E；禁止 `@token-smoke`、provider、submit | 默认 suite 通过或给出精确失败；确认未触发 `/api/scenario/*`、Fast Mode submit、provider |
 | TODO-P0-4 | L4D-5Y/L4D-5Z 证据索引复核 | pending | 只读检查 `tmp/debug`、portfolio/read-only evidence 与 runbook 文档一致性 | 证据索引只声明 S2 bounded media 到 `seedance_clips`，不外推 full media/S1-S5/publish |
 | TODO-P0-5 | Production key 生命周期治理 | pending | 只读核对临时 key 创建、过期、撤销记录；不展示明文 key | 明确当前可用/已过期/已撤销状态；如需撤销须另行授权 |

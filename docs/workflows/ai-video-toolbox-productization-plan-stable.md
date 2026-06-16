@@ -5,7 +5,7 @@ module: ai-video-2.0
 topic: toolbox-productization
 status: stable
 created: 2026-06-05
-updated: 2026-06-06
+updated: 2026-06-16
 owner: self
 source: human+ai
 related:
@@ -28,6 +28,8 @@ related:
 当前已完成 AI Video 2.0 dry-run 合约、门禁、job ledger、只读注入、prompt preview audit、品牌 token 候选治理、工具箱独立产品层、工具产物只读回注、Momcozy S5/toolbox L2 fixture 矩阵和工具级 provider readiness preflight。
 
 工具箱已经具备 `/toolbox` 导航、五个工具页、统一 API、工具级 run state、artifact/job ledger/audit summary 与 refs-only injection draft。真实生成仍未授权；T9 只是授权前置门禁，不代表 live smoke 已执行。
+
+2026-06-16 checklist drift sync：T0-T8 checklist 已按当前代码与 GAP 表同步为完成态。该完成态只表示 `L2-fixture-or-dry-run`、preflight、job ledger、audit summary 与 refs-only injection 已实现；不表示真实 provider 调用、live smoke、approved brand token、delivery acceptance 或 publish 已授权或执行。
 
 因此下一阶段目标不是继续堆 provider，而是建立一个可复用的工具箱产品层：
 
@@ -371,8 +373,8 @@ web/src/types/api.generated.ts
 ### T0 文档与边界收口
 
 - [x] 建立本实施计划。
-- [ ] 将本计划追加为后续代码实现的 source-of-truth。
-- [ ] 确认旧研究文档仍是依据，不声明工具箱代码完成。
+- [x] 将本计划追加为后续代码实现的 source-of-truth。
+- [x] 确认旧研究文档仍是依据，不声明工具箱代码完成。
 
 测试：
 
@@ -388,10 +390,10 @@ docs: 固化AI视频工具箱产品化实施计划
 
 ### T1 后端工具箱合约
 
-- [ ] 新增 `src/models/toolbox_contracts.py`。
-- [ ] 定义 `tool_id` 枚举和五类工具 request/plan/artifact/audit。
-- [ ] 新增 fixture 覆盖正常、blocked、review_required。
-- [ ] 保证 schema 不携带 prompt payload 或品牌资产原文。
+- [x] 新增 `src/models/toolbox_contracts.py`。
+- [x] 定义 `tool_id` 枚举和五类工具 request/plan/artifact/audit。
+- [x] 新增 fixture 覆盖正常、blocked、review_required。
+- [x] 保证 schema 不携带 prompt payload 或品牌资产原文。
 
 测试：
 
@@ -409,10 +411,10 @@ feat: 建立AI视频工具箱合约底座
 
 ### T2 后端 dry-run router
 
-- [ ] 新增 `src/routers/toolbox.py`。
-- [ ] 挂载 `/toolbox/*`，继承 API key auth。
-- [ ] 实现 `GET /tools`、`POST /plan`、`POST /prompt-preview`、`POST /run`、`GET /runs/{id}`。
-- [ ] `run` 默认只写 dry-run job ledger，不触发 provider。
+- [x] 新增 `src/routers/toolbox.py`。
+- [x] 挂载 `/toolbox/*`，继承 API key auth。
+- [x] 实现 `GET /tools`、`POST /plan`、`POST /prompt-preview`、`POST /run`、`GET /runs/{id}`。
+- [x] `run` 默认只写 dry-run job ledger，不触发 provider。
 
 测试：
 
@@ -430,9 +432,9 @@ feat: 增加工具箱dry-run接口
 
 ### T3 OpenAPI 与前端类型
 
-- [ ] 运行 OpenAPI drift check。
-- [ ] 仅在 drift 真实存在时更新 `web/src/types/api.generated.ts`。
-- [ ] 在 `web/src/components/api.ts` 增加 toolbox API helpers。
+- [x] 运行 OpenAPI drift check。
+- [x] 仅在 drift 真实存在时更新 `web/src/types/api.generated.ts`。
+- [x] 在 `web/src/components/api.ts` 增加 toolbox API helpers。
 
 测试：
 
@@ -450,10 +452,10 @@ chore: 同步工具箱接口类型
 
 ### T4 前端导航与工具箱首页
 
-- [ ] `Nav.tsx` 增加 `工具箱` 一级入口。
-- [ ] `translations.ts` 增加 zh/en 文案。
-- [ ] 新增 `/toolbox` 首页。
-- [ ] 展示五个工具卡片、最近 runs、dry-run evidence 状态。
+- [x] `Nav.tsx` 增加 `工具箱` 一级入口。
+- [x] `translations.ts` 增加 zh/en 文案。
+- [x] 新增 `/toolbox` 首页。
+- [x] 展示五个工具卡片、最近 runs、dry-run evidence 状态。
 
 测试：
 
@@ -470,10 +472,10 @@ feat: 增加AI视频工具箱导航与首页
 
 ### T5 故事版与产品六视图页面
 
-- [ ] 新增 `storyboard` 工具页。
-- [ ] 新增 `six-view` 工具页。
-- [ ] 展示 prompt preview、audit、job ledger、artifact placeholder。
-- [ ] 回注按钮只生成 injection draft，不修改 S1-S5 运行状态。
+- [x] 新增 `storyboard` 工具页。
+- [x] 新增 `six-view` 工具页。
+- [x] 展示 prompt preview、audit、job ledger、artifact placeholder。
+- [x] 回注按钮只生成 injection draft，不修改 S1-S5 运行状态。
 
 测试：
 
@@ -491,10 +493,10 @@ feat: 增加故事版与六视图工具页面
 
 ### T6 电商商品图与电商视觉图页面
 
-- [ ] 新增 `product-image` 工具页。
-- [ ] 新增 `ecommerce-visual` 工具页。
-- [ ] 支持 platform、aspect ratio、image type、layout variant。
-- [ ] 显示 product truth、claim、safe-zone、brand alignment gate。
+- [x] 新增 `product-image` 工具页。
+- [x] 新增 `ecommerce-visual` 工具页。
+- [x] 支持 platform、aspect ratio、image type、layout variant。
+- [x] 显示 product truth、claim、safe-zone、brand alignment gate。
 
 测试：
 
@@ -512,10 +514,10 @@ feat: 增加电商商品图与视觉图工具页面
 
 ### T7 数字人工具 dry-run
 
-- [ ] 新增 `digital-human` 工具页。
-- [ ] 显示 avatar、voice、consent、likeness、children-safety gate。
-- [ ] 默认不提供真实生成入口。
-- [ ] 只有授权记录和 provider readiness 通过后才显示 live-ready 状态。
+- [x] 新增 `digital-human` 工具页。
+- [x] 显示 avatar、voice、consent、likeness、children-safety gate。
+- [x] 默认不提供真实生成入口。
+- [x] 只有授权记录和 provider readiness 通过后才显示 live-ready 状态。
 
 测试：
 
@@ -533,10 +535,10 @@ feat: 增加数字人工具dry-run门禁
 
 ### T8 工具箱回注 S1-S5
 
-- [ ] 新增 `ToolboxInjectionDraft`。
-- [ ] 支持工具产物回注 S1-S5 的 runtime config 或 step injection refs。
-- [ ] 只传 refs、ids、checks，不传 prompt payload。
-- [ ] UI 展示 planned refs vs current step refs 的差异。
+- [x] 新增 `ToolboxInjectionDraft`。
+- [x] 支持工具产物回注 S1-S5 的 runtime config 或 step injection refs。
+- [x] 只传 refs、ids、checks，不传 prompt payload。
+- [x] UI 展示 planned refs vs current step refs 的差异。
 
 测试：
 
