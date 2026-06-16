@@ -131,17 +131,23 @@ async function openApp(page: Page, path: string) {
   await page.goto(path, { waitUntil: "domcontentloaded" });
 
   const splashMarker = page.getByText("Evolving for Mom and Cozy");
-  if (await splashMarker.isVisible().catch(() => false)) {
-    await page.getByRole("button", { name: /开始创作|Get Started/i }).evaluate((node) => {
+  const nav = page.locator("nav").first();
+  const enter = page.getByRole("button", { name: /开始创作|Get Started|进入|Enter/i }).first();
+
+  await Promise.race([
+    nav.waitFor({ state: "visible", timeout: 2_000 }).catch(() => undefined),
+    enter.waitFor({ state: "visible", timeout: 2_000 }).catch(() => undefined),
+  ]);
+
+  if (await enter.isVisible().catch(() => false)) {
+    await enter.evaluate((node) => {
       (node as HTMLButtonElement).click();
     });
     await expect(splashMarker).toBeHidden({ timeout: 5_000 });
   }
 
-  const nav = page.locator("nav").first();
   await nav.waitFor({ state: "visible", timeout: 2_000 }).catch(() => { /* fallback to explicit splash dismissal */ });
   if (!await nav.isVisible().catch(() => false)) {
-    const enter = page.getByRole("button", { name: /开始创作|Get Started|进入|Enter/i }).first();
     if (await enter.isVisible().catch(() => false)) {
       await enter.evaluate((node) => (node as HTMLButtonElement).click());
     }
