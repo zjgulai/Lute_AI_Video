@@ -128,7 +128,7 @@ class VideoDownloader:
             {metadata: VideoMetadata, segments: list[TranscribeSegment]}
         """
         metadata = await self.download(url)
-        if not metadata.local_path or "[MOCK]" in metadata.local_path:
+        if not metadata.local_path or self._is_mock_download_path(metadata.local_path):
             logger.info("video_downloader: mock mode, skipping transcription")
             return {
                 "metadata": metadata.model_dump(),
@@ -259,6 +259,10 @@ class VideoDownloader:
             platform=plat,
             local_path="[MOCK_DOWNLOAD — add yt-dlp]",
         )
+
+    def _is_mock_download_path(self, path: str) -> bool:
+        """Detect synthetic paths returned by `_mock_metadata`."""
+        return path.startswith("[MOCK_DOWNLOAD")
 
     def _mock_transcription(self) -> list[TranscribeSegment]:
         """Return mock transcription when Whisper unavailable."""
