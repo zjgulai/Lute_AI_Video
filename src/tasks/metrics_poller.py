@@ -13,6 +13,7 @@ Designed to be invoked from a FastAPI BackgroundTask or an asyncio loop.
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,25 +21,54 @@ from ..storage.metrics_repository import VideoMetricsRepository
 
 logger = logging.getLogger(__name__)
 
+PlatformMetricsFetcher = Callable[[str], Awaitable[dict[str, Any]]]
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _hours_since(dt: datetime | None) -> float:
+def _coerce_datetime(value: datetime | str | None) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning("metrics_poller: invalid timestamp %r", value)
+        return None
+
+
+def _hours_since(dt: datetime | str | None) -> float:
     """Return the number of hours between *now* and *dt* (0 if dt is None)."""
-    if dt is None:
+    parsed = _coerce_datetime(dt)
+    if parsed is None:
         return 0.0
-    delta = _now() - dt.replace(tzinfo=UTC) if dt.tzinfo is None else _now() - dt
+    delta = _now() - parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else _now() - parsed
     return max(0.0, delta.total_seconds() / 3600.0)
 
 
 class MetricsPoller:
     """Periodically fetch and store video performance metrics from platforms."""
 
-    def __init__(self, max_concurrency: int = 3) -> None:
-        self.repo = VideoMetricsRepository()
+    def __init__(
+        self,
+        max_concurrency: int = 3,
+        repo: VideoMetricsRepository | None = None,
+        platform_fetchers: Mapping[str, PlatformMetricsFetcher] | None = None,
+    ) -> None:
+        self.repo = repo or VideoMetricsRepository()
         self.max_concurrency = max(1, max_concurrency)
+        if platform_fetchers is None:
+            platform_fetchers = {
+                "tiktok": self._fetch_from_tiktok,
+                "shopify": self._fetch_from_shopify,
+            }
+        self.platform_fetchers = {
+            platform.strip().lower(): fetcher
+            for platform, fetcher in platform_fetchers.items()
+        }
 
     # ------------------------------------------------------------------
     # Public entry points
@@ -125,6 +155,8 @@ class MetricsPoller:
 
         try:
             metrics = await self._fetch_from_platform(platform, post_id)
+            if metrics is None:
+                return False
             await self.repo.save_metrics(
                 video_id=post["video_id"],
                 scenario=post["scenario"],
@@ -152,15 +184,14 @@ class MetricsPoller:
     # Platform-specific fetchers (mock stubs — replace with real API calls)
     # ------------------------------------------------------------------
 
-    async def _fetch_from_platform(self, platform: str, post_id: str) -> dict[str, Any]:
+    async def _fetch_from_platform(self, platform: str, post_id: str) -> dict[str, Any] | None:
         """Route to the correct platform fetcher based on *platform* name."""
         platform_lower = platform.strip().lower()
-        if platform_lower == "tiktok":
-            return await self._fetch_from_tiktok(post_id)
-        elif platform_lower == "shopify":
-            return await self._fetch_from_shopify(post_id)
+        fetcher = self.platform_fetchers.get(platform_lower)
+        if fetcher is not None:
+            return await fetcher(post_id)
         logger.warning("metrics_poller: unknown platform %r — returning empty", platform)
-        return {}
+        return None
 
     async def _fetch_from_tiktok(self, post_id: str) -> dict[str, Any]:
         """Fetch metrics from TikTok Insights API.
