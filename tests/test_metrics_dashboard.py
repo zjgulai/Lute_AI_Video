@@ -155,3 +155,44 @@ async def test_video_metrics_503_when_storage_disabled(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         await metrics_router.get_video_metrics("v_123", platform="tiktok")
     assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_metrics_pull_disabled_by_default(monkeypatch):
+    from fastapi import HTTPException
+
+    from src import config
+    from src.routers import metrics as metrics_router
+
+    monkeypatch.setattr(metrics_router, "HAS_STORAGE", True)
+    monkeypatch.setattr(config, "METRICS_PULL_ENABLED", False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await metrics_router.trigger_metrics_pull()
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Metrics pull is disabled"
+
+
+@pytest.mark.asyncio
+async def test_metrics_pull_enabled_invokes_poller(monkeypatch):
+    from src import config
+    from src.routers import metrics as metrics_router
+    from src.tasks import metrics_poller
+
+    monkeypatch.setattr(metrics_router, "HAS_STORAGE", True)
+    monkeypatch.setattr(config, "METRICS_PULL_ENABLED", True)
+
+    calls = 0
+
+    class _FakePoller:
+        async def pull_all(self) -> None:
+            nonlocal calls
+            calls += 1
+
+    monkeypatch.setattr(metrics_poller, "MetricsPoller", _FakePoller)
+
+    resp = await metrics_router.trigger_metrics_pull()
+
+    assert calls == 1
+    assert resp == {"status": "ok", "message": "Metrics pull triggered successfully"}
