@@ -5,7 +5,7 @@ module: metrics
 topic: metrics-webhook-analytics-event-chain
 status: stable
 created: 2026-06-17
-updated: 2026-06-17
+updated: 2026-06-18
 owner: self
 source: human+ai
 ---
@@ -51,8 +51,8 @@ source: human+ai
 | 阶段 | 目标 | 默认环境 | 是否允许外部调用 | 验收口径 |
 |---|---|---|---:|---|
 | `P2-1L0` | 固化当前 source map 与计划 | 本地 docs-only | 否 | 本文件存在；GAP 表引用本文件；不改代码、不碰生产 |
-| `P2-1L1` | 平台 metrics fetcher contract | 本地 no-provider | 否 | TikTok/Shopify fetcher 通过 fake client 注入测试；真实 connector 仍不调用 |
-| `P2-1L2` | poller ingestion contract | 本地 no-provider | 否 | fake active post -> fake metrics -> repository -> dashboard 聚合全链通过；tenant filter 与 idempotency 规则明确 |
+| `P2-1L1` | 平台 metrics fetcher contract | 本地 no-provider | 否 | 已通过：TikTok/Shopify fetcher 可注入 fake client；unknown platform 不写入；真实 connector 仍不调用 |
+| `P2-1L2` | poller ingestion contract | 本地 no-provider | 否 | 已通过：fake active post -> fake metrics -> repository -> dashboard 聚合全链通过；recent snapshot 跳过；SQLite timestamp string 可解析 |
 | `P2-1L3` | webhook receiver contract | 本地 no-provider | 否 | fake receiver / mocked HTTP 验证 envelope、timeout、failure isolation；不打到外网 |
 | `P2-1L4` | 生产 read-only regression | 生产 read-only | 否 | `/api/health`、`/api/dashboard/overview`、`/dashboard` GET 通过；`/api/metrics/pull` 仍 403；日志无真实 pull/webhook 外发 |
 | `P2-1L5` | 外部 webhook 单事件 smoke | 生产受控 | 是，仅 webhook receiver | 只注册 1 个临时外部接收端；只触发 1 个非 publish 事件；receiver readback 匹配 envelope；收尾撤销配置 |
@@ -137,6 +137,34 @@ source: human+ai
 验证 dashboard readback 后撤销临时 key并生成 sanitized summary。
 ```
 
+## 2026-06-18 P2-1L1 / P2-1L2 执行记录
+
+本轮只做本地 no-provider contract 修复：
+
+- `MetricsPoller` 支持注入 `repo` 与 `platform_fetchers`。
+- 默认仍只保留 TikTok / Shopify stub，不调用真实平台 API。
+- unknown platform 返回 skip，不再写入空 metrics snapshot。
+- recent `pulled_at` snapshot 按 adaptive interval 跳过，不调用 fetcher。
+- SQLite fallback 读出的 timestamp string 可被 poller 解析，避免 ingestion contract 在本地 fallback 中失败。
+- fake TikTok active post 可经 `pull_all()` 写入 `VideoMetricsRepository`，并由 `get_dashboard_overview()` 读回最新 metrics。
+
+验证命令：
+
+```bash
+DATABASE_URL= .venv/bin/pytest tests/test_metrics_poller.py -q
+```
+
+结果：`6 passed`。
+
+证据边界：
+
+- 未启用 `METRICS_PULL_ENABLED`。
+- 未执行 `/api/metrics/pull`。
+- 未注册 startup scheduler。
+- 未调用 TikTok / Shopify 真实 metrics API。
+- 未配置或触发外部 webhook dispatch。
+- 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+
 ## 下一步
 
-默认下一步是 `P2-1L1 + P2-1L2`：在本地 no-provider 模式下补平台 fetcher contract、poller ingestion contract 与 idempotency 测试。该阶段只允许 fake client 和 SQLite/fixture，不允许真实平台 API、生产写入或 webhook 外发。
+默认下一步是 `P2-1L3`：补 webhook receiver contract 的本地 no-provider 测试，验证 envelope、timeout、failure isolation 与 readback summary 结构。该阶段只允许 fake receiver / mocked HTTP，不允许真实 webhook.site、生产写入或 webhook 外发。
