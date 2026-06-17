@@ -23,6 +23,7 @@ import structlog
 # Internal listener signature: receives the raw event payload (not the envelope).
 # Sync callables run inline; coroutines are scheduled as fire-and-forget tasks.
 EventListener = Callable[[dict[str, Any]], Awaitable[None] | None]
+WebhookHttpSender = Callable[[str, dict[str, Any]], Awaitable[int]]
 
 logger = structlog.get_logger()
 
@@ -122,12 +123,19 @@ class WebhookManager:
     Use via the module-level singleton: get_webhook_manager()
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        http_sender: WebhookHttpSender | None = None,
+        timeout_seconds: float = WEBHOOK_TIMEOUT_SECONDS,
+    ):
         self._webhooks: dict[str, list[str]] = defaultdict(list)
         # In-process listeners (e.g. portfolio index rebuild on pipeline.completed).
         # Distinct from HTTP webhooks: not subject to URL validation, never crosses
         # the network, exception isolation handled per-listener.
         self._listeners: dict[str, list[EventListener]] = defaultdict(list)
+        self._http_sender = http_sender
+        self._timeout_seconds = timeout_seconds
 
     # ── Registration API ──
 
@@ -205,7 +213,7 @@ class WebhookManager:
 
     # ── Dispatch ──
 
-    async def dispatch(self, event_type: str, payload: dict[str, Any]) -> None:
+    async def dispatch(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Send webhook notifications for an event.
 
         Fans out to two channels in parallel:
@@ -214,14 +222,35 @@ class WebhookManager:
 
         Both channels run with timeout/exception isolation; failures are logged,
         never raised, so pipeline forward progress is preserved.
+
+        Returns a sanitized local summary that tests and dry-run tooling can use
+        to verify delivery boundaries without relying on an external receiver.
         """
+        summary: dict[str, Any] = {
+            "event_type": event_type,
+            "event_id": None,
+            "listeners": {
+                "attempted": len(self._listeners.get(event_type, [])),
+                "scheduled": 0,
+                "failed": 0,
+            },
+            "http": {
+                "attempted": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "results": [],
+            },
+        }
+
         # ── Channel 1: in-process listeners ──
         for listener in self._listeners.get(event_type, []):
             try:
                 result = listener(payload)
                 if asyncio.iscoroutine(result):
                     asyncio.create_task(self._run_listener(event_type, listener, result))
+                    summary["listeners"]["scheduled"] += 1
             except Exception as exc:
+                summary["listeners"]["failed"] += 1
                 logger.warning(
                     "webhook: listener failed",
                     event_type=event_type,
@@ -232,28 +261,35 @@ class WebhookManager:
         # ── Channel 2: HTTP webhook URLs ──
         urls = self._webhooks.get(event_type, [])
         if not urls:
-            return
+            return summary
 
         envelope = self._build_envelope(event_type, payload)
-        tasks = [self._send(url, envelope) for url in urls]
+        summary["event_id"] = envelope["event_id"]
+        summary["http"]["attempted"] = len(urls)
+        tasks = [self._send_with_timeout(url, envelope) for url in urls]
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks)
+        summary["http"]["results"] = results
+        summary["http"]["succeeded"] = sum(1 for result in results if result["ok"])
+        summary["http"]["failed"] = len(results) - summary["http"]["succeeded"]
 
-        for url, result in zip(urls, results):
-            if isinstance(result, Exception):
+        for result in results:
+            if not result["ok"]:
                 logger.warning(
                     "webhook: dispatch failed",
                     event_type=event_type,
-                    url=url,
-                    error=str(result),
+                    url=result["url"],
+                    error=result["error"],
                 )
             else:
                 logger.debug(
                     "webhook: dispatched",
                     event_type=event_type,
-                    url=url,
-                    status=result,
+                    url=result["url"],
+                    status=result["status_code"],
                 )
+
+        return summary
 
     async def _run_listener(
         self, event_type: str, listener: EventListener, awaitable: Awaitable[None]
@@ -269,7 +305,7 @@ class WebhookManager:
                 error=str(exc)[:200],
             )
 
-    def dispatch_sync(self, event_type: str, payload: dict[str, Any]) -> None:
+    def dispatch_sync(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Synchronous dispatch — for use in synchronous code paths.
 
         Creates a new event loop in the current thread if needed.
@@ -278,14 +314,14 @@ class WebhookManager:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             # No running loop — create one
-            asyncio.run(self.dispatch(event_type, payload))
-            return
+            return asyncio.run(self.dispatch(event_type, payload))
 
         # Already in an event loop — schedule and wait (blocking call from sync context)
         if loop.is_running():
             loop.create_task(self.dispatch(event_type, payload))
+            return None
         else:
-            loop.run_until_complete(self.dispatch(event_type, payload))
+            return loop.run_until_complete(self.dispatch(event_type, payload))
 
     # ── Internal ──
 
@@ -302,13 +338,39 @@ class WebhookManager:
             "data": payload,
         }
 
+    async def _send_with_timeout(self, url: str, envelope: dict[str, Any]) -> dict[str, Any]:
+        """Send one HTTP webhook and return a sanitized per-receiver result."""
+        try:
+            status_code = await asyncio.wait_for(
+                self._send(url, envelope),
+                timeout=self._timeout_seconds,
+            )
+            return {
+                "url": url,
+                "ok": True,
+                "status_code": status_code,
+                "error_type": None,
+                "error": None,
+            }
+        except Exception as exc:
+            return {
+                "url": url,
+                "ok": False,
+                "status_code": None,
+                "error_type": type(exc).__name__,
+                "error": str(exc)[:200] or type(exc).__name__,
+            }
+
     async def _send(self, url: str, envelope: dict[str, Any]) -> int:
         """POST the envelope to a single webhook URL.
 
         Returns HTTP status code on success.
         Raises on connection error, timeout, or non-2xx status.
         """
-        async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS) as client:
+        if self._http_sender is not None:
+            return await self._http_sender(url, envelope)
+
+        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
             response = await client.post(url, json=envelope)
             response.raise_for_status()
             return response.status_code
