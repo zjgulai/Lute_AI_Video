@@ -31,6 +31,8 @@ source: human+ai
 
 2026-06-17 P2 Quality ML 本地 no-provider readiness 修复收口：`TODO-P2-3A` 此前失败根因为 `tests/test_media_tools.py` 的 mock-mode 测试未显式隔离外部工具探测，且 `src/tools/video_downloader.py` 的 `download_and_transcribe()` 只检查 `"[MOCK]"`，无法识别 `_mock_metadata()` 返回的 `"[MOCK_DOWNLOAD ...]"` synthetic path，导致本地已安装 `faster-whisper` 时 fake path 进入真实 PyAV 解码。现已最小修复：产品代码改为显式识别 mock download marker，测试 fixture 强制 mock 模式，并新增回归测试保证 mock download path 不会进入真实 transcription backend。复跑 import smoke 时使用 `DATABASE_URL=`、`HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`，`src.quality.clip_alignment`、`src.quality.nr_quality`、`src.quality.scene_analysis`、`src.quality.face_consistency`、`src.quality.safe_zone`、`src.skills.media_quality_audit`、`src.routers.health` 均 import 成功，`/health` 的 `media_tools` contract 可返回，`ClipAligner` 初始化仍保持 lazy-load，不下载权重；sanitized summary 为 `tmp/debug/todo-p2-3a-quality-ml-local-readiness-after-fix-20260617092804.json`，closeout summary 为 `tmp/debug/todo-p2-3a-quality-ml-local-after-fix-closeout-20260617092838.json`。随后运行目标集 `DATABASE_URL= HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/pytest tests/test_health_media_tools.py tests/test_clip_alignment.py tests/test_media_tools.py tests/test_quality_signals.py -q`，结果 `54 passed`。证据等级保持 `L2-fixture-or-dry-run`；本轮未访问生产容器、未调用 provider、未执行 `/api/scenario/*` submit 或 Fast Mode submit，不外推为生产容器 Quality ML 可用性。
 
+2026-06-17 P2 CloudBase / Render 替代部署路径本地 docs/config drift 审计：`TODO-P2-4` 已完成本地文档与配置层复核，不部署。`render.yaml` 可被 PyYAML 正常解析，仍是 backend-only Render Blueprint，指向 `Dockerfile.backend`，`DEFAULT_LLM_PROVIDER=deepseek`，`API_KEY` 由 Render 生成，`CORS_ORIGINS` 与 `DATABASE_URL` 仍为空占位；但该 blueprint 未定义 frontend、rendering、nginx 或 canonical domain routing，且 `buildFilter` 未覆盖 `Dockerfile.backend` 会 COPY 的 `migrations`、`strategy_source`、`rendering` 等触发路径，因此只可作为 overseas backend prototype reference，不能作为 canonical production deploy。`deploy/tencent-cloudbase.md` 与 `deploy/CLOUDBASE_STEP_BY_STEP.md` 仍可作为 CloudBase 手动部署参考，但默认 GitHub Pages URL、`ai_video_demo_2026` demo key 与 `https://zjgulai.github.io` CORS 口径已不是当前 production auth/tenant smoke 口径；使用前必须替换为目标前端域名、非 demo key、真实 persistence/object storage 策略。`docs/deploy/cloudbase.md` 是更早 legacy reference，含手动镜像推送、`web/dist` static export 与 `sk-...` placeholder，不作为当前执行 SOP。Lighthouse 仍是 canonical target。sanitized summary 为 `tmp/debug/todo-p2-4-alt-deploy-doc-config-audit-20260617100616.json`；本轮未执行生产部署、provider 调用、`/api/scenario/*` submit、Fast Mode submit、发布、delivery acceptance 或 approved brand token write。
+
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
 > 更早盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
@@ -77,7 +79,7 @@ source: human+ai
 | TODO-P2-1 | metrics / webhook / analytics 真实闭环 | pending | 先做本地/fixture，再做生产只读，再考虑真实事件 | 不把 mock metrics 当成真实业务效果 |
 | TODO-P2-2 | 多租户并发与 API key 隔离压测 | local_no_provider_passed | 本地 unit/fixture 层已通过；生产只读压测仍需单独授权，不运行 locust 生产压测 | `24 passed` 覆盖 provider API key/tenant contextvars 并发隔离、auth tenant 持久化、cross-tenant state 拒绝、portfolio/assets/metrics tenant filter 与 route auth contract；无 provider、submit、production key 或生产压测 |
 | TODO-P2-3 | Quality ML 依赖生产可用性验证 | local_no_provider_passed | 本地 import smoke 与目标 pytest 集已通过；生产容器 smoke 未执行 | after-fix summary `tmp/debug/todo-p2-3a-quality-ml-local-readiness-after-fix-20260617092804.json`；closeout summary `tmp/debug/todo-p2-3a-quality-ml-local-after-fix-closeout-20260617092838.json`；目标集 `54 passed`；证据等级仅为 `L2-fixture-or-dry-run`，不外推生产容器可用性 |
-| TODO-P2-4 | CloudBase / Render 替代部署路径复核 | pending | 只做文档和配置 drift 审计；不部署 | 明确哪些路径仍可用、哪些已历史化 |
+| TODO-P2-4 | CloudBase / Render 替代部署路径复核 | docs_config_audited_no_deploy | 已完成本地 docs/config drift 审计；不部署、不 live verify | `render.yaml` YAML parse OK 但仅为 backend-only prototype reference，`DATABASE_URL` 为空且 build trigger 覆盖不完整；CloudBase 文档可作手动参考但 GitHub Pages/demo key/CORS 默认值需替换；`docs/deploy/cloudbase.md` 为 legacy reference；summary `tmp/debug/todo-p2-4-alt-deploy-doc-config-audit-20260617100616.json` |
 | TODO-P2-5 | publish / delivery acceptance / approved brand token 设计复核 | pending | 只做 dry-run contract 和人工确认字段隔离 | human-confirmed 字段与 LLM suggestion 字段不混用 |
 
 ### 当前禁止外推
@@ -1319,9 +1321,11 @@ DeepSeek 故障下的"降级 + 终止 + 错误上报"链路、`error_collector` 
 contextvars 读取),没压测过。
 - **I. i18n 切换** `zh-CN` / `en` 在生产页面切换后,所有按钮 / 表单 / 报错 / SettingsPanel /
 GatePanel / DistributionView 文案是否都从翻译表读取(无硬编码中文/英文残留),未走查。
-- **J. 备用部署目标** `render.yaml`(海外)与 `deploy/tencent-cloudbase.md`(国内 CloudBase)
-这两条 alternative 路径的现状,自从 Lighthouse 成为 canonical 后没人再验过。`render.yaml`
-里 `DEFAULT_LLM_PROVIDER=kimi` 是否还能正常生成内容,未知。
+- **J. 备用部署目标** `render.yaml`(海外)与 `deploy/tencent-cloudbase.md` /
+`deploy/CLOUDBASE_STEP_BY_STEP.md`(国内 CloudBase) 已在 2026-06-17 做本地 docs/config
+drift 审计但仍未部署验证。`render.yaml` 当前已是 `DEFAULT_LLM_PROVIDER=deepseek`，风险
+不再是 `kimi` 默认值，而是 backend-only blueprint、`DATABASE_URL` 默认空、build trigger
+覆盖不完整，以及 CloudBase 文档仍默认 GitHub Pages/demo key/CORS。
 - **K. Quality 模块真实 ML 依赖验证** `src/quality/` 下 CLIP、BRISQUE、PySceneDetect、
 MediaPipe/DeepFace 均只在代码层面验证通过（lazy import + fallback 路径）。真实安装
 transformers+torch / opencv-python / mediapipe 后的端到端验证尚未执行。`nr_quality.py`
