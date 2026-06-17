@@ -33,6 +33,102 @@ async def test_dashboard_overview_returns_empty_list_when_no_metrics(monkeypatch
     assert resp["platform"] is None
     assert resp["days"] == 7
     assert resp["data"] == []
+    assert resp["videos"] == []
+    assert resp["scenarios"] == []
+    assert resp["platforms"] == []
+
+
+@pytest.mark.asyncio
+async def test_dashboard_overview_returns_frontend_contract(monkeypatch):
+    """The API shape must match PerformanceDashboard's videos/scenarios/platforms contract."""
+    from src.routers import metrics as metrics_router
+
+    class _FakeRepo:
+        async def get_dashboard_overview(self, scenario=None, platform=None, days=7, tenant_id=None):
+            return [
+                {
+                    "video_id": "video-1",
+                    "scenario": "S1",
+                    "platform": "tiktok",
+                    "metrics": {
+                        "title": "Launch clip",
+                        "ctr": 0.12,
+                        "cvr": 0.04,
+                        "watch_rate": 0.73,
+                        "followers_gained": 10,
+                        "sales": 3,
+                        "views": 1000,
+                    },
+                },
+                {
+                    "video_id": "video-2",
+                    "scenario": "S1",
+                    "platform": "shopify",
+                    "metrics": {
+                        "ctr": "0.08",
+                        "cvr": "0.02",
+                        "watch_rate": "0.67",
+                        "followers_gained": None,
+                        "sales": 5,
+                        "views": 500,
+                    },
+                },
+            ]
+
+    def _fake_ctor(self=None):
+        return _FakeRepo()
+
+    from src.storage import metrics_repository
+
+    monkeypatch.setattr(metrics_repository, "VideoMetricsRepository", _fake_ctor)
+    monkeypatch.setattr(metrics_router, "HAS_STORAGE", True)
+
+    resp = await metrics_router.get_dashboard_overview(days=7)
+
+    assert resp["data"][0]["video_id"] == "video-1"
+    assert resp["videos"] == [
+        {
+            "video_id": "video-1",
+            "title": "Launch clip",
+            "scenario": "S1",
+            "platform": "tiktok",
+            "ctr": 0.12,
+            "cvr": 0.04,
+            "watch_rate": 0.73,
+            "followers_gained": 10.0,
+            "sales": 3.0,
+            "views": 1000.0,
+        },
+        {
+            "video_id": "video-2",
+            "title": "video-2",
+            "scenario": "S1",
+            "platform": "shopify",
+            "ctr": 0.08,
+            "cvr": 0.02,
+            "watch_rate": 0.67,
+            "followers_gained": 0.0,
+            "sales": 5.0,
+            "views": 500.0,
+        },
+    ]
+    assert resp["scenarios"] == [
+        {
+            "scenario": "S1",
+            "avg_watch_rate": 0.7,
+            "avg_ctr": 0.1,
+            "avg_cvr": 0.03,
+            "total_videos": 2,
+            "total_sales": 8.0,
+        }
+    ]
+    assert {p["platform"] for p in resp["platforms"]} == {"shopify", "tiktok"}
+    tiktok = next(p for p in resp["platforms"] if p["platform"] == "tiktok")
+    assert tiktok["scenario_breakdown"]["S1"] == {
+        "avg_watch_rate": 0.73,
+        "avg_ctr": 0.12,
+        "avg_cvr": 0.04,
+    }
 
 
 @pytest.mark.asyncio
