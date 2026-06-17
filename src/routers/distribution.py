@@ -1,6 +1,7 @@
 """distribution router — extracted from api.py (P1-11)."""
 
-from typing import TYPE_CHECKING
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -14,11 +15,76 @@ except ImportError:
 if TYPE_CHECKING:
     pass
 
-from typing import Any
-
 from src.routers._deps import _safe_error, verify_api_key
 
 router = APIRouter()
+
+
+def _as_mapping(value: object) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _extract_publish_authorization(body: Mapping[str, Any]) -> Mapping[str, Any]:
+    content = _as_mapping(body.get("content"))
+    metadata = _as_mapping(body.get("metadata"))
+    for candidate in (
+        body.get("delivery_acceptance"),
+        content.get("delivery_acceptance"),
+        metadata.get("delivery_acceptance"),
+    ):
+        if isinstance(candidate, Mapping):
+            return candidate
+    return {}
+
+
+def _require_human_publish_authorization(body: Mapping[str, Any]) -> None:
+    acceptance = _extract_publish_authorization(body)
+    if not acceptance:
+        raise HTTPException(
+            status_code=403,
+            detail="Human delivery acceptance is required before publishing",
+        )
+
+    source = str(
+        acceptance.get("source")
+        or acceptance.get("decision_source")
+        or acceptance.get("confirmed_by_type")
+        or ""
+    ).strip().lower()
+    if source != "human":
+        raise HTTPException(
+            status_code=403,
+            detail="Publish authorization must come from a human decision source",
+        )
+
+    if acceptance.get("delivery_accepted") is not True:
+        raise HTTPException(
+            status_code=403,
+            detail="delivery_accepted=true is required before publishing",
+        )
+    if acceptance.get("publish_allowed") is not True:
+        raise HTTPException(
+            status_code=403,
+            detail="publish_allowed=true is required before publishing",
+        )
+    if acceptance.get("approved_brand_token_write") is True:
+        raise HTTPException(
+            status_code=403,
+            detail="Publishing cannot write or imply approved brand token approval",
+        )
+
+    reviewer = str(
+        acceptance.get("reviewer")
+        or acceptance.get("reviewer_id")
+        or acceptance.get("accepted_by")
+        or ""
+    ).strip()
+    if not reviewer:
+        raise HTTPException(
+            status_code=403,
+            detail="Human reviewer identity is required before publishing",
+        )
+
 
 @router.post("/distribution/publish", dependencies=[Depends(verify_api_key)])
 async def distribution_publish(body: dict[str, Any]):
@@ -32,6 +98,8 @@ async def distribution_publish(body: dict[str, Any]):
         Publish result dict from the connector.
     """
     from src.connectors.registry import publish_to_platform
+
+    _require_human_publish_authorization(body)
 
     try:
         result = await publish_to_platform(body["platform"], body["content"])
@@ -106,6 +174,8 @@ async def publish_video(video_id: str, body: dict[str, Any]):
     platforms = body.get("platforms", [])
     metadata = body.get("metadata", {})
 
+    _require_human_publish_authorization(body)
+
     if not platforms:
         raise HTTPException(status_code=400, detail="No platforms specified")
 
@@ -153,5 +223,3 @@ async def publish_video(video_id: str, body: dict[str, Any]):
         }
         for r in results
     ]
-
-

@@ -130,6 +130,13 @@ async def test_distribution_publish_endpoint(tmp_path):
                     "title": "e2e dist endpoint test",
                     "description": "automated",
                     "video_path": "output/renders/s1.mp4",
+                    "delivery_acceptance": {
+                        "source": "human",
+                        "reviewer": "manual-e2e-operator",
+                        "delivery_accepted": True,
+                        "publish_allowed": True,
+                        "approved_brand_token_write": False,
+                    },
                 },
             },
         )
