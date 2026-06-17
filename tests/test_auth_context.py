@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi import HTTPException
 
@@ -82,6 +84,130 @@ async def test_verify_api_key_accepts_explicit_test_bundle_key(monkeypatch):
     assert ctx.tenant_id == "test-bundle"
     assert ctx.key_type == _deps.ApiKeyType.TEST_BUNDLE
     assert ctx.has_permission("scenario:run")
+
+
+class _FakeAcquire:
+    def __init__(self, conn):
+        self.conn = conn
+
+    async def __aenter__(self):
+        return self.conn
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakePool:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def acquire(self):
+        return _FakeAcquire(self.conn)
+
+
+class _FakeAuthConn:
+    def __init__(self, row):
+        self.row = row
+        self.last_used_updated = False
+
+    async def fetchrow(self, *_args, **_kwargs):
+        return self.row
+
+    async def execute(self, *_args, **_kwargs):
+        self.last_used_updated = True
+        return "UPDATE 1"
+
+
+@pytest.mark.asyncio
+async def test_verify_api_key_accepts_db_key_with_naive_future_expires_at(monkeypatch):
+    from src.routers import _deps
+    from src.storage import db
+
+    conn = _FakeAuthConn(
+        {
+            "id": "key-id",
+            "tenant_id": "momcozy-marketing",
+            "permissions": ["all"],
+            "revoked_at": None,
+            "expires_at": (datetime.now(UTC) + timedelta(hours=1)).replace(tzinfo=None),
+        }
+    )
+
+    async def fake_get_pool():
+        return _FakePool(conn)
+
+    monkeypatch.setattr(db, "is_pg_available", lambda: True)
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    monkeypatch.setattr(_deps, "API_KEY", "")
+    monkeypatch.setattr(_deps, "TEST_BUNDLE_KEY", "")
+    monkeypatch.setattr(_deps, "ENVIRONMENT", "production")
+
+    ctx = await _deps.verify_api_key(None, "db-key")
+
+    assert ctx.tenant_id == "momcozy-marketing"
+    assert ctx.key_type == _deps.ApiKeyType.TENANT
+    assert conn.last_used_updated is True
+
+
+@pytest.mark.asyncio
+async def test_verify_api_key_rejects_db_key_with_naive_expired_expires_at(monkeypatch):
+    from src.routers import _deps
+    from src.storage import db
+
+    conn = _FakeAuthConn(
+        {
+            "id": "key-id",
+            "tenant_id": "momcozy-marketing",
+            "permissions": ["all"],
+            "revoked_at": None,
+            "expires_at": (datetime.now(UTC) - timedelta(minutes=1)).replace(tzinfo=None),
+        }
+    )
+
+    async def fake_get_pool():
+        return _FakePool(conn)
+
+    monkeypatch.setattr(db, "is_pg_available", lambda: True)
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    monkeypatch.setattr(_deps, "API_KEY", "")
+    monkeypatch.setattr(_deps, "TEST_BUNDLE_KEY", "")
+    monkeypatch.setattr(_deps, "ENVIRONMENT", "production")
+
+    with pytest.raises(HTTPException) as exc:
+        await _deps.verify_api_key(None, "db-key")
+
+    assert exc.value.status_code == 401
+    assert conn.last_used_updated is False
+
+
+@pytest.mark.asyncio
+async def test_verify_api_key_accepts_db_key_with_aware_future_expires_at(monkeypatch):
+    from src.routers import _deps
+    from src.storage import db
+
+    conn = _FakeAuthConn(
+        {
+            "id": "key-id",
+            "tenant_id": "momcozy-marketing",
+            "permissions": ["all"],
+            "revoked_at": None,
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        }
+    )
+
+    async def fake_get_pool():
+        return _FakePool(conn)
+
+    monkeypatch.setattr(db, "is_pg_available", lambda: True)
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    monkeypatch.setattr(_deps, "API_KEY", "")
+    monkeypatch.setattr(_deps, "TEST_BUNDLE_KEY", "")
+    monkeypatch.setattr(_deps, "ENVIRONMENT", "production")
+
+    ctx = await _deps.verify_api_key(None, "db-key")
+
+    assert ctx.tenant_id == "momcozy-marketing"
+    assert ctx.key_type == _deps.ApiKeyType.TENANT
 
 
 @pytest.mark.asyncio

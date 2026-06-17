@@ -83,6 +83,12 @@ def _normalize_permissions(raw: Any) -> frozenset[str]:
     return frozenset({"all"})
 
 
+def _as_utc_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 API_KEY = os.getenv("API_KEY", "")
 TEST_BUNDLE_KEY = os.getenv("TEST_BUNDLE_KEY", "")
 ALLOW_TEST_BUNDLE_KEY = os.getenv("ALLOW_TEST_BUNDLE_KEY", "").lower() in ("1", "true", "yes")
@@ -132,7 +138,7 @@ async def verify_api_key(request: Request, x_api_key: str | None = Header(None))
                 )
                 if row and not row["revoked_at"]:
                     expires = row["expires_at"]
-                    if expires is None or expires > datetime.now(UTC):
+                    if expires is None or _as_utc_datetime(expires) > datetime.now(UTC):
                         auth_ctx = AuthContext(
                             tenant_id=row["tenant_id"],
                             key_id=str(row["id"]),
