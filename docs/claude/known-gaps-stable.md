@@ -98,7 +98,7 @@ source: human+ai
 
 | ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
 |---|---|---|---|---|
-| TODO-P2-1 | metrics / webhook / analytics 真实闭环 | production_pull_fail_closed_guard_synced | 本地/fixture readiness 已通过；API key `expires_at` 与 dashboard contract 修复均已同步生产并通过 authenticated GET / browser readback；`/dashboard` 自然访问入口已合并并完成 frontend-only 生产同步；`/metrics/pull` 的 `METRICS_PULL_ENABLED` fail-closed guard 已合并进 `main` 并最小同步生产；真实 metrics 事件链仍未执行 | `112 passed` 覆盖 metrics router/repository/poller、webhook manager、portfolio hook、analytics agent 与 `/metrics/pull` 默认禁用/显式启用合同；PR `#25` merge commit `646b621e382dcdef5178260aaccc86ef85175851`，main `CI` 与 `Deploy to GitHub Pages` checks 均为 `success`，合并后目标 smoke `8 passed`；`TODO-P2-1K` 生产 hash verify、import smoke、`/api/health`、backend healthy、POST `/api/metrics/pull=403 Metrics pull is disabled`、post-revoke `401` 与 refined log gate 均通过；生产 `/api/health` 显示 PostgreSQL `tables_verified=true`，`/metrics` 可达；`TODO-P2-1E` authenticated `/api/dashboard/overview` 与 `/api/metrics/{video_id}` 均返回 200，post-revoke 返回 401；`TODO-P2-1G` 生产 `/api/dashboard/overview?days=7` 返回 `data/videos/scenarios/platforms` 且缺失字段为 `0`，浏览器上下文 authenticated GET 通过、`non_get_count=0`；`TODO-P2-1I` `/dashboard=200`，authenticated 页面进入非错误空数据态，生产 dashboard `days=7` GET 计数 `1`、`non_get_count=0`、临时 key 已撤销并 post-revoke `401`；但 `MetricsPoller` 未注册 startup scheduler，TikTok/Shopify fetcher 仍为 stub，未启用生产 `/metrics/pull`，webhook.site 与真实 platform metrics 数据流未验证 |
+| TODO-P2-1 | metrics / webhook / analytics 真实闭环 | real_event_chain_plan_ready | 本地/fixture readiness、生产 authenticated dashboard readback、`/dashboard` 前端 read-only、`/metrics/pull` fail-closed 生产同步均已完成；`TODO-P2-1L` 已制定真实事件链路分段计划；真实 metrics pull、外部 webhook dispatch、startup scheduler 与平台 metrics 数据流仍未执行 | `112 passed` 覆盖 metrics router/repository/poller、webhook manager、portfolio hook、analytics agent 与 `/metrics/pull` 默认禁用/显式启用合同；`TODO-P2-1K` 生产 hash verify、import smoke、`/api/health`、backend healthy、POST `/api/metrics/pull=403 Metrics pull is disabled`、post-revoke `401` 与 refined log gate 均通过；`TODO-P2-1L` 计划见 [Metrics Webhook Analytics 事件链路分段计划](../workflows/metrics-webhook-analytics-event-chain-plan-stable.md)，下一步默认只进入本地 no-provider 的 platform fetcher / poller ingestion contract；不得外推为真实 TikTok/Shopify metrics pull、webhook.site 回读、生产 scheduler、publish、delivery acceptance 或 approved brand token write |
 | TODO-P2-2 | 多租户并发与 API key 隔离压测 | local_no_provider_passed | 本地 unit/fixture 层已通过；生产只读压测仍需单独授权，不运行 locust 生产压测 | `24 passed` 覆盖 provider API key/tenant contextvars 并发隔离、auth tenant 持久化、cross-tenant state 拒绝、portfolio/assets/metrics tenant filter 与 route auth contract；无 provider、submit、production key 或生产压测 |
 | TODO-P2-3 | Quality ML 依赖生产可用性验证 | local_no_provider_passed | 本地 import smoke 与目标 pytest 集已通过；生产容器 smoke 未执行 | after-fix summary `tmp/debug/todo-p2-3a-quality-ml-local-readiness-after-fix-20260617092804.json`；closeout summary `tmp/debug/todo-p2-3a-quality-ml-local-after-fix-closeout-20260617092838.json`；目标集 `54 passed`；证据等级仅为 `L2-fixture-or-dry-run`，不外推生产容器可用性 |
 | TODO-P2-4 | CloudBase / Render 替代部署路径复核 | docs_config_audited_no_deploy | 已完成本地 docs/config drift 审计；不部署、不 live verify | `render.yaml` YAML parse OK 但仅为 backend-only prototype reference，`DATABASE_URL` 为空且 build trigger 覆盖不完整；CloudBase 文档可作手动参考但 GitHub Pages/demo key/CORS 默认值需替换；`docs/deploy/cloudbase.md` 为 legacy reference；summary `tmp/debug/todo-p2-4-alt-deploy-doc-config-audit-20260617100616.json` |
@@ -1347,7 +1347,11 @@ post-revoke 返回 `401`。边界：组件默认首屏 `days=30` 请求在浏览
 数据流仍未验证。静态代码复核显示
 `MetricsPoller.pull_all` 未注册到 `src/api.py` startup，只有手动 `POST /metrics/pull` 入口；
 本轮未调用该 POST。`MetricsPoller` 的 TikTok/Shopify fetcher 仍是 stub，前端生产页面
-真实 platform 数据流未验证。
+真实 platform 数据流未验证。`TODO-P2-1L` 已新增
+[`metrics-webhook-analytics-event-chain-plan-stable.md`](../workflows/metrics-webhook-analytics-event-chain-plan-stable.md)，
+将下一步拆成 platform fetcher contract、poller ingestion contract、webhook receiver contract、
+生产 read-only regression、外部 webhook single-event smoke、platform metrics pull single-post pilot
+和 scheduler readiness；默认只推进本地 no-provider contract，不启用生产 metrics pull。
 - **E. Assets 上传链路** ✅ 后端单元测试已覆盖（`test_upload_e2e.py` 10 测试验证
 multipart → 落盘 → `/api/files` 列出 → `/api/media/` 访问完整链路；含认证/扩展名/大小限制
 负向测试）。前端 `brand-packages/page.tsx` 已集成 `AssetUploader` 上传面板（Header 右侧
