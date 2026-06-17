@@ -51,6 +51,8 @@ source: human+ai
 
 2026-06-17 P2 dashboard 自然访问入口本地修复：`TODO-P2-1H` 已在本地分支新增 `/dashboard` 只读页面，直接复用 `PerformanceDashboard`，使指标看板不再依赖一次性生成结果页的内存 `oneshotResult` 状态。新增测试覆盖直接路由能渲染 `PerformanceDashboard`，以及组件能消费包含 `data/videos/scenarios/platforms` 的 dashboard response 并进入空数据态而非错误态。验证：`npm test -- --run src/components/PerformanceDashboard.test.tsx src/app/dashboard/page.test.tsx` 结果 `2 passed`，`npx eslint src/app/dashboard/page.tsx src/app/dashboard/page.test.tsx src/components/PerformanceDashboard.test.tsx` 通过，`npx tsc --noEmit -p tsconfig.json` 通过。证据等级为 `L2-local-ui-contract`；本轮未推送、未合并、未同步生产、未创建 production key、未执行生产 readback、未调用 provider、未执行 `/api/scenario/*` submit、Fast Mode submit、`/metrics/pull`、webhook 外发、publish、delivery acceptance 或 approved brand token write。
 
+2026-06-17 P2 dashboard 自然访问入口生产只读回读：`TODO-P2-1I` 已将 `/dashboard` direct route 合并进 `main`（PR `#24`，merge commit `138e02c17497533cf8a0aa4ebda87e70aee5f52a`），并按授权执行 frontend-only 生产同步。只同步 `web/src/app/dashboard/page.tsx` 到生产，hash 为 `3fe9c08cc84d40a250168c0b46ff00d8542d27a65a1d2b1fcbbd6795b8e6387c`；因生产旧 `.next/standalone` 权限阻塞，按追加授权仅清理 `.next/standalone` 等前端 build artifacts，随后在 `/opt/ai-video/web` 执行 `npm run build` 成功，构建输出包含 `/dashboard` route 与 `42` 个 JS chunks。只重启 `ai_video_frontend` 与 `ai_video_nginx`，未重启 backend/rendering。生产 `/api/health=200`，`/dashboard` 从 `404` 变为 `200`。随后创建 1 个 2 小时临时 non-demo production key（tenant=`momcozy-marketing`，masked=`todo...hYdo`，key_id=`1b4d1f24-df8a-4615-8a6d-669377c2a928`），authenticated GET `/api/dashboard/overview?days=7` 返回 `200` 且包含 `data/videos/scenarios/platforms`。浏览器只读 readback 验证 `/dashboard` 进入 authenticated 状态，`PerformanceDashboard` 进入非错误空数据态，`non_get_count=0`，生产后端只收到 `1` 次 dashboard `days=7` GET 与 `1` 次 `/api/health` GET。因组件默认首屏会请求 `days=30`，本轮在浏览器层 stub 了 `2` 次默认 `days=30` 请求，避免生产后端收到未授权的 dashboard days=30 GET；Google Fonts 外部静态请求也在浏览器层阻断。验证后已撤销该 key，post-revoke authenticated dashboard GET 返回 `401 Invalid or expired API key`，本地明文 key 文件已删除。sanitized summary 为 `tmp/debug/todo-p2-1i-dashboard-production-readback-20260617162425.json`。本轮未执行生产全量部署、未重启 backend/rendering、未调用 provider、未执行 `/api/scenario/*` submit、Fast Mode submit、`/metrics/pull`、webhook 外发、publish、delivery acceptance 或 approved brand token write。
+
 > 上一次盘点：2026-06-09 — 完成综合技术债务审计（221 项发现，报告见 `docs/claude/debt-audit/debt-audit-report-2026-06-09.md`），并执行首批治理修复。详细执行记录见 `docs/claude/debt-audit/debt-remediation-execution-plan-2026-06-09.md`。
 
 > 更早盘点：2026-06-03 — 补充 AI 商业化视频生成技术调研、长视频生产覆盖审计与工具库架构规格，作为 S1-S5 后续无代码阶段方案内化依据。
@@ -94,7 +96,7 @@ source: human+ai
 
 | ID | 任务 | 当前状态 | 执行边界 | 验收口径 |
 |---|---|---|---|---|
-| TODO-P2-1 | metrics / webhook / analytics 真实闭环 | dashboard_route_local_passed_production_readback_pending | 本地/fixture readiness 已通过；API key `expires_at` 与 dashboard contract 修复均已同步生产并通过 authenticated GET / browser readback；本地已新增 `/dashboard` 自然访问入口；真实 metrics 事件链仍未执行 | `109 passed` 覆盖 metrics router/repository/poller、webhook manager、portfolio hook 与 analytics agent；生产 `/api/health` 显示 PostgreSQL `tables_verified=true`，`/metrics` 可达；`TODO-P2-1E` authenticated `/api/dashboard/overview` 与 `/api/metrics/{video_id}` 均返回 200，post-revoke 返回 401；`TODO-P2-1G` 生产 `/api/dashboard/overview?days=7` 返回 `data/videos/scenarios/platforms` 且缺失字段为 `0`，浏览器上下文 authenticated GET 通过、`non_get_count=0`；`TODO-P2-1H` 本地 `/dashboard` 路由与组件合同测试 `2 passed`，target eslint/tsc 通过；但该路由未推送/合并/部署，`MetricsPoller` 未注册 startup scheduler，TikTok/Shopify fetcher 仍为 stub，未调用 `/metrics/pull`，webhook.site 与真实前端数据流未验证 |
+| TODO-P2-1 | metrics / webhook / analytics 真实闭环 | dashboard_route_production_readback_passed | 本地/fixture readiness 已通过；API key `expires_at` 与 dashboard contract 修复均已同步生产并通过 authenticated GET / browser readback；`/dashboard` 自然访问入口已合并并完成 frontend-only 生产同步；真实 metrics 事件链仍未执行 | `109 passed` 覆盖 metrics router/repository/poller、webhook manager、portfolio hook 与 analytics agent；生产 `/api/health` 显示 PostgreSQL `tables_verified=true`，`/metrics` 可达；`TODO-P2-1E` authenticated `/api/dashboard/overview` 与 `/api/metrics/{video_id}` 均返回 200，post-revoke 返回 401；`TODO-P2-1G` 生产 `/api/dashboard/overview?days=7` 返回 `data/videos/scenarios/platforms` 且缺失字段为 `0`，浏览器上下文 authenticated GET 通过、`non_get_count=0`；`TODO-P2-1I` `/dashboard=200`，authenticated 页面进入非错误空数据态，生产 dashboard `days=7` GET 计数 `1`、`non_get_count=0`、临时 key 已撤销并 post-revoke `401`；但 `MetricsPoller` 未注册 startup scheduler，TikTok/Shopify fetcher 仍为 stub，未调用 `/metrics/pull`，webhook.site 与真实 platform metrics 数据流未验证 |
 | TODO-P2-2 | 多租户并发与 API key 隔离压测 | local_no_provider_passed | 本地 unit/fixture 层已通过；生产只读压测仍需单独授权，不运行 locust 生产压测 | `24 passed` 覆盖 provider API key/tenant contextvars 并发隔离、auth tenant 持久化、cross-tenant state 拒绝、portfolio/assets/metrics tenant filter 与 route auth contract；无 provider、submit、production key 或生产压测 |
 | TODO-P2-3 | Quality ML 依赖生产可用性验证 | local_no_provider_passed | 本地 import smoke 与目标 pytest 集已通过；生产容器 smoke 未执行 | after-fix summary `tmp/debug/todo-p2-3a-quality-ml-local-readiness-after-fix-20260617092804.json`；closeout summary `tmp/debug/todo-p2-3a-quality-ml-local-after-fix-closeout-20260617092838.json`；目标集 `54 passed`；证据等级仅为 `L2-fixture-or-dry-run`，不外推生产容器可用性 |
 | TODO-P2-4 | CloudBase / Render 替代部署路径复核 | docs_config_audited_no_deploy | 已完成本地 docs/config drift 审计；不部署、不 live verify | `render.yaml` YAML parse OK 但仅为 backend-only prototype reference，`DATABASE_URL` 为空且 build trigger 覆盖不完整；CloudBase 文档可作手动参考但 GitHub Pages/demo key/CORS 默认值需替换；`docs/deploy/cloudbase.md` 为 legacy reference；summary `tmp/debug/todo-p2-4-alt-deploy-doc-config-audit-20260617100616.json` |
@@ -1336,11 +1338,14 @@ tenant key 做 authenticated GET probe，因 `api_keys.expires_at` 是 naive tim
 返回 `data/videos/scenarios/platforms`，缺失字段为 `0`，临时 key 已撤销且 post-revoke 返回
 401；但 `PerformanceDashboard` 自然组件渲染仍受一次性结果页 in-memory `oneshotResult` 状态限制，
 只读导航无法在不 submit 的情况下自然创建该状态。`TODO-P2-1H` 已在本地新增 `/dashboard`
-只读入口并通过组件/路由合同测试，使后续可在不 submit 的前提下对看板做自然页面级回归；该入口尚未
-推送、合并或部署到生产。静态代码复核显示
+只读入口并通过组件/路由合同测试，使后续可在不 submit 的前提下对看板做自然页面级回归。`TODO-P2-1I`
+已将该入口合并、frontend-only 同步到生产并完成 authenticated 页面级 readback：`/dashboard=200`，
+`PerformanceDashboard` 进入非错误空数据态，生产 dashboard `days=7` GET 计数为 `1`，临时 key 已撤销且
+post-revoke 返回 `401`。边界：组件默认首屏 `days=30` 请求在浏览器层 stub，真实 platform metrics
+数据流仍未验证。静态代码复核显示
 `MetricsPoller.pull_all` 未注册到 `src/api.py` startup，只有手动 `POST /metrics/pull` 入口；
 本轮未调用该 POST。`MetricsPoller` 的 TikTok/Shopify fetcher 仍是 stub，前端生产页面
-真实组件数据流未验证。
+真实 platform 数据流未验证。
 - **E. Assets 上传链路** ✅ 后端单元测试已覆盖（`test_upload_e2e.py` 10 测试验证
 multipart → 落盘 → `/api/files` 列出 → `/api/media/` 访问完整链路；含认证/扩展名/大小限制
 负向测试）。前端 `brand-packages/page.tsx` 已集成 `AssetUploader` 上传面板（Header 右侧
