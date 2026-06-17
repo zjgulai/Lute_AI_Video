@@ -146,6 +146,70 @@ class TestWebhookManager:
         assert "data" in envelope
         assert envelope["data"]["checkpoint"] == "strategy"
 
+    def test_dispatch_returns_http_readback_summary_and_preserves_envelope(self):
+        """dispatch returns a local readback summary for fake receivers."""
+        sent: list[tuple[str, dict]] = []
+
+        async def fake_sender(url: str, envelope: dict) -> int:
+            sent.append((url, envelope))
+            return 202
+
+        m = WebhookManager(http_sender=fake_sender, timeout_seconds=0.1)
+        m.register("audit.completed", "https://receiver.example.test/hook")
+
+        payload = {"checkpoint": "strategy", "score": 0.93}
+        summary = asyncio.run(m.dispatch("audit.completed", payload))
+
+        assert summary["event_type"] == "audit.completed"
+        assert summary["http"]["attempted"] == 1
+        assert summary["http"]["succeeded"] == 1
+        assert summary["http"]["failed"] == 0
+        assert summary["http"]["results"] == [
+            {
+                "url": "https://receiver.example.test/hook",
+                "ok": True,
+                "status_code": 202,
+                "error_type": None,
+                "error": None,
+            }
+        ]
+
+        assert len(sent) == 1
+        _, envelope = sent[0]
+        assert envelope["event_type"] == "audit.completed"
+        assert envelope["event_id"] == summary["event_id"]
+        assert "timestamp" in envelope
+        assert envelope["data"] == payload
+
+    def test_dispatch_summary_isolates_receiver_failure_and_timeout(self):
+        """One failed or slow receiver is summarized without blocking others."""
+
+        async def fake_sender(url: str, envelope: dict) -> int:
+            if "slow" in url:
+                await asyncio.sleep(0.05)
+                return 204
+            if "fail" in url:
+                raise RuntimeError("receiver rejected")
+            return 204
+
+        m = WebhookManager(http_sender=fake_sender, timeout_seconds=0.01)
+        m.register("audit.completed", "https://ok.example.test/hook")
+        m.register("audit.completed", "https://fail.example.test/hook")
+        m.register("audit.completed", "https://slow.example.test/hook")
+
+        summary = asyncio.run(m.dispatch("audit.completed", {"checkpoint": "edit"}))
+
+        assert summary["http"]["attempted"] == 3
+        assert summary["http"]["succeeded"] == 1
+        assert summary["http"]["failed"] == 2
+
+        results_by_url = {item["url"]: item for item in summary["http"]["results"]}
+        assert results_by_url["https://ok.example.test/hook"]["ok"] is True
+        assert results_by_url["https://fail.example.test/hook"]["ok"] is False
+        assert results_by_url["https://fail.example.test/hook"]["error_type"] == "RuntimeError"
+        assert results_by_url["https://slow.example.test/hook"]["ok"] is False
+        assert results_by_url["https://slow.example.test/hook"]["error_type"] == "TimeoutError"
+
 
 class TestWebhookManagerSingleton:
     """Tests for module-level singleton."""

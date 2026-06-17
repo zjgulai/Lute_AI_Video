@@ -53,7 +53,7 @@ source: human+ai
 | `P2-1L0` | 固化当前 source map 与计划 | 本地 docs-only | 否 | 本文件存在；GAP 表引用本文件；不改代码、不碰生产 |
 | `P2-1L1` | 平台 metrics fetcher contract | 本地 no-provider | 否 | 已通过：TikTok/Shopify fetcher 可注入 fake client；unknown platform 不写入；真实 connector 仍不调用 |
 | `P2-1L2` | poller ingestion contract | 本地 no-provider | 否 | 已通过：fake active post -> fake metrics -> repository -> dashboard 聚合全链通过；recent snapshot 跳过；SQLite timestamp string 可解析 |
-| `P2-1L3` | webhook receiver contract | 本地 no-provider | 否 | fake receiver / mocked HTTP 验证 envelope、timeout、failure isolation；不打到外网 |
+| `P2-1L3` | webhook receiver contract | 本地 no-provider | 否 | 已通过：fake receiver / mocked HTTP 验证 envelope、timeout、failure isolation 与 readback summary；未打到外网 |
 | `P2-1L4` | 生产 read-only regression | 生产 read-only | 否 | `/api/health`、`/api/dashboard/overview`、`/dashboard` GET 通过；`/api/metrics/pull` 仍 403；日志无真实 pull/webhook 外发 |
 | `P2-1L5` | 外部 webhook 单事件 smoke | 生产受控 | 是，仅 webhook receiver | 只注册 1 个临时外部接收端；只触发 1 个非 publish 事件；receiver readback 匹配 envelope；收尾撤销配置 |
 | `P2-1L6` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | `METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
@@ -165,6 +165,35 @@ DATABASE_URL= .venv/bin/pytest tests/test_metrics_poller.py -q
 - 未配置或触发外部 webhook dispatch。
 - 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
 
+## 2026-06-18 P2-1L3 执行记录
+
+本轮只做本地 no-provider webhook receiver contract 修复：
+
+- `WebhookManager` 支持注入 `http_sender` fake receiver 与 `timeout_seconds`，测试可以在不访问外网的前提下验证 HTTP dispatch。
+- `dispatch()` 返回 sanitized local summary，包含 `event_type`、`event_id`、listener 计数、HTTP attempted/succeeded/failed 和逐 URL result。
+- HTTP envelope 继续包含 `event_type`、`timestamp`、`event_id`、`data`，且 fake receiver readback 可与 summary 对齐。
+- 单 receiver failure 与 timeout 均进入 summary 和日志，不阻塞其他 receiver。
+- 原有 pipeline fire-and-forget 调用仍可忽略 `dispatch()` 返回值。
+
+验证命令：
+
+```bash
+DATABASE_URL= .venv/bin/pytest tests/test_webhook_manager.py -q
+DATABASE_URL= .venv/bin/pytest tests/test_metrics_dashboard.py tests/test_video_metrics_integration.py tests/test_metrics_repository.py tests/test_metrics_poller.py tests/test_webhook_manager.py tests/test_portfolio_mechanism.py tests/test_agents.py -q
+```
+
+结果：目标 webhook contract `18 passed`；metrics / webhook / analytics no-provider 回归集 `118 passed`。
+
+证据边界：
+
+- 未启用 `METRICS_PULL_ENABLED`。
+- 未执行 `/api/metrics/pull`。
+- 未注册 startup scheduler。
+- 未调用 TikTok / Shopify 真实 metrics API。
+- 未配置 webhook.site 或真实外部接收端。
+- 未触发真实 webhook 外发。
+- 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+
 ## 下一步
 
-默认下一步是 `P2-1L3`：补 webhook receiver contract 的本地 no-provider 测试，验证 envelope、timeout、failure isolation 与 readback summary 结构。该阶段只允许 fake receiver / mocked HTTP，不允许真实 webhook.site、生产写入或 webhook 外发。
+默认下一步是 `P2-1L4`：执行 metrics/dashboard 生产 read-only regression。该阶段只允许 GET `/api/health`、GET `/api/dashboard/overview?days=7`、只读访问 `/dashboard`，并确认 `/api/metrics/pull` 仍 fail-closed；不允许启用 `METRICS_PULL_ENABLED`、不允许真实 metrics pull、webhook 外发、provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
