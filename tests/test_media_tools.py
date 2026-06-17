@@ -51,7 +51,10 @@ class TestVideoDownloaderMockMode:
 
     @pytest.fixture
     def dl(self, tmp_path):
-        return VideoDownloader(output_dir=tmp_path)
+        downloader = VideoDownloader(output_dir=tmp_path)
+        downloader._ytdlp_available = False
+        downloader._whisper_available = False
+        return downloader
 
     @pytest.mark.asyncio
     async def test_download_returns_mock_metadata(self, dl):
@@ -79,6 +82,19 @@ class TestVideoDownloaderMockMode:
         assert "metadata" in result
         assert "segments" in result
         assert result["metadata"]["platform"] == "douyin"
+        assert len(result["segments"]) == 6
+
+    @pytest.mark.asyncio
+    async def test_download_and_transcribe_skips_transcribe_for_mock_download(self, dl, monkeypatch):
+        """Mock download paths should not be passed into real transcription backends."""
+        dl._whisper_available = True
+
+        async def fail_if_called(_video_path: str):
+            raise AssertionError("mock download path reached transcription")
+
+        monkeypatch.setattr(dl, "transcribe", fail_if_called)
+        result = await dl.download_and_transcribe("https://www.douyin.com/video/456")
+        assert result["metadata"]["local_path"].startswith("[MOCK_DOWNLOAD")
         assert len(result["segments"]) == 6
 
     @pytest.mark.asyncio
