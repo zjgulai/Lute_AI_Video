@@ -137,6 +137,10 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # Webhook notifications (comma-separated URLs, all registered to all event types)
 WEBHOOK_URLS = os.getenv("WEBHOOK_URLS", "")
 
+# Metrics polling mutates production analytics snapshots and may call external
+# platform APIs once real fetchers replace current stubs, so keep it opt-in.
+METRICS_PULL_ENABLED: bool = os.getenv("METRICS_PULL_ENABLED", "").lower() in ("1", "true", "yes")
+
 # Pipeline
 DEFAULT_PLATFORMS = ["tiktok", "facebook", "youtube_shorts", "shopify"]
 DEFAULT_LANGUAGES = ["en"]

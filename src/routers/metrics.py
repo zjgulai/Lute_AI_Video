@@ -210,6 +210,11 @@ async def trigger_metrics_pull():
     if not HAS_STORAGE:
         raise HTTPException(status_code=503, detail="Metrics storage not available")
 
+    from src import config
+
+    if not config.METRICS_PULL_ENABLED:
+        raise HTTPException(status_code=403, detail="Metrics pull is disabled")
+
     try:
         from src.tasks.metrics_poller import MetricsPoller
         poller = MetricsPoller()
