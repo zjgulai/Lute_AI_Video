@@ -126,31 +126,56 @@ async function primeUiState(page: Page) {
   });
 }
 
+async function clickSplashEnterButton(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const enterPattern = /开始创作|Get Started|进入|Enter/i;
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const enterButton = buttons.find((button) => {
+      const text = button.textContent?.trim() ?? "";
+      if (!enterPattern.test(text)) return false;
+      const rect = button.getBoundingClientRect();
+      const style = window.getComputedStyle(button);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    });
+
+    if (!enterButton) return false;
+    enterButton.click();
+    return true;
+  });
+}
+
 async function openApp(page: Page, path: string) {
   await primeUiState(page);
   await page.goto(path, { waitUntil: "domcontentloaded" });
 
   const splashMarker = page.getByText("Evolving for Mom and Cozy");
   const nav = page.locator("nav").first();
-  const enter = page.getByRole("button", { name: /开始创作|Get Started|进入|Enter/i }).first();
 
   await Promise.race([
     nav.waitFor({ state: "visible", timeout: 2_000 }).catch(() => undefined),
-    enter.waitFor({ state: "visible", timeout: 2_000 }).catch(() => undefined),
+    splashMarker.waitFor({ state: "visible", timeout: 2_000 }).catch(() => undefined),
+    page.waitForTimeout(2_000),
   ]);
 
-  if (await enter.isVisible().catch(() => false)) {
-    await enter.evaluate((node) => {
-      (node as HTMLButtonElement).click();
-    });
-    await expect(splashMarker).toBeHidden({ timeout: 5_000 });
+  if (await splashMarker.isVisible().catch(() => false) || !await nav.isVisible().catch(() => false)) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const clicked = await clickSplashEnterButton(page);
+      if (!clicked) {
+        await page.waitForTimeout(250);
+        continue;
+      }
+      await Promise.race([
+        nav.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined),
+        splashMarker.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined),
+      ]);
+      if (!await splashMarker.isVisible().catch(() => false)) break;
+      await page.waitForTimeout(250);
+    }
   }
 
   await nav.waitFor({ state: "visible", timeout: 2_000 }).catch(() => { /* fallback to explicit splash dismissal */ });
   if (!await nav.isVisible().catch(() => false)) {
-    if (await enter.isVisible().catch(() => false)) {
-      await enter.evaluate((node) => (node as HTMLButtonElement).click());
-    }
+    await clickSplashEnterButton(page);
     await nav.waitFor({ state: "visible", timeout: 10_000 });
   }
 
