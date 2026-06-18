@@ -43,6 +43,15 @@ def _from_json(value: Any) -> Any:
     return value
 
 
+def _as_int(value: Any) -> int:
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _deserialize_row(row: dict[str, Any]) -> dict[str, Any]:
     """Deserialize JSONB columns in a row returned from the database."""
     result = dict(row)
@@ -341,6 +350,95 @@ class VideoMetricsRepository:
         """
         cursor = conn.execute(sqlite_query, (cutoff,))
         return [_deserialize_row(dict(row)) for row in cursor.fetchall()]
+
+    async def get_active_post_source_summary(self) -> dict[str, Any]:
+        """Describe candidate sources for metrics pull without fetching metrics.
+
+        The live poller currently uses ``video_metrics`` snapshots as its only
+        active-post source. ``publish_logs`` is reported separately because it
+        can prove a publish happened, but it does not contain the full
+        video/scenario/timing contract required to become a pull candidate.
+        """
+        cutoff = _now() - timedelta(days=30)
+        video_row = await self._fetchrow(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN published_at >= $1 THEN 1 ELSE 0 END) AS recent_30d,
+                SUM(CASE WHEN post_id IS NOT NULL AND post_id != '' THEN 1 ELSE 0 END) AS with_post_id,
+                SUM(
+                    CASE
+                        WHEN published_at >= $2
+                             AND post_id IS NOT NULL
+                             AND post_id != ''
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS active_candidate_rows
+            FROM video_metrics
+            """,
+            cutoff,
+            cutoff,
+        ) or {}
+        publish_row = await self._fetchrow(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN created_at >= $1 THEN 1 ELSE 0 END) AS recent_30d,
+                SUM(CASE WHEN post_id IS NOT NULL AND post_id != '' THEN 1 ELSE 0 END) AS with_post_id,
+                SUM(
+                    CASE
+                        WHEN created_at >= $2
+                             AND post_id IS NOT NULL
+                             AND post_id != ''
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS recent_with_post_id,
+                SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(status, '')) = 'published'
+                             AND post_id IS NOT NULL
+                             AND post_id != ''
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS published_with_post_id
+            FROM publish_logs
+            """,
+            cutoff,
+            cutoff,
+        ) or {}
+        return {
+            "active_source": "video_metrics",
+            "video_metrics": {
+                "used_by_metrics_poller": True,
+                "total": _as_int(video_row.get("total")),
+                "recent_30d": _as_int(video_row.get("recent_30d")),
+                "with_post_id": _as_int(video_row.get("with_post_id")),
+                "active_candidate_rows": _as_int(video_row.get("active_candidate_rows")),
+            },
+            "publish_logs": {
+                "used_by_metrics_poller": False,
+                "reason": "publish_logs lacks the full metrics pull candidate contract",
+                "required_fields_missing": ["video_id", "scenario", "published_at"],
+                "total": _as_int(publish_row.get("total")),
+                "recent_30d": _as_int(publish_row.get("recent_30d")),
+                "with_post_id": _as_int(publish_row.get("with_post_id")),
+                "recent_with_post_id": _as_int(publish_row.get("recent_with_post_id")),
+                "published_with_post_id": _as_int(publish_row.get("published_with_post_id")),
+            },
+            "manual_allowlist": {
+                "supported": True,
+                "mode": "filters active video_metrics post_id values only",
+                "creates_active_post_source": False,
+            },
+            "manual_seed": {
+                "supported": False,
+                "requires_explicit_db_write_authorization": True,
+                "reason": "manual seed is a production data write and is outside no-pull readiness",
+            },
+        }
 
     async def get_scenario_aggregates(self, days: int = 7) -> list[dict[str, Any]]:
         """Average metrics grouped by scenario over the given time window.

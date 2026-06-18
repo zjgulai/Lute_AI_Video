@@ -27,6 +27,19 @@ class _SaveRepo:
         return kwargs
 
 
+class _SourceSummaryRepo(_SaveRepo):
+    def __init__(
+        self,
+        posts: list[dict] | None = None,
+        summary: dict | None = None,
+    ) -> None:
+        super().__init__(posts=posts)
+        self.summary = summary or {}
+
+    async def get_active_post_source_summary(self) -> dict:
+        return self.summary
+
+
 class _FakeHttpClient:
     def __init__(self, *responses: httpx.Response) -> None:
         self.responses = list(responses)
@@ -531,10 +544,50 @@ async def test_dry_run_due_posts_blocks_when_no_active_posts() -> None:
 
     readiness = await poller.dry_run_due_posts()
 
-    assert readiness["readiness"] == "blocked_by_no_active_post"
+    assert readiness["readiness"] == "blocked_by_no_active_post_source"
     assert readiness["active_post_count"] == 0
     assert readiness["due_post_count"] == 0
     assert readiness["candidates"] == []
+    assert readiness["source_contract"]["active_source"] == "video_metrics"
+
+
+@pytest.mark.asyncio
+async def test_dry_run_due_posts_distinguishes_publish_logs_not_active_source() -> None:
+    from src.tasks.metrics_poller import MetricsPoller
+
+    repo = _SourceSummaryRepo(
+        posts=[],
+        summary={
+            "active_source": "video_metrics",
+            "video_metrics": {
+                "used_by_metrics_poller": True,
+                "active_candidate_rows": 0,
+            },
+            "publish_logs": {
+                "used_by_metrics_poller": False,
+                "published_with_post_id": 2,
+            },
+            "manual_allowlist": {
+                "supported": True,
+                "creates_active_post_source": False,
+            },
+            "manual_seed": {
+                "supported": False,
+                "requires_explicit_db_write_authorization": True,
+            },
+        },
+    )
+    poller = MetricsPoller(repo=repo, platform_fetchers={"tiktok": lambda _: {}})
+
+    readiness = await poller.dry_run_due_posts()
+
+    assert readiness["readiness"] == "blocked_by_publish_logs_not_active_source"
+    assert readiness["active_post_count"] == 0
+    assert readiness["source_contract"]["publish_logs"]["used_by_metrics_poller"] is False
+    assert (
+        readiness["source_contract"]["manual_seed"]["requires_explicit_db_write_authorization"]
+        is True
+    )
 
 
 @pytest.mark.asyncio
@@ -592,6 +645,8 @@ async def test_dry_run_due_posts_returns_allowlisted_candidate() -> None:
     assert readiness["allowlisted_due_post_count"] == 1
     assert readiness["candidates"][0]["post_id"] == "tt_due"
     assert readiness["candidates"][0]["_dry_run"]["reason"] == "due"
+    assert readiness["source_contract"]["active_source_available"] is True
+    assert readiness["source_contract"]["live_pull_ready"] is False
 
 
 def test_shopify_access_token_falls_back_to_legacy_api_key(monkeypatch) -> None:
@@ -693,3 +748,53 @@ async def test_pull_all_ingests_fake_platform_metrics_into_dashboard(
     assert row["metrics"]["views"] == 3210
     assert row["metrics"]["watch_rate"] == 0.74
     assert row["tenant_id"] == "momcozy-marketing"
+
+
+@pytest.mark.asyncio
+async def test_active_post_source_summary_counts_video_metrics_and_publish_logs(
+    isolated_video_metrics_db,
+) -> None:
+    from src.storage import db as db_module
+    from src.storage.metrics_repository import VideoMetricsRepository
+
+    repo = VideoMetricsRepository()
+    await repo.save_metrics(
+        video_id="video-source-contract",
+        scenario="S2",
+        platform="tiktok",
+        tenant_id="momcozy-marketing",
+        post_id="tt_source_contract",
+        post_url="https://www.tiktok.com/@momcozy/video/tt_source_contract",
+        metrics_dict={"views": 42},
+    )
+    conn = db_module.get_sqlite_conn()
+    assert conn is not None
+    conn.execute(
+        """
+        INSERT INTO publish_logs
+            (id, platform, tenant_id, post_id, content, status, url, error, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "publish-source-contract",
+            "tiktok",
+            "momcozy-marketing",
+            "tt_published_contract",
+            "{}",
+            "published",
+            "https://www.tiktok.com/@momcozy/video/tt_published_contract",
+            None,
+            datetime.now(UTC).replace(tzinfo=None),
+        ),
+    )
+    conn.commit()
+
+    summary = await repo.get_active_post_source_summary()
+
+    assert summary["active_source"] == "video_metrics"
+    assert summary["video_metrics"]["used_by_metrics_poller"] is True
+    assert summary["video_metrics"]["active_candidate_rows"] == 1
+    assert summary["publish_logs"]["used_by_metrics_poller"] is False
+    assert summary["publish_logs"]["published_with_post_id"] == 1
+    assert summary["manual_allowlist"]["creates_active_post_source"] is False
+    assert summary["manual_seed"]["requires_explicit_db_write_authorization"] is True

@@ -14,7 +14,7 @@ source: human+ai
 
 ## 当前结论
 
-截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读与单次 authorized webhook-only 证据；`P2-1L6C` 已补上 TikTok / Shopify 真实 API mapping 代码路径，并仅通过 mocked HTTP/no-provider 合同测试验证。真实平台 metrics pull 当前仍不 ready，生产 scheduler 与 publish-driven 事件链路仍未执行。
+截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读与单次 authorized webhook-only 证据；`P2-1L6C` 已补上 TikTok / Shopify 真实 API mapping 代码路径，并仅通过 mocked HTTP/no-provider 合同测试验证。`P2-1L6G` 继续补齐 active-post source 合同，使 readiness 能区分 `video_metrics`、`publish_logs` 和 manual allowlist/seed 边界。真实平台 metrics pull 当前仍不 ready，生产 scheduler 与 publish-driven 事件链路仍未执行。
 
 已验证能力：
 
@@ -29,13 +29,16 @@ source: human+ai
 - `P2-1L6-prep` 已完成 no-pull readiness：生产 `/api/health=200`、`metrics_pull_enabled=false`、`active_post_count=0`，本地 `tests/test_metrics_poller.py tests/test_metrics_dashboard.py` 结果 `12 passed`。
 - `P2-1L6A` 已完成本地 contract：platform metrics error 分类、default connector fail-closed、empty/schema-drift payload 不落库、dry-run due-post readiness、Shopify env alias；目标测试 `19 passed`。
 - `P2-1L6C` 已完成本地 mocked HTTP mapping contract：TikTok `/v2/video/query/` 字段映射、Shopify Admin GraphQL `shopifyqlQuery` tableData 映射、错误分类、not implemented 与空/未知 payload 不落库；目标测试 `29 passed`。
+- `P2-1L6E` 已将 API mapping 相关文件同步到生产，并在 no-pull readiness 下验证 `METRICS_PULL_ENABLED=false`、`dry_run_due_posts()` 可执行且不调用 platform fetcher。
+- `P2-1L6F` 已完成生产只读 active-post source 探查：`video_metrics.total=0`、`publish_logs.total=0`，因此当前状态为 `blocked_by_no_active_post_source`。
+- `P2-1L6G` 已在本地合同层补齐 source summary：live pull source 仍为 `video_metrics`；`publish_logs` 只作为只读证据源，不自动成为 pull candidate；manual allowlist 只过滤已存在 active post；manual seed 需要另行授权 DB write。
 
 未验证能力：
 
 - `MetricsPoller` 未注册到 `src/api.py` startup scheduler。
 - 真实 TikTok / Shopify platform metrics API 未调用；当前只验证 mocked HTTP code path。
 - 生产 `METRICS_PULL_ENABLED` 未启用，生产 `/api/metrics/pull` 未执行真实 pull。
-- 生产 active post 候选为 `0`，当前没有 allowlisted single-post pilot 对象。
+- 生产 active post source 为空：`video_metrics` 和 `publish_logs` 当前均无候选，当前没有 allowlisted single-post pilot 对象。
 - 生产可见 Shopify env 名称为 `SHOPIFY_API_KEY` / `SHOPIFY_STORE_URL`；本地 config 已把 `SHOPIFY_ACCESS_TOKEN` 回落到 legacy `SHOPIFY_API_KEY`，但尚未同步生产。
 - ShopifyQL post-level 维度仍未由本轮官方资料核对为可用于 selected post pilot；默认 mapping 只能作为 report-level contract，不得外推为 per-post live pull ready。
 - `WEBHOOK_URLS` 生产仍为空，`P2-1L5R` 的 webhook 注册只存在于 one-off 进程内；未执行真实 publish / pipeline.completed 业务事件。
@@ -68,6 +71,9 @@ source: human+ai
 | `P2-1L6-prep` | 平台 metrics pull readiness no-pull probe | 本地 no-provider + 生产 read-only | 否 | 已完成：真实 fetcher 仍是 stub，生产 active post 候选为 `0`，`L6` 判定 `blocked_by_real_connector_no_active_post` |
 | `P2-1L6A` | 真实 platform metrics connector contract + allowlisted post readiness | 本地 no-provider + 生产 read-only | 否 | 本地 contract 已完成：错误分类、fail-closed、dry-run readiness、Shopify env alias；仍 blocked：真实 API mapping 未实现，生产 active post 候选为 `0` |
 | `P2-1L6C` | 真实 platform metrics API mapping no-provider contract | 本地 no-provider + mocked HTTP | 否 | 已完成：TikTok `/v2/video/query/` 与 Shopify `shopifyqlQuery` mapping code path 有 mocked HTTP 覆盖；auth/rate_limit/not_found/schema_drift/transient/not_implemented 分类和空/未知 payload 不落库均通过；仍 blocked：未真实 pull，生产 active post 候选为 `0`，Shopify post-level 维度未确认 |
+| `P2-1L6E` | API mapping production sync no-pull readiness | 生产 no-pull + read-only introspection | 否 | 已完成：同步 `config/metrics_poller/tiktok/shopify` 相关文件，`METRICS_PULL_ENABLED=false`，`dry_run_due_posts()` 不调用 platform fetcher，active candidates 为 `0` |
+| `P2-1L6F` | active-post source production read-only probe | 生产 read-only | 否 | 已完成：`video_metrics.total=0`、`publish_logs.total=0`，判定 `blocked_by_no_active_post_source`，无 `/api/metrics/pull`、无真实 platform pull |
+| `P2-1L6G` | active-post source contract | 本地 no-provider | 否 | 已完成本地合同：`get_active_post_source_summary()` 区分 `video_metrics`、`publish_logs`、manual allowlist 和 manual seed；`dry_run_due_posts()` 输出 source contract；目标测试 `31 passed` |
 | `P2-1L6B` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | 仅在 `P2-1L6C` 通过且存在 1 条 allowlisted active post 后授权；`METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
 | `P2-1L7` | scheduler readiness | 本地/生产 no-execute | 否 | 只设计 scheduler 启停、锁、频率、kill-switch；不自动注册生产 startup |
 
@@ -88,7 +94,9 @@ source: human+ai
 
 - 同一 `(tenant_id, video_id, platform, post_id, pulled_at window)` 是否允许重复 snapshot。
 - dashboard 使用 latest snapshot 的规则是否满足业务判断。
-- active post 来源是否只依赖现有 `video_metrics` 历史行，还是需要从 `publish_logs` 建立待拉取队列。
+- active post live pull source 当前只允许来自现有 `video_metrics` 历史行；`publish_logs` 只能作为只读 source evidence，不自动成为待拉取队列。
+- manual allowlist 只能过滤已存在的 `video_metrics.post_id`，不能创建 active post source。
+- manual seed 属于生产 DB write，必须另行授权，且不得在 no-pull readiness 中执行。
 - 无 `post_id`、无 `tenant_id`、过期 post、未知 platform 必须计数并跳过。
 
 ### Webhook contract
@@ -399,6 +407,39 @@ DATABASE_URL= .venv/bin/pytest tests/test_metrics_dashboard.py tests/test_video_
 - ShopifyQL 的 post-level 过滤维度本轮仍未由官方资料确认，因此 Shopify live single-post pilot 不能仅凭该 mapping 进入执行。
 - 本地目标测试结果：`DATABASE_URL= HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/pytest tests/test_metrics_poller.py tests/test_metrics_dashboard.py -q` 为 `29 passed`。
 - `ruff` 目标检查通过，`git diff --check` 无输出。
+
+证据边界：
+
+- 未生产部署、未同步代码、未重启 backend/frontend/nginx/rendering。
+- 未调用 `/api/metrics/pull`。
+- 未启用 `METRICS_PULL_ENABLED`。
+- 未调用 TikTok / Shopify 真实 metrics API。
+- 未 webhook 外发。
+- 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+
+## 2026-06-18 P2-1L6G 执行记录
+
+执行范围：
+
+- 只做本地 active-post source 合同修复、docs 更新和 no-provider 测试。
+- 修改 `src/tasks/metrics_poller.py`、`src/storage/metrics_repository.py`、`tests/test_metrics_poller.py` 以及本文件和 known gaps。
+- 未生产部署、未同步代码到生产、未重启服务。
+- 未调用 `/api/metrics/pull`，未启用 `METRICS_PULL_ENABLED`。
+- 未调用 TikTok / Shopify 真实 metrics API。
+
+结果：
+
+- 判定：`active_post_source_contract_local_passed_but_live_pull_blocked`。
+- 证据等级：`L2-local-no-provider-contract`。
+- `VideoMetricsRepository.get_active_post_source_summary()` 可只读区分 `video_metrics` 和 `publish_logs`。
+- `video_metrics` 是当前唯一 live pull active source。
+- `publish_logs` 只作为只读 source evidence；因缺少完整 metrics candidate 合同，不自动成为 pull candidate。
+- manual allowlist 只过滤已存在 `video_metrics.post_id`，不创建 active post source。
+- manual seed 被明确标记为需要单独 DB write 授权，不属于 no-pull readiness。
+- `MetricsPoller.dry_run_due_posts()` 现在返回 `source_contract`，并在无 source 时输出 `blocked_by_no_active_post_source`；若只有 `publish_logs` 候选，则输出 `blocked_by_publish_logs_not_active_source`。
+- source inspection 只声明 `active_source_available`；`live_pull_ready` 保持 fail-closed，仍需 due-post、allowlist 和显式授权分别通过。
+- 本地目标测试结果：`DATABASE_URL= HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/pytest tests/test_metrics_poller.py tests/test_metrics_dashboard.py -q` 为 `31 passed`。
+- `ruff` 目标检查通过。
 
 证据边界：
 
