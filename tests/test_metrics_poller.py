@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -152,6 +153,58 @@ async def test_pull_single_skips_unknown_platform_without_saving() -> None:
 
 
 @pytest.mark.asyncio
+async def test_default_platform_connector_not_implemented_does_not_save() -> None:
+    from src.tasks.metrics_poller import MetricsPoller
+
+    repo = _SaveRepo()
+    poller = MetricsPoller(repo=repo)
+
+    result = await poller.pull_single(
+        {
+            "id": "row-real-blocked",
+            "video_id": "video-real-blocked",
+            "scenario": "S2",
+            "platform": "tiktok",
+            "tenant_id": "momcozy-marketing",
+            "post_id": "tt_real_blocked",
+            "published_at": datetime.now(UTC) - timedelta(hours=3),
+            "pulled_at": None,
+        }
+    )
+
+    assert result is False
+    assert repo.saved == []
+
+
+@pytest.mark.asyncio
+async def test_empty_metrics_payload_does_not_save() -> None:
+    from src.tasks.metrics_poller import MetricsPoller
+
+    repo = _SaveRepo()
+
+    async def fetch_tiktok(post_id: str) -> dict:
+        return {}
+
+    poller = MetricsPoller(repo=repo, platform_fetchers={"tiktok": fetch_tiktok})
+
+    result = await poller.pull_single(
+        {
+            "id": "row-empty-payload",
+            "video_id": "video-empty-payload",
+            "scenario": "S2",
+            "platform": "tiktok",
+            "tenant_id": "momcozy-marketing",
+            "post_id": "tt_empty",
+            "published_at": datetime.now(UTC) - timedelta(hours=3),
+            "pulled_at": None,
+        }
+    )
+
+    assert result is False
+    assert repo.saved == []
+
+
+@pytest.mark.asyncio
 async def test_pull_single_skips_recent_snapshot_without_fetching() -> None:
     from src.tasks.metrics_poller import MetricsPoller
 
@@ -181,6 +234,106 @@ async def test_pull_single_skips_recent_snapshot_without_fetching() -> None:
     assert result is False
     assert calls == 0
     assert repo.saved == []
+
+
+def test_platform_http_status_classification() -> None:
+    from src.tasks.metrics_poller import classify_platform_http_status
+
+    assert classify_platform_http_status(401) == "auth"
+    assert classify_platform_http_status(403) == "auth"
+    assert classify_platform_http_status(429) == "rate_limit"
+    assert classify_platform_http_status(404) == "not_found"
+    assert classify_platform_http_status(502) == "transient"
+    assert classify_platform_http_status(418) == "schema_drift"
+
+
+@pytest.mark.asyncio
+async def test_dry_run_due_posts_blocks_when_no_active_posts() -> None:
+    from src.tasks.metrics_poller import MetricsPoller
+
+    repo = _SaveRepo(posts=[])
+    poller = MetricsPoller(repo=repo, platform_fetchers={"tiktok": lambda _: {}})
+
+    readiness = await poller.dry_run_due_posts()
+
+    assert readiness["readiness"] == "blocked_by_no_active_post"
+    assert readiness["active_post_count"] == 0
+    assert readiness["due_post_count"] == 0
+    assert readiness["candidates"] == []
+
+
+@pytest.mark.asyncio
+async def test_dry_run_due_posts_blocks_when_allowlist_has_no_candidate() -> None:
+    from src.tasks.metrics_poller import MetricsPoller
+
+    repo = _SaveRepo(
+        posts=[
+            {
+                "id": "row-due",
+                "video_id": "video-due",
+                "scenario": "S2",
+                "platform": "tiktok",
+                "tenant_id": "momcozy-marketing",
+                "post_id": "tt_due",
+                "published_at": datetime.now(UTC) - timedelta(hours=3),
+                "pulled_at": None,
+            }
+        ]
+    )
+    poller = MetricsPoller(repo=repo, platform_fetchers={"tiktok": lambda _: {}})
+
+    readiness = await poller.dry_run_due_posts(allowlisted_post_ids={"tt_other"})
+
+    assert readiness["readiness"] == "blocked_by_no_allowlisted_active_post"
+    assert readiness["active_post_count"] == 1
+    assert readiness["due_post_count"] == 1
+    assert readiness["allowlisted_due_post_count"] == 0
+    assert readiness["skipped"] == {"not_allowlisted": 1}
+
+
+@pytest.mark.asyncio
+async def test_dry_run_due_posts_returns_allowlisted_candidate() -> None:
+    from src.tasks.metrics_poller import MetricsPoller
+
+    repo = _SaveRepo(
+        posts=[
+            {
+                "id": "row-due",
+                "video_id": "video-due",
+                "scenario": "S2",
+                "platform": "tiktok",
+                "tenant_id": "momcozy-marketing",
+                "post_id": "tt_due",
+                "published_at": datetime.now(UTC) - timedelta(hours=3),
+                "pulled_at": None,
+            }
+        ]
+    )
+    poller = MetricsPoller(repo=repo, platform_fetchers={"tiktok": lambda _: {}})
+
+    readiness = await poller.dry_run_due_posts(allowlisted_post_ids={"tt_due"})
+
+    assert readiness["readiness"] == "ready_for_single_post_pilot"
+    assert readiness["allowlisted_due_post_count"] == 1
+    assert readiness["candidates"][0]["post_id"] == "tt_due"
+    assert readiness["candidates"][0]["_dry_run"]["reason"] == "due"
+
+
+def test_shopify_access_token_falls_back_to_legacy_api_key(monkeypatch) -> None:
+    import src.config as config
+
+    with monkeypatch.context() as m:
+        m.delenv("SHOPIFY_ACCESS_TOKEN", raising=False)
+        m.setenv("SHOPIFY_API_KEY", "legacy-shopify-key")
+        m.setenv("SHOPIFY_STORE_URL", "example.myshopify.com")
+
+        reloaded = importlib.reload(config)
+
+        assert reloaded.SHOPIFY_API_KEY == "legacy-shopify-key"
+        assert reloaded.SHOPIFY_ACCESS_TOKEN == "legacy-shopify-key"
+        assert reloaded.SHOPIFY_STORE_URL == "example.myshopify.com"
+
+    importlib.reload(config)
 
 
 @pytest.fixture

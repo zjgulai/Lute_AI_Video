@@ -41,9 +41,9 @@ def _admin_url() -> str:
 
 def _headers() -> dict[str, Any]:
     """Build headers for Shopify Admin API requests."""
-    api_key = os.environ.get("SHOPIFY_API_KEY", "")
-    password = os.environ.get("SHOPIFY_API_PASSWORD", "")
-    token = os.environ.get("SHOPIFY_ACCESS_TOKEN", "")
+    token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
+        "SHOPIFY_API_KEY", ""
+    )
 
     if token:
         return {
@@ -57,6 +57,17 @@ def _headers() -> dict[str, Any]:
 
 
 class ShopifyConnector(PlatformConnector):
+    async def fetch_metrics(self, post_id: str) -> dict[str, Any]:
+        """Fetch performance metrics for a Shopify media/post id.
+
+        Real Shopify analytics are not wired yet. This method exists so the
+        metrics poller can fail closed instead of treating a stub `{}` as a
+        successful platform pull.
+        """
+        raise NotImplementedError(
+            "Shopify metrics connector is not implemented; live pull remains blocked"
+        )
+
     async def publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Publish content to Shopify.
 
@@ -68,12 +79,14 @@ class ShopifyConnector(PlatformConnector):
         Returns dict with keys:
             success, post_id, url, status, error, platform, published_at
         """
-        api_key = os.environ.get("SHOPIFY_API_KEY", "")
+        token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
+            "SHOPIFY_API_KEY", ""
+        )
         store_url = os.environ.get("SHOPIFY_STORE_URL", "")
 
-        if not api_key or not store_url:
+        if not token or not store_url:
             logger.info(
-                "SHOPIFY_API_KEY or SHOPIFY_STORE_URL not set — using mock publish"
+                "SHOPIFY_ACCESS_TOKEN/SHOPIFY_API_KEY or SHOPIFY_STORE_URL not set — using mock publish"
             )
             return await self._mock_publish(content)
 
@@ -453,10 +466,12 @@ class ShopifyConnector(PlatformConnector):
 
         Falls back to mock when credentials are absent.
         """
-        api_key = os.environ.get("SHOPIFY_API_KEY", "")
+        token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
+            "SHOPIFY_API_KEY", ""
+        )
         store_url = os.environ.get("SHOPIFY_STORE_URL", "")
 
-        if not api_key or not store_url:
+        if not token or not store_url:
             return self._mock_status(post_id)
 
         graphql_url = _SHOPIFY_GRAPHQL_URL.format(store=store_url)
