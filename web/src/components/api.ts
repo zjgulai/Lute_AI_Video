@@ -730,7 +730,12 @@ function _maybeHandleAuthExpiry(res: Response, absUrl: string): void {
   }
 }
 
-export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+export type ApiFetchInit = RequestInit & {
+  suppressAuthExpiryRedirect?: boolean;
+};
+
+export async function apiFetch(url: string, init?: ApiFetchInit): Promise<Response> {
+  const { suppressAuthExpiryRedirect = false, ...requestInit } = init ?? {};
   // P1-A: 自动把相对路径补全 + 注入 auth header
   // 2026-05-09 dedup: when base ends with "/api" (production behind nginx) and
   // url already starts with "/api/" (e.g. /api/files, /api/admin/...), strip
@@ -745,8 +750,8 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
       ? base.slice(0, -"/api".length) + path
       : base + path;
   }
-  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
-  const userHeaders = (init?.headers as Record<string, string>) || {};
+  const isFormData = typeof FormData !== "undefined" && requestInit.body instanceof FormData;
+  const userHeaders = (requestInit.headers as Record<string, string>) || {};
   const mergedHeaders: Record<string, string> = {
     ...userHeaders,
     "X-API-Key": userHeaders["X-API-Key"] || getApiKey(),
@@ -754,7 +759,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
   // FormData 不要手设 Content-Type(浏览器自动加 boundary);其他默认 JSON
   if (
     !isFormData &&
-    init?.body &&
+    requestInit.body &&
     !mergedHeaders["Content-Type"] &&
     !mergedHeaders["content-type"]
   ) {
@@ -763,13 +768,13 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 
   const traceId = genTraceId();
   const start = performance.now();
-  const method = (init?.method || "GET").toUpperCase();
+  const method = (requestInit.method || "GET").toUpperCase();
   const shortUrl = absUrl.replace(getApiBase(), "") || absUrl;
   const skipBody = isMediaUrl(absUrl);
 
   // Merge trace ID
   mergedHeaders["X-Client-Trace-Id"] = traceId;
-  const mergedInit: RequestInit = { ...init, headers: mergedHeaders };
+  const mergedInit: RequestInit = { ...requestInit, headers: mergedHeaders };
 
   // P3-5: Apply timeout via AbortController (respect caller's signal)
   const timeoutMs = _getTimeoutMs(absUrl);
@@ -785,7 +790,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
     if (isHealthUrl(absUrl)) {
       console.log(`[HERMES:HEALTH] ${method} ${shortUrl} trace_id=${traceId}`);
     } else {
-      const bodyPreview = skipBody ? "" : safeBodyPreview(init?.body);
+      const bodyPreview = skipBody ? "" : safeBodyPreview(requestInit.body);
       if (bodyPreview) {
         console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`, bodyPreview);
       } else {
@@ -826,7 +831,9 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
             errText.slice(0, 500) || "[no body]"
           );
         }
-        _maybeHandleAuthExpiry(res, absUrl);
+        if (!suppressAuthExpiryRedirect) {
+          _maybeHandleAuthExpiry(res, absUrl);
+        }
         return res;
       }
 
@@ -1563,6 +1570,7 @@ export async function fetchToolboxTools(options?: { signal?: AbortSignal }): Pro
   const res = await apiFetch("/toolbox/tools", {
     headers: getHeaders(false),
     signal: options?.signal,
+    suppressAuthExpiryRedirect: true,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
@@ -1623,6 +1631,7 @@ export async function fetchToolboxRun(
   const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}`, {
     headers: getHeaders(false),
     signal: options?.signal,
+    suppressAuthExpiryRedirect: true,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
@@ -1638,6 +1647,7 @@ export async function fetchToolboxRuns(
   const res = await apiFetch(`/toolbox/runs${query ? `?${query}` : ""}`, {
     headers: getHeaders(false),
     signal: options?.signal,
+    suppressAuthExpiryRedirect: true,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
@@ -1653,6 +1663,7 @@ export async function fetchToolboxAuditSummaries(
   const res = await apiFetch(`/toolbox/runs/audit-summaries${query ? `?${query}` : ""}`, {
     headers: getHeaders(false),
     signal: options?.signal,
+    suppressAuthExpiryRedirect: true,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
@@ -1665,6 +1676,7 @@ export async function fetchToolboxArtifacts(
   const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/artifacts`, {
     headers: getHeaders(false),
     signal: options?.signal,
+    suppressAuthExpiryRedirect: true,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
@@ -1690,6 +1702,7 @@ export async function fetchToolboxAuditSummary(
   const res = await apiFetch(`/toolbox/runs/${encodeURIComponent(runId)}/audit-summary`, {
     headers: getHeaders(false),
     signal: options?.signal,
+    suppressAuthExpiryRedirect: true,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
