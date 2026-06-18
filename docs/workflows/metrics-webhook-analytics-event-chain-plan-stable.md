@@ -14,7 +14,7 @@ source: human+ai
 
 ## 当前结论
 
-截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读与单次 authorized webhook-only 证据；真实平台 metrics pull、生产 scheduler 与 publish-driven 事件链路仍未执行。
+截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读与单次 authorized webhook-only 证据；`P2-1L6-prep` 已证明真实平台 metrics pull 当前不 ready。真实平台 metrics pull、生产 scheduler 与 publish-driven 事件链路仍未执行。
 
 已验证能力：
 
@@ -26,12 +26,16 @@ source: human+ai
 - `/api/metrics/pull` 已默认 fail-closed，生产验证返回 `403 Metrics pull is disabled`，未调用 `MetricsPoller.pull_all`。
 - `WebhookManager` 已在本地 fixture 层覆盖 URL 安全、HTTP dispatch failure isolation、in-process listener 和 portfolio hook。
 - `P2-1L5R` 已用生产兼容 one-off 完成 1 次 synthetic `audit.completed` 外部 receiver readback，证据等级为 `L4-authorized-live-webhook-only`。
+- `P2-1L6-prep` 已完成 no-pull readiness：生产 `/api/health=200`、`metrics_pull_enabled=false`、`active_post_count=0`，本地 `tests/test_metrics_poller.py tests/test_metrics_dashboard.py` 结果 `12 passed`。
 
 未验证能力：
 
 - `MetricsPoller` 未注册到 `src/api.py` startup scheduler。
 - TikTok / Shopify metrics fetcher 仍是 stub，未接真实平台 metrics API。
+- `src/connectors/` 当前没有被 `MetricsPoller` 使用的真实 TikTok / Shopify metrics pull 方法。
 - 生产 `METRICS_PULL_ENABLED` 未启用，生产 `/api/metrics/pull` 未执行真实 pull。
+- 生产 active post 候选为 `0`，当前没有 allowlisted single-post pilot 对象。
+- 生产可见 Shopify env 名称为 `SHOPIFY_API_KEY` / `SHOPIFY_STORE_URL`，而代码读取 `SHOPIFY_ACCESS_TOKEN`，真实接入前需要统一配置命名。
 - `WEBHOOK_URLS` 生产仍为空，`P2-1L5R` 的 webhook 注册只存在于 one-off 进程内；未执行真实 publish / pipeline.completed 业务事件。
 - 没有从真实 publish post_id 到 metrics ingestion，再到 dashboard，再到 webhook/event audit 的端到端证据链。
 
@@ -59,7 +63,9 @@ source: human+ai
 | `P2-1L4` | 生产 read-only regression | 生产 read-only | 否 | 已通过：`/api/health`、`/api/dashboard/overview?days=7`、`/api/metrics/todo-p2-1-readonly-probe-nonexistent` authenticated GET 均为 `200`；临时 key 已撤销且 post-revoke 为 `401`；日志无真实 pull/webhook 外发/provider/submit/publish |
 | `P2-1L5` | 外部 webhook 单事件 smoke | 生产受控 | 是，仅 webhook receiver | 首次尝试失败于发送前：receiver readback `0` 次 POST，生产 `WebhookManager.__init__()` 不支持 `timeout_seconds` |
 | `P2-1L5R` | 外部 webhook 单事件 retry | 生产受控 | 是，仅 webhook receiver | 已通过：1 次 synthetic `audit.completed`，receiver 新增 `1` 次 POST，envelope/payload 精确匹配，日志禁止项为 `0` |
-| `P2-1L6` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | `METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
+| `P2-1L6-prep` | 平台 metrics pull readiness no-pull probe | 本地 no-provider + 生产 read-only | 否 | 已完成：真实 fetcher 仍是 stub，生产 active post 候选为 `0`，`L6` 判定 `blocked_by_real_connector_no_active_post` |
+| `P2-1L6A` | 真实 platform metrics connector contract + allowlisted post readiness | 本地 no-provider + 生产 read-only | 否 | 先实现/验证真实 connector 合同、env 名称、错误分类、dry-run due-post 列表和单 post 候选；仍不调用 `/api/metrics/pull` |
+| `P2-1L6B` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | 仅在 `P2-1L6A` 通过后授权；`METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
 | `P2-1L7` | scheduler readiness | 本地/生产 no-execute | 否 | 只设计 scheduler 启停、锁、频率、kill-switch；不自动注册生产 startup |
 
 ## 关键设计要求
@@ -127,17 +133,20 @@ source: human+ai
 不允许 metrics pull、provider、scenario submit、Fast Mode submit、publish、delivery acceptance、approved brand token write。
 ```
 
-### P2-1L6 platform metrics pull single-post pilot
+### P2-1L6A real connector and allowlisted post readiness
 
 ```text
-我授权在生产环境 https://video.lute-tlz-dddd.top 执行 P2-1L6 platform metrics pull single-post pilot。
-只允许临时启用 METRICS_PULL_ENABLED，窗口结束后必须恢复 false。
-只允许处理 1 条 allowlisted tenant/post/platform 记录。
-只允许调用指定 platform metrics API 1 次。
+我授权在生产环境 https://video.lute-tlz-dddd.top 执行 P2-1L6A real platform metrics connector contract + allowlisted post readiness。
+只允许本地 no-provider 测试、静态检查和生产只读检查。
+允许确认 TikTok / Shopify 真实 metrics connector 是否已实现，并验证 env 名称、错误分类、schema mapping、dry-run due-post 列表和单 post 候选。
+允许只读检查生产 /api/health、METRICS_PULL_ENABLED 布尔状态和 active post 候选摘要。
+不允许调用 /api/metrics/pull。
+不允许启用 METRICS_PULL_ENABLED。
+不允许真实 TikTok / Shopify metrics pull。
 不允许 startup scheduler。
 不允许 webhook 外发。
 不允许 provider、scenario submit、Fast Mode submit、publish、delivery acceptance、approved brand token write。
-验证 dashboard readback 后撤销临时 key并生成 sanitized summary。
+如真实 connector 或 single-post 候选仍缺失，必须标记 blocked，不得进入 live pull。
 ```
 
 ## 2026-06-18 P2-1L1 / P2-1L2 执行记录
@@ -292,6 +301,41 @@ DATABASE_URL= .venv/bin/pytest tests/test_metrics_dashboard.py tests/test_video_
 - 未执行 provider、scenario submit、Fast Mode submit、`pipeline.completed`、publish、delivery acceptance 或 approved brand token write。
 - webhook 注册只存在于 one-off 进程内，未写入持久生产配置。
 
+## 2026-06-18 P2-1L6-prep 执行记录
+
+执行范围：
+
+- 本地静态检查 `src/tasks/metrics_poller.py`、`src/connectors/*`、`src/routers/metrics.py`、`src/config.py`。
+- 生产只读检查 `/api/health`、平台 env 名称、`METRICS_PULL_ENABLED` 布尔状态和 active post 候选。
+- 本地 no-provider 测试 `tests/test_metrics_poller.py tests/test_metrics_dashboard.py`。
+- 未调用 `/api/metrics/pull`，未启用 `METRICS_PULL_ENABLED`。
+
+结果：
+
+- 判定：`blocked_by_real_connector_no_active_post`。
+- 证据等级：`L3-production-read-only-plus-L2-local-no-provider`。
+- `src/tasks/metrics_poller.py` 默认 TikTok / Shopify fetcher 仍是 stub，分别返回 `{}`。
+- `src/connectors/` 当前没有被 `MetricsPoller` 使用的真实 TikTok / Shopify metrics pull 方法。
+- `/api/metrics/pull` 仍由 `METRICS_PULL_ENABLED` fail-closed 保护；生产 introspection 显示 `metrics_pull_enabled=false`。
+- 生产 `/api/health=200`，`status=ok`，PostgreSQL persistence healthy。
+- 生产只输出 env 名称不输出 secret value；可见平台相关名称包括 `TIKTOK_ACCESS_TOKEN`、`YOUTUBE_API_KEY`、`SHOPIFY_API_KEY`、`SHOPIFY_STORE_URL`。
+- `src/config.py` 读取 `SHOPIFY_ACCESS_TOKEN`，与生产可见 `SHOPIFY_API_KEY` / `SHOPIFY_STORE_URL` 存在配置命名漂移。
+- 生产 `VideoMetricsRepository.get_active_posts()` 返回 `active_post_count=0`，没有 allowlisted single-post pilot 候选。
+- 本地测试结果：`12 passed`。
+
+证据文件：
+
+- `tmp/debug/todo-p2-1l6-prep-platform-metrics-pull-readiness-20260618105143.json`
+
+证据边界：
+
+- 未生产部署、未同步代码、未重启 backend/frontend/nginx/rendering。
+- 未调用 `/api/metrics/pull`。
+- 未启用 `METRICS_PULL_ENABLED`。
+- 未调用 TikTok / Shopify 真实 metrics API。
+- 未 webhook 外发。
+- 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+
 ## 下一步
 
-默认下一步是 `P2-1L6`：platform metrics pull single-post pilot。该阶段必须另行授权；需要明确 platform、allowlisted post、临时启用 `METRICS_PULL_ENABLED` 的窗口、pull 次数上限、readback 口径和 rollback。仍不允许 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write；除 L6 明确允许项外，不允许额外 webhook 外发。
+默认下一步不是 live pull，而是 `P2-1L6A`：真实 platform metrics connector contract + allowlisted post readiness。进入 live `P2-1L6B` 前必须先证明真实 connector 已实现、配置命名已对齐、错误分类和 schema mapping 有 no-provider 测试覆盖，并存在 1 条 allowlisted active post 候选；否则继续保持 `METRICS_PULL_ENABLED=false`，不调用 `/api/metrics/pull`。
