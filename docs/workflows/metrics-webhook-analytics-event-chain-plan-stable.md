@@ -14,7 +14,7 @@ source: human+ai
 
 ## 当前结论
 
-截至 2026-06-18，metrics / webhook / analytics 已具备本地与生产只读基础能力，但真实事件链路仍未执行。
+截至 2026-06-18，metrics / webhook / analytics 已具备本地与生产只读基础能力；外部 webhook 单事件 smoke 已首次尝试但失败于发送前，真实事件链路仍未成功执行。
 
 已验证能力：
 
@@ -31,7 +31,7 @@ source: human+ai
 - `MetricsPoller` 未注册到 `src/api.py` startup scheduler。
 - TikTok / Shopify metrics fetcher 仍是 stub，未接真实平台 metrics API。
 - 生产 `METRICS_PULL_ENABLED` 未启用，生产 `/api/metrics/pull` 未执行真实 pull。
-- `WEBHOOK_URLS` 生产为空，未对 webhook.site 或等价外部接收端做真实 dispatch/readback。
+- `WEBHOOK_URLS` 生产为空，`P2-1L5` 首次尝试使用临时 webhook.site receiver，但 one-off 在发出前失败，receiver 收到 `0` 次 POST。
 - 没有从真实 publish post_id 到 metrics ingestion，再到 dashboard，再到 webhook/event audit 的端到端证据链。
 
 ## 硬边界
@@ -56,7 +56,7 @@ source: human+ai
 | `P2-1L2` | poller ingestion contract | 本地 no-provider | 否 | 已通过：fake active post -> fake metrics -> repository -> dashboard 聚合全链通过；recent snapshot 跳过；SQLite timestamp string 可解析 |
 | `P2-1L3` | webhook receiver contract | 本地 no-provider | 否 | 已通过：fake receiver / mocked HTTP 验证 envelope、timeout、failure isolation 与 readback summary；未打到外网 |
 | `P2-1L4` | 生产 read-only regression | 生产 read-only | 否 | 已通过：`/api/health`、`/api/dashboard/overview?days=7`、`/api/metrics/todo-p2-1-readonly-probe-nonexistent` authenticated GET 均为 `200`；临时 key 已撤销且 post-revoke 为 `401`；日志无真实 pull/webhook 外发/provider/submit/publish |
-| `P2-1L5` | 外部 webhook 单事件 smoke | 生产受控 | 是，仅 webhook receiver | 只注册 1 个临时外部接收端；只触发 1 个非 publish 事件；receiver readback 匹配 envelope；收尾撤销配置 |
+| `P2-1L5` | 外部 webhook 单事件 smoke | 生产受控 | 是，仅 webhook receiver | 首次尝试失败于发送前：receiver readback `0` 次 POST，生产 `WebhookManager.__init__()` 不支持 `timeout_seconds`；需另行授权 `L5R` retry |
 | `P2-1L6` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | `METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
 | `P2-1L7` | scheduler readiness | 本地/生产 no-execute | 否 | 只设计 scheduler 启停、锁、频率、kill-switch；不自动注册生产 startup |
 
@@ -225,6 +225,37 @@ DATABASE_URL= .venv/bin/pytest tests/test_metrics_dashboard.py tests/test_video_
 - 未触发真实 webhook 外发。
 - 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
 
+## 2026-06-18 P2-1L5 首次尝试记录
+
+执行范围：
+
+- 创建 1 个临时 webhook.site HTTPS receiver，文档与 summary 只保留 masked receiver。
+- 在 `ai_video_backend` 容器内执行 1 次 Python one-off smoke。
+- 目标 event type 为 `audit.completed`，payload 仅包含 synthetic `trace_id/thread_id/checkpoint/score`。
+
+结果：
+
+- 判定：`failed-before-send`。
+- one-off returncode 为 `1`。
+- receiver readback：`received_count_delta=0`，总请求数仍为 `0`。
+- 失败根因：生产容器内 `WebhookManager.__init__()` 不支持本地 main 已具备的 `timeout_seconds` 参数，抛出 `TypeError: WebhookManager.__init__() got an unexpected keyword argument 'timeout_seconds'`。
+- 未执行第二次 dispatch。
+- backend log gate 通过：provider、scenario submit、Fast Mode submit、metrics pull、publish/delivery 禁止项均为 `0`。
+
+证据文件：
+
+- `tmp/debug/todo-p2-1l5-external-webhook-single-event-smoke-20260618022925.json`
+- `tmp/debug/todo-p2-1l5-backend-log-window-20260618022925.log`
+
+证据边界：
+
+- 不能升级为 `L4-authorized-live-webhook-only`，因为没有外部 receiver 成功收到 POST。
+- 未部署生产、未重启 backend/frontend/nginx/rendering。
+- 未启用 `METRICS_PULL_ENABLED`。
+- 未执行 `/api/metrics/pull`。
+- 未调用 TikTok / Shopify 真实 metrics API。
+- 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+
 ## 下一步
 
-默认下一步是 `P2-1L5`：external webhook single-event smoke。该阶段必须另行授权，只能使用 1 个临时 HTTPS receiver、1 个非 publish event type、1 次受控测试事件，并在完成后撤销配置；仍不允许 metrics pull、provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+默认下一步是 `P2-1L5R`：external webhook single-event smoke retry。该阶段必须另行授权；推荐不做代码同步，直接用生产兼容 one-off（`WebhookManager()`，不传 `timeout_seconds`）重试 1 次 `audit.completed` synthetic event。仍只能使用 1 个临时 HTTPS receiver、1 个非 publish event type、1 次受控测试事件，并在完成后撤销配置；仍不允许 metrics pull、provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
