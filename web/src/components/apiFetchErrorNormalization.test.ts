@@ -16,10 +16,15 @@ async function loadApiWithResponse(response: Response) {
   return { api, fetchMock };
 }
 
+function storedApiKey(): string | null {
+  return localStorage.getItem("ai_video_api_key");
+}
+
 describe("apiFetch error normalization", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.resetModules();
+    localStorage.clear();
   });
 
   it("surfaces 401 from S1 step-by-step start as ApiError", async () => {
@@ -36,6 +41,32 @@ describe("apiFetch error normalization", () => {
         retryAfterSec: null,
       },
     });
+  });
+
+  it("clears the configured key for normal non-auth-probe 401 responses", async () => {
+    window.history.pushState({}, "", "/?session_expired=1");
+    const { api } = await loadApiWithResponse(jsonResponse(401, { detail: "Invalid API key" }));
+    api.setApiKey("prod_key_for_test");
+
+    const res = await api.apiFetch("/scenario/s1", { method: "POST" });
+
+    expect(res.status).toBe(401);
+    expect(storedApiKey()).toBeNull();
+  });
+
+  it("does not clear the configured key for toolbox read-only 401 responses", async () => {
+    window.history.pushState({}, "", "/toolbox/product-image");
+    const { api } = await loadApiWithResponse(jsonResponse(401, { detail: "Invalid API key" }));
+    api.setApiKey("prod_key_for_test");
+
+    await expect(api.fetchToolboxRuns({ toolId: "product-image", limit: 5 })).rejects.toMatchObject({
+      name: "ApiError",
+      info: {
+        status: 401,
+      },
+    });
+
+    expect(storedApiKey()).toBe("prod_key_for_test");
   });
 
   it("preserves 422 field errors from S1 step execution", async () => {

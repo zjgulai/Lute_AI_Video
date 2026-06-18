@@ -23,7 +23,9 @@ let _brandPresetsCache: TemplatePreset[] | null | undefined;
 async function loadBrandPresets(): Promise<TemplatePreset[] | null> {
   if (_brandPresetsCache !== undefined) return _brandPresetsCache;
   try {
-    const res = await apiFetch("/portfolio/brand-presets?brand=momcozy");
+    const res = await apiFetch("/portfolio/brand-presets?brand=momcozy", {
+      suppressAuthExpiryRedirect: true,
+    });
     if (!res.ok) {
       _brandPresetsCache = null;
       return null;

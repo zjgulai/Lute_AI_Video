@@ -16,17 +16,22 @@ export default function Nav() {
   const resetApp = useAppStore((s) => s.resetApp);
   const resetPipeline = usePipelineStore((s) => s.resetAll);
   const resetExpert = useExpertStore((s) => s.resetExpert);
-  const [adminVisible, setAdminVisible] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem("hermes_admin_visible") === "1";
-  });
+  const [adminVisible, setAdminVisible] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const CACHE_KEY = "hermes_admin_visible";
-    if (sessionStorage.getItem(CACHE_KEY) !== null) return;
-
     let cancelled = false;
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (cached !== null) {
+      queueMicrotask(() => {
+        if (!cancelled) setAdminVisible(cached === "1");
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     fetch(buildAdminUrl("/api/admin/auth/session"), { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -93,10 +98,10 @@ export default function Nav() {
       <button
         onClick={() => setLocale(locale === "en" ? "zh" : "en")}
         aria-label={locale === "zh" ? "Switch to English" : "切换到中文"}
-        className="ml-1 sm:ml-3 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold transition-all bg-[var(--bg-panel)] text-[var(--text-muted)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)] cursor-pointer border border-[var(--border-default)] min-w-[48px] sm:min-w-[56px] text-center shrink-0"
+        className="ml-0.5 sm:ml-3 px-2 sm:px-3 py-1.5 rounded-full text-xs font-semibold transition-all bg-[var(--bg-panel)] text-[var(--text-muted)] hover:bg-[var(--bg-layer3)] hover:text-[var(--text-h1)] cursor-pointer border border-[var(--border-default)] min-w-[42px] sm:min-w-[56px] text-center shrink-0"
       >
         <span className={locale === "zh" ? "text-[var(--fortune-red)]" : ""}>中</span>
-        <span className="mx-1 opacity-40">/</span>
+        <span className="mx-1 hidden sm:inline opacity-40">/</span>
         <span className={locale === "en" ? "text-[var(--fortune-red)]" : ""}>EN</span>
       </button>
     </nav>

@@ -54,4 +54,19 @@ describe("Nav", () => {
       cleanup();
     }
   });
+
+  it("keeps the locale switch compact on mobile navigation", () => {
+    const { container, cleanup } = renderNav();
+    try {
+      const localeButton = container.querySelector("button[aria-label='切换到中文']");
+      expect(localeButton).not.toBeNull();
+      expect(localeButton?.className).toContain("min-w-[42px]");
+      const slash = Array.from(localeButton?.querySelectorAll("span") ?? []).find(
+        (span) => span.textContent === "/",
+      );
+      expect(slash?.className).toContain("hidden sm:inline");
+    } finally {
+      cleanup();
+    }
+  });
 });
