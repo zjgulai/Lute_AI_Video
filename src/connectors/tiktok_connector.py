@@ -32,6 +32,17 @@ def _is_mock_mode() -> bool:
 
 
 class TikTokConnector(PlatformConnector):
+    async def fetch_metrics(self, post_id: str) -> dict[str, Any]:
+        """Fetch performance metrics for a TikTok post.
+
+        Real TikTok insights are not wired yet. This method exists so the
+        metrics poller can fail closed instead of treating a stub `{}` as a
+        successful platform pull.
+        """
+        raise NotImplementedError(
+            "TikTok metrics connector is not implemented; live pull remains blocked"
+        )
+
     async def publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Publish content to TikTok.
 

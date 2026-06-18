@@ -15,13 +15,60 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from ..storage.metrics_repository import VideoMetricsRepository
 
 logger = logging.getLogger(__name__)
 
 PlatformMetricsFetcher = Callable[[str], Awaitable[dict[str, Any]]]
+MetricErrorCategory = Literal[
+    "auth",
+    "rate_limit",
+    "not_found",
+    "schema_drift",
+    "transient",
+    "not_implemented",
+]
+
+METRIC_PAYLOAD_KEYS = {
+    "views",
+    "watch_rate",
+    "ctr",
+    "cvr",
+    "followers_gained",
+    "sales",
+    "likes",
+    "comments",
+    "shares",
+    "orders",
+    "revenue",
+}
+
+
+class PlatformMetricsError(RuntimeError):
+    """Classified platform metrics pull failure.
+
+    The poller keeps live pulls fail-closed: classified failures never write an
+    empty metrics snapshot and never masquerade as successful ingestion.
+    """
+
+    def __init__(self, category: MetricErrorCategory, message: str) -> None:
+        super().__init__(message)
+        self.category = category
+
+
+def classify_platform_http_status(status_code: int) -> MetricErrorCategory:
+    """Map platform HTTP status to the contract categories used by the poller."""
+    if status_code in {401, 403}:
+        return "auth"
+    if status_code == 429:
+        return "rate_limit"
+    if status_code == 404:
+        return "not_found"
+    if status_code >= 500:
+        return "transient"
+    return "schema_drift"
 
 
 def _now() -> datetime:
@@ -47,6 +94,32 @@ def _hours_since(dt: datetime | str | None) -> float:
         return 0.0
     delta = _now() - parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else _now() - parsed
     return max(0.0, delta.total_seconds() / 3600.0)
+
+
+def _poll_interval_hours(age_hours: float) -> int:
+    if age_hours < 24:
+        return 2
+    if age_hours < 72:
+        return 6
+    return 12
+
+
+def _normalize_metrics_payload(
+    platform: str,
+    post_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or not payload:
+        raise PlatformMetricsError(
+            "schema_drift",
+            f"{platform} metrics payload for {post_id} is empty or not an object",
+        )
+    if not (METRIC_PAYLOAD_KEYS & set(payload)):
+        raise PlatformMetricsError(
+            "schema_drift",
+            f"{platform} metrics payload for {post_id} has no recognized metric keys",
+        )
+    return payload
 
 
 class MetricsPoller:
@@ -125,13 +198,7 @@ class MetricsPoller:
             )
             return False
 
-        # Determine poll frequency based on age
-        if age_hours < 24:
-            interval_hours = 2
-        elif age_hours < 72:
-            interval_hours = 6
-        else:
-            interval_hours = 12
+        interval_hours = _poll_interval_hours(age_hours)
 
         # Check if enough time has passed since last pull
         pulled_at: datetime | None = post.get("pulled_at")
@@ -155,7 +222,12 @@ class MetricsPoller:
 
         try:
             metrics = await self._fetch_from_platform(platform, post_id)
-            if metrics is None:
+            if not metrics:
+                logger.warning(
+                    "metrics_poller: no metrics returned for %s (%s) — skipping save",
+                    post_id,
+                    platform,
+                )
                 return False
             await self.repo.save_metrics(
                 video_id=post["video_id"],
@@ -174,6 +246,15 @@ class MetricsPoller:
                 list(metrics.keys()) if metrics else "empty",
             )
             return True
+        except PlatformMetricsError as e:
+            logger.warning(
+                "metrics_poller: pull blocked for %s (%s): category=%s message=%s",
+                post_id,
+                platform,
+                e.category,
+                str(e),
+            )
+            return False
         except Exception as e:
             logger.warning(
                 "metrics_poller: pull failed for %s", post_id, exc_info=e
@@ -181,7 +262,92 @@ class MetricsPoller:
             return False
 
     # ------------------------------------------------------------------
-    # Platform-specific fetchers (mock stubs — replace with real API calls)
+    # Readiness and dry-run inspection
+    # ------------------------------------------------------------------
+
+    async def dry_run_due_posts(
+        self,
+        allowlisted_post_ids: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """Inspect active posts without fetching or saving platform metrics."""
+        allowlist = {str(post_id) for post_id in allowlisted_post_ids or set()}
+        posts = await self.repo.get_active_posts()
+        due_posts: list[dict[str, Any]] = []
+        allowlisted_due_posts: list[dict[str, Any]] = []
+        skipped: dict[str, int] = {}
+
+        for post in posts:
+            decision = self._post_due_decision(post)
+            if decision["due"]:
+                due_posts.append({**post, "_dry_run": decision})
+                if not allowlist or str(post.get("post_id") or "") in allowlist:
+                    allowlisted_due_posts.append({**post, "_dry_run": decision})
+                elif allowlist:
+                    skipped["not_allowlisted"] = skipped.get("not_allowlisted", 0) + 1
+                continue
+            reason = str(decision["reason"])
+            skipped[reason] = skipped.get(reason, 0) + 1
+
+        if not posts:
+            readiness = "blocked_by_no_active_post"
+        elif allowlist and not allowlisted_due_posts:
+            readiness = "blocked_by_no_allowlisted_active_post"
+        elif not due_posts:
+            readiness = "blocked_by_no_due_post"
+        else:
+            readiness = "ready_for_single_post_pilot"
+
+        return {
+            "readiness": readiness,
+            "active_post_count": len(posts),
+            "due_post_count": len(due_posts),
+            "allowlisted_due_post_count": len(allowlisted_due_posts),
+            "skipped": skipped,
+            "candidates": allowlisted_due_posts,
+        }
+
+    def _post_due_decision(self, post: dict[str, Any]) -> dict[str, Any]:
+        published_at = _coerce_datetime(post.get("published_at"))
+        if published_at is None:
+            return {"due": False, "reason": "missing_published_at"}
+
+        age_hours = _hours_since(published_at)
+        if age_hours > 720:
+            return {"due": False, "reason": "expired_post", "age_hours": age_hours}
+
+        platform = str(post.get("platform") or "").strip().lower()
+        if platform not in self.platform_fetchers:
+            return {"due": False, "reason": "unknown_platform", "platform": platform}
+
+        post_id = str(post.get("post_id") or "").strip()
+        if not post_id:
+            return {"due": False, "reason": "missing_post_id", "platform": platform}
+
+        interval_hours = _poll_interval_hours(age_hours)
+        last_pull = post.get("pulled_at") or published_at
+        hours_since_last = _hours_since(last_pull)
+        if hours_since_last < interval_hours:
+            return {
+                "due": False,
+                "reason": "not_due",
+                "platform": platform,
+                "post_id": post_id,
+                "age_hours": age_hours,
+                "interval_hours": interval_hours,
+                "hours_since_last": hours_since_last,
+            }
+        return {
+            "due": True,
+            "reason": "due",
+            "platform": platform,
+            "post_id": post_id,
+            "age_hours": age_hours,
+            "interval_hours": interval_hours,
+            "hours_since_last": hours_since_last,
+        }
+
+    # ------------------------------------------------------------------
+    # Platform-specific fetchers
     # ------------------------------------------------------------------
 
     async def _fetch_from_platform(self, platform: str, post_id: str) -> dict[str, Any] | None:
@@ -189,30 +355,53 @@ class MetricsPoller:
         platform_lower = platform.strip().lower()
         fetcher = self.platform_fetchers.get(platform_lower)
         if fetcher is not None:
-            return await fetcher(post_id)
+            payload = await fetcher(post_id)
+            return _normalize_metrics_payload(platform_lower, post_id, payload)
         logger.warning("metrics_poller: unknown platform %r — returning empty", platform)
         return None
 
     async def _fetch_from_tiktok(self, post_id: str) -> dict[str, Any]:
         """Fetch metrics from TikTok Insights API.
 
-        Returns a dict of metrics or empty dict on failure.
-        (Stub — replace with real TikTok connector call.)
+        Default path is fail-closed until the TikTok connector implements a
+        real metrics method. Tests may inject a fake fetcher for no-provider
+        contract coverage.
         """
-        # TODO: Replace with real call via TikTok connector
-        # e.g. from src.connectors.tiktok_connector import get_insights
-        # return await get_insights(post_id)
-        logger.debug("metrics_poller: _fetch_from_tiktok(%s) — stub returning empty", post_id)
-        return {}
+        from src.connectors.tiktok_connector import TikTokConnector
+
+        return await self._fetch_via_connector(TikTokConnector(), post_id, "tiktok")
 
     async def _fetch_from_shopify(self, post_id: str) -> dict[str, Any]:
         """Fetch metrics from Shopify Analytics API.
 
-        Returns a dict of metrics or empty dict on failure.
-        (Stub — replace with real Shopify connector call.)
+        Default path is fail-closed until the Shopify connector implements a
+        real metrics method. Tests may inject a fake fetcher for no-provider
+        contract coverage.
         """
-        # TODO: Replace with real call via Shopify connector
-        # e.g. from src.connectors.shopify_connector import get_analytics
-        # return await get_analytics(post_id)
-        logger.debug("metrics_poller: _fetch_from_shopify(%s) — stub returning empty", post_id)
-        return {}
+        from src.connectors.shopify_connector import ShopifyConnector
+
+        return await self._fetch_via_connector(ShopifyConnector(), post_id, "shopify")
+
+    async def _fetch_via_connector(
+        self,
+        connector: Any,
+        post_id: str,
+        platform: str,
+    ) -> dict[str, Any]:
+        fetch_metrics = getattr(connector, "fetch_metrics", None)
+        if not callable(fetch_metrics):
+            raise PlatformMetricsError(
+                "not_implemented",
+                f"{platform} connector has no fetch_metrics method",
+            )
+        try:
+            return await fetch_metrics(post_id)
+        except NotImplementedError as exc:
+            raise PlatformMetricsError("not_implemented", str(exc)) from exc
+        except PlatformMetricsError:
+            raise
+        except Exception as exc:
+            raise PlatformMetricsError(
+                "transient",
+                f"{platform} metrics fetch failed: {exc}",
+            ) from exc
