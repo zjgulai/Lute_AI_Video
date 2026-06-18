@@ -14,7 +14,7 @@ source: human+ai
 
 ## 当前结论
 
-截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读与单次 authorized webhook-only 证据；`P2-1L6C` 已补上 TikTok / Shopify 真实 API mapping 代码路径，并仅通过 mocked HTTP/no-provider 合同测试验证。`P2-1L6G` 继续补齐 active-post source 合同，使 readiness 能区分 `video_metrics`、`publish_logs` 和 manual allowlist/seed 边界。真实平台 metrics pull 当前仍不 ready，生产 scheduler 与 publish-driven 事件链路仍未执行。
+截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读、单次 authorized webhook-only 与 active-post source production no-pull readiness 证据；`P2-1L6C` 已补上 TikTok / Shopify 真实 API mapping 代码路径，并仅通过 mocked HTTP/no-provider 合同测试验证。`P2-1L6G/L6H` 已补齐 active-post source 合同并同步到生产，使 readiness 能区分 `video_metrics`、`publish_logs` 和 manual allowlist/seed 边界。真实平台 metrics pull 当前仍不 ready，生产 scheduler 与 publish-driven 事件链路仍未执行。
 
 已验证能力：
 
@@ -32,6 +32,7 @@ source: human+ai
 - `P2-1L6E` 已将 API mapping 相关文件同步到生产，并在 no-pull readiness 下验证 `METRICS_PULL_ENABLED=false`、`dry_run_due_posts()` 可执行且不调用 platform fetcher。
 - `P2-1L6F` 已完成生产只读 active-post source 探查：`video_metrics.total=0`、`publish_logs.total=0`，因此当前状态为 `blocked_by_no_active_post_source`。
 - `P2-1L6G` 已在本地合同层补齐 source summary：live pull source 仍为 `video_metrics`；`publish_logs` 只作为只读证据源，不自动成为 pull candidate；manual allowlist 只过滤已存在 active post；manual seed 需要另行授权 DB write。
+- `P2-1L6H` 已将 active-post source 合同相关的 `src/storage/metrics_repository.py` 与 `src/tasks/metrics_poller.py` 同步到生产，只重启 backend，并验证 hash/import/no-pull readiness：`METRICS_PULL_ENABLED=false`，`dry_run_due_posts()` 返回 `source_contract`，readiness 仍为 `blocked_by_no_active_post_source`。
 
 未验证能力：
 
@@ -39,7 +40,6 @@ source: human+ai
 - 真实 TikTok / Shopify platform metrics API 未调用；当前只验证 mocked HTTP code path。
 - 生产 `METRICS_PULL_ENABLED` 未启用，生产 `/api/metrics/pull` 未执行真实 pull。
 - 生产 active post source 为空：`video_metrics` 和 `publish_logs` 当前均无候选，当前没有 allowlisted single-post pilot 对象。
-- 生产可见 Shopify env 名称为 `SHOPIFY_API_KEY` / `SHOPIFY_STORE_URL`；本地 config 已把 `SHOPIFY_ACCESS_TOKEN` 回落到 legacy `SHOPIFY_API_KEY`，但尚未同步生产。
 - ShopifyQL post-level 维度仍未由本轮官方资料核对为可用于 selected post pilot；默认 mapping 只能作为 report-level contract，不得外推为 per-post live pull ready。
 - `WEBHOOK_URLS` 生产仍为空，`P2-1L5R` 的 webhook 注册只存在于 one-off 进程内；未执行真实 publish / pipeline.completed 业务事件。
 - 没有从真实 publish post_id 到 metrics ingestion，再到 dashboard，再到 webhook/event audit 的端到端证据链。
@@ -74,6 +74,7 @@ source: human+ai
 | `P2-1L6E` | API mapping production sync no-pull readiness | 生产 no-pull + read-only introspection | 否 | 已完成：同步 `config/metrics_poller/tiktok/shopify` 相关文件，`METRICS_PULL_ENABLED=false`，`dry_run_due_posts()` 不调用 platform fetcher，active candidates 为 `0` |
 | `P2-1L6F` | active-post source production read-only probe | 生产 read-only | 否 | 已完成：`video_metrics.total=0`、`publish_logs.total=0`，判定 `blocked_by_no_active_post_source`，无 `/api/metrics/pull`、无真实 platform pull |
 | `P2-1L6G` | active-post source contract | 本地 no-provider | 否 | 已完成本地合同：`get_active_post_source_summary()` 区分 `video_metrics`、`publish_logs`、manual allowlist 和 manual seed；`dry_run_due_posts()` 输出 source contract；目标测试 `31 passed` |
+| `P2-1L6H` | active-post source contract production sync + no-pull readiness | 生产同步 + no-pull introspection | 否 | 已完成：同步 `metrics_repository.py` 与 `metrics_poller.py`，hash/import 通过，`METRICS_PULL_ENABLED=false`，`dry_run_due_posts()` 输出 `source_contract` 且 readiness=`blocked_by_no_active_post_source`，backend forbidden log gate 为 `0` |
 | `P2-1L6B` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | 仅在 `P2-1L6C` 通过且存在 1 条 allowlisted active post 后授权；`METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
 | `P2-1L7` | scheduler readiness | 本地/生产 no-execute | 否 | 只设计 scheduler 启停、锁、频率、kill-switch；不自动注册生产 startup |
 
@@ -444,6 +445,38 @@ DATABASE_URL= .venv/bin/pytest tests/test_metrics_dashboard.py tests/test_video_
 证据边界：
 
 - 未生产部署、未同步代码、未重启 backend/frontend/nginx/rendering。
+- 未调用 `/api/metrics/pull`。
+- 未启用 `METRICS_PULL_ENABLED`。
+- 未调用 TikTok / Shopify 真实 metrics API。
+- 未 webhook 外发。
+- 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+
+## 2026-06-18 P2-1L6H 执行记录
+
+执行范围：
+
+- 只同步已合并 main 的 `src/storage/metrics_repository.py` 与 `src/tasks/metrics_poller.py` 到生产。
+- 远端原文件备份到 `/opt/ai-video/backups/p2-1l6h-active-post-source-contract-20260618160644`。
+- 只重启 `ai_video_backend`；未重启 frontend、nginx、rendering。
+- 未调用 `/api/metrics/pull`，未启用 `METRICS_PULL_ENABLED`。
+
+结果：
+
+- 判定：`passed_blocked`，即生产同步和 no-pull readiness 通过，但 live pull 继续阻塞。
+- 证据等级：`L4-authorized-production-sync-readonly-no-pull`。
+- `/api/health=ok`，PostgreSQL persistence healthy。
+- `src/storage/metrics_repository.py` 本地、生产主机与容器 hash 均为 `5dc7fc1e870306c2b504b0ac64af8b9d1ea54115e2556bddeb49311cdfe080a4`。
+- `src/tasks/metrics_poller.py` 本地、生产主机与容器 hash 均为 `adcf4da4a98b9d3c6bcc8b67166d3f06bf58dd4995d2a1b31e39dfba3ea89769`。
+- 容器 import smoke 通过：`src.storage.metrics_repository`、`src.tasks.metrics_poller`。
+- 容器 introspection 显示 `metrics_pull_enabled=false`，`dry_run_due_posts()` 可调用并返回 `source_contract`。
+- `source_contract.readiness=blocked_by_no_active_post_source`，`active_post_count=0`，`due_post_count=0`，`allowlisted_due_post_count=0`，`live_pull_ready=false`。
+- 370 秒 backend log gate：`/api/metrics/pull`、`MetricsPoller.pull_all`、真实 TikTok/Shopify pull、webhook 外发、provider、scenario/Fast submit、publish/delivery 均为 `0`。
+- 证据文件：`tmp/debug/todo-p2-1l6h-active-post-source-production-sync-20260618160644.json`。
+
+证据边界：
+
+- 未执行生产全量部署。
+- 未同步其他文件。
 - 未调用 `/api/metrics/pull`。
 - 未启用 `METRICS_PULL_ENABLED`。
 - 未调用 TikTok / Shopify 真实 metrics API。
