@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowClockwise,
+  CheckCircle,
   ClipboardText,
   LockKey,
   PlayCircle,
@@ -204,6 +205,50 @@ function FieldRow({
   );
 }
 
+function DetailChip({
+  icon,
+  label,
+}: {
+  icon: "check" | "lock" | "warn" | "note";
+  label: string;
+}) {
+  const Icon =
+    icon === "check" ? CheckCircle : icon === "lock" ? LockKey : icon === "warn" ? WarningCircle : ClipboardText;
+  const toneClassName =
+    icon === "check"
+      ? "text-[#1c7d73]"
+      : icon === "lock"
+        ? "text-[var(--fortune-red)]"
+        : icon === "warn"
+          ? "text-[#a66b1f]"
+          : "text-[var(--fortune-red)]";
+
+  return (
+    <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[rgba(53,20,26,0.08)] bg-white px-4 text-xs font-semibold text-[var(--text-body)] shadow-[0_1px_2px_rgba(53,20,26,0.04)]">
+      <Icon size={16} weight="fill" className={toneClassName} />
+      {label}
+    </span>
+  );
+}
+
+function Surface({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`min-w-0 rounded-[26px] border border-[rgba(53,20,26,0.09)] bg-white p-5 shadow-[0_12px_34px_rgba(53,20,26,0.06)] ${className}`}>
+      {children}
+    </section>
+  );
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <h2 className="text-base font-semibold text-[var(--text-h1)]">{children}</h2>;
+}
+
 function SelectField({
   value,
   onChange,
@@ -217,7 +262,7 @@ function SelectField({
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="h-10 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-layer2)] px-3 text-sm text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)]"
+      className="h-11 w-full rounded-[16px] border border-[rgba(53,20,26,0.10)] bg-white px-3 text-sm font-medium text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)] focus:ring-2 focus:ring-[rgba(215,92,112,0.14)]"
     >
       {options.map((option) => (
         <option key={option} value={option}>
@@ -239,16 +284,16 @@ function TextInput({
     <input
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="h-10 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-layer2)] px-3 text-sm text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)]"
+      className="h-11 w-full rounded-[16px] border border-[rgba(53,20,26,0.10)] bg-white px-3 text-sm font-medium text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)] focus:ring-2 focus:ring-[rgba(215,92,112,0.14)]"
     />
   );
 }
 
 function ValueRow({ label, value }: { label: string; value: string | boolean | number | null | undefined }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-[var(--divider-subtle)] py-2 last:border-b-0">
-      <span className="text-xs font-semibold text-[var(--text-muted)]">{label}</span>
-      <span className="max-w-[220px] break-words text-right text-xs font-semibold text-[var(--text-h1)]">
+    <div className="flex min-w-0 items-start justify-between gap-3 border-b border-[rgba(53,20,26,0.06)] py-2.5 last:border-b-0">
+      <span className="shrink-0 text-xs font-semibold text-[var(--text-muted)]">{label}</span>
+      <span className="min-w-0 max-w-[220px] break-words text-right text-xs font-semibold text-[var(--text-h1)]">
         {String(value ?? "-")}
       </span>
     </div>
@@ -262,7 +307,7 @@ function ArtifactList({ artifacts }: { artifacts: ToolboxArtifact[] }) {
   return (
     <ul className="space-y-2">
       {artifacts.map((artifact) => (
-        <li key={artifact.artifact_id} className="rounded-lg bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+        <li key={artifact.artifact_id} className="min-w-0 rounded-[18px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-3 text-xs text-[var(--text-muted)]">
           <div className="font-semibold text-[var(--text-h1)]">{artifact.artifact_type}</div>
           <div className="mt-1 break-all">{artifact.artifact_ref}</div>
         </li>
@@ -278,7 +323,7 @@ function RefList({ values }: { values: string[] }) {
   return (
     <ul className="space-y-1.5">
       {values.map((value) => (
-        <li key={value} className="break-all rounded-lg bg-[var(--bg-panel)] px-2.5 py-2 text-[11px] leading-5 text-[var(--text-muted)]">
+        <li key={value} className="break-all rounded-[14px] border border-[rgba(53,20,26,0.06)] bg-white px-2.5 py-2 text-[11px] leading-5 text-[var(--text-muted)]">
           {value}
         </li>
       ))}
@@ -297,8 +342,8 @@ function InjectionTargetDiff({
 }) {
   return (
     <div className="grid gap-3">
-      <section className="rounded-lg bg-[var(--bg-layer2)] p-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+      <section className="rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-4">
+        <h3 className="text-xs font-semibold text-[var(--text-muted)]">
           {t("toolbox.injection.plannedRefs")}
         </h3>
         <div className="mt-3">
@@ -307,10 +352,10 @@ function InjectionTargetDiff({
       </section>
       {targets.length > 0 ? (
         targets.map((target) => (
-          <section key={target.target_ref} className="rounded-lg bg-[var(--bg-layer2)] p-3" data-injection-target={target.target_ref}>
+          <section key={target.target_ref} className="rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-4" data-injection-target={target.target_ref}>
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xs font-semibold text-[var(--text-h1)]">{target.scenario}</h3>
-              <span className="rounded-full bg-[var(--bg-panel)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
+              <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--text-muted)]">
                 {target.step_name}
               </span>
             </div>
@@ -331,7 +376,7 @@ function InjectionTargetDiff({
           </section>
         ))
       ) : (
-        <section className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+        <section className="rounded-[20px] border border-dashed border-[rgba(53,20,26,0.14)] bg-[var(--bg-layer3)] p-4 text-xs text-[var(--text-muted)]">
           {t("toolbox.injection.noTargets")}
         </section>
       )}
@@ -348,15 +393,15 @@ function InjectionDraftPanel({
 }) {
   if (!draft) {
     return (
-      <section className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+      <section className="rounded-[20px] border border-dashed border-[rgba(53,20,26,0.14)] bg-[var(--bg-layer3)] p-4 text-xs text-[var(--text-muted)]">
         {t("toolbox.injection.noDraft")}
       </section>
     );
   }
 
   return (
-    <section className="rounded-lg bg-[var(--bg-layer2)] p-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+    <section className="rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-4">
+      <h3 className="text-xs font-semibold text-[var(--text-muted)]">
         {t("toolbox.injectionDraft")}
       </h3>
       <div className="mt-3">
@@ -409,16 +454,16 @@ function InjectionAuditSummaryPanel({
 }) {
   if (!summary) {
     return (
-      <section className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+      <section className="rounded-[20px] border border-dashed border-[rgba(53,20,26,0.14)] bg-[var(--bg-layer3)] p-4 text-xs text-[var(--text-muted)]">
         {t("toolbox.audit.noSummary")}
       </section>
     );
   }
 
   return (
-    <section className="rounded-lg bg-[var(--bg-layer2)] p-3">
+    <section className="rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+        <h3 className="text-xs font-semibold text-[var(--text-muted)]">
           {t("toolbox.injectionAuditSummary")}
         </h3>
         <span
@@ -446,7 +491,7 @@ function InjectionAuditSummaryPanel({
       </div>
       <div className="mt-3 space-y-2">
         {summary.checks.map((check) => (
-          <div key={check.check_id} className={`rounded-lg border px-3 py-2 ${auditStatusClassName(check.status)}`}>
+          <div key={check.check_id} className={`rounded-[16px] border px-3 py-2 ${auditStatusClassName(check.status)}`}>
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-semibold">{check.label}</span>
               <span className="text-[11px] font-semibold uppercase">{check.status}</span>
@@ -476,16 +521,27 @@ export default function ToolboxToolPage({ toolId }: { toolId: string }) {
 
   if (!isToolboxToolId(toolId)) {
     return (
-      <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-body)]">
+      <div className="min-h-screen bg-[linear-gradient(180deg,#f8f8f8_0%,var(--bg-page)_42%,#f5f1ef_100%)] text-[var(--text-body)]">
         <TopHeader />
         <main className="mx-auto w-full max-w-[960px] px-4 py-10 sm:px-6">
-          <Link href="/toolbox" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--fortune-red)]">
-            <ArrowLeft size={16} weight="bold" />
-            {t("toolbox.back")}
-          </Link>
-          <section className="mt-6 rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-6">
-            <h1 className="text-xl font-semibold text-[var(--text-h1)]">{t("toolbox.unknown.title")}</h1>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">{t("toolbox.unknown.desc")}</p>
+          <section className="overflow-hidden rounded-[28px] border border-[rgba(53,20,26,0.08)] bg-[linear-gradient(135deg,#ffffff_0%,#fbf7f5_50%,#f3eeeb_100%)] p-6 shadow-[0_22px_60px_rgba(53,20,26,0.08)] sm:p-8">
+            <Link href="/toolbox" className="inline-flex h-9 items-center gap-2 rounded-full border border-[rgba(53,20,26,0.08)] bg-white px-4 text-xs font-semibold text-[var(--fortune-red)] shadow-[0_1px_2px_rgba(53,20,26,0.04)] transition hover:border-[rgba(215,92,112,0.30)]">
+              <ArrowLeft size={15} weight="bold" />
+              {t("toolbox.back")}
+            </Link>
+            <div className="mt-8 flex items-start gap-4">
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]">
+                <WarningCircle size={34} weight="fill" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-3xl font-semibold leading-tight text-[var(--text-h1)] sm:text-4xl">{t("toolbox.unknown.title")}</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-body)]">{t("toolbox.unknown.desc")}</p>
+              </div>
+            </div>
+            <div className="mt-8 rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-white/90 p-4 shadow-[0_14px_34px_rgba(53,20,26,0.06)]">
+              <ValueRow label="requested_id" value={toolId} />
+              <ValueRow label="provider_call" value={false} />
+            </div>
           </section>
         </main>
       </div>
@@ -637,44 +693,69 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-page)] text-[var(--text-body)]" data-testid="toolbox-tool-page">
+    <div
+      className="min-h-screen bg-[linear-gradient(180deg,#f8f8f8_0%,var(--bg-page)_42%,#f5f1ef_100%)] text-[var(--text-body)]"
+      data-testid="toolbox-tool-page"
+    >
       <TopHeader />
-      <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
-        <section className="border-b border-[var(--divider-subtle)] pb-6">
-          <Link href="/toolbox" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--fortune-red)]">
-            <ArrowLeft size={16} weight="bold" />
-            {t("toolbox.back")}
-          </Link>
-          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-            <div className="flex items-start gap-4">
-              <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${presentation.accentClassName}`}>
-                <Icon size={26} weight="fill" />
-              </span>
+      <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-7 px-4 py-6 sm:px-6 lg:py-8">
+        <section className="overflow-hidden rounded-[28px] border border-[rgba(53,20,26,0.08)] bg-[linear-gradient(135deg,#ffffff_0%,#fbf7f5_48%,#f3eeeb_100%)] shadow-[0_22px_60px_rgba(53,20,26,0.08)]">
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.55fr)]">
+            <div className="flex min-h-[280px] flex-col justify-between p-6 sm:min-h-[320px] sm:p-8 lg:p-10">
               <div>
-                <h1 className="text-3xl font-semibold tracking-normal text-[var(--text-h1)] sm:text-4xl">
-                  {t(presentation.titleKey)}
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)] sm:text-base">
-                  {t(presentation.descriptionKey)}
-                </p>
+                <Link href="/toolbox" className="inline-flex h-9 items-center gap-2 rounded-full border border-[rgba(53,20,26,0.08)] bg-white px-4 text-xs font-semibold text-[var(--fortune-red)] shadow-[0_1px_2px_rgba(53,20,26,0.04)] transition hover:border-[rgba(215,92,112,0.30)]">
+                  <ArrowLeft size={15} weight="bold" />
+                  {t("toolbox.back")}
+                </Link>
+                <div className="mt-7 flex items-start gap-4">
+                  <span className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] ${presentation.accentClassName}`}>
+                    <Icon size={34} weight="fill" />
+                  </span>
+                  <div className="min-w-0">
+                    <h1 className="text-3xl font-semibold leading-tight tracking-normal text-[var(--text-h1)] sm:text-5xl">
+                      {t(presentation.titleKey)}
+                    </h1>
+                    <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--text-body)] sm:text-base">
+                      {t(presentation.descriptionKey)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-8 flex flex-wrap gap-2">
+                <DetailChip icon="note" label="L2-fixture-or-dry-run" />
+                <DetailChip icon="check" label={t("toolbox.dryRunOnly")} />
+                <DetailChip icon="lock" label={t("toolbox.liveLocked")} />
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <span className="inline-flex h-8 items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-panel)] px-3 text-xs font-semibold text-[var(--text-muted)]">
-                <ClipboardText size={15} weight="fill" />
-                L2-fixture-or-dry-run
-              </span>
-              <span className="inline-flex h-8 items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-panel)] px-3 text-xs font-semibold text-[var(--text-muted)]">
-                <LockKey size={15} weight="fill" />
-                {t("toolbox.liveLocked")}
-              </span>
+
+            <div className="border-t border-[rgba(53,20,26,0.07)] bg-[radial-gradient(circle_at_12%_18%,rgba(215,92,112,0.14),transparent_30%),linear-gradient(145deg,#f4f4f4_0%,#ffffff_56%,#eee8e4_100%)] p-6 lg:border-l lg:border-t-0 lg:p-8">
+              <div className="grid h-full min-h-[220px] gap-3 sm:min-h-[260px]">
+                <div className="rounded-[24px] border border-[rgba(53,20,26,0.08)] bg-white/90 p-4 shadow-[0_14px_34px_rgba(53,20,26,0.08)]">
+                  <div className="text-[11px] font-semibold text-[var(--text-muted)]">tool_id</div>
+                  <div className="mt-1 break-all text-sm font-semibold text-[var(--text-h1)]">{requestPreview.tool_id}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-[24px] border border-[rgba(53,20,26,0.08)] bg-white/90 p-4 shadow-[0_14px_34px_rgba(53,20,26,0.08)]">
+                    <div className="text-[11px] font-semibold text-[var(--text-muted)]">mode</div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--text-h1)]">dry_run</div>
+                  </div>
+                  <div className="rounded-[24px] border border-[rgba(53,20,26,0.08)] bg-white/90 p-4 shadow-[0_14px_34px_rgba(53,20,26,0.08)]">
+                    <div className="text-[11px] font-semibold text-[var(--text-muted)]">provider_call</div>
+                    <div className="mt-1 text-sm font-semibold text-[#1c7d73]">false</div>
+                  </div>
+                </div>
+                <div className="rounded-[24px] border border-[rgba(53,20,26,0.08)] bg-white/90 p-4 shadow-[0_14px_34px_rgba(53,20,26,0.08)]">
+                  <div className="text-[11px] font-semibold text-[var(--text-muted)]">{t("toolbox.preview.promptHash")}</div>
+                  <div className="mt-1 break-all text-sm font-semibold text-[var(--text-h1)]">{plan?.prompt_hash ?? "-"}</div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)_360px]">
-          <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
-            <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.detail.input")}</h2>
+        <section className="grid gap-4 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.2fr)_minmax(300px,0.64fr)]">
+          <Surface>
+            <SectionTitle>{t("toolbox.detail.input")}</SectionTitle>
             <div className="mt-4 grid gap-3">
               <FieldRow label={t("toolbox.form.brandId")}>
                 <TextInput value={form.brandId} onChange={(value) => updateField("brandId", value)} />
@@ -708,14 +789,14 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                 <textarea
                   value={form.brief}
                   onChange={(event) => updateField("brief", event.target.value)}
-                  className="min-h-[112px] w-full resize-y rounded-lg border border-[var(--border-default)] bg-[var(--bg-layer2)] px-3 py-2 text-sm leading-6 text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)]"
+                  className="min-h-[112px] w-full resize-y rounded-[16px] border border-[rgba(53,20,26,0.10)] bg-white px-3 py-2 text-sm leading-6 text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)] focus:ring-2 focus:ring-[rgba(215,92,112,0.14)]"
                 />
               </FieldRow>
               <FieldRow label={t("toolbox.form.assetRefs")}>
                 <textarea
                   value={form.assetRefsText}
                   onChange={(event) => updateField("assetRefsText", event.target.value)}
-                  className="min-h-[84px] w-full resize-y rounded-lg border border-[var(--border-default)] bg-[var(--bg-layer2)] px-3 py-2 text-sm leading-6 text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)]"
+                  className="min-h-[84px] w-full resize-y rounded-[16px] border border-[rgba(53,20,26,0.10)] bg-white px-3 py-2 text-sm leading-6 text-[var(--text-h1)] outline-none transition focus:border-[var(--fortune-red)] focus:ring-2 focus:ring-[rgba(215,92,112,0.14)]"
                 />
               </FieldRow>
             </div>
@@ -724,7 +805,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                 type="button"
                 onClick={handlePreparePlan}
                 disabled={busyAction !== null}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--fortune-red)] px-4 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--fortune-red)] px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(215,92,112,0.24)] transition hover:bg-[var(--fortune-red-600)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <ClipboardText size={17} weight="fill" />
                 {busyAction === "plan" ? t("toolbox.actionRunning") : t("toolbox.preparePlan")}
@@ -733,7 +814,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                 type="button"
                 onClick={handlePreviewPrompt}
                 disabled={busyAction !== null}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] px-4 text-sm font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[rgba(53,20,26,0.10)] bg-white px-4 text-sm font-semibold text-[var(--text-h1)] transition hover:border-[rgba(215,92,112,0.32)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <ShieldCheck size={17} weight="fill" />
                 {busyAction === "preview" ? t("toolbox.actionRunning") : t("toolbox.previewPrompt")}
@@ -742,7 +823,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                 type="button"
                 onClick={handleDryRun}
                 disabled={busyAction !== null}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] px-4 text-sm font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[rgba(53,20,26,0.10)] bg-white px-4 text-sm font-semibold text-[var(--text-h1)] transition hover:border-[rgba(215,92,112,0.32)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <PlayCircle size={17} weight="fill" />
                 {busyAction === "run" ? t("toolbox.actionRunning") : t("toolbox.runDryRun")}
@@ -750,24 +831,24 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
               <button
                 type="button"
                 disabled
-                className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-layer2)] px-4 text-sm font-semibold text-[var(--text-muted)]"
+                className="inline-flex h-11 cursor-not-allowed items-center justify-center gap-2 rounded-full border border-[rgba(53,20,26,0.08)] bg-[var(--bg-layer3)] px-4 text-sm font-semibold text-[var(--text-muted)]"
               >
                 <LockKey size={17} weight="fill" />
                 {t("toolbox.liveLocked")}
               </button>
             </div>
             {error ? (
-              <div className="mt-4 rounded-lg border border-[var(--danger)] bg-[rgba(185,28,28,0.06)] p-3 text-sm text-[var(--danger)]" role="alert">
+              <div className="mt-4 rounded-[18px] border border-[var(--danger)] bg-[rgba(185,28,28,0.06)] p-3 text-sm text-[var(--danger)]" role="alert">
                 {error}
               </div>
             ) : null}
-          </section>
+          </Surface>
 
-          <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
-            <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.detail.planPreview")}</h2>
+          <Surface>
+            <SectionTitle>{t("toolbox.detail.planPreview")}</SectionTitle>
             <div className="mt-4 grid gap-4">
-              <section className="rounded-lg bg-[var(--bg-layer2)] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{t("toolbox.preview.requestEnvelope")}</h3>
+              <section className="rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-4">
+                <h3 className="text-xs font-semibold text-[var(--text-muted)]">{t("toolbox.preview.requestEnvelope")}</h3>
                 <div className="mt-3">
                   <ValueRow label="tool_id" value={requestPreview.tool_id} />
                   <ValueRow label="brand_id" value={requestPreview.brand_id} />
@@ -777,8 +858,8 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                   <ValueRow label="aspect_ratio" value={requestPreview.platform_target.aspect_ratio} />
                 </div>
               </section>
-              <section className="rounded-lg bg-[var(--bg-layer2)] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{t("toolbox.preview.plan")}</h3>
+              <section className="rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-4">
+                <h3 className="text-xs font-semibold text-[var(--text-muted)]">{t("toolbox.preview.plan")}</h3>
                 <div className="mt-3">
                   <ValueRow label="plan_id" value={plan?.plan_id} />
                   <ValueRow label={t("toolbox.preview.providerCall")} value={plan?.provider_call ?? false} />
@@ -786,52 +867,52 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                   <ValueRow label={t("toolbox.preview.promptHash")} value={plan?.prompt_hash} />
                 </div>
               </section>
-              <section className="rounded-lg bg-[var(--bg-layer2)] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{t("toolbox.preview.promptBlocks")}</h3>
+              <section className="rounded-[20px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-4">
+                <h3 className="text-xs font-semibold text-[var(--text-muted)]">{t("toolbox.preview.promptBlocks")}</h3>
                 <div className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
                   {(preview?.sanitized_prompt_blocks ?? [t("toolbox.preview.noPrompt")]).map((block) => (
-                    <p key={block} className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] px-3 py-2">
+                    <p key={block} className="rounded-[16px] border border-[rgba(53,20,26,0.08)] bg-white px-3 py-2">
                       {block}
                     </p>
                   ))}
                 </div>
               </section>
-              <section className="rounded-lg bg-[var(--bg-layer2)] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{t("toolbox.preview.providerWarnings")}</h3>
+              <section className="rounded-[20px] border border-[rgba(183,129,44,0.18)] bg-[rgba(183,129,44,0.06)] p-4">
+                <h3 className="text-xs font-semibold text-[#a66b1f]">{t("toolbox.preview.providerWarnings")}</h3>
                 <div className="mt-3 flex items-start gap-2 text-sm leading-6 text-[var(--text-muted)]">
                   <WarningCircle size={17} weight="fill" className="mt-0.5 text-[#a66b1f]" />
                   <span>{t("toolbox.providerNoToken")}</span>
                 </div>
               </section>
             </div>
-          </section>
+          </Surface>
 
           <aside className="grid gap-4">
-            <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.qualityGate")}</h2>
+            <Surface>
+              <SectionTitle>{t("toolbox.preview.qualityGate")}</SectionTitle>
               <div className="mt-3 space-y-2">
                 {requiredChecks.map((check) => (
-                  <div key={check} className="rounded-lg bg-[var(--bg-layer2)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <div key={check} className="rounded-[16px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
                     {check}
                   </div>
                 ))}
               </div>
-            </section>
+            </Surface>
 
-            <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
+            <Surface>
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.currentRun")}</h2>
+                <SectionTitle>{t("toolbox.currentRun")}</SectionTitle>
                 <button
                   type="button"
                   onClick={handleRefreshRuns}
                   disabled={busyAction !== null}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[rgba(53,20,26,0.10)] bg-white px-3 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[rgba(215,92,112,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <ArrowClockwise size={14} weight="bold" />
                   {busyAction === "refresh" ? t("toolbox.actionRunning") : t("toolbox.refreshRuns")}
                 </button>
               </div>
-              <div className="mt-3 rounded-lg bg-[var(--bg-layer2)] p-3 text-xs text-[var(--text-muted)]">
+              <div className="mt-3 rounded-[18px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-3 text-xs text-[var(--text-muted)]">
                 <div className="font-semibold text-[var(--text-h1)]">{run?.run_id ?? t("toolbox.preview.noRun")}</div>
                 <div className="mt-1">{run?.status ?? "-"}</div>
               </div>
@@ -844,7 +925,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                       onClick={() => handleLoadRun(item.run_id)}
                       disabled={busyAction !== null}
                       data-toolbox-run-select={item.run_id}
-                      className="block w-full rounded-lg bg-[var(--bg-layer2)] p-3 text-left transition hover:bg-[rgba(215,92,112,0.08)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="block w-full rounded-[18px] border border-[rgba(53,20,26,0.07)] bg-[var(--bg-layer3)] p-3 text-left transition hover:border-[rgba(215,92,112,0.26)] hover:bg-[rgba(215,92,112,0.08)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <span className="block text-xs font-semibold text-[var(--text-h1)]">{item.tool_id}</span>
                       <span className="mt-1 block break-all text-[11px] leading-5 text-[var(--text-muted)]">{item.run_id}</span>
@@ -852,46 +933,46 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                     </button>
                   ))
                 ) : (
-                  <div className="rounded-lg border border-dashed border-[var(--border-default)] p-3 text-xs text-[var(--text-muted)]">
+                  <div className="rounded-[18px] border border-dashed border-[rgba(53,20,26,0.14)] p-3 text-xs text-[var(--text-muted)]">
                     {t("toolbox.recentRunsEmpty")}
                   </div>
                 )}
               </div>
-            </section>
+            </Surface>
 
-            <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.jobLedger")}</h2>
+            <Surface>
+              <SectionTitle>{t("toolbox.preview.jobLedger")}</SectionTitle>
               <div className="mt-3">
                 <ValueRow label={t("toolbox.preview.jobId")} value={run?.job_record?.job_id} />
                 <ValueRow label={t("toolbox.preview.status")} value={run?.job_record?.status ?? t("toolbox.preview.noRun")} />
                 <ValueRow label={t("toolbox.preview.deliveryAccepted")} value={run?.job_record?.delivery_accepted ?? false} />
                 <ValueRow label={t("toolbox.preview.publishAllowed")} value={run?.job_record?.publish_allowed ?? false} />
               </div>
-            </section>
+            </Surface>
 
-            <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.repairPlan")}</h2>
+            <Surface>
+              <SectionTitle>{t("toolbox.preview.repairPlan")}</SectionTitle>
               <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">{t("toolbox.preview.noRepair")}</p>
-            </section>
+            </Surface>
           </aside>
         </section>
 
-        <section className="grid gap-6 border-t border-[var(--divider-subtle)] pt-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
-            <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.artifactManifest")}</h2>
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
+          <Surface>
+            <SectionTitle>{t("toolbox.preview.artifactManifest")}</SectionTitle>
             <div className="mt-4">
               <ArtifactList artifacts={artifacts} />
             </div>
-          </section>
-          <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
+          </Surface>
+          <Surface>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">{t("toolbox.preview.injectionBoundary")}</h2>
+              <SectionTitle>{t("toolbox.preview.injectionBoundary")}</SectionTitle>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={handleFetchAuditSummary}
                   disabled={!run || busyAction !== null}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[rgba(53,20,26,0.10)] bg-white px-3 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[rgba(215,92,112,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <ShieldCheck size={14} weight="fill" />
                   {busyAction === "auditSummary" ? t("toolbox.actionRunning") : t("toolbox.previewAuditSummary")}
@@ -900,7 +981,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
                   type="button"
                   onClick={handlePreviewInjectionDraft}
                   disabled={!run || busyAction !== null}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-2.5 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[var(--fortune-red)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[rgba(53,20,26,0.10)] bg-white px-3 text-xs font-semibold text-[var(--text-h1)] transition hover:border-[rgba(215,92,112,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <ClipboardText size={14} weight="fill" />
                   {busyAction === "injectDraft" ? t("toolbox.actionRunning") : t("toolbox.previewInjectionDraft")}
@@ -913,7 +994,7 @@ function ValidToolboxToolPage({ toolId }: { toolId: ToolboxToolId }) {
               <InjectionTargetDiff plannedRefs={plannedInjectionRefs} targets={injectionTargets} t={t} />
               <InjectionDraftPanel draft={injectionDraft} t={t} />
             </div>
-          </section>
+          </Surface>
         </section>
       </main>
     </div>
