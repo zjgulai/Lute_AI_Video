@@ -271,6 +271,7 @@ class MetricsPoller:
     ) -> dict[str, Any]:
         """Inspect active posts without fetching or saving platform metrics."""
         allowlist = {str(post_id) for post_id in allowlisted_post_ids or set()}
+        source_contract = await self.inspect_active_post_sources()
         posts = await self.repo.get_active_posts()
         due_posts: list[dict[str, Any]] = []
         allowlisted_due_posts: list[dict[str, Any]] = []
@@ -289,7 +290,7 @@ class MetricsPoller:
             skipped[reason] = skipped.get(reason, 0) + 1
 
         if not posts:
-            readiness = "blocked_by_no_active_post"
+            readiness = source_contract["readiness"]
         elif allowlist and not allowlisted_due_posts:
             readiness = "blocked_by_no_allowlisted_active_post"
         elif not due_posts:
@@ -304,6 +305,65 @@ class MetricsPoller:
             "allowlisted_due_post_count": len(allowlisted_due_posts),
             "skipped": skipped,
             "candidates": allowlisted_due_posts,
+            "source_contract": source_contract,
+        }
+
+    async def inspect_active_post_sources(self) -> dict[str, Any]:
+        """Return a fail-closed source contract for metrics pull readiness."""
+        summary_getter = getattr(self.repo, "get_active_post_source_summary", None)
+        if callable(summary_getter):
+            summary = await summary_getter()
+        else:
+            posts = await self.repo.get_active_posts()
+            summary = {
+                "active_source": "video_metrics",
+                "video_metrics": {
+                    "used_by_metrics_poller": True,
+                    "active_candidate_rows": len(posts),
+                },
+                "publish_logs": {
+                    "used_by_metrics_poller": False,
+                    "published_with_post_id": 0,
+                },
+                "manual_allowlist": {
+                    "supported": True,
+                    "mode": "filters active video_metrics post_id values only",
+                    "creates_active_post_source": False,
+                },
+                "manual_seed": {
+                    "supported": False,
+                    "requires_explicit_db_write_authorization": True,
+                },
+            }
+
+        video_metrics = summary.get("video_metrics")
+        publish_logs = summary.get("publish_logs")
+        video_candidate_count = (
+            video_metrics.get("active_candidate_rows", 0)
+            if isinstance(video_metrics, dict)
+            else 0
+        )
+        publish_candidate_count = (
+            publish_logs.get("published_with_post_id", 0)
+            if isinstance(publish_logs, dict)
+            else 0
+        )
+        if video_candidate_count <= 0:
+            if publish_candidate_count > 0:
+                readiness = "blocked_by_publish_logs_not_active_source"
+            else:
+                readiness = "blocked_by_no_active_post_source"
+        else:
+            readiness = "active_post_source_available"
+        return {
+            **summary,
+            "readiness": readiness,
+            "active_source_available": readiness == "active_post_source_available",
+            "live_pull_ready": False,
+            "live_pull_ready_reason": (
+                "source inspection only; due-post, allowlist, and explicit "
+                "authorization gates must pass separately"
+            ),
         }
 
     def _post_due_decision(self, post: dict[str, Any]) -> dict[str, Any]:
