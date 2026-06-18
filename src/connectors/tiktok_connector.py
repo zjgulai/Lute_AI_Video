@@ -13,8 +13,9 @@ from uuid import uuid4
 
 import httpx
 
-from src.config import TIKTOK_API_UPLOAD_URL
+from src.config import TIKTOK_API_BASE_URL, TIKTOK_API_UPLOAD_URL
 from src.connectors.base import PlatformConnector
+from src.tasks.metrics_poller import PlatformMetricsError, classify_platform_http_status
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 _TIKTOK_UPLOAD_URL = TIKTOK_API_UPLOAD_URL + "/video/upload/"
 _TIKTOK_PUBLISH_URL = TIKTOK_API_UPLOAD_URL + "/video/publish/"
 _TIKTOK_QUERY_URL = TIKTOK_API_UPLOAD_URL + "/video/query/"
+_TIKTOK_METRICS_QUERY_URL = TIKTOK_API_BASE_URL.rstrip("/") + "/v2/video/query/"
+_TIKTOK_METRIC_FIELDS = "id,view_count,like_count,comment_count,share_count"
 
 
 def _is_mock_mode() -> bool:
@@ -31,17 +34,122 @@ def _is_mock_mode() -> bool:
     return not token
 
 
+def _classify_tiktok_error(code: str, message: str) -> str:
+    value = f"{code} {message}".lower()
+    if any(marker in value for marker in ("auth", "token", "scope", "permission")):
+        return "auth"
+    if any(marker in value for marker in ("rate", "quota", "too many")):
+        return "rate_limit"
+    if any(marker in value for marker in ("not_found", "not found", "does not exist")):
+        return "not_found"
+    if any(marker in value for marker in ("invalid", "field", "schema", "param")):
+        return "schema_drift"
+    return "transient"
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_tiktok_video_metrics(video: dict[str, Any]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    field_map = {
+        "view_count": "views",
+        "like_count": "likes",
+        "comment_count": "comments",
+        "share_count": "shares",
+    }
+    for source, target in field_map.items():
+        value = _coerce_int(video.get(source))
+        if value is not None:
+            metrics[target] = value
+    return metrics
+
+
 class TikTokConnector(PlatformConnector):
+    def __init__(self, http_client: httpx.AsyncClient | None = None) -> None:
+        self._http_client = http_client
+
     async def fetch_metrics(self, post_id: str) -> dict[str, Any]:
         """Fetch performance metrics for a TikTok post.
 
-        Real TikTok insights are not wired yet. This method exists so the
-        metrics poller can fail closed instead of treating a stub `{}` as a
-        successful platform pull.
+        Uses TikTok's official `/v2/video/query/` endpoint. The endpoint
+        verifies ownership of the requested video for the authorized user and
+        returns the requested video object fields.
         """
-        raise NotImplementedError(
-            "TikTok metrics connector is not implemented; live pull remains blocked"
+        token = os.environ.get("TIKTOK_ACCESS_TOKEN", "")
+        if not token:
+            raise PlatformMetricsError(
+                "auth",
+                "TIKTOK_ACCESS_TOKEN is required for TikTok metrics",
+            )
+
+        resp = await self._post_metrics_query(token, post_id)
+        if resp.status_code != 200:
+            raise PlatformMetricsError(
+                classify_platform_http_status(resp.status_code),
+                f"TikTok metrics HTTP {resp.status_code}",
+            )
+
+        data = resp.json()
+        error = data.get("error") or {}
+        error_code = str(error.get("code") or "").lower()
+        if error and error_code not in {"", "ok", "0"}:
+            raise PlatformMetricsError(
+                _classify_tiktok_error(error_code, str(error.get("message") or "")),
+                f"TikTok metrics error {error_code}: {error.get('message', '')}",
+            )
+
+        videos = data.get("data", {}).get("videos")
+        if not isinstance(videos, list):
+            raise PlatformMetricsError(
+                "schema_drift",
+                "TikTok metrics response missing data.videos list",
+            )
+        video = next(
+            (item for item in videos if str(item.get("id")) == str(post_id)),
+            videos[0] if videos else None,
         )
+        if not isinstance(video, dict):
+            raise PlatformMetricsError(
+                "not_found",
+                f"TikTok video {post_id} was not returned by metrics query",
+            )
+
+        metrics = _normalize_tiktok_video_metrics(video)
+        if not metrics:
+            raise PlatformMetricsError(
+                "schema_drift",
+                "TikTok video object has no supported metric fields",
+            )
+        return metrics
+
+    async def _post_metrics_query(self, token: str, post_id: str) -> httpx.Response:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        payload = {"filters": {"video_ids": [str(post_id)]}}
+        params = {"fields": _TIKTOK_METRIC_FIELDS}
+        if self._http_client is not None:
+            return await self._http_client.post(
+                _TIKTOK_METRICS_QUERY_URL,
+                headers=headers,
+                params=params,
+                json=payload,
+            )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            return await client.post(
+                _TIKTOK_METRICS_QUERY_URL,
+                headers=headers,
+                params=params,
+                json=payload,
+            )
 
     async def publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Publish content to TikTok.

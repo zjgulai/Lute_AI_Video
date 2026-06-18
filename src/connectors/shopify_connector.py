@@ -13,8 +13,9 @@ from uuid import uuid4
 
 import httpx
 
-from src.config import SHOPIFY_GRAPHQL_URL_TEMPLATE
+from src.config import SHOPIFY_GRAPHQL_URL_TEMPLATE, SHOPIFY_METRICS_SHOPIFYQL_QUERY
 from src.connectors.base import PlatformConnector
+from src.tasks.metrics_poller import PlatformMetricsError, classify_platform_http_status
 
 logger = logging.getLogger(__name__)
 
@@ -56,17 +57,210 @@ def _headers() -> dict[str, Any]:
     }
 
 
+def _shopify_metrics_query(post_id: str) -> str:
+    template = os.environ.get(
+        "SHOPIFY_METRICS_SHOPIFYQL_QUERY",
+        SHOPIFY_METRICS_SHOPIFYQL_QUERY,
+    )
+    safe_post_id = str(post_id).replace("\\", "\\\\").replace("'", "\\'")
+    return template.replace("{post_id}", safe_post_id)
+
+
+def _summarize_graphql_errors(errors: Any) -> str:
+    if not isinstance(errors, list):
+        return str(errors)
+    messages = [
+        str(error.get("message", error)) if isinstance(error, dict) else str(error)
+        for error in errors
+    ]
+    return "; ".join(messages)
+
+
+def _classify_shopify_error(errors: Any) -> str:
+    value = _summarize_graphql_errors(errors).lower()
+    if any(marker in value for marker in ("access denied", "scope", "permission", "protected customer", "token")):
+        return "auth"
+    if any(marker in value for marker in ("throttle", "rate limit", "too many")):
+        return "rate_limit"
+    if "not found" in value:
+        return "not_found"
+    if any(marker in value for marker in ("parse", "syntax", "field", "schema")):
+        return "schema_drift"
+    return "transient"
+
+
+def _to_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, dict):
+        amount = value.get("amount")
+        return _to_number(amount)
+    if isinstance(value, str):
+        normalized = value.replace(",", "").replace("$", "").strip()
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    return None
+
+
+def _iter_shopifyql_rows(table_data: Any) -> list[dict[str, Any]]:
+    if not isinstance(table_data, dict):
+        raise PlatformMetricsError("schema_drift", "ShopifyQL tableData is missing")
+    columns = table_data.get("columns")
+    rows = table_data.get("rows")
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        raise PlatformMetricsError(
+            "schema_drift",
+            "ShopifyQL tableData missing columns or rows list",
+        )
+    column_names = [
+        str(column.get("name") or column.get("displayName") or "")
+        for column in columns
+        if isinstance(column, dict)
+    ]
+    normalized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if isinstance(row, dict):
+            normalized_rows.append(row)
+            continue
+        if isinstance(row, list):
+            normalized_rows.append(
+                {
+                    column_names[index]: value
+                    for index, value in enumerate(row)
+                    if index < len(column_names) and column_names[index]
+                }
+            )
+    return normalized_rows
+
+
+def _normalize_shopifyql_metrics(table_data: Any) -> dict[str, Any]:
+    rows = _iter_shopifyql_rows(table_data)
+    if not rows:
+        raise PlatformMetricsError("not_found", "ShopifyQL returned no metric rows")
+
+    totals: dict[str, float] = {}
+    for row in rows:
+        for key, value in row.items():
+            number = _to_number(value)
+            if number is not None:
+                totals[str(key)] = totals.get(str(key), 0.0) + number
+
+    metrics: dict[str, Any] = {}
+    revenue = (
+        totals.get("total_sales")
+        or totals.get("gross_sales")
+        or totals.get("net_sales")
+        or totals.get("revenue")
+    )
+    orders = totals.get("orders")
+    sessions = totals.get("sessions")
+    if revenue is not None:
+        metrics["revenue"] = revenue
+    if orders is not None:
+        metrics["orders"] = int(orders)
+        metrics["sales"] = int(orders)
+    if sessions is not None:
+        metrics["views"] = int(sessions)
+    if orders is not None and sessions:
+        metrics["cvr"] = orders / sessions
+    return metrics
+
+
 class ShopifyConnector(PlatformConnector):
+    def __init__(self, http_client: httpx.AsyncClient | None = None) -> None:
+        self._http_client = http_client
+
     async def fetch_metrics(self, post_id: str) -> dict[str, Any]:
         """Fetch performance metrics for a Shopify media/post id.
 
-        Real Shopify analytics are not wired yet. This method exists so the
-        metrics poller can fail closed instead of treating a stub `{}` as a
-        successful platform pull.
+        Uses Shopify Admin GraphQL `shopifyqlQuery`. The default query returns
+        store/reporting analytics rather than media-file analytics; deployments
+        that need stricter post-level filtering should set
+        `SHOPIFY_METRICS_SHOPIFYQL_QUERY` with a `{post_id}` placeholder once
+        the selected Shopify dimension is confirmed for the pilot.
         """
-        raise NotImplementedError(
-            "Shopify metrics connector is not implemented; live pull remains blocked"
+        token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
+            "SHOPIFY_API_KEY", ""
         )
+        store_url = os.environ.get("SHOPIFY_STORE_URL", "")
+        if not token or not store_url:
+            raise PlatformMetricsError(
+                "auth",
+                "SHOPIFY_ACCESS_TOKEN/SHOPIFY_API_KEY and SHOPIFY_STORE_URL are required for Shopify metrics",
+            )
+
+        query = _shopify_metrics_query(post_id)
+        resp = await self._post_shopifyql_query(store_url, query)
+        if resp.status_code != 200:
+            raise PlatformMetricsError(
+                classify_platform_http_status(resp.status_code),
+                f"Shopify metrics HTTP {resp.status_code}",
+            )
+
+        data = resp.json()
+        errors = data.get("errors")
+        if errors:
+            raise PlatformMetricsError(
+                _classify_shopify_error(errors),
+                f"Shopify metrics GraphQL errors: {_summarize_graphql_errors(errors)}",
+            )
+        response = data.get("data", {}).get("shopifyqlQuery")
+        if not isinstance(response, dict):
+            raise PlatformMetricsError(
+                "schema_drift",
+                "Shopify metrics response missing data.shopifyqlQuery",
+            )
+        parse_errors = response.get("parseErrors") or []
+        if parse_errors:
+            raise PlatformMetricsError(
+                "schema_drift",
+                f"ShopifyQL parse errors: {parse_errors}",
+            )
+        table_data = response.get("tableData")
+        metrics = _normalize_shopifyql_metrics(table_data)
+        if not metrics:
+            raise PlatformMetricsError(
+                "schema_drift",
+                "ShopifyQL tableData has no supported metric columns",
+            )
+        return metrics
+
+    async def _post_shopifyql_query(self, store_url: str, shopifyql: str) -> httpx.Response:
+        graphql_url = _SHOPIFY_GRAPHQL_URL.format(store=store_url)
+        graphql_query = """
+        query ShopifyMetrics($query: String!) {
+            shopifyqlQuery(query: $query) {
+                tableData {
+                    columns {
+                        name
+                        dataType
+                        displayName
+                    }
+                    rows
+                }
+                parseErrors
+            }
+        }
+        """
+        payload = {"query": graphql_query, "variables": {"query": shopifyql}}
+        if self._http_client is not None:
+            return await self._http_client.post(
+                graphql_url,
+                headers=_headers(),
+                json=payload,
+            )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            return await client.post(
+                graphql_url,
+                headers=_headers(),
+                json=payload,
+            )
 
     async def publish(self, content: dict[str, Any]) -> dict[str, Any]:
         """Publish content to Shopify.

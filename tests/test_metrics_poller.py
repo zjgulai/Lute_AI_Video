@@ -5,6 +5,7 @@ import contextlib
 import importlib
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 
@@ -24,6 +25,26 @@ class _SaveRepo:
     async def save_metrics(self, **kwargs) -> dict:
         self.saved.append(kwargs)
         return kwargs
+
+
+class _FakeHttpClient:
+    def __init__(self, *responses: httpx.Response) -> None:
+        self.responses = list(responses)
+        self.requests: list[dict] = []
+
+    async def post(self, url: str, **kwargs) -> httpx.Response:
+        self.requests.append({"url": url, **kwargs})
+        if not self.responses:
+            raise AssertionError("unexpected HTTP call")
+        return self.responses.pop(0)
+
+
+def _json_response(status_code: int, payload: dict) -> httpx.Response:
+    return httpx.Response(
+        status_code,
+        json=payload,
+        request=httpx.Request("POST", "https://example.test/metrics"),
+    )
 
 
 @pytest.mark.asyncio
@@ -153,9 +174,10 @@ async def test_pull_single_skips_unknown_platform_without_saving() -> None:
 
 
 @pytest.mark.asyncio
-async def test_default_platform_connector_not_implemented_does_not_save() -> None:
+async def test_default_platform_connector_auth_failure_does_not_save(monkeypatch) -> None:
     from src.tasks.metrics_poller import MetricsPoller
 
+    monkeypatch.delenv("TIKTOK_ACCESS_TOKEN", raising=False)
     repo = _SaveRepo()
     poller = MetricsPoller(repo=repo)
 
@@ -167,6 +189,34 @@ async def test_default_platform_connector_not_implemented_does_not_save() -> Non
             "platform": "tiktok",
             "tenant_id": "momcozy-marketing",
             "post_id": "tt_real_blocked",
+            "published_at": datetime.now(UTC) - timedelta(hours=3),
+            "pulled_at": None,
+        }
+    )
+
+    assert result is False
+    assert repo.saved == []
+
+
+@pytest.mark.asyncio
+async def test_not_implemented_platform_error_does_not_save() -> None:
+    from src.tasks.metrics_poller import MetricsPoller, PlatformMetricsError
+
+    repo = _SaveRepo()
+
+    async def fetch_tiktok(post_id: str) -> dict:
+        raise PlatformMetricsError("not_implemented", f"{post_id} not ready")
+
+    poller = MetricsPoller(repo=repo, platform_fetchers={"tiktok": fetch_tiktok})
+
+    result = await poller.pull_single(
+        {
+            "id": "row-not-implemented",
+            "video_id": "video-not-implemented",
+            "scenario": "S2",
+            "platform": "tiktok",
+            "tenant_id": "momcozy-marketing",
+            "post_id": "tt_not_implemented",
             "published_at": datetime.now(UTC) - timedelta(hours=3),
             "pulled_at": None,
         }
@@ -195,6 +245,34 @@ async def test_empty_metrics_payload_does_not_save() -> None:
             "platform": "tiktok",
             "tenant_id": "momcozy-marketing",
             "post_id": "tt_empty",
+            "published_at": datetime.now(UTC) - timedelta(hours=3),
+            "pulled_at": None,
+        }
+    )
+
+    assert result is False
+    assert repo.saved == []
+
+
+@pytest.mark.asyncio
+async def test_unrecognized_metrics_payload_does_not_save() -> None:
+    from src.tasks.metrics_poller import MetricsPoller
+
+    repo = _SaveRepo()
+
+    async def fetch_tiktok(post_id: str) -> dict:
+        return {"unrecognized": 1}
+
+    poller = MetricsPoller(repo=repo, platform_fetchers={"tiktok": fetch_tiktok})
+
+    result = await poller.pull_single(
+        {
+            "id": "row-unrecognized-payload",
+            "video_id": "video-unrecognized-payload",
+            "scenario": "S2",
+            "platform": "tiktok",
+            "tenant_id": "momcozy-marketing",
+            "post_id": "tt_unrecognized",
             "published_at": datetime.now(UTC) - timedelta(hours=3),
             "pulled_at": None,
         }
@@ -245,6 +323,203 @@ def test_platform_http_status_classification() -> None:
     assert classify_platform_http_status(404) == "not_found"
     assert classify_platform_http_status(502) == "transient"
     assert classify_platform_http_status(418) == "schema_drift"
+
+
+@pytest.mark.asyncio
+async def test_tiktok_fetch_metrics_maps_official_video_query(monkeypatch) -> None:
+    from src.connectors.tiktok_connector import TikTokConnector
+
+    monkeypatch.setenv("TIKTOK_ACCESS_TOKEN", "test-token")
+    fake = _FakeHttpClient(
+        _json_response(
+            200,
+            {
+                "data": {
+                    "videos": [
+                        {
+                            "id": "tt_123",
+                            "view_count": 1200,
+                            "like_count": 80,
+                            "comment_count": 12,
+                            "share_count": 5,
+                        }
+                    ]
+                },
+                "error": {"code": "ok", "message": ""},
+            },
+        )
+    )
+
+    metrics = await TikTokConnector(http_client=fake).fetch_metrics("tt_123")
+
+    assert metrics == {
+        "views": 1200,
+        "likes": 80,
+        "comments": 12,
+        "shares": 5,
+    }
+    assert fake.requests[0]["url"].endswith("/v2/video/query/")
+    assert "view_count" in fake.requests[0]["params"]["fields"]
+    assert fake.requests[0]["json"] == {"filters": {"video_ids": ["tt_123"]}}
+
+
+@pytest.mark.asyncio
+async def test_tiktok_fetch_metrics_classifies_rate_limit(monkeypatch) -> None:
+    from src.connectors.tiktok_connector import TikTokConnector
+    from src.tasks.metrics_poller import PlatformMetricsError
+
+    monkeypatch.setenv("TIKTOK_ACCESS_TOKEN", "test-token")
+    fake = _FakeHttpClient(_json_response(429, {"error": {"code": "rate_limit"}}))
+
+    with pytest.raises(PlatformMetricsError) as excinfo:
+        await TikTokConnector(http_client=fake).fetch_metrics("tt_123")
+
+    assert excinfo.value.category == "rate_limit"
+
+
+@pytest.mark.asyncio
+async def test_tiktok_fetch_metrics_empty_videos_is_not_found(monkeypatch) -> None:
+    from src.connectors.tiktok_connector import TikTokConnector
+    from src.tasks.metrics_poller import PlatformMetricsError
+
+    monkeypatch.setenv("TIKTOK_ACCESS_TOKEN", "test-token")
+    fake = _FakeHttpClient(
+        _json_response(200, {"data": {"videos": []}, "error": {"code": "ok"}})
+    )
+
+    with pytest.raises(PlatformMetricsError) as excinfo:
+        await TikTokConnector(http_client=fake).fetch_metrics("tt_missing")
+
+    assert excinfo.value.category == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_tiktok_fetch_metrics_api_error_is_transient(monkeypatch) -> None:
+    from src.connectors.tiktok_connector import TikTokConnector
+    from src.tasks.metrics_poller import PlatformMetricsError
+
+    monkeypatch.setenv("TIKTOK_ACCESS_TOKEN", "test-token")
+    fake = _FakeHttpClient(
+        _json_response(
+            200,
+            {
+                "data": {},
+                "error": {"code": "internal_error", "message": "try later"},
+            },
+        )
+    )
+
+    with pytest.raises(PlatformMetricsError) as excinfo:
+        await TikTokConnector(http_client=fake).fetch_metrics("tt_123")
+
+    assert excinfo.value.category == "transient"
+
+
+@pytest.mark.asyncio
+async def test_shopify_fetch_metrics_maps_shopifyql_table(monkeypatch) -> None:
+    from src.connectors.shopify_connector import ShopifyConnector
+
+    monkeypatch.setenv("SHOPIFY_ACCESS_TOKEN", "shopify-token")
+    monkeypatch.setenv("SHOPIFY_STORE_URL", "example.myshopify.com")
+    fake = _FakeHttpClient(
+        _json_response(
+            200,
+            {
+                "data": {
+                    "shopifyqlQuery": {
+                        "tableData": {
+                            "columns": [
+                                {"name": "total_sales"},
+                                {"name": "orders"},
+                                {"name": "sessions"},
+                            ],
+                            "rows": [[125.5, 4, 200]],
+                        },
+                        "parseErrors": [],
+                    }
+                }
+            },
+        )
+    )
+
+    metrics = await ShopifyConnector(http_client=fake).fetch_metrics("gid://post/1")
+
+    assert metrics == {
+        "revenue": 125.5,
+        "orders": 4,
+        "sales": 4,
+        "views": 200,
+        "cvr": 0.02,
+    }
+    assert fake.requests[0]["url"] == (
+        "https://example.myshopify.com/admin/api/2024-07/graphql.json"
+    )
+    assert fake.requests[0]["headers"]["X-Shopify-Access-Token"] == "shopify-token"
+    assert "shopifyqlQuery" in fake.requests[0]["json"]["query"]
+    assert fake.requests[0]["json"]["variables"]["query"] == (
+        "FROM sales SHOW total_sales, orders SINCE -30d"
+    )
+
+
+@pytest.mark.asyncio
+async def test_shopify_fetch_metrics_parse_errors_are_schema_drift(monkeypatch) -> None:
+    from src.connectors.shopify_connector import ShopifyConnector
+    from src.tasks.metrics_poller import PlatformMetricsError
+
+    monkeypatch.setenv("SHOPIFY_ACCESS_TOKEN", "shopify-token")
+    monkeypatch.setenv("SHOPIFY_STORE_URL", "example.myshopify.com")
+    fake = _FakeHttpClient(
+        _json_response(
+            200,
+            {
+                "data": {
+                    "shopifyqlQuery": {
+                        "tableData": {"columns": [], "rows": []},
+                        "parseErrors": [{"message": "Unknown metric"}],
+                    }
+                }
+            },
+        )
+    )
+
+    with pytest.raises(PlatformMetricsError) as excinfo:
+        await ShopifyConnector(http_client=fake).fetch_metrics("shopify-post")
+
+    assert excinfo.value.category == "schema_drift"
+
+
+@pytest.mark.asyncio
+async def test_shopify_fetch_metrics_graphql_access_error_is_auth(monkeypatch) -> None:
+    from src.connectors.shopify_connector import ShopifyConnector
+    from src.tasks.metrics_poller import PlatformMetricsError
+
+    monkeypatch.setenv("SHOPIFY_ACCESS_TOKEN", "shopify-token")
+    monkeypatch.setenv("SHOPIFY_STORE_URL", "example.myshopify.com")
+    fake = _FakeHttpClient(
+        _json_response(200, {"errors": [{"message": "Access denied for reports"}]})
+    )
+
+    with pytest.raises(PlatformMetricsError) as excinfo:
+        await ShopifyConnector(http_client=fake).fetch_metrics("shopify-post")
+
+    assert excinfo.value.category == "auth"
+
+
+@pytest.mark.asyncio
+async def test_shopify_fetch_metrics_graphql_not_found(monkeypatch) -> None:
+    from src.connectors.shopify_connector import ShopifyConnector
+    from src.tasks.metrics_poller import PlatformMetricsError
+
+    monkeypatch.setenv("SHOPIFY_ACCESS_TOKEN", "shopify-token")
+    monkeypatch.setenv("SHOPIFY_STORE_URL", "example.myshopify.com")
+    fake = _FakeHttpClient(
+        _json_response(200, {"errors": [{"message": "Report not found"}]})
+    )
+
+    with pytest.raises(PlatformMetricsError) as excinfo:
+        await ShopifyConnector(http_client=fake).fetch_metrics("shopify-post")
+
+    assert excinfo.value.category == "not_found"
 
 
 @pytest.mark.asyncio

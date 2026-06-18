@@ -206,8 +206,13 @@ OPENAI_IMAGE_API_BASE: str = os.environ.get("OPENAI_IMAGE_API_BASE", "https://ap
 ELEVENLABS_API_BASE: str = os.environ.get("ELEVENLABS_API_BASE", "https://api.elevenlabs.io/v1")
 
 # ── Connector base URLs ──
+TIKTOK_API_BASE_URL: str = os.environ.get("TIKTOK_API_BASE_URL", "https://open.tiktokapis.com")
 TIKTOK_API_UPLOAD_URL: str = os.environ.get("TIKTOK_API_UPLOAD_URL", "https://open-api.tiktok.com")
 SHOPIFY_GRAPHQL_URL_TEMPLATE: str = os.environ.get("SHOPIFY_GRAPHQL_URL_TEMPLATE", "https://{store}/admin/api/2024-07/graphql.json")
+SHOPIFY_METRICS_SHOPIFYQL_QUERY: str = os.environ.get(
+    "SHOPIFY_METRICS_SHOPIFYQL_QUERY",
+    "FROM sales SHOW total_sales, orders SINCE -30d",
+)
 
 # ── Admin health checks ──
 # External provider probes are opt-in so token smokes are not polluted by

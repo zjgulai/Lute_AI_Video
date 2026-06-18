@@ -14,7 +14,7 @@ source: human+ai
 
 ## 当前结论
 
-截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读与单次 authorized webhook-only 证据；`P2-1L6A` 已补上本地 connector contract / error classification / dry-run readiness，但真实平台 metrics pull 当前仍不 ready。真实平台 metrics pull、生产 scheduler 与 publish-driven 事件链路仍未执行。
+截至 2026-06-18，metrics / webhook / analytics 已具备本地、生产只读与单次 authorized webhook-only 证据；`P2-1L6C` 已补上 TikTok / Shopify 真实 API mapping 代码路径，并仅通过 mocked HTTP/no-provider 合同测试验证。真实平台 metrics pull 当前仍不 ready，生产 scheduler 与 publish-driven 事件链路仍未执行。
 
 已验证能力：
 
@@ -28,14 +28,16 @@ source: human+ai
 - `P2-1L5R` 已用生产兼容 one-off 完成 1 次 synthetic `audit.completed` 外部 receiver readback，证据等级为 `L4-authorized-live-webhook-only`。
 - `P2-1L6-prep` 已完成 no-pull readiness：生产 `/api/health=200`、`metrics_pull_enabled=false`、`active_post_count=0`，本地 `tests/test_metrics_poller.py tests/test_metrics_dashboard.py` 结果 `12 passed`。
 - `P2-1L6A` 已完成本地 contract：platform metrics error 分类、default connector fail-closed、empty/schema-drift payload 不落库、dry-run due-post readiness、Shopify env alias；目标测试 `19 passed`。
+- `P2-1L6C` 已完成本地 mocked HTTP mapping contract：TikTok `/v2/video/query/` 字段映射、Shopify Admin GraphQL `shopifyqlQuery` tableData 映射、错误分类、not implemented 与空/未知 payload 不落库；目标测试 `29 passed`。
 
 未验证能力：
 
 - `MetricsPoller` 未注册到 `src/api.py` startup scheduler。
-- TikTok / Shopify `fetch_metrics()` 仍为显式 `NotImplementedError` 合同，未接真实平台 metrics API mapping。
+- 真实 TikTok / Shopify platform metrics API 未调用；当前只验证 mocked HTTP code path。
 - 生产 `METRICS_PULL_ENABLED` 未启用，生产 `/api/metrics/pull` 未执行真实 pull。
 - 生产 active post 候选为 `0`，当前没有 allowlisted single-post pilot 对象。
 - 生产可见 Shopify env 名称为 `SHOPIFY_API_KEY` / `SHOPIFY_STORE_URL`；本地 config 已把 `SHOPIFY_ACCESS_TOKEN` 回落到 legacy `SHOPIFY_API_KEY`，但尚未同步生产。
+- ShopifyQL post-level 维度仍未由本轮官方资料核对为可用于 selected post pilot；默认 mapping 只能作为 report-level contract，不得外推为 per-post live pull ready。
 - `WEBHOOK_URLS` 生产仍为空，`P2-1L5R` 的 webhook 注册只存在于 one-off 进程内；未执行真实 publish / pipeline.completed 业务事件。
 - 没有从真实 publish post_id 到 metrics ingestion，再到 dashboard，再到 webhook/event audit 的端到端证据链。
 
@@ -65,7 +67,8 @@ source: human+ai
 | `P2-1L5R` | 外部 webhook 单事件 retry | 生产受控 | 是，仅 webhook receiver | 已通过：1 次 synthetic `audit.completed`，receiver 新增 `1` 次 POST，envelope/payload 精确匹配，日志禁止项为 `0` |
 | `P2-1L6-prep` | 平台 metrics pull readiness no-pull probe | 本地 no-provider + 生产 read-only | 否 | 已完成：真实 fetcher 仍是 stub，生产 active post 候选为 `0`，`L6` 判定 `blocked_by_real_connector_no_active_post` |
 | `P2-1L6A` | 真实 platform metrics connector contract + allowlisted post readiness | 本地 no-provider + 生产 read-only | 否 | 本地 contract 已完成：错误分类、fail-closed、dry-run readiness、Shopify env alias；仍 blocked：真实 API mapping 未实现，生产 active post 候选为 `0` |
-| `P2-1L6B` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | 仅在 `P2-1L6A` 通过后授权；`METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
+| `P2-1L6C` | 真实 platform metrics API mapping no-provider contract | 本地 no-provider + mocked HTTP | 否 | 已完成：TikTok `/v2/video/query/` 与 Shopify `shopifyqlQuery` mapping code path 有 mocked HTTP 覆盖；auth/rate_limit/not_found/schema_drift/transient/not_implemented 分类和空/未知 payload 不落库均通过；仍 blocked：未真实 pull，生产 active post 候选为 `0`，Shopify post-level 维度未确认 |
+| `P2-1L6B` | 平台 metrics pull 单次 pilot | 生产受控 | 是，仅指定 platform metrics API | 仅在 `P2-1L6C` 通过且存在 1 条 allowlisted active post 后授权；`METRICS_PULL_ENABLED` 只在窗口内启用；只处理 1 条 allowlisted post；pull 次数=1；dashboard 可读；日志无 publish/provider/submit |
 | `P2-1L7` | scheduler readiness | 本地/生产 no-execute | 否 | 只设计 scheduler 启停、锁、频率、kill-switch；不自动注册生产 startup |
 
 ## 关键设计要求
@@ -374,6 +377,38 @@ DATABASE_URL= .venv/bin/pytest tests/test_metrics_dashboard.py tests/test_video_
 - 未 webhook 外发。
 - 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
 
+## 2026-06-18 P2-1L6C 执行记录
+
+执行范围：
+
+- 只做本地代码检查、官方文档/接口字段只读核对、最小代码修复和本地 no-provider 测试。
+- 修改 `src/connectors/tiktok_connector.py`、`src/connectors/shopify_connector.py`、`src/config.py`、`tests/test_metrics_poller.py` 以及本文件和 known gaps。
+- 未生产部署、未同步代码到生产、未重启服务。
+- 未调用 `/api/metrics/pull`，未启用 `METRICS_PULL_ENABLED`。
+- 未调用 TikTok / Shopify 真实 metrics API；测试只使用 mocked HTTP。
+
+结果：
+
+- 判定：`api_mapping_no_provider_passed_but_live_pull_blocked`。
+- 证据等级：`L2-local-mocked-http-contract`。
+- TikTok mapping 使用官方 `/v2/video/query/` code path，request body 为 `filters.video_ids`，fields 包含 `view_count`、`like_count`、`comment_count`、`share_count`，并映射为 `views`、`likes`、`comments`、`shares`。
+- Shopify mapping 使用 Admin GraphQL `shopifyqlQuery` code path，默认 query 为官方示例风格的单数据源 `FROM sales SHOW total_sales, orders SINCE -30d`；解析 `tableData.columns` / `tableData.rows` 和 `parseErrors`，并将 `total_sales`、`orders` 映射为 `revenue`、`orders/sales`，如自定义 query 返回 `sessions` 则额外映射 `views/cvr`。
+- error mapping 覆盖 `auth`、`rate_limit`、`not_found`、`schema_drift`、`transient` 和 `not_implemented`。
+- empty payload 与 unrecognized payload 仍不落库。
+- `dry_run_due_posts()` 仍只做 readiness，不执行 platform fetcher、不写 DB。
+- ShopifyQL 的 post-level 过滤维度本轮仍未由官方资料确认，因此 Shopify live single-post pilot 不能仅凭该 mapping 进入执行。
+- 本地目标测试结果：`DATABASE_URL= HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/pytest tests/test_metrics_poller.py tests/test_metrics_dashboard.py -q` 为 `29 passed`。
+- `ruff` 目标检查通过，`git diff --check` 无输出。
+
+证据边界：
+
+- 未生产部署、未同步代码、未重启 backend/frontend/nginx/rendering。
+- 未调用 `/api/metrics/pull`。
+- 未启用 `METRICS_PULL_ENABLED`。
+- 未调用 TikTok / Shopify 真实 metrics API。
+- 未 webhook 外发。
+- 未执行 provider、scenario submit、Fast Mode submit、publish、delivery acceptance 或 approved brand token write。
+
 ## 下一步
 
-默认下一步仍不是 live pull。进入 live `P2-1L6B` 前必须先完成两个条件：真实 TikTok / Shopify metrics API mapping 可用且有 no-provider contract 测试覆盖；生产存在 1 条 allowlisted active post 候选。否则继续保持 `METRICS_PULL_ENABLED=false`，不调用 `/api/metrics/pull`。
+默认下一步仍不是 live pull。进入 live `P2-1L6B` 前必须先完成两个条件：生产存在 1 条 allowlisted active post 候选；Shopify 若参与 pilot，必须先确认可用于 selected post 的 ShopifyQL 维度或改为只授权 TikTok 单 post pilot。否则继续保持 `METRICS_PULL_ENABLED=false`，不调用 `/api/metrics/pull`。
