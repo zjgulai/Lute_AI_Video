@@ -84,9 +84,12 @@ class S1StartRequest(BaseModel):
     target_languages: list[str] = DEFAULT_LANGUAGES
     week: str = ""
     video_duration: int = 30
+    output_label: str | None = None
     mode: str = "auto"
     brand_mode: bool = False
     enable_media_synthesis: bool = True
+    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
+    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     continuity_mode: bool | str = True
     continuity_generation_mode: str = "standard"
     storyboard_grid: int = 12

@@ -36,7 +36,7 @@ from src.pipeline.s1_product_pipeline import (
     _ensure_step_skills_registered,
 )
 from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
-from src.routers._state import S2BrandCampaignRequest
+from src.routers._state import S1StartRequest, S2BrandCampaignRequest
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -109,6 +109,110 @@ class TestS2RunContract:
             enable_media_synthesis=False,
         )
         assert result["brand_package"] == BRAND_PACKAGE_FIXTURE
+
+
+class TestS1BoundedMediaContract:
+    def test_s1_request_accepts_bounded_media_controls(self):
+        request = S1StartRequest(
+            product_catalog={"product_name": "Momcozy Bottle Sterilizer"},
+            enable_media_synthesis=True,
+            artifact_disposition="pending_review",
+            provider_max_retries=0,
+            output_label="s1_bounded_media_fixture",
+        )
+
+        assert request.artifact_disposition == "pending_review"
+        assert request.provider_max_retries == 0
+        assert request.output_label == "s1_bounded_media_fixture"
+
+    @pytest.mark.asyncio
+    async def test_pending_review_media_pilot_stops_before_tts_and_assemble(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import src.pipeline.s1_product_pipeline as s1_pipeline
+
+        executed_steps: list[str] = []
+        saved_states: list[dict[str, Any]] = []
+
+        class FakeStateManager:
+            async def save(self, label: str, state: dict[str, Any]) -> None:
+                saved_states.append({"label": label, "state": state})
+
+        class FakeStepRunner:
+            def __init__(self, state_manager: object) -> None:
+                self.state_manager = FakeStateManager()
+
+            async def init_state(self, *, config, mode="auto", label=None, scenario="s1"):
+                assert config["artifact_disposition"] == "pending_review"
+                assert config["provider_max_retries"] == 0
+                assert config["provider_job_caps"] == {"image": 1, "video": 1}
+                assert config["seedance_quality_gate_enabled"] is False
+                return label or "s1_pending_review_media_pilot_fixture"
+
+            async def resume(self, label):
+                raise AssertionError("pending_review S1 media pilot must not resume through assemble_final")
+
+            async def run_step(self, label, step_name):
+                executed_steps.append(step_name)
+                output: Any = []
+                if step_name == "seedance_clips":
+                    output = {"clip_paths": ["/tmp/pending_review/s1-clip.mp4"]}
+                return {
+                    "scenario": "s1",
+                    "steps": {step: {"output": []} for step in executed_steps if step != "seedance_clips"}
+                    | {"seedance_clips": {"output": output}},
+                    "current_step": "tts_audio",
+                    "errors": [],
+                    "media_synthesis_errors": [],
+                    "pipeline_degraded": False,
+                }
+
+        monkeypatch.setattr(s1_pipeline, "StepRunner", FakeStepRunner)
+
+        result = await S1ProductDirectPipeline().run(
+            product_catalog={"product_name": "Momcozy Bottle Sterilizer"},
+            brand_guidelines={"brand_name": "Momcozy"},
+            target_platforms=["tiktok"],
+            video_duration=15,
+            enable_media_synthesis=True,
+            artifact_disposition="pending_review",
+            provider_max_retries=3,
+            output_label="s1_bounded_media_fixture",
+        )
+
+        assert executed_steps == [
+            "strategy",
+            "scripts",
+            "storyboards",
+            "continuity_storyboard_grid",
+            "keyframe_images",
+            "video_prompts",
+            "seedance_clips",
+        ]
+        assert "thumbnail_prompts" not in executed_steps
+        assert "tts_audio" not in executed_steps
+        assert "thumbnail_images" not in executed_steps
+        assert "assemble_final" not in executed_steps
+        assert "audit" not in executed_steps
+        assert result["artifact_disposition"] == "pending_review"
+        assert result["artifact_storage_scope"] == "tenant_pending_review"
+        assert result["provider_max_retries"] == 0
+        assert result["provider_job_caps"] == {"image": 1, "video": 1}
+        assert result["bounded_media_pilot"] is True
+        assert result["bounded_media_stop_step"] == "seedance_clips"
+        assert result["clip_paths"] == ["/tmp/pending_review/s1-clip.mp4"]
+        assert result["audio_paths"] == []
+        assert result["thumbnail_image_paths"] == []
+        assert result["final_video_path"] == ""
+        assert result["delivery_accepted"] is False
+        assert result["publish_allowed"] is False
+        assert result["approved_brand_token_write"] is False
+        assert saved_states
+        assert saved_states[-1]["state"]["current_step"] is None
+        assert saved_states[-1]["state"]["bounded_media_pilot"] is True
+        assert saved_states[-1]["state"]["provider_max_retries"] == 0
+        assert saved_states[-1]["state"]["provider_job_caps"] == {"image": 1, "video": 1}
 
 
 class TestS2RunResultShape:

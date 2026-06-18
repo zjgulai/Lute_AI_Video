@@ -128,6 +128,58 @@ async def _resume_s1_without_media_synthesis(step_runner: Any, label: str) -> di
     return final_state
 
 
+S1_BOUNDED_MEDIA_STOP_STEP = "seedance_clips"
+S1_BOUNDED_MEDIA_STEP_ORDER = [
+    "strategy",
+    "scripts",
+    "storyboards",
+    "continuity_storyboard_grid",
+    "keyframe_images",
+    "video_prompts",
+    "seedance_clips",
+]
+S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS = {"image": 1, "video": 1}
+
+
+def _artifact_storage_scope(disposition: str) -> str:
+    if disposition == "pending_review":
+        return "tenant_pending_review"
+    if disposition == "quarantine":
+        return "tenant_quarantine"
+    return "default"
+
+
+async def _resume_s1_bounded_media_pilot(
+    step_runner: Any,
+    label: str,
+    artifact_disposition: str,
+    provider_max_retries: int | None,
+) -> dict[str, Any]:
+    """Run S1 only through bounded image/video generation and stop before publishable work."""
+    final_state: dict[str, Any] = {}
+    for step_name in S1_BOUNDED_MEDIA_STEP_ORDER:
+        final_state = await step_runner.run_step(label, step_name)
+        if final_state.get("pipeline_degraded"):
+            break
+        if step_name == S1_BOUNDED_MEDIA_STOP_STEP:
+            final_state["current_step"] = None
+            final_state["bounded_media_pilot"] = True
+            final_state["bounded_media_stop_step"] = S1_BOUNDED_MEDIA_STOP_STEP
+            final_state["artifact_disposition"] = artifact_disposition
+            final_state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
+            final_state["provider_max_retries"] = provider_max_retries
+            final_state["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+            final_state.setdefault("config", {})
+            final_state["config"]["provider_max_retries"] = provider_max_retries
+            final_state["config"]["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+            final_state["config"]["seedance_quality_gate_enabled"] = False
+            save = getattr(step_runner.state_manager, "save", None)
+            if callable(save):
+                await save(label, final_state)
+            break
+    return final_state
+
+
 def _assert_prompt_preview_scenario_match(
     scenario: str,
     body: PromptPreviewAuditRequest,
@@ -148,7 +200,7 @@ def _assert_prompt_preview_scenario_match(
 
 
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
-async def run_s1_product_direct(body: dict[str, Any]):
+async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
     """Run S1 Product Direct pipeline (auto mode via StepRunner for progress visibility).
 
     Uses StepRunner.init_state() + StepRunner.resume() directly so that
@@ -160,14 +212,19 @@ async def run_s1_product_direct(body: dict[str, Any]):
     Original Chinese values are stored in ``_original_zh`` within
     the product_catalog so the frontend can display them.
     """
+    raw_body_data = body if isinstance(body, dict) else body.model_dump()
+    if isinstance(body, dict):
+        body = S1StartRequest(**body)
+
     # P1-C: 把用户填的多供应商 key 注入 contextvars,LLM/POYO/CosyVoice 客户端
     # 优先读 contextvars,实现按租户隔离,不污染 process-wide os.environ。
-    _inject_api_keys(body.get("api_keys", {}))
+    _inject_api_keys(body.api_keys)
+    body_data = body.model_dump()
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_runner import StepRunner
     from src.tools.translate import translate_catalog_to_english
 
-    product_catalog = body.get("product_catalog", {})
+    product_catalog = body.product_catalog
     product_name = product_catalog.get("product_name", product_catalog.get("name", "unknown"))
 
     # P3-4: Bind pipeline context to all downstream structlog calls
@@ -178,25 +235,39 @@ async def run_s1_product_direct(body: dict[str, Any]):
         mode="auto",
     )
     product_catalog = await translate_catalog_to_english(product_catalog)
+    bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
+        "pending_review",
+        "quarantine",
+    }
+    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+    label = body.output_label
 
     config = {
         "product_catalog": product_catalog,
-        "brand_guidelines": body.get("brand_guidelines"),
-        "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
+        "brand_guidelines": body.brand_guidelines,
+        "target_platforms": body.target_platforms or ["tiktok", "shopify"],
         "target_languages": DEFAULT_LANGUAGES,
-        "week": body.get("week", ""),
-        "video_duration": coerce_video_duration(body),
-        "brand_mode": body.get("brand_mode", False),
-        "enable_media_synthesis": body.get("enable_media_synthesis", True),
-        "continuity_mode": body.get("continuity_mode", True),
-        "continuity_generation_mode": body.get("continuity_generation_mode", "standard"),
-        "storyboard_grid": body.get("storyboard_grid", 12),
-        "clip_group_size": body.get("clip_group_size", 3),
-        "transition_style": body.get("transition_style", "match_cut"),
+        "week": body.week,
+        "video_duration": coerce_video_duration(body_data),
+        "brand_mode": body.brand_mode,
+        "enable_media_synthesis": body.enable_media_synthesis,
+        "output_label": label,
+        "continuity_mode": body.continuity_mode,
+        "continuity_generation_mode": body.continuity_generation_mode,
+        "storyboard_grid": raw_body_data.get("storyboard_grid", body.storyboard_grid),
+        "clip_group_size": body.clip_group_size,
+        "transition_style": body.transition_style,
+        "artifact_disposition": body.artifact_disposition,
+        "provider_max_retries": effective_provider_max_retries,
     }
+    if bounded_media_pilot:
+        config.update({
+            "provider_job_caps": {"image": 1, "video": 1},
+            "seedance_quality_gate_enabled": False,
+        })
     config = _with_commercial_injection_config(
         config,
-        body.get("commercial_injection_plan"),
+        body.commercial_injection_plan,
         expected_scenario="s1",
     )
 
@@ -204,12 +275,20 @@ async def run_s1_product_direct(body: dict[str, Any]):
     step_runner = StepRunner(state_manager)
 
     # Initialize state (saved immediately so polling can see it) and run to completion
-    label = await step_runner.init_state(config=config, mode="auto")
+    label = await step_runner.init_state(config=config, mode="auto", label=label)
     from src.tools.cost_tracker import set_thread_id
     set_thread_id(label)
     try:
         if config["enable_media_synthesis"]:
-            final_state = await step_runner.resume(label)
+            if bounded_media_pilot:
+                final_state = await _resume_s1_bounded_media_pilot(
+                    step_runner,
+                    label,
+                    body.artifact_disposition,
+                    effective_provider_max_retries,
+                )
+            else:
+                final_state = await step_runner.resume(label)
         else:
             final_state = await _resume_s1_without_media_synthesis(step_runner, label)
     except TypeError as te:
@@ -220,19 +299,22 @@ async def run_s1_product_direct(body: dict[str, Any]):
         p = S1ProductDirectPipeline()
         final_state = await p.run(
             product_catalog=product_catalog,
-            brand_guidelines=body.get("brand_guidelines"),
-            target_platforms=body.get("target_platforms", ["tiktok", "shopify"]),
+            brand_guidelines=body.brand_guidelines,
+            target_platforms=body.target_platforms or ["tiktok", "shopify"],
             target_languages=DEFAULT_LANGUAGES,
-            week=body.get("week", ""),
-            brand_mode=body.get("brand_mode", False),
-            enable_media_synthesis=body.get("enable_media_synthesis", True),
-            video_duration=coerce_video_duration(body),
-            continuity_mode=body.get("continuity_mode", True),
-            continuity_generation_mode=body.get("continuity_generation_mode", "standard"),
-            storyboard_grid=body.get("storyboard_grid", 12),
-            clip_group_size=body.get("clip_group_size", 3),
-            transition_style=body.get("transition_style", "match_cut"),
-            commercial_injection_plan=body.get("commercial_injection_plan"),
+            week=body.week,
+            brand_mode=body.brand_mode,
+            enable_media_synthesis=body.enable_media_synthesis,
+            output_label=body.output_label,
+            video_duration=coerce_video_duration(body_data),
+            continuity_mode=body.continuity_mode,
+            continuity_generation_mode=body.continuity_generation_mode,
+            storyboard_grid=raw_body_data.get("storyboard_grid", body.storyboard_grid),
+            clip_group_size=body.clip_group_size,
+            transition_style=body.transition_style,
+            commercial_injection_plan=body.commercial_injection_plan,
+            artifact_disposition=body.artifact_disposition,
+            provider_max_retries=body.provider_max_retries,
         )
         # S1ProductDirectPipeline returns a dict differently — extract steps from the state
         return final_state
@@ -255,6 +337,12 @@ async def run_s1_product_direct(body: dict[str, Any]):
         "label": label,
         "scenario": final_state.get("scenario", "product_direct"),
         "video_duration": config["video_duration"],
+        "artifact_disposition": body.artifact_disposition,
+        "artifact_storage_scope": _artifact_storage_scope(body.artifact_disposition),
+        "provider_max_retries": effective_provider_max_retries,
+        "provider_job_caps": dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS) if bounded_media_pilot else None,
+        "bounded_media_pilot": bounded_media_pilot,
+        "bounded_media_stop_step": S1_BOUNDED_MEDIA_STOP_STEP if bounded_media_pilot else None,
         "errors": final_state.get("errors", []),
         "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
         "briefs": _get_step_output(final_state, "strategy") or [],
@@ -284,6 +372,19 @@ async def run_s1_product_direct(body: dict[str, Any]):
         result["render_json_path"] = ""
 
     result["audit_report"] = _get_step_output(final_state, "audit") or {}
+    if bounded_media_pilot:
+        result["final_video_path"] = ""
+        result["render_json_path"] = ""
+        result["thumbnail_sets"] = []
+        result["thumbnail_image_paths"] = []
+        result["audio_paths"] = []
+        result["lyrics_paths"] = []
+        result["audit_report"] = {}
+        result["delivery_accepted"] = False
+        result["publish_allowed"] = False
+        result["approved_brand_token_write"] = False
+        result["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+        result["steps_completed"] = S1_BOUNDED_MEDIA_STEP_ORDER.index(S1_BOUNDED_MEDIA_STOP_STEP) + 1
     return result
 
 
@@ -611,10 +712,28 @@ async def start_s1_pipeline(body: S1StartRequest):
             body.commercial_injection_plan,
             expected_scenario="s1",
         )
-        label = await step_runner.init_state(config=config, mode=body.mode)
+        bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
+            "pending_review",
+            "quarantine",
+        }
+        effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+        config["provider_max_retries"] = effective_provider_max_retries
+        if bounded_media_pilot:
+            config.update({
+                "provider_job_caps": {"image": 1, "video": 1},
+                "seedance_quality_gate_enabled": False,
+            })
+        label = await step_runner.init_state(config=config, mode=body.mode, label=body.output_label)
 
         if body.mode == "auto":
             if body.enable_media_synthesis:
+                if bounded_media_pilot:
+                    return await _resume_s1_bounded_media_pilot(
+                        step_runner,
+                        label,
+                        body.artifact_disposition,
+                        effective_provider_max_retries,
+                    )
                 return await step_runner.resume(label)
             return await _resume_s1_without_media_synthesis(step_runner, label)
 
