@@ -95,7 +95,11 @@ def _check_schema_version(state: dict[str, Any] | None, label: str) -> None:
 
 def _repository_payload(state: dict[str, Any]) -> dict[str, Any]:
     """Build the canonical PG projection for persisted scenario state."""
-    return {field: state.get(field) for field in _STATE_REPOSITORY_FIELDS}
+    payload = {field: state.get(field) for field in _STATE_REPOSITORY_FIELDS}
+    trace_id = payload.get("trace_id")
+    if trace_id is not None and not isinstance(trace_id, str):
+        payload["trace_id"] = str(trace_id)
+    return payload
 
 
 class PipelineStateManager:

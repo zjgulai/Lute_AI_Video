@@ -60,6 +60,17 @@ def _contract_state(label: str = "contract-pg-projection") -> dict[str, Any]:
     }
 
 
+def test_repository_payload_coerces_trace_id_to_string():
+    from src.pipeline.state_manager import _repository_payload
+
+    payload = _repository_payload({
+        **_contract_state(),
+        "trace_id": 55663019,
+    })
+
+    assert payload["trace_id"] == "55663019"
+
+
 @pytest.mark.asyncio
 async def test_pg_backfill_preserves_contract_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     contract = _load_contract()
