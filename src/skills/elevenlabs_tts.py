@@ -50,6 +50,7 @@ class ElevenLabsTTSSkill(SkillCallable):
         voice_id = params.get("voice_id", self.DEFAULT_VOICE_ID)
         stability = float(params.get("stability", 0.5))
         similarity_boost = float(params.get("similarity_boost", 0.75))
+        output_dir = Path(params["output_dir"]) if params.get("output_dir") else None
 
         from src.config import ELEVENLABS_API_KEY, POYO_API_KEY, SILICONFLOW_API_KEY
 
@@ -58,7 +59,7 @@ class ElevenLabsTTSSkill(SkillCallable):
             from src.tools.cosyvoice_client import VOICE_PRESETS as COSY_PRESETS
             from src.tools.cosyvoice_client import CosyVoiceClient
 
-            cosy_client = CosyVoiceClient()
+            cosy_client = CosyVoiceClient(output_dir=output_dir)
             path: Path | None = None
             try:
                 # Map ElevenLabs voice_id to CosyVoice voice if possible.
@@ -91,7 +92,7 @@ class ElevenLabsTTSSkill(SkillCallable):
         else:
             from src.tools.elevenlabs_client import VOICE_PRESETS, ElevenLabsClient
 
-            client = ElevenLabsClient()
+            client = ElevenLabsClient(output_dir=output_dir)
             try:
                 path: Path = await client.synthesize(
                     text=text,
@@ -279,7 +280,7 @@ class ElevenLabsTTSSkill(SkillCallable):
 
         text = params.get("text", "")
         language = params.get("language", "en")
-        out_dir = OUTPUT_DIR / "audio"
+        out_dir = Path(params["output_dir"]) if params.get("output_dir") else OUTPUT_DIR / "audio"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         import hashlib

@@ -35,7 +35,11 @@ from src.pipeline.s1_product_pipeline import (
     _artifact_media_output_dir,
     _ensure_step_skills_registered,
 )
-from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
+from src.pipeline.s2_brand_pipeline_v2 import (
+    S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS,
+    S2_SEGMENTED_MEDIA_STEP_ORDERS,
+    S2BrandCampaignPipeline,
+)
 from src.routers._state import S1StartRequest, S2BrandCampaignRequest
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
@@ -223,11 +227,13 @@ class TestS2RunResultShape:
             artifact_disposition="pending_review",
             provider_max_retries=0,
             output_label="s2_transport_readback_fixture",
+            media_stop_step="tts_audio",
         )
 
         assert request.artifact_disposition == "pending_review"
         assert request.provider_max_retries == 0
         assert request.output_label == "s2_transport_readback_fixture"
+        assert request.media_stop_step == "tts_audio"
 
     @pytest.mark.asyncio
     async def test_run_uses_explicit_output_label(self):
@@ -374,6 +380,156 @@ class TestS2RunResultShape:
         assert saved_states[-1]["state"]["provider_max_retries"] == 0
         assert saved_states[-1]["state"]["provider_job_caps"] == {"image": 1, "video": 1}
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("stop_step", list(S2_SEGMENTED_MEDIA_STEP_ORDERS))
+    async def test_segmented_media_stop_points_do_not_cross_boundaries(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        stop_step: str,
+    ):
+        executed_steps: list[str] = []
+        saved_states: list[dict[str, Any]] = []
+        expected_steps = S2_SEGMENTED_MEDIA_STEP_ORDERS[stop_step]  # type: ignore[index]
+        expected_caps = S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[stop_step]  # type: ignore[index]
+
+        outputs: dict[str, Any] = {
+            "strategy": [{"id": "brief-1", "description": "brand campaign brief"}],
+            "scripts": [
+                {
+                    "id": "script-1",
+                    "segments": [
+                        {
+                            "voiceover": "Warm product story",
+                            "start_time": 0,
+                            "end_time": 3,
+                        }
+                    ],
+                }
+            ],
+            "compliance": [{"overall_status": "pass"}],
+            "storyboards": [{"shots": [{"visual": "brand hero shot"}]}],
+            "continuity_storyboard_grid": {"micro_shots": [{"visual": "brand hero shot"}]},
+            "keyframe_images": [
+                {"shots": [{"keyframe_image_path": "/tmp/pending_review/s2-keyframe.png"}]}
+            ],
+            "video_prompts": [{"prompt": "safe brand campaign clip"}],
+            "seedance_clips": {
+                "clip_paths": ["/tmp/pending_review/s2-clip.mp4"],
+                "clip_details": [{"duration_seconds": 4, "is_stub": False}],
+            },
+            "tts_audio": {
+                "audio_paths": ["/tmp/pending_review/s2-audio.mp3"],
+                "lyrics_paths": ["/tmp/pending_review/s2-audio.txt"],
+            },
+            "thumbnail_prompts": [{"variants": [{"prompt": "thumbnail prompt"}]}],
+            "thumbnail_images": ["/tmp/pending_review/s2-thumbnail.png"],
+            "assemble_final": {
+                "video_path": "/tmp/pending_review/s2-intermediate.mp4",
+                "render_json_path": "/tmp/pending_review/s2-render.json",
+            },
+            "audit": {"overall_status": "pass", "score": 0.91},
+        }
+
+        class FakeStateManager:
+            async def save(self, label: str, state: dict[str, Any]) -> None:
+                saved_states.append({"label": label, "state": state})
+
+        class FakeStepRunner:
+            def __init__(self, state_manager: object) -> None:
+                self.state_manager = FakeStateManager()
+
+            async def init_state(self, *, config, mode="auto", label=None, scenario="s2"):
+                assert config["artifact_disposition"] == "pending_review"
+                assert config["provider_max_retries"] == 0
+                assert config["provider_job_caps"] == expected_caps
+                assert config["media_stop_step"] == stop_step
+                assert config["seedance_quality_gate_enabled"] is False
+                return label or "s2_segmented_media_fixture"
+
+            async def resume(self, label):
+                raise AssertionError("segmented S2 media pilot must not resume unrestricted pipeline")
+
+            async def run_step(self, label, step_name):
+                executed_steps.append(step_name)
+                return {
+                    "scenario": "s2",
+                    "steps": {
+                        step: {"output": outputs[step], "status": "done"}
+                        for step in executed_steps
+                    },
+                    "current_step": "downstream_placeholder",
+                    "errors": [],
+                    "media_synthesis_errors": [],
+                    "pipeline_degraded": False,
+                }
+
+        monkeypatch.setattr(s2_brand_pipeline_v2, "StepRunner", FakeStepRunner)
+
+        result = await S2BrandCampaignPipeline().run(
+            brand_package=BRAND_PACKAGE_FIXTURE,
+            video_duration=15,
+            enable_media_synthesis=True,
+            artifact_disposition="pending_review",
+            provider_max_retries=3,
+            media_stop_step=stop_step,  # type: ignore[arg-type]
+        )
+
+        assert executed_steps == expected_steps
+        for step_name in set(S2_SEGMENTED_MEDIA_STEP_ORDERS["audit"]) - set(expected_steps):
+            assert step_name not in executed_steps
+        assert result["artifact_disposition"] == "pending_review"
+        assert result["artifact_storage_scope"] == "tenant_pending_review"
+        assert result["provider_max_retries"] == 0
+        assert result["provider_job_caps"] == expected_caps
+        assert result["bounded_media_pilot"] is True
+        assert result["bounded_media_stop_step"] == stop_step
+        assert result["final_video_path"] == ""
+        assert result["render_json_path"] == ""
+        assert result["delivery_accepted"] is False
+        assert result["publish_allowed"] is False
+        assert result["approved_brand_token_write"] is False
+        assert result["steps_completed"] == len(expected_steps)
+
+        if stop_step == "seedance_clips":
+            assert result["clip_paths"] == ["/tmp/pending_review/s2-clip.mp4"]
+            assert result["audio_paths"] == []
+            assert result["thumbnail_image_paths"] == []
+            assert result["audit_report"] == {}
+        elif stop_step == "tts_audio":
+            assert result["clip_paths"] == []
+            assert result["audio_paths"] == ["/tmp/pending_review/s2-audio.mp3"]
+            assert result["thumbnail_image_paths"] == []
+            assert result["audit_report"] == {}
+        elif stop_step == "thumbnail_prompts":
+            assert result["thumbnail_sets"] == [{"variants": [{"prompt": "thumbnail prompt"}]}]
+            assert result["clip_paths"] == []
+            assert result["audio_paths"] == []
+            assert result["thumbnail_image_paths"] == []
+            assert result["audit_report"] == {}
+        elif stop_step == "thumbnail_images":
+            assert result["clip_paths"] == []
+            assert result["audio_paths"] == []
+            assert result["thumbnail_image_paths"] == ["/tmp/pending_review/s2-thumbnail.png"]
+            assert result["audit_report"] == {}
+        elif stop_step == "assemble_final":
+            assert result["clip_paths"] == ["/tmp/pending_review/s2-clip.mp4"]
+            assert result["audio_paths"] == ["/tmp/pending_review/s2-audio.mp3"]
+            assert result["thumbnail_image_paths"] == []
+            assert result["intermediate_video_path"] == "/tmp/pending_review/s2-intermediate.mp4"
+            assert result["audit_report"] == {}
+        elif stop_step == "audit":
+            assert result["clip_paths"] == ["/tmp/pending_review/s2-clip.mp4"]
+            assert result["audio_paths"] == ["/tmp/pending_review/s2-audio.mp3"]
+            assert result["thumbnail_image_paths"] == ["/tmp/pending_review/s2-thumbnail.png"]
+            assert result["intermediate_video_path"] == "/tmp/pending_review/s2-intermediate.mp4"
+            assert result["audit_report"] == {"overall_status": "pass", "score": 0.91}
+
+        assert saved_states
+        assert saved_states[-1]["state"]["current_step"] is None
+        assert saved_states[-1]["state"]["bounded_media_stop_step"] == stop_step
+        assert saved_states[-1]["state"]["config"]["media_stop_step"] == stop_step
+        assert saved_states[-1]["state"]["provider_job_caps"] == expected_caps
+
     def test_bounded_seedance_skill_registration_skips_audit_skill(self):
         SkillRegistry.clear_global()
 
@@ -486,6 +642,78 @@ class TestS2RunResultShape:
         ]
         assert len(seen_params) == 1
         assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/clips")
+        assert seen_params[0]["provider_max_retries"] == 0
+
+    @pytest.mark.asyncio
+    async def test_tts_step_passes_pending_review_output_dir_retry_zero_and_hard_cap(self):
+        seen_params: list[dict[str, Any]] = []
+
+        class FakeRegistry:
+            async def execute(self, name: str, params: dict[str, Any]) -> SkillResult:
+                assert name == "elevenlabs-tts-skill"
+                seen_params.append(params)
+                return SkillResult(
+                    success=True,
+                    data={
+                        "audio_path": f"{params['output_dir']}/audio.mp3",
+                        "lyrics_path": f"{params['output_dir']}/audio.txt",
+                        "verification": {"all_ok": True},
+                    },
+                )
+
+        result = await S1ProductDirectPipeline()._step_tts_audio(
+            reg=FakeRegistry(),  # type: ignore[arg-type]
+            scripts=[
+                {"id": "script-1", "segments": [{"voiceover": "first voiceover"}]},
+                {"id": "script-2", "segments": [{"voiceover": "second voiceover"}]},
+            ],
+            language="en",
+            errors=[],
+            artifact_output_dir="/tmp/tenants/momcozy-marketing/pending_review/s2_run/audio",
+            provider_max_retries=0,
+            tts_job_cap=1,
+        )
+
+        assert result["audio_paths"] == [
+            "/tmp/tenants/momcozy-marketing/pending_review/s2_run/audio/audio.mp3"
+        ]
+        assert len(seen_params) == 1
+        assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/audio")
+        assert seen_params[0]["provider_max_retries"] == 0
+
+    @pytest.mark.asyncio
+    async def test_thumbnail_step_passes_pending_review_output_dir_retry_zero_and_hard_cap(self):
+        seen_params: list[dict[str, Any]] = []
+
+        class FakeRegistry:
+            async def execute(self, name: str, params: dict[str, Any]) -> SkillResult:
+                assert name == "gpt-image-generate-skill"
+                seen_params.append(params)
+                return SkillResult(
+                    success=True,
+                    data={
+                        "image_path": f"{params['output_dir']}/thumb.png",
+                        "verification": {"all_ok": True},
+                    },
+                )
+
+        result = await S1ProductDirectPipeline()._step_thumbnail_images(
+            reg=FakeRegistry(),  # type: ignore[arg-type]
+            thumbnail_sets=[
+                {"variants": [{"prompt": "first thumbnail"}, {"prompt": "second thumbnail"}]},
+            ],
+            label="s2_run",
+            errors=[],
+            artifact_output_dir="/tmp/tenants/momcozy-marketing/pending_review/s2_run/thumbnails",
+            provider_max_retries=0,
+            thumbnail_job_cap=1,
+        )
+
+        assert result == [
+            "/tmp/tenants/momcozy-marketing/pending_review/s2_run/thumbnails/thumb.png"
+        ]
+        assert len(seen_params) == 1
+        assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/thumbnails")
         assert seen_params[0]["provider_max_retries"] == 0
 
     @pytest.mark.asyncio

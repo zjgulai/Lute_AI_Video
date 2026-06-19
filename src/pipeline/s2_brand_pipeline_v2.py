@@ -46,8 +46,16 @@ from src.pipeline.step_runner import StepRunner
 logger = structlog.get_logger()
 
 S2ArtifactDisposition = Literal["default", "pending_review", "quarantine"]
+S2SegmentedMediaStopStep = Literal[
+    "seedance_clips",
+    "tts_audio",
+    "thumbnail_prompts",
+    "thumbnail_images",
+    "assemble_final",
+    "audit",
+]
 S2_BOUNDED_MEDIA_STOP_STEP = "seedance_clips"
-S2_BOUNDED_MEDIA_STEP_ORDER = [
+S2_SEEDANCE_MEDIA_STEP_ORDER = [
     "strategy",
     "scripts",
     "compliance",
@@ -57,6 +65,55 @@ S2_BOUNDED_MEDIA_STEP_ORDER = [
     "video_prompts",
     "seedance_clips",
 ]
+S2_SEGMENTED_MEDIA_STOP_STEPS: tuple[S2SegmentedMediaStopStep, ...] = (
+    "seedance_clips",
+    "tts_audio",
+    "thumbnail_prompts",
+    "thumbnail_images",
+    "assemble_final",
+    "audit",
+)
+S2_SEGMENTED_MEDIA_STEP_ORDERS: dict[S2SegmentedMediaStopStep, list[str]] = {
+    "seedance_clips": S2_SEEDANCE_MEDIA_STEP_ORDER,
+    "tts_audio": [
+        "strategy",
+        "scripts",
+        "tts_audio",
+    ],
+    "thumbnail_prompts": [
+        "strategy",
+        "scripts",
+        "thumbnail_prompts",
+    ],
+    "thumbnail_images": [
+        "strategy",
+        "scripts",
+        "thumbnail_prompts",
+        "thumbnail_images",
+    ],
+    "assemble_final": [
+        *S2_SEEDANCE_MEDIA_STEP_ORDER,
+        "tts_audio",
+        "assemble_final",
+    ],
+    "audit": [
+        *S2_SEEDANCE_MEDIA_STEP_ORDER,
+        "tts_audio",
+        "thumbnail_prompts",
+        "thumbnail_images",
+        "assemble_final",
+        "audit",
+    ],
+}
+S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS: dict[S2SegmentedMediaStopStep, dict[str, int]] = {
+    "seedance_clips": {"image": 1, "video": 1},
+    "tts_audio": {"tts": 1},
+    "thumbnail_prompts": {},
+    "thumbnail_images": {"thumbnail": 1},
+    "assemble_final": {"image": 1, "video": 1, "tts": 1},
+    "audit": {"image": 1, "video": 1, "tts": 1, "thumbnail": 1},
+}
+S2_BOUNDED_MEDIA_STEP_ORDER = S2_SEGMENTED_MEDIA_STEP_ORDERS["seedance_clips"]
 S2_BOUNDED_MEDIA_PROVIDER_JOB_CAPS = {"image": 1, "video": 1}
 
 
@@ -66,6 +123,21 @@ def _artifact_storage_scope(disposition: S2ArtifactDisposition) -> str:
     if disposition == "quarantine":
         return "tenant_quarantine"
     return "default"
+
+
+def _resolve_media_stop_step(
+    media_stop_step: S2SegmentedMediaStopStep | str | None,
+    *,
+    bounded_media_pilot: bool,
+) -> S2SegmentedMediaStopStep | None:
+    if not bounded_media_pilot:
+        return None
+    if media_stop_step is None:
+        return S2_BOUNDED_MEDIA_STOP_STEP
+    if media_stop_step not in S2_SEGMENTED_MEDIA_STOP_STEPS:
+        allowed = ", ".join(S2_SEGMENTED_MEDIA_STOP_STEPS)
+        raise ValueError(f"unsupported S2 media_stop_step={media_stop_step!r}; allowed={allowed}")
+    return media_stop_step  # type: ignore[return-value]
 
 
 class S2BrandCampaignPipeline:
@@ -98,6 +170,7 @@ class S2BrandCampaignPipeline:
         artifact_disposition: S2ArtifactDisposition = "default",
         provider_max_retries: int | None = None,
         output_label: str | None = None,
+        media_stop_step: S2SegmentedMediaStopStep | None = None,
         commercial_injection_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run the S2 Brand Campaign pipeline end-to-end.
@@ -120,6 +193,10 @@ class S2BrandCampaignPipeline:
                 forces this to 0 so a live smoke cannot silently spend extra
                 provider calls.
             output_label: Override the auto-generated pipeline label.
+            media_stop_step: Optional bounded media stop point. Only honored
+                when ``artifact_disposition`` is ``pending_review`` or
+                ``quarantine``; otherwise the normal S2 full pipeline order
+                is used.
 
         Returns:
             dict shaped for S2 callers:
@@ -143,8 +220,16 @@ class S2BrandCampaignPipeline:
         label = output_label or f"s2_{brand_name.lower().replace(' ', '_')}_{int(time.time())}"
         model_id = select_model(self.SCENARIO_TAG)
         bounded_media_pilot = enable_media_synthesis and artifact_disposition in {"pending_review", "quarantine"}
+        effective_media_stop_step = _resolve_media_stop_step(
+            media_stop_step,
+            bounded_media_pilot=bounded_media_pilot,
+        )
         effective_provider_max_retries = 0 if bounded_media_pilot else provider_max_retries
-        provider_job_caps = dict(S2_BOUNDED_MEDIA_PROVIDER_JOB_CAPS) if bounded_media_pilot else None
+        provider_job_caps = (
+            dict(S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[effective_media_stop_step])
+            if effective_media_stop_step
+            else None
+        )
 
         # Brand campaign treats the brand itself as the "product" subject;
         # carry brand identity into product_catalog so reused S1 step
@@ -171,10 +256,13 @@ class S2BrandCampaignPipeline:
             "preferred_model_id": model_id,
             "artifact_disposition": artifact_disposition,
             "provider_max_retries": effective_provider_max_retries,
+            "media_stop_step": effective_media_stop_step,
         }
         if bounded_media_pilot:
             config.update({
-                "provider_job_caps": {"image": 1, "video": 1},
+                "provider_job_caps": {"image": 1, "video": 1}
+                if effective_media_stop_step == S2_BOUNDED_MEDIA_STOP_STEP
+                else provider_job_caps,
                 "seedance_quality_gate_enabled": False,
             })
         config = with_optional_injection_config(
@@ -205,6 +293,7 @@ class S2BrandCampaignPipeline:
                     label,
                     artifact_disposition,
                     effective_provider_max_retries,
+                    effective_media_stop_step or S2_BOUNDED_MEDIA_STOP_STEP,
                 )
             else:
                 final_state = await runner.resume(label)
@@ -221,6 +310,7 @@ class S2BrandCampaignPipeline:
             provider_max_retries=effective_provider_max_retries,
             provider_job_caps=provider_job_caps,
             bounded_media_pilot=bounded_media_pilot,
+            media_stop_step=effective_media_stop_step,
             model_id=model_id,
             label=label,
         )
@@ -242,24 +332,28 @@ class S2BrandCampaignPipeline:
         label: str,
         artifact_disposition: S2ArtifactDisposition,
         provider_max_retries: int | None,
+        media_stop_step: S2SegmentedMediaStopStep = S2_BOUNDED_MEDIA_STOP_STEP,
     ) -> dict[str, Any]:
-        """Run S2 media only through clips, never final assembly or publishable work."""
+        """Run S2 media through a controlled stop point, never publishable work."""
         final_state: dict[str, Any] = {}
-        for step_name in S2_BOUNDED_MEDIA_STEP_ORDER:
+        step_order = S2_SEGMENTED_MEDIA_STEP_ORDERS[media_stop_step]
+        provider_job_caps = dict(S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[media_stop_step])
+        for step_name in step_order:
             final_state = await runner.run_step(label, step_name)
             if final_state.get("pipeline_degraded"):
                 break
-            if step_name == S2_BOUNDED_MEDIA_STOP_STEP:
+            if step_name == media_stop_step:
                 final_state["current_step"] = None
                 final_state["bounded_media_pilot"] = True
-                final_state["bounded_media_stop_step"] = S2_BOUNDED_MEDIA_STOP_STEP
+                final_state["bounded_media_stop_step"] = media_stop_step
                 final_state["artifact_disposition"] = artifact_disposition
                 final_state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
                 final_state["provider_max_retries"] = provider_max_retries
-                final_state["provider_job_caps"] = dict(S2_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state["provider_job_caps"] = provider_job_caps
                 final_state.setdefault("config", {})
                 final_state["config"]["provider_max_retries"] = provider_max_retries
-                final_state["config"]["provider_job_caps"] = dict(S2_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state["config"]["media_stop_step"] = media_stop_step
+                final_state["config"]["provider_job_caps"] = provider_job_caps
                 final_state["config"]["seedance_quality_gate_enabled"] = False
                 save = getattr(runner.state_manager, "save", None)
                 if callable(save):
@@ -279,12 +373,14 @@ class S2BrandCampaignPipeline:
         provider_max_retries: int | None = None,
         provider_job_caps: dict[str, int] | None = None,
         bounded_media_pilot: bool = False,
+        media_stop_step: S2SegmentedMediaStopStep | None = None,
         model_id: str,
         label: str,
     ) -> dict[str, Any]:
         """Shape the S2 result dict from the final pipeline state."""
         steps = final_state.get("steps", {})
         get = S1ProductDirectPipeline._get_step_output
+        bounded_stop_step = media_stop_step if bounded_media_pilot else None
 
         result: dict[str, Any] = {
             "success": True,
@@ -299,7 +395,7 @@ class S2BrandCampaignPipeline:
             "provider_max_retries": provider_max_retries,
             "provider_job_caps": provider_job_caps,
             "bounded_media_pilot": bounded_media_pilot,
-            "bounded_media_stop_step": S2_BOUNDED_MEDIA_STOP_STEP if bounded_media_pilot else None,
+            "bounded_media_stop_step": bounded_stop_step,
             "errors": final_state.get("errors", []),
             "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
             "briefs": get(steps, "strategy") or [],
@@ -340,22 +436,32 @@ class S2BrandCampaignPipeline:
         result["render_json_path"] = render_json_path
 
         result["audit_report"] = get(steps, "audit") or {}
-        if bounded_media_pilot:
+        if bounded_media_pilot and bounded_stop_step:
+            if bounded_stop_step not in {"seedance_clips", "tts_audio", "assemble_final", "audit"}:
+                result["clip_paths"] = []
+            if bounded_stop_step not in {"tts_audio", "assemble_final", "audit"}:
+                result["audio_paths"] = []
+                result["lyrics_paths"] = []
+            if bounded_stop_step != "thumbnail_images" and bounded_stop_step != "audit":
+                result["thumbnail_image_paths"] = []
+            if bounded_stop_step in {"assemble_final", "audit"}:
+                result["intermediate_video_path"] = final_video_path
+                result["intermediate_render_json_path"] = render_json_path
             result["final_video_path"] = ""
             result["render_json_path"] = ""
-            result["thumbnail_image_paths"] = []
-            result["audit_report"] = {}
+            if bounded_stop_step != "audit":
+                result["audit_report"] = {}
             result["delivery_accepted"] = False
             result["publish_allowed"] = False
             result["approved_brand_token_write"] = False
             result["provider_job_caps"] = provider_job_caps or final_state.get("provider_job_caps")
-            result["steps_completed"] = S2_BOUNDED_MEDIA_STEP_ORDER.index(S2_BOUNDED_MEDIA_STOP_STEP) + 1
+            result["steps_completed"] = len(S2_SEGMENTED_MEDIA_STEP_ORDERS[bounded_stop_step])
             logger.info(
                 "s2: bounded media pilot complete",
                 brand=brand_name,
                 label=label,
                 artifact_disposition=artifact_disposition,
-                stop_step=S2_BOUNDED_MEDIA_STOP_STEP,
+                stop_step=bounded_stop_step,
                 clips=len(result["clip_paths"]),
             )
             return result

@@ -109,6 +109,14 @@ class S2BrandCampaignRequest(BaseModel):
     enable_media_synthesis: bool = True
     artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
     provider_max_retries: int | None = Field(default=None, ge=0, le=10)
+    media_stop_step: Literal[
+        "seedance_clips",
+        "tts_audio",
+        "thumbnail_prompts",
+        "thumbnail_images",
+        "assemble_final",
+        "audit",
+    ] | None = None
     commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 
