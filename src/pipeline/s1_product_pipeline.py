@@ -604,20 +604,28 @@ class S1ProductDirectPipeline:
 
         if step_name == "tts_audio":
             scripts = self._get_step_output(steps, "scripts") or []
+            provider_job_caps = config.get("provider_job_caps") or {}
             return await self._step_tts_audio(
                 reg=reg,
                 scripts=scripts,
                 language=config.get("target_language", "en"),
                 errors=media_errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "audio"),
+                provider_max_retries=config.get("provider_max_retries"),
+                tts_job_cap=provider_job_caps.get("tts"),
             )
 
         if step_name == "thumbnail_images":
             thumbnails = self._get_step_output(steps, "thumbnail_prompts") or []
+            provider_job_caps = config.get("provider_job_caps") or {}
             return await self._step_thumbnail_images(
                 reg=reg,
                 thumbnail_sets=thumbnails,
                 label=config.get("output_label", "s1"),
                 errors=media_errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "thumbnails"),
+                provider_max_retries=config.get("provider_max_retries"),
+                thumbnail_job_cap=provider_job_caps.get("thumbnail"),
             )
 
         if step_name == "assemble_final":
@@ -1402,6 +1410,9 @@ class S1ProductDirectPipeline:
         scripts: list[dict[str, Any]],
         language: str,
         errors: list[str],
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        tts_job_cap: int | None = None,
     ) -> dict[str, Any]:
         """Generate one background audio track per script.
 
@@ -1413,7 +1424,11 @@ class S1ProductDirectPipeline:
         audio_paths: list[str] = []
         lyrics_paths: list[str] = []
 
-        for script in scripts[:MAX_CLIPS_PER_DEMO]:
+        scripts_to_synthesize = scripts[:MAX_CLIPS_PER_DEMO]
+        if tts_job_cap is not None:
+            scripts_to_synthesize = scripts_to_synthesize[:max(0, int(tts_job_cap))]
+
+        for script in scripts_to_synthesize:
             # Collect all non-empty voiceovers from segments
             voiceover_parts: list[str] = []
             for seg in script.get("segments", []):
@@ -1443,10 +1458,15 @@ class S1ProductDirectPipeline:
                     text_preview=merged_text[:120],
                 )
 
-            res = await reg.execute("elevenlabs-tts-skill", {
+            tts_params: dict[str, Any] = {
                 "text": merged_text,
                 "language": language,
-            })
+            }
+            if artifact_output_dir:
+                tts_params["output_dir"] = artifact_output_dir
+            if provider_max_retries is not None:
+                tts_params["provider_max_retries"] = provider_max_retries
+            res = await reg.execute("elevenlabs-tts-skill", tts_params)
             if res.success and res.data:
                 p = res.data.get("audio_path", "")
                 if p:
@@ -1467,6 +1487,9 @@ class S1ProductDirectPipeline:
         thumbnail_sets: list[dict[str, Any]],
         label: str,
         errors: list[str],
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        thumbnail_job_cap: int | None = None,
     ) -> list[str]:
         thumb_paths: list[str] = []
         flat_prompts: list[str] = []
@@ -1477,6 +1500,8 @@ class S1ProductDirectPipeline:
                     flat_prompts.append(p)
 
         capped_prompts = flat_prompts[:MAX_THUMBNAILS_PER_DEMO]
+        if thumbnail_job_cap is not None:
+            capped_prompts = capped_prompts[:max(0, int(thumbnail_job_cap))]
         if not capped_prompts:
             return thumb_paths
 
@@ -1484,12 +1509,17 @@ class S1ProductDirectPipeline:
 
         async def _gen_one(i: int, prompt: str) -> tuple[int, Any]:
             async with thumb_sem:
-                res = await reg.execute("gpt-image-generate-skill", {
+                image_params: dict[str, Any] = {
                     "prompt": prompt,
                     "size": "1024x1792",
                     "quality": "high",
                     "image_id": f"{label}_thumb_{i}",
-                })
+                }
+                if artifact_output_dir:
+                    image_params["output_dir"] = artifact_output_dir
+                if provider_max_retries is not None:
+                    image_params["provider_max_retries"] = provider_max_retries
+                res = await reg.execute("gpt-image-generate-skill", image_params)
                 return i, res
 
         tasks = [_gen_one(i, p) for i, p in enumerate(capped_prompts)]

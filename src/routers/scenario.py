@@ -422,6 +422,7 @@ async def run_s2_brand_campaign(body: S2BrandCampaignRequest):
         artifact_disposition=body.artifact_disposition,
         provider_max_retries=body.provider_max_retries,
         output_label=body.output_label,
+        media_stop_step=body.media_stop_step,
         commercial_injection_plan=commercial_injection_plan,
     )
     return r

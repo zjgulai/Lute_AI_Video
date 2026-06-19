@@ -5,7 +5,7 @@ module: ai-video-2.0
 topic: e2e-test-plan
 status: stable
 created: 2026-06-06
-updated: 2026-06-13
+updated: 2026-06-19
 owner: self
 source: human+ai
 ---
@@ -44,6 +44,7 @@ source: human+ai
 | `L4C-7` S4 no-media clean-log single-submit | L4 | 是（仅 DeepSeek 文本） | 验证 `/scenario/s4` + no-media + clean-log | 已通过；单 spec、单 submit、媒体/provider forbidden 计数为 0 |
 | `L4C-8R` S5 no-media after-timeout-fix single-submit | L4 | 是（仅 DeepSeek 文本） | 验证 `/scenario/s5` + no-media + clean-log | 已通过；单 spec、单 submit、媒体/provider forbidden 计数为 0 |
 | `L4D` real media provider staged smoke | L4 | 是 | image-only → video-only → image+video → S2 bounded media pilot → frontend readback | 已通过至 `L4D-5Z`；S2 bounded media 只验证到 `seedance_clips`，产物保持 tenant-scoped `pending_review` |
+| `TODO-P1-5A` S2 segmented stop-point contract | L2 | 否 | S2 request/router/pipeline 显式支持受控 `media_stop_step` | 本地 no-provider 合同已通过；live segments 仍 blocked |
 | `L4C-2+` production `@token-smoke` slices | L4 | 是 | S1/S2-S5/gate/media/poster/quality 等更宽场景联测 | 暂缓；需重新授权 |
 
 ### 执行决策
@@ -542,6 +543,33 @@ npx playwright test -c playwright.prod.config.ts \
 
 当前 L4D 阶段的默认停止条件：不继续追加 provider 消耗，不把 `L4D-5Y` 外推为 S2 full media 或 S1/S3/S4/S5 media generation。下一步优先收口文档、CI/read-only guard 和证据索引；任何新的 provider submit、full media、TTS、assemble、quality audit、publish 或 delivery acceptance 都必须重新定义目标、预算、止损和精确授权。
 
+### 2026-06-19 TODO-P1-5 S2 full-media segmented readiness
+
+[事实] 当前生产已验证的 S2 media provider 范围仍只到 `seedance_clips`：`L4D-5Y` 证明 1 个 keyframe image job + 1 个 Seedance video job 成功，`L4D-5Z` 证明该批 pending_review 产物可只读回读。该证据不包含 `tts_audio`、`thumbnail_prompts`、`thumbnail_images`、`assemble_final` 或 `audit`。
+
+[事实] `TODO-P1-5-prep` 已新增 `web/e2e/production/scenario-s2-full-media-segmented-readiness.prod.spec.ts` 作为 no-provider readiness guard。初始版本只证明当前 S2 full-media 分段 stop point 尚未暴露，并确认现有 live bounded spec 明确禁止 TTS、thumbnail、assemble 与 audit。
+
+[事实] `TODO-P1-5A` 已在本地实现 S2 segmented stop-point contract：`S2BrandCampaignRequest` 显式接收 `media_stop_step`，`/scenario/s2` router 显式传入 `body.media_stop_step`，`src/pipeline/s2_brand_pipeline_v2.py` 定义受控 stop point 集合、每个 stop point 的 step order 与 provider job caps。默认不传 `media_stop_step` 时仍保持既有 `seedance_clips` bounded smoke 行为；`tts_audio`、`thumbnail_prompts`、`thumbnail_images` 可用隔离顺序运行，避免为了验证 TTS 或 thumbnail 先触发 Seedance。S1 复用 step 也已补齐 `audio` / `thumbnails` 的 tenant-scoped output_dir、`provider_max_retries` 与 job cap 透传。
+
+[证据] 本轮只执行本地 no-provider / 静态验证：
+
+- `DATABASE_URL= HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/pytest tests/test_s2_e2e.py -q`：`35 passed`。
+- `cd web && RUN_TOKEN_SMOKE=0 npx playwright test -c playwright.prod.config.ts e2e/production/scenario-s2-full-media-segmented-readiness.prod.spec.ts --list`：只枚举 1 个 readiness 测试。
+- `cd web && RUN_TOKEN_SMOKE=0 npx playwright test -c playwright.prod.config.ts e2e/production/scenario-s2-full-media-segmented-readiness.prod.spec.ts --reporter=list`：`1 passed`。
+- `.venv/bin/ruff check src/routers/_state.py src/routers/scenario.py src/pipeline/s2_brand_pipeline_v2.py src/pipeline/s1_product_pipeline.py src/skills/elevenlabs_tts.py tests/test_s2_e2e.py`：通过。
+
+[判断] S2 full-media 不能作为一个单次 live smoke 直接执行。合理路径应拆成以下阶段，每一阶段都需要单独授权、单独预算、单独 forbidden log gate 和单独 readback：
+
+| Stage | 新增验证面 | 允许的新增 side effect | 必须继续禁止 |
+|---|---|---|---|
+| `TODO-P1-5A` no-provider contract | request/model/router/pipeline 支持分段 stop point | 0 | 已完成；provider、submit、生产同步仍禁止 |
+| `TODO-P1-5B` TTS segment smoke | `tts_audio` 单段执行与音频路径处置 | TTS job <= 1 | poyo image、Seedance、thumbnail、assemble、audit、final_work |
+| `TODO-P1-5C` thumbnail segment smoke | `thumbnail_prompts` + `thumbnail_images` 单缩略图执行 | thumbnail image job <= 1 | Seedance、TTS、assemble、audit、final_work |
+| `TODO-P1-5D` assemble segment smoke | 用已存在 pending_review clip/audio/thumb 组装中间产物 | Remotion/local assemble only | provider、publish、delivery、approved brand token |
+| `TODO-P1-5E` audit segment smoke | 对已存在中间产物做 media_quality_audit | audit read/analysis only | provider、publish、delivery、approved brand token |
+
+[边界] `TODO-P1-5A` 只证明本地 S2 segmented stop-point 合同、step 越界防护和 readiness guard 通过；不代表 S2 TTS、thumbnail、assemble、media_quality_audit 的真实 provider / production live smoke 已执行，也不代表 S2 full media、final assembly、publish、delivery acceptance 或 approved brand token write 已执行。
+
 L4D 收口证据索引见 [L4D 真实媒体 Provider 证据索引](l4d-real-media-provider-evidence-index-stable.md)。
 
 后续 `L4C` 单片候选命令模板：
@@ -796,6 +824,8 @@ npx playwright test -c playwright.prod.config.ts \
 22. [x] 将 2026-06-11 L4A 待审产物同步到生产 `output/tenants/momcozy-marketing/pending_review/momcozy_sterilizer_smoke_20260611/`，部署 portfolio 扫描补丁后执行 L4B 只读回读。证据文件：`tmp/outputs/l4b-production-readback-20260611-160827.json`。
 23. [x] 完成 L4C S1-S5 no-media clean-log single-submit 阶段，并正式制定 L4D 真实 media provider 分级授权计划。实现文件：`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`、`docs/runbooks/production-e2e-token-smoke.md`。
 24. [x] 完成 L4D S2 bounded media provider smoke 与 frontend/library read-only 回归收口。证据文件：`tmp/debug/l4d5y-final-summary-20260613132543.json`、`tmp/debug/l4d5z-final-summary-20260613135315.json`。
+25. [x] 完成 `TODO-P1-5-prep` S2 full-media segmented no-provider readiness guard，明确 full-media live 仍 blocked，后续必须按 TTS / thumbnail / assemble / audit 分段授权。实现文件：`web/e2e/production/scenario-s2-full-media-segmented-readiness.prod.spec.ts`。
+26. [x] 完成 `TODO-P1-5A` S2 segmented stop-point contract PR：`S2BrandCampaignRequest`、router 与 S2 pipeline 支持 `media_stop_step`，本地 no-provider 测试证明 `seedance_clips`、`tts_audio`、`thumbnail_prompts`、`thumbnail_images`、`assemble_final`、`audit` 六个 stop point 不越界；live segment smoke 仍需逐段授权。
 
 ## 阶段验收
 
