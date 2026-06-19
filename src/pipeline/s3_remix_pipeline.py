@@ -21,7 +21,7 @@ import asyncio
 import importlib
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 
@@ -37,6 +37,7 @@ from src.pipeline.continuity_utils import (
     extract_clip_last_frame,
 )
 from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.pipeline.step_utils import get_step_output
@@ -48,6 +49,47 @@ logger = structlog.get_logger()
 # Caps to keep demo timeline sane (each Seedance call ~30-60s)
 MAX_CLIPS_PER_DEMO = 3
 MAX_THUMBNAILS_PER_DEMO = 4
+
+S3ArtifactDisposition = Literal["default", "pending_review", "quarantine"]
+S3_BOUNDED_MEDIA_STOP_STEP = "seedance_clips"
+S3_BOUNDED_MEDIA_STEP_ORDER = [
+    "video_analysis",
+    "character_identity",
+    "remix_script",
+    "storyboards",
+    "continuity_storyboard_grid",
+    "keyframe_images",
+    "video_prompts",
+    "seedance_clips",
+]
+S3_BOUNDED_MEDIA_PROVIDER_JOB_CAPS = {"image": 1, "video": 1}
+
+
+def _artifact_storage_scope(disposition: S3ArtifactDisposition) -> str:
+    if disposition == "pending_review":
+        return "tenant_pending_review"
+    if disposition == "quarantine":
+        return "tenant_quarantine"
+    return "default"
+
+
+def _safe_path_segment(value: Any, fallback: str) -> str:
+    segment = str(value or fallback).strip() or fallback
+    return segment.replace("/", "_").replace("\\", "_")
+
+
+def _artifact_media_output_dir(
+    state: dict[str, Any],
+    config: dict[str, Any],
+    media_kind: str,
+) -> str | None:
+    disposition = config.get("artifact_disposition", "default")
+    if disposition not in {"pending_review", "quarantine"}:
+        return None
+
+    tenant_id = _safe_path_segment(state.get("tenant_id") or config.get("tenant_id"), "default")
+    label = _safe_path_segment(config.get("output_label") or state.get("label"), "run")
+    return str(OUTPUT_DIR / "tenants" / tenant_id / disposition / label / media_kind)
 
 _LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
     "keyframe_images": (
@@ -79,9 +121,16 @@ _LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
 }
 
 
-def _ensure_step_skills_registered(step_name: str) -> None:
+def _ensure_step_skills_registered(step_name: str, config: dict[str, Any] | None = None) -> None:
     """Register provider-backed skills only when their step actually runs."""
-    for module_name, skill_name in _LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()):
+    modules = list(_LAZY_SKILL_MODULES_BY_STEP.get(step_name, ()))
+    if step_name == "seedance_clips" and (config or {}).get("seedance_quality_gate_enabled") is False:
+        modules = [
+            module
+            for module in modules
+            if module[1] != "media-quality-audit-skill"
+        ]
+    for module_name, skill_name in modules:
         module = importlib.import_module(module_name)
         if skill_name not in SkillRegistry._global_skills:
             importlib.reload(module)
@@ -107,6 +156,19 @@ class S3Result:
         self.audit_report: dict[str, Any] | None = None
         self.media_synthesis_errors: list[str] = []
         self.errors: list[str] = []
+        self.label: str = ""
+        self.scenario: str = "influencer_remix"
+        self.video_duration: int = 30
+        self.artifact_disposition: S3ArtifactDisposition = "default"
+        self.artifact_storage_scope: str = "default"
+        self.provider_max_retries: int | None = None
+        self.provider_job_caps: dict[str, int] | None = None
+        self.bounded_media_pilot: bool = False
+        self.bounded_media_stop_step: str | None = None
+        self.delivery_accepted: bool | None = None
+        self.publish_allowed: bool | None = None
+        self.approved_brand_token_write: bool | None = None
+        self.steps_completed: int | None = None
 
     # Back-compat alias used by some tests
     @property
@@ -120,6 +182,15 @@ class S3Result:
 
         return {
             "success": self.success,
+            "label": self.label,
+            "scenario": self.scenario,
+            "video_duration": self.video_duration,
+            "artifact_disposition": self.artifact_disposition,
+            "artifact_storage_scope": self.artifact_storage_scope,
+            "provider_max_retries": self.provider_max_retries,
+            "provider_job_caps": self.provider_job_caps,
+            "bounded_media_pilot": self.bounded_media_pilot,
+            "bounded_media_stop_step": self.bounded_media_stop_step,
             "video_analysis": self.video_analysis,
             "identity_card": self.identity_card,
             "remix_script": self.remix_script,
@@ -136,6 +207,10 @@ class S3Result:
             "media_synthesis_errors": self.media_synthesis_errors,
             "errors": self.errors,
             "segment_count": len(segments),
+            "delivery_accepted": self.delivery_accepted,
+            "publish_allowed": self.publish_allowed,
+            "approved_brand_token_write": self.approved_brand_token_write,
+            "steps_completed": self.steps_completed,
         }
 
 
@@ -161,7 +236,7 @@ class S3InfluencerRemixPipeline:
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step (used by StepRunner)."""
         config = state["config"]
-        _ensure_step_skills_registered(step_name)
+        _ensure_step_skills_registered(step_name, config)
         if step_name in _LAZY_SKILL_MODULES_BY_STEP:
             self._registry = SkillRegistry()
         reg = SkillRegistry()
@@ -238,7 +313,14 @@ class S3InfluencerRemixPipeline:
         if step_name == "keyframe_images":
             storyboard = self._get_step_output(steps, "storyboards") or {}
             identity = self._get_step_output(steps, "character_identity") or {}
-            return await self._step_keyframe_images(storyboard=storyboard, identity_card=identity)
+            provider_job_caps = config.get("provider_job_caps") or {}
+            return await self._step_keyframe_images(
+                storyboard=storyboard,
+                identity_card=identity,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "keyframes"),
+                provider_max_retries=config.get("provider_max_retries"),
+                image_job_cap=provider_job_caps.get("image"),
+            )
 
         if step_name == "video_prompts":
             script = self._get_step_output(steps, "remix_script") or {}
@@ -256,12 +338,16 @@ class S3InfluencerRemixPipeline:
         if step_name == "seedance_clips":
             prompts = self._get_step_output(steps, "video_prompts") or []
             keyframes = self._get_step_output(steps, "keyframe_images") or {}
+            provider_job_caps = config.get("provider_job_caps") or {}
             return await self._step_seedance_clips(
                 video_prompts=prompts,
                 product=config["product"],
                 label=config.get("output_label", "s3"),
                 errors=media_errors,
                 keyframe_images=keyframes,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "clips"),
+                provider_max_retries=config.get("provider_max_retries"),
+                video_job_cap=provider_job_caps.get("video"),
             )
 
         if step_name == "tts_audio":
@@ -351,8 +437,12 @@ class S3InfluencerRemixPipeline:
         brief_id: str = "",
         enable_media_synthesis: bool = True,
         target_language: str = "en",
+        target_platforms: list[str] | None = None,
         output_label: str | None = None,
         video_duration: int = 30,
+        artifact_disposition: S3ArtifactDisposition = "default",
+        provider_max_retries: int | None = None,
+        commercial_injection_plan: dict[str, Any] | None = None,
     ) -> S3Result:
         """Run the full S3 pipeline end-to-end.
 
@@ -361,6 +451,9 @@ class S3InfluencerRemixPipeline:
         """
         self._video_duration = video_duration if video_duration in {15, 30, 45, 60, 90} else 30
         label = output_label or f"s3_{int(time.time())}"
+        bounded_media_pilot = enable_media_synthesis and artifact_disposition in {"pending_review", "quarantine"}
+        effective_provider_max_retries = 0 if bounded_media_pilot else provider_max_retries
+        provider_job_caps = dict(S3_BOUNDED_MEDIA_PROVIDER_JOB_CAPS) if bounded_media_pilot else None
 
         logger.info("s3: starting influencer remix pipeline",
                     video_url=video_url, product=product.get("name"),
@@ -373,10 +466,23 @@ class S3InfluencerRemixPipeline:
             "extract_segments": extract_segments,
             "brief_id": brief_id,
             "target_language": target_language,
+            "target_platforms": target_platforms or ["tiktok"],
             "video_duration": self._video_duration,
             "output_label": label,
             "enable_media_synthesis": enable_media_synthesis,
+            "artifact_disposition": artifact_disposition,
+            "provider_max_retries": effective_provider_max_retries,
         }
+        if bounded_media_pilot:
+            config.update({
+                "provider_job_caps": {"image": 1, "video": 1},
+                "seedance_quality_gate_enabled": False,
+            })
+        config = with_optional_injection_config(
+            config,
+            commercial_injection_plan,
+            expected_scenario="s3",
+        )
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
@@ -384,7 +490,15 @@ class S3InfluencerRemixPipeline:
 
         try:
             if enable_media_synthesis:
-                final_state = await runner.resume(label)
+                if bounded_media_pilot:
+                    final_state = await self._resume_bounded_media_pilot(
+                        runner,
+                        label,
+                        artifact_disposition,
+                        effective_provider_max_retries,
+                    )
+                else:
+                    final_state = await runner.resume(label)
             else:
                 final_state = await self._resume_without_media_synthesis(runner, label)
         except Exception as e:
@@ -397,6 +511,15 @@ class S3InfluencerRemixPipeline:
         errors = final_state.get("errors", [])
 
         result = S3Result()
+        result.label = label
+        result.scenario = final_state.get("scenario", "influencer_remix")
+        result.video_duration = self._video_duration
+        result.artifact_disposition = artifact_disposition
+        result.artifact_storage_scope = _artifact_storage_scope(artifact_disposition)
+        result.provider_max_retries = effective_provider_max_retries
+        result.provider_job_caps = provider_job_caps
+        result.bounded_media_pilot = bounded_media_pilot
+        result.bounded_media_stop_step = S3_BOUNDED_MEDIA_STOP_STEP if bounded_media_pilot else None
         result.video_analysis = self._get_step_output(steps, "video_analysis")
         result.identity_card = self._get_step_output(steps, "character_identity")
         result.remix_script = self._get_step_output(steps, "remix_script")
@@ -415,6 +538,18 @@ class S3InfluencerRemixPipeline:
             result.final_video_path, result.render_json_path = extract_assemble_paths(assemble)
             result.audit_report = self._get_step_output(steps, "audit")
             result.media_synthesis_errors = final_state.get("media_synthesis_errors", [])
+            if bounded_media_pilot:
+                result.audio_paths = []
+                result.thumbnail_sets = []
+                result.thumbnail_image_paths = []
+                result.final_video_path = ""
+                result.render_json_path = ""
+                result.audit_report = {}
+                result.delivery_accepted = False
+                result.publish_allowed = False
+                result.approved_brand_token_write = False
+                result.provider_job_caps = provider_job_caps or final_state.get("provider_job_caps")
+                result.steps_completed = S3_BOUNDED_MEDIA_STEP_ORDER.index(S3_BOUNDED_MEDIA_STOP_STEP) + 1
 
         result.errors = errors
         result.success = len(errors) == 0
@@ -428,6 +563,37 @@ class S3InfluencerRemixPipeline:
                     audit=result.audit_report and result.audit_report.get("overall_status"),
                     errors=len(result.errors))
         return result
+
+    async def _resume_bounded_media_pilot(
+        self,
+        runner: StepRunner,
+        label: str,
+        artifact_disposition: S3ArtifactDisposition,
+        provider_max_retries: int | None,
+    ) -> dict[str, Any]:
+        """Run S3 only through bounded image/video generation, then stop."""
+        final_state: dict[str, Any] = {}
+        for step_name in S3_BOUNDED_MEDIA_STEP_ORDER:
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+            if step_name == S3_BOUNDED_MEDIA_STOP_STEP:
+                final_state["current_step"] = None
+                final_state["bounded_media_pilot"] = True
+                final_state["bounded_media_stop_step"] = S3_BOUNDED_MEDIA_STOP_STEP
+                final_state["artifact_disposition"] = artifact_disposition
+                final_state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
+                final_state["provider_max_retries"] = provider_max_retries
+                final_state["provider_job_caps"] = dict(S3_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state.setdefault("config", {})
+                final_state["config"]["provider_max_retries"] = provider_max_retries
+                final_state["config"]["provider_job_caps"] = dict(S3_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state["config"]["seedance_quality_gate_enabled"] = False
+                save = getattr(runner.state_manager, "save", None)
+                if callable(save):
+                    await save(label, final_state)
+                break
+        return final_state
 
     async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
         """Run only S3 pre-media steps; stop before provider-backed asset generation."""
@@ -813,6 +979,9 @@ class S3InfluencerRemixPipeline:
         self,
         storyboard: dict[str, Any],
         identity_card: dict[str, Any],
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        image_job_cap: int | None = None,
     ) -> dict[str, Any]:
         """Generate keyframe images for each storyboard shot using GPT-Image.
 
@@ -824,12 +993,19 @@ class S3InfluencerRemixPipeline:
                      shots=len(storyboard.get("shots", [])))
 
         try:
-            res = await self._registry.execute("keyframe-images", {
+            params: dict[str, Any] = {
                 "storyboard": storyboard,
                 "identity_card": identity_card,
                 "size": "1024x1792",
                 "quality": "high",
-            })
+            }
+            if image_job_cap is not None:
+                params["_max_shots"] = max(0, int(image_job_cap))
+            if artifact_output_dir:
+                params["output_dir"] = artifact_output_dir
+            if provider_max_retries is not None:
+                params["provider_max_retries"] = provider_max_retries
+            res = await self._registry.execute("keyframe-images", params)
             if res.success and res.data:
                 generated = res.data.get("keyframes_generated", 0)
                 logger.info("s3: keyframe images done", generated=generated)
@@ -840,6 +1016,10 @@ class S3InfluencerRemixPipeline:
         # Fallback: add empty keyframe_image_path to each shot
         logger.warning("s3: keyframe_images - using placeholder paths")
         fallback = dict(storyboard)
+        fallback_shots = fallback.get("shots", [])
+        if image_job_cap is not None:
+            fallback_shots = fallback_shots[: max(0, int(image_job_cap))]
+        fallback["shots"] = fallback_shots
         for shot in fallback.get("shots", []):
             shot["keyframe_image_path"] = ""
             shot["keyframe_prompt"] = shot.get("visual", "")
@@ -855,6 +1035,9 @@ class S3InfluencerRemixPipeline:
         label: str,
         errors: list[str],
         keyframe_images: dict[str, Any] | None = None,
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        video_job_cap: int | None = None,
     ) -> dict[str, Any]:
         """Step 8: invoke seedance-video-generate-skill with bounded concurrency.
 
@@ -891,6 +1074,8 @@ class S3InfluencerRemixPipeline:
                     kf_image_paths.append(path)
 
         capped = video_prompts[:MAX_CLIPS_PER_DEMO]
+        if video_job_cap is not None:
+            capped = capped[: max(0, int(video_job_cap))]
         video_max_duration = 15
         fallback_clip_duration = min(video_max_duration, max(4, self._video_duration // max(len(capped), 1)))
 
@@ -912,6 +1097,10 @@ class S3InfluencerRemixPipeline:
                     "output_label": f"{label}_clip_{i}",
                     "model": s3_model,
                 }
+                if artifact_output_dir:
+                    gen_params["output_dir"] = artifact_output_dir
+                if provider_max_retries is not None:
+                    gen_params["provider_max_retries"] = provider_max_retries
                 if last_frame:
                     gen_params["continuity_frame_path"] = last_frame
                 elif i < len(kf_image_paths) and kf_image_paths[i]:
@@ -926,7 +1115,11 @@ class S3InfluencerRemixPipeline:
                     if path:
                         frame = extract_clip_last_frame(
                             video_path=path,
-                            output_dir=str(OUTPUT_DIR / "seedance" / "continuity_frames"),
+                            output_dir=(
+                                str(Path(artifact_output_dir).parent / "continuity_frames")
+                                if artifact_output_dir
+                                else str(OUTPUT_DIR / "seedance" / "continuity_frames")
+                            ),
                         )
                         next_frame = frame
                 return i, res, next_frame

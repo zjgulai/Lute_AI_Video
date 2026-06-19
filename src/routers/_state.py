@@ -113,6 +113,22 @@ class S2BrandCampaignRequest(BaseModel):
     api_keys: dict[str, str] = {}
 
 
+class S3InfluencerRemixRequest(BaseModel):
+    video_url: str = ""
+    product: dict[str, Any] = {}
+    influencer_name: str = "Influencer"
+    brief_id: str = ""
+    target_platforms: list[str] = ["tiktok"]
+    target_languages: list[str] = DEFAULT_LANGUAGES
+    video_duration: int = 30
+    output_label: str | None = None
+    enable_media_synthesis: bool = True
+    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
+    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
+    commercial_injection_plan: dict[str, Any] | None = None
+    api_keys: dict[str, str] = {}
+
+
 class S5BrandVlogRequest(BaseModel):
     brand_id: str = "momcozy"
     product_sku: dict[str, Any] = {}

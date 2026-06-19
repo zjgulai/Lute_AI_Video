@@ -40,6 +40,7 @@ from src.routers._state import (
     FastModeRequest,
     S1StartRequest,
     S2BrandCampaignRequest,
+    S3InfluencerRemixRequest,
     S5BrandVlogRequest,
     _get_step_deps,
     _get_step_output,
@@ -426,7 +427,7 @@ async def run_s2_brand_campaign(body: S2BrandCampaignRequest):
 
 
 @router.post("/scenario/s3", dependencies=[Depends(verify_api_key)])
-async def run_s3_influencer_remix(body: dict[str, Any]):
+async def run_s3_influencer_remix(body: S3InfluencerRemixRequest | dict[str, Any]):
     """Run S3 Influencer Remix pipeline.
 
     Phase 2+3: Translates Chinese product inputs to English before
@@ -441,31 +442,50 @@ async def run_s3_influencer_remix(body: dict[str, Any]):
         brief_id: str (optional)
         video_duration: int (optional, default 30, valid: 15/30/45/60/90)
     """
-    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
+    body_data = body if isinstance(body, dict) else body.model_dump()
+    if isinstance(body, dict):
+        body = S3InfluencerRemixRequest(**body)
+
+    _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s3_remix_pipeline import S3InfluencerRemixPipeline
     from src.tools.translate import translate_catalog_to_english
 
-    product = body.get("product", {})
+    product = body.product
     if isinstance(product, dict):
         product = await translate_catalog_to_english(product)
-        body["product"] = product
 
     # P3-4: Bind pipeline context to all downstream structlog calls
     structlog.contextvars.bind_contextvars(
         product_name=product.get("name", "unknown") if isinstance(product, dict) else "unknown",
         brand_name="",
         scenario="s3",
-        video_url=body.get("video_url", "")[:50],
+        video_url=body.video_url[:50],
     )
+
+    bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
+        "pending_review",
+        "quarantine",
+    }
+    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+    commercial_injection_plan = _with_commercial_injection_config(
+        {},
+        body.commercial_injection_plan,
+        expected_scenario="s3",
+    ).get("commercial_injection_plan")
 
     p = S3InfluencerRemixPipeline()
     r = await p.run(
-        video_url=body.get("video_url", ""),
+        video_url=body.video_url,
         product=product,
-        influencer_name=body.get("influencer_name", "Influencer"),
-        brief_id=body.get("brief_id", ""),
-        video_duration=coerce_video_duration(body),
-        enable_media_synthesis=body.get("enable_media_synthesis", True),
+        influencer_name=body.influencer_name,
+        brief_id=body.brief_id,
+        target_platforms=body.target_platforms,
+        video_duration=coerce_video_duration(body_data),
+        enable_media_synthesis=body.enable_media_synthesis,
+        output_label=body.output_label,
+        artifact_disposition=body.artifact_disposition,
+        provider_max_retries=effective_provider_max_retries,
+        commercial_injection_plan=commercial_injection_plan,
     )
     return r.to_dict()
 
