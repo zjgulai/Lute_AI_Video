@@ -9,10 +9,12 @@ from __future__ import annotations
 import asyncio
 import importlib
 import time
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 import structlog
 
+from src.config import OUTPUT_DIR
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     all_clips_are_stubs,
@@ -28,6 +30,42 @@ from src.telemetry import generate_trace_id, pipeline_metrics
 logger = structlog.get_logger()
 
 VIDEO_MAX_DURATION = 15  # Happy Horse API limit
+S5ArtifactDisposition = Literal["default", "pending_review", "quarantine"]
+S5_BOUNDED_MEDIA_STOP_STEP = "seedance_clips"
+S5_BOUNDED_MEDIA_STEP_ORDER = [
+    "vlog_strategy",
+    "continuity_storyboard_grid",
+    "video_prompts",
+    "seedance_clips",
+]
+S5_BOUNDED_MEDIA_PROVIDER_JOB_CAPS = {"image": 1, "video": 1}
+
+
+def _artifact_storage_scope(disposition: S5ArtifactDisposition) -> str:
+    if disposition == "pending_review":
+        return "tenant_pending_review"
+    if disposition == "quarantine":
+        return "tenant_quarantine"
+    return "default"
+
+
+def _safe_path_segment(value: Any, fallback: str) -> str:
+    segment = str(value or fallback).strip() or fallback
+    return segment.replace("/", "_").replace("\\", "_")
+
+
+def _artifact_media_output_dir(
+    state: dict[str, Any],
+    config: dict[str, Any],
+    media_kind: str,
+) -> str | None:
+    disposition = config.get("artifact_disposition", "default")
+    if disposition not in {"pending_review", "quarantine"}:
+        return None
+
+    tenant_id = _safe_path_segment(state.get("tenant_id") or config.get("tenant_id"), "default")
+    label = _safe_path_segment(config.get("output_label") or state.get("label"), "run")
+    return str(OUTPUT_DIR / "tenants" / tenant_id / disposition / label / media_kind)
 
 # Decision E (2026-05-13): S5 must NEVER produce identifiable children's
 # faces or full-body shots. This block is appended to every clip prompt as
@@ -131,10 +169,14 @@ class S5BrandVlogPipeline:
 
         if step_name == "seedance_clips":
             prompts = self._get_step_output(steps, "video_prompts") or []
+            provider_job_caps = config.get("provider_job_caps") or {}
             return await self._step_seedance_clips(
                 reg, prompts, config.get("product_name", "Product"),
                 config.get("output_label", "vlog"), errors,
                 config.get("video_duration", 30), config.get("product_sku"),
+                artifact_output_dir=_artifact_media_output_dir(state, config, "clips"),
+                provider_max_retries=config.get("provider_max_retries"),
+                video_job_cap=provider_job_caps.get("video"),
             )
 
         if step_name == "tts_audio":
@@ -208,6 +250,9 @@ class S5BrandVlogPipeline:
         video_duration: int = 30,
         commercial_injection_plan: dict[str, Any] | None = None,
         enable_media_synthesis: bool = True,
+        output_label: str | None = None,
+        artifact_disposition: S5ArtifactDisposition = "default",
+        provider_max_retries: int | None = None,
     ) -> dict[str, Any]:
         """Run the full S5 pipeline end-to-end.
 
@@ -218,7 +263,10 @@ class S5BrandVlogPipeline:
         selected_models = selected_models or []
         product_name = product_sku.get("name", product_sku.get("shortName", "Product"))
         trace_id = generate_trace_id()
-        label = f"vlog_{int(time.time())}"
+        label = output_label or f"vlog_{int(time.time())}"
+        bounded_media_pilot = enable_media_synthesis and artifact_disposition in {"pending_review", "quarantine"}
+        effective_provider_max_retries = 0 if bounded_media_pilot else provider_max_retries
+        provider_job_caps = dict(S5_BOUNDED_MEDIA_PROVIDER_JOB_CAPS) if bounded_media_pilot else None
 
         logger.info("s5_vlog: starting", trace_id=trace_id, product=product_name, duration=video_duration)
 
@@ -240,7 +288,14 @@ class S5BrandVlogPipeline:
             "product_name": product_name,
             "output_label": label,
             "enable_media_synthesis": enable_media_synthesis,
+            "artifact_disposition": artifact_disposition,
+            "provider_max_retries": effective_provider_max_retries,
         }
+        if bounded_media_pilot:
+            config.update({
+                "provider_job_caps": {"image": 1, "video": 1},
+                "seedance_quality_gate_enabled": False,
+            })
         config = with_optional_injection_config(
             config,
             commercial_injection_plan,
@@ -257,7 +312,15 @@ class S5BrandVlogPipeline:
         start = time.perf_counter()
         try:
             if enable_media_synthesis:
-                final_state = await runner.resume(label)
+                if bounded_media_pilot:
+                    final_state = await self._resume_bounded_media_pilot(
+                        runner,
+                        label,
+                        artifact_disposition,
+                        effective_provider_max_retries,
+                    )
+                else:
+                    final_state = await runner.resume(label)
             else:
                 final_state = await self._resume_without_media_synthesis(runner, label)
         except Exception as e:
@@ -277,7 +340,10 @@ class S5BrandVlogPipeline:
         assemble_out = self._get_step_output(steps, "assemble_final")
         final_video, render_json_path = extract_assemble_paths(assemble_out)
         audit_report = self._get_step_output(steps, "audit") or {}
-        success = len(errors) == 0 and (bool(final_video) if enable_media_synthesis else bool(scripts))
+        if bounded_media_pilot:
+            success = len(errors) == 0 and bool(clip_paths)
+        else:
+            success = len(errors) == 0 and (bool(final_video) if enable_media_synthesis else bool(scripts))
 
         pipeline_metrics.record_pipeline(
             label=label, scenario="brand_vlog",
@@ -285,12 +351,18 @@ class S5BrandVlogPipeline:
             error_count=len(errors),
         )
 
-        return {
+        result: dict[str, Any] = {
             "success": success,
             "label": label,
             "scenario": "brand_vlog",
             "trace_id": trace_id,
             "video_duration": video_duration,
+            "artifact_disposition": artifact_disposition,
+            "artifact_storage_scope": _artifact_storage_scope(artifact_disposition),
+            "provider_max_retries": effective_provider_max_retries,
+            "provider_job_caps": provider_job_caps,
+            "bounded_media_pilot": bounded_media_pilot,
+            "bounded_media_stop_step": S5_BOUNDED_MEDIA_STOP_STEP if bounded_media_pilot else None,
             "briefs": [],
             "scripts": scripts,
             "storyboards": [],
@@ -304,10 +376,62 @@ class S5BrandVlogPipeline:
             "thumbnail_sets": [],
             "thumbnail_image_paths": [],
             "audit_report": audit_report,
+            "delivery_accepted": None,
+            "publish_allowed": None,
+            "approved_brand_token_write": None,
             "errors": errors,
             "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
-            "steps_completed": 7 if enable_media_synthesis else 2,
+            "steps_completed": (
+                len(S5_BOUNDED_MEDIA_STEP_ORDER)
+                if bounded_media_pilot
+                else 7 if enable_media_synthesis else 2
+            ),
         }
+        if bounded_media_pilot:
+            result.update({
+                "audio_paths": [],
+                "thumbnail_sets": [],
+                "thumbnail_image_paths": [],
+                "final_video_path": "",
+                "render_json_path": "",
+                "audit_report": {},
+                "delivery_accepted": False,
+                "publish_allowed": False,
+                "approved_brand_token_write": False,
+                "provider_job_caps": provider_job_caps or final_state.get("provider_job_caps"),
+            })
+        return result
+
+    async def _resume_bounded_media_pilot(
+        self,
+        runner,
+        label: str,
+        artifact_disposition: S5ArtifactDisposition,
+        provider_max_retries: int | None,
+    ) -> dict[str, Any]:
+        """Run S5 only through bounded Seedance clip generation, then stop."""
+        final_state: dict[str, Any] = {}
+        for step_name in S5_BOUNDED_MEDIA_STEP_ORDER:
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+            if step_name == S5_BOUNDED_MEDIA_STOP_STEP:
+                final_state["current_step"] = None
+                final_state["bounded_media_pilot"] = True
+                final_state["bounded_media_stop_step"] = S5_BOUNDED_MEDIA_STOP_STEP
+                final_state["artifact_disposition"] = artifact_disposition
+                final_state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
+                final_state["provider_max_retries"] = provider_max_retries
+                final_state["provider_job_caps"] = dict(S5_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state.setdefault("config", {})
+                final_state["config"]["provider_max_retries"] = provider_max_retries
+                final_state["config"]["provider_job_caps"] = dict(S5_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state["config"]["seedance_quality_gate_enabled"] = False
+                save = getattr(runner.state_manager, "save", None)
+                if callable(save):
+                    await save(label, final_state)
+                break
+        return final_state
 
     async def _resume_without_media_synthesis(self, runner, label: str) -> dict[str, Any]:
         """Run only S5 pre-media steps; stop before Seedance prompt generation."""
@@ -638,6 +762,9 @@ class S5BrandVlogPipeline:
     async def _step_seedance_clips(
         self, reg, video_prompts, product_name, label, errors, video_duration,
         product_sku: dict[str, Any] | None = None,
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        video_job_cap: int | None = None,
     ):
         """Generate video clips per segment via Seedance 2 (multi-clip).
 
@@ -652,7 +779,6 @@ class S5BrandVlogPipeline:
             3. (text-to-video fallback)
         """
 
-        from src.config import OUTPUT_DIR
         from src.pipeline.model_router import select_model
 
         s5_model = select_model("s5")
@@ -660,6 +786,14 @@ class S5BrandVlogPipeline:
         clip_details = []
         per_clip = min(VIDEO_MAX_DURATION, video_duration)
         last_frame: str | None = None
+        active_video_prompts = list(video_prompts[:5])
+        if video_job_cap is not None:
+            active_video_prompts = active_video_prompts[: max(0, int(video_job_cap))]
+        continuity_frame_output_dir = (
+            str(Path(artifact_output_dir).parent / "continuity_frames")
+            if artifact_output_dir
+            else str(OUTPUT_DIR / "seedance" / "continuity_frames")
+        )
 
         # P3: Build keyframe image mapping from product views
         keyframe_map: dict[str, str] = {}
@@ -675,7 +809,7 @@ class S5BrandVlogPipeline:
         # P0-1: 检测是否所有 clips 都有 keyframe 覆盖
         _all_have_keyframe = all(
             keyframe_map.get(vp.get("product_angle", ""), "")
-            for vp in video_prompts[:5]
+            for vp in active_video_prompts
         )
 
         if _all_have_keyframe:
@@ -702,6 +836,10 @@ class S5BrandVlogPipeline:
                         "output_label": f"{label}_seg_{i}",
                         "model": s5_model,
                     }
+                    if artifact_output_dir:
+                        gen_params["output_dir"] = artifact_output_dir
+                    if provider_max_retries is not None:
+                        gen_params["provider_max_retries"] = provider_max_retries
 
                     product_angle = vp.get("product_angle", "")
                     kf_path = keyframe_map.get(product_angle, "") if product_angle else ""
@@ -712,7 +850,7 @@ class S5BrandVlogPipeline:
                     res = await reg.execute("seedance-video-generate-skill", gen_params)
                     return i, res
 
-            tasks = [_gen_one_s5(i, vp) for i, vp in enumerate(video_prompts[:5])]
+            tasks = [_gen_one_s5(i, vp) for i, vp in enumerate(active_video_prompts)]
             raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for raw in raw_results:
@@ -750,7 +888,7 @@ class S5BrandVlogPipeline:
 
         else:
             # ── 串行 fallback：保留 last-frame 链 ──
-            for i, vp in enumerate(video_prompts[:5]):
+            for i, vp in enumerate(active_video_prompts):
                 prompt_text = vp.get("segment_prompt", "") or vp.get("prompt", "")
                 if isinstance(prompt_text, dict):
                     prompt_text = prompt_text.get("segment_prompt", "") or str(prompt_text)
@@ -769,6 +907,10 @@ class S5BrandVlogPipeline:
                     "output_label": f"{label}_seg_{i}",
                     "model": s5_model,
                 }
+                if artifact_output_dir:
+                    gen_params["output_dir"] = artifact_output_dir
+                if provider_max_retries is not None:
+                    gen_params["provider_max_retries"] = provider_max_retries
 
                 # P3: Keyframe anchoring — use product view image if available
                 product_angle = vp.get("product_angle", "")
@@ -804,15 +946,16 @@ class S5BrandVlogPipeline:
                         })
                         # P1-4: delegate last-frame extraction to skill for
                         # consistent async handling + fallback semantics.
-                        cm_params = {
-                            "video_path": path,
-                            "output_dir": str(OUTPUT_DIR / "seedance" / "continuity_frames"),
-                        }
-                        cm_res = await reg.execute("video-continuity-manager-skill", cm_params)
-                        if cm_res.success and cm_res.data:
-                            last_frame = cm_res.data.get("continuity_frame_path")
-                        else:
-                            last_frame = None
+                        if i < len(active_video_prompts) - 1:
+                            cm_params = {
+                                "video_path": path,
+                                "output_dir": continuity_frame_output_dir,
+                            }
+                            cm_res = await reg.execute("video-continuity-manager-skill", cm_params)
+                            if cm_res.success and cm_res.data:
+                                last_frame = cm_res.data.get("continuity_frame_path")
+                            else:
+                                last_frame = None
                 else:
                     errors.append(f"clip_{i}_failed: {res.error}")
                     last_frame = None

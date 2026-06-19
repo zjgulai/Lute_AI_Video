@@ -151,6 +151,10 @@ class S5BrandVlogRequest(BaseModel):
     selected_models: list[dict[str, Any]] = []
     story_description: str = ""
     video_duration: int = 30
+    output_label: str | None = None
+    enable_media_synthesis: bool = True
+    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
+    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 
