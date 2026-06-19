@@ -26,7 +26,7 @@ import asyncio
 import importlib
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 
@@ -59,6 +59,27 @@ from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
+
+S1ArtifactDisposition = Literal["default", "pending_review", "quarantine"]
+S1_BOUNDED_MEDIA_STOP_STEP = "seedance_clips"
+S1_BOUNDED_MEDIA_STEP_ORDER = [
+    "strategy",
+    "scripts",
+    "storyboards",
+    "continuity_storyboard_grid",
+    "keyframe_images",
+    "video_prompts",
+    "seedance_clips",
+]
+S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS = {"image": 1, "video": 1}
+
+
+def _artifact_storage_scope(disposition: S1ArtifactDisposition) -> str:
+    if disposition == "pending_review":
+        return "tenant_pending_review"
+    if disposition == "quarantine":
+        return "tenant_quarantine"
+    return "default"
 
 
 def _safe_path_segment(value: Any, fallback: str) -> str:
@@ -160,6 +181,8 @@ class S1ProductDirectPipeline:
         clip_group_size: int = 3,
         transition_style: str = "match_cut",
         commercial_injection_plan: dict[str, Any] | None = None,
+        artifact_disposition: S1ArtifactDisposition = "default",
+        provider_max_retries: int | None = None,
     ) -> dict[str, Any]:
         """Run the full S1 pipeline end-to-end.
 
@@ -179,6 +202,9 @@ class S1ProductDirectPipeline:
         brand_name = (brand_guidelines or {}).get("brand_name", "")
         target_language = "en"
         label = output_label or f"s1_{int(time.time())}"
+        bounded_media_pilot = enable_media_synthesis and artifact_disposition in {"pending_review", "quarantine"}
+        effective_provider_max_retries = 0 if bounded_media_pilot else provider_max_retries
+        provider_job_caps = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS) if bounded_media_pilot else None
 
         config = {
             "product_catalog": product_catalog,
@@ -198,7 +224,14 @@ class S1ProductDirectPipeline:
             "storyboard_grid": storyboard_grid,
             "clip_group_size": clip_group_size,
             "transition_style": transition_style,
+            "artifact_disposition": artifact_disposition,
+            "provider_max_retries": effective_provider_max_retries,
         }
+        if bounded_media_pilot:
+            config.update({
+                "provider_job_caps": {"image": 1, "video": 1},
+                "seedance_quality_gate_enabled": False,
+            })
         config = with_optional_injection_config(
             config,
             commercial_injection_plan,
@@ -209,7 +242,15 @@ class S1ProductDirectPipeline:
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label)
         if enable_media_synthesis:
-            final_state = await runner.resume(label)
+            if bounded_media_pilot:
+                final_state = await self._resume_bounded_media_pilot(
+                    runner,
+                    label,
+                    artifact_disposition,
+                    effective_provider_max_retries,
+                )
+            else:
+                final_state = await runner.resume(label)
         else:
             final_state = await self._resume_without_media_synthesis(runner, label)
 
@@ -220,6 +261,13 @@ class S1ProductDirectPipeline:
             "scenario": final_state.get("scenario", "product_direct"),
             "brand_mode": brand_mode,
             "video_duration": video_duration,
+            "label": label,
+            "artifact_disposition": artifact_disposition,
+            "artifact_storage_scope": _artifact_storage_scope(artifact_disposition),
+            "provider_max_retries": effective_provider_max_retries,
+            "provider_job_caps": provider_job_caps,
+            "bounded_media_pilot": bounded_media_pilot,
+            "bounded_media_stop_step": S1_BOUNDED_MEDIA_STOP_STEP if bounded_media_pilot else None,
             "errors": final_state.get("errors", []),
             "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
             "briefs": self._get_step_output(steps, "strategy") or [],
@@ -256,6 +304,28 @@ class S1ProductDirectPipeline:
         result["render_json_path"] = render_json_path
 
         result["audit_report"] = self._get_step_output(steps, "audit") or {}
+        if bounded_media_pilot:
+            result["final_video_path"] = ""
+            result["render_json_path"] = ""
+            result["thumbnail_sets"] = []
+            result["thumbnail_image_paths"] = []
+            result["audio_paths"] = []
+            result["lyrics_paths"] = []
+            result["audit_report"] = {}
+            result["delivery_accepted"] = False
+            result["publish_allowed"] = False
+            result["approved_brand_token_write"] = False
+            result["provider_job_caps"] = provider_job_caps or final_state.get("provider_job_caps")
+            result["steps_completed"] = S1_BOUNDED_MEDIA_STEP_ORDER.index(S1_BOUNDED_MEDIA_STOP_STEP) + 1
+            logger.info(
+                "s1: bounded media pilot complete",
+                label=label,
+                artifact_disposition=artifact_disposition,
+                stop_step=S1_BOUNDED_MEDIA_STOP_STEP,
+                clips=len(result["clip_paths"]),
+            )
+            return result
+
         result["steps_completed"] = 12
 
         # Sprint 3 P3-1: C2PA Content Credentials signing for EU AI Act
@@ -297,6 +367,37 @@ class S1ProductDirectPipeline:
                     errors=len(result["errors"]))
 
         return result
+
+    async def _resume_bounded_media_pilot(
+        self,
+        runner: StepRunner,
+        label: str,
+        artifact_disposition: S1ArtifactDisposition,
+        provider_max_retries: int | None,
+    ) -> dict[str, Any]:
+        """Run S1 media only through clips, never final assembly or publishable work."""
+        final_state: dict[str, Any] = {}
+        for step_name in S1_BOUNDED_MEDIA_STEP_ORDER:
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+            if step_name == S1_BOUNDED_MEDIA_STOP_STEP:
+                final_state["current_step"] = None
+                final_state["bounded_media_pilot"] = True
+                final_state["bounded_media_stop_step"] = S1_BOUNDED_MEDIA_STOP_STEP
+                final_state["artifact_disposition"] = artifact_disposition
+                final_state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
+                final_state["provider_max_retries"] = provider_max_retries
+                final_state["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state.setdefault("config", {})
+                final_state["config"]["provider_max_retries"] = provider_max_retries
+                final_state["config"]["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state["config"]["seedance_quality_gate_enabled"] = False
+                save = getattr(runner.state_manager, "save", None)
+                if callable(save):
+                    await save(label, final_state)
+                break
+        return final_state
 
     async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
         """Run only pre-media steps; stop before provider-backed asset generation."""
