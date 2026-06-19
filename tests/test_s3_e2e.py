@@ -715,3 +715,166 @@ async def test_scenario_s3_route_passes_enable_media_synthesis_false(
 
     assert response["success"] is True
     assert captured["enable_media_synthesis"] is False
+
+
+@pytest.mark.asyncio
+async def test_scenario_s3_route_passes_bounded_media_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.routers import scenario
+    from src.routers._state import S3InfluencerRemixRequest
+    from src.tools import translate
+
+    captured: dict[str, object] = {}
+
+    async def fake_translate_catalog(product: dict) -> dict:
+        return product
+
+    class FakeS3Pipeline:
+        async def run(self, **kwargs):
+            captured.update(kwargs)
+            result = S3Result()
+            result.success = True
+            return result
+
+    monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
+    monkeypatch.setattr(
+        "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
+        FakeS3Pipeline,
+    )
+
+    response = await scenario.run_s3_influencer_remix(
+        S3InfluencerRemixRequest(
+            video_url="https://tiktok.com/@momcozy/video/1000000001",
+            product={"name": "Momcozy UV Sterilizer"},
+            influencer_name="Test Influencer",
+            video_duration=15,
+            output_label="s3_bounded_contract",
+            enable_media_synthesis=True,
+            artifact_disposition="pending_review",
+            provider_max_retries=3,
+        )
+    )
+
+    assert response["success"] is True
+    assert captured["output_label"] == "s3_bounded_contract"
+    assert captured["artifact_disposition"] == "pending_review"
+    assert captured["provider_max_retries"] == 0
+
+
+@pytest.mark.asyncio
+async def test_s3_bounded_media_stops_after_seedance_and_clears_publishable_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed_steps: list[str] = []
+    saved_states: list[dict[str, object]] = []
+    captured_config: dict[str, object] = {}
+
+    class FakeStateManager:
+        async def save(self, label: str, state: dict[str, object]) -> None:
+            saved_states.append(
+                {
+                    "label": label,
+                    "current_step": state.get("current_step"),
+                    "bounded_media_stop_step": state.get("bounded_media_stop_step"),
+                }
+            )
+
+    class FakeStepRunner:
+        def __init__(self, state_manager: object) -> None:
+            self.state_manager = FakeStateManager()
+
+        async def init_state(self, *, config, mode="auto", label=None, scenario="s3"):
+            captured_config.update(config)
+            return label or "s3_bounded_fixture"
+
+        async def resume(self, label):
+            raise AssertionError("bounded S3 must not resume the full media pipeline")
+
+        async def run_step(self, label, step_name):
+            executed_steps.append(step_name)
+            steps: dict[str, dict[str, object]] = {
+                step: {"status": "done", "output": {}} for step in executed_steps
+            }
+            steps["keyframe_images"] = {
+                "status": "done",
+                "output": {
+                    "keyframes_generated": 1,
+                    "shots": [
+                        {
+                            "id": 1,
+                            "keyframe_image_path": (
+                                "/output/tenants/momcozy-marketing/pending_review/"
+                                "s3_bounded_fixture/keyframes/main.png"
+                            ),
+                        }
+                    ],
+                },
+            }
+            steps["seedance_clips"] = {
+                "status": "done",
+                "output": {
+                    "clip_paths": [
+                        (
+                            "/output/tenants/momcozy-marketing/pending_review/"
+                            "s3_bounded_fixture/clips/clip_0.mp4"
+                        )
+                    ],
+                    "clip_details": [{"duration": 6}],
+                    "total_duration": 6,
+                },
+            }
+            for pending_step in (
+                "thumbnail_prompts",
+                "tts_audio",
+                "thumbnail_images",
+                "assemble_final",
+                "audit",
+            ):
+                steps.setdefault(pending_step, {"status": "pending", "output": None})
+            return {
+                "label": label,
+                "scenario": "s3",
+                "tenant_id": "momcozy-marketing",
+                "config": captured_config,
+                "steps": steps,
+                "errors": [],
+                "media_synthesis_errors": [],
+                "pipeline_degraded": False,
+            }
+
+    monkeypatch.setattr(s3_remix_pipeline, "StepRunner", FakeStepRunner)
+
+    result = await S3InfluencerRemixPipeline().run(
+        video_url="https://tiktok.com/@momcozy/video/1000000002",
+        product={"name": "Momcozy UV Sterilizer", "brand_name": "Momcozy"},
+        influencer_name="Test Influencer",
+        video_duration=15,
+        output_label="s3_bounded_fixture",
+        enable_media_synthesis=True,
+        artifact_disposition="pending_review",
+        provider_max_retries=5,
+    )
+
+    assert executed_steps == s3_remix_pipeline.S3_BOUNDED_MEDIA_STEP_ORDER
+    assert captured_config["provider_max_retries"] == 0
+    assert captured_config["provider_job_caps"] == {"image": 1, "video": 1}
+    assert captured_config["seedance_quality_gate_enabled"] is False
+    assert result.success is True
+    assert result.bounded_media_pilot is True
+    assert result.bounded_media_stop_step == "seedance_clips"
+    assert result.provider_max_retries == 0
+    assert result.provider_job_caps == {"image": 1, "video": 1}
+    assert result.clip_paths == [
+        "/output/tenants/momcozy-marketing/pending_review/s3_bounded_fixture/clips/clip_0.mp4"
+    ]
+    assert result.audio_paths == []
+    assert result.thumbnail_sets == []
+    assert result.thumbnail_image_paths == []
+    assert result.final_video_path == ""
+    assert result.render_json_path == ""
+    assert result.audit_report == {}
+    assert result.delivery_accepted is False
+    assert result.publish_allowed is False
+    assert result.approved_brand_token_write is False
+    assert saved_states[-1]["current_step"] is None
