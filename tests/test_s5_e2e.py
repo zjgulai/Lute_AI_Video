@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+import src.pipeline.s5_brand_vlog_pipeline as s5_brand_vlog_pipeline
 import src.skills.elevenlabs_tts as elevenlabs_tts_skill
 import src.skills.media_quality_audit as media_quality_audit_skill
 import src.skills.remotion_assemble as remotion_assemble_skill
@@ -331,6 +332,165 @@ async def test_scenario_s5_route_passes_enable_media_synthesis_false(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_scenario_s5_route_passes_bounded_media_controls(monkeypatch):
+    from src.pipeline import s5_brand_vlog_pipeline
+    from src.routers import scenario
+
+    captured: dict[str, Any] = {}
+
+    async def fake_run(self: S5BrandVlogPipeline, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"success": True, "scenario": "brand_vlog"}
+
+    class FakeRequest:
+        async def json(self) -> dict[str, Any]:
+            return {
+                "enable_media_synthesis": True,
+                "scene_id": "living-room",
+            }
+
+    assert "output_label" in S5BrandVlogRequest.model_fields
+    assert "artifact_disposition" in S5BrandVlogRequest.model_fields
+    assert "provider_max_retries" in S5BrandVlogRequest.model_fields
+
+    monkeypatch.setattr(s5_brand_vlog_pipeline.S5BrandVlogPipeline, "run", fake_run)
+
+    result = await scenario.run_s5_brand_vlog(
+        S5BrandVlogRequest(
+            brand_id="lactfit",
+            product_sku=PRODUCT_SKU_FIXTURE,
+            scene_id="living-room",
+            selected_models=SELECTED_MODELS_FIXTURE,
+            story_description="Test story",
+            video_duration=15,
+            output_label="s5_bounded_contract",
+            artifact_disposition="pending_review",
+            provider_max_retries=3,
+        ),
+        request=FakeRequest(),
+    )
+
+    assert result["success"] is True
+    assert captured["output_label"] == "s5_bounded_contract"
+    assert captured["artifact_disposition"] == "pending_review"
+    assert captured["provider_max_retries"] == 0
+
+
+@pytest.mark.asyncio
+async def test_s5_bounded_media_stops_after_seedance_and_clears_publishable_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed_steps: list[str] = []
+    saved_states: list[dict[str, object]] = []
+    captured_config: dict[str, object] = {}
+
+    class FakeStateManager:
+        async def save(self, label: str, state: dict[str, object]) -> None:
+            saved_states.append(
+                {
+                    "label": label,
+                    "current_step": state.get("current_step"),
+                    "bounded_media_stop_step": state.get("bounded_media_stop_step"),
+                }
+            )
+
+    class FakeStepRunner:
+        def __init__(self, state_manager: object) -> None:
+            self.state_manager = FakeStateManager()
+
+        async def init_state(self, *, config, mode="auto", label=None, scenario="s5"):
+            captured_config.update(config)
+            return label or "s5_bounded_fixture"
+
+        async def resume(self, label):
+            raise AssertionError("bounded S5 must not resume the full media pipeline")
+
+        async def run_step(self, label, step_name):
+            executed_steps.append(step_name)
+            steps: dict[str, dict[str, object]] = {
+                step: {"status": "done", "output": {}} for step in executed_steps
+            }
+            steps["vlog_strategy"] = {
+                "status": "done",
+                "output": {"scripts": [{"segments": [{"voiceover": "轻松开始。"}]}]},
+            }
+            steps["video_prompts"] = {
+                "status": "done",
+                "output": [{"prompt": "warm vlog product scene", "duration_seconds": 6}],
+            }
+            steps["seedance_clips"] = {
+                "status": "done",
+                "output": {
+                    "clip_paths": [
+                        (
+                            "/output/tenants/momcozy-marketing/pending_review/"
+                            "s5_bounded_fixture/clips/clip_0.mp4"
+                        )
+                    ],
+                    "clip_details": [{"duration": 6}],
+                    "total_duration": 6,
+                },
+            }
+            for pending_step in (
+                "tts_audio",
+                "assemble_final",
+                "audit",
+            ):
+                steps.setdefault(pending_step, {"status": "pending", "output": None})
+            return {
+                "label": label,
+                "scenario": "s5",
+                "tenant_id": "momcozy-marketing",
+                "config": captured_config,
+                "steps": steps,
+                "errors": [],
+                "media_synthesis_errors": [],
+                "pipeline_degraded": False,
+            }
+
+    monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
+
+    result = await S5BrandVlogPipeline().run(
+        brand_id="lactfit",
+        product_sku=PRODUCT_SKU_FIXTURE,
+        scene_id="living-room",
+        selected_models=SELECTED_MODELS_FIXTURE,
+        story_description="Test story",
+        video_duration=15,
+        output_label="s5_bounded_fixture",
+        enable_media_synthesis=True,
+        artifact_disposition="pending_review",
+        provider_max_retries=5,
+    )
+
+    assert executed_steps == s5_brand_vlog_pipeline.S5_BOUNDED_MEDIA_STEP_ORDER
+    assert captured_config["provider_max_retries"] == 0
+    assert captured_config["provider_job_caps"] == {"image": 1, "video": 1}
+    assert captured_config["seedance_quality_gate_enabled"] is False
+    assert result["success"] is True
+    assert result["label"] == "s5_bounded_fixture"
+    assert result["bounded_media_pilot"] is True
+    assert result["bounded_media_stop_step"] == "seedance_clips"
+    assert result["artifact_disposition"] == "pending_review"
+    assert result["artifact_storage_scope"] == "tenant_pending_review"
+    assert result["provider_max_retries"] == 0
+    assert result["provider_job_caps"] == {"image": 1, "video": 1}
+    assert result["clip_paths"] == [
+        "/output/tenants/momcozy-marketing/pending_review/s5_bounded_fixture/clips/clip_0.mp4"
+    ]
+    assert result["audio_paths"] == []
+    assert result["thumbnail_sets"] == []
+    assert result["thumbnail_image_paths"] == []
+    assert result["final_video_path"] == ""
+    assert result["render_json_path"] == ""
+    assert result["audit_report"] == {}
+    assert result["delivery_accepted"] is False
+    assert result["publish_allowed"] is False
+    assert result["approved_brand_token_write"] is False
+    assert saved_states[-1]["current_step"] is None
+
+
+@pytest.mark.asyncio
 async def test_s5_full_pipeline_mock():
     """S5 full run() returns expected output shape in mock mode."""
     pipeline = S5BrandVlogPipeline()
@@ -523,6 +683,66 @@ async def test_s5_seedance_clips_preserve_director_intent_metadata():
     assert result["clip_details"][1]["scene_beat"] == "lived_in_demo"
     assert result["clip_details"][1]["beat_summary"] == "hands-on usage with Sarah"
     assert result["clip_details"][1]["transition_intent"] == "carry the story toward practical proof"
+
+
+@pytest.mark.asyncio
+async def test_s5_seedance_clips_honor_video_cap_and_pending_review_output_dir():
+    pipeline = S5BrandVlogPipeline()
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            calls.append((name, params))
+            assert name == "seedance-video-generate-skill"
+            return SkillResult(
+                success=True,
+                data={
+                    "video_path": f"{params['output_dir']}/{params['output_label']}.mp4",
+                    "duration_seconds": params["duration"],
+                    "file_size_bytes": 2048,
+                    "verification": {"all_ok": True},
+                    "is_stub": False,
+                },
+            )
+
+    result = await pipeline._step_seedance_clips(
+        reg=FakeRegistry(),
+        video_prompts=[
+            {
+                "segment_prompt": "opening scene",
+                "duration_seconds": 4,
+                "product_angle": "主视图",
+            },
+            {
+                "segment_prompt": "second scene",
+                "duration_seconds": 5,
+                "product_angle": "佩戴图",
+            },
+        ],
+        product_name="X1 Pump",
+        label="s5-bounded",
+        errors=[],
+        video_duration=15,
+        product_sku={
+            "views": [
+                {"label": "主视图", "imagePath": "/tmp/main.png"},
+                {"label": "佩戴图", "imagePath": "/tmp/worn.png"},
+            ],
+        },
+        artifact_output_dir="/output/tenants/momcozy-marketing/pending_review/s5-bounded/clips",
+        provider_max_retries=0,
+        video_job_cap=1,
+    )
+
+    assert len(calls) == 1
+    name, params = calls[0]
+    assert name == "seedance-video-generate-skill"
+    assert params["output_dir"] == "/output/tenants/momcozy-marketing/pending_review/s5-bounded/clips"
+    assert params["provider_max_retries"] == 0
+    assert params["keyframe_image_path"] == "/tmp/main.png"
+    assert result["clip_paths"] == [
+        "/output/tenants/momcozy-marketing/pending_review/s5-bounded/clips/s5-bounded_seg_0.mp4"
+    ]
 
 
 def test_s5_clip_groups_preserve_angle_model_and_shot_type():

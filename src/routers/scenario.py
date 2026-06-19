@@ -553,6 +553,11 @@ async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
     enable_media_synthesis = True
     if isinstance(raw_body, dict):
         enable_media_synthesis = raw_body.get("enable_media_synthesis", True) is not False
+    bounded_media_pilot = enable_media_synthesis and body.artifact_disposition in {
+        "pending_review",
+        "quarantine",
+    }
+    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
     commercial_injection_plan = _with_commercial_injection_config(
         {},
         body.commercial_injection_plan,
@@ -578,6 +583,9 @@ async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
         video_duration=coerce_video_duration(body_data),
         commercial_injection_plan=commercial_injection_plan,
         enable_media_synthesis=enable_media_synthesis,
+        output_label=body.output_label,
+        artifact_disposition=body.artifact_disposition,
+        provider_max_retries=effective_provider_max_retries,
     )
     return r
 
