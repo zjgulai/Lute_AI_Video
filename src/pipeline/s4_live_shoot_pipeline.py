@@ -19,19 +19,20 @@ from __future__ import annotations
 import asyncio
 import importlib
 import time
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 
 import src.skills.continuity_storyboard_grid  # noqa: F401
 import src.skills.script_writer  # noqa: F401
-from src.config import DEFAULT_LANGUAGES
+from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     build_continuity_audit_summary,
     build_transitions_from_clip_details,
 )
 from src.pipeline.scenario_config import get_scenario_step_order
+from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.pipeline.step_utils import get_step_output
@@ -41,6 +42,42 @@ logger = structlog.get_logger()
 
 # Caps for demo runs
 MAX_SCRIPTS_PER_RUN = 3
+S4ArtifactDisposition = Literal["default", "pending_review", "quarantine"]
+S4_BOUNDED_MEDIA_STOP_STEP = "seedance_clips"
+S4_BOUNDED_MEDIA_STEP_ORDER = [
+    "scripts",
+    "continuity_storyboard_grid",
+    "video_prompts",
+    "seedance_clips",
+]
+S4_BOUNDED_MEDIA_PROVIDER_JOB_CAPS = {"image": 1, "video": 1}
+
+
+def _artifact_storage_scope(disposition: S4ArtifactDisposition) -> str:
+    if disposition == "pending_review":
+        return "tenant_pending_review"
+    if disposition == "quarantine":
+        return "tenant_quarantine"
+    return "default"
+
+
+def _safe_path_segment(value: Any, fallback: str) -> str:
+    segment = str(value or fallback).strip() or fallback
+    return segment.replace("/", "_").replace("\\", "_")
+
+
+def _artifact_media_output_dir(
+    state: dict[str, Any],
+    config: dict[str, Any],
+    media_kind: str,
+) -> str | None:
+    disposition = config.get("artifact_disposition", "default")
+    if disposition not in {"pending_review", "quarantine"}:
+        return None
+
+    tenant_id = _safe_path_segment(state.get("tenant_id") or config.get("tenant_id"), "default")
+    label = _safe_path_segment(config.get("output_label") or state.get("label"), "run")
+    return str(OUTPUT_DIR / "tenants" / tenant_id / disposition / label / media_kind)
 
 _LAZY_SKILL_MODULES_BY_STEP: dict[str, tuple[tuple[str, str], ...]] = {
     "video_prompts": (
@@ -167,12 +204,16 @@ class S4LiveShootPipeline:
 
         if step_name == "seedance_clips":
             prompts = self._get_step_output(steps, "video_prompts") or []
+            provider_job_caps = config.get("provider_job_caps") or {}
             return await self._step_seedance_clips(
                 reg=reg,
                 video_prompts=prompts,
                 product_name=config.get("product_name", "Product"),
                 label=config.get("output_label", "s4"),
                 errors=errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "clips"),
+                provider_max_retries=config.get("provider_max_retries"),
+                video_job_cap=provider_job_caps.get("video"),
             )
 
         if step_name == "tts_audio":
@@ -587,6 +628,9 @@ class S4LiveShootPipeline:
         product_name: str,
         label: str,
         errors: list[str],
+        artifact_output_dir: str | None = None,
+        provider_max_retries: int | None = None,
+        video_job_cap: int | None = None,
     ) -> dict[str, Any]:
         """Generate video clips from Seedance prompts.
 
@@ -600,6 +644,9 @@ class S4LiveShootPipeline:
         s4_model = select_model("s4")
         clip_paths: list[str] = []
         clip_details: list[dict[str, Any]] = []
+        capped_prompts = video_prompts[:MAX_SCRIPTS_PER_RUN]
+        if video_job_cap is not None:
+            capped_prompts = capped_prompts[: max(0, int(video_job_cap))]
 
         # P0-2: S4 clips 并发化 — Live Shoot 场景各 clip 为独立使用场景，无需 clip-to-clip 连续性
         _seedance_sem = asyncio.Semaphore(4)
@@ -624,10 +671,14 @@ class S4LiveShootPipeline:
                     "output_label": f"{label}_seg_{i}",
                     "model": s4_model,
                 }
+                if artifact_output_dir:
+                    params["output_dir"] = artifact_output_dir
+                if provider_max_retries is not None:
+                    params["provider_max_retries"] = provider_max_retries
                 res = await reg.execute("seedance-video-generate-skill", params)
                 return i, res
 
-        tasks = [_gen_concurrent(i, vp) for i, vp in enumerate(video_prompts)]
+        tasks = [_gen_concurrent(i, vp) for i, vp in enumerate(capped_prompts)]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for raw in raw_results:
@@ -645,14 +696,14 @@ class S4LiveShootPipeline:
                         "is_stub": skill_result.data.get("is_stub", False),
                         "verification": skill_result.data.get("verification", {}),
                         "continuity_frame_used": None,
-                        "transition_to_next": video_prompts[i].get("transition_to_next", ""),
-                        "transition_type": video_prompts[i].get("transition_type", "clean"),
-                        "scene_beat": video_prompts[i].get("scene_beat", ""),
-                        "beat_summary": video_prompts[i].get("beat_summary", ""),
-                        "transition_intent": video_prompts[i].get("transition_intent", ""),
-                        "clip_index": video_prompts[i].get("clip_index", i + 1),
-                        "segment_type": video_prompts[i].get("segment_type", "body"),
-                        "shot_type": video_prompts[i].get("shot_type", ""),
+                        "transition_to_next": capped_prompts[i].get("transition_to_next", ""),
+                        "transition_type": capped_prompts[i].get("transition_type", "clean"),
+                        "scene_beat": capped_prompts[i].get("scene_beat", ""),
+                        "beat_summary": capped_prompts[i].get("beat_summary", ""),
+                        "transition_intent": capped_prompts[i].get("transition_intent", ""),
+                        "clip_index": capped_prompts[i].get("clip_index", i + 1),
+                        "segment_type": capped_prompts[i].get("segment_type", "body"),
+                        "shot_type": capped_prompts[i].get("shot_type", ""),
                     })
             else:
                 errors.append(f"clip_{i}_failed: {skill_result.error}")
@@ -822,6 +873,9 @@ class S4LiveShootPipeline:
         video_duration: int = 30,
         enable_media_synthesis: bool = True,
         output_label: str | None = None,
+        artifact_disposition: S4ArtifactDisposition = "default",
+        provider_max_retries: int | None = None,
+        commercial_injection_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run the full S4 pipeline end-to-end.
 
@@ -833,6 +887,9 @@ class S4LiveShootPipeline:
         brand_name = product_info.get("brand_name", "")
         video_duration = video_duration if video_duration in {15, 30, 45, 60, 90} else 30
         label = output_label or f"s4_{int(time.time())}"
+        bounded_media_pilot = enable_media_synthesis and artifact_disposition in {"pending_review", "quarantine"}
+        effective_provider_max_retries = 0 if bounded_media_pilot else provider_max_retries
+        provider_job_caps = dict(S4_BOUNDED_MEDIA_PROVIDER_JOB_CAPS) if bounded_media_pilot else None
 
         config = {
             "footage_assets": footage_assets,
@@ -846,13 +903,33 @@ class S4LiveShootPipeline:
             "enable_media_synthesis": enable_media_synthesis,
             "output_label": label,
             "target_language": "en",
+            "artifact_disposition": artifact_disposition,
+            "provider_max_retries": effective_provider_max_retries,
         }
+        if bounded_media_pilot:
+            config.update({
+                "provider_job_caps": {"image": 1, "video": 1},
+                "seedance_quality_gate_enabled": False,
+            })
+        config = with_optional_injection_config(
+            config,
+            commercial_injection_plan,
+            expected_scenario="s4",
+        )
 
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s4")
         if enable_media_synthesis:
-            final_state = await runner.resume(label)
+            if bounded_media_pilot:
+                final_state = await self._resume_bounded_media_pilot(
+                    runner,
+                    label,
+                    artifact_disposition,
+                    effective_provider_max_retries,
+                )
+            else:
+                final_state = await runner.resume(label)
         else:
             final_state = await self._resume_without_media_synthesis(runner, label)
 
@@ -865,20 +942,49 @@ class S4LiveShootPipeline:
 
         result: dict[str, Any] = {
             "success": True,
+            "label": label,
             "scenario": "s4_live_shoot",
             "video_duration": video_duration,
+            "artifact_disposition": artifact_disposition,
+            "artifact_storage_scope": _artifact_storage_scope(artifact_disposition),
+            "provider_max_retries": effective_provider_max_retries,
+            "provider_job_caps": provider_job_caps,
+            "bounded_media_pilot": bounded_media_pilot,
+            "bounded_media_stop_step": S4_BOUNDED_MEDIA_STOP_STEP if bounded_media_pilot else None,
             "scripts": self._get_step_output(steps, "scripts") or [],
             "video_prompts": self._get_step_output(steps, "video_prompts") or [],
             "thumbnail_sets": self._get_step_output(steps, "thumbnails") or [],
             "seedance_clips": seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else [],
             "clip_paths": seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else [],
             "audio_paths": tts_out.get("audio_paths", []) if isinstance(tts_out, dict) else [],
+            "thumbnail_image_paths": [],
             "final_video_path": final_video,
             "render_json_path": render_json_path,
-            "steps_completed": 7 if enable_media_synthesis else 2,
+            "audit_report": self._get_step_output(steps, "audit") or {},
+            "delivery_accepted": None,
+            "publish_allowed": None,
+            "approved_brand_token_write": None,
+            "steps_completed": (
+                len(S4_BOUNDED_MEDIA_STEP_ORDER)
+                if bounded_media_pilot
+                else 7 if enable_media_synthesis else 2
+            ),
             "errors": final_state.get("errors", []),
             "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
         }
+        if bounded_media_pilot:
+            result.update({
+                "thumbnail_sets": [],
+                "audio_paths": [],
+                "thumbnail_image_paths": [],
+                "final_video_path": "",
+                "render_json_path": "",
+                "audit_report": {},
+                "delivery_accepted": False,
+                "publish_allowed": False,
+                "approved_brand_token_write": False,
+                "provider_job_caps": provider_job_caps or final_state.get("provider_job_caps"),
+            })
 
         if final_state.get("pipeline_degraded"):
             result["success"] = False
@@ -896,6 +1002,37 @@ class S4LiveShootPipeline:
             errors=len(result.get("errors", [])),
         )
         return result
+
+    async def _resume_bounded_media_pilot(
+        self,
+        runner: StepRunner,
+        label: str,
+        artifact_disposition: S4ArtifactDisposition,
+        provider_max_retries: int | None,
+    ) -> dict[str, Any]:
+        """Run S4 only through bounded Seedance clip generation, then stop."""
+        final_state: dict[str, Any] = {}
+        for step_name in S4_BOUNDED_MEDIA_STEP_ORDER:
+            final_state = await runner.run_step(label, step_name)
+            if final_state.get("pipeline_degraded"):
+                break
+            if step_name == S4_BOUNDED_MEDIA_STOP_STEP:
+                final_state["current_step"] = None
+                final_state["bounded_media_pilot"] = True
+                final_state["bounded_media_stop_step"] = S4_BOUNDED_MEDIA_STOP_STEP
+                final_state["artifact_disposition"] = artifact_disposition
+                final_state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
+                final_state["provider_max_retries"] = provider_max_retries
+                final_state["provider_job_caps"] = dict(S4_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state.setdefault("config", {})
+                final_state["config"]["provider_max_retries"] = provider_max_retries
+                final_state["config"]["provider_job_caps"] = dict(S4_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
+                final_state["config"]["seedance_quality_gate_enabled"] = False
+                save = getattr(runner.state_manager, "save", None)
+                if callable(save):
+                    await save(label, final_state)
+                break
+        return final_state
 
     async def _resume_without_media_synthesis(self, runner: StepRunner, label: str) -> dict[str, Any]:
         """Run only S4 pre-media steps; stop before Seedance prompt generation."""

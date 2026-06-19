@@ -41,6 +41,7 @@ from src.routers._state import (
     S1StartRequest,
     S2BrandCampaignRequest,
     S3InfluencerRemixRequest,
+    S4LiveShootRequest,
     S5BrandVlogRequest,
     _get_step_deps,
     _get_step_output,
@@ -491,27 +492,45 @@ async def run_s3_influencer_remix(body: S3InfluencerRemixRequest | dict[str, Any
 
 
 @router.post("/scenario/s4", dependencies=[Depends(verify_api_key)])
-async def run_s4_live_shoot(body: dict[str, Any]):
+async def run_s4_live_shoot(body: S4LiveShootRequest | dict[str, Any]):
     """Run S4 Live Shoot to Video pipeline."""
-    _inject_api_keys(body.get("api_keys", {}))  # P1-C: 用户 key 注入 contextvars
+    body_data = body if isinstance(body, dict) else body.model_dump()
+    if isinstance(body, dict):
+        body = S4LiveShootRequest(**body)
+
+    _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
-    product_info = body.get("product_info", {})
+    product_info = body.product_info
     # P3-4: Bind pipeline context
     structlog.contextvars.bind_contextvars(
         product_name=product_info.get("name", "unknown"),
         brand_name=product_info.get("brand_name", ""),
         scenario="s4",
-        topic=body.get("topic", "")[:50],
+        topic=body.topic[:50],
     )
+    bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
+        "pending_review",
+        "quarantine",
+    }
+    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+    commercial_injection_plan = _with_commercial_injection_config(
+        {},
+        body.commercial_injection_plan,
+        expected_scenario="s4",
+    ).get("commercial_injection_plan")
     p = S4LiveShootPipeline()
     r = await p.run(
-        footage_assets=body.get("footage_assets", []),
+        footage_assets=body.footage_assets,
         product_info=product_info,
-        topic=body.get("topic", ""),
-        target_platforms=body.get("target_platforms", ["tiktok"]),
-        brand_guidelines=body.get("brand_guidelines", {}),
-        video_duration=coerce_video_duration(body),
-        enable_media_synthesis=body.get("enable_media_synthesis", True),
+        topic=body.topic,
+        target_platforms=body.target_platforms,
+        brand_guidelines=body.brand_guidelines,
+        video_duration=coerce_video_duration(body_data),
+        enable_media_synthesis=body.enable_media_synthesis,
+        output_label=body.output_label,
+        artifact_disposition=body.artifact_disposition,
+        provider_max_retries=effective_provider_max_retries,
+        commercial_injection_plan=commercial_injection_plan,
     )
     return r
 

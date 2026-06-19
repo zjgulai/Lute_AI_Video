@@ -165,6 +165,157 @@ async def test_s4_no_media_stops_before_provider_backed_steps(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
+async def test_scenario_s4_route_passes_bounded_media_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.routers import scenario
+    from src.routers._state import S4LiveShootRequest
+
+    captured: dict[str, object] = {}
+
+    class FakeS4Pipeline:
+        async def run(self, **kwargs):
+            captured.update(kwargs)
+            return {"success": True, "scenario": "s4_live_shoot"}
+
+    monkeypatch.setattr(
+        "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
+        FakeS4Pipeline,
+    )
+
+    response = await scenario.run_s4_live_shoot(
+        S4LiveShootRequest(
+            footage_assets=FOOTAGE_FIXTURE,
+            product_info=PRODUCT_INFO_FIXTURE,
+            topic="Working mom daily routine",
+            target_platforms=["tiktok"],
+            video_duration=15,
+            output_label="s4_bounded_contract",
+            enable_media_synthesis=True,
+            artifact_disposition="pending_review",
+            provider_max_retries=3,
+        )
+    )
+
+    assert response["success"] is True
+    assert captured["output_label"] == "s4_bounded_contract"
+    assert captured["artifact_disposition"] == "pending_review"
+    assert captured["provider_max_retries"] == 0
+
+
+@pytest.mark.asyncio
+async def test_s4_bounded_media_stops_after_seedance_and_clears_publishable_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed_steps: list[str] = []
+    saved_states: list[dict[str, object]] = []
+    captured_config: dict[str, object] = {}
+
+    class FakeStateManager:
+        async def save(self, label: str, state: dict[str, object]) -> None:
+            saved_states.append(
+                {
+                    "label": label,
+                    "current_step": state.get("current_step"),
+                    "bounded_media_stop_step": state.get("bounded_media_stop_step"),
+                }
+            )
+
+    class FakeStepRunner:
+        def __init__(self, state_manager: object) -> None:
+            self.state_manager = FakeStateManager()
+
+        async def init_state(self, *, config, mode="auto", label=None, scenario="s4"):
+            captured_config.update(config)
+            return label or "s4_bounded_fixture"
+
+        async def resume(self, label):
+            raise AssertionError("bounded S4 must not resume the full media pipeline")
+
+        async def run_step(self, label, step_name):
+            executed_steps.append(step_name)
+            steps: dict[str, dict[str, object]] = {
+                step: {"status": "done", "output": {}} for step in executed_steps
+            }
+            steps["scripts"] = {
+                "status": "done",
+                "output": [{"id": "s4-script", "segments": []}],
+            }
+            steps["video_prompts"] = {
+                "status": "done",
+                "output": [{"prompt": "authentic live shoot", "duration_seconds": 6}],
+            }
+            steps["seedance_clips"] = {
+                "status": "done",
+                "output": {
+                    "clip_paths": [
+                        (
+                            "/output/tenants/momcozy-marketing/pending_review/"
+                            "s4_bounded_fixture/clips/clip_0.mp4"
+                        )
+                    ],
+                    "clip_details": [{"duration": 6}],
+                    "total_duration": 6,
+                },
+            }
+            for pending_step in (
+                "thumbnails",
+                "tts_audio",
+                "assemble_final",
+                "audit",
+            ):
+                steps.setdefault(pending_step, {"status": "pending", "output": None})
+            return {
+                "label": label,
+                "scenario": "s4",
+                "tenant_id": "momcozy-marketing",
+                "config": captured_config,
+                "steps": steps,
+                "errors": [],
+                "media_synthesis_errors": [],
+                "pipeline_degraded": False,
+            }
+
+    monkeypatch.setattr(s4_live_shoot_pipeline, "StepRunner", FakeStepRunner)
+
+    result = await S4LiveShootPipeline().run(
+        footage_assets=FOOTAGE_FIXTURE,
+        product_info=PRODUCT_INFO_FIXTURE,
+        topic="Working mom daily routine",
+        target_platforms=["tiktok"],
+        video_duration=15,
+        output_label="s4_bounded_fixture",
+        enable_media_synthesis=True,
+        artifact_disposition="pending_review",
+        provider_max_retries=5,
+    )
+
+    assert executed_steps == s4_live_shoot_pipeline.S4_BOUNDED_MEDIA_STEP_ORDER
+    assert captured_config["provider_max_retries"] == 0
+    assert captured_config["provider_job_caps"] == {"image": 1, "video": 1}
+    assert captured_config["seedance_quality_gate_enabled"] is False
+    assert result["success"] is True
+    assert result["label"] == "s4_bounded_fixture"
+    assert result["bounded_media_pilot"] is True
+    assert result["bounded_media_stop_step"] == "seedance_clips"
+    assert result["provider_max_retries"] == 0
+    assert result["provider_job_caps"] == {"image": 1, "video": 1}
+    assert result["clip_paths"] == [
+        "/output/tenants/momcozy-marketing/pending_review/s4_bounded_fixture/clips/clip_0.mp4"
+    ]
+    assert result["audio_paths"] == []
+    assert result["thumbnail_sets"] == []
+    assert result["thumbnail_image_paths"] == []
+    assert result["final_video_path"] == ""
+    assert result["render_json_path"] == ""
+    assert result["audit_report"] == {}
+    assert result["delivery_accepted"] is False
+    assert result["publish_allowed"] is False
+    assert result["approved_brand_token_write"] is False
+    assert saved_states[-1]["current_step"] is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.hermetic_slow
 async def test_s4_step_runner_init_and_resume():
     """S4 via StepRunner: init_state + resume produces valid state."""
@@ -313,6 +464,44 @@ async def test_s4_seedance_clips_use_prompt_durations():
     assert result["clip_details"][0]["scene_beat"] == "setup_context"
     assert result["clip_details"][1]["beat_summary"] == "capture product use in motion"
     assert result["clip_details"][2]["transition_intent"] == "resolve into a grounded finish"
+
+
+@pytest.mark.asyncio
+async def test_s4_seedance_clips_honor_video_cap_output_dir_and_retries():
+    call_log: list[dict[str, Any]] = []
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            assert name == "seedance-video-generate-skill"
+            call_log.append(params)
+            return SkillResult(
+                success=True,
+                data={
+                    "video_path": f"/tmp/s4-capped-{params['output_label']}.mp4",
+                    "duration_seconds": params["duration"],
+                    "verification": {"all_ok": True},
+                },
+            )
+
+    result = await S4LiveShootPipeline()._step_seedance_clips(
+        reg=FakeRegistry(),
+        video_prompts=[
+            {"prompt": "first scene", "duration_seconds": 4},
+            {"prompt": "second scene", "duration_seconds": 7},
+        ],
+        product_name="X1 Pump",
+        label="s4-capped-test",
+        errors=[],
+        artifact_output_dir="/tmp/s4-pending-review/clips",
+        provider_max_retries=0,
+        video_job_cap=1,
+    )
+
+    assert len(call_log) == 1
+    assert call_log[0]["output_dir"] == "/tmp/s4-pending-review/clips"
+    assert call_log[0]["provider_max_retries"] == 0
+    assert len(result["clip_paths"]) == 1
+    assert result["total_duration"] == 4
 
 
 @pytest.mark.asyncio
