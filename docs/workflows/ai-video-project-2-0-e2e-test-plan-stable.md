@@ -5,7 +5,7 @@ module: ai-video-2.0
 topic: e2e-test-plan
 status: stable
 created: 2026-06-06
-updated: 2026-06-19
+updated: 2026-06-21
 owner: self
 source: human+ai
 ---
@@ -563,12 +563,22 @@ npx playwright test -c playwright.prod.config.ts \
 | Stage | 新增验证面 | 允许的新增 side effect | 必须继续禁止 |
 |---|---|---|---|
 | `TODO-P1-5A` no-provider contract | request/model/router/pipeline 支持分段 stop point | 0 | 已完成；provider、submit、生产同步仍禁止 |
-| `TODO-P1-5B` TTS segment smoke | `tts_audio` 单段执行与音频路径处置 | TTS job <= 1 | poyo image、Seedance、thumbnail、assemble、audit、final_work |
-| `TODO-P1-5C` thumbnail segment smoke | `thumbnail_prompts` + `thumbnail_images` 单缩略图执行 | thumbnail image job <= 1 | Seedance、TTS、assemble、audit、final_work |
+| `TODO-P1-5B` / `P1-5C-1R` TTS segment smoke | `tts_audio` 单段执行与音频路径处置 | TTS job = 1 | 已完成；poyo image、Seedance、thumbnail、assemble、audit、final_work 均为 0 |
+| `TODO-P1-5C-next` thumbnail segment smoke | `thumbnail_prompts` + `thumbnail_images` 单缩略图执行 | thumbnail image job <= 1 | Seedance、TTS、assemble、audit、final_work |
 | `TODO-P1-5D` assemble segment smoke | 用已存在 pending_review clip/audio/thumb 组装中间产物 | Remotion/local assemble only | provider、publish、delivery、approved brand token |
 | `TODO-P1-5E` audit segment smoke | 对已存在中间产物做 media_quality_audit | audit read/analysis only | provider、publish、delivery、approved brand token |
 
-[边界] `TODO-P1-5A` 只证明本地 S2 segmented stop-point 合同、step 越界防护和 readiness guard 通过；不代表 S2 TTS、thumbnail、assemble、media_quality_audit 的真实 provider / production live smoke 已执行，也不代表 S2 full media、final assembly、publish、delivery acceptance 或 approved brand token write 已执行。
+[事实] `P1-5C-1R` 已按用户授权完成 S2 segmented `tts_audio` 单 submit live segment。首次 `P1-5C-1` 因 DeepSeek `402 Payment Required / Insufficient Balance` 被严格门禁拦截，未做第二次 submit；DeepSeek 充值并重新授权后，本轮只执行 1 次 `/api/scenario/s2` submit，`media_stop_step=tts_audio`，DeepSeek HTTP `200` 计数为 `2`，SiliconFlow/CosyVoice TTS HTTP `200` 计数为 `1`，`provider_max_retries=0`，临时 production key 已撤销且 post-revoke protected check 返回 `401`。生产 state / filesystem readback 显示 `provider_job_caps={tts:1}`、`tts_audio=done`，音频位于 `/app/output/tenants/momcozy-marketing/pending_review/p1_s2_segmented_tts_r_20260620T181821Z/audio/cosyvoice_en_38d3eea0.mp3`，`final_work_match_count=0`；`keyframe_images`、`seedance_clips`、`thumbnail_prompts`、`thumbnail_images`、`assemble_final` 与 `audit` 仍为 `pending`。
+
+[证据] `P1-5C-1R` evidence：
+
+- `tmp/debug/todo-p1-5c-final-summary-20260620T181821Z.json`：`decision=passed`、`submit_count=1`、`tts_http_count=1`、poyo/Seedance/thumbnail/assemble/audit/publish/delivery/token write 计数均为 `0`。
+- `tmp/debug/todo-p1-5c-log-gate-20260620T181821Z.json`：所有 strict checks 为 true，`provider_error=0`。
+- `tmp/debug/todo-p1-5c-status-20260620T181821Z.json`：status readback `200`，`tts_audio=done`，downstream steps 未执行。
+- `tmp/debug/todo-p1-5c-filesystem-20260620T181821Z.json`：tenant-scoped `pending_review` 音频文件存在，`quarantine` 不存在，`final_work_match_count=0`。
+- `tmp/debug/todo-p1-5c-backend-log-20260620T181821Z.log`：DeepSeek `200 OK`、TTS `200 OK`，无 poyo image、Seedance、thumbnail、assemble、media_quality_audit、final_work、publish、delivery。
+
+[边界] `TODO-P1-5A` 证明本地 S2 segmented stop-point 合同、step 越界防护和 readiness guard 通过；`P1-5C-1R` 只证明 S2 segmented TTS 到 `tts_audio` 的 `L4-authorized-live-provider-tts-only`。仍不代表 S2 thumbnail、assemble、media_quality_audit、full media、final assembly、publish、delivery acceptance 或 approved brand token write 已执行。
 
 L4D 收口证据索引见 [L4D 真实媒体 Provider 证据索引](l4d-real-media-provider-evidence-index-stable.md)。
 
@@ -825,7 +835,8 @@ npx playwright test -c playwright.prod.config.ts \
 23. [x] 完成 L4C S1-S5 no-media clean-log single-submit 阶段，并正式制定 L4D 真实 media provider 分级授权计划。实现文件：`docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md`、`docs/runbooks/production-e2e-token-smoke.md`。
 24. [x] 完成 L4D S2 bounded media provider smoke 与 frontend/library read-only 回归收口。证据文件：`tmp/debug/l4d5y-final-summary-20260613132543.json`、`tmp/debug/l4d5z-final-summary-20260613135315.json`。
 25. [x] 完成 `TODO-P1-5-prep` S2 full-media segmented no-provider readiness guard，明确 full-media live 仍 blocked，后续必须按 TTS / thumbnail / assemble / audit 分段授权。实现文件：`web/e2e/production/scenario-s2-full-media-segmented-readiness.prod.spec.ts`。
-26. [x] 完成 `TODO-P1-5A` S2 segmented stop-point contract PR：`S2BrandCampaignRequest`、router 与 S2 pipeline 支持 `media_stop_step`，本地 no-provider 测试证明 `seedance_clips`、`tts_audio`、`thumbnail_prompts`、`thumbnail_images`、`assemble_final`、`audit` 六个 stop point 不越界；live segment smoke 仍需逐段授权。
+26. [x] 完成 `TODO-P1-5A` S2 segmented stop-point contract PR：`S2BrandCampaignRequest`、router 与 S2 pipeline 支持 `media_stop_step`，本地 no-provider 测试证明 `seedance_clips`、`tts_audio`、`thumbnail_prompts`、`thumbnail_images`、`assemble_final`、`audit` 六个 stop point 不越界。
+27. [x] 完成 `P1-5C-1R` S2 segmented `tts_audio` live segment：单次 `/api/scenario/s2` submit，DeepSeek calls=2，TTS job=1，provider retry=0，产物进入 tenant-scoped `pending_review`，`final_work=0`；poyo image、Seedance、thumbnail、assemble、audit、publish、delivery、approved brand token 均未执行。
 
 ## 阶段验收
 
