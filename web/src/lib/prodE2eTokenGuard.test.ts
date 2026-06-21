@@ -149,6 +149,9 @@ describe("Production E2E token smoke guardrails", () => {
       "e2e/production/scenario-s2-bounded-media-pilot-live.prod.spec.ts": [
         "single S2 bounded media submit stops after seedance_clips @token-smoke",
       ],
+      "e2e/production/scenario-s2-thumbnail-segment-live.prod.spec.ts": [
+        "single S2 segmented thumbnail submit stops after thumbnail_images @token-smoke",
+      ],
       "e2e/production/scenario-s1-bounded-media-pilot-live.prod.spec.ts": [
         "single S1 bounded media submit stops after seedance_clips @token-smoke",
       ],

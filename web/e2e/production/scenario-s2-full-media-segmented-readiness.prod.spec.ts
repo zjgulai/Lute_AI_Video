@@ -97,6 +97,27 @@ test.describe("TODO-P1-5 S2 full-media segmented readiness", () => {
       expect(boundedLiveSpec).toContain(`expectStepNotExecuted(steps, "${forbiddenStep}")`);
     }
 
+    const thumbnailLiveSpec = readRepoFile(
+      "web/e2e/production/scenario-s2-thumbnail-segment-live.prod.spec.ts",
+    );
+    expect(thumbnailLiveSpec).toContain(
+      "single S2 segmented thumbnail submit stops after thumbnail_images @token-smoke",
+    );
+    expect(thumbnailLiveSpec).toContain("const thumbnailStopStep = \"thumbnail_images\"");
+    expect(thumbnailLiveSpec).toContain("media_stop_step: thumbnailStopStep");
+    expect(thumbnailLiveSpec).toContain("expect(body.provider_job_caps).toEqual({ thumbnail: 1 })");
+    expect(thumbnailLiveSpec).toContain("expectPendingReviewThumbnailPaths(body.thumbnail_image_paths)");
+    expect(thumbnailLiveSpec).toContain("request.get(`/api/scenario/s2/status/${runLabel}`");
+    for (const forbiddenStep of [
+      "keyframe_images",
+      "seedance_clips",
+      "tts_audio",
+      "assemble_final",
+      "audit",
+    ]) {
+      expect(thumbnailLiveSpec).toContain(`expectStepNotExecuted(steps, "${forbiddenStep}")`);
+    }
+
     const thisSpec = readRepoFile(
       "web/e2e/production/scenario-s2-full-media-segmented-readiness.prod.spec.ts",
     );
