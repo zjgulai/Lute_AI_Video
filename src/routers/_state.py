@@ -117,6 +117,7 @@ class S2BrandCampaignRequest(BaseModel):
         "assemble_final",
         "audit",
     ] | None = None
+    media_refs: dict[str, Any] | None = None
     commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 
