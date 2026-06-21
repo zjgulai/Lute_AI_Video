@@ -228,12 +228,14 @@ class TestS2RunResultShape:
             provider_max_retries=0,
             output_label="s2_transport_readback_fixture",
             media_stop_step="tts_audio",
+            media_refs={"clip_paths": ["/tmp/tenants/default/pending_review/ref/clip.mp4"]},
         )
 
         assert request.artifact_disposition == "pending_review"
         assert request.provider_max_retries == 0
         assert request.output_label == "s2_transport_readback_fixture"
         assert request.media_stop_step == "tts_audio"
+        assert request.media_refs == {"clip_paths": ["/tmp/tenants/default/pending_review/ref/clip.mp4"]}
 
     @pytest.mark.asyncio
     async def test_run_uses_explicit_output_label(self):
@@ -410,29 +412,36 @@ class TestS2RunResultShape:
             "storyboards": [{"shots": [{"visual": "brand hero shot"}]}],
             "continuity_storyboard_grid": {"micro_shots": [{"visual": "brand hero shot"}]},
             "keyframe_images": [
-                {"shots": [{"keyframe_image_path": "/tmp/pending_review/s2-keyframe.png"}]}
+                {"shots": [{"keyframe_image_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/keyframes/s2-keyframe.png"}]}
             ],
             "video_prompts": [{"prompt": "safe brand campaign clip"}],
             "seedance_clips": {
-                "clip_paths": ["/tmp/pending_review/s2-clip.mp4"],
+                "clip_paths": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"],
                 "clip_details": [{"duration_seconds": 4, "is_stub": False}],
             },
             "tts_audio": {
-                "audio_paths": ["/tmp/pending_review/s2-audio.mp3"],
-                "lyrics_paths": ["/tmp/pending_review/s2-audio.txt"],
+                "audio_paths": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"],
+                "lyrics_paths": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.txt"],
             },
             "thumbnail_prompts": [{"variants": [{"prompt": "thumbnail prompt"}]}],
-            "thumbnail_images": ["/tmp/pending_review/s2-thumbnail.png"],
+            "thumbnail_images": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"],
             "assemble_final": {
-                "video_path": "/tmp/pending_review/s2-intermediate.mp4",
-                "render_json_path": "/tmp/pending_review/s2-render.json",
+                "video_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4",
+                "render_json_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-render.json",
             },
             "audit": {"overall_status": "pass", "score": 0.91},
         }
 
         class FakeStateManager:
+            def __init__(self) -> None:
+                self.state: dict[str, Any] | None = None
+
             async def save(self, label: str, state: dict[str, Any]) -> None:
+                self.state = state
                 saved_states.append({"label": label, "state": state})
+
+            async def load(self, label: str) -> dict[str, Any] | None:
+                return self.state
 
         class FakeStepRunner:
             def __init__(self, state_manager: object) -> None:
@@ -444,26 +453,48 @@ class TestS2RunResultShape:
                 assert config["provider_job_caps"] == expected_caps
                 assert config["media_stop_step"] == stop_step
                 assert config["seedance_quality_gate_enabled"] is False
-                return label or "s2_segmented_media_fixture"
+                if stop_step == "assemble_final":
+                    assert config["refs_only_media_assembly"] is True
+                    assert config["media_refs"]["clip_paths"] == outputs["seedance_clips"]["clip_paths"]
+                test_label = label or "s2_segmented_media_fixture"
+                self.state_manager.state = {
+                    "label": test_label,
+                    "scenario": "s2",
+                    "tenant_id": "momcozy-marketing",
+                    "config": config,
+                    "steps": {
+                        step: {"output": None, "status": "pending"}
+                        for step in S2_SEGMENTED_MEDIA_STEP_ORDERS["audit"]
+                    },
+                    "current_step": "strategy",
+                    "errors": [],
+                    "media_synthesis_errors": [],
+                    "pipeline_degraded": False,
+                }
+                return test_label
 
             async def resume(self, label):
                 raise AssertionError("segmented S2 media pilot must not resume unrestricted pipeline")
 
             async def run_step(self, label, step_name):
                 executed_steps.append(step_name)
-                return {
-                    "scenario": "s2",
-                    "steps": {
-                        step: {"output": outputs[step], "status": "done"}
-                        for step in executed_steps
-                    },
-                    "current_step": "downstream_placeholder",
-                    "errors": [],
-                    "media_synthesis_errors": [],
-                    "pipeline_degraded": False,
-                }
+                state = await self.state_manager.load(label)
+                assert state is not None
+                state["steps"][step_name] = {"output": outputs[step_name], "status": "done"}
+                state["current_step"] = "downstream_placeholder"
+                return state
 
         monkeypatch.setattr(s2_brand_pipeline_v2, "StepRunner", FakeStepRunner)
+
+        media_refs = None
+        if stop_step == "assemble_final":
+            media_refs = {
+                "clip_paths": outputs["seedance_clips"]["clip_paths"],
+                "clip_details": outputs["seedance_clips"]["clip_details"],
+                "audio_paths": outputs["tts_audio"]["audio_paths"],
+                "lyrics_paths": outputs["tts_audio"]["lyrics_paths"],
+                "thumbnail_image_paths": outputs["thumbnail_images"],
+            }
 
         result = await S2BrandCampaignPipeline().run(
             brand_package=BRAND_PACKAGE_FIXTURE,
@@ -472,6 +503,7 @@ class TestS2RunResultShape:
             artifact_disposition="pending_review",
             provider_max_retries=3,
             media_stop_step=stop_step,  # type: ignore[arg-type]
+            media_refs=media_refs,
         )
 
         assert executed_steps == expected_steps
@@ -491,13 +523,13 @@ class TestS2RunResultShape:
         assert result["steps_completed"] == len(expected_steps)
 
         if stop_step == "seedance_clips":
-            assert result["clip_paths"] == ["/tmp/pending_review/s2-clip.mp4"]
+            assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"]
             assert result["audio_paths"] == []
             assert result["thumbnail_image_paths"] == []
             assert result["audit_report"] == {}
         elif stop_step == "tts_audio":
             assert result["clip_paths"] == []
-            assert result["audio_paths"] == ["/tmp/pending_review/s2-audio.mp3"]
+            assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"]
             assert result["thumbnail_image_paths"] == []
             assert result["audit_report"] == {}
         elif stop_step == "thumbnail_prompts":
@@ -509,19 +541,20 @@ class TestS2RunResultShape:
         elif stop_step == "thumbnail_images":
             assert result["clip_paths"] == []
             assert result["audio_paths"] == []
-            assert result["thumbnail_image_paths"] == ["/tmp/pending_review/s2-thumbnail.png"]
+            assert result["thumbnail_image_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"]
             assert result["audit_report"] == {}
         elif stop_step == "assemble_final":
-            assert result["clip_paths"] == ["/tmp/pending_review/s2-clip.mp4"]
-            assert result["audio_paths"] == ["/tmp/pending_review/s2-audio.mp3"]
-            assert result["thumbnail_image_paths"] == []
-            assert result["intermediate_video_path"] == "/tmp/pending_review/s2-intermediate.mp4"
+            assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"]
+            assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"]
+            assert result["thumbnail_image_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"]
+            assert result["intermediate_video_path"] == "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4"
+            assert result["refs_only_media_assembly"] is True
             assert result["audit_report"] == {}
         elif stop_step == "audit":
-            assert result["clip_paths"] == ["/tmp/pending_review/s2-clip.mp4"]
-            assert result["audio_paths"] == ["/tmp/pending_review/s2-audio.mp3"]
-            assert result["thumbnail_image_paths"] == ["/tmp/pending_review/s2-thumbnail.png"]
-            assert result["intermediate_video_path"] == "/tmp/pending_review/s2-intermediate.mp4"
+            assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"]
+            assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"]
+            assert result["thumbnail_image_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"]
+            assert result["intermediate_video_path"] == "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4"
             assert result["audit_report"] == {"overall_status": "pass", "score": 0.91}
 
         assert saved_states
@@ -529,6 +562,43 @@ class TestS2RunResultShape:
         assert saved_states[-1]["state"]["bounded_media_stop_step"] == stop_step
         assert saved_states[-1]["state"]["config"]["media_stop_step"] == stop_step
         assert saved_states[-1]["state"]["provider_job_caps"] == expected_caps
+        if stop_step == "assemble_final":
+            assert saved_states[-1]["state"]["refs_only_media_assembly"] is True
+            assert saved_states[-1]["state"]["config"]["refs_only_media_assembly"] is True
+            assert saved_states[-1]["state"]["config"]["provider_job_caps"] == {}
+
+    @pytest.mark.asyncio
+    async def test_assemble_segment_requires_refs_only_media_refs(self):
+        with pytest.raises(ValueError, match="requires media_refs"):
+            await S2BrandCampaignPipeline().run(
+                brand_package=BRAND_PACKAGE_FIXTURE,
+                video_duration=15,
+                enable_media_synthesis=True,
+                artifact_disposition="pending_review",
+                provider_max_retries=0,
+                media_stop_step="assemble_final",
+            )
+
+    @pytest.mark.asyncio
+    async def test_assemble_segment_rejects_non_review_scoped_refs(self):
+        with pytest.raises(ValueError, match="forbidden artifact path"):
+            await S2BrandCampaignPipeline().run(
+                brand_package=BRAND_PACKAGE_FIXTURE,
+                video_duration=15,
+                enable_media_synthesis=True,
+                artifact_disposition="pending_review",
+                provider_max_retries=0,
+                media_stop_step="assemble_final",
+                media_refs={
+                    "clip_paths": ["/app/output/tenants/momcozy-marketing/final_work/clip.mp4"],
+                    "audio_paths": [
+                        "/app/output/tenants/momcozy-marketing/pending_review/ref/audio.mp3"
+                    ],
+                    "thumbnail_image_paths": [
+                        "/app/output/tenants/momcozy-marketing/pending_review/ref/thumb.png"
+                    ],
+                },
+            )
 
     def test_bounded_seedance_skill_registration_skips_audit_skill(self):
         SkillRegistry.clear_global()

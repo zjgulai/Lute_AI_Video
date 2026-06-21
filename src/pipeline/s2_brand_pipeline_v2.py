@@ -30,11 +30,12 @@ is when an S2-specific step actually differs, not now.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Any, Literal
 
 import structlog
 
-from src.config import DEFAULT_LANGUAGES
+from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.model_router import select_model
 from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
@@ -92,8 +93,6 @@ S2_SEGMENTED_MEDIA_STEP_ORDERS: dict[S2SegmentedMediaStopStep, list[str]] = {
         "thumbnail_images",
     ],
     "assemble_final": [
-        *S2_SEEDANCE_MEDIA_STEP_ORDER,
-        "tts_audio",
         "assemble_final",
     ],
     "audit": [
@@ -110,7 +109,7 @@ S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS: dict[S2SegmentedMediaStopStep, dict[str, i
     "tts_audio": {"tts": 1},
     "thumbnail_prompts": {},
     "thumbnail_images": {"thumbnail": 1},
-    "assemble_final": {"image": 1, "video": 1, "tts": 1},
+    "assemble_final": {},
     "audit": {"image": 1, "video": 1, "tts": 1, "thumbnail": 1},
 }
 S2_BOUNDED_MEDIA_STEP_ORDER = S2_SEGMENTED_MEDIA_STEP_ORDERS["seedance_clips"]
@@ -123,6 +122,134 @@ def _artifact_storage_scope(disposition: S2ArtifactDisposition) -> str:
     if disposition == "quarantine":
         return "tenant_quarantine"
     return "default"
+
+
+def _as_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _extract_media_ref_paths(media_refs: dict[str, Any], *keys: str) -> list[str]:
+    for key in keys:
+        paths = _as_string_list(media_refs.get(key))
+        if paths:
+            return paths
+    return []
+
+
+def _assert_review_scoped_ref(path: str, *, disposition: S2ArtifactDisposition, ref_name: str) -> None:
+    normalized = path.replace("\\", "/")
+    forbidden_segments = ("/final_work/", "/renders/", "/fast_mode/", "/gpt_images/")
+    if any(segment in normalized for segment in forbidden_segments):
+        raise ValueError(f"S2 assemble refs-only {ref_name} uses forbidden artifact path: {path}")
+    if "/tenants/" not in normalized or f"/{disposition}/" not in normalized:
+        raise ValueError(
+            f"S2 assemble refs-only {ref_name} must be tenant-scoped {disposition}: {path}"
+        )
+
+
+def _normalize_assemble_media_refs(
+    media_refs: dict[str, Any] | None,
+    *,
+    disposition: S2ArtifactDisposition,
+) -> dict[str, Any]:
+    """Return validated refs for provider-free S2 assemble segment."""
+    if not isinstance(media_refs, dict):
+        raise ValueError("S2 assemble_final stop point requires media_refs for refs-only assembly")
+
+    clip_paths = _extract_media_ref_paths(media_refs, "clip_paths", "clips")
+    audio_paths = _extract_media_ref_paths(media_refs, "audio_paths", "audios")
+    thumbnail_image_paths = _extract_media_ref_paths(
+        media_refs,
+        "thumbnail_image_paths",
+        "thumbnail_paths",
+        "thumbnails",
+    )
+    lyrics_paths = _extract_media_ref_paths(media_refs, "lyrics_paths", "lyrics")
+
+    required = {
+        "clip_paths": clip_paths,
+        "audio_paths": audio_paths,
+        "thumbnail_image_paths": thumbnail_image_paths,
+    }
+    missing = [key for key, value in required.items() if not value]
+    if missing:
+        raise ValueError(
+            "S2 assemble_final refs-only media_refs missing required keys: "
+            + ", ".join(missing)
+        )
+
+    for ref_name, paths in required.items():
+        for path in paths:
+            _assert_review_scoped_ref(path, disposition=disposition, ref_name=ref_name)
+    for path in lyrics_paths:
+        _assert_review_scoped_ref(path, disposition=disposition, ref_name="lyrics_paths")
+
+    clip_details = media_refs.get("clip_details")
+    if not isinstance(clip_details, list) or not clip_details:
+        clip_details = [{"is_stub": False} for _ in clip_paths]
+
+    scripts = media_refs.get("scripts")
+    if not isinstance(scripts, list) or not scripts:
+        scripts = [{
+            "id": "refs-only-script",
+            "segments": [{
+                "voiceover": "Refs-only assembly checkpoint.",
+                "description": "Assemble existing reviewed media references.",
+                "start_time": 0,
+                "end_time": 5,
+            }],
+        }]
+
+    storyboards = media_refs.get("storyboards")
+    if not isinstance(storyboards, list):
+        storyboards = []
+
+    return {
+        "clip_paths": clip_paths,
+        "clip_details": clip_details,
+        "audio_paths": audio_paths,
+        "lyrics_paths": lyrics_paths,
+        "thumbnail_image_paths": thumbnail_image_paths,
+        "scripts": scripts,
+        "storyboards": storyboards,
+    }
+
+
+def _tenant_review_media_dir(
+    *,
+    tenant_id: str,
+    disposition: S2ArtifactDisposition,
+    label: str,
+    media_kind: str,
+) -> Path:
+    return OUTPUT_DIR / "tenants" / tenant_id / disposition / label / media_kind
+
+
+def _move_path_into_review_scope(
+    path: str,
+    *,
+    target_dir: Path,
+) -> str:
+    if not path:
+        return ""
+    normalized = path.replace("\\", "/")
+    if "/tenants/" in normalized and ("/pending_review/" in normalized or "/quarantine/" in normalized):
+        return path
+
+    source = Path(path)
+    if not source.exists():
+        raise RuntimeError(f"S2 refs-only assemble output missing before review-scope move: {path}")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / source.name
+    if source.resolve() != target.resolve():
+        source.replace(target)
+    return str(target)
 
 
 def _resolve_media_stop_step(
@@ -171,6 +298,7 @@ class S2BrandCampaignPipeline:
         provider_max_retries: int | None = None,
         output_label: str | None = None,
         media_stop_step: S2SegmentedMediaStopStep | None = None,
+        media_refs: dict[str, Any] | None = None,
         commercial_injection_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run the S2 Brand Campaign pipeline end-to-end.
@@ -197,6 +325,9 @@ class S2BrandCampaignPipeline:
                 when ``artifact_disposition`` is ``pending_review`` or
                 ``quarantine``; otherwise the normal S2 full pipeline order
                 is used.
+            media_refs: Existing tenant-scoped pending_review/quarantine media
+                inputs for provider-free segmented assembly. Required when
+                ``media_stop_step="assemble_final"``.
 
         Returns:
             dict shaped for S2 callers:
@@ -225,6 +356,11 @@ class S2BrandCampaignPipeline:
             bounded_media_pilot=bounded_media_pilot,
         )
         effective_provider_max_retries = 0 if bounded_media_pilot else provider_max_retries
+        normalized_media_refs = (
+            _normalize_assemble_media_refs(media_refs, disposition=artifact_disposition)
+            if effective_media_stop_step == "assemble_final"
+            else None
+        )
         provider_job_caps = (
             dict(S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[effective_media_stop_step])
             if effective_media_stop_step
@@ -258,6 +394,9 @@ class S2BrandCampaignPipeline:
             "provider_max_retries": effective_provider_max_retries,
             "media_stop_step": effective_media_stop_step,
         }
+        if normalized_media_refs is not None:
+            config["media_refs"] = normalized_media_refs
+            config["refs_only_media_assembly"] = True
         if bounded_media_pilot:
             config.update({
                 "provider_job_caps": {"image": 1, "video": 1}
@@ -294,6 +433,7 @@ class S2BrandCampaignPipeline:
                     artifact_disposition,
                     effective_provider_max_retries,
                     effective_media_stop_step or S2_BOUNDED_MEDIA_STOP_STEP,
+                    normalized_media_refs,
                 )
             else:
                 final_state = await runner.resume(label)
@@ -311,6 +451,7 @@ class S2BrandCampaignPipeline:
             provider_job_caps=provider_job_caps,
             bounded_media_pilot=bounded_media_pilot,
             media_stop_step=effective_media_stop_step,
+            refs_only_media_assembly=normalized_media_refs is not None,
             model_id=model_id,
             label=label,
         )
@@ -333,16 +474,31 @@ class S2BrandCampaignPipeline:
         artifact_disposition: S2ArtifactDisposition,
         provider_max_retries: int | None,
         media_stop_step: S2SegmentedMediaStopStep = S2_BOUNDED_MEDIA_STOP_STEP,
+        media_refs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run S2 media through a controlled stop point, never publishable work."""
         final_state: dict[str, Any] = {}
         step_order = S2_SEGMENTED_MEDIA_STEP_ORDERS[media_stop_step]
         provider_job_caps = dict(S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[media_stop_step])
+        if media_stop_step == "assemble_final":
+            await self._seed_refs_only_assemble_inputs(
+                runner=runner,
+                label=label,
+                artifact_disposition=artifact_disposition,
+                provider_max_retries=provider_max_retries,
+                media_refs=media_refs,
+            )
         for step_name in step_order:
             final_state = await runner.run_step(label, step_name)
             if final_state.get("pipeline_degraded"):
                 break
             if step_name == media_stop_step:
+                if media_stop_step == "assemble_final":
+                    final_state = self._scope_refs_only_assemble_output(
+                        final_state=final_state,
+                        label=label,
+                        artifact_disposition=artifact_disposition,
+                    )
                 final_state["current_step"] = None
                 final_state["bounded_media_pilot"] = True
                 final_state["bounded_media_stop_step"] = media_stop_step
@@ -350,15 +506,102 @@ class S2BrandCampaignPipeline:
                 final_state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
                 final_state["provider_max_retries"] = provider_max_retries
                 final_state["provider_job_caps"] = provider_job_caps
+                if media_stop_step == "assemble_final":
+                    final_state["refs_only_media_assembly"] = True
                 final_state.setdefault("config", {})
                 final_state["config"]["provider_max_retries"] = provider_max_retries
                 final_state["config"]["media_stop_step"] = media_stop_step
                 final_state["config"]["provider_job_caps"] = provider_job_caps
                 final_state["config"]["seedance_quality_gate_enabled"] = False
+                if media_stop_step == "assemble_final":
+                    final_state["config"]["refs_only_media_assembly"] = True
                 save = getattr(runner.state_manager, "save", None)
                 if callable(save):
                     await save(label, final_state)
                 break
+        return final_state
+
+    async def _seed_refs_only_assemble_inputs(
+        self,
+        *,
+        runner: StepRunner,
+        label: str,
+        artifact_disposition: S2ArtifactDisposition,
+        provider_max_retries: int | None,
+        media_refs: dict[str, Any] | None,
+    ) -> None:
+        refs = _normalize_assemble_media_refs(media_refs, disposition=artifact_disposition)
+        state = await runner.state_manager.load(label)
+        if state is None:
+            raise ValueError(f"State not found for label: {label}")
+
+        completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        steps = state.setdefault("steps", {})
+
+        def seed_step(step_name: str, output: Any) -> None:
+            step = steps.setdefault(step_name, {})
+            step["status"] = "done"
+            step["output"] = output
+            step["completed_at"] = completed_at
+
+        seed_step("scripts", refs["scripts"])
+        seed_step("storyboards", refs["storyboards"])
+        seed_step("seedance_clips", {
+            "clip_paths": refs["clip_paths"],
+            "clip_details": refs["clip_details"],
+            "refs_only": True,
+        })
+        seed_step("tts_audio", {
+            "audio_paths": refs["audio_paths"],
+            "lyrics_paths": refs["lyrics_paths"],
+            "refs_only": True,
+        })
+        seed_step("thumbnail_images", refs["thumbnail_image_paths"])
+
+        state["current_step"] = "assemble_final"
+        state["bounded_media_pilot"] = True
+        state["bounded_media_stop_step"] = "assemble_final"
+        state["artifact_disposition"] = artifact_disposition
+        state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
+        state["provider_max_retries"] = provider_max_retries
+        state["provider_job_caps"] = {}
+        state["refs_only_media_assembly"] = True
+        state.setdefault("config", {})
+        state["config"]["media_refs"] = refs
+        state["config"]["media_stop_step"] = "assemble_final"
+        state["config"]["provider_job_caps"] = {}
+        state["config"]["refs_only_media_assembly"] = True
+        state["config"]["seedance_quality_gate_enabled"] = False
+        await runner.state_manager.save(label, state)
+
+    def _scope_refs_only_assemble_output(
+        self,
+        *,
+        final_state: dict[str, Any],
+        label: str,
+        artifact_disposition: S2ArtifactDisposition,
+    ) -> dict[str, Any]:
+        steps = final_state.get("steps", {})
+        assemble_step = steps.get("assemble_final", {})
+        output = assemble_step.get("output") if isinstance(assemble_step, dict) else None
+        video_path, render_json_path = extract_assemble_paths(output)
+        tenant_id = str(final_state.get("tenant_id") or final_state.get("config", {}).get("tenant_id") or "default")
+        target_dir = _tenant_review_media_dir(
+            tenant_id=tenant_id,
+            disposition=artifact_disposition,
+            label=label,
+            media_kind="assemble",
+        )
+        scoped_video_path = _move_path_into_review_scope(video_path, target_dir=target_dir)
+        scoped_render_json_path = _move_path_into_review_scope(render_json_path, target_dir=target_dir)
+        scoped_output = {
+            **(output if isinstance(output, dict) else {}),
+            "video_path": scoped_video_path,
+            "render_json_path": scoped_render_json_path,
+            "refs_only": True,
+        }
+        if isinstance(assemble_step, dict):
+            assemble_step["output"] = scoped_output
         return final_state
 
     def _build_result(
@@ -374,6 +617,7 @@ class S2BrandCampaignPipeline:
         provider_job_caps: dict[str, int] | None = None,
         bounded_media_pilot: bool = False,
         media_stop_step: S2SegmentedMediaStopStep | None = None,
+        refs_only_media_assembly: bool = False,
         model_id: str,
         label: str,
     ) -> dict[str, Any]:
@@ -396,6 +640,7 @@ class S2BrandCampaignPipeline:
             "provider_job_caps": provider_job_caps,
             "bounded_media_pilot": bounded_media_pilot,
             "bounded_media_stop_step": bounded_stop_step,
+            "refs_only_media_assembly": refs_only_media_assembly,
             "errors": final_state.get("errors", []),
             "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
             "briefs": get(steps, "strategy") or [],
@@ -442,7 +687,7 @@ class S2BrandCampaignPipeline:
             if bounded_stop_step not in {"tts_audio", "assemble_final", "audit"}:
                 result["audio_paths"] = []
                 result["lyrics_paths"] = []
-            if bounded_stop_step != "thumbnail_images" and bounded_stop_step != "audit":
+            if bounded_stop_step not in {"thumbnail_images", "assemble_final", "audit"}:
                 result["thumbnail_image_paths"] = []
             if bounded_stop_step in {"assemble_final", "audit"}:
                 result["intermediate_video_path"] = final_video_path
