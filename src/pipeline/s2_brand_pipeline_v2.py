@@ -96,11 +96,6 @@ S2_SEGMENTED_MEDIA_STEP_ORDERS: dict[S2SegmentedMediaStopStep, list[str]] = {
         "assemble_final",
     ],
     "audit": [
-        *S2_SEEDANCE_MEDIA_STEP_ORDER,
-        "tts_audio",
-        "thumbnail_prompts",
-        "thumbnail_images",
-        "assemble_final",
         "audit",
     ],
 }
@@ -110,7 +105,7 @@ S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS: dict[S2SegmentedMediaStopStep, dict[str, i
     "thumbnail_prompts": {},
     "thumbnail_images": {"thumbnail": 1},
     "assemble_final": {},
-    "audit": {"image": 1, "video": 1, "tts": 1, "thumbnail": 1},
+    "audit": {},
 }
 S2_BOUNDED_MEDIA_STEP_ORDER = S2_SEGMENTED_MEDIA_STEP_ORDERS["seedance_clips"]
 S2_BOUNDED_MEDIA_PROVIDER_JOB_CAPS = {"image": 1, "video": 1}
@@ -142,14 +137,20 @@ def _extract_media_ref_paths(media_refs: dict[str, Any], *keys: str) -> list[str
     return []
 
 
-def _assert_review_scoped_ref(path: str, *, disposition: S2ArtifactDisposition, ref_name: str) -> None:
+def _assert_review_scoped_ref(
+    path: str,
+    *,
+    disposition: S2ArtifactDisposition,
+    ref_name: str,
+    context: str = "S2 segmented media refs-only",
+) -> None:
     normalized = path.replace("\\", "/")
     forbidden_segments = ("/final_work/", "/renders/", "/fast_mode/", "/gpt_images/")
     if any(segment in normalized for segment in forbidden_segments):
-        raise ValueError(f"S2 assemble refs-only {ref_name} uses forbidden artifact path: {path}")
+        raise ValueError(f"{context} {ref_name} uses forbidden artifact path: {path}")
     if "/tenants/" not in normalized or f"/{disposition}/" not in normalized:
         raise ValueError(
-            f"S2 assemble refs-only {ref_name} must be tenant-scoped {disposition}: {path}"
+            f"{context} {ref_name} must be tenant-scoped {disposition}: {path}"
         )
 
 
@@ -218,6 +219,74 @@ def _normalize_assemble_media_refs(
         "thumbnail_image_paths": thumbnail_image_paths,
         "scripts": scripts,
         "storyboards": storyboards,
+    }
+
+
+def _normalize_audit_media_refs(
+    media_refs: dict[str, Any] | None,
+    *,
+    disposition: S2ArtifactDisposition,
+) -> dict[str, Any]:
+    """Return validated refs for provider-free S2 media quality audit."""
+    if not isinstance(media_refs, dict):
+        raise ValueError("S2 audit stop point requires media_refs for refs-only media quality audit")
+
+    refs = _normalize_assemble_media_refs(media_refs, disposition=disposition)
+    video_paths = _extract_media_ref_paths(
+        media_refs,
+        "video_path",
+        "intermediate_video_path",
+        "assemble_video_path",
+        "video_paths",
+    )
+    if not video_paths:
+        raise ValueError("S2 audit refs-only media_refs missing required keys: video_path")
+
+    render_json_paths = _extract_media_ref_paths(
+        media_refs,
+        "render_json_path",
+        "intermediate_render_json_path",
+        "assemble_render_json_path",
+        "render_json_paths",
+    )
+
+    for path in video_paths:
+        _assert_review_scoped_ref(
+            path,
+            disposition=disposition,
+            ref_name="video_path",
+            context="S2 audit refs-only",
+        )
+    for path in render_json_paths:
+        _assert_review_scoped_ref(
+            path,
+            disposition=disposition,
+            ref_name="render_json_path",
+            context="S2 audit refs-only",
+        )
+
+    thumbnail_prompts = media_refs.get("thumbnail_prompts") or media_refs.get("thumbnail_sets")
+    if not isinstance(thumbnail_prompts, list):
+        thumbnail_prompts = [{
+            "variants": [{
+                "prompt": "Refs-only media quality audit thumbnail checkpoint.",
+            }],
+        }]
+
+    continuity_grid = media_refs.get("continuity_storyboard_grid")
+    if not isinstance(continuity_grid, dict):
+        continuity_grid = {
+            "status": "refs_only",
+            "micro_shots": [],
+            "clip_groups": [],
+        }
+
+    return {
+        **refs,
+        "video_path": video_paths[0],
+        "render_json_path": render_json_paths[0] if render_json_paths else "",
+        "thumbnail_prompts": thumbnail_prompts,
+        "continuity_storyboard_grid": continuity_grid,
     }
 
 
@@ -356,11 +425,21 @@ class S2BrandCampaignPipeline:
             bounded_media_pilot=bounded_media_pilot,
         )
         effective_provider_max_retries = 0 if bounded_media_pilot else provider_max_retries
-        normalized_media_refs = (
-            _normalize_assemble_media_refs(media_refs, disposition=artifact_disposition)
-            if effective_media_stop_step == "assemble_final"
-            else None
-        )
+        normalized_media_refs = None
+        refs_only_media_assembly = False
+        refs_only_media_audit = False
+        if effective_media_stop_step == "assemble_final":
+            normalized_media_refs = _normalize_assemble_media_refs(
+                media_refs,
+                disposition=artifact_disposition,
+            )
+            refs_only_media_assembly = True
+        elif effective_media_stop_step == "audit":
+            normalized_media_refs = _normalize_audit_media_refs(
+                media_refs,
+                disposition=artifact_disposition,
+            )
+            refs_only_media_audit = True
         provider_job_caps = (
             dict(S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[effective_media_stop_step])
             if effective_media_stop_step
@@ -396,7 +475,10 @@ class S2BrandCampaignPipeline:
         }
         if normalized_media_refs is not None:
             config["media_refs"] = normalized_media_refs
-            config["refs_only_media_assembly"] = True
+            if refs_only_media_assembly:
+                config["refs_only_media_assembly"] = True
+            if refs_only_media_audit:
+                config["refs_only_media_audit"] = True
         if bounded_media_pilot:
             config.update({
                 "provider_job_caps": {"image": 1, "video": 1}
@@ -451,7 +533,8 @@ class S2BrandCampaignPipeline:
             provider_job_caps=provider_job_caps,
             bounded_media_pilot=bounded_media_pilot,
             media_stop_step=effective_media_stop_step,
-            refs_only_media_assembly=normalized_media_refs is not None,
+            refs_only_media_assembly=refs_only_media_assembly,
+            refs_only_media_audit=refs_only_media_audit,
             model_id=model_id,
             label=label,
         )
@@ -488,6 +571,14 @@ class S2BrandCampaignPipeline:
                 provider_max_retries=provider_max_retries,
                 media_refs=media_refs,
             )
+        elif media_stop_step == "audit":
+            await self._seed_refs_only_audit_inputs(
+                runner=runner,
+                label=label,
+                artifact_disposition=artifact_disposition,
+                provider_max_retries=provider_max_retries,
+                media_refs=media_refs,
+            )
         for step_name in step_order:
             final_state = await runner.run_step(label, step_name)
             if final_state.get("pipeline_degraded"):
@@ -508,6 +599,8 @@ class S2BrandCampaignPipeline:
                 final_state["provider_job_caps"] = provider_job_caps
                 if media_stop_step == "assemble_final":
                     final_state["refs_only_media_assembly"] = True
+                if media_stop_step == "audit":
+                    final_state["refs_only_media_audit"] = True
                 final_state.setdefault("config", {})
                 final_state["config"]["provider_max_retries"] = provider_max_retries
                 final_state["config"]["media_stop_step"] = media_stop_step
@@ -515,6 +608,8 @@ class S2BrandCampaignPipeline:
                 final_state["config"]["seedance_quality_gate_enabled"] = False
                 if media_stop_step == "assemble_final":
                     final_state["config"]["refs_only_media_assembly"] = True
+                if media_stop_step == "audit":
+                    final_state["config"]["refs_only_media_audit"] = True
                 save = getattr(runner.state_manager, "save", None)
                 if callable(save):
                     await save(label, final_state)
@@ -574,6 +669,66 @@ class S2BrandCampaignPipeline:
         state["config"]["seedance_quality_gate_enabled"] = False
         await runner.state_manager.save(label, state)
 
+    async def _seed_refs_only_audit_inputs(
+        self,
+        *,
+        runner: StepRunner,
+        label: str,
+        artifact_disposition: S2ArtifactDisposition,
+        provider_max_retries: int | None,
+        media_refs: dict[str, Any] | None,
+    ) -> None:
+        refs = _normalize_audit_media_refs(media_refs, disposition=artifact_disposition)
+        state = await runner.state_manager.load(label)
+        if state is None:
+            raise ValueError(f"State not found for label: {label}")
+
+        completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        steps = state.setdefault("steps", {})
+
+        def seed_step(step_name: str, output: Any) -> None:
+            step = steps.setdefault(step_name, {})
+            step["status"] = "done"
+            step["output"] = output
+            step["completed_at"] = completed_at
+
+        seed_step("scripts", refs["scripts"])
+        seed_step("storyboards", refs["storyboards"])
+        seed_step("continuity_storyboard_grid", refs["continuity_storyboard_grid"])
+        seed_step("seedance_clips", {
+            "clip_paths": refs["clip_paths"],
+            "clip_details": refs["clip_details"],
+            "refs_only": True,
+        })
+        seed_step("tts_audio", {
+            "audio_paths": refs["audio_paths"],
+            "lyrics_paths": refs["lyrics_paths"],
+            "refs_only": True,
+        })
+        seed_step("thumbnail_prompts", refs["thumbnail_prompts"])
+        seed_step("thumbnail_images", refs["thumbnail_image_paths"])
+        seed_step("assemble_final", {
+            "video_path": refs["video_path"],
+            "render_json_path": refs["render_json_path"],
+            "refs_only": True,
+        })
+
+        state["current_step"] = "audit"
+        state["bounded_media_pilot"] = True
+        state["bounded_media_stop_step"] = "audit"
+        state["artifact_disposition"] = artifact_disposition
+        state["artifact_storage_scope"] = _artifact_storage_scope(artifact_disposition)
+        state["provider_max_retries"] = provider_max_retries
+        state["provider_job_caps"] = {}
+        state["refs_only_media_audit"] = True
+        state.setdefault("config", {})
+        state["config"]["media_refs"] = refs
+        state["config"]["media_stop_step"] = "audit"
+        state["config"]["provider_job_caps"] = {}
+        state["config"]["refs_only_media_audit"] = True
+        state["config"]["seedance_quality_gate_enabled"] = False
+        await runner.state_manager.save(label, state)
+
     def _scope_refs_only_assemble_output(
         self,
         *,
@@ -618,6 +773,7 @@ class S2BrandCampaignPipeline:
         bounded_media_pilot: bool = False,
         media_stop_step: S2SegmentedMediaStopStep | None = None,
         refs_only_media_assembly: bool = False,
+        refs_only_media_audit: bool = False,
         model_id: str,
         label: str,
     ) -> dict[str, Any]:
@@ -641,6 +797,7 @@ class S2BrandCampaignPipeline:
             "bounded_media_pilot": bounded_media_pilot,
             "bounded_media_stop_step": bounded_stop_step,
             "refs_only_media_assembly": refs_only_media_assembly,
+            "refs_only_media_audit": refs_only_media_audit,
             "errors": final_state.get("errors", []),
             "media_synthesis_errors": final_state.get("media_synthesis_errors", []),
             "briefs": get(steps, "strategy") or [],
