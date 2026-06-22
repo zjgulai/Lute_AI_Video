@@ -456,6 +456,9 @@ class TestS2RunResultShape:
                 if stop_step == "assemble_final":
                     assert config["refs_only_media_assembly"] is True
                     assert config["media_refs"]["clip_paths"] == outputs["seedance_clips"]["clip_paths"]
+                if stop_step == "audit":
+                    assert config["refs_only_media_audit"] is True
+                    assert config["media_refs"]["video_path"] == outputs["assemble_final"]["video_path"]
                 test_label = label or "s2_segmented_media_fixture"
                 self.state_manager.state = {
                     "label": test_label,
@@ -494,6 +497,20 @@ class TestS2RunResultShape:
                 "audio_paths": outputs["tts_audio"]["audio_paths"],
                 "lyrics_paths": outputs["tts_audio"]["lyrics_paths"],
                 "thumbnail_image_paths": outputs["thumbnail_images"],
+            }
+        elif stop_step == "audit":
+            media_refs = {
+                "clip_paths": outputs["seedance_clips"]["clip_paths"],
+                "clip_details": outputs["seedance_clips"]["clip_details"],
+                "audio_paths": outputs["tts_audio"]["audio_paths"],
+                "lyrics_paths": outputs["tts_audio"]["lyrics_paths"],
+                "thumbnail_image_paths": outputs["thumbnail_images"],
+                "thumbnail_prompts": outputs["thumbnail_prompts"],
+                "video_path": outputs["assemble_final"]["video_path"],
+                "render_json_path": outputs["assemble_final"]["render_json_path"],
+                "scripts": outputs["scripts"],
+                "storyboards": outputs["storyboards"],
+                "continuity_storyboard_grid": outputs["continuity_storyboard_grid"],
             }
 
         result = await S2BrandCampaignPipeline().run(
@@ -555,6 +572,7 @@ class TestS2RunResultShape:
             assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"]
             assert result["thumbnail_image_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"]
             assert result["intermediate_video_path"] == "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4"
+            assert result["refs_only_media_audit"] is True
             assert result["audit_report"] == {"overall_status": "pass", "score": 0.91}
 
         assert saved_states
@@ -565,6 +583,10 @@ class TestS2RunResultShape:
         if stop_step == "assemble_final":
             assert saved_states[-1]["state"]["refs_only_media_assembly"] is True
             assert saved_states[-1]["state"]["config"]["refs_only_media_assembly"] is True
+            assert saved_states[-1]["state"]["config"]["provider_job_caps"] == {}
+        if stop_step == "audit":
+            assert saved_states[-1]["state"]["refs_only_media_audit"] is True
+            assert saved_states[-1]["state"]["config"]["refs_only_media_audit"] is True
             assert saved_states[-1]["state"]["config"]["provider_job_caps"] == {}
 
     @pytest.mark.asyncio
@@ -597,6 +619,42 @@ class TestS2RunResultShape:
                     "thumbnail_image_paths": [
                         "/app/output/tenants/momcozy-marketing/pending_review/ref/thumb.png"
                     ],
+                },
+            )
+
+    @pytest.mark.asyncio
+    async def test_audit_segment_requires_refs_only_media_refs(self):
+        with pytest.raises(ValueError, match="requires media_refs"):
+            await S2BrandCampaignPipeline().run(
+                brand_package=BRAND_PACKAGE_FIXTURE,
+                video_duration=15,
+                enable_media_synthesis=True,
+                artifact_disposition="pending_review",
+                provider_max_retries=0,
+                media_stop_step="audit",
+            )
+
+    @pytest.mark.asyncio
+    async def test_audit_segment_rejects_non_review_scoped_refs(self):
+        with pytest.raises(ValueError, match="forbidden artifact path"):
+            await S2BrandCampaignPipeline().run(
+                brand_package=BRAND_PACKAGE_FIXTURE,
+                video_duration=15,
+                enable_media_synthesis=True,
+                artifact_disposition="pending_review",
+                provider_max_retries=0,
+                media_stop_step="audit",
+                media_refs={
+                    "clip_paths": [
+                        "/app/output/tenants/momcozy-marketing/pending_review/ref/clip.mp4"
+                    ],
+                    "audio_paths": [
+                        "/app/output/tenants/momcozy-marketing/pending_review/ref/audio.mp3"
+                    ],
+                    "thumbnail_image_paths": [
+                        "/app/output/tenants/momcozy-marketing/pending_review/ref/thumb.png"
+                    ],
+                    "video_path": "/app/output/tenants/momcozy-marketing/final_work/ref/final.mp4",
                 },
             )
 
