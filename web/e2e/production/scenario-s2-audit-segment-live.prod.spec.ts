@@ -157,6 +157,16 @@ function expectStepNotExecuted(
   expect(step.output ?? null, `${stepName} must not produce output`).toBeNull();
 }
 
+function expectRefsOnlyInjectedStep(
+  steps: Record<string, { output?: unknown; status?: string }> | undefined,
+  stepName: string,
+): Record<string, unknown> {
+  const step = steps?.[stepName];
+  expect(step?.status, `${stepName} must be injected as refs-only input`).toBe("done");
+  expect(step?.output ?? null, `${stepName} must carry refs-only input`).not.toBeNull();
+  return step?.output as Record<string, unknown>;
+}
+
 function expectReviewScopedPath(value: unknown, label: string): string {
   expect(typeof value, `${label} must be a path`).toBe("string");
   const path = value as string;
@@ -187,9 +197,11 @@ function expectSegmentedAuditStatusReadback(statusBody: Record<string, unknown>,
   expectStepDone(steps, "audit");
   expectStepNotExecuted(steps, "strategy");
   expectStepNotExecuted(steps, "compliance");
-  expectStepNotExecuted(steps, "continuity_storyboard_grid");
   expectStepNotExecuted(steps, "keyframe_images");
   expectStepNotExecuted(steps, "video_prompts");
+
+  const continuityGrid = expectRefsOnlyInjectedStep(steps, "continuity_storyboard_grid");
+  expect(continuityGrid.status, "continuity grid must be marked refs-only").toBe("refs_only");
 
   const assembleOutput = getStepOutput(statusBody, "assemble_final") as Record<string, unknown>;
   expectReviewScopedPath(assembleOutput?.video_path, "assemble video_path");

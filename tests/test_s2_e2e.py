@@ -410,7 +410,11 @@ class TestS2RunResultShape:
             ],
             "compliance": [{"overall_status": "pass"}],
             "storyboards": [{"shots": [{"visual": "brand hero shot"}]}],
-            "continuity_storyboard_grid": {"micro_shots": [{"visual": "brand hero shot"}]},
+            "continuity_storyboard_grid": {
+                "status": "refs_only",
+                "micro_shots": [{"visual": "brand hero shot"}],
+                "clip_groups": [],
+            },
             "keyframe_images": [
                 {"shots": [{"keyframe_image_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/keyframes/s2-keyframe.png"}]}
             ],
@@ -588,6 +592,14 @@ class TestS2RunResultShape:
             assert saved_states[-1]["state"]["refs_only_media_audit"] is True
             assert saved_states[-1]["state"]["config"]["refs_only_media_audit"] is True
             assert saved_states[-1]["state"]["config"]["provider_job_caps"] == {}
+            steps = saved_states[-1]["state"]["steps"]
+            assert executed_steps == ["audit"]
+            assert steps["continuity_storyboard_grid"]["status"] == "done"
+            assert steps["continuity_storyboard_grid"]["output"]["status"] == "refs_only"
+            assert steps["assemble_final"]["status"] == "done"
+            assert steps["assemble_final"]["output"]["refs_only"] is True
+            assert steps.get("keyframe_images", {}).get("status", "pending") == "pending"
+            assert steps.get("video_prompts", {}).get("status", "pending") == "pending"
 
     @pytest.mark.asyncio
     async def test_assemble_segment_requires_refs_only_media_refs(self):
