@@ -97,7 +97,7 @@ npm run build
 
 [事实] L4B 生产只读回读已完成：`tmp/outputs/l4b-production-readback-20260611-160827.json` 记录 `provider_call_executed=false`、`pending_review_count=4`、`final_work_total=0`、`final_work_smoke_assets=0`，生产 Playwright `web/e2e/production/library-portfolio.prod.spec.ts` 在 `RUN_TOKEN_SMOKE=0` 下结果为 `2 passed`。
 
-[判断] 当前可声明的最高证据为：本地质量门和 no-token readiness 达到 `L2-fixture-or-dry-run`，Phase C 生产非 token E2E 达到 `L3-production-read-only`，Momcozy 消毒器样本包达到 `L4-authorized-live` provider smoke，并完成 `L4B` 生产只读回读。`L4C-4R`、`L4C-5`、`L4C-6`、`L4C-7`、`L4C-8R` 可声明 S1-S5 no-media clean-log single-submit token smoke 通过。`L4D-5Y` 可声明 S2 bounded media pilot 在生产真实 provider 下通过到 `seedance_clips`：一次 `/api/scenario/s2` submit、1 个 poyo image job、1 个 poyo Seedance job、provider retry 为 0、产物进入 tenant-scoped `pending_review`，且 `final_work=0`。`L4D-5Z` 可声明该批 S2 bounded media 产物在 `/api/portfolio` 与 `/library?tab=materials` 只读回归中可见。仍不能声明 S1/S3/S4/S5 media generation、S2 full media/final assembly、S1 gate/step-by-step、完整 token suite、商业交付、delivery acceptance、publish allowed 或 approved brand token。
+[判断] 当前可声明的最高证据为：本地质量门和 no-token readiness 达到 `L2-fixture-or-dry-run`，Phase C 生产非 token E2E 达到 `L3-production-read-only`，Momcozy 消毒器样本包达到 `L4-authorized-live` provider smoke，并完成 `L4B` 生产只读回读。`L4C-4R`、`L4C-5`、`L4C-6`、`L4C-7`、`L4C-8R` 可声明 S1-S5 no-media clean-log single-submit token smoke 通过。`L4D-5Y` 可声明 S2 bounded media pilot 在生产真实 provider 下通过到 `seedance_clips`：一次 `/api/scenario/s2` submit、1 个 poyo image job、1 个 poyo Seedance job、provider retry 为 0、产物进入 tenant-scoped `pending_review`，且 `final_work=0`。`L4D-5Z` 可声明该批 S2 bounded media 产物在 `/api/portfolio` 与 `/library?tab=materials` 只读回归中可见。S1 gate/step-by-step 已完成 no-provider readiness：本地 gate 合同 `102 passed, 2 skipped`，默认 production Playwright 在 `RUN_TOKEN_SMOKE=0` 下只执行 2 个 `/s1` 只读页面用例并通过，token guard `7 passed`。仍不能声明 S1/S3/S4/S5 full media generation、S2 full media/final assembly、S1 gate candidate 真实生成/approve、完整 token suite、商业交付、delivery acceptance、publish allowed 或 approved brand token。
 
 ## 证据边界
 
@@ -419,6 +419,13 @@ npx playwright test -c playwright.prod.config.ts \
 目的：在 `L4A` 和 `L4B` 都稳定后，再考虑扩展到更宽的前后端 token smoke。
 
 默认不执行。执行前必须重新评估本节风险，因为当前 `@token-smoke` 规格会覆盖 Fast Mode、S1 gate、S1 step-by-step、S2-S5 submit/status，可能创建多个真实任务。
+
+2026-06-22 已完成 S1 gate / step-by-step no-provider readiness 分层：
+
+- 本地 gate 合同回归：`DATABASE_URL= HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/pytest tests/test_s1_gate_full_flow.py tests/test_gate_approve_idempotency_contract.py tests/test_gate_full_flow_e2e.py tests/test_gate_scenario_configs.py -q`，结果 `102 passed, 2 skipped`。
+- 默认 production Playwright 隔离：`RUN_TOKEN_SMOKE=0 npx playwright test -c playwright.prod.config.ts e2e/production/s1-gate.prod.spec.ts e2e/production/s1-step-by-step.prod.spec.ts --list` 只枚举 2 个只读 `/s1` 页面用例；实际执行结果 `2 passed`。
+- Token guard：`npx vitest run src/lib/prodE2eTokenGuard.test.ts`，结果 `7 passed`。
+- 边界：`POST /api/scenario/s1/start`、`POST /api/scenario/s1/step/strategy`、`POST /api/scenario/s1/gate/{label}/{gate_id}/generate` 仍全部由 `@token-smoke` 隔离；本轮未执行生产 S1 submit、gate candidate 真实生成、approve/regenerate、provider、publish、delivery acceptance 或 approved brand token write。
 
 进入 L4C 前先复制并填写 `configs/l4c-token-smoke-plan-template.json` 到 `tmp/outputs/` 或私有路径，再运行 no-execute 计划验证器：
 
