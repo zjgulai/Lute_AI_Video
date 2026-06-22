@@ -51,7 +51,7 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
     expect(integ3, "INTEGRATION-3 regression: nested products[].name not accepted").toBeUndefined();
   });
 
-  test("step 2: gate exists after strategy and exposes 3 candidates @token-smoke", async ({ request }) => {
+  test("step 2: gate exists after scripts and exposes 3 candidates @token-smoke", async ({ request }) => {
     const initR = await request.post("/api/scenario/s1/start", {
       headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: S1_PAYLOAD,
@@ -65,6 +65,13 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
     });
     expect(strategyR.status()).toBe(200);
 
+    const scriptsR = await request.post("/api/scenario/s1/step/scripts", {
+      headers: productionApiHeaders({ "Content-Type": "application/json" }),
+      data: { label },
+      timeout: 60_000,
+    });
+    expect(scriptsR.status()).toBe(200);
+
     const stateR = await request.get(`/api/scenario/s1/state/${label}`, {
       headers: productionApiHeaders(),
     });
@@ -72,12 +79,9 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
     const state = await stateR.json();
 
     const gates = state.gates ?? state.gate_states ?? {};
-    const gateId = Object.keys(gates)[0];
+    const gateId = "gate_1_script";
 
-    if (!gateId) {
-      test.skip(true, "no gate exposed after strategy on this scenario config");
-      return;
-    }
+    expect(gates[gateId], "gate_1_script should be exposed after scripts").toBeDefined();
 
     const genR = await request.post(
       `/api/scenario/s1/gate/${label}/${gateId}/generate`,
