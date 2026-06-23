@@ -47,6 +47,7 @@ source: human+ai
 | `TODO-P1-5A` S2 segmented stop-point contract | L2/L4 分段 | 按分段授权 | S2 request/router/pipeline 显式支持受控 `media_stop_step` | 本地 no-provider 合同已通过；TTS、thumbnail、refs-only assemble、refs-only audit live segments 均已分段执行；audit 当次旧 spec 因 refs-only seeded step 期望漂移返回 nonzero，PR `#44` 已修正合同但未重跑 live |
 | `P1-5D` S2 assemble refs-only live smoke | L4 | 否（local Remotion assemble only） | 用既有 pending_review clip/audio/thumb refs 执行 `assemble_final` | 已通过；1 次 scenario submit、provider HTTP=0、local Remotion assemble=1、产物进入 tenant-scoped pending_review |
 | `P1-5E` S2 audit refs-only live smoke | L4 side-effect / contract-aligned | 否（refs-only local audit，无 provider） | 用既有 pending_review/quarantine refs 只执行 `media_quality_audit` | 生产 sync-prep 通过；live run 已完成 audit readback 与 no-provider boundary，旧 spec 因 `continuity_storyboard_grid` refs-only 状态口径漂移返回 nonzero；PR `#44` 已对齐合同，未重跑 live submit |
+| `P1-6A-R2S` S1 gate corrected live smoke | L4 | 是（仅 DeepSeek 文本） | 在 scripts 后生成 `gate_1_script` 3 candidates | 已通过；单标题、start/strategy/scripts/gate_generate 各 1 次，未 approve/regenerate，媒体/publish/delivery/token write 为 0 |
 | `L4C-2+` production `@token-smoke` slices | L4 | 是 | S1/S2-S5/gate/media/poster/quality 等更宽场景联测 | 暂缓；需重新授权 |
 
 ### 执行决策
@@ -97,7 +98,7 @@ npm run build
 
 [事实] L4B 生产只读回读已完成：`tmp/outputs/l4b-production-readback-20260611-160827.json` 记录 `provider_call_executed=false`、`pending_review_count=4`、`final_work_total=0`、`final_work_smoke_assets=0`，生产 Playwright `web/e2e/production/library-portfolio.prod.spec.ts` 在 `RUN_TOKEN_SMOKE=0` 下结果为 `2 passed`。
 
-[判断] 当前可声明的最高证据为：本地质量门和 no-token readiness 达到 `L2-fixture-or-dry-run`，Phase C 生产非 token E2E 达到 `L3-production-read-only`，Momcozy 消毒器样本包达到 `L4-authorized-live` provider smoke，并完成 `L4B` 生产只读回读。`L4C-4R`、`L4C-5`、`L4C-6`、`L4C-7`、`L4C-8R` 可声明 S1-S5 no-media clean-log single-submit token smoke 通过。`L4D-5Y` 可声明 S2 bounded media pilot 在生产真实 provider 下通过到 `seedance_clips`：一次 `/api/scenario/s2` submit、1 个 poyo image job、1 个 poyo Seedance job、provider retry 为 0、产物进入 tenant-scoped `pending_review`，且 `final_work=0`。`L4D-5Z` 可声明该批 S2 bounded media 产物在 `/api/portfolio` 与 `/library?tab=materials` 只读回归中可见。S1 gate/step-by-step 已完成 no-provider readiness：本地 gate 合同 `102 passed, 2 skipped`，默认 production Playwright 在 `RUN_TOKEN_SMOKE=0` 下只执行 2 个 `/s1` 只读页面用例并通过，token guard `7 passed`。仍不能声明 S1/S3/S4/S5 full media generation、S2 full media/final assembly、S1 gate candidate 真实生成/approve、完整 token suite、商业交付、delivery acceptance、publish allowed 或 approved brand token。
+[判断] 当前可声明的最高证据为：本地质量门和 no-token readiness 达到 `L2-fixture-or-dry-run`，Phase C 生产非 token E2E 达到 `L3-production-read-only`，Momcozy 消毒器样本包达到 `L4-authorized-live` provider smoke，并完成 `L4B` 生产只读回读。`L4C-4R`、`L4C-5`、`L4C-6`、`L4C-7`、`L4C-8R` 可声明 S1-S5 no-media clean-log single-submit token smoke 通过。`L4D-5Y` 可声明 S2 bounded media pilot 在生产真实 provider 下通过到 `seedance_clips`：一次 `/api/scenario/s2` submit、1 个 poyo image job、1 个 poyo Seedance job、provider retry 为 0、产物进入 tenant-scoped `pending_review`，且 `final_work=0`。`L4D-5Z` 可声明该批 S2 bounded media 产物在 `/api/portfolio` 与 `/library?tab=materials` 只读回归中可见。S1 gate corrected live smoke `P1-6A-R2S` 可声明 scripts 后 `gate_1_script` candidate generation 通过：start/strategy/scripts/gate_generate 各 1 次，DeepSeek `200 OK` 计数为 8，返回 3 candidates，媒体/provider 禁止项为 0，临时 key 已撤销。仍不能声明 gate approve/regenerate、S1 media generation、S2-S5 gate、完整 token suite、商业交付、delivery acceptance、publish allowed 或 approved brand token。
 
 ## 证据边界
 
@@ -427,15 +428,15 @@ npx playwright test -c playwright.prod.config.ts \
 - Token guard：`npx vitest run src/lib/prodE2eTokenGuard.test.ts`，结果 `7 passed`。
 - 边界：`POST /api/scenario/s1/start`、`POST /api/scenario/s1/step/strategy`、`POST /api/scenario/s1/gate/{label}/{gate_id}/generate` 仍全部由 `@token-smoke` 隔离；本轮未执行生产 S1 submit、gate candidate 真实生成、approve/regenerate、provider、publish、delivery acceptance 或 approved brand token write。
 
-2026-06-23 已执行 `P1-6A-R` S1 gate corrected live smoke closeout，但结果不是通过：
+2026-06-23 已完成 `P1-6A` S1 gate corrected live smoke 分层收口：
 
 - PR `#45` 已合并到 `main`，merge commit `cb4e6a1d357ed1fcb7831a30b225c208e0d7528f`；该 PR 只修正 `s1-gate.prod.spec.ts` 的 gate 停点，将 gate 检查移动到 `scripts` 后。
-- 本轮只运行 `web/e2e/production/s1-gate.prod.spec.ts` 中 `step 2: gate exists after scripts and exposes 3 candidates @token-smoke`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`--retries=0`。
-- 生产实际事件：`/scenario/s1/start`、`/scenario/s1/step/strategy`、`/scenario/s1/step/scripts` 与 `gate_1_script/generate` 各 1 次；backend 记录 gate generate 最终 `200`，耗时约 `67007ms`。
-- Playwright 仍按默认全局 30s timeout 失败，失败点在等待 `gate_1_script/generate`；因此当前不能声明 S1 gate corrected live smoke passed。
-- DeepSeek 文本调用仅限该链路；poyo、Seedance、TTS、thumbnail、assemble、media_quality_audit、publish、delivery 均为 `0`，未观察到 `final_work` 写入。日志中有一次 `GET /portfolio/?kind=final_work` 返回 `401` 的只读背景噪音，不是产物写入。
-- 临时 non-demo production key 已撤销，本地明文 key env 已删除；未执行 gate approve / regenerate，也没有第二次 corrected live submit。证据文件：`tmp/debug/p1_6a_r_s1_gate_20260623T025518Z-final-summary.json`、`tmp/debug/p1_6a_r_s1_gate_20260623T025518Z-playwright.log`、`tmp/debug/p1_6a_r_s1_gate_20260623T025518Z-backend.log`。
-- 下一步不是继续 live：先做 no-provider 的单 spec timeout / guard 修复，并在本地证明只枚举目标测试；如需再跑生产 corrected live，必须重新授权单次重试。
+- `P1-6A-R` 首次 corrected live run 中，生产实际事件为 `/scenario/s1/start`、`/scenario/s1/step/strategy`、`/scenario/s1/step/scripts` 与 `gate_1_script/generate` 各 1 次，backend 记录 gate generate 最终 `200`；Playwright 被默认全局 30s timeout 截断，因此未作为通过证据。
+- PR `#53` 已合并到 `main`，用于补足单 spec timeout / explicit-spec guard；随后 `P1-6A-R2R` 已证明 curl-auth 路径可完成同一链路，但当时 DeepSeek 返回 `402 Payment Required`。
+- 充值前的只读配置核对确认本地 `.env.prod`、远端 `.env.prod` 与容器 runtime 的 DeepSeek key fingerprint 一致，`DEEPSEEK_API_BASE=https://api.deepseek.com`，`DEEPSEEK_MODEL=deepseek-v4-pro`，`DEFAULT_LLM_PROVIDER=deepseek`；因此该阻断归因为账户余额/额度状态，而非 key 漂移或生产 env 未生效。
+- 充值后 `P1-6A-R2S` 按单标题、单链路授权重跑通过：Playwright `1 passed (1.3m)`；应用日志中 `/scenario/s1/start`、`/scenario/s1/step/strategy`、`/scenario/s1/step/scripts`、`/scenario/s1/gate/{label}/gate_1_script/generate` 各 1 次；DeepSeek HTTP `200 OK` 计数为 `8`，`402 Payment Required` 计数为 `0`；poyo、Seedance、TTS、thumbnail、assemble、media_quality_audit、final_work、publish、delivery 与 approved brand token 禁止项均为 `0`。
+- 临时 non-demo production key 已撤销，post-revoke protected check 返回 `401`，本地明文 key env 已删除。证据文件：`tmp/debug/p1-6a-r2s-final-adjudication-20260623T094047Z.json`、`tmp/debug/p1-6a-r2-summary-20260623T094047Z.json`、`tmp/debug/p1-6a-r2-playwright-20260623T094047Z.log`、`tmp/debug/p1-6a-r2-backend-20260623T094047Z.log`。
+- 边界：该证据只证明 S1 scripts 后 `gate_1_script` candidate generation 可以产出 3 candidates；未执行 gate approve/regenerate、S1 media generation、S2-S5、Fast Mode、完整 token suite、publish、delivery acceptance 或 approved brand token write。
 
 进入 L4C 前先复制并填写 `configs/l4c-token-smoke-plan-template.json` 到 `tmp/outputs/` 或私有路径，再运行 no-execute 计划验证器：
 
