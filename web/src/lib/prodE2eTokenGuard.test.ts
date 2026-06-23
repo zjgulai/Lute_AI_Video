@@ -219,4 +219,13 @@ describe("Production E2E token smoke guardrails", () => {
       Array.from(SAFE_NEGATIVE_MUTATION_TEST_TITLES).filter((title) => !seenSafeNegativeTitles.has(title)),
     ).toEqual([]);
   });
+
+  it("keeps the S1 gate candidate live smoke on an explicit timeout budget", () => {
+    const spec = readWebFile("e2e/production/s1-gate.prod.spec.ts");
+
+    expect(spec).toContain("PLAYWRIGHT_S1_GATE_GENERATE_TIMEOUT_MS");
+    expect(spec).toContain("PLAYWRIGHT_S1_GATE_TEST_TIMEOUT_MS");
+    expect(spec).toContain("test.setTimeout(s1GateLiveTestTimeoutMs)");
+    expect(spec).toContain("timeout: s1GateGenerateTimeoutMs");
+  });
 });
