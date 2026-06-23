@@ -4,7 +4,7 @@ doc_type: knowledge
 module: project
 status: stable
 created: 2026-05-08
-updated: 2026-06-22
+updated: 2026-06-23
 owner: self
 source: human+ai
 ---
@@ -136,7 +136,7 @@ source: human+ai
 | TODO-P1-3 | S4 bounded media single-submit smoke | completed_l4_authorized_live_bounded_passed | 已按授权完成 production sync-prep、no-submit verification、单 spec/单 submit live smoke；后续任何重跑、扩大到 full media 或执行 generic/full-chain 视频 smoke 仍需重新授权预算、submit/job cap、artifact disposition 与止损 | Playwright `1 passed (3.9m)`；poyo Seedance video job=1，poyo image generation=0，provider retry=0；产物为 tenant-scoped `pending_review` 下 1 个 mp4，`image_count=0`，`final_work=0`；`seedance_clips=done` 后停止，TTS/thumbnail/assemble/audit/gate/publish/delivery/token write 均未执行 |
 | TODO-P1-4 | S5 bounded media single-submit smoke | completed_l4_authorized_live_bounded_passed | 已按授权完成 production sync-prep、no-submit verification、单 spec/单 submit live smoke；后续任何重跑、扩大到 full media 或执行 generic/full-chain 视频 smoke 仍需重新授权预算、submit/job cap、artifact disposition 与止损 | Playwright `1 passed (4.0m)`；poyo image job=0，poyo Seedance video job=1，provider retry=0；产物为 tenant-scoped `pending_review` 下 1 个 mp4，`image_count=0`，`final_work=0`；`seedance_clips=done` 后停止，TTS/thumbnail/assemble/audit/gate/publish/delivery/token write 均未执行 |
 | TODO-P1-5 | S2 full-media 分段计划 | p1_5e_live_boundary_verified_contract_aligned | `media_stop_step` 合同与 no-provider 越界测试已完成；`P1-5C-1R` 完成 `tts_audio`，`P1-5C-2` 完成 `thumbnail_images`，`P1-5D` 完成 refs-only local assemble，`P1-5E` 已执行 refs-only audit live 并通过边界/log/readback 复核；PR `#44` 已修正 refs-only seeded step 的测试合同漂移 | TTS segment：DeepSeek calls=2、TTS job=1；thumbnail segment：poyo thumbnail image job=1；assemble segment：provider HTTP=0、local Remotion assemble=1；audit segment：1 次实际 `/scenario/s2` submit、provider/DeepSeek/poyo/Seedance/TTS/thumbnail/keyframe/assemble/gate/final_work/publish/delivery 均为 `0`。P1-5E 当次旧 spec 返回 nonzero，原因是测试期望漂移；修正后未重跑 live spec。S2 full media/final assembly、publish、delivery acceptance、approved brand token 仍未执行 |
-| TODO-P1-6 | S1 gate / step-by-step 真实 token flow | no_provider_readiness_passed | no-provider readiness 已完成；真实 gate candidate / step-by-step token flow 仍需单独授权，且必须限定单 spec、单 submit/单 gate action、零重试、日志门禁与产物处置 | 本地 gate 合同测试 `102 passed, 2 skipped`；`RUN_TOKEN_SMOKE=0` 只枚举并执行 2 个 `/s1` 只读页面用例，结果 `2 passed`；token guard `7 passed`；所有 `POST /api/scenario/s1/start`、`POST /api/scenario/s1/step/strategy`、`POST /api/scenario/s1/gate/*/generate` 用例仍被 `@token-smoke` 隔离，未执行真实 submit/provider/publish/delivery/token write |
+| TODO-P1-6 | S1 gate / step-by-step 真实 token flow | corrected_live_attempt_failed_timeout_backend_gate_200 | no-provider readiness 已完成；PR `#45` 已修正 live spec 停点并合并；`P1-6A-R` 已执行 1 次 corrected live smoke，但 Playwright 全局 30s timeout 失败，不能声明通过；后续必须先做 no-provider timeout/spec guard 修复，再另行授权单次重试 | PR `#45` merge commit `cb4e6a1`；本轮只运行 `web/e2e/production/s1-gate.prod.spec.ts` 的 `step 2: gate exists after scripts and exposes 3 candidates @token-smoke`。生产实际事件：`/scenario/s1/start`、`/step/strategy`、`/step/scripts`、`gate_1_script/generate` 各 1 次；backend 记录 gate generate `200`，耗时约 `67007ms`；Playwright 因 30s timeout 失败。DeepSeek 文本调用存在且限于本链路；poyo/Seedance/TTS/thumbnail/assemble/media_quality_audit/publish/delivery 为 `0`，`final_work_write=0`。临时 key 已撤销，本地明文 env 已删除；没有第二次 corrected live submit |
 
 ### P2：工程韧性与产品闭环
 

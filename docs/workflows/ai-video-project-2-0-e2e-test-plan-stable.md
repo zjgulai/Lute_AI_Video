@@ -5,7 +5,7 @@ module: ai-video-2.0
 topic: e2e-test-plan
 status: stable
 created: 2026-06-06
-updated: 2026-06-22
+updated: 2026-06-23
 owner: self
 source: human+ai
 ---
@@ -426,6 +426,16 @@ npx playwright test -c playwright.prod.config.ts \
 - 默认 production Playwright 隔离：`RUN_TOKEN_SMOKE=0 npx playwright test -c playwright.prod.config.ts e2e/production/s1-gate.prod.spec.ts e2e/production/s1-step-by-step.prod.spec.ts --list` 只枚举 2 个只读 `/s1` 页面用例；实际执行结果 `2 passed`。
 - Token guard：`npx vitest run src/lib/prodE2eTokenGuard.test.ts`，结果 `7 passed`。
 - 边界：`POST /api/scenario/s1/start`、`POST /api/scenario/s1/step/strategy`、`POST /api/scenario/s1/gate/{label}/{gate_id}/generate` 仍全部由 `@token-smoke` 隔离；本轮未执行生产 S1 submit、gate candidate 真实生成、approve/regenerate、provider、publish、delivery acceptance 或 approved brand token write。
+
+2026-06-23 已执行 `P1-6A-R` S1 gate corrected live smoke closeout，但结果不是通过：
+
+- PR `#45` 已合并到 `main`，merge commit `cb4e6a1d357ed1fcb7831a30b225c208e0d7528f`；该 PR 只修正 `s1-gate.prod.spec.ts` 的 gate 停点，将 gate 检查移动到 `scripts` 后。
+- 本轮只运行 `web/e2e/production/s1-gate.prod.spec.ts` 中 `step 2: gate exists after scripts and exposes 3 candidates @token-smoke`，`RUN_TOKEN_SMOKE=1`、`PLAYWRIGHT_PROD_WORKERS=1`、`PLAYWRIGHT_MAX_SUBMIT_COUNT=1`、`--retries=0`。
+- 生产实际事件：`/scenario/s1/start`、`/scenario/s1/step/strategy`、`/scenario/s1/step/scripts` 与 `gate_1_script/generate` 各 1 次；backend 记录 gate generate 最终 `200`，耗时约 `67007ms`。
+- Playwright 仍按默认全局 30s timeout 失败，失败点在等待 `gate_1_script/generate`；因此当前不能声明 S1 gate corrected live smoke passed。
+- DeepSeek 文本调用仅限该链路；poyo、Seedance、TTS、thumbnail、assemble、media_quality_audit、publish、delivery 均为 `0`，未观察到 `final_work` 写入。日志中有一次 `GET /portfolio/?kind=final_work` 返回 `401` 的只读背景噪音，不是产物写入。
+- 临时 non-demo production key 已撤销，本地明文 key env 已删除；未执行 gate approve / regenerate，也没有第二次 corrected live submit。证据文件：`tmp/debug/p1_6a_r_s1_gate_20260623T025518Z-final-summary.json`、`tmp/debug/p1_6a_r_s1_gate_20260623T025518Z-playwright.log`、`tmp/debug/p1_6a_r_s1_gate_20260623T025518Z-backend.log`。
+- 下一步不是继续 live：先做 no-provider 的单 spec timeout / guard 修复，并在本地证明只枚举目标测试；如需再跑生产 corrected live，必须重新授权单次重试。
 
 进入 L4C 前先复制并填写 `configs/l4c-token-smoke-plan-template.json` 到 `tmp/outputs/` 或私有路径，再运行 no-execute 计划验证器：
 
