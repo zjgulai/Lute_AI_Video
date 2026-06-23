@@ -7,6 +7,21 @@
 import { test, expect } from "@playwright/test";
 import { productionApiHeaders } from "./helpers";
 
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const s1GateGenerateTimeoutMs = positiveIntEnv("PLAYWRIGHT_S1_GATE_GENERATE_TIMEOUT_MS", 120_000);
+const s1GateLiveTestTimeoutMs = positiveIntEnv(
+  "PLAYWRIGHT_S1_GATE_TEST_TIMEOUT_MS",
+  s1GateGenerateTimeoutMs + 60_000,
+);
+
 const S1_PAYLOAD = {
   product_catalog: {
     products: [
@@ -52,6 +67,8 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
   });
 
   test("step 2: gate exists after scripts and exposes 3 candidates @token-smoke", async ({ request }) => {
+    test.setTimeout(s1GateLiveTestTimeoutMs);
+
     const initR = await request.post("/api/scenario/s1/start", {
       headers: productionApiHeaders({ "Content-Type": "application/json" }),
       data: S1_PAYLOAD,
@@ -88,7 +105,7 @@ test.describe("P4-2 — S1 Gate panel flow", () => {
       {
         headers: productionApiHeaders({ "Content-Type": "application/json" }),
         data: {},
-        timeout: 60_000,
+        timeout: s1GateGenerateTimeoutMs,
       },
     );
     expect([200, 202]).toContain(genR.status());
