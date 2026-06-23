@@ -131,7 +131,7 @@ describe("Production E2E token smoke guardrails", () => {
       ],
       "e2e/production/s1-gate.prod.spec.ts": [
         "step 1: start S1 and run strategy step without INTEGRATION-3 regression @token-smoke",
-        "step 2: gate exists after strategy and exposes 3 candidates @token-smoke",
+        "step 2: gate exists after scripts and exposes 3 candidates @token-smoke",
       ],
       "e2e/production/s1-step-by-step.prod.spec.ts": [
         "POST /api/scenario/s1/start returns label @token-smoke",
