@@ -42,7 +42,7 @@ faster-whisper>=1.2.1
 # Decision: keep CPU-only to stay under 4GB image budget. GPU users override
 # via PIP_INDEX_URL + cuda-aware torch in deploy/lighthouse/.env.prod.
 transformers>=5.12.1
-torch>=2.12.0
+torch>=2.12.1
 Pillow>=10.0
 
 # Development
