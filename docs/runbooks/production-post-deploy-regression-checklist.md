@@ -27,14 +27,16 @@ source: human+ai
 
 2026-06-25 已按本清单完成 Video 2.0 production no-provider deployment baseline：
 
-- main SHA：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9`
+- production deployment/version-sync SHA：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9`（PR `#55` merge commit）
+- current repository SHA：`38276014eb87a0a0bb37e8202a0cc07869fd980d`（docs-only closeout；`HEAD` / `origin/main` / GitHub main aligned）
 - production `/api/health`：`status=ok`，`version=2.0.0`
-- GitHub main checks：`CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success
+- GitHub checks：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9` 上 `CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success；docs-only `38276014eb87a0a0bb37e8202a0cc07869fd980d` 上 `CI` 与 `Deploy to GitHub Pages` 为 success
 - Lighthouse smoke：`RUN_TOKEN_SMOKE=0`，通过；Fast Mode token smoke 跳过
 - strict read-only production E2E：`55 passed`
 - 只读页面：`/`、`/toolbox`、`/dashboard`、`/library`、`/works`、`/settings` 均返回 `200`
 - log gate：provider HTTP、`/api/scenario/*` submit、Fast Mode submit、publish/delivery、approved brand token write、`final_work` 写入计数均为 `0`
-- 证据文件：`tmp/debug/video20-production-deploy-summary-20260625T013842Z.json`、`tmp/debug/video20-version-deploy-summary-20260625T021617Z.json`、`tmp/debug/video20-version-deploy-backend-log-20260625T0208Z.log`
+- post-deploy monitor：后续 30 分钟窗口内 `traceback_or_critical_or_5xx_or_429_count=0`，provider/submit/publish/delivery/token write/final_work write 计数均为 `0`
+- 证据文件：`tmp/debug/video20-production-deploy-summary-20260625T013842Z.json`、`tmp/debug/video20-version-deploy-summary-20260625T021617Z.json`、`tmp/debug/video20-version-deploy-backend-log-20260625T0208Z.log`、`tmp/debug/video20-post-deploy-monitor-summary-20260625T023331Z.json`
 
 边界：该记录只证明 production deployment + no-provider/read-only regression 已通过，不代表 provider full chain、full media/final assembly、publish、delivery acceptance 或 approved brand token write 已执行。
 
