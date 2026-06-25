@@ -28,7 +28,7 @@ source: human+ai
 2026-06-25 已按本清单完成 Video 2.0 production no-provider deployment baseline：
 
 - production deployment/version-sync SHA：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9`（PR `#55` merge commit）
-- current repository SHA：`38276014eb87a0a0bb37e8202a0cc07869fd980d`（docs-only closeout；`HEAD` / `origin/main` / GitHub main aligned）
+- docs-only closeout SHA：`38276014eb87a0a0bb37e8202a0cc07869fd980d`（not a production redeploy）
 - production `/api/health`：`status=ok`，`version=2.0.0`
 - GitHub checks：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9` 上 `CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success；docs-only `38276014eb87a0a0bb37e8202a0cc07869fd980d` 上 `CI` 与 `Deploy to GitHub Pages` 为 success
 - Lighthouse smoke：`RUN_TOKEN_SMOKE=0`，通过；Fast Mode token smoke 跳过
