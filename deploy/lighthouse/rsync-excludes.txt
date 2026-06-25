@@ -1,6 +1,7 @@
 .git
 .env
 .DS_Store
+*.pem
 *.baiduyun.uploading.cfg
 .*.baiduyun.uploading.cfg
 *.bak*
@@ -31,6 +32,8 @@ coverage
 htmlcov
 .coverage
 output
+output_uploaded
+backups
 tmp
 tmp/outputs
 tmp/screenshots
@@ -39,12 +42,18 @@ web/tmp/screenshots
 __pycache__
 web/blob-report
 deploy/lighthouse/.env.prod
+deploy/lighthouse/.portal-auth.env
 deploy/lighthouse/server.crt
 deploy/lighthouse/server.key
 deploy/lighthouse/*.pem
+deploy/lighthouse/backups
+deploy/lighthouse/portal-auth
+deploy/lighthouse/skills.conf
 deploy/lighthouse/landing/login.html
 deploy/lighthouse/landing/register.html
 deploy/lighthouse/landing/systems.html
 deploy/lighthouse/landing/lute-*.html
 deploy/lighthouse/landing/lute-auth.*
 deploy/lighthouse/landing/voc-zh_messages.json
+deploy/lighthouse/landing/.portal.htpasswd
+deploy/lighthouse/landing/brand-placeholder.html

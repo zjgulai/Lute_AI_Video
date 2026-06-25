@@ -16,7 +16,9 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
     "source_control_and_env": {
         ".git",
         ".env",
+        "*.pem",
         "deploy/lighthouse/.env.prod",
+        "deploy/lighthouse/.portal-auth.env",
         "deploy/lighthouse/server.crt",
         "deploy/lighthouse/server.key",
         "deploy/lighthouse/*.pem",
@@ -47,6 +49,7 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
     },
     "runtime_outputs_and_screenshots": {
         "output",
+        "output_uploaded",
         "tmp",
         "tmp/outputs",
         "tmp/screenshots",
@@ -67,6 +70,14 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
         "deploy/lighthouse/landing/lute-*.html",
         "deploy/lighthouse/landing/lute-auth.*",
         "deploy/lighthouse/landing/voc-zh_messages.json",
+        "deploy/lighthouse/landing/.portal.htpasswd",
+        "deploy/lighthouse/landing/brand-placeholder.html",
+    },
+    "remote_only_production_sidecars": {
+        "backups",
+        "deploy/lighthouse/backups",
+        "deploy/lighthouse/portal-auth",
+        "deploy/lighthouse/skills.conf",
     },
 }
 
@@ -112,6 +123,7 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
         "runtime_outputs_and_screenshots",
         "local_workspace_state",
         "remote_only_landing_sidecars",
+        "remote_only_production_sidecars",
         "landing_sidecar_sync_wrapper",
         "landing_sidecar_sync_defaults_to_dry_run",
         "landing_sidecar_sync_must_not_delete_remote_files",
@@ -126,9 +138,12 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
         "deploy/lighthouse/rsync-excludes.txt",
         "web/playwright-report",
         "tmp/screenshots",
+        "output_uploaded",
         "drafts",
         "ref",
         "landing/login.html",
+        "portal-auth",
+        "skills.conf",
         "sync-landing-sidecars.sh",
         "DRY_RUN=1",
         "DRY_RUN=0",

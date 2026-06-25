@@ -15,7 +15,9 @@ entrypoints:
 exclude_categories:
   production_secrets_and_certificates:
     - .env
+    - "*.pem"
     - deploy/lighthouse/.env.prod
+    - deploy/lighthouse/.portal-auth.env
     - deploy/lighthouse/server.crt
     - deploy/lighthouse/server.key
     - deploy/lighthouse/*.pem
@@ -41,6 +43,7 @@ exclude_categories:
     - .coverage
   runtime_outputs_and_screenshots:
     - output
+    - output_uploaded
     - tmp
     - tmp/outputs
     - tmp/screenshots
@@ -59,6 +62,13 @@ exclude_categories:
     - deploy/lighthouse/landing/lute-*.html
     - deploy/lighthouse/landing/lute-auth.*
     - deploy/lighthouse/landing/voc-zh_messages.json
+    - deploy/lighthouse/landing/.portal.htpasswd
+    - deploy/lighthouse/landing/brand-placeholder.html
+  remote_only_production_sidecars:
+    - backups
+    - deploy/lighthouse/backups
+    - deploy/lighthouse/portal-auth
+    - deploy/lighthouse/skills.conf
 
 rules:
   shared_exclude_file_required: true
