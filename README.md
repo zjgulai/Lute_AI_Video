@@ -169,8 +169,9 @@ RUN_TOKEN_SMOKE=1 npm run e2e:prod  # Explicit real task / provider-credit smoke
 ## Project Status
 
 - **v0.2.7** — Brand assets Phase 2-4, portfolio API, quick templates
-- **2026-05-31 production deploy** — Lighthouse live at `https://video.lute-tlz-dddd.top`; latest deployed commits include `306b86f`, `95c2925`, and `d62a3ac`
-- 6 scenarios (Fast Mode + S1-S5) verified end-to-end in production; real token-consuming generation smoke is opt-in via `RUN_TOKEN_SMOKE=1`
+- **2026-06-25 production deploy** — Lighthouse live at `https://video.lute-tlz-dddd.top`; local deploy source `ae094f45d9ea720d15194a4336a4a7ca86347186` is now pushed to `origin/main`
+- Production read-only baseline is healthy: `/api/health.version=2.0.0`, Lighthouse smoke passed with `RUN_TOKEN_SMOKE=0`, and strict read-only production E2E was `55 passed`
+- 6 scenarios (Fast Mode + S1-S5) have staged production evidence; real token-consuming generation smoke is still opt-in via `RUN_TOKEN_SMOKE=1`
 - Quality system in observe mode (frame variance, AV sync, video specs)
 - Admin Panel Phase 1 operational (tenants, logs, health, auth)
 - 380+ tests, CI/CD via GitHub Actions

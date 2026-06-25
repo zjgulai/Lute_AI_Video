@@ -5,7 +5,7 @@ module: deploy
 topic: production-post-deploy-regression-checklist
 status: stable
 created: 2026-06-07
-updated: 2026-06-25
+updated: 2026-06-26
 owner: self
 source: human+ai
 ---
@@ -25,18 +25,19 @@ source: human+ai
 
 ## 最近一次执行记录
 
-2026-06-25 已按本清单完成 Video 2.0 production no-provider deployment baseline：
+2026-06-25 至 2026-06-26 已按本清单完成 Video 2.0 production no-provider deployment baseline 与后续 all-products Lighthouse 部署保护复核：
 
 - production deployment/version-sync SHA：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9`（PR `#55` merge commit）
-- docs-only closeout SHA：`38276014eb87a0a0bb37e8202a0cc07869fd980d`（not a production redeploy）
+- rsync remote-only sidecar protection SHA：`ae094f45d9ea720d15194a4336a4a7ca86347186`（deployed source and pushed to `origin/main`）
 - production `/api/health`：`status=ok`，`version=2.0.0`
-- GitHub checks：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9` 上 `CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success；docs-only `38276014eb87a0a0bb37e8202a0cc07869fd980d` 上 `CI` 与 `Deploy to GitHub Pages` 为 success
+- GitHub checks：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9` 上 `CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success；`ae094f45d9ea720d15194a4336a4a7ca86347186` 上 `CI` 与 `Deploy to GitHub Pages` 均为 success
 - Lighthouse smoke：`RUN_TOKEN_SMOKE=0`，通过；Fast Mode token smoke 跳过
 - strict read-only production E2E：`55 passed`
-- 只读页面：`/`、`/toolbox`、`/dashboard`、`/library`、`/works`、`/settings` 均返回 `200`
-- log gate：provider HTTP、`/api/scenario/*` submit、Fast Mode submit、publish/delivery、approved brand token write、`final_work` 写入计数均为 `0`
+- 只读页面：`/`、`/s1`、`/s2`、`/s3`、`/s4`、`/s5`、`/fast`、`/toolbox`、`/dashboard`、`/library`、`/works`、`/settings` 均返回 `200`
+- container status：backend/frontend/rendering/nginx 均 running，restart=0
+- refined log gate：provider HTTP、`/api/fast/generate`、`/api/scenario/*` submit 与 5xx 计数均为 `0`
 - post-deploy monitor：后续 30 分钟窗口内 `traceback_or_critical_or_5xx_or_429_count=0`，provider/submit/publish/delivery/token write/final_work write 计数均为 `0`
-- 证据文件：`tmp/debug/video20-production-deploy-summary-20260625T013842Z.json`、`tmp/debug/video20-version-deploy-summary-20260625T021617Z.json`、`tmp/debug/video20-version-deploy-backend-log-20260625T0208Z.log`、`tmp/debug/video20-post-deploy-monitor-summary-20260625T023331Z.json`
+- 证据文件：`tmp/debug/all-products-lighthouse-dry-run-20260625T122802Z.log`、`tmp/debug/all-products-lighthouse-dry-run-20260625T123013Z.log`、`tmp/debug/all-products-lighthouse-deploy-20260625T123349Z.log`、`tmp/debug/video20-production-deploy-summary-20260625T013842Z.json`、`tmp/debug/video20-version-deploy-summary-20260625T021617Z.json`、`tmp/debug/video20-version-deploy-backend-log-20260625T0208Z.log`、`tmp/debug/video20-post-deploy-monitor-summary-20260625T023331Z.json`
 
 边界：该记录只证明 production deployment + no-provider/read-only regression 已通过，不代表 provider full chain、full media/final assembly、publish、delivery acceptance 或 approved brand token write 已执行。
 
