@@ -91,12 +91,12 @@ test.describe("Production smoke — backend API connectivity", () => {
     expect((body as { _meta?: unknown })._meta).toHaveProperty("version");
   });
 
-  test("GET /api/health returns version 0.2.x with media_tools all true", async ({ request }) => {
+  test("GET /api/health returns semantic app version with media_tools all true", async ({ request }) => {
     const r = await request.get("/api/health");
     expect(r.status()).toBe(200);
     const body = await r.json();
     expect(body.status).toBe("ok");
-    expect(body.version).toMatch(/^0\.\d+\.\d+/);
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(body).toHaveProperty("media_tools");
     expect(body.media_tools.ytdlp_available).toBe(true);
     expect(body.media_tools.whisper_available).toBe(true);
