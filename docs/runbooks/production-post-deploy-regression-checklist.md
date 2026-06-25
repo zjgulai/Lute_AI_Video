@@ -5,7 +5,7 @@ module: deploy
 topic: production-post-deploy-regression-checklist
 status: stable
 created: 2026-06-07
-updated: 2026-06-07
+updated: 2026-06-25
 owner: self
 source: human+ai
 ---
@@ -22,6 +22,21 @@ source: human+ai
 2. 风险拦截：鉴权、rate-limit、异常码、日志污染是否异常
 3. 可复现证据：把检查结果落到固定产出目录，便于每次上线对比
 4. 与 `RUN_TOKEN_SMOKE` 的边界：除非明确启用 token smoke，不在此清单中触发真实 provider 或发布动作
+
+## 最近一次执行记录
+
+2026-06-25 已按本清单完成 Video 2.0 production no-provider deployment baseline：
+
+- main SHA：`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9`
+- production `/api/health`：`status=ok`，`version=2.0.0`
+- GitHub main checks：`CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success
+- Lighthouse smoke：`RUN_TOKEN_SMOKE=0`，通过；Fast Mode token smoke 跳过
+- strict read-only production E2E：`55 passed`
+- 只读页面：`/`、`/toolbox`、`/dashboard`、`/library`、`/works`、`/settings` 均返回 `200`
+- log gate：provider HTTP、`/api/scenario/*` submit、Fast Mode submit、publish/delivery、approved brand token write、`final_work` 写入计数均为 `0`
+- 证据文件：`tmp/debug/video20-production-deploy-summary-20260625T013842Z.json`、`tmp/debug/video20-version-deploy-summary-20260625T021617Z.json`、`tmp/debug/video20-version-deploy-backend-log-20260625T0208Z.log`
+
+边界：该记录只证明 production deployment + no-provider/read-only regression 已通过，不代表 provider full chain、full media/final assembly、publish、delivery acceptance 或 approved brand token write 已执行。
 
 ## 依赖与前提
 
