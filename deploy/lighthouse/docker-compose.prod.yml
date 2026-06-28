@@ -121,6 +121,7 @@ services:
       - ./server.crt:/etc/nginx/ssl/server.crt:ro
       - ./server.key:/etc/nginx/ssl/server.key:ro
       - ./landing:/var/www/landing:ro
+      - /var/www/audit:/var/www/audit:ro
       - /opt/mkt53/html:/var/www/mkt53:ro
       - /opt/voc-report/html:/var/www/voc-report:ro
       - /opt/momcozy-audit/html:/var/www/momcozy-audit:ro
