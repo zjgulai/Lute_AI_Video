@@ -33,7 +33,7 @@ bcrypt>=4.2
 # yt-dlp: shell out via CLI (video_downloader._real_download)
 # faster-whisper: Python binding, ~200MB vs openai-whisper+torch ~1.8GB
 # (_real_transcribe uses faster_whisper.WhisperModel when available)
-yt-dlp>=2026.6.9
+yt-dlp>=2026.7.4
 faster-whisper>=1.2.1
 
 # Quality module — CLIP text-image alignment (D15 Option CLIP-only)
