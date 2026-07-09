@@ -278,6 +278,16 @@ class TestDeployWorkflow:
         assert "REBUILD_BACKEND" in text, "backend rebuild must be controlled by explicit env"
         assert "$COMPOSE build backend" in text, "deploy.sh must support rebuilding backend image"
         assert "REBUILD_BACKEND=1" in text, "operator guidance must document the rebuild opt-in"
+        assert "REQ_SHA_PY" in text, "requirements rebuild check must ignore comments and blanks"
+        assert ".requirements_semantic_sha256" in text
+
+    def test_backend_dockerfile_records_requirements_semantic_hash(self):
+        text = BACKEND_DOCKERFILE.read_text()
+
+        assert ".requirements_sha256" in text
+        assert ".requirements_semantic_sha256" in text
+        assert "requirements.txt" in text
+        assert "hashlib.sha256" in text
 
     def test_lighthouse_deploy_manages_rendering_service_explicitly(self):
         text = LIGHTHOUSE_DEPLOY.read_text()

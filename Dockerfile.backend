@@ -48,6 +48,7 @@ RUN printf 'torch==%s\n' "$TORCH_WHEEL_VERSION" > /tmp/torch-wheel-constraints.t
     rm -f /tmp/torch-wheel-constraints.txt
 # Record requirements hash for deploy.sh change detection (replaces unreliable mtime comparison)
 RUN sha256sum requirements.txt > /app/.requirements_sha256
+RUN python -c 'import hashlib, pathlib, re; lines = []; [lines.append(re.sub(r"\s+#.*$", "", line).strip()) for line in pathlib.Path("requirements.txt").read_text().splitlines() if re.sub(r"\s+#.*$", "", line).strip() and not re.sub(r"\s+#.*$", "", line).strip().startswith("#")]; print(hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest())' > /app/.requirements_semantic_sha256
 
 # Copy all backend source code
 COPY src ./src

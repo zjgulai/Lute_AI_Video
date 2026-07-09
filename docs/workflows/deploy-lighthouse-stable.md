@@ -34,10 +34,10 @@ The project ships three deploy targets, in priority order:
    `deploy/lighthouse/`),所以 backend output volume 是 `lighthouse_backend_output`,
    不是 `ai-video_backend_output`(后者是历史残留 volume,backend 不会读到)。任何
    `docker run -v <volume>:/...` 操作都要用 `lighthouse_backend_output`。
-   2026-05-05 部署事故防御:`Dockerfile.backend` 配阿里云 PyPI mirror、`deploy.sh`
-   Phase 0 hash 检测（`sha256sum requirements.txt` 本地 hash vs image 内记录 hash）、
-   backend `restart: on-failure:5` 限制无限重启。完整时间线 + 紧急恢复三步法见
-   `docs/workflows/incident-2026-05-05-postgres-saver-deploy-stable.md`。
+	   2026-05-05 部署事故防御:`Dockerfile.backend` 配阿里云 PyPI mirror、`deploy.sh`
+	   Phase 0 semantic hash 检测（忽略 `requirements.txt` 注释/空行后比较依赖内容）、
+	   backend `restart: on-failure:5` 限制无限重启。完整时间线 + 紧急恢复三步法见
+	   `docs/workflows/incident-2026-05-05-postgres-saver-deploy-stable.md`。
    **2026-05-07 deploy.sh 更新**: 构建前清理 `.next/standalone/` `.next/static/`
    `.next/server/` 防止 Turbopack 旧 chunk 残留；构建后验证 `standalone/server.js`
    和 `static/chunks/` 存在；nginx 用 `--force-recreate` 确保 volume 挂载变更生效。

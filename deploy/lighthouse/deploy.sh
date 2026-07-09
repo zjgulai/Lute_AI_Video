@@ -36,6 +36,13 @@ cd "$(dirname "$0")"
 COMPOSE="sudo docker compose -f docker-compose.prod.yml"
 REBUILD_BACKEND="${REBUILD_BACKEND:-0}"
 REBUILD_RENDERING="${REBUILD_RENDERING:-0}"
+REQ_SHA_PY='import hashlib, pathlib, re, sys
+lines = []
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    normalized = re.sub(r"\s+#.*$", "", line).strip()
+    if normalized and not normalized.startswith("#"):
+        lines.append(normalized)
+print(hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest())'
 
 # Deployment root (was hardcoded /opt/ai-video; now configurable)
 DEPLOY_ROOT="${DEPLOY_ROOT:-/opt/ai-video}"
@@ -47,33 +54,38 @@ echo ""
 
 # -- Phase 0: requirements.txt rebuild check (2026-05-05 incident 教训) --
 # requirements.txt 改了但 image 没 rebuild → backend 启动 ImportError → restart loop。
-# 用 sha256 hash 比较本地 requirements.txt 与 image 中记录的 hash，比 mtime 更可靠。
+# 用去注释后的 semantic sha256 比较本地 requirements.txt 与 image 中记录的 hash，
+# 既能捕获真实依赖变化，也避免注释/空行变更触发生产镜像重建。
 echo "[0/5] requirements.txt rebuild check..."
 cd ../..
-LOCAL_REQ_SHA=$(sha256sum requirements.txt 2>/dev/null | awk '{print $1}')
-IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest cat /app/.requirements_sha256 2>/dev/null | awk '{print $1}')
+LOCAL_REQ_SHA=$(python3 -c "$REQ_SHA_PY" requirements.txt 2>/dev/null || true)
+IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest sh -c \
+  'if [ -f /app/.requirements_semantic_sha256 ]; then cat /app/.requirements_semantic_sha256; else python -c "$0" /app/requirements.txt; fi' \
+  "$REQ_SHA_PY" 2>/dev/null | awk '{print $1}')
 cd deploy/lighthouse
 if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
-  echo "  ⚠ requirements.txt 与当前 backend image 不一致"
-  echo "  ⚠ 本地 hash: ${LOCAL_REQ_SHA:-(无法计算)}"
-  echo "  ⚠ 镜像 hash: ${IMG_REQ_SHA:-(首次部署或镜像不存在)}"
+  echo "  ⚠ requirements.txt 依赖内容与当前 backend image 不一致"
+  echo "  ⚠ 本地 semantic hash: ${LOCAL_REQ_SHA:-(无法计算)}"
+  echo "  ⚠ 镜像 semantic hash: ${IMG_REQ_SHA:-(首次部署或镜像不存在)}"
   if [ "$REBUILD_BACKEND" = "1" ]; then
     echo "  REBUILD_BACKEND=1 set; rebuilding backend image..."
     $COMPOSE build backend
-    IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest cat /app/.requirements_sha256 2>/dev/null | awk '{print $1}')
+    IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest sh -c \
+      'if [ -f /app/.requirements_semantic_sha256 ]; then cat /app/.requirements_semantic_sha256; else python -c "$0" /app/requirements.txt; fi' \
+      "$REQ_SHA_PY" 2>/dev/null | awk '{print $1}')
     if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
-      echo "  ❌ backend rebuild finished but requirements hash still differs"
-      echo "  ❌ 镜像 hash: ${IMG_REQ_SHA:-(无法计算)}"
+      echo "  ❌ backend rebuild finished but requirements semantic hash still differs"
+      echo "  ❌ 镜像 semantic hash: ${IMG_REQ_SHA:-(无法计算)}"
       exit 1
     fi
-    echo "  ✓ backend image rebuilt and requirements hash matched"
+    echo "  ✓ backend image rebuilt and requirements semantic hash matched"
   else
     echo "  ❌ Aborted before container restart."
     echo "  ❌ Re-run with REBUILD_BACKEND=1 to rebuild backend image automatically."
     exit 1
   fi
 else
-  echo "  ✓ requirements.txt 与 backend image 一致"
+  echo "  ✓ requirements.txt 依赖内容与 backend image 一致"
 fi
 echo ""
 
