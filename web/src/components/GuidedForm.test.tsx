@@ -105,4 +105,23 @@ describe("GuidedForm release-critical scene contracts", () => {
     }
   });
 
+  it("renders video type labels and descriptions from the English i18n map", () => {
+    localStorage.setItem("app-locale", "en");
+    const onSubmit = vi.fn();
+    const { container, cleanup } = renderGuidedForm({
+      scene: "brand_campaign",
+      onSubmit,
+      loading: false,
+    });
+
+    try {
+      expect(container.textContent).toContain("Select Video Type");
+      expect(container.textContent).toContain("Brand Image Film");
+      expect(container.textContent).toContain("Convey brand tone and values");
+      expect(container.textContent).not.toContain("传递品牌调性和价值观");
+    } finally {
+      cleanup();
+    }
+  });
+
 });
