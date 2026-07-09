@@ -5,7 +5,7 @@ module: project
 topic: root-directory-governance
 status: stable
 created: 2026-06-01
-updated: 2026-06-11
+updated: 2026-07-09
 owner: self
 source: human+ai
 ---
@@ -57,6 +57,7 @@ source: human+ai
 
 | path | status |
 | --- | --- |
+| `.codegraph` | config |
 | `.github` | config |
 | `configs` | config |
 | `deploy` | deployment_directory |

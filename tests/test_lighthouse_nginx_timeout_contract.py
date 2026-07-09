@@ -15,19 +15,19 @@ DOCS_LINK_SCOPE = REPO_ROOT / "configs" / "docs-link-check-scope.txt"
 
 LONG_RUNNING_LOCATIONS = {
     "/api/scenario/": {
-        "proxy_pass": "http://backend/scenario/",
+        "proxy_pass": "http://ai_video_backend/scenario/",
         "read_timeout": "1500s",
         "send_timeout": "1500s",
         "connect_timeout": "60s",
     },
     "/api/fast/": {
-        "proxy_pass": "http://backend/fast/",
+        "proxy_pass": "http://ai_video_backend/fast/",
         "read_timeout": "1500s",
         "send_timeout": "1500s",
         "connect_timeout": "60s",
     },
     "/api/pipeline/": {
-        "proxy_pass": "http://backend/pipeline/",
+        "proxy_pass": "http://ai_video_backend/pipeline/",
         "read_timeout": "1500s",
         "send_timeout": "1500s",
         "connect_timeout": "60s",

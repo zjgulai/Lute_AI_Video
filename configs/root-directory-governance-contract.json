@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-01",
+  "updated": "2026-07-09",
   "runbook": "docs/runbooks/root-directory-governance.md",
   "policy": {
     "default_documents": "docs/ or drafts/docs/",
@@ -102,6 +102,11 @@
     }
   ],
   "allowed_root_directories": [
+    {
+      "path": ".codegraph",
+      "status": "config",
+      "reason": "CodeGraph project metadata and ignore policy; generated index databases, cache, and logs remain local-only."
+    },
     {
       "path": ".github",
       "status": "config",

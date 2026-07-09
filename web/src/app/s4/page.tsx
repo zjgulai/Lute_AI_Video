@@ -19,7 +19,7 @@ function S4Inner() {
   useEffect(() => {
     if (isGateDirect) return;
     const modeParam = searchParams.get("mode") as "expert" | "smart" || "expert";
-    setActiveScene("live_shoot");
+    setActiveScene("live_shoot_to_video");
     setMode(modeParam);
     setStage("home");
     setShowSplash(false);

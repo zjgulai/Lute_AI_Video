@@ -42,6 +42,8 @@ export function isExpectedProductionPageNoise(message: string): boolean {
     || lower.includes("429")
     || lower.includes("too many requests")
     || lower.includes("net::err_failed")
+    || lower.includes("net::err_connection_closed")
+    || lower.includes("net::err_socket_not_connected")
   );
 }
 

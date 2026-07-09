@@ -1,7 +1,7 @@
 version: 1
 owner: deploy
 status: stable
-updated: "2026-06-01"
+updated: "2026-07-09"
 
 entrypoints:
   nginx_server_blocks: deploy/lighthouse/nginx.conf
@@ -12,19 +12,19 @@ entrypoints:
 
 long_running_locations:
   /api/scenario/:
-    proxy_pass: http://backend/scenario/
+    proxy_pass: http://ai_video_backend/scenario/
     proxy_read_timeout: 1500s
     proxy_send_timeout: 1500s
     proxy_connect_timeout: 60s
     proxy_buffering: off
   /api/fast/:
-    proxy_pass: http://backend/fast/
+    proxy_pass: http://ai_video_backend/fast/
     proxy_read_timeout: 1500s
     proxy_send_timeout: 1500s
     proxy_connect_timeout: 60s
     proxy_buffering: off
   /api/pipeline/:
-    proxy_pass: http://backend/pipeline/
+    proxy_pass: http://ai_video_backend/pipeline/
     proxy_read_timeout: 1500s
     proxy_send_timeout: 1500s
     proxy_connect_timeout: 60s

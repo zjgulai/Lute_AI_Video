@@ -5,6 +5,8 @@ import { useI18n } from "@/i18n/I18nProvider";
 import {
   GUIDED_CARD_SEQUENCES,
   SCENE_VIDEO_TYPES,
+  VLOG_BRANDS,
+  VLOG_MODELS,
 } from "@/demo-data";
 import { CONTENT_SCENARIOS } from "./types";
 import type { GuidedCard as GuidedCardType } from "./types";
@@ -25,9 +27,10 @@ interface Props {
 
 export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Props) {
   const { t } = useI18n();
+  const effectiveScene = scene === "live_shoot" ? "live_shoot_to_video" : scene;
 
   // 视频类型选择
-  const videoTypes = SCENE_VIDEO_TYPES[scene] || [];
+  const videoTypes = SCENE_VIDEO_TYPES[effectiveScene] || [];
   const [selectedVideoType, setSelectedVideoType] = useState(
     videoTypes[0]?.id || ""
   );
@@ -36,15 +39,15 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
   const cardSequence = useMemo(() => {
     return (
       GUIDED_CARD_SEQUENCES.find(
-        (s) => s.scene === scene && s.videoType === selectedVideoType
+        (s) => s.scene === effectiveScene && s.videoType === selectedVideoType
       ) ||
-      GUIDED_CARD_SEQUENCES.find((s) => s.scene === scene) || {
-        scene,
+      GUIDED_CARD_SEQUENCES.find((s) => s.scene === effectiveScene) || {
+        scene: effectiveScene,
         videoType: selectedVideoType,
         cards: [],
       }
     );
-  }, [scene, selectedVideoType]);
+  }, [effectiveScene, selectedVideoType]);
 
   const cards = useMemo(
     () =>
@@ -92,15 +95,15 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
 
   const handleSubmit = useCallback(() => {
     const config: Record<string, unknown> = {
-      content_scenario: scene,
+      content_scenario: effectiveScene,
       content_scenario_subtype: selectedVideoType,
       target_platforms: ["tiktok"],
       target_languages: ["en"],
     };
-    Object.assign(config, applyGuidedContinuityDefaults(config, scene, values));
+    Object.assign(config, applyGuidedContinuityDefaults(config, effectiveScene, values));
 
     // 根据场景组装数据
-    if (scene === "product_direct") {
+    if (effectiveScene === "product_direct") {
       config.product_catalog = {
         products: [
           {
@@ -131,8 +134,14 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
             : [],
         },
       };
-    } else if (scene === "brand_campaign") {
-      config.brand_package = values.brand_name || "";
+    } else if (effectiveScene === "brand_campaign") {
+      config.brand_package = {
+        brand_name: values.brand_name || "Momcozy",
+        campaign_theme: values.campaign_theme || "",
+        key_message: values.brand_values || "",
+        target_audience: values.target_audience || "",
+        visual_identity: values.visual_identity || "",
+      };
       config.campaign_theme = values.campaign_theme || "";
       config.key_message = values.brand_values || "";
       config.target_audience = values.target_audience || "";
@@ -142,8 +151,12 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
         visual_identity: values.visual_identity || "",
       };
       config.product_catalog = { products: [] };
-    } else if (scene === "influencer_remix") {
+    } else if (effectiveScene === "influencer_remix") {
       config.video_url = values.video_url || "";
+      config.product = {
+        name: values.product_name || "",
+        usps: [],
+      };
       config.product_catalog = {
         products: [
           {
@@ -154,29 +167,54 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
       };
       config.influencer_name = values.influencer_name || "";
       config.keep_original_audio = values.keep_original_audio === "true";
-    } else if (scene === "brand_vlog") {
-      config.brand_id = values.brand_id || "momcozy";
-      config.scene_id = values.scene_id || "living-room";
-      config.selected_models = (values.selected_models || "")
+    } else if (effectiveScene === "brand_vlog") {
+      const productViewPaths = (values.product_views || "")
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const brand = VLOG_BRANDS.find((item) => item.id === (values.brand_id || "momcozy"));
+      const productSku = brand?.products[0];
+      const baseViews = Array.isArray(productSku?.views) ? productSku.views : [];
+      const views = productViewPaths.length > 0
+        ? productViewPaths.map((path, index) => ({
+            ...(baseViews[index] || {}),
+            label: baseViews[index]?.label || `view_${index + 1}`,
+            imagePath: path,
+            path,
+          }))
+        : baseViews;
+      const selectedModelIds = (values.selected_models || "")
         .split(",")
         .filter(Boolean);
+      config.brand_id = values.brand_id || "momcozy";
+      config.product_sku = {
+        ...(productSku || {}),
+        views,
+      };
+      config.product_views = productViewPaths;
+      config.scene_id = values.scene_id || "living-room";
+      config.selected_models = selectedModelIds.map((id) => (
+        VLOG_MODELS.find((model) => model.id === id) || { id, name: id, role: "presenter", description: "" }
+      ));
       config.story_description = values.story_description || "";
       config.video_duration = parseInt(values.video_duration || "30");
-    } else if (scene === "live_shoot_to_video") {
-      config.footage_assets = [];
-      config.product_info = { name: values.product_name || "" };
+    } else if (effectiveScene === "live_shoot_to_video") {
+      config.footage_assets = values.footage_assets
+        ? [{ path: values.footage_assets, source: "guided_form" }]
+        : [];
+      config.product_info = { name: values.product_name || "", brand_name: values.brand_name || "Momcozy" };
       config.topic = values.topic || "";
     }
 
     onSubmit(config);
-  }, [scene, selectedVideoType, values, onSubmit]);
+  }, [effectiveScene, selectedVideoType, values, onSubmit]);
 
   // 检查必填项是否完成
   const canSubmit = useMemo(() => {
     const requiredFields = cards
       .filter((c) => c.priority === "required")
       .map((c) => c.fieldKey);
-    return requiredFields.every((f) => values[f]?.trim()?.length > 0);
+    return cards.length > 0 && requiredFields.every((f) => values[f]?.trim()?.length > 0);
   }, [cards, values]);
 
   const filledCount = cards.filter(
@@ -212,8 +250,8 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
     return cards[index + 1]?.connectionText || "";
   };
 
-  const scenarioFromData = CONTENT_SCENARIOS.find((s: { id: string; title: string }) => s.id === scene);
-  const scenarioTitle = t(`scene.${scene}.title`, scenarioFromData?.title || scene);
+  const scenarioFromData = CONTENT_SCENARIOS.find((s: { id: string; title: string }) => s.id === effectiveScene);
+  const scenarioTitle = t(`scene.${effectiveScene}.title`, scenarioFromData?.title || effectiveScene);
 
   const progressText = (
     <span>
@@ -239,7 +277,7 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
               {t("scene.selectVideoType")}
             </span>
           </div>
-          <QuickTemplate scene={scene} onApply={handleApplyTemplate} />
+          <QuickTemplate scene={effectiveScene} onApply={handleApplyTemplate} />
         </div>
 
         {/* 视频类型选择 */}
@@ -257,7 +295,7 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
                 aria-checked={selectedVideoType === vt.id}
                 onClick={() => {
                   setSelectedVideoType(vt.id);
-                  setValues(scene === "product_direct" ? { continuity_mode: "standard" } : {});
+                  setValues(effectiveScene === "product_direct" ? { continuity_mode: "standard" } : {});
                   setFocusedIndex(0);
                 }}
                 className={`text-left px-3 py-2.5 rounded-xl border transition-all ${
