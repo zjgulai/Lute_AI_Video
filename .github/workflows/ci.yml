@@ -26,13 +26,9 @@ jobs:
     name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -53,21 +49,15 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
       - name: Set up Node.js for OpenAPI type drift guard
-        uses: actions/setup-node@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -105,11 +95,10 @@ jobs:
           ELEVENLABS_API_KEY: ""
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: codecov/codecov-action@v7
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
+          disable_search: true
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -117,14 +106,10 @@ jobs:
     name: Docs link check (lychee)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/checkout@v7
 
       - name: Run lychee
         uses: lycheeverse/lychee-action@v2
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
         with:
           args: >-
             --offline
@@ -216,13 +201,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -249,14 +230,10 @@ jobs:
     name: Docker build validate (no push)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: docker/setup-buildx-action@v4
 
       - name: Docker compose config validation (no start)
         run: |
@@ -266,9 +243,7 @@ jobs:
           docker compose -f deploy/lighthouse/docker-compose.prod.yml config --quiet
 
       - name: Build backend image (validate, no push)
-        uses: docker/build-push-action@v5
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.backend

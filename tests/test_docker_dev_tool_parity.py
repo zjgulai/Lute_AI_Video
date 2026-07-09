@@ -116,7 +116,7 @@ def test_workflow_node_jobs_use_npm_ci_and_package_lock_cache() -> None:
             step
             for job in jobs.values()
             for step in (job.get("steps") or [])
-            if step.get("uses") == "actions/setup-node@v4"
+            if step.get("uses") == "actions/setup-node@v6"
         ]
         assert setup_node_steps, f"{workflow_path} must set up Node with npm cache"
 

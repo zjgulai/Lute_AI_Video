@@ -19,14 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -44,9 +40,7 @@ jobs:
         run: npm run build
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ./web/dist
 
@@ -59,6 +53,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: actions/deploy-pages@v5

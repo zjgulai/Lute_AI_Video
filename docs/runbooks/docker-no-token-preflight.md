@@ -5,7 +5,7 @@ module: deploy
 topic: docker-no-token-preflight
 status: stable
 created: 2026-05-31
-updated: 2026-05-31
+updated: 2026-07-09
 owner: self
 source: human+ai
 ---
@@ -51,11 +51,15 @@ docker compose -f deploy/lighthouse/docker-compose.prod.yml config --quiet
 Backend image build 只允许 cache-only validation：
 
 ```yaml
-uses: docker/build-push-action@v5
+uses: docker/build-push-action@v7
 with:
   push: false
   load: false
 ```
+
+GitHub-hosted workflow 的 JavaScript actions 必须使用 Node 24-compatible major，不保留
+`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` 这类临时强制变量；相关静态边界由
+`tests/test_deploy_workflow.py` 锁定。
 
 ## 边界
 

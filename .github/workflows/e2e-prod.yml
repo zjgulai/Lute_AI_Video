@@ -37,13 +37,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"
@@ -68,9 +64,7 @@ jobs:
 
       - name: Upload Playwright HTML report on failure
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_attempt }}
           path: web/playwright-report/
@@ -78,9 +72,7 @@ jobs:
 
       - name: Upload trace artifacts on failure
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces-${{ github.run_attempt }}
           path: web/test-results/

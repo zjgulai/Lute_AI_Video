@@ -86,7 +86,7 @@ def test_ci_and_deploy_docker_builds_are_cache_only_and_secret_free():
         build_step = _step_by_name(job.get("steps") or [], step_name)
         build_with = build_step.get("with") or {}
 
-        assert build_step.get("uses") == "docker/build-push-action@v5"
+        assert build_step.get("uses") == "docker/build-push-action@v7"
         assert build_with.get("push") is False
         assert build_with.get("load") is False
         assert build_with.get("file") == "./Dockerfile.backend"
@@ -131,7 +131,7 @@ def test_docker_no_token_preflight_runbook_documents_boundaries():
     text = RUNBOOK.read_text()
     required_phrases = [
         "docker compose config --quiet",
-        "docker/build-push-action@v5",
+        "docker/build-push-action@v7",
         "push: false",
         "load: false",
         "不启动容器",

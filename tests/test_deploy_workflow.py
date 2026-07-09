@@ -22,6 +22,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEPLOY_YML = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+WORKFLOW_YMLS = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
 RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
@@ -351,6 +352,28 @@ class TestCIWorkflow:
             "main CI must lint src, tests, and scripts to keep repo-wide ruff trustworthy"
         )
 
+    def test_workflows_do_not_reintroduce_node20_action_pins(self):
+        blocked_patterns = [
+            "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24",
+            "actions/checkout@v4",
+            "actions/setup-node@v4",
+            "actions/setup-python@v5",
+            "docker/setup-buildx-action@v3",
+            "docker/build-push-action@v5",
+            "codecov/codecov-action@v4",
+            "actions/upload-artifact@v4",
+            "actions/upload-pages-artifact@v3",
+            "actions/deploy-pages@v4",
+        ]
+
+        for workflow in WORKFLOW_YMLS:
+            text = workflow.read_text()
+            for pattern in blocked_patterns:
+                assert pattern not in text, (
+                    f"{workflow.relative_to(REPO_ROOT)} must not pin Node 20-era "
+                    f"GitHub Actions runtime via {pattern}"
+                )
+
     def test_ci_installs_media_tools_for_video_quality_tests(self):
         with open(CI_YML) as f:
             wf = yaml.safe_load(f)
@@ -370,7 +393,7 @@ class TestCIWorkflow:
         install_step = _step_by_name(steps, "Install OpenAPI typegen dependencies")
         pytest_step = _step_by_name(steps, "Run tests with coverage")
 
-        assert node_step["uses"] == "actions/setup-node@v4"
+        assert node_step["uses"] == "actions/setup-node@v6"
         assert node_step["with"]["node-version"] == "22"
         assert node_step["with"]["cache"] == "npm"
         assert node_step["with"]["cache-dependency-path"] == "web/package-lock.json"
@@ -385,3 +408,15 @@ class TestCIWorkflow:
         test_step = _step_by_name(steps, "Run tests with coverage")
 
         _assert_hermetic_pytest_env(test_step.get("env") or {})
+
+    def test_ci_codecov_v7_upload_uses_explicit_files_input(self):
+        with open(CI_YML) as f:
+            wf = yaml.safe_load(f)
+        steps = wf["jobs"]["test"].get("steps") or []
+        codecov_step = _step_by_name(steps, "Upload coverage to Codecov")
+        with_config = codecov_step.get("with") or {}
+
+        assert codecov_step["uses"] == "codecov/codecov-action@v7"
+        assert with_config.get("files") == "./coverage.xml"
+        assert with_config.get("disable_search") is True
+        assert "file" not in with_config

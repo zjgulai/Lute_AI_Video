@@ -718,7 +718,7 @@ source: human+ai
 ## 0.44 2026-05-31 P1-32 Docker build no-token preflight
 
 - **compose config-only 预检** — `.github/workflows/ci.yml` 与 `.github/workflows/deploy.yml` 新增 `Docker compose config validation (no start)`，只创建空 `.env` / `.env.prod` 并执行 `docker compose ... config --quiet`。
-- **Docker build secret 边界** — `tests/test_docker_no_token_preflight.py` 锁定 CI/deploy 的 `docker/build-push-action@v5` 只能 `push: false`、`load: false`，且 build args 只能是 `APT_MIRROR`、`PIP_INDEX_URL`。
+- **Docker build secret 边界** — `tests/test_docker_no_token_preflight.py` 锁定 CI/deploy 的 `docker/build-push-action@v7` 只能 `push: false`、`load: false`，且 build args 只能是 `APT_MIRROR`、`PIP_INDEX_URL`。
 - **禁止误触发 runtime smoke** — 同一测试禁止 compose 预检步骤出现启动容器、`curl`、`/api/fast`、`/api/scenario`、`/api/pipeline`、Gate 或 `RUN_TOKEN_SMOKE=1`。
 - **Runbook 固化** — 新增 `docs/runbooks/docker-no-token-preflight.md` 并纳入 `configs/docs-link-check-scope.txt`，说明 Docker 预检只验证配置和构建上下文，不读取生产 secret、不触发 provider。
 - **无 token 边界** — 本轮没有运行 Docker compose、没有请求 `/health`、没有调用 DeepSeek/POYO/SiliconFlow 等外部服务。
