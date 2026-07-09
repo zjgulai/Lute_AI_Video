@@ -4,7 +4,7 @@ doc_type: workflow
 module: deploy
 status: stable
 created: 2026-05-08
-updated: 2026-05-31
+updated: 2026-07-09
 owner: self
 source: human+ai
 ---
@@ -53,6 +53,11 @@ The project ships three deploy targets, in priority order:
    `/api/fast/generate`，避免未充值或不希望消耗外部额度时触发真实生成。充值后如需验证
    真实生成链路，显式执行
    `RUN_TOKEN_SMOKE=1 API_KEY=... BASE=https://video.lute-tlz-dddd.top bash smoke.sh`。
+   **2026-07-09 部署硬化**: `Dockerfile.backend` 通过 `TORCH_WHEEL_VERSION`
+   和 `TORCH_WHEEL_INDEX_URL` build args 将生产镜像默认收敛到 torch CPU wheel；
+   `deploy.sh` 在 nginx `--force-recreate` 后先等待 `nginx -t` 和
+   `https://localhost/` 200，再进入 backend/frontend/rendering health checks 和
+   `smoke.sh`。
    最近一次部署验证：`/` 200、`/api/health` 200、`persistence.backend=postgresql`、
    `POST /api/pipeline/start` 无 key 返回 401。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and

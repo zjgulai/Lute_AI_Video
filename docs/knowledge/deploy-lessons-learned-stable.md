@@ -5,7 +5,7 @@ module: deploy
 topic: lighthouse-deployment-mistakes
 status: stable
 created: 2026-04-30
-updated: 2026-05-31
+updated: 2026-07-09
 owner: self
 source: human+ai
 ---
@@ -27,6 +27,8 @@ source: human+ai
 | 5 | wget localhost 解析到 IPv6 ::1 | Alpine Linux wget 优先 IPv6 | Day 2 | 中等 |
 | 6 | 容器状态 unhealthy | 上述 4+5 叠加导致 | Day 2 | 严重 |
 | 7 | 部署 smoke 触发真实生成 | smoke.sh 默认调用 `/api/fast/generate`，未做 token-consuming opt-in | 2026-05-31 | 中等 |
+| 8 | backend image rebuild 下载 CUDA side packages | Docker 构建未约束 `torch>=...` 到 CPU wheel | 2026-07-09 | 中等 |
+| 9 | deploy smoke 与 nginx 重建窗口竞争 | nginx `--force-recreate` 后缺少 readiness gate | 2026-07-09 | 中等 |
 
 ---
 
@@ -263,6 +265,46 @@ RUN_TOKEN_SMOKE=1 BASE=https://video.lute-tlz-dddd.top bash smoke.sh
 
 ---
 
+## 错误 8: backend image rebuild 下载 CUDA side packages
+
+### 现象
+Lighthouse backend image rebuild 安装 `requirements.txt` 时，`torch>=...` 在 Linux / Python 3.14 环境解析到带 CUDA side packages 的 wheel，拉取 `nvidia-cudnn`、`nvidia-cublas`、`nvidia-cusolver` 等依赖，导致镜像重建明显变慢并增加磁盘占用。
+
+### 根因
+1. `requirements.txt` 只写了 `torch>=2.12.1`，注释表达了 CPU-only 意图，但 Docker 构建没有强制 CPU wheel
+2. Python 3.14 / Linux 的 torch wheel 解析会跟随索引上的默认 wheel 选择
+3. 部署镜像没有 GPU 运行需求，CUDA side packages 对 Lighthouse 生产路径是无用成本
+
+### 修复
+`Dockerfile.backend` 使用 `TORCH_WHEEL_VERSION=2.13.0+cpu` 和 `TORCH_WHEEL_INDEX_URL=https://download.pytorch.org/whl/cpu`，通过临时 constraints 文件把 `requirements.txt` 中的 `torch>=...` 收敛到 CPU wheel。
+
+### 预防 (Checklist)
+- [ ] 变更 `torch` 版本或 Python base image 时，先验证目标平台 CPU wheel 可解析
+- [ ] 不用 `.env.prod` 运行时变量试图影响已构建镜像中的 wheel 类型
+- [ ] 如确需 GPU image，必须显式覆盖 `TORCH_WHEEL_*` build args 并单独验证镜像大小和 provider 路径
+
+---
+
+## 错误 9: deploy smoke 与 nginx 重建窗口竞争
+
+### 现象
+`deploy.sh` 使用 `docker compose up -d --force-recreate nginx` 后立即进入 Phase 3 health checks 和 Phase 5 `smoke.sh`。如果 nginx 容器仍在启动、挂载文件刚生效或配置测试尚未完成，smoke 可能读到瞬态状态。
+
+### 根因
+1. nginx 的 `--force-recreate` 是异步容器收敛动作，命令返回不代表 HTTPS 入口已经 ready
+2. 原脚本只轮询 backend `/api/health`，没有先校验 `ai_video_nginx` 自身 `nginx -t`
+3. Phase 5 `smoke.sh` 依赖 nginx 入口，必须放在 nginx readiness 之后
+
+### 修复
+`deploy.sh` 在 Phase 2 后增加 Phase 2.1：最多等待 120 秒，要求 `docker exec ai_video_nginx nginx -t` 通过且 `https://localhost/` 返回 200，满足后才进入 Phase 3。
+
+### 预防 (Checklist)
+- [ ] nginx 配置或 volume mount 变更后继续使用 `--force-recreate`
+- [ ] `smoke.sh` 前必须已有 nginx readiness 证据，不能只看 compose 命令返回
+- [ ] readiness 超时先看 nginx logs，再扩大排查到 frontend/backend
+
+---
+
 ## 教训总结
 
 1. **Docker 多阶段构建中 ARG/ENV 不跨 stage 传递** — 每个 stage 必须显式重新声明
@@ -272,3 +314,5 @@ RUN_TOKEN_SMOKE=1 BASE=https://video.lute-tlz-dddd.top bash smoke.sh
 5. **Alpine wget localhost 优先 IPv6** — 容器内健康检查必须使用 `127.0.0.1`
 6. **部署前必须验证容器健康状态** — `docker ps` 中状态必须是 `(healthy)`，不是 `(health: starting)` 或 `(unhealthy)`
 7. **SSH 密钥必须清除 xattr 并显式指定路径** — 不要依赖默认搜索路径
+8. **镜像构建意图必须用构建约束表达** — CPU-only torch 不能只写在注释里
+9. **重建入口容器后必须条件等待** — nginx ready 后再运行生产 smoke

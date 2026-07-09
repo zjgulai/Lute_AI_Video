@@ -27,6 +27,7 @@ REQUIREMENTS = REPO_ROOT / "requirements.txt"
 RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 LIGHTHOUSE_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
 LIGHTHOUSE_BUILD_AND_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "build-and-deploy.sh"
+BACKEND_DOCKERFILE = REPO_ROOT / "Dockerfile.backend"
 
 HERMETIC_PYTEST_ENV = {
     "API_KEY": "test-api-key-for-pytest",
@@ -288,6 +289,25 @@ class TestDeployWorkflow:
         )
         assert "docker exec ai_video_rendering" in text
         assert "http://127.0.0.1:3001/health" in text
+
+    def test_lighthouse_deploy_waits_for_nginx_before_health_checks(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+
+        assert "[2.1/5] Waiting for nginx readiness" in text
+        assert "NGINX_READY" in text
+        assert "docker exec ai_video_nginx nginx -t" in text
+        assert "https://localhost/" in text
+        assert "Nginx readiness did not pass" in text
+        assert text.index("[2.1/5] Waiting for nginx readiness") < text.index("[3/5] Health checks")
+
+    def test_backend_dockerfile_pins_torch_cpu_wheel(self):
+        text = BACKEND_DOCKERFILE.read_text()
+
+        assert "TORCH_WHEEL_VERSION=2.13.0+cpu" in text
+        assert "TORCH_WHEEL_INDEX_URL=https://download.pytorch.org/whl/cpu" in text
+        assert "torch==%s" in text
+        assert "--extra-index-url \"$TORCH_WHEEL_INDEX_URL\"" in text
+        assert "-c /tmp/torch-wheel-constraints.txt" in text
 
     def test_lighthouse_build_wrapper_forwards_deploy_control_flags(self):
         text = LIGHTHOUSE_BUILD_AND_DEPLOY.read_text()

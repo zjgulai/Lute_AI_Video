@@ -40,7 +40,7 @@ faster-whisper>=1.2.1
 # transformers + torch + Pillow enable src/quality/clip_alignment.py to score
 # keyframe/storyboard alignment. ~600MB image growth (torch CPU wheels).
 # Decision: keep CPU-only to stay under 4GB image budget. GPU users override
-# via PIP_INDEX_URL + cuda-aware torch in deploy/lighthouse/.env.prod.
+# Dockerfile.backend TORCH_WHEEL_* build args with a CUDA-aware torch wheel.
 transformers>=5.13.0
 torch>=2.12.1
 Pillow>=10.0

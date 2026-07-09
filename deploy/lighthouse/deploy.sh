@@ -161,6 +161,36 @@ $COMPOSE up -d --force-recreate nginx 2>&1 | tail -3
 echo "  Containers restarted"
 echo ""
 
+# -- Phase 2.1: Wait for nginx readiness before service smoke --
+# Recreating nginx can momentarily expose missing mounts or startup races.
+# Gate Phase 3 on both config validity and HTTPS frontend reachability so
+# smoke.sh does not race a container that is still converging.
+echo "[2.1/5] Waiting for nginx readiness..."
+NGINX_READY="0"
+NGINX_STATUS="000"
+for attempt in $(seq 1 24); do
+  if sudo docker exec ai_video_nginx nginx -t >/dev/null 2>&1; then
+    NGINX_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/ 2>/dev/null || true)
+    if [ "$NGINX_STATUS" = "200" ]; then
+      NGINX_READY="1"
+      echo "  Nginx ready: config ok, frontend /: 200 (attempt $attempt/24)"
+      break
+    fi
+  else
+    NGINX_STATUS="nginx-test-failed"
+  fi
+  if [ "$attempt" != "24" ]; then
+    sleep 5
+  fi
+done
+if [ "$NGINX_READY" != "1" ]; then
+  echo "  ❌ Nginx readiness did not pass: $NGINX_STATUS"
+  echo "  --- 最近 30 行 nginx logs ---"
+  sudo docker logs --tail 30 ai_video_nginx 2>&1 | tail -30
+  exit 1
+fi
+echo ""
+
 # -- Phase 3: Health checks --
 echo "[3/5] Health checks..."
 

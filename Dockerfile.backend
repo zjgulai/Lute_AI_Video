@@ -35,7 +35,17 @@ ENV PIP_INDEX_URL=$PIP_INDEX_URL
 ENV PIP_TRUSTED_HOST=$PIP_TRUSTED_HOST
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Keep Lighthouse backend images CPU-only. The PyPI torch wheel can pull CUDA
+# side packages on Linux/Python 3.14, which makes rebuilds slow and bloats disk.
+# GPU-specific images must override both build args explicitly.
+ARG TORCH_WHEEL_VERSION=2.13.0+cpu
+ARG TORCH_WHEEL_INDEX_URL=https://download.pytorch.org/whl/cpu
+RUN printf 'torch==%s\n' "$TORCH_WHEEL_VERSION" > /tmp/torch-wheel-constraints.txt && \
+    pip install --no-cache-dir \
+      --extra-index-url "$TORCH_WHEEL_INDEX_URL" \
+      -r requirements.txt \
+      -c /tmp/torch-wheel-constraints.txt && \
+    rm -f /tmp/torch-wheel-constraints.txt
 # Record requirements hash for deploy.sh change detection (replaces unreliable mtime comparison)
 RUN sha256sum requirements.txt > /app/.requirements_sha256
 
