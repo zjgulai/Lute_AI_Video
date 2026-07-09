@@ -57,7 +57,10 @@ The project ships three deploy targets, in priority order:
    和 `TORCH_WHEEL_INDEX_URL` build args 将生产镜像默认收敛到 torch CPU wheel；
    `deploy.sh` 在 nginx `--force-recreate` 后先等待 `nginx -t` 和
    `https://localhost/` 200，再进入 backend/frontend/rendering health checks 和
-   `smoke.sh`。
+   `smoke.sh`。同日发现 Lighthouse 共享入口还承载 `flowise`、BOS、Reddit
+   等跨项目路由；默认 `build-and-deploy.sh` 已排除远端
+   `docker-compose.prod.yml` 和 `nginx.conf`，避免 AI Video 发布覆盖共享入口。
+   如需同步这两个文件，必须单独 dry-run、diff 审核并确认跨项目路由影响。
    最近一次部署验证：`/` 200、`/api/health` 200、`persistence.backend=postgresql`、
    `POST /api/pipeline/start` 无 key 返回 401。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and

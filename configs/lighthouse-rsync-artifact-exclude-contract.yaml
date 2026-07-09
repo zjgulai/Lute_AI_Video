@@ -69,6 +69,8 @@ exclude_categories:
     - backups
     - deploy/lighthouse/backups
     - deploy/lighthouse/portal-auth
+    - deploy/lighthouse/docker-compose.prod.yml
+    - deploy/lighthouse/nginx.conf
     - deploy/lighthouse/skills.conf
     - deploy/lighthouse/auth_gate.conf
     - deploy/lighthouse/momcozy-platform.conf
