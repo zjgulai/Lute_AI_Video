@@ -603,7 +603,11 @@ Key test areas:
 
 ## Known Gaps and TODOs
 
-Last updated: **2026-06-09** (after comprehensive debt audit — 221 findings, 33+ remediation tasks completed across config, LLM URL centralization, step_utils dedup, deploy.sh modernization, nginx security headers, frontend i18n fixes, except Exception reduction, docs archiving, and standard project files).
+Last updated: **2026-07-10** (after stale TODO reconciliation for local-only
+quality evidence; comprehensive debt audit baseline remains 2026-06-09 — 221
+findings, 33+ remediation tasks completed across config, LLM URL centralization,
+step_utils dedup, deploy.sh modernization, nginx security headers, frontend i18n
+fixes, except Exception reduction, docs archiving, and standard project files).
 
 ### ✅ Resolved since 2026-05-03 baseline
 
@@ -662,6 +666,26 @@ Last updated: **2026-06-09** (after comprehensive debt audit — 221 findings, 3
   equivalent `/api/portfolio/` listing path had `burst=100`. Library tab switching
   bursts both, exhausting the asset bucket. Raised to `burst=100` to match the sibling
   listing endpoint. Verified 30/30 rapid `GET /api/assets/influencers` return 200.
+- ~~**`video_duration: "not-a-number"` accepted by backend**~~ — stale TODO
+  reconciled 2026-07-10. `src/routers/_state.py::coerce_video_duration` now rejects
+  garbage strings, bools, and unsupported types with field-level 422 details before
+  scenario pipelines reach media steps; `tests/test_video_duration_coerce.py` covers
+  `"not-a-number"`, numeric strings, clamping, bool, and list inputs. Evidence is
+  local unit/lint/CI only; no production submit, provider call, or full media path was
+  rerun for this reconciliation.
+- ~~**HU-05 `SCENE_VIDEO_TYPES.desc` still Chinese**~~ — stale TODO reconciled
+  2026-07-10. `GuidedForm` already renders video-type labels and descriptions through
+  `videoType.*` / `videoTypeDesc.*` i18n keys, and EN translations exist for every
+  current `SCENE_VIDEO_TYPES` entry. `web/src/components/GuidedForm.test.tsx` now
+  locks the EN render path so the brand-campaign selector shows "Convey brand tone
+  and values" instead of the Chinese fallback. Evidence is local frontend unit/lint/
+  type/build only; no production route, provider call, or scenario submit was run.
+- ~~**Frontend eslint 286 errors / CI does not gate frontend lint**~~ — stale TODO
+  reconciled 2026-07-10. `.github/workflows/ci.yml` has a `Frontend quality gate`
+  job that runs `npx eslint src e2e playwright.ui.config.ts playwright.prod.config.ts`,
+  and `.github/workflows/deploy.yml` runs the same frontend lint in preflight. Local
+  `npm run lint` also passes. Evidence is local workflow inspection plus frontend
+  lint/type/test/build only; no production route, provider call, or deploy was run.
 
 ### 🟡 Still open — real technical debt
 
@@ -694,10 +718,6 @@ None. The v0.2.6 release is clean.
 - **Untested path G (degradation chain).** `pipeline_degraded=True` + `error_collector`
   FIFO + `/telemetry` visibility never exercised in production (all 5 scenarios went
   green). No mock-POYO-500 / mock-DeepSeek-timeout integration test.
-- **`video_duration: "not-a-number"` accepted by backend.** Discovered during V-2 QA
-  (2026-05-11): `/api/scenario/s*/submit` accepts non-numeric `video_duration` and
-  crashes later at seedance step with `'<' not supported between 'str' and 'int'`.
-  Pydantic model needs stricter type coercion.
 
 #### P2 (nice-to-have)
 
@@ -730,13 +750,6 @@ None. The v0.2.6 release is clean.
   `quality_score` / `_self_check`; downstream (`keyframe_images` / `seedance_clips` /
   `remotion_assemble`) do not read and regenerate on sub-threshold scores yet. Design
   exists, implementation doesn't.
-- **Frontend eslint 286 errors (pre-existing).** CI doesn't gate on `npm run lint`.
-  Mostly `@typescript-eslint/no-explicit-any` in catch blocks. `any` → `unknown`
-  migration could land ~100 of them; `no-img-element` another ~15. Low-priority because
-  zero behavioral impact.
-- **HU-05 `SCENE_VIDEO_TYPES.desc` still Chinese.** The card-hint subtitles on the
-  video-type selector remain hardcoded zh (not covered by `cardCopyEn`). Small
-  follow-up: extend the map or move these copies into `translations.ts`.
 - **HU-02 desktop notification + HU-03 script quality.** Left as manual-verify only
   (cannot automate in Playwright: permission gesture + subjective evaluation).
 
