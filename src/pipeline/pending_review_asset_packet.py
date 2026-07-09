@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -98,7 +98,7 @@ class PendingReviewAssetPacket(BaseModel):
     supported_claims: list[str] = Field(default_factory=list)
     forbidden_claims: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
-    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    generated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @model_validator(mode="after")
     def _review_packet_must_not_promote_assets(self) -> PendingReviewAssetPacket:
@@ -137,7 +137,7 @@ def build_pending_review_asset_packet(
         raise ValueError("video_reference_asset_refs must match the manifest image_count")
 
     return PendingReviewAssetPacket(
-        packet_id=f"pending_review_packet_{manifest['manifest_id']}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        packet_id=f"pending_review_packet_{manifest['manifest_id']}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         source_summary_ref=source_summary_ref,
         claim_boundary=str(summary.get("claim_boundary") or _default_claim_boundary()),
         provider_call_executed=bool(summary.get("provider_call_executed")),

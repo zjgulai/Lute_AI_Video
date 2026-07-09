@@ -724,7 +724,7 @@ async def test_pull_all_ingests_fake_platform_metrics_into_dashboard(
     assert conn is not None
     conn.execute(
         "UPDATE video_metrics SET pulled_at = ?, published_at = ? WHERE video_id = ?",
-        (old_ts, old_ts, "video-p2-1l"),
+        (old_ts.isoformat(sep=" "), old_ts.isoformat(sep=" "), "video-p2-1l"),
     )
     conn.commit()
 
@@ -784,7 +784,7 @@ async def test_active_post_source_summary_counts_video_metrics_and_publish_logs(
             "published",
             "https://www.tiktok.com/@momcozy/video/tt_published_contract",
             None,
-            datetime.now(UTC).replace(tzinfo=None),
+            datetime.now(UTC).replace(tzinfo=None).isoformat(sep=" "),
         ),
     )
     conn.commit()

@@ -6,7 +6,7 @@ import base64
 import hashlib
 import os
 from collections.abc import Callable, Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 from urllib import request
 
@@ -132,7 +132,7 @@ class L4DPairedReport(BaseModel):
     provider_media_urls: dict[str, str] = Field(default_factory=dict)
     generated_image_sha256: str | None = None
     blocked_reasons: list[str] = Field(default_factory=list)
-    checked_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    checked_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class SinglePairedChainSubmitter:
@@ -235,7 +235,7 @@ def run_l4d_paired_smoke(
     submitter_factory: ProviderSubmitterFactory | None = None,
 ) -> L4DPairedReport:
     env = os.environ if env is None else env
-    harness_id = f"l4d_paired_smoke_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    harness_id = f"l4d_paired_smoke_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     if mode == "disabled":
         return L4DPairedReport(
             harness_id=harness_id,

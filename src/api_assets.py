@@ -102,8 +102,8 @@ async def create_brand_package(package: BrandAssetPackage):
     if not package.package_id:
         import uuid
         package.package_id = f"BPKG-{uuid.uuid4().hex[:8].upper()}"
-    from datetime import datetime
-    package.created_at = datetime.utcnow().isoformat()
+    from datetime import UTC, datetime
+    package.created_at = datetime.now(UTC).isoformat()
     package.updated_at = package.created_at
     await _brand_store.create(package)
     logger.info("api: brand package created", id=package.package_id)
@@ -144,8 +144,8 @@ async def create_influencer(profile: InfluencerProfile):
     if not profile.influencer_id:
         import uuid
         profile.influencer_id = f"INFL-{uuid.uuid4().hex[:8].upper()}"
-    from datetime import datetime
-    profile.created_at = datetime.utcnow().isoformat()
+    from datetime import UTC, datetime
+    profile.created_at = datetime.now(UTC).isoformat()
     profile.updated_at = profile.created_at
     await _influencer_store.create(profile)
     logger.info("api: influencer created", id=profile.influencer_id)
@@ -187,8 +187,8 @@ async def update_influencer_product_links(
         raise HTTPException(status_code=404)
     from src.models.influencer import InfluencerProductLink
     profile.product_links = [InfluencerProductLink(**l) for l in links]
-    from datetime import datetime
-    profile.updated_at = datetime.utcnow().isoformat()
+    from datetime import UTC, datetime
+    profile.updated_at = datetime.now(UTC).isoformat()
     await _influencer_store.update(profile)
     logger.info("api: influencer links updated", id=influencer_id, count=len(links))
     return profile.to_dict()

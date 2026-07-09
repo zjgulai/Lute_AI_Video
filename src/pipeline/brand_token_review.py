@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -51,7 +51,7 @@ class BrandTokenReviewReport(BaseModel):
     rejected_token_ids: list[str] = Field(default_factory=list)
     skipped_token_ids: list[str] = Field(default_factory=list)
     approved_tokens: list[BrandAssetToken] = Field(default_factory=list)
-    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    generated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def apply_brand_token_review(

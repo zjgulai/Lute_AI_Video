@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -570,8 +570,8 @@ class MediaJobRecord(BaseModel):
     blocked_reasons: list[str] = Field(default_factory=list)
     delivery_accepted: bool = False
     publish_allowed: bool = False
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @model_validator(mode="after")
     def _generation_success_is_not_delivery_acceptance(self) -> MediaJobRecord:
@@ -599,7 +599,7 @@ class RepairPlan(BaseModel):
     contract_id: str
     evidence_bundle_id: str
     actions: list[RepairAction] = Field(default_factory=list)
-    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    generated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class GateDecision(BaseModel):

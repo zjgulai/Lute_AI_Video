@@ -6,7 +6,7 @@ import base64
 import hashlib
 import os
 from collections.abc import Callable, Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -118,7 +118,7 @@ class L4DVideoOnlyReport(BaseModel):
     provider_response_refs: dict[str, str] = Field(default_factory=dict)
     provider_media_urls: dict[str, str] = Field(default_factory=dict)
     blocked_reasons: list[str] = Field(default_factory=list)
-    checked_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    checked_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class SingleVideoJobSubmitter:
@@ -168,7 +168,7 @@ def run_l4d_video_only_smoke(
     submitter_factory: ProviderSubmitterFactory | None = None,
 ) -> L4DVideoOnlyReport:
     env = os.environ if env is None else env
-    harness_id = f"l4d_video_only_smoke_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    harness_id = f"l4d_video_only_smoke_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     if mode == "disabled":
         return L4DVideoOnlyReport(
             harness_id=harness_id,

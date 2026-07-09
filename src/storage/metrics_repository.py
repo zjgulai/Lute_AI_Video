@@ -67,6 +67,16 @@ def _sqlite_placeholders(where_clause: str) -> str:
     return where_clause
 
 
+def _sqlite_param(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ")
+    return value
+
+
+def _sqlite_params(values: tuple[Any, ...] | list[Any]) -> tuple[Any, ...]:
+    return tuple(_sqlite_param(value) for value in values)
+
+
 class VideoMetricsRepository:
     """CRUD operations for the video_metrics table."""
 
@@ -85,7 +95,7 @@ class VideoMetricsRepository:
         conn = get_sqlite_conn()
         if conn is None:
             return None
-        cursor = conn.execute(_sqlite_placeholders(query), args)
+        cursor = conn.execute(_sqlite_placeholders(query), _sqlite_params(args))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -98,7 +108,7 @@ class VideoMetricsRepository:
         conn = get_sqlite_conn()
         if conn is None:
             return []
-        cursor = conn.execute(_sqlite_placeholders(query), args)
+        cursor = conn.execute(_sqlite_placeholders(query), _sqlite_params(args))
         return [dict(row) for row in cursor.fetchall()]
 
     async def _execute(self, query: str, *args) -> None:
@@ -109,7 +119,7 @@ class VideoMetricsRepository:
             return
         conn = get_sqlite_conn()
         if conn is not None:
-            conn.execute(_sqlite_placeholders(query), args)
+            conn.execute(_sqlite_placeholders(query), _sqlite_params(args))
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -164,7 +174,7 @@ class VideoMetricsRepository:
                      metrics, pulled_at, published_at, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
+                _sqlite_params((
                     record_id,
                     video_id,
                     scenario,
@@ -176,7 +186,7 @@ class VideoMetricsRepository:
                     now_ts,
                     now_ts,
                     now_ts,
-                ),
+                )),
             )
             conn.commit()
             cursor = conn.execute(
@@ -294,7 +304,7 @@ class VideoMetricsRepository:
             WHERE rn = 1
             ORDER BY video_id, platform
         """
-        cursor = conn.execute(sqlite_query, tuple(params))
+        cursor = conn.execute(sqlite_query, _sqlite_params(params))
         return [_deserialize_row(dict(row)) for row in cursor.fetchall()]
 
     async def get_active_posts(self) -> list[dict[str, Any]]:
@@ -348,7 +358,7 @@ class VideoMetricsRepository:
             WHERE rn = 1
             ORDER BY video_id, platform
         """
-        cursor = conn.execute(sqlite_query, (cutoff,))
+        cursor = conn.execute(sqlite_query, _sqlite_params((cutoff,)))
         return [_deserialize_row(dict(row)) for row in cursor.fetchall()]
 
     async def get_active_post_source_summary(self) -> dict[str, Any]:
@@ -506,7 +516,7 @@ class VideoMetricsRepository:
             GROUP BY scenario
             ORDER BY scenario
             """,
-            (cutoff,),
+            _sqlite_params((cutoff,)),
         )
         return [dict(row) for row in cursor.fetchall()]
 
@@ -588,5 +598,5 @@ class VideoMetricsRepository:
             GROUP BY platform, scenario
             ORDER BY platform, scenario
         """
-        cursor = conn.execute(sqlite_query, params)
+        cursor = conn.execute(sqlite_query, _sqlite_params(params))
         return [dict(row) for row in cursor.fetchall()]

@@ -9,7 +9,7 @@ import io
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +86,7 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
         budget_limit=args.budget_limit,
     )
     packet: dict[str, Any] = {
-        "packet_id": f"authorized_live_smoke_packet_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        "packet_id": f"authorized_live_smoke_packet_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         "evidence_level": "L2-fixture-or-dry-run",
         "no_provider_call": True,
         "provider_call_allowed": False,

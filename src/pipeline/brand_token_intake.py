@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +29,7 @@ class BrandTokenIntakeReport(BaseModel):
     approved_token_count: int = 0
     blocked_reasons: list[str] = Field(default_factory=list)
     ledger: CandidateTokenLedger
-    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    generated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def build_candidate_ledger_from_token_vault(
@@ -41,7 +41,7 @@ def build_candidate_ledger_from_token_vault(
     path = Path(token_vault_path)
     payload = json.loads(path.read_text())
     brand_id = _slug(payload.get("brand") or payload.get("brand_id") or "unknown_brand")
-    generated_at = str(payload.get("generated_at") or datetime.utcnow().isoformat())
+    generated_at = str(payload.get("generated_at") or datetime.now(UTC).isoformat())
     candidate_tokens = _candidate_tokens_from_payload(payload, brand_id=brand_id, max_tokens=max_tokens)
     ledger = CandidateTokenLedger(
         brand_id=brand_id,

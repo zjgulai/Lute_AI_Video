@@ -9,7 +9,7 @@ import io
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -173,7 +173,7 @@ def _build_report(args: argparse.Namespace) -> dict[str, Any]:
     live_execution_ready = discussion_ready and preflight["provider_call_allowed"] is True
 
     return {
-        "report_id": f"authorized_live_test_plan_readiness_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        "report_id": f"authorized_live_test_plan_readiness_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         "evidence_level": "L2-fixture-or-dry-run",
         "no_provider_call": True,
         "provider_call_allowed": preflight["provider_call_allowed"],

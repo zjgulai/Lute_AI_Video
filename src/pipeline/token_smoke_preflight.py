@@ -7,7 +7,7 @@ import json
 import math
 import os
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -75,7 +75,7 @@ class TokenSmokePreflightReport(BaseModel):
     provider_call_allowed: bool = False
     blocked: bool = True
     checks: list[PreflightCheck] = Field(default_factory=list)
-    checked_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    checked_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def build_token_smoke_preflight_report(
@@ -104,7 +104,7 @@ def build_token_smoke_preflight_report(
     blocked = any(check.status == "block" for check in checks)
 
     return TokenSmokePreflightReport(
-        report_id=f"token_smoke_preflight_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        report_id=f"token_smoke_preflight_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         run_token_smoke=env.get(RUN_TOKEN_SMOKE_ENV) == "1",
         approval_record_ref=str(record_path) if record_path else None,
         account_readiness_record_ref=str(account_readiness_path) if account_readiness_path else None,
@@ -149,7 +149,7 @@ def build_authorized_live_approval_payload(
     provider_model_scope = provider_model_scope.strip()
     test_scope = test_scope.strip()
     budget_limit = budget_limit.strip()
-    approved_at = approved_at.strip() if approved_at else f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z"
+    approved_at = approved_at.strip() if approved_at else _utc_now_z()
 
     if _looks_like_template_placeholder(approved_by) or _looks_like_template_placeholder(approved_at):
         raise ValueError("approved_by and approved_at must be concrete non-template values")
@@ -244,7 +244,7 @@ def build_provider_account_readiness_payload(
     """Build a private provider account readiness record without storing API keys."""
     checked_by = checked_by.strip()
     provider = provider.strip()
-    checked_at = checked_at.strip() if checked_at else f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z"
+    checked_at = checked_at.strip() if checked_at else _utc_now_z()
     if _looks_like_template_placeholder(checked_by) or _looks_like_template_placeholder(checked_at):
         raise ValueError("checked_by and checked_at must be concrete non-template values")
 
@@ -1076,6 +1076,10 @@ def _looks_like_template_placeholder(value: Any) -> bool:
         or "replace_me" in normalized
         or "example" in normalized
     )
+
+
+def _utc_now_z() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _approval_budget_limit_usd(payload: Mapping[str, Any] | None) -> float | None:

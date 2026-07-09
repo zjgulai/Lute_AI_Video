@@ -5,7 +5,7 @@ State can be either dict or VideoPipelineState (both forms used by LangGraph).
 """
 
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.graph.routing import (
@@ -57,7 +57,7 @@ def make_audit_report(score: float, checkpoint: str = "strategy", artifact_id: s
         overall_status=AuditCriterionStatus(status),
         criteria=[make_criterion("relevance", "PASS")],
         summary=f"Test audit report for {checkpoint} with score {score}",
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(UTC),
     )
 
 
@@ -72,7 +72,7 @@ def audit_as_dict(score: float, checkpoint: str = "strategy") -> dict[str, Any]:
         "criteria": [{"name": "relevance", "status": "PASS", "score": 1.0,
                        "observation": "OK", "recommendation": ""}],
         "summary": f"Test dict audit {score}",
-        "generated_at": datetime.utcnow(),
+        "generated_at": datetime.now(UTC),
     }
 
 
@@ -83,7 +83,7 @@ def audit_as_dict_no_score() -> dict[str, Any]:
         "target_artifact_id": "ART-001",
         "criteria": [],
         "summary": "No overall_score",
-        "generated_at": datetime.utcnow(),
+        "generated_at": datetime.now(UTC),
     }
 
 

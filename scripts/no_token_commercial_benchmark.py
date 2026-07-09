@@ -7,7 +7,7 @@ import argparse
 import contextlib
 import json
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -76,7 +76,7 @@ class NoTokenCommercialBenchmarkReport(BaseModel):
     blocked_count: int = 0
     review_required_count: int = 0
     forbidden_claims: list[str] = Field(default_factory=list)
-    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    generated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def build_no_token_commercial_benchmark_report() -> NoTokenCommercialBenchmarkReport:
@@ -96,7 +96,7 @@ def build_no_token_commercial_benchmark_report() -> NoTokenCommercialBenchmarkRe
         for claim in check.forbidden_claims
     })
     return NoTokenCommercialBenchmarkReport(
-        benchmark_id=f"no_token_commercial_benchmark_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        benchmark_id=f"no_token_commercial_benchmark_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         checks=checks,
         blocked_count=sum(1 for check in checks if check.status == "blocked"),
         review_required_count=sum(1 for check in checks if check.status == "review_required"),

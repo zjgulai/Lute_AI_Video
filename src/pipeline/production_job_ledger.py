@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.models.commercial_contracts import (
     MediaJobRecord,
@@ -99,4 +99,4 @@ class ProductionJobLedger:
 
 
 def _now() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(UTC).isoformat()

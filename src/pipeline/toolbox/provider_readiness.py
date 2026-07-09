@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -48,7 +48,7 @@ def build_toolbox_provider_readiness(
 
     ready_for_authorized_live = preflight.provider_call_allowed and not tool_scope_blocker
     return ToolboxProviderReadiness(
-        readiness_id=f"tbx_provider_readiness_{tool_id.value}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        readiness_id=f"tbx_provider_readiness_{tool_id.value}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         tool_id=tool_id,
         provider_profile_id=TOOLBOX_PROVIDER_PROFILE_ID,
         ready_for_dry_run=True,

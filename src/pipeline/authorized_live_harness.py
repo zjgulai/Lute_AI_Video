@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -69,7 +69,7 @@ class AuthorizedLiveHarnessReport(BaseModel):
     provider_response_refs: dict[str, str] = Field(default_factory=dict)
     blocked_reasons: list[str] = Field(default_factory=list)
     preflight: TokenSmokePreflightReport | None = None
-    checked_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    checked_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def run_authorized_live_harness(
@@ -82,7 +82,7 @@ def run_authorized_live_harness(
 ) -> AuthorizedLiveHarnessReport:
     """Run the C9 harness gate without implicit provider calls."""
     env = os.environ if env is None else env
-    harness_id = f"authorized_live_harness_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    harness_id = f"authorized_live_harness_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     if mode == "disabled":
         return AuthorizedLiveHarnessReport(
             harness_id=harness_id,

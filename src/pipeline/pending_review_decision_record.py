@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -90,7 +90,7 @@ class PendingReviewDecisionRecord(BaseModel):
     supported_claims: list[str] = Field(default_factory=list)
     forbidden_claims: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
-    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    generated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @model_validator(mode="after")
     def _decision_record_must_not_promote_assets(self) -> PendingReviewDecisionRecord:
@@ -164,7 +164,7 @@ def build_pending_review_decision_record(
         if asset.sample_id not in decision_by_sample_id
     ]
     return PendingReviewDecisionRecord(
-        decision_record_id=f"pending_review_decision_{parsed_packet.packet_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        decision_record_id=f"pending_review_decision_{parsed_packet.packet_id}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         source_packet_ref=source_packet_ref,
         source_packet_id=parsed_packet.packet_id,
         source_evidence_level=parsed_packet.evidence_level,

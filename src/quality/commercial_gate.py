@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -60,7 +60,7 @@ class AuditResult(BaseModel):
     delivery: DeliveryDecision
     gate_decision: GateDecision
     repair_plan: RepairPlan
-    checked_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    checked_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def evaluate_quality_contract(
