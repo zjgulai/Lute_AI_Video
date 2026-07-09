@@ -52,8 +52,6 @@ async def test_cancel_background_tasks_removes_completed_task() -> None:
 
 @pytest.mark.asyncio
 async def test_fastapi_lifespan_shutdown_cancels_registered_background_task(monkeypatch) -> None:
-    from fastapi.testclient import TestClient
-
     import src.api as api
 
     started = threading.Event()
@@ -76,7 +74,7 @@ async def test_fastapi_lifespan_shutdown_cancels_registered_background_task(monk
 
     monkeypatch.setattr(api, "_run_startup", fake_startup)
 
-    with TestClient(api.app):
+    async with api.app.router.lifespan_context(api.app):
         snapshot = bg_registry.get_background_task_snapshot()
         assert any(record["label"] == "lifespan_test_sleeper" for record in snapshot.values())
         assert started.is_set()

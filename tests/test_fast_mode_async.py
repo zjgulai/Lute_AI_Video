@@ -4,16 +4,17 @@ import asyncio
 import os
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 
 @pytest.fixture
-def client():
-    from fastapi.testclient import TestClient
-
+async def client():
     from src.api import app
 
-    return TestClient(app)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as async_client:
+        yield async_client
 
 
 @pytest.fixture
@@ -115,15 +116,18 @@ class TestFastTaskRegistry:
 
 class TestFastSubmitEndpoint:
 
-    def test_submit_requires_api_key(self, client):
-        r = client.post("/fast/submit", json={"user_prompt": "test"})
+    @pytest.mark.asyncio
+    async def test_submit_requires_api_key(self, client):
+        r = await client.post("/fast/submit", json={"user_prompt": "test"})
         assert r.status_code == 401
 
-    def test_status_404_for_unknown_task(self, client, auth):
-        r = client.get("/fast/status/unknown_task_id_xyz", headers=auth)
+    @pytest.mark.asyncio
+    async def test_status_404_for_unknown_task(self, client, auth):
+        r = await client.get("/fast/status/unknown_task_id_xyz", headers=auth)
         assert r.status_code == 404
 
-    def test_submit_returns_task_id_immediately(self, client, auth):
+    @pytest.mark.asyncio
+    async def test_submit_returns_task_id_immediately(self, client, auth):
         async def _fake_generate(*a, **kw):
             await asyncio.sleep(0.5)
             return {
@@ -133,7 +137,7 @@ class TestFastSubmitEndpoint:
             }
 
         with patch("src.services.fast_mode.FastModeService.generate", new=AsyncMock(side_effect=_fake_generate)):
-            r = client.post(
+            r = await client.post(
                 "/fast/submit",
                 headers=auth,
                 json={"user_prompt": "a red apple", "duration": 10, "enable_tts": False},
@@ -146,7 +150,7 @@ class TestFastSubmitEndpoint:
         assert data["status"] == "queued"
         assert "started_at_unix" in data
 
-    def test_status_returns_running_then_done(self, client, auth):
+    def test_status_returns_running_then_done(self):
         """Verify submit + status round-trip via direct registry manipulation.
 
         Note: TestClient closes its event loop after each request, which
@@ -178,7 +182,7 @@ class TestFastSubmitEndpoint:
         assert snapshot["status"] == "done", f"got: {snapshot}"
         assert snapshot["result"] == {"success": True, "video_path": "/tmp/x.mp4"}
 
-    def test_status_failed_records_error(self, client, auth):
+    def test_status_failed_records_error(self):
         """Verify failed task records error via direct registry call.
 
         Same TestClient limitation as above — test registry directly.

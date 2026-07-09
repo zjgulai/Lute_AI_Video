@@ -18,14 +18,15 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+
+pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def admin_client():
+async def admin_client():
     """TestClient with verify_admin_session bypassed."""
-    from fastapi.testclient import TestClient
-
     from src.api import app
     from src.routers._admin_deps import verify_admin_session
 
@@ -33,44 +34,45 @@ def admin_client():
         return "admin_smoke_test"
 
     app.dependency_overrides[verify_admin_session] = _fake_verify
-    client = TestClient(app)
-    yield client
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
     app.dependency_overrides.clear()
 
 
 class TestAdminAuthGate:
 
-    def test_dashboard_summary_requires_auth(self):
-        from fastapi.testclient import TestClient
-
+    async def test_dashboard_summary_requires_auth(self):
         from src.api import app
 
-        with TestClient(app) as client:
-            r = client.get("/api/admin/dashboard/summary", headers={"X-API-Key": "ai_video_demo_2026"})
-            assert r.status_code == 401
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            r = await client.get(
+                "/api/admin/dashboard/summary",
+                headers={"X-API-Key": "ai_video_demo_2026"},
+            )
+        assert r.status_code == 401
 
-    def test_logs_list_requires_auth(self):
-        from fastapi.testclient import TestClient
-
+    async def test_logs_list_requires_auth(self):
         from src.api import app
 
-        with TestClient(app) as client:
-            r = client.get("/api/admin/logs", headers={"X-API-Key": "ai_video_demo_2026"})
-            assert r.status_code == 401
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            r = await client.get("/api/admin/logs", headers={"X-API-Key": "ai_video_demo_2026"})
+        assert r.status_code == 401
 
-    def test_health_status_requires_auth(self):
-        from fastapi.testclient import TestClient
-
+    async def test_health_status_requires_auth(self):
         from src.api import app
 
-        with TestClient(app) as client:
-            r = client.get("/api/admin/health/status", headers={"X-API-Key": "ai_video_demo_2026"})
-            assert r.status_code == 401
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            r = await client.get("/api/admin/health/status", headers={"X-API-Key": "ai_video_demo_2026"})
+        assert r.status_code == 401
 
 
 class TestDashboardSummary:
 
-    def test_handles_empty_db_gracefully(self, admin_client):
+    async def test_handles_empty_db_gracefully(self, admin_client):
         mock_pool = MagicMock()
         mock_conn = MagicMock()
         mock_conn.fetchrow = AsyncMock(return_value={"total": 0})
@@ -83,10 +85,10 @@ class TestDashboardSummary:
             return mock_pool
 
         with patch("src.storage.db.get_pool", _fake_pool):
-            r = admin_client.get(
+            admin_client.cookies.set("admin_session", "fake")
+            r = await admin_client.get(
                 "/api/admin/dashboard/summary",
                 headers={"X-API-Key": "ai_video_demo_2026"},
-                cookies={"admin_session": "fake"},
             )
 
         # Must not 500 — either 200 with empty data or 503 if pool unavailable.
@@ -95,7 +97,7 @@ class TestDashboardSummary:
 
 class TestLogsList:
 
-    def test_handles_empty_logs(self, admin_client):
+    async def test_handles_empty_logs(self, admin_client):
         mock_pool = MagicMock()
         mock_conn = MagicMock()
         mock_conn.fetchrow = AsyncMock(return_value={"total": 0})
@@ -108,22 +110,19 @@ class TestLogsList:
             return mock_pool
 
         with patch("src.storage.db.get_pool", _fake_pool):
-            r = admin_client.get(
-                "/api/admin/logs",
-                headers={"X-API-Key": "ai_video_demo_2026"},
-                cookies={"admin_session": "fake"},
-            )
+            admin_client.cookies.set("admin_session", "fake")
+            r = await admin_client.get("/api/admin/logs", headers={"X-API-Key": "ai_video_demo_2026"})
 
         assert r.status_code in (200, 500, 503)
 
 
 class TestHealthStatus:
 
-    def test_returns_health_payload(self, admin_client):
-        r = admin_client.get(
+    async def test_returns_health_payload(self, admin_client):
+        admin_client.cookies.set("admin_session", "fake")
+        r = await admin_client.get(
             "/api/admin/health/status",
             headers={"X-API-Key": "ai_video_demo_2026"},
-            cookies={"admin_session": "fake"},
         )
 
         assert r.status_code in (200, 500, 503)

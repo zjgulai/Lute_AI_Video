@@ -1,37 +1,40 @@
 from __future__ import annotations
 
+import httpx
 import pytest
+
+pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def client():
-    from fastapi.testclient import TestClient
-
+async def client():
     from src.api import app
 
-    return TestClient(app)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as async_client:
+        yield async_client
 
 
 class TestPrometheusEndpoint:
 
-    def test_metrics_endpoint_no_auth_required(self, client):
-        r = client.get("/metrics")
+    async def test_metrics_endpoint_no_auth_required(self, client):
+        r = await client.get("/metrics")
         assert r.status_code == 200
 
-    def test_metrics_returns_prometheus_content_type(self, client):
-        r = client.get("/metrics")
+    async def test_metrics_returns_prometheus_content_type(self, client):
+        r = await client.get("/metrics")
         ct = r.headers.get("content-type", "")
         assert "text/plain" in ct
         assert "version=" in ct
 
-    def test_metrics_body_is_prometheus_text_format(self, client):
-        r = client.get("/metrics")
+    async def test_metrics_body_is_prometheus_text_format(self, client):
+        r = await client.get("/metrics")
         body = r.text
         assert "# HELP" in body
         assert "# TYPE" in body
 
-    def test_known_metrics_present_in_output(self, client):
-        r = client.get("/metrics")
+    async def test_known_metrics_present_in_output(self, client):
+        r = await client.get("/metrics")
         body = r.text
         expected = [
             "pipeline_runs_total",
@@ -46,7 +49,7 @@ class TestPrometheusEndpoint:
         for metric in expected:
             assert metric in body, f"missing metric in /metrics output: {metric}"
 
-    def test_metrics_does_not_collide_with_video_metrics_route(self, client):
+    async def test_metrics_does_not_collide_with_video_metrics_route(self, client):
         from src.api import app
         from src.routers._deps import verify_api_key
 
@@ -55,11 +58,11 @@ class TestPrometheusEndpoint:
 
         app.dependency_overrides[verify_api_key] = _ok
         try:
-            r1 = client.get("/metrics")
+            r1 = await client.get("/metrics")
             assert r1.status_code == 200
             assert "active_pipelines" in r1.text
 
-            r2 = client.get("/metrics/abc-video-id")
+            r2 = await client.get("/metrics/abc-video-id")
             assert r2.status_code in (200, 503)
             if r2.status_code == 200:
                 body = r2.json()
