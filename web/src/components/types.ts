@@ -126,6 +126,13 @@ export const CONTENT_SCENARIOS = [
     platforms: ["tiktok", "shopify"],
   },
   {
+    id: "live_shoot_to_video",
+    title: "Live Shoot",
+    desc: "Upload live footage and let AI add voiceover, captions, and brand packaging",
+    iconName: SCENE_ICON_NAMES.live_shoot_to_video,
+    platforms: ["tiktok", "shopify", "youtube_shorts"],
+  },
+  {
     id: "brand_vlog",
     title: "Brand VLOG",
     desc: "Select product SKU to auto-fill six-view, choose model roles, input story direction, AI generates a complete VLOG narrative video.",

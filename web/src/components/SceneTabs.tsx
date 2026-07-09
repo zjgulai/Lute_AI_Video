@@ -11,12 +11,14 @@ interface Props {
   videoCounts: Record<string, number>;
 }
 
-const SCENE_IDS = ["product_direct", "brand_campaign", "influencer_remix", "brand_vlog", "fast_mode"];
+const SCENE_IDS = ["product_direct", "brand_campaign", "influencer_remix", "live_shoot_to_video", "brand_vlog", "fast_mode"];
 
 const SCENE_DESC_KEYS: Record<string, string> = {
   product_direct: "scene.desc.product_direct",
   brand_campaign: "scene.desc.brand_campaign",
   influencer_remix: "scene.desc.influencer_remix",
+  live_shoot: "scene.desc.live_shoot_to_video",
+  live_shoot_to_video: "scene.desc.live_shoot_to_video",
   brand_vlog: "scene.desc.brand_vlog",
   fast_mode: "scene.desc.fast_mode",
 };
@@ -25,6 +27,7 @@ const SCENE_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   product_direct: Package,
   brand_campaign: Megaphone,
   influencer_remix: Users,
+  live_shoot_to_video: Camera,
   brand_vlog: Camera,
   fast_mode: Lightning,
 };
@@ -36,7 +39,7 @@ export default function SceneTabs({ activeScene, onChange, videoCounts }: Props)
     <div className="space-y-3">
       <div className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
         {SCENE_IDS.map((id) => {
-          const isActive = activeScene === id;
+          const isActive = activeScene === id || (activeScene === "live_shoot" && id === "live_shoot_to_video");
           const count = videoCounts[id] ?? 0;
           const IconComponent = SCENE_ICON_MAP[id];
           return (

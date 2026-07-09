@@ -12,6 +12,7 @@ import { errorMessage } from "@/lib/errors";
 import { handleSmartCreateStageError } from "@/lib/smartCreateError";
 import { withScenarioContinuityConfig } from "@/lib/scenarioContinuity";
 import { sceneToPath, sceneToScenarioId } from "@/lib/scenarioRouting";
+import { buildScenarioAutoSubmitPayload } from "@/lib/scenarioPayload";
 import { extractGalleryResultFields, normalizePipelineResult } from "@/lib/pipelineResult";
 import {
   normalizeStepByStepState,
@@ -21,7 +22,6 @@ import {
   fetchState,
   submitReview,
   runS1ProductDirect,
-  runS5BrandVlog,
   startS1StepByStep,
   fetchS1State,
   getMediaUrl,
@@ -543,14 +543,7 @@ export default function Home() {
     setShowStageProgress(true);
     startGenerating(t("exec.narrative.analyzing"));
     try {
-      const submitPayload = {
-        product_catalog: config.product_catalog,
-        brand_guidelines: config.brand_guidelines,
-        target_platforms: config.target_platforms,
-        target_languages: config.target_languages || ["en"],
-        week: config.content_calendar_week || "",
-        video_duration: config.video_duration || 30,
-      };
+      const submitPayload = buildScenarioAutoSubmitPayload(config, videoDuration);
       // Phase 1B: Unified async submit — returns label immediately, pipeline runs in background
       const submitResult = await submitScenario(
         scenarioId,
@@ -666,55 +659,26 @@ export default function Home() {
     if (effectiveModeRaw === "step_by_step" && !supportsStepByStep(scenario)) {
       showToast(t("toast.stepByStepS1Only"), "info");
     }
-    if (scenario === "brand_vlog") {
-      // S5 Brand VLOG — dedicated endpoint
-      setLoadingText(t("app.loading"));
-      try {
-        const result = await runS5BrandVlog({
-          brand_id: config.brand_id || "momcozy",
-          product_sku: config.product_sku || {},
-          scene_id: config.scene_id || "living-room",
-          selected_models: config.selected_models || [],
-          story_description: config.story_description || "",
-          video_duration: config.video_duration || 30,
-          ...withScenarioContinuityConfig(config, {}),
-        }, { signal: abortRef.current?.signal });
-        setOneshotResult(result);
-        setOneshotScenario(scenario);
-        saveToGallery(result, scenario);
-        showToast(t("toast.vlogDone"), "success");
-      } catch (e: unknown) {
-        reportSubmitError(e, "toast.execFailed");
-      }
-      setLoading(false);
-      return;
-    }
-
     if (effectiveMode === "auto") {
-      // Auto mode: run all steps in one shot
       setLoadingText(t("app.loading"));
       try {
-        const result = await runS1ProductDirect(
-          withScenarioContinuityConfig(config, {
-            product_catalog: {
-              name: config.product_catalog?.products?.[0]?.name
-                || config.product_catalog?.name
-                || "Product",
-              ...(config.product_catalog || {}),
-            },
-            brand_guidelines: config.brand_guidelines,
-            target_platforms: config.target_platforms || ["tiktok", "shopify"],
-            target_languages: config.target_languages || ["en"],
-            week: config.content_calendar_week || "",
-            video_duration: config.video_duration || videoDuration,
-          }),
+        const submitResult = await submitScenario(
+          sceneToScenarioId(scenario),
+          withScenarioContinuityConfig(
+            config,
+            buildScenarioAutoSubmitPayload(config, videoDuration),
+          ),
           { signal: abortRef.current?.signal }
         );
-
-        setOneshotResult(result);
-        setOneshotScenario(scenario);
-        saveToGallery(result, scenario);
-        showToast(t("toast.autoDone"), "success");
+        setSmartCreateLabel(submitResult.label);
+        startActivePipeline({
+          label: submitResult.label,
+          scenario: sceneToScenarioId(scenario),
+          scene: scenario,
+          startedAt: Date.now(),
+        });
+        setShowStageProgress(true);
+        startGenerating(t("exec.narrative.analyzing"));
       } catch (e: unknown) {
         reportSubmitError(e, "toast.execFailed");
       }
@@ -1011,7 +975,15 @@ export default function Home() {
               config={pendingConfig}
               onBack={() => setStage("home")}
               onStart={(finalConfig) => {
-                if (finalConfig.mode === "smart" || mode === "smart") {
+                const scenario = typeof finalConfig.content_scenario === "string"
+                  ? finalConfig.content_scenario
+                  : "product_direct";
+                const shouldUseSmartProgress =
+                  finalConfig.mode === "smart"
+                  || finalConfig.mode === "auto"
+                  || mode === "smart"
+                  || !supportsStepByStep(scenario);
+                if (shouldUseSmartProgress) {
                   // Smart Create: auto-execute, show StageProgress
                   setStage("generate");
                   setMode("smart");

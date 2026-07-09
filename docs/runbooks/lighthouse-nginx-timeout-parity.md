@@ -5,7 +5,7 @@ module: deploy
 topic: lighthouse-nginx-timeout-parity
 status: stable
 created: 2026-06-01
-updated: 2026-06-01
+updated: 2026-07-09
 owner: self
 source: human+ai
 ---
@@ -22,6 +22,7 @@ source: human+ai
 - `/api/scenario/`、`/api/fast/`、`/api/pipeline/` 必须保留 `proxy_read_timeout 1500s`。
 - `/api/scenario/`、`/api/fast/`、`/api/pipeline/` 必须保留 `proxy_send_timeout 1500s`。
 - 上述三个路由必须保留 `proxy_connect_timeout 60s` 和 `proxy_buffering off`。
+- 上述三个路由的 `proxy_pass` 必须指向 `ai_video_backend` upstream，保持与 Lighthouse 生产容器名一致。
 - `video.lute-tlz-dddd.top` 与 IP fallback `101.34.52.232 _` 必须共同 include `/etc/nginx/ai_video_locations.conf`。
 - 该检查只读取本地 nginx 配置和文档，不触发生成接口、不访问生产、不消耗 poyo.ai tokens。
 
