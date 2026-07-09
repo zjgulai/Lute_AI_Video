@@ -57,6 +57,7 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
         "web/tmp/screenshots",
     },
     "local_workspace_state": {
+        ".codegraph",
         ".hermes",
         "worktrees",
         "drafts",
@@ -78,6 +79,9 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
         "deploy/lighthouse/backups",
         "deploy/lighthouse/portal-auth",
         "deploy/lighthouse/skills.conf",
+        "deploy/lighthouse/auth_gate.conf",
+        "deploy/lighthouse/momcozy-platform.conf",
+        "deploy/lighthouse/*.conf.*backup*",
     },
 }
 
@@ -141,9 +145,12 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
         "output_uploaded",
         "drafts",
         "ref",
+        ".codegraph",
         "landing/login.html",
         "portal-auth",
         "skills.conf",
+        "auth_gate.conf",
+        "momcozy-platform.conf",
         "sync-landing-sidecars.sh",
         "DRY_RUN=1",
         "DRY_RUN=0",

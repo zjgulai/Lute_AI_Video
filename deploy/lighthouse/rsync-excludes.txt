@@ -9,6 +9,7 @@ node_modules
 .claude
 .kiro
 .hermes
+.codegraph
 worktrees
 drafts
 archive
@@ -49,6 +50,9 @@ deploy/lighthouse/*.pem
 deploy/lighthouse/backups
 deploy/lighthouse/portal-auth
 deploy/lighthouse/skills.conf
+deploy/lighthouse/auth_gate.conf
+deploy/lighthouse/momcozy-platform.conf
+deploy/lighthouse/*.conf.*backup*
 deploy/lighthouse/landing/login.html
 deploy/lighthouse/landing/register.html
 deploy/lighthouse/landing/systems.html

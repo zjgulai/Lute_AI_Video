@@ -1,7 +1,7 @@
 version: 1
 owner: deploy
 status: stable
-updated: "2026-06-06"
+updated: "2026-07-09"
 
 entrypoints:
   exclude_file: deploy/lighthouse/rsync-excludes.txt
@@ -50,6 +50,7 @@ exclude_categories:
     - web/tmp
     - web/tmp/screenshots
   local_workspace_state:
+    - .codegraph
     - .hermes
     - worktrees
     - drafts
@@ -69,6 +70,9 @@ exclude_categories:
     - deploy/lighthouse/backups
     - deploy/lighthouse/portal-auth
     - deploy/lighthouse/skills.conf
+    - deploy/lighthouse/auth_gate.conf
+    - deploy/lighthouse/momcozy-platform.conf
+    - deploy/lighthouse/*.conf.*backup*
 
 rules:
   shared_exclude_file_required: true
