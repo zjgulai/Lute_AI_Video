@@ -209,7 +209,7 @@ echo "[3/5] Health checks..."
 # Check backend
 BACKEND_STATUS="000"
 for attempt in $(seq 1 24); do
-  BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --cacert /etc/letsencrypt/live/lute-tlz-dddd.top/fullchain.pem https://localhost/api/health || echo "000")
+  BACKEND_STATUS=$(curl -s -k -o /dev/null -w "%{http_code}" https://localhost/api/health 2>/dev/null || true)
   if [ "$BACKEND_STATUS" = "200" ]; then
     echo "  Backend /api/health: 200 (attempt $attempt/24)"
     break
@@ -225,6 +225,7 @@ if [ "$BACKEND_STATUS" != "200" ]; then
   echo "  ----"
   echo "  ⚠ 如果是 ImportError → 跑 'docker compose build backend' 重 build"
   echo "  ⚠ 如果是 RuntimeError: PostgreSQL → 检查 .env.prod DATABASE_URL"
+  exit 1
 fi
 
 # Check frontend

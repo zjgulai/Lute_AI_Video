@@ -310,6 +310,14 @@ class TestDeployWorkflow:
         assert "Nginx readiness did not pass" in text
         assert text.index("[2.1/5] Waiting for nginx readiness") < text.index("[3/5] Health checks")
 
+    def test_lighthouse_deploy_backend_health_uses_local_tls_probe_and_fails_closed(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+        backend_section = text.split("# Check backend", 1)[1].split("# Check frontend", 1)[0]
+
+        assert 'curl -s -k -o /dev/null -w "%{http_code}" https://localhost/api/health' in backend_section
+        assert '|| echo "000"' not in backend_section
+        assert "exit 1" in backend_section
+
     def test_backend_dockerfile_pins_torch_cpu_wheel(self):
         text = BACKEND_DOCKERFILE.read_text()
 
