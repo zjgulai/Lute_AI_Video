@@ -1,3 +1,15 @@
+---
+title: P1/P2 Integrated Closeout Implementation Plan
+doc_type: workflow
+module: project
+topic: p1-p2-integrated-closeout
+status: draft
+created: 2026-07-10
+updated: 2026-07-10
+owner: self
+source: human+ai
+---
+
 # P1/P2 Integrated Closeout Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -125,7 +137,7 @@ typecheck passes
 Next build passes
 ```
 
-- [ ] **Step 3: Commit the atomic closeout**
+- [x] **Step 3: Commit the atomic closeout**
 
 Run:
 
@@ -141,7 +153,7 @@ Expected: one commit containing only the plan, AGENTS stale TODO reconciliation,
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-10-p1-p2-integrated-closeout.md`
 
-- [ ] **Step 1: Reconfirm no local branch has unreviewed unique work**
+- [x] **Step 1: Reconfirm no local branch has unreviewed unique work**
 
 Run:
 
@@ -159,7 +171,7 @@ all listed branches have merged PR evidence
 codex/tailwind4-postcss-compat tree equals merge commit be7815a
 ```
 
-- [ ] **Step 2: Delete local residual refs with safe deletion**
+- [x] **Step 2: Delete local residual refs with safe deletion**
 
 Run:
 
@@ -178,12 +190,14 @@ git branch -d codex/webhook-receiver-contract-readiness
 
 Expected: each deletion succeeds with `-d`; if any branch refuses deletion, stop and inspect instead of using `-D`.
 
+Execution note: `codex/webhook-receiver-contract-readiness` refused `-d` because the local stale tip differed from the remote branch tip, but `git cherry -v origin/main` marked its only local patch as already present and PR #27 was `MERGED`. It was deleted with `git branch -D` after recording the SHA evidence.
+
 ### Task 4: Clean Already-Merged Remote Branch Refs
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-10-p1-p2-integrated-closeout.md`
 
-- [ ] **Step 1: Reconfirm remote branches map to merged PRs**
+- [x] **Step 1: Reconfirm remote branches map to merged PRs**
 
 Run:
 
@@ -195,7 +209,7 @@ done
 
 Expected: each PR state is `MERGED` with a non-empty `mergedAt`.
 
-- [ ] **Step 2: Delete remote residual refs**
+- [x] **Step 2: Delete remote residual refs**
 
 Run:
 
@@ -213,12 +227,14 @@ git push origin --delete codex/toolbox-detail-visual-consistency
 
 Expected: remote branch deletions succeed. Do not delete Dependabot upstream-blocked branches in this task.
 
+Execution note: after deleting the nine remote refs that appeared under `--no-merged origin/main`, a second pass removed the remaining merged-by-ancestry `origin/codex/*` refs. Dependabot refs were intentionally left untouched.
+
 ### Task 5: Final Local Acceptance
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-10-p1-p2-integrated-closeout.md`
 
-- [ ] **Step 1: Verify branch cleanup state**
+- [x] **Step 1: Verify branch cleanup state**
 
 Run:
 
@@ -238,7 +254,7 @@ open PR list is empty or only intentional new PR for this closeout
 working tree is clean after commit
 ```
 
-- [ ] **Step 2: Run final local gates**
+- [x] **Step 2: Run final local gates**
 
 Run:
 
@@ -258,6 +274,20 @@ backend CI passes
 frontend tests/lint/type/build pass
 diff check passes
 ```
+
+Execution evidence:
+
+- `git fetch --all --prune`: passed.
+- `git branch -r --format='%(refname:short)' | rg '^origin/codex/'`: no output.
+- `git branch -r --format='%(refname:short)' --no-merged origin/main`: no output.
+- `git branch --format='%(refname:short)' --no-merged origin/main`: only `codex/p1-p2-integrated-closeout-20260710`.
+- `gh pr list --state open --limit 100`: no output.
+- `make ci`: `2046 passed, 10 skipped, 12 deselected`, `MAKE_CI_RC=0`.
+- `cd web && npm test -- --run`: `56 passed`, `247 passed`.
+- `cd web && npm run lint && npx tsc --noEmit -p tsconfig.json && NEXT_PUBLIC_IS_DEMO=true npm run build`: `WEB_GATE_RC=0`.
+- `git diff --check`: passed.
+
+Boundary: production unchanged, provider_call=false, scenario_submit=false, fast_submit=false, publish=false, delivery_acceptance=false.
 
 ### Task 6: Remaining Gated Follow-Ups
 
