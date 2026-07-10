@@ -74,6 +74,7 @@ exclude_categories:
     - deploy/lighthouse/skills.conf
     - deploy/lighthouse/auth_gate.conf
     - deploy/lighthouse/momcozy-platform.conf
+    - deploy/lighthouse/plugin-hub.htpasswd
     - deploy/lighthouse/*.conf.*backup*
     - deploy/lighthouse/*.candidate
 
