@@ -39,6 +39,9 @@ REBUILD_RENDERING="${REBUILD_RENDERING:-0}"
 # The renderer image needs Chromium/ffmpeg packages. This default is tested on
 # the Lighthouse host and remains build-time only; operators may override it.
 RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-https://mirrors.cloud.tencent.com/alpine}"
+CLEANUP_AFTER_DEPLOY="${CLEANUP_AFTER_DEPLOY:-0}"
+CLEANUP_TIMEOUT_SECONDS="${CLEANUP_TIMEOUT_SECONDS:-180}"
+RUN_DEPLOY_SMOKE="${RUN_DEPLOY_SMOKE:-0}"
 REQ_SHA_PY='import hashlib, pathlib, re, sys
 lines = []
 for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
@@ -286,19 +289,42 @@ else
 fi
 echo ""
 
-# -- Phase 4: Cleanup (optional) --
-echo "[4/5] Cleanup..."
-sudo docker system prune -f 2>&1 | tail -1
-sudo docker builder prune -f 2>&1 | tail -1
-echo "  Cleanup done"
+# -- Phase 4: Docker cleanup (explicit opt-in) --
+# Cleanup does not affect a healthy application deployment, so it must not
+# hold the deploy control path open by default.
+echo "[4/5] Docker cleanup..."
+if [ "$CLEANUP_AFTER_DEPLOY" = "1" ]; then
+  if ! [[ "$CLEANUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "  ❌ CLEANUP_TIMEOUT_SECONDS must be a positive integer"
+    exit 2
+  fi
+  if command -v timeout >/dev/null 2>&1; then
+    if sudo -n timeout --signal=TERM --kill-after=15 "$CLEANUP_TIMEOUT_SECONDS" docker system prune -f; then
+      echo "  ✓ docker system prune completed"
+    else
+      echo "  ⚠ docker system prune did not complete; application deployment remains healthy"
+    fi
+    if sudo -n timeout --signal=TERM --kill-after=15 "$CLEANUP_TIMEOUT_SECONDS" docker builder prune -f; then
+      echo "  ✓ docker builder prune completed"
+    else
+      echo "  ⚠ docker builder prune did not complete; application deployment remains healthy"
+    fi
+  else
+    echo "  ⚠ timeout command unavailable; cleanup skipped"
+  fi
+else
+  echo "  Skipped (set CLEANUP_AFTER_DEPLOY=1 for bounded cleanup)"
+fi
 echo ""
 
-# -- Phase 5: Run smoke.sh for full verification --
-echo "[5/5] Running smoke.sh for full verification..."
-if [ -f smoke.sh ]; then
+# -- Phase 5: Authenticated smoke (explicit opt-in) --
+echo "[5/5] Authenticated smoke..."
+if [ "$RUN_DEPLOY_SMOKE" = "1" ] && [ -f smoke.sh ]; then
   bash smoke.sh
+elif [ "$RUN_DEPLOY_SMOKE" = "1" ]; then
+  echo "  ⚠ smoke.sh not found, skipped"
 else
-  echo "  ⚠ smoke.sh not found,跳过"
+  echo "  Skipped (set RUN_DEPLOY_SMOKE=1 to allow API-key-reading smoke.sh)"
 fi
 echo ""
 

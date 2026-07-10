@@ -68,6 +68,12 @@ The project ships three deploy targets, in priority order:
    `REBUILD_RENDERING=1` 时传入 `RENDERING_ALPINE_MIRROR`（默认
    `https://mirrors.cloud.tencent.com/alpine`）。该设置只影响构建时系统包下载，
    不修改宿主机 Docker 配置、不读取生产 secret，也不触发 provider 调用。
+   **2026-07-10 wrapper 收口**: `CLEANUP_AFTER_DEPLOY=0` 与
+   `RUN_DEPLOY_SMOKE=0` 是默认值。Docker prune 只在显式设置
+   `CLEANUP_AFTER_DEPLOY=1` 时执行，并受 `CLEANUP_TIMEOUT_SECONDS`（默认 180 秒）
+   限制；`smoke.sh` 只在显式设置 `RUN_DEPLOY_SMOKE=1` 时运行，因为它需要读取
+   `.env.prod`。本地 wrapper 使用 SSH keepalive 和连接超时，避免远端进程结束后
+   客户端无限等待。上述 opt-in 不等同于 provider、publish 或 delivery 授权。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
   `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.
