@@ -1,260 +1,121 @@
 ---
-name: runbook-key-rotation
-description: Runbook \u2014 production API key rotation SOP. \u8986\u76d6 DEEPSEEK_API_KEY / POYO_API_KEY / SILICONFLOW_API_KEY / API_KEY \u56db\u4e2a\u6838\u5fc3\u5bc6\u94a5\u7684\u9884\u7533\u8bf7 / .env.prod \u66f4\u65b0 / \u91cd\u542f / \u9a8c\u8bc1 / \u65e7\u5bc6\u94a5\u4f5c\u5e9f\u3002\u5f53\u5bc6\u94a5\u6cc4\u9732\u3001\u6388\u6743\u751f\u6548\u3001\u5b9a\u671f rotation\uff0890 \u5929\uff09\u3001\u6216\u590d\u7528\u300c\u4e0a\u4e00\u4efd\u5bc6\u94a5\u53ef\u80fd\u88ab\u8bb0\u5f55\u300d\u4e8b\u4ef6\u65f6\u4f7f\u7528\u3002
-doc_type: runbook
-module: ai-video
+title: API Key Rotation SOP
+doc_type: workflow
+module: operations
 topic: secret-rotation
 status: stable
 created: 2026-05-16
-updated: 2026-05-18
-owner: Sisyphus
-source: ai+sop
+updated: 2026-07-10
+owner: self
+source: human+ai
 related:
   - file: ../../.kiro/plan/VULNERABILITIES-AND-PENDING-2026-05-15.md
-    relation: implements-v2
+    relation: implements
   - file: ../../deploy/lighthouse/.env.prod
-    relation: target-file
+    relation: runtime-secret-file
 ---
 
-# Runbook \u2014 API Key Rotation SOP
+# API Key Rotation SOP
 
-> **\u4ec0\u4e48\u65f6\u5019\u6267\u884c**: \u5bc6\u94a5\u6cc4\u9732\u3001\u6388\u6743\u53d8\u66f4\u3001\u5b9a\u671f rotation\uff08\u63a8\u8350 90 \u5929\uff09\u3001\u6216\u300c\u4e0a\u4e00\u6b21\u4f1a\u8bdd\u53ef\u80fd\u8bfb\u8fc7\u65e7 key\u300d\u3002
->
-> **\u8eab\u4efd**: \u5fc5\u987b\u7531\u6709\u8bbf\u95ee\u751f\u4ea7 lighthouse \u670d\u52a1\u5668\u4ee5\u53ca\u4e09\u65b9\u670d\u52a1\u63a7\u5236\u53f0\u8d26\u6237\u7684\u4eba\u5458\u6267\u884c\u3002
->
-> **\u4e0d\u53ef\u9006**: rotate \u540e\u65e7 key \u4f5c\u5e9f\u3002\u68c0\u67e5\u65e7 key \u662f\u5426\u88ab\u5176\u4ed6\u4eba\u5458 / \u811a\u672c / CI \u5f15\u7528\uff01
+适用于 secret 泄露、授权变更、人员离职、90 天周期轮换或仓库/日志/会话可能记录过明文凭据的情况。所有 rotation 都是生产写操作，必须有明确 L4 授权、执行人和回滚窗口。
 
----
+## 1. 密钥分类
 
-## \u9700\u8981 rotate \u7684 4 \u4e2a key
-
-| Key | \u63a7\u5236\u53f0 | \u5f53\u524d\u5728 .env.prod | \u4f7f\u7528\u8005 |
+| 类型 | 典型名称 | 存储位置 | 轮换方式 |
 |---|---|---|---|
-| `DEEPSEEK_API_KEY` | https://platform.deepseek.com | \u662f | LLM \u4e3b\u63a8\u7406\uff08\u5168\u6d41\u6c34\u7ebf strategy/script/audit \u7b49\uff09 |
-| `POYO_API_KEY` | https://poyo.ai/dashboard | \u662f | \u56fe\u7247 + \u89c6\u9891\u751f\u6210 |
-| `SILICONFLOW_API_KEY` | https://siliconflow.cn | \u662f | TTS (CosyVoice) |
-| `API_KEY` | \u5185\u90e8\u751f\u6210 | \u662f | backend API auth \uff08\u524d\u7aef X-API-Key header\uff09 |
+| Provider key | `DEEPSEEK_API_KEY`、`POYO_API_KEY`、`SILICONFLOW_API_KEY` | `deploy/lighthouse/.env.prod` | Provider 控制台签发新 key，更新环境并重建 backend，验证后 revoke 旧 key |
+| 环境 API key | `API_KEY` | `deploy/lighthouse/.env.prod` | 生成新随机值，更新依赖方并重建 backend，验证后移除旧值 |
+| Tenant API key | 数据库 `api_keys` 记录 | PostgreSQL | Admin 创建替代 key，安全分发，验证后 revoke 旧记录 |
+| 测试 bundle key | `ai_video_demo_2026` 等固定测试值 | 代码/测试配置 | 生产默认禁用；不能作为正式 tenant key |
 
----
+## 2. 已知事件与当前门禁
 
-## ⚠️ 2026-05-17 Audit: 已确认泄露范围
+### 2026-05-17 provider 历史事件
 
-AI 对 git history + origin/main + .gitignore 做完整扫描后的真实结论：
+历史审计记录显示一个 POYO provider key 曾进入 Git 历史。当前有效性未在本轮重新测试；在存在已完成 rotation 证据前，仍按 compromised 处理。不要从历史 commit 复制明文做验证。
 
-| Key | git history | origin/main | .gitignore 保护 | 风险评级 | 紧急 rotate? |
-|---|---|---|---|---|---|
-| `POYO_API_KEY` (`sk-redacted`) | ✅ commit `49d5bdc` (sprint2-backup) | ✅ **YES, 已推到 origin/main** | ✅ now | 🔴 **HIGH** | **是，本周必做** |
-| `DEEPSEEK_API_KEY` | ❌ 历史无 | ❌ | ✅ | 🟢 SAFE | defer (90d 周期 rotation) |
-| `SILICONFLOW_API_KEY` | ❌ 历史无 | ❌ | ✅ | 🟢 SAFE | defer (90d 周期 rotation) |
-| `API_KEY` / `TEST_BUNDLE_KEY` | ⚠️ 测试打包 key 可公开被滥用 | ✅ | ✅ now | 🟡 test-bundle | 生产禁用或换成 DB tenant key |
+### 2026-07-10 tenant key 文档事件
 
-**结论**: 供应商 key 中只有 **1 个 (POYO) 是真正泄露 + 紧急 rotate 优先**。`ai_video_demo_2026` 不是只读 demo key，而是测试打包 key；生产环境必须改用 DB tenant key，或仅在显式设置 `ALLOW_TEST_BUNDLE_KEY=1` 的受控环境启用。
+只读仓库审计确认，两份 tracked Markdown 曾包含同一个疑似生产 tenant application key，最早可追溯到 commit `9a4e004e346afa492e0de859a144970760f42a5c`。当前树已改为占位符，并新增回归测试阻止同类 `momcozy_mkt_*` 值再次进入 tracked Markdown。
 
-### POYO key 紧急 rotate 步骤
+本轮没有使用该值访问生产，也没有测试其当前有效性。由于 Git 历史仍保留旧内容，部署前必须：
 
-1. 登 https://poyo.ai/dashboard → API Keys
-2. 点 "Generate new key"，复制新 key
-3. SSH 到生产 `ssh -i ~/ai_video.pem ubuntu@101.34.52.232`
-4. `nano /opt/ai-video/deploy/lighthouse/.env.prod` → 替换 `POYO_API_KEY=<new>`
-5. `docker compose -f /opt/ai-video/deploy/lighthouse/docker-compose.prod.yml up -d --force-recreate backend`
-6. 等 30s 后验证: `curl -sk https://video.lute-tlz-dddd.top/health | grep version`
-7. **泄露的旧 key disable**: 回 poyo.ai dashboard → 找旧 key → Revoke
+1. 在 Admin Panel 按 tenant、key id、description 和 created_at 定位对应 key 记录；当前数据库只保存 hash，不能把 hash 前缀当作原 key 的 masked prefix。
+2. 如果不能唯一定位，轮换受影响 tenant 的全部历史 key，而不是从 Git 历史恢复明文逐个试。
+3. 创建替代 key，通过安全渠道分发并完成受保护只读 GET 验证。
+4. revoke 旧 key，并从 Admin Panel/数据库状态确认其 lifecycle 为 revoked。
 
-### 注意
-- 老 commit `49d5bdc` 在 sprint2-backup branch，**已在 origin/main 之外的分支**。但 origin 可能保留了 dangling object。**rotate POYO key 即可彻底闭环**。
-- 不需要 `git filter-repo` 清理 history（已 rotate 等于 deactivate，老 history 中的 key 失效后无安全意义）。
+此事件本身不要求调用 DeepSeek、POYO 或 SiliconFlow，也不授权 provider generation。
 
----
+## 3. 执行前检查
 
+- [ ] 已记录 incident/rotation 范围、执行人、窗口和回滚人。
+- [ ] 已确认要轮换的是 provider、环境还是 tenant key，不能混为一组。
+- [ ] 已盘点 CI、浏览器配置、脚本、部署环境和人工持有者。
+- [ ] 已确认不会把 secret 值写入终端录屏、聊天、日志、Markdown 或 Git diff。
+- [ ] 涉及 provider 验证时，已取得独立 provider-call 授权和预算上限。
 
+不要 `cat`、`grep` 或打印 `.env.prod` 的值。只能检查文件权限、变量名是否存在和容器是否加载预期变量名。
 
-```bash
-ssh -i ./ai_video.pem ubuntu@101.34.52.232
-cd /opt/ai-video
-sudo cp deploy/lighthouse/.env.prod deploy/lighthouse/.env.prod.bak.$(date +%Y%m%d-%H%M%S)
-sudo ls -la deploy/lighthouse/.env.prod.bak.*
-```
+## 4. Provider 与环境 key 轮换
 
-\u9a8c\u6536\uff1a\u770b\u5230\u521a\u624d\u521b\u5efa\u7684 .bak \u6587\u4ef6\u3002
-
----
-
-## \u9636\u6bb5 2 \u2014 \u83b7\u53d6\u65b0 key\uff083 \u4e2a\u5e73\u53f0 + 1 \u4e2a\u751f\u6210\uff0c\u603b\u8ba1 10-15 min\uff09
-
-### 2a. DeepSeek
-
-1. \u767b\u5f55 https://platform.deepseek.com
-2. **API Keys** \u9875 \u2192 **Create new secret key**
-3. \u540d\u79f0\u4e3a `ai-video-prod-2026-05-rotation`
-4. \u590d\u5236\u65b0 key\uff08\u5f00\u5934 `sk-`\uff0c**\u53ea\u663e\u793a\u4e00\u6b21**\uff09
-5. \u6682\u5b58\u672c\u5730 password manager / Bitwarden
-
-### 2b. POYO
-
-1. \u767b\u5f55 https://poyo.ai/dashboard
-2. **API Keys** \u9875 \u2192 **Generate**
-3. \u590d\u5236\u65b0 key\uff08\u5f00\u5934 `sk-`\uff0c\u4e5f\u662f\u4e00\u6b21\u6027\u663e\u793a\uff09
-
-### 2c. SiliconFlow
-
-1. \u767b\u5f55 https://siliconflow.cn
-2. **API Keys** \u9875 \u2192 **\u521b\u5efa\u65b0 key**
-3. \u590d\u5236
-
-### 2d. Backend API_KEY \uff08\u672c\u5730\u751f\u6210\uff09
-
-```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-# \u8f93\u51fa\u4f8b\u5982: jkq8aLp_KZpRq3vYx4tHnE2bWcMdN5sFeGoIuP9zRcA
-```
-
----
-
-## \u9636\u6bb5 3 \u2014 \u66f4\u65b0 .env.prod\uff083 min\uff09
-
-\u5728\u670d\u52a1\u5668\u4e0a\u7528 nano/vi \u7f16\u8f91\uff1a
+### 4.1 创建受控回滚副本
 
 ```bash
 ssh -i ./ai_video.pem ubuntu@101.34.52.232
-sudo nano /opt/ai-video/deploy/lighthouse/.env.prod
+sudo install -d -m 0700 /root/ai-video-secret-backups
+sudo install -m 0600 \
+  /opt/ai-video/deploy/lighthouse/.env.prod \
+  /root/ai-video-secret-backups/env.prod.$(date +%Y%m%d-%H%M%S)
 ```
 
-**\u53ea\u6539\u4ee5\u4e0b 4 \u884c**\uff08\u4fdd\u6301\u5176\u4ed6\u4e0d\u53d8\uff09\uff1a
+回滚副本不得放在仓库目录，不得 commit，不得复制到普通聊天或工单附件。
 
-```
-DEEPSEEK_API_KEY=<\u65b0 deepseek key>
-POYO_API_KEY=<\u65b0 poyo key>
-SILICONFLOW_API_KEY=<\u65b0 siliconflow key>
-API_KEY=<\u672c\u5730\u751f\u6210\u7684 token>
-```
+### 4.2 先签发新 key
 
-\u4fdd\u5b58 + \u9000\u51fa\u3002\u9a8c\u6536\uff1a
+在对应 provider 控制台创建新 key；环境 `API_KEY` 使用本地安全终端生成随机值并直接写入密码管理器。新值只显示和传递一次，不写入执行记录。
+
+### 4.3 更新环境并重建 backend
 
 ```bash
-sudo grep -E "^(DEEPSEEK|POYO|SILICONFLOW|API)_API_KEY=|^API_KEY=" /opt/ai-video/deploy/lighthouse/.env.prod | wc -l
-# \u671f\u671b\u8f93\u51fa: 4
-```
-
----
-
-## \u9636\u6bb5 4 \u2014 \u91cd\u542f backend container \u52a0\u8f7d\u65b0 env\uff083 min\uff09
-
-```bash
-ssh -i ./ai_video.pem ubuntu@101.34.52.232
+sudoedit /opt/ai-video/deploy/lighthouse/.env.prod
 cd /opt/ai-video/deploy/lighthouse
-sudo docker-compose -f docker-compose.prod.yml up -d --no-deps backend
+sudo docker compose -f docker-compose.prod.yml up -d --force-recreate backend
 sleep 15
-curl -fsSk https://localhost/health | python3 -m json.tool | head -20
+curl -fsSk https://localhost/api/health | python3 -m json.tool >/dev/null
 ```
 
-\u9a8c\u6536\uff1astatus=`ok`, persistence=`healthy`\u3002
+验收：`.env.prod` 仍为 `0600`，backend healthy，公开 health 未泄露 key、token、DSN 或私有路径。
 
----
+### 4.4 验证与 revoke
 
-## \u9636\u6bb5 5 \u2014 \u9a8c\u8bc1\u65b0 key \u53ef\u7528\uff0810-15 min\uff09
+- 环境 API key：只执行受保护的只读 GET，确认新 key 返回 200；确认依赖方切换后再移除旧值。
+- Provider key：优先在 provider 控制台检查状态。任何真实 API 调用都需要独立 L4 provider-call 授权；默认不运行生成任务。
+- 只有新 key 验证通过后才能 revoke 旧 key。旧 key revoke 后不可用回滚副本重新启用。
 
-### 5a. \u9a8c\u8bc1 DeepSeek \u53ef\u7528 \uff08\u9700 API_KEY = ai_video_demo_2026 \u4f4d\u7f6e\u6362\u4e3a\u521a\u4ea7\u751f\u7684\u65b0 token\uff09
+## 5. Tenant key 轮换
 
-```bash
-NEW_API_KEY="<\u521a\u4ea7\u751f\u7684\u65b0 API_KEY>"
-curl -fsSk -X POST https://localhost/fast/generate \
-  -H "X-API-Key: $NEW_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"smoke test rotation","duration_seconds":10}'
-```
+1. 在 `/admin/tenants/{tenant_id}` 创建新 key，填写明确 label 和过期日期；UI 默认 90 天，backend 对未传 expiry 的兼容请求也默认 90 天。
+2. plaintext 只存入密码管理器并通过安全私聊交付，不进入群聊、邮件正文或文档。
+3. 使用新 key 调用一个受保护的只读 GET，例如 `/api/dashboard/overview?days=7`。
+4. 在 Admin Panel revoke 旧 key；如果 incident 范围不确定，revoke 该 tenant 下所有无法证明安全的历史 key。
+5. 确认新 key 为 active、旧 key 为 revoked，并检查最近审计日志是否有异常来源。
 
-\u9a8c\u6536\uff1aHTTP 200\uff0c\u8fd4\u56de `task_id`\u3002
+不要从 Git 历史、shell history 或旧聊天中提取疑似泄露 key 来发送验证请求。
 
-### 5b. \u9a8c\u8bc1 POYO \uff08\u9690\u542b\uff0c\u4e0a\u4e00\u6b65\u8fd0\u884c\u65f6\u4f1a\u8c03 poyo\uff09
+## 6. 完工证据
 
-\u67e5\u770b backend \u65e5\u5fd7\u662f\u5426\u6709 401/403 \u6765\u81ea poyo\uff1a
+- [ ] rotation 范围与执行授权已记录。
+- [ ] 新 key 已安全签发和分发。
+- [ ] backend/tenant 只读验证通过。
+- [ ] 旧 key 已 revoke，状态已回读。
+- [ ] `.env.prod` 权限为 `0600`，回滚副本位于仓库外的 root-only 目录。
+- [ ] 证据只包含 key 名、key id、description、状态、时间与 HTTP 状态码。
+- [ ] 未记录 plaintext、hash、password、private key 或 provider response payload。
+- [ ] 未经独立授权，没有执行 provider generation、publish、delivery 或业务写入。
 
-```bash
-ssh -i ./ai_video.pem ubuntu@101.34.52.232 \
-  'sudo docker logs --since 5m ai_video_backend 2>&1 | grep -iE "poyo.*40[13]|poyo.*unauthorized" | head -5'
-```
+## 7. 回滚
 
-\u9a8c\u6536\uff1a\u8f93\u51fa\u4e3a\u7a7a\u3002
+如果新 key 在旧 key revoke 前验证失败：恢复仓库外的最新 `env.prod` 回滚副本，重建 backend 并验证 health。不要 revoke 旧 key。
 
-### 5c. \u9a8c\u8bc1 SiliconFlow
-
-\u8de8 5a-5b \u540e backend \u65e5\u5fd7\u770b TTS \u8c03\u7528\uff1a
-
-```bash
-ssh -i ./ai_video.pem ubuntu@101.34.52.232 \
-  'sudo docker logs --since 5m ai_video_backend 2>&1 | grep -iE "cosyvoice|siliconflow" | tail -5'
-```
-
-\u9a8c\u6536\uff1a\u770b\u5230\u6210\u529f\u54cd\u5e94\uff0c\u4e0d\u662f 4xx\u3002
-
----
-
-## \u9636\u6bb5 6 \u2014 \u4f5c\u5e9f\u65e7 key\uff088 min\uff09
-
-> **\u5173\u952e**\uff1a\u53ea\u6709\u9636\u6bb5 5 \u5168\u90e8 PASS \u624d\u80fd\u4f5c\u5e9f\uff0c\u5426\u5219\u670d\u52a1\u4e2d\u65ad\u3002
-
-### 6a. DeepSeek
-
-\u63a7\u5236\u53f0\u5220\u9664\u65e7 key\u3002
-
-### 6b. POYO
-
-\u540c\u4e0a\u3002
-
-### 6c. SiliconFlow
-
-\u540c\u4e0a\u3002
-
-### 6d. \u65e7 API_KEY \uff08\u5185\u90e8 token\uff09
-
-\u4e0d\u9700\u8981\u63a7\u5236\u53f0\u4f5c\u5e9f\u3002\u4f46\u5982\u679c\u524d\u7aef demo \u6a21\u5f0f\u6709\u786c\u7f16\u7801\u4ea7\u7269\uff1a
-
-```bash
-# \u68c0\u67e5\u524d\u7aef\u662f\u5426\u8fd8\u5728\u7528 demo key
-ssh -i ./ai_video.pem ubuntu@101.34.52.232 \
-  'sudo docker exec ai_video_frontend printenv 2>/dev/null | grep -iE "API_KEY|NEXT_PUBLIC" | head -5'
-# \u5982\u679c\u770b\u5230 demo key\uff0c\u9700\u540c\u6b65\u66f4\u65b0
-```
-
----
-
-## \u9636\u6bb5 7 \u2014 \u5b8c\u5de5\u68c0\u67e5\u5217\u8868
-
-- [ ] .env.prod \u5907\u4efd\u5b58\u5728
-- [ ] 4 \u4e2a\u65b0 key \u5df2\u5728\u63a7\u5236\u53f0\u7533\u8bf7
-- [ ] .env.prod \u5df2\u66f4\u65b0\uff086 \u884c\u4ee5\u5185\u53d8\u52a8\uff09
-- [ ] chmod 600 \u4ecd\u751f\u6548\uff08`ls -la` \u8df3\u8fc7\uff09
-- [ ] backend container \u91cd\u542f\u540e healthy
-- [ ] 5a-5c \u4e09\u4e2a\u9a8c\u8bc1\u5168 PASS
-- [ ] \u65e7 key \u4f5c\u5e9f
-- [ ] notify \u56e2\u961f\uff08\u5982\u679c\u6709\u4eba\u624b\u91cc\u6709\u65e7 key\u4f5c\u4e2a\u4eba\u8bbe\u7f6e\uff09
-- [ ] commit .env.prod.bak \u5230 \u4e2a\u4eba\u5907\u4efd\uff08\u4e0d push\uff09\u540e\u5220\u672c\u5730 backup
-
----
-
-## \u56de\u6eda
-
-\u5982\u679c\u9636\u6bb5 5 \u9a8c\u8bc1\u5931\u8d25\uff1a
-
-```bash
-ssh -i ./ai_video.pem ubuntu@101.34.52.232
-sudo cp /opt/ai-video/deploy/lighthouse/.env.prod.bak.<TIMESTAMP> /opt/ai-video/deploy/lighthouse/.env.prod
-cd /opt/ai-video/deploy/lighthouse
-sudo docker-compose -f docker-compose.prod.yml up -d --no-deps backend
-sleep 15
-curl -fsSk https://localhost/health
-```
-
-\u4e0d\u8981\u4f5c\u5e9f\u65e7 key\u76f4\u5230 health \u6062\u590d\u3002
-
----
-
-## \u4e0e VULNERABILITIES-AND-PENDING V-2 \u7684\u5173\u7cfb
-
-- **V-2 chmod 600 \u90e8\u5206**: \u5df2\u5728 2026-05-16 \u5b8c\u6210\uff08commit \u672a\u751f\u6210\uff0c\u4ec5\u670d\u52a1\u5668\u7aef\u53d8\u52a8\uff09
-- **V-2 rotate \u90e8\u5206**: \u672c runbook \u662f\u5b8c\u6574 SOP\uff0c\u9700\u4eba\u5458\u6309\u9636\u6bb5\u8df3
-- **\u89e6\u53d1\u539f\u56e0**: 2026-05-15 \u9636\u6bb5 Phase 0 deploy \u4f1a\u8bdd\u4e2d AI \u4ee3\u7406 cat \u8fc7 .env.prod\uff0c4 \u4e2a key \u8fdb\u5165\u4e86\u4f1a\u8bdd\u4e0a\u4e0b\u6587
-
----
-
-*\u672c runbook \u53d6\u4ee3 chmod \u90e8\u5206\u7531 AI \u4ee3\u7406\u6267\u884c\uff1brotation \u90e8\u5206\u5fc5\u987b\u4eba\u5458 sign-off\u3002*
+如果旧 key 已 revoke：不能通过恢复旧 `.env.prod` 回滚；必须修复新 key 配置或签发另一把新 key。

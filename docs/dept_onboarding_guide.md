@@ -1,13 +1,22 @@
 ---
 name: dept-onboarding-guide
 description: 部门接入 Hermes-Evo AI 视频创作平台的 SOP。覆盖 admin 创建 tenant、发 API key、部门同事粘贴 key 进入创作流程的完整步骤。当新部门要接入时使用。
+title: 部门接入指南
+doc_type: knowledge
+module: operations
+topic: tenant-onboarding
+status: stable
+created: 2026-05-11
+updated: 2026-07-10
+owner: self
+source: human+ai
 ---
 
 # Hermes-Evo 部门接入指南
 
 **适用于**：路特集团内部任何想用 AI 视频创作平台的部门  
 **前置条件**：你联系了 admin（运营方）拿到了部门专属 API key  
-**生效环境**：`https://101.34.52.232`
+**生效环境**：`https://video.lute-tlz-dddd.top`
 
 ---
 
@@ -15,8 +24,8 @@ description: 部门接入 Hermes-Evo AI 视频创作平台的 SOP。覆盖 admin
 
 ### 1.1 登录 Admin Panel
 
-1. 打开 `https://101.34.52.232/admin/login`
-2. 用 admin 账号登录（当前账号：`zhoujianaaa123@gmail.com`）
+1. 打开 `https://video.lute-tlz-dddd.top/admin/login`
+2. 用授权的 admin 账号登录
 3. 自动跳到 `/admin/dashboard`
 
 ### 1.2 创建租户（tenant）
@@ -50,11 +59,11 @@ description: 部门接入 Hermes-Evo AI 视频创作平台的 SOP。覆盖 admin
 
 ### 2.1 拿到 key
 
-通过钉钉私聊收到形如 `momcozy_mkt_zfFCoM3IegCtA3CyJsmAgNBIc8g` 的字符串。**这就是你的 X-API-Key**。
+通过安全私聊收到形如 `<production-api-key>` 的字符串。**这就是你的 X-API-Key**。
 
 ### 2.2 首次访问平台
 
-1. 打开 `https://101.34.52.232`（建议 Chrome/Edge）
+1. 打开 `https://video.lute-tlz-dddd.top`（建议 Chrome/Edge）
 2. 看到品牌欢迎页 → 点「**开始创作**」
 3. 弹出 **「需要 API Key 才能创作」** 模态
 4. 在密码输入框粘贴你的 key

@@ -92,7 +92,6 @@ source: human+ai
 - `docs/runbooks/deepseek-timeout.md`
 - `docs/runbooks/github-actions-deploy-secrets.md`
 - `docs/runbooks/github-deploy-secrets-setup.md`
-- `docs/runbooks/key-rotation.md`
 - `docs/runbooks/phase1-signoff-checklist.md`
 - `docs/runbooks/pipeline-stuck.md`
 - `docs/runbooks/poyo-rejection.md`

@@ -21,6 +21,7 @@ interface ApiKey {
   label: string;
   status: string;
   created_at: string | null;
+  expires_at: string | null;
   last_used_at: string | null;
 }
 
@@ -33,6 +34,12 @@ interface TenantDetail {
   keys: ApiKey[];
 }
 
+function defaultExpiryDate(): string {
+  const value = new Date();
+  value.setUTCDate(value.getUTCDate() + 90);
+  return value.toISOString().slice(0, 10);
+}
+
 export default function AdminTenantDetailClient({ tenantId }: { tenantId: string }) {
   const [data, setData] = useState<TenantDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,6 +48,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
   // Key creation
   const [showCreateKey, setShowCreateKey] = useState(false);
   const [keyLabel, setKeyLabel] = useState("");
+  const [keyExpiresAt, setKeyExpiresAt] = useState(defaultExpiryDate);
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [keyVisible, setKeyVisible] = useState(false);
@@ -79,7 +87,10 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
       }>(`/api/admin/tenants/${tenantId}/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: keyLabel.trim() }),
+        body: JSON.stringify({
+          label: keyLabel.trim(),
+          expires_at: `${keyExpiresAt}T23:59:59Z`,
+        }),
       });
       setNewKey(result.api_key);
       setKeyVisible(false);
@@ -208,6 +219,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
               setShowCreateKey(true);
               setNewKey(null);
               setKeyLabel("");
+              setKeyExpiresAt(defaultExpiryDate());
             }}
             className="flex items-center gap-1 apple-btn apple-btn-primary text-xs py-1 px-2"
           >
@@ -236,6 +248,9 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                     {key.status}
                     {key.last_used_at
                       ? ` · last used ${new Date(key.last_used_at).toLocaleDateString()}`
+                      : ""}
+                    {key.expires_at
+                      ? ` · expires ${new Date(key.expires_at).toLocaleDateString()}`
                       : ""}
                   </p>
                 </div>
@@ -368,6 +383,17 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                   placeholder="Key label (optional, e.g. production)"
                   className="apple-input text-xs w-full"
                 />
+                <label className="block text-xs text-[var(--text-muted)]">
+                  Expires on
+                  <input
+                    type="date"
+                    required
+                    min={new Date().toISOString().slice(0, 10)}
+                    value={keyExpiresAt}
+                    onChange={(event) => setKeyExpiresAt(event.target.value)}
+                    className="apple-input text-xs w-full mt-1"
+                  />
+                </label>
                 <button
                   type="submit"
                   disabled={creating}
