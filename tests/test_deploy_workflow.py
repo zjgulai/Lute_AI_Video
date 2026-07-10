@@ -29,6 +29,7 @@ RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 LIGHTHOUSE_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
 LIGHTHOUSE_BUILD_AND_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "build-and-deploy.sh"
 BACKEND_DOCKERFILE = REPO_ROOT / "Dockerfile.backend"
+RENDERING_DOCKERFILE = REPO_ROOT / "rendering" / "Dockerfile"
 
 HERMETIC_PYTEST_ENV = {
     "API_KEY": "test-api-key-for-pytest",
@@ -289,6 +290,13 @@ class TestDeployWorkflow:
         assert ".requirements_semantic_sha256" in text
         assert "requirements.txt" in text
         assert "hashlib.sha256" in text
+
+    def test_rendering_dockerfile_uses_reproducible_production_install(self):
+        text = RENDERING_DOCKERFILE.read_text()
+
+        assert "COPY package.json package-lock.json" in text
+        assert "RUN npm ci --omit=dev --no-audit --no-fund" in text
+        assert "npm install --omit=dev" not in text
 
     def test_lighthouse_deploy_manages_rendering_service_explicitly(self):
         text = LIGHTHOUSE_DEPLOY.read_text()

@@ -378,6 +378,54 @@ async def test_s4_scripts_forwards_configured_video_duration():
 
 
 @pytest.mark.asyncio
+async def test_s4_video_prompts_preserve_path_only_upload_reference():
+    """Frontend uploads provide `path`; S4 must keep that identity in prompts."""
+    captured: dict[str, Any] = {}
+
+    class FakeRegistry:
+        async def execute(self, name, params):
+            assert name == "seedance-video-prompt"
+            captured.update(params)
+            return SkillResult(success=True, data=[{"prompt": "fixture prompt"}])
+
+    result = await S4LiveShootPipeline()._step_video_prompts(
+        reg=FakeRegistry(),
+        config={
+            "footage_assets": [
+                {
+                    "path": "/api/media/uploads/momcozy-live-demo.mp4",
+                    "source": "guided_form",
+                },
+            ],
+        },
+        steps={
+            "scripts": {
+                "output": [
+                    {
+                        "id": "s4-upload-trace",
+                        "product_name": "KleanPal Pro",
+                        "segments": [
+                            {
+                                "segment_type": "hook",
+                                "visual_description": "show the sterilizer in use",
+                                "start_time": 0,
+                                "end_time": 4,
+                            },
+                        ],
+                    },
+                ],
+            },
+        },
+        errors=[],
+    )
+
+    description = captured["script_segments"][0]["description"]
+    assert "@material '/api/media/uploads/momcozy-live-demo.mp4'" in description
+    assert "@material 'footage'" not in description
+    assert result[0]["script_id"] == "s4-upload-trace"
+
+
+@pytest.mark.asyncio
 async def test_s4_audit_reads_persisted_assemble_list_path(monkeypatch):
     pipeline = S4LiveShootPipeline()
     captured: dict[str, str] = {}

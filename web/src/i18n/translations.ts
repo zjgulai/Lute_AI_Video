@@ -406,6 +406,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "pipeline.completedTitle": "路特创新视频工厂",
     "pipeline.pausedNotice": "节点已完成，等待你审核",
     "pipeline.pausedTitle": "需要你审核",
+    "pipeline.enableNotifications": "启用桌面通知",
+    "pipeline.notificationsEnabled": "桌面通知已启用",
+    "pipeline.notificationsDenied": "浏览器已拒绝通知权限",
+    "pipeline.notificationsUnavailable": "当前浏览器无法启用桌面通知",
     "pipeline.viewDetails": "查看详情",
     "pipeline.viewWorks": "查看作品",
 
@@ -1001,6 +1005,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gate.selectHint": "选择 1 至 2 个方案",
     "gate.awaitingApproval": "等待审批",
     "gate.approved": "已审批通过，继续执行...",
+    "gate.invalidNumberHintForScenario": "当前场景仅支持 Gate 1 至 {max}",
     "gate.processing": "后台处理中，请稍候...",
 
     // Stage Progress (Smart Create)
@@ -1961,6 +1966,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "pipeline.completedTitle": "Short Video Factory",
     "pipeline.pausedNotice": "A step completed — your review is needed",
     "pipeline.pausedTitle": "Review needed",
+    "pipeline.enableNotifications": "Enable desktop notifications",
+    "pipeline.notificationsEnabled": "Desktop notifications enabled",
+    "pipeline.notificationsDenied": "Notification permission was denied",
+    "pipeline.notificationsUnavailable": "Desktop notifications are unavailable in this browser",
     "pipeline.viewDetails": "View details",
     "pipeline.viewWorks": "View works",
     "pipeline.stepByStepHint": "Step-by-step mode: manually execute each step, confirm before proceeding",
@@ -2470,6 +2479,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "gate.selectHint": "Select 1 to 2 candidates",
     "gate.awaitingApproval": "Awaiting approval",
     "gate.approved": "Approved, continuing...",
+    "gate.invalidNumberHintForScenario": "This scenario supports gates 1 through {max}",
     "gate.processing": "Processing in background...",
 
     // Stage Progress (Smart Create)

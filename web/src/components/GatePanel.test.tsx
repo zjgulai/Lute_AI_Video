@@ -78,6 +78,18 @@ describe("GatePanel — demo mode rendering (D3)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(isDemoMode).mockReturnValue(true);
+    localStorage.setItem("app-locale", "zh");
+  });
+
+  it("renders the approval flow in English without Chinese fallback text", async () => {
+    localStorage.setItem("app-locale", "en");
+    const { container, cleanup } = await renderGate(baseProps);
+    try {
+      expect(container.textContent).toContain("Approve & Continue");
+      expect(container.textContent).not.toContain("审批通过并继续");
+    } finally {
+      cleanup();
+    }
   });
 
   it("renders without crashing and shows candidate cards for gate_1_script", async () => {
@@ -213,6 +225,7 @@ describe("GatePanel — demo mode rendering (D3)", () => {
   });
 
   it("renders tooltip-backed continuity diagnostics for long gate text", async () => {
+    localStorage.setItem("app-locale", "en");
     vi.mocked(isDemoMode).mockReturnValue(false);
     vi.mocked(apiFetch).mockResolvedValue({
       ok: true,

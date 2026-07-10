@@ -55,6 +55,7 @@ deploy/lighthouse/skills.conf
 deploy/lighthouse/auth_gate.conf
 deploy/lighthouse/momcozy-platform.conf
 deploy/lighthouse/*.conf.*backup*
+deploy/lighthouse/*.candidate
 deploy/lighthouse/landing/login.html
 deploy/lighthouse/landing/register.html
 deploy/lighthouse/landing/systems.html

@@ -5,7 +5,7 @@ module: deploy
 topic: lighthouse-rsync-artifact-exclude
 status: stable
 created: 2026-06-01
-updated: 2026-07-09
+updated: 2026-07-10
 owner: self
 source: human+ai
 ---
@@ -27,7 +27,7 @@ source: human+ai
 - 必须排除 screenshots / tmp outputs：`tmp/screenshots`、`tmp/outputs`、`web/tmp`、`web/tmp/screenshots`、`output_uploaded`。
 - 必须排除 local workspace state：`.codegraph`、`.hermes`、`worktrees`、`drafts`、`archive`、`ref`。
 - 必须排除 production secret / cert：`*.pem`、`deploy/lighthouse/.env.prod`、`deploy/lighthouse/.portal-auth.env`、`server.crt`、`server.key`。
-- 必须保护 remote-only production sidecars：`backups`、`deploy/lighthouse/backups`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`。这些路径可能承载跨产品入口、认证服务或远端回滚证据，不能被 AI Video 发布默认清理或覆盖。
+- 必须保护 remote-only production sidecars：`backups`、`deploy/lighthouse/backups`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`、`deploy/lighthouse/*.candidate`。这些路径可能承载跨产品入口、认证服务、候选配置或远端回滚证据，不能被 AI Video 发布默认清理或覆盖。
 - 必须保护 remote-only landing sidecars：`landing/login.html`、`landing/register.html`、`landing/systems.html`、`landing/lute-*.html`、`landing/lute-auth.*`、`landing/voc-zh_messages.json`、`landing/.portal.htpasswd`、`landing/brand-placeholder.html`。这些文件是否删除属于单独的远端静态资产清理决策，不能被 AI Video 发布默认清理。
 - apex landing sidecar 的唯一手动同步入口是 `deploy/lighthouse/sync-landing-sidecars.sh`。该脚本默认 `DRY_RUN=1`，只同步 `index.html`、`login.html`、`register.html`、`systems.html`、`lute-auth.css`、`lute-auth.js`，不使用 `--delete`，不调用 `deploy.sh`，不重启容器，不触发生成接口。
 - 该检查只读取本地脚本和配置，不触发生成接口、不访问生产、不消耗 poyo.ai tokens。
@@ -44,7 +44,7 @@ source: human+ai
 1. 新增本地产物目录时，先更新 `deploy/lighthouse/rsync-excludes.txt`。
 2. 同步更新 `configs/lighthouse-rsync-artifact-exclude-contract.yaml` 和测试里的分类清单。
 3. 手工部署前先执行 `DRY_RUN=1 SSH_KEY=/path/to/ai_video.pem deploy/lighthouse/build-and-deploy.sh`。
-4. dry-run 输出如出现 `.env.prod`、证书、`ai_video.pem`、`.next`、`web/playwright-report`、`tmp/screenshots`、`output`、`output_uploaded`、`backups`、`.codegraph`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`、`drafts`、`archive`、`ref`、`landing/login.html` 等路径，先修 exclude，不允许继续部署。
+4. dry-run 输出如出现 `.env.prod`、证书、`ai_video.pem`、`.next`、`web/playwright-report`、`tmp/screenshots`、`output`、`output_uploaded`、`backups`、`.codegraph`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`、`deploy/lighthouse/*.candidate`、`drafts`、`archive`、`ref`、`landing/login.html` 等路径，先修 exclude，不允许继续部署。
 5. 如需同步 apex landing sidecar，不要取消默认发布排除项；改用：
 
 ```bash

@@ -1,7 +1,7 @@
 version: 1
 owner: deploy
 status: stable
-updated: "2026-07-09"
+updated: "2026-07-10"
 
 entrypoints:
   exclude_file: deploy/lighthouse/rsync-excludes.txt
@@ -75,6 +75,7 @@ exclude_categories:
     - deploy/lighthouse/auth_gate.conf
     - deploy/lighthouse/momcozy-platform.conf
     - deploy/lighthouse/*.conf.*backup*
+    - deploy/lighthouse/*.candidate
 
 rules:
   shared_exclude_file_required: true

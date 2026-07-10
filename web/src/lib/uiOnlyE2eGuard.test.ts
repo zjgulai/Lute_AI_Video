@@ -19,7 +19,9 @@ describe("UI-only Playwright guardrails", () => {
 
     expect(packageJson.scripts?.["e2e:ui"]).toBe("playwright test --config=playwright.ui.config.ts");
     expect(uiConfig).toContain('testDir: "./e2e/ui-only"');
-    expect(uiConfig).toContain('baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000"');
+    expect(uiConfig).toContain("const localBaseUrl = `http://127.0.0.1:${playwrightPort}`");
+    expect(uiConfig).toContain("baseURL: process.env.PLAYWRIGHT_BASE_URL || localBaseUrl");
+    expect(uiConfig).toContain("url: localBaseUrl");
     expect(uiConfig).not.toContain("PLAYWRIGHT_PROD_URL");
     expect(uiConfig).not.toContain("PLAYWRIGHT_API_KEY");
   });
