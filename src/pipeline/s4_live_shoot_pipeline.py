@@ -164,6 +164,15 @@ class S4LiveShootPipeline:
             return []
         return [u for u in urls if isinstance(u, str) and u]
 
+    @staticmethod
+    def _footage_reference_label(footage_asset: dict[str, Any]) -> str:
+        """Return a stable prompt reference for an uploaded footage asset."""
+        for key in ("filename", "path", "url", "file_url", "asset_id"):
+            raw_value = footage_asset.get(key)
+            if raw_value:
+                return str(raw_value).replace("'", "\\'")[:300]
+        return "footage"
+
     async def run_step(self, step_name: str, state: dict[str, Any]) -> Any:
         """Execute a single pipeline step given the current state dict.
 
@@ -558,7 +567,7 @@ class S4LiveShootPipeline:
                 footage_ref = ""
                 if footage_assets:
                     fa = footage_assets[min(i, len(footage_assets) - 1)]
-                    footage_ref = f"@material '{fa.get('filename', 'footage')}'"
+                    footage_ref = f"@material '{self._footage_reference_label(fa)}'"
                 script_segs.append({
                     "type": s.get("segment_type", "body"),
                     "description": f"{footage_ref} {desc}" if footage_ref else desc,

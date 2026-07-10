@@ -5,7 +5,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import GatePanel from "@/components/GatePanel";
 import { apiFetch } from "@/components/api";
 
-function getGateSequence(
+export function getGateSequence(
   scene: "s1" | "s2" | "s3" | "s4" | "s5",
   t: (key: string, fallback?: string) => string,
 ) {
@@ -58,7 +58,8 @@ export default function GateDirectAccess({ scene, label, gateNumber }: Props) {
       <div className="apple-card p-8 max-w-2xl mx-auto mt-12 text-center">
         <p className="text-lg font-semibold mb-2">{t("gate.invalidNumber", "Invalid gate number")}</p>
         <p className="text-sm text-[var(--color-text-tertiary)]">
-          {t("gate.invalidNumberHint", "Gate must be 1, 2, 3, or 4")} ({gateNumber})
+          {t("gate.invalidNumberHintForScenario", "This scenario supports gates 1 through {max}")
+            .replace("{max}", String(sequence.length))} ({gateNumber})
         </p>
       </div>
     );

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Spinner, Warning, X, ArrowRight } from "@phosphor-icons/react";
+import { ArrowRight, Bell, CheckCircle, Spinner, Warning, X } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { usePipelineStore } from "@/stores/usePipelineStore";
 import { useAppStore } from "@/stores/useAppStore";
@@ -99,12 +99,21 @@ export default function PipelineStatusBar() {
   const [snapshot, setSnapshot] = useState<StatusSnapshot | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [hidden, setHidden] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("unsupported");
   const completionNotifiedRef = useRef(false);
   const pausedNotifiedRef = useRef(false);
   const failureCountRef = useRef(0);
 
   const isDismissed = activePipeline ? dismissedLabels.includes(activePipeline.label) : false;
   const shouldShow = !!activePipeline && !hidden && !isDismissed;
+
+  useEffect(() => {
+    const permission = typeof window !== "undefined" && "Notification" in window
+      ? Notification.permission
+      : "unsupported";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNotificationPermission(permission);
+  }, [activePipeline]);
 
   useEffect(() => {
     if (!activePipeline) {
@@ -192,14 +201,6 @@ export default function PipelineStatusBar() {
     };
   }, [activePipeline, showToast, t]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (!activePipeline) return;
-    if (Notification.permission === "default") {
-      Notification.requestPermission().catch(() => {});
-    }
-  }, [activePipeline]);
-
   if (!shouldShow || !activePipeline) return null;
 
   const status = snapshot?.status ?? "running";
@@ -260,6 +261,22 @@ export default function PipelineStatusBar() {
     }
   };
 
+  const handleEnableNotifications = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") {
+        showToast(t("pipeline.notificationsEnabled"), "success");
+      } else if (permission === "denied") {
+        showToast(t("pipeline.notificationsDenied"), "info");
+      }
+    } catch {
+      setNotificationPermission("unsupported");
+      showToast(t("pipeline.notificationsUnavailable"), "error");
+    }
+  };
+
   return (
     <div
       data-pipeline-status-bar
@@ -310,6 +327,17 @@ export default function PipelineStatusBar() {
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {notificationPermission === "default" && (
+            <button
+              type="button"
+              onClick={handleEnableNotifications}
+              aria-label={t("pipeline.enableNotifications")}
+              title={t("pipeline.enableNotifications")}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] hover:text-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.10)] transition-colors cursor-pointer"
+            >
+              <Bell size={15} weight="bold" />
+            </button>
+          )}
           <button
             type="button"
             onClick={handleViewDetails}
