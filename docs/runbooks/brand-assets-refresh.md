@@ -80,12 +80,15 @@ PRODUCT_URLS = [
 ### 场景 A: 备份还在
 ```bash
 ssh -i ai_video.pem ubuntu@101.34.52.232 "
-  LATEST=\$(ls -t /opt/ai-video-backups/ | head -1)
-  sudo docker cp /opt/ai-video-backups/\$LATEST/output/brand_assets ai_video_backend:/app/output/
+  LATEST=\$(sudo find /opt/ai-video-backups -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??????' -print | sort | tail -1)
+  test -n \"\$LATEST\"
+  sudo grep -Fx 'project: ai-video' \"\$LATEST/manifest.txt\"
+  sudo grep -Fx 'status: complete' \"\$LATEST/manifest.txt\"
+  sudo docker cp \"\$LATEST/output/brand_assets\" ai_video_backend:/app/output/
 "
 ```
 
-每日 03:00 cron 备份已包含 brand_assets/，保留 7 天。
+每日 03:00 cron 备份包含 `brand_assets/`，默认保留 15 天。只有 manifest 标记为 `status: complete` 的时间戳目录可用于恢复。
 
 ### 场景 B: 备份也丢，从头重建
 ```bash
