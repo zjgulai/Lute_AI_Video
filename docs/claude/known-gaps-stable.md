@@ -17,7 +17,7 @@ source: human+ai
 
 当前证据上限为 `L3-production-read-only`：本地渲染镜像构建和健康检查通过；生产 12 个页面为 200，`/api/health` 显示 PostgreSQL、Remotion、ffmpeg、Chromium、yt-dlp、Whisper、CLIP 健康，四个容器运行且 restart=0，nginx 配置检查通过，本轮只读窗口内 5xx、生成 submit、provider submit、publish、delivery acceptance 均为 0。production unchanged，`provider_call=false`，`no publish/delivery`。
 
-合并前仍需完成最终全量门禁、PR CI 和 merge 后 `main == origin/main` 核验。合并后仍属于独立 L4 事项的只有：正式 Lighthouse 部署、真实 Human Review/Gate/provider 运行、基于真实 active post 的 metrics pull、TikTok/Shopify publish、外部 webhook send、HU-03 人工品牌脚本评审与 delivery acceptance；这些不从本轮 dry-run/只读证据外推。
+本变更由 PR `#67` 承载；首轮 Python 3.11/3.12、Ruff、frontend quality、Docker build、docs links、UI-only visual checks 已全绿，最终 merge 状态以 GitHub 为准。PR 成功合并并核验 `main == origin/main` 后，不再保留本地 P1/P2 工程缺口。仍属于独立 L4 事项的只有：正式 Lighthouse 部署、真实 Human Review/Gate/provider 运行、基于真实 active post 的 metrics pull、TikTok/Shopify publish、外部 webhook send、HU-03 人工品牌脚本评审与 delivery acceptance；这些不从本轮 dry-run/只读证据外推。
 
 最近一次盘点：**2026-06-26** — Video 2.0 已完成 production no-provider deployment baseline，并完成后续 Lighthouse all-products 部署保护修复同步。生产部署/版本同步基线来自 PR `#55` merge commit `bad53cdd07ab80f580bceed06e3ee1d9fa7471a9`；随后 `ae094f45d9ea720d15194a4336a4a7ca86347186`（`deploy: protect remote-only Lighthouse sidecars`）已从本地部署源推送到 `origin/main`，用于保护 `rsync --delete` 不删除远端生产侧 sidecar、认证文件、备份目录、上传产物或私钥类文件。`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9` 上 `CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success；`ae094f45d9ea720d15194a4336a4a7ca86347186` 推送后 `CI` 与 `Deploy to GitHub Pages` 均为 success。
 

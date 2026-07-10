@@ -3,7 +3,7 @@ title: P1/P2 Integrated Closeout Implementation Plan
 doc_type: workflow
 module: project
 topic: p1-p2-integrated-closeout
-status: draft
+status: stable
 created: 2026-07-10
 updated: 2026-07-10
 owner: self

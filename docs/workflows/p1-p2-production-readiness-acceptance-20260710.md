@@ -3,7 +3,7 @@ title: P1/P2 Production Readiness Acceptance 2026-07-10
 doc_type: workflow
 module: project
 topic: p1-p2-production-readiness
-status: draft
+status: stable
 created: 2026-07-10
 updated: 2026-07-10
 owner: self
@@ -20,7 +20,7 @@ This record does not authorize or claim provider generation, publish, delivery a
 
 ## Current Verdict
 
-`ready_for_pr`: the local implementation, deploy dry-run, and production read-only gates pass. The branch is not yet declared deployable until final full gates, GitHub checks, and merge verification complete.
+`deploy_ready_after_merge`: implementation, final local gates, deploy dry-run, production read-only checks, and the initial PR #67 check suite pass. The only remaining repository-state gate is merging the current green PR head and verifying synchronized `main`.
 
 Maximum current evidence is `L3-production-read-only`. Production is unchanged, `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false`.
 
@@ -73,7 +73,8 @@ Current gate state:
 - [x] Lighthouse `DRY_RUN=1` completed with `RUN_TOKEN_SMOKE=0` and `REBUILD_RENDERING=1`. The first preview exposed three remote `*.candidate` deletions; the exclude contract was fixed and the second preview contained zero deletion entries.
 - [x] Production read-only checks passed: 12 routes returned `200`; `/api/health` reported PostgreSQL and media/rendering dependencies healthy; backend/frontend/rendering/nginx were running with restart count `0`; `nginx -t` passed; the observation window had zero 5xx, generation submit, provider submit, publish, or delivery-acceptance events.
 - [x] Final full local gates were rerun after document and deploy-guard edits; `git diff --check` and the changed-file secret scan also passed.
-- [ ] GitHub checks are green and the merge result is verified.
+- [x] PR #67 initial head checks passed: Python 3.11, Python 3.12, Ruff, frontend quality, Docker build, docs links, and UI-only visual regression.
+- [ ] The current PR head must remain green at merge time; merge and `main == origin/main` verification are recorded in GitHub and the execution closeout rather than back-written into this pre-deploy artifact.
 
 ## Production Deployment Plan
 
