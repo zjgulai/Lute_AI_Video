@@ -11,13 +11,23 @@ source: human+ai
 
 # 已知缺口与待办清单
 
+## 2026-07-10 备份与密钥部署门禁
+
+P1/P2 工程分支已合并后，进一步的生产只读运维审计发现两个会阻止正式部署的事实：root cron 直接执行 `/opt/ai-video/scripts/backup_production.sh`，但部署后的文件模式为 `0644`，`/var/log/hermes-backup.log` 持续记录 `Permission denied`；同时，两份 tracked Markdown 曾包含同一个疑似生产 tenant key，最早可追溯到 commit `9a4e004e346afa492e0de859a144970760f42a5c`。本轮没有使用该值访问生产，也不能确认其当前是否有效，因此按 compromised 处理。
+
+本地修复由 `codex/backup-cron-deploy-readiness-20260710` 承载：备份改为 15 天默认保留、`flock` 互斥、`.partial` 原子发布、数据库单个 `repeatable read` 事务、数据库统计/行数/size/checksum 与媒体逐文件 checksum 校验、成功后才清理带 AI Video complete manifest 的旧目录；新增 root-owned 运行时 cron 安装器并强制 `/bin/bash` 调用；恢复脚本补齐 UUID/时间戳类型转换、未知表/列拒绝和全表事务恢复；fresh PostgreSQL init 已镜像 12 个备份表；Admin tenant key 创建补齐默认/显式过期时间，详情接口兼容 label/description schema、无时区数据库写入和 revoked 状态优先级；活动文档已脱敏，新增 tracked Markdown tenant-key 回归守卫。数据库与在线媒体快照仍不是同一事务点。
+
+本地证据：focused gate `29 passed`；最终 `make ci` 为 `2065 passed, 10 skipped, 12 deselected`；前端为 `60` files / `256` tests，并通过 ESLint、TypeScript 和 Next production build；一次 disposable PostgreSQL 16 检查创建 `12/12` 备份表，并完成 6 行 UUID/TIMESTAMP/TIMESTAMPTZ/JSONB/INET/FK dump -> truncate -> restore。以上仍是本地证据，不代表生产 cron、生产备份或生产恢复已执行。
+
+当前部署判定为 `blocked_by_backup_and_secret_rotation`。仍需独立 L4 执行并留证：合并本修复、最小同步四个备份/恢复脚本、轮换/revoke 疑似 tenant key、安装并核验唯一 cron、在低写入窗口创建首个 `status: complete` 的数据库/媒体备份、通过完整性校验和隔离恢复演练，然后才能重新进行 Lighthouse dry-run 与正式部署。production unchanged，`provider_call=false`，`no publish/delivery`。
+
 ## 2026-07-10 P1/P2 生产就绪收口
 
-当前分支 `codex/p1-p2-production-readiness-20260710` 已完成剩余本地可关闭项：S3/S4/S5 Gate 映射回归、S4 上传素材引用保真、GatePanel/DistributionView/InsightReport 英文覆盖、HU-02 通知权限用户手势、quality-score keyframe pilot 文档同步，以及 rendering 锁文件与 `npm ci --omit=dev` 生产镜像契约。Lighthouse 首轮 dry-run 发现远端 `*.candidate` 配置会被 `rsync --delete` 清理，现已将其加入 remote-only sidecar 排除 SSOT；第二轮 dry-run 删除项为 0。
+分支 `codex/p1-p2-production-readiness-20260710` 已完成剩余本地可关闭项并通过 PR #67 合并：S3/S4/S5 Gate 映射回归、S4 上传素材引用保真、GatePanel/DistributionView/InsightReport 英文覆盖、HU-02 通知权限用户手势、quality-score keyframe pilot 文档同步，以及 rendering 锁文件与 `npm ci --omit=dev` 生产镜像契约。Lighthouse 首轮 dry-run 发现远端 `*.candidate` 配置会被 `rsync --delete` 清理，现已将其加入 remote-only sidecar 排除 SSOT；第二轮 dry-run 删除项为 0。
 
 当前证据上限为 `L3-production-read-only`：本地渲染镜像构建和健康检查通过；生产 12 个页面为 200，`/api/health` 显示 PostgreSQL、Remotion、ffmpeg、Chromium、yt-dlp、Whisper、CLIP 健康，四个容器运行且 restart=0，nginx 配置检查通过，本轮只读窗口内 5xx、生成 submit、provider submit、publish、delivery acceptance 均为 0。production unchanged，`provider_call=false`，`no publish/delivery`。
 
-本变更由 PR `#67` 承载；首轮 Python 3.11/3.12、Ruff、frontend quality、Docker build、docs links、UI-only visual checks 已全绿，最终 merge 状态以 GitHub 为准。PR 成功合并并核验 `main == origin/main` 后，不再保留本地 P1/P2 工程缺口。仍属于独立 L4 事项的只有：正式 Lighthouse 部署、真实 Human Review/Gate/provider 运行、基于真实 active post 的 metrics pull、TikTok/Shopify publish、外部 webhook send、HU-03 人工品牌脚本评审与 delivery acceptance；这些不从本轮 dry-run/只读证据外推。
+PR `#67` 已全绿并合并为 `5985c5cd1eee8ccd4f1dd53790c6d8112563cd3b`，随后已核验 `main == origin/main`。P1/P2 本地工程缺口已关闭，但上面的备份与密钥门禁使正式 Lighthouse 部署继续 blocked。真实 Human Review/Gate/provider 运行、基于真实 active post 的 metrics pull、TikTok/Shopify publish、外部 webhook send、HU-03 人工品牌脚本评审与 delivery acceptance 仍是独立 L4 事项，不能从 dry-run/只读证据外推。
 
 最近一次盘点：**2026-06-26** — Video 2.0 已完成 production no-provider deployment baseline，并完成后续 Lighthouse all-products 部署保护修复同步。生产部署/版本同步基线来自 PR `#55` merge commit `bad53cdd07ab80f580bceed06e3ee1d9fa7471a9`；随后 `ae094f45d9ea720d15194a4336a4a7ca86347186`（`deploy: protect remote-only Lighthouse sidecars`）已从本地部署源推送到 `origin/main`，用于保护 `rsync --delete` 不删除远端生产侧 sidecar、认证文件、备份目录、上传产物或私钥类文件。`bad53cdd07ab80f580bceed06e3ee1d9fa7471a9` 上 `CI`、`e2e-ui`、`Deploy to GitHub Pages`、`e2e-prod` 均为 success；`ae094f45d9ea720d15194a4336a4a7ca86347186` 推送后 `CI` 与 `Deploy to GitHub Pages` 均为 success。
 

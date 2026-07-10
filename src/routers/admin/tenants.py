@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,6 +15,31 @@ from src.routers.admin.common import _validate_tenant_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["admin"])
+DEFAULT_API_KEY_TTL_DAYS = 90
+
+
+def _as_utc_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _parse_api_key_expiry(raw_value: Any) -> datetime:
+    now = datetime.now(UTC)
+    if raw_value in (None, ""):
+        return now + timedelta(days=DEFAULT_API_KEY_TTL_DAYS)
+    if not isinstance(raw_value, str):
+        raise HTTPException(status_code=422, detail="expires_at must be an ISO datetime")
+
+    try:
+        parsed = datetime.fromisoformat(raw_value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="expires_at must be an ISO datetime")
+
+    expires_at = _as_utc_datetime(parsed)
+    if expires_at <= now:
+        raise HTTPException(status_code=422, detail="expires_at must be in the future")
+    return expires_at
 
 
 @router.post("/api/admin/tenants")
@@ -203,7 +228,7 @@ async def get_tenant(
             # API keys
             key_rows = await conn.fetch(
                 """
-                SELECT id, key_hash, label, created_at, expires_at,
+                SELECT id, key_hash, description, created_at, expires_at,
                        revoked_at, last_used_at
                 FROM api_keys
                 WHERE tenant_id = $1
@@ -216,16 +241,23 @@ async def get_tenant(
             for k in key_rows:
                 key_id = str(k["id"])
                 key_hash = k["key_hash"]
-                status = "revoked" if k["revoked_at"] else "active"
-                if k["expires_at"] and k["expires_at"] < datetime.now(UTC):
+                expires_at = (
+                    _as_utc_datetime(k["expires_at"])
+                    if k["expires_at"]
+                    else None
+                )
+                status = "active"
+                if k["revoked_at"]:
+                    status = "revoked"
+                elif expires_at and expires_at < datetime.now(UTC):
                     status = "expired"
                 keys.append({
                     "id": key_id,
                     "key_preview": key_hash[:12] + "..." if key_hash else "unknown",
-                    "label": k["label"] or "",
+                    "label": k["description"] or "",
                     "status": status,
                     "created_at": k["created_at"].isoformat() if k["created_at"] else None,
-                    "expires_at": k["expires_at"].isoformat() if k["expires_at"] else None,
+                    "expires_at": expires_at.isoformat() if expires_at else None,
                     "revoked_at": k["revoked_at"].isoformat() if k["revoked_at"] else None,
                     "last_used_at": k["last_used_at"].isoformat() if k["last_used_at"] else None,
                 })
@@ -380,7 +412,16 @@ async def create_api_key(
 ) -> dict[str, Any]:
     """Create a new API key for a tenant. Returns the plaintext key EXACTLY ONCE."""
     body = await request.json()
-    label = (body.get("label") or "").strip()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="request body must be an object")
+    raw_label = body.get("label") or body.get("description") or ""
+    if not isinstance(raw_label, str):
+        raise HTTPException(status_code=422, detail="label must be a string")
+    label = raw_label.strip()
+    if len(label) > 200:
+        raise HTTPException(status_code=422, detail="label must be at most 200 characters")
+    expires_at = _parse_api_key_expiry(body.get("expires_at"))
+    database_expires_at = expires_at.replace(tzinfo=None)
 
     # Verify tenant exists and is active
     try:
@@ -406,14 +447,17 @@ async def create_api_key(
 
             row = await conn.fetchrow(
                 """
-                INSERT INTO api_keys (tenant_id, key_hash, description, permissions)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id, created_at
+                INSERT INTO api_keys (
+                    tenant_id, key_hash, description, permissions, expires_at
+                )
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, created_at, expires_at
                 """,
                 tenant_id,
                 key_hash,
                 label,
                 '["all"]',
+                database_expires_at,
             )
 
             logger.info(
@@ -423,12 +467,20 @@ async def create_api_key(
                 admin_id,
             )
 
+            stored_expires_at = (
+                _as_utc_datetime(row["expires_at"])
+                if row["expires_at"]
+                else None
+            )
             return {
                 "id": str(row["id"]),
                 "tenant_id": tenant_id,
                 "api_key": raw_key,  # PLAINTEXT — only returned once
                 "label": label,
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "expires_at": (
+                    stored_expires_at.isoformat() if stored_expires_at else None
+                ),
             }
 
     except HTTPException:
