@@ -20,7 +20,7 @@ This record does not authorize or claim provider generation, publish, delivery a
 
 ## Current Verdict
 
-`deployment_blocked_by_backup_and_secret_rotation`: PR #67 merged successfully as `5985c5cd1eee8ccd4f1dd53790c6d8112563cd3b`, and synchronized `main` passed the previously recorded local, dry-run, and read-only gates. A deeper post-merge operations audit then found two independent L4 blockers: the production backup cron cannot execute its `0644` script, and a production-looking tenant key existed in tracked documentation and Git history.
+`deployment_blocked_by_backup_and_secret_rotation`: PR #67 merged successfully as `5985c5cd1eee8ccd4f1dd53790c6d8112563cd3b`, after which a deeper operations audit found two independent L4 blockers: the production backup cron could not execute its `0644` script, and a production-looking tenant key existed in tracked documentation and Git history. The repository remediation then passed all 7 PR #68 checks and merged as `c05ac4ecb41034bc9d2b45cdfb974a9cb3a243e8`; this closes the code/documentation gap but does not perform the production operations below.
 
 Maximum current evidence remains `L3-production-read-only`. Production is unchanged, `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false`. The earlier code-deploy readiness verdict must not be used as authorization until the backup and key-rotation gates below pass.
 
@@ -79,7 +79,7 @@ Current gate state:
 - [x] Backup/security remediation local gates passed: focused `29/29`; Ruff plus full backend `2065 passed, 10 skipped, 12 deselected`; frontend `60` files / `256` tests, ESLint, TypeScript, and Next production build.
 - [x] Disposable PostgreSQL 16 created all `12/12` logical-backup tables and completed a six-row dump -> truncate -> restore round-trip for UUID, TIMESTAMP, TIMESTAMPTZ, JSONB, INET, and Admin FK data.
 - [x] Independent security and critic audits were cross-checked; the accepted fresh-schema, restore, cron, retention, Admin expiry, and DR ordering findings were fixed and locally reverified.
-- [ ] The backup/security remediation PR passes GitHub checks, merges, and leaves synchronized clean `main`.
+- [x] PR #68 passed Python 3.11/3.12, Ruff, frontend quality, Docker build, docs links, and UI-only visual regression; it merged as `c05ac4ecb41034bc9d2b45cdfb974a9cb3a243e8`, and synchronized clean `main` was verified.
 - [ ] The suspected tenant key is replaced and revoked with sanitized evidence; no historical plaintext is used for verification.
 - [ ] The root cron invokes the backup script through `/bin/bash`, with exactly one AI Video backup entry and unrelated cron jobs preserved.
 - [ ] A fresh completed database/media backup passes stats, row-count, checksum, per-file media manifest, and no-partial validation in a low-write window; the same backup completes an isolated restore drill.
@@ -88,9 +88,9 @@ Current gate state:
 
 The first production deployment after the new blockers close must use the canonical Lighthouse lane:
 
-1. Merge the backup/security remediation and record the resulting `origin/main` SHA.
+1. Completed: PR #68 merged the backup/security remediation as `c05ac4ecb41034bc9d2b45cdfb974a9cb3a243e8`.
 2. Under exact L4 authorization, minimally sync `backup_production.sh`, `install_backup_cron.sh`, `pg_dump_logical.py`, and `pg_restore_logical.py` without restarting application containers; retain the remote pre-change script copies.
-3. Rotate/revoke the suspected tenant key through the Admin lifecycle and record only masked identifiers and status.
+3. Rotate/revoke the suspected tenant key through the Admin lifecycle and record only tenant, key id, description, status, and time.
 4. Install the root cron with `/bin/bash`, run one manual backup, and retain the completed backup directory after all integrity checks pass.
 5. From a clean synchronized `main`, rerun `DRY_RUN=1 RUN_TOKEN_SMOKE=0 REBUILD_BACKEND=0 REBUILD_RENDERING=1 deploy/lighthouse/build-and-deploy.sh` and reject any unexpected delete entry.
 6. Run the same wrapper with `DRY_RUN=0`; keep `RUN_TOKEN_SMOKE=0` and `REBUILD_RENDERING=1`.
