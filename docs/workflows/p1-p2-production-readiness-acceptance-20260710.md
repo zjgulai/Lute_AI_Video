@@ -16,19 +16,22 @@ source: human+ai
 
 Determine whether the current P1/P2 branch is safe to merge and deploy to the canonical Tencent Lighthouse target with token smoke disabled.
 
-This record does not authorize or claim provider generation, publish, delivery acceptance, approved brand-token writes, or a real production deploy.
+This record covers the authorized no-token Lighthouse deployment completed on 2026-07-10. It does not authorize or claim provider generation, publish, delivery acceptance, approved brand-token writes, or a full business-path smoke.
 
 ## Current Verdict
 
-`deployment_pending_plugin_hub_exclude_merge`: PR #70 merged the schema-archive remediation as part of current `main` (`5bf22c4` behind merge `8447fec`). Authorized production operations then produced backup `2026-07-10_112359` with PostgreSQL 18 schema artifacts, 12 logical tables / 185 rows, 1617 media files, no partial directory, and `restore_verified=passed`. Sanitized tenant metadata also showed the incident replacement key active and the affected legacy key revoked. The current local Lighthouse rsync guard adds `deploy/lighthouse/plugin-hub.htpasswd` to the shared exclude boundary; it is tested and dry-run verified but remains uncommitted, so a clean-main dry-run must be rerun after that change is merged before any real deploy.
+`production_no_token_deploy_accepted_with_transport-closeout-gap`: PR #70 merged the schema-archive remediation as part of current `main` (`5bf22c4` behind merge `8447fec`). Authorized production operations then produced backup `2026-07-10_112359` with PostgreSQL 18 schema artifacts, 12 logical tables / 185 rows, 1617 media files, no partial directory, and `restore_verified=passed`. Sanitized tenant metadata also showed the incident replacement key active and the affected legacy key revoked. PR #71 merged the `plugin-hub.htpasswd` rsync exclusion and PR #72 merged the rendering Alpine-mirror build contract as `5b4c7dc3a76c91a24623c4e4ceef74f507c8f8c4`.
 
-Maximum current evidence is mixed: repository work and the rsync preview remain `L2-fixture-or-dry-run`, read-only inspection is `L3-production-read-only`, and the cron migration, complete backup creation, schema probe, key rotation, and isolated restore are `L4-authorized-live` operations. Production application containers were not deployed or restarted; `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false`. The schema-backed restore and key-rotation blockers are closed; the remaining gate is merge plus clean-main dry-run of the rsync sidecar exclusion change.
+The clean-main Lighthouse dry-run with `RUN_TOKEN_SMOKE=0`, `REBUILD_BACKEND=0`, and `REBUILD_RENDERING=1` listed only the five expected tracked files and contained no deletion entry. The formal deploy rebuilt rendering image `sha256:0d9e71325f04ca4aa79ba3f05101c8f25c444aca907b7a4e54e0ecfed9edf885`, then recreated backend, frontend, rendering, and nginx. Independent acceptance verified public `/` and `/health` as `200`, PostgreSQL persistence healthy, Nginx syntax valid, rendering Remotion `4.0.451` with Chromium and ffmpeg available, matching local/remote `rendering/Dockerfile` hashes, and restart count `0` for all four application containers. Since the recreated backend start time, sanitized log counts were `0` for provider-host events, generation/publish POST events, and 5xx events.
+
+The deploy wrapper did not yield a clean terminal exit: local stale SSH clients remained after the remote deployment processes had ended, and closing those local clients produced exit `255`. No remote service process, Docker daemon, container, volume, or image was terminated. Therefore application deployment is accepted at `L4-authorized-live` with independent `L3-production-read-only` acceptance, while a successful end-to-end wrapper exit and the API-key-reading `smoke.sh` are explicitly unverified. `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false` apply to the post-deploy backend log window only.
 
 ## Evidence Boundary
 
 - Local unit/integration/UI/build and deployment dry-run: `L2-fixture-or-dry-run`.
 - Production health/route/container/log inspection: `L3-production-read-only`.
-- Provider generation, publish, delivery acceptance, and production mutation: `L4-authorized-live` only, outside this deploy-readiness decision.
+- The no-token container deployment: `L4-authorized-live`.
+- Provider generation, publish, delivery acceptance, and approved brand-token writes: `L4-authorized-live` only, outside this deployment decision.
 
 ## Reconciled P1/P2 Inventory
 
@@ -87,8 +90,13 @@ Current gate state:
 - [x] The suspected tenant key is replaced and revoked with sanitized evidence; no historical plaintext is used for verification.
 - [x] The schema-archive remediation passes review/CI, merges, is minimally synced, and produces a new backup containing digest-pinned `pg_schema.dump`, `pg_schema.list`, matching before/after column signatures, and manifest checksums.
 - [x] The new schema-backed backup completes an isolated restore drill with exact row-count parity for all 12 tables.
+- [x] PR #71 and PR #72 passed Python 3.11/3.12, Ruff, frontend quality, Docker build, and docs-link checks before merging to `main` as `5b4c7dc3a76c91a24623c4e4ceef74f507c8f8c4`.
+- [x] A Lighthouse target-host preflight built the new rendering image in an isolated tag, then ran an isolated `--network none` container whose health reported Remotion `4.0.451`, `ffmpeg=true`, and `chromium=true`.
+- [x] The clean-main dry-run contained only the expected five files and no deletion entry; the subsequent no-token deploy switched rendering to image `sha256:0d9e71325f04ca4aa79ba3f05101c8f25c444aca907b7a4e54e0ecfed9edf885`.
+- [x] Independent post-deploy acceptance passed public `/` and `/health`, local `/api/health`, Nginx syntax, rendering health, matching Dockerfile hashes, restart-count checks, and the sanitized provider/generation/publish/5xx log gate.
+- [ ] The deploy wrapper's terminal success and `smoke.sh` are not accepted evidence: the wrapper SSH transport was stale after remote work ended, and `smoke.sh` reads `.env.prod` plus issues an authentication-rejection POST. Do not infer a complete smoke pass.
 
-## Production Deployment Plan
+## Production Deployment Outcome
 
 The first production deployment after the new blockers close must use the canonical Lighthouse lane:
 
@@ -96,8 +104,9 @@ The first production deployment after the new blockers close must use the canoni
 2. Completed for the PR #68 version: backup tools were minimally synced, the root cron was migrated, and the pre-change files/crontab were retained without application restart.
 3. Completed: PR #70 merged the backup tools; backup `2026-07-10_112359` contains the PostgreSQL 18 schema/data artifacts, media checksums, and a passed isolated restore marker.
 4. Completed: sanitized production metadata confirmed the incident replacement key active and the affected legacy key revoked.
-5. Pending after the rsync guard change merges: from a clean synchronized `main`, rerun `DRY_RUN=1 RUN_TOKEN_SMOKE=0 REBUILD_BACKEND=0 REBUILD_RENDERING=1 deploy/lighthouse/build-and-deploy.sh` and reject any unexpected delete entry.
-6. Run the same wrapper with `DRY_RUN=0`; keep `RUN_TOKEN_SMOKE=0` and `REBUILD_RENDERING=1`.
-7. Require deploy health checks, no-token smoke, the post-deploy read-only checklist, stable restart counts, and a clean provider/publish log gate before declaring deployment complete.
+5. Completed: from clean `main`, `DRY_RUN=1 RUN_TOKEN_SMOKE=0 REBUILD_BACKEND=0 REBUILD_RENDERING=1 deploy/lighthouse/build-and-deploy.sh` showed no deletion entry.
+6. Completed: the same wrapper was started with `DRY_RUN=0`, `RUN_TOKEN_SMOKE=0`, `REBUILD_BACKEND=0`, and `REBUILD_RENDERING=1`; rendering rebuilt from the validated Alpine mirror and all application containers recreated healthy.
+7. Completed at independent acceptance level: public/read-only health, rendering health, restart counts, Dockerfile hash parity, and the sanitized provider/generation/publish/5xx log gate passed.
+8. Remaining operational follow-up: bound or decouple `deploy.sh` Phase 4 Docker prune from the deployment control path, then prove a clean wrapper terminal exit. Keep any API-key-reading `smoke.sh` separate from secret-free acceptance and explicitly authorize it before execution.
 
 Rollback trigger: any failed image build, unhealthy container, failed nginx validation, persistent 5xx, or unexpected provider/publish activity. Stop token/provider work, restore the pre-deploy source SHA through the same dry-run-first sync lane, rebuild rendering, and use the recorded database/media backup only if state restoration is actually required.
