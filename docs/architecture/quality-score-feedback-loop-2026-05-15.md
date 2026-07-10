@@ -1,12 +1,12 @@
 ---
 name: quality-score-feedback-loop-2026-05-15
-description: 设计文档 — pipeline 上游 quality_score 驱动的下游自动 regenerate 机制。当评估视频质量自动闭环、设计 retry/skip 决策点、加 quality_score consumer 时使用。当前状态：上游已 emit，下游未消费。本文档定义 read-then-act 契约 + 阈值矩阵 + 1 个 keyframe pilot 实现路径。
+description: 设计与实现记录 — pipeline 上游 quality_score 驱动下游自动 regenerate。keyframe pilot 已实现；Seedance 与 Remotion consumer 仍在 pilot 范围外。
 doc_type: design
 module: ai-video
 topic: quality-feedback-loop
-status: proposed
+status: stable
 created: 2026-05-15
-updated: 2026-05-15
+updated: 2026-07-10
 owner: Sisyphus
 source: ai
 related:
@@ -14,9 +14,9 @@ related:
     relation: implements-todo-23
 ---
 
-# Quality Score Feedback Loop — 设计文档
+# Quality Score Feedback Loop — 设计与实现记录
 
-> **状态**: Proposed (P2-9 backlog, NEXT-STEPS-2026-05-11). 本文档不直接实现自动 regenerate，仅设计契约 + 阈值矩阵 + 1 个 pilot 路径，待用户对阈值 / cost 折衷拍板后开发。
+> **当前状态（2026-07-10）**：keyframe pilot 已实现并由 `tests/test_feedback_gate.py`、`tests/test_quality_score_feedback.py` 覆盖。`seedance_video_generate` 与 `remotion_assemble` consumer 仍在 pilot 范围外；扩展会改变 provider 消耗和重生成语义，需另行产品决策。
 
 ## 一、当前现状
 
@@ -29,11 +29,11 @@ related:
 | [`character_identity.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/character_identity.py) | `attributes.face_quality_score` | 0.0-1.0 |
 | [`candidate_scorer.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/pipeline/candidate_scorer.py) | `score.overall` + `breakdown` | 0.0-1.0 |
 
-### Consumers — 没有消费上游 quality_score
+### Consumers — keyframe pilot 已接入
 
 | Downstream skill | 当前 retry 逻辑 | 缺失 |
 |---|---|---|
-| [`keyframe_images.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/keyframe_images.py) | 仅 API failure 重试 | 不读 storyboard 的 `quality_score` |
+| [`keyframe_images.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/keyframe_images.py) | API failure + feedback gate | 已读取 storyboard `quality_score`；支持 proceed / warn / regenerate / attempts exhausted |
 | [`seedance_video_generate.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/seedance_video_generate.py) | API failure + duration verification 重试 | 不读 prompt 的 `quality_score` |
 | [`remotion_assemble.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/remotion_assemble.py) | 仅 ffmpeg 失败重试 | 不读 clip 的 `quality_score` |
 
@@ -153,21 +153,21 @@ if result.regenerate_upstream:
 
 需要 `state.regenerate_chain` 新字段做 audit trail（哪些步骤被自动触发重生成）。
 
-## 三、Pilot 范围（推荐第一步落地）
+## 三、Pilot 范围（已落地）
 
-只做 **`keyframe_images` consumer**：
+已完成 **`keyframe_images` consumer**：
 
-1. 新建 `src/pipeline/quality_gate.py` (~100 lines, 含 unit tests in tests/test_quality_gate.py)
-2. 改 `src/skills/keyframe_images.py` 入口加 `evaluate_upstream_quality` 调用
-3. 改 `src/pipeline/step_runner.py` 加 `regenerate_upstream` 信号处理
-4. `pipeline_states` 加 `regenerate_chain` JSONB 列（alembic migration）
-5. 加 `tests/test_quality_score_feedback.py` 集成测试 3 case：
+1. `src/pipeline/feedback_gate.py` 提供集中阈值与决策函数。
+2. `src/skills/keyframe_images.py` 在 provider-backed keyframe 生成前调用 feedback gate。
+3. `src/pipeline/step_runner.py` 处理 `regenerate_upstream` 信号并记录 `regenerate_chain`。
+4. `pipeline_states` 持久化 `regenerate_chain`。
+5. `tests/test_quality_score_feedback.py` 覆盖：
    - 上游 score 0.85 → consumer proceed normal
    - 上游 score 0.65 → consumer proceed with warn flag
    - 上游 score 0.40 → consumer regenerate, attempt 1
    - 上游 score 0.40, attempt=2 → force proceed with warn (max attempts)
 
-工时：6-8h（含 alembic migration + e2e 验证）。
+当前实现边界保持 keyframe-only，不从 helper 中已定义的 Seedance/Remotion 阈值外推为对应 consumer 已接入。
 
 ## 四、未在 pilot 范围
 
@@ -195,8 +195,8 @@ pilot 上线 7 天后：
 
 ## 七、决策入口
 
-下次会话直接说：
-- **"做 quality_gate pilot"** → 从 `src/pipeline/quality_gate.py` + tests/test_quality_gate.py 开始（已有同名文件做 candidate scoring 阈值，不冲突，但要 rename 避免歧义）
+后续决策入口：
+- **"复核 quality feedback pilot"** → 运行 `tests/test_feedback_gate.py` 与 `tests/test_quality_score_feedback.py`
 - **"调阈值"** → 改 `_CONSUMER_THRESHOLDS` dict 的数字
 - **"扩展到 seedance"** → pilot 稳定后追加 seedance_video_generate consumer
 

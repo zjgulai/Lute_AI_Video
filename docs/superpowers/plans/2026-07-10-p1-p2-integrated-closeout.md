@@ -293,17 +293,20 @@ Boundary: production unchanged, provider_call=false, scenario_submit=false, fast
 
 These items stay open after this local branch-governance closeout because they require product, budget, production, or external-credential decisions:
 
-- [ ] Decide whether to install `yt-dlp + openai-whisper` in `Dockerfile.backend` despite image-size growth.
-- [ ] Authorize scoped Human Review production branch coverage smoke.
-- [ ] Authorize S3/S4/S5 Gate real-key E2E.
+- [x] Reconcile media dependencies: `yt-dlp` and faster-whisper are present in the backend dependency/image contract and exposed by `/api/health`; CPU-only ML constraints remain the accepted image-budget decision.
+- [x] Close Human Review approve/reject/changes-requested branches with hermetic integration coverage. A production branch smoke remains optional L4 evidence, not a code gap.
+- [x] Close S3/S4/S5 Gate frontend/backend identifier parity with pure sequence tests and Chromium direct-route checks. Real candidate generation/approval remains L4-only.
 - [ ] Seed or identify an active post before metrics live pull.
-- [ ] Define uploaded-asset-to-final-video acceptance sample.
-- [ ] Define degradation-chain integration fixture or production-safe fault injection.
-- [ ] Authorize Distribution/Publish with TikTok/Shopify credentials.
-- [ ] Authorize webhook.site or internal receiver smoke.
-- [ ] Define multi-tenant API-key isolation pressure test inputs.
-- [ ] Schedule manual EN walkthrough for GatePanel / DistributionView / InsightReport.
-- [ ] Decide whether CloudBase/Render still matter as supported deploy targets.
-- [ ] Decide Quality ML dependency budget and image-size threshold.
-- [ ] Specify `quality_score` feedback-loop behavior before implementation.
-- [ ] Complete HU-02 desktop notification and HU-03 script quality manual review.
+- [x] Preserve S4 uploaded asset path/url/identity into video prompt material references and document that true frame conditioning is a separate feature boundary.
+- [x] Close the degradation chain with deterministic fault-injection, telemetry, persistence, and fail-fast routing tests.
+- [x] Close Distribution/Publish code behavior with the human gate and mock connector tests. Real TikTok/Shopify publishing remains L4-only.
+- [x] Close webhook behavior with injected local receiver, timeout, and failure-isolation tests. External send remains L4-only.
+- [x] Close bounded multi-tenant API-key isolation pressure coverage locally.
+- [x] Close automated EN coverage for GatePanel, DistributionView, and InsightReport. A production manual walkthrough is optional L3 UX evidence.
+- [x] Retain CloudBase/Render as non-canonical reference targets; Lighthouse remains the release target.
+- [x] Record the CPU-only Quality ML image-budget decision and health fallback contract.
+- [x] Reconcile `quality_score`: the keyframe feedback pilot is implemented and covered; Seedance/Remotion consumers remain outside the pilot.
+- [x] Close HU-02 by requiring an explicit Bell-button permission gesture and covering dispatch behavior.
+- [ ] Complete HU-03 manual brand/script-quality review before a provider-enabled delivery run.
+
+Follow-on execution evidence is recorded in `docs/workflows/p1-p2-production-readiness-acceptance-20260710.md`. Production remains unchanged; provider generation, real publish, delivery acceptance, and the actual Lighthouse deploy retain separate L4 execution records.
