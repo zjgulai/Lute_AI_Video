@@ -191,6 +191,16 @@
       "reason": "Database logical restore operation."
     },
     {
+      "path": "scripts/restore_backup_database.sh",
+      "status": "manual_deploy_only",
+      "reason": "Fail-closed schema and logical-data restore into an explicitly verified empty PostgreSQL target."
+    },
+    {
+      "path": "scripts/verify_restored_database.py",
+      "status": "manual_deploy_only",
+      "reason": "Post-restore exact table-count verifier used by the database restore wrapper."
+    },
+    {
       "path": "scripts/phase0_watchdog.sh",
       "status": "manual_deploy_only",
       "reason": "Historical phase-named deploy watchdog retained for explicit operations only."
