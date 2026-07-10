@@ -1,10 +1,15 @@
 FROM node:22-alpine
 
+# Keep the official Alpine source for ordinary local and CI builds. Lighthouse
+# deploys can override this at build time when the default CDN is unreliable.
+ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+
 # Chromium + ffmpeg + fonts for headless rendering and clip concatenation.
 # Alpine's chromium ships with required deps; ffmpeg is needed for both
 # Seedance clip concat and audio mux; ttf-* + font-noto-cjk give CJK glyph
 # coverage in burned-in subtitles.
-RUN apk add --no-cache \
+RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" /etc/apk/repositories \
+    && apk add --no-cache \
       chromium \
       ffmpeg \
       ttf-freefont \

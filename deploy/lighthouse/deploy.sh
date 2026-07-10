@@ -36,6 +36,9 @@ cd "$(dirname "$0")"
 COMPOSE="sudo docker compose -f docker-compose.prod.yml"
 REBUILD_BACKEND="${REBUILD_BACKEND:-0}"
 REBUILD_RENDERING="${REBUILD_RENDERING:-0}"
+# The renderer image needs Chromium/ffmpeg packages. This default is tested on
+# the Lighthouse host and remains build-time only; operators may override it.
+RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-https://mirrors.cloud.tencent.com/alpine}"
 REQ_SHA_PY='import hashlib, pathlib, re, sys
 lines = []
 for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
@@ -91,8 +94,8 @@ echo ""
 
 echo "[0.1/5] Rendering image rebuild check..."
 if [ "$REBUILD_RENDERING" = "1" ]; then
-  echo "  REBUILD_RENDERING=1 set; rebuilding rendering image..."
-  $COMPOSE build rendering
+  echo "  REBUILD_RENDERING=1 set; rebuilding rendering image with $RENDERING_ALPINE_MIRROR..."
+  $COMPOSE build --build-arg "ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR" rendering
   echo "  ✓ rendering image rebuilt"
 else
   echo "  ✓ rendering rebuild skipped (set REBUILD_RENDERING=1 after rendering/ changes)"

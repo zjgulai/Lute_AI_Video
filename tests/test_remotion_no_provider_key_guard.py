@@ -70,6 +70,43 @@ def _env_entries(value: Any) -> set[str]:
     raise AssertionError(f"unexpected environment shape: {type(value).__name__}")
 
 
+def _docker_runtime_env_assignments(dockerfile: str) -> set[str]:
+    """Return ENV names without treating build-only ARG values as runtime env."""
+
+    logical_lines: list[str] = []
+    pending = ""
+    for raw_line in dockerfile.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        pending = f"{pending} {line}".strip() if pending else line
+        if pending.endswith("\\"):
+            pending = pending[:-1].rstrip()
+            continue
+        logical_lines.append(pending)
+        pending = ""
+
+    assert not pending, "Dockerfile must not end with an incomplete instruction"
+    return {
+        name
+        for line in logical_lines
+        if line.startswith("ENV ")
+        for name in re.findall(r"\b([A-Z][A-Z0-9_]*)=", line)
+    }
+
+
+def test_docker_runtime_env_parser_excludes_build_args() -> None:
+    env_names = _docker_runtime_env_assignments(
+        """
+        ARG ALPINE_MIRROR=https://example.invalid/alpine
+        ENV PORT=3001 \\
+            OUTPUT_DIR=/tmp/output
+        """
+    )
+
+    assert env_names == {"PORT", "OUTPUT_DIR"}
+
+
 def test_tracked_rendering_files_do_not_reference_provider_credentials_or_apis() -> None:
     contract = _contract()
     forbidden_markers = tuple(
@@ -89,8 +126,8 @@ def test_rendering_env_reads_are_limited_to_local_runtime_controls() -> None:
     text = "\n".join(path.read_text() for path in _tracked_rendering_paths())
 
     js_env_reads = set(re.findall(r"process\.env\.([A-Z0-9_]+)", text))
-    docker_env_assignments = set(
-        re.findall(r"\b([A-Z][A-Z0-9_]+)=", (REPO_ROOT / "rendering" / "Dockerfile").read_text())
+    docker_env_assignments = _docker_runtime_env_assignments(
+        (REPO_ROOT / "rendering" / "Dockerfile").read_text()
     )
 
     assert js_env_reads <= allowed_env_names

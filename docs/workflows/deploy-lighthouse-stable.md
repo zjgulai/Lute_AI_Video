@@ -4,7 +4,7 @@ doc_type: workflow
 module: deploy
 status: stable
 created: 2026-05-08
-updated: 2026-07-09
+updated: 2026-07-10
 owner: self
 source: human+ai
 ---
@@ -63,6 +63,11 @@ The project ships three deploy targets, in priority order:
    如需同步这两个文件，必须单独 dry-run、diff 审核并确认跨项目路由影响。
    最近一次部署验证：`/` 200、`/api/health` 200、`persistence.backend=postgresql`、
    `POST /api/pipeline/start` 无 key 返回 401。
+   **2026-07-10 rendering 构建韧性**: `rendering/Dockerfile` 保留官方 Alpine 源
+   作为默认值，并接受 `ALPINE_MIRROR` build arg；Lighthouse `deploy.sh` 仅在
+   `REBUILD_RENDERING=1` 时传入 `RENDERING_ALPINE_MIRROR`（默认
+   `https://mirrors.cloud.tencent.com/alpine`）。该设置只影响构建时系统包下载，
+   不修改宿主机 Docker 配置、不读取生产 secret，也不触发 provider 调用。
 2. **Tencent CloudBase (alternative, China)** — see `deploy/tencent-cloudbase.md` and
   `deploy/CLOUDBASE_STEP_BY_STEP.md`. Container-typed cloud hosting, pay-as-you-go.
    Documented but not the live target.
