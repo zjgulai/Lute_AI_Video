@@ -84,6 +84,7 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
         "deploy/lighthouse/auth_gate.conf",
         "deploy/lighthouse/momcozy-platform.conf",
         "deploy/lighthouse/*.conf.*backup*",
+        "deploy/lighthouse/*.candidate",
     },
 }
 
@@ -155,6 +156,7 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
         "skills.conf",
         "auth_gate.conf",
         "momcozy-platform.conf",
+        "*.candidate",
         "sync-landing-sidecars.sh",
         "DRY_RUN=1",
         "DRY_RUN=0",
