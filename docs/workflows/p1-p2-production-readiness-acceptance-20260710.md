@@ -94,7 +94,9 @@ Current gate state:
 - [x] A Lighthouse target-host preflight built the new rendering image in an isolated tag, then ran an isolated `--network none` container whose health reported Remotion `4.0.451`, `ffmpeg=true`, and `chromium=true`.
 - [x] The clean-main dry-run contained only the expected five files and no deletion entry; the subsequent no-token deploy switched rendering to image `sha256:0d9e71325f04ca4aa79ba3f05101c8f25c444aca907b7a4e54e0ecfed9edf885`.
 - [x] Independent post-deploy acceptance passed public `/` and `/health`, local `/api/health`, Nginx syntax, rendering health, matching Dockerfile hashes, restart-count checks, and the sanitized provider/generation/publish/5xx log gate.
-- [ ] The deploy wrapper's terminal success and `smoke.sh` are not accepted evidence: the wrapper SSH transport was stale after remote work ended, and `smoke.sh` reads `.env.prod` plus issues an authentication-rejection POST. Do not infer a complete smoke pass.
+- [x] PR #74 merged the deploy-wrapper closeout as `e91a2d1badcb3bebb2aa99f1ffa02e8b56b0e842`: Docker cleanup is explicit, bounded, and non-interactive; API-key-reading `smoke.sh` is a separate opt-in; and rsync plus the remote command share SSH timeout/keepalive controls.
+- [x] After that merge, the clean-main wrapper completed `DRY_RUN=1` with `CLEANUP_AFTER_DEPLOY=0` and `RUN_DEPLOY_SMOKE=0`, exited before remote `deploy.sh`, and reported no remote changes. This proves the dry-run terminal path only.
+- [ ] `smoke.sh` is not accepted evidence in this record because it reads `.env.prod` and issues an authentication-rejection POST. Do not infer a complete smoke pass; run it only with separate authorization.
 
 ## Production Deployment Outcome
 
@@ -107,6 +109,7 @@ The first production deployment after the new blockers close must use the canoni
 5. Completed: from clean `main`, `DRY_RUN=1 RUN_TOKEN_SMOKE=0 REBUILD_BACKEND=0 REBUILD_RENDERING=1 deploy/lighthouse/build-and-deploy.sh` showed no deletion entry.
 6. Completed: the same wrapper was started with `DRY_RUN=0`, `RUN_TOKEN_SMOKE=0`, `REBUILD_BACKEND=0`, and `REBUILD_RENDERING=1`; rendering rebuilt from the validated Alpine mirror and all application containers recreated healthy.
 7. Completed at independent acceptance level: public/read-only health, rendering health, restart counts, Dockerfile hash parity, and the sanitized provider/generation/publish/5xx log gate passed.
-8. Remaining operational follow-up: bound or decouple `deploy.sh` Phase 4 Docker prune from the deployment control path, then prove a clean wrapper terminal exit. Keep any API-key-reading `smoke.sh` separate from secret-free acceptance and explicitly authorize it before execution.
+8. Completed in dry-run: PR #74 merged the bounded cleanup and SSH-closeout controls; the new wrapper exited cleanly without remote changes when `DRY_RUN=1`, `CLEANUP_AFTER_DEPLOY=0`, and `RUN_DEPLOY_SMOKE=0`.
+9. Remaining live evidence: the next formal deployment using the updated wrapper must independently prove a clean non-dry-run terminal exit. Keep any API-key-reading `smoke.sh` separate from secret-free acceptance and explicitly authorize it before execution.
 
 Rollback trigger: any failed image build, unhealthy container, failed nginx validation, persistent 5xx, or unexpected provider/publish activity. Stop token/provider work, restore the pre-deploy source SHA through the same dry-run-first sync lane, rebuild rendering, and use the recorded database/media backup only if state restoration is actually required.
