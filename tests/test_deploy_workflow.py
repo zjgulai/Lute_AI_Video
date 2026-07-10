@@ -330,6 +330,19 @@ class TestDeployWorkflow:
         assert "docker exec ai_video_rendering" in text
         assert "http://127.0.0.1:3001/health" in text
 
+    def test_lighthouse_cleanup_and_authenticated_smoke_are_explicit_opt_ins(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+
+        assert 'CLEANUP_AFTER_DEPLOY="${CLEANUP_AFTER_DEPLOY:-0}"' in text
+        assert 'RUN_DEPLOY_SMOKE="${RUN_DEPLOY_SMOKE:-0}"' in text
+        assert 'if [ "$CLEANUP_AFTER_DEPLOY" = "1" ]; then' in text
+        assert "sudo -n timeout --signal=TERM --kill-after=15" in text
+        assert "sudo docker system prune -f" not in text
+        assert "sudo docker builder prune -f" not in text
+        assert "Skipped (set CLEANUP_AFTER_DEPLOY=1 for bounded cleanup)" in text
+        assert 'if [ "$RUN_DEPLOY_SMOKE" = "1" ] && [ -f smoke.sh ]; then' in text
+        assert "Skipped (set RUN_DEPLOY_SMOKE=1 to allow API-key-reading smoke.sh)" in text
+
     def test_lighthouse_deploy_waits_for_nginx_before_health_checks(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
 
@@ -363,6 +376,17 @@ class TestDeployWorkflow:
         assert "REBUILD_BACKEND=${REBUILD_BACKEND:-0}" in text
         assert "REBUILD_RENDERING=${REBUILD_RENDERING:-0}" in text
         assert "RUN_TOKEN_SMOKE=${RUN_TOKEN_SMOKE:-0}" in text
+        assert "CLEANUP_AFTER_DEPLOY=$CLEANUP_AFTER_DEPLOY" in text
+        assert "CLEANUP_TIMEOUT_SECONDS=$CLEANUP_TIMEOUT_SECONDS" in text
+        assert "RUN_DEPLOY_SMOKE=$RUN_DEPLOY_SMOKE" in text
+        assert "SSH_OPTIONS=(" in text
+        assert "BatchMode=yes" in text
+        assert "ConnectTimeout=\"$SSH_CONNECT_TIMEOUT\"" in text
+        assert "ServerAliveInterval=\"$SSH_SERVER_ALIVE_INTERVAL\"" in text
+        assert "ServerAliveCountMax=\"$SSH_SERVER_ALIVE_COUNT_MAX\"" in text
+        assert "printf -v RSYNC_SSH_COMMAND" in text
+        assert '-e "$RSYNC_SSH_COMMAND"' in text
+        assert 'ssh "${SSH_OPTIONS[@]}"' in text
 
 
 class TestCIWorkflow:

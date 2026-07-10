@@ -124,3 +124,14 @@ def test_lighthouse_smoke_checks_toolbox_read_only_endpoints():
         and any(method in line for method in ("-X POST", "-X PUT", "-X PATCH", "-X DELETE"))
     ]
     assert mutating_toolbox_calls == []
+
+
+def test_lighthouse_deploy_keeps_api_key_reading_smoke_behind_its_own_opt_in():
+    text = DEPLOY_SCRIPT.read_text()
+    phase_five = text.split("# -- Phase 5: Authenticated smoke (explicit opt-in) --", 1)[1]
+
+    assert phase_five.count("bash smoke.sh") == 1
+    assert 'if [ "$RUN_DEPLOY_SMOKE" = "1" ] && [ -f smoke.sh ]; then' in phase_five
+    assert phase_five.index('if [ "$RUN_DEPLOY_SMOKE" = "1" ] && [ -f smoke.sh ]; then') < phase_five.index(
+        "bash smoke.sh"
+    )

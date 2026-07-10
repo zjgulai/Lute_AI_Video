@@ -9,6 +9,12 @@ SERVER_IP="${SERVER_IP:-101.34.52.232}"
 SSH_USER="${SSH_USER:-ubuntu}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/ai-video}"
 DRY_RUN="${DRY_RUN:-0}"
+SSH_CONNECT_TIMEOUT="${SSH_CONNECT_TIMEOUT:-15}"
+SSH_SERVER_ALIVE_INTERVAL="${SSH_SERVER_ALIVE_INTERVAL:-30}"
+SSH_SERVER_ALIVE_COUNT_MAX="${SSH_SERVER_ALIVE_COUNT_MAX:-4}"
+CLEANUP_AFTER_DEPLOY="${CLEANUP_AFTER_DEPLOY:-0}"
+CLEANUP_TIMEOUT_SECONDS="${CLEANUP_TIMEOUT_SECONDS:-180}"
+RUN_DEPLOY_SMOKE="${RUN_DEPLOY_SMOKE:-0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -37,6 +43,33 @@ if [ ! -f "$EXCLUDE_FILE" ]; then
   echo "ERROR: rsync exclude file not found: $EXCLUDE_FILE" >&2
   exit 1
 fi
+
+for setting in SSH_CONNECT_TIMEOUT SSH_SERVER_ALIVE_INTERVAL SSH_SERVER_ALIVE_COUNT_MAX CLEANUP_TIMEOUT_SECONDS; do
+  value="${!setting}"
+  if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: $setting must be a positive integer." >&2
+    exit 1
+  fi
+done
+
+for setting in CLEANUP_AFTER_DEPLOY RUN_DEPLOY_SMOKE; do
+  value="${!setting}"
+  if [ "$value" != "0" ] && [ "$value" != "1" ]; then
+    echo "ERROR: $setting must be 0 or 1." >&2
+    exit 1
+  fi
+done
+
+SSH_OPTIONS=(
+  -i "$SSH_KEY"
+  -o StrictHostKeyChecking=accept-new
+  -o BatchMode=yes
+  -o ConnectTimeout="$SSH_CONNECT_TIMEOUT"
+  -o ServerAliveInterval="$SSH_SERVER_ALIVE_INTERVAL"
+  -o ServerAliveCountMax="$SSH_SERVER_ALIVE_COUNT_MAX"
+)
+printf -v RSYNC_SSH_COMMAND '%q ' ssh "${SSH_OPTIONS[@]}"
+RSYNC_SSH_COMMAND="${RSYNC_SSH_COMMAND% }"
 
 if [ -z "${RSYNC_BIN:-}" ]; then
   for candidate in \
@@ -70,7 +103,7 @@ RSYNC_ARGS=(
   -avz
   --delete
   --chmod=F644,D755
-  -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
+  -e "$RSYNC_SSH_COMMAND"
   --exclude-from="$EXCLUDE_FILE"
 )
 
@@ -90,6 +123,8 @@ echo "dry run:    $DRY_RUN"
 echo "rebuild backend:   ${REBUILD_BACKEND:-0}"
 echo "rebuild rendering: ${REBUILD_RENDERING:-0}"
 echo "token smoke:${RUN_TOKEN_SMOKE:-0}"
+echo "cleanup after deploy: $CLEANUP_AFTER_DEPLOY"
+echo "authenticated deploy smoke: $RUN_DEPLOY_SMOKE"
 echo ""
 
 cd "$REPO_ROOT"
@@ -105,8 +140,8 @@ fi
 
 echo ""
 echo "[2/2] Running remote deploy.sh..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SERVER_IP" \
-  "cd '$REMOTE_DIR/deploy/lighthouse' && REBUILD_BACKEND=${REBUILD_BACKEND:-0} REBUILD_RENDERING=${REBUILD_RENDERING:-0} RUN_TOKEN_SMOKE=${RUN_TOKEN_SMOKE:-0} bash deploy.sh"
+ssh "${SSH_OPTIONS[@]}" "$SSH_USER@$SERVER_IP" \
+  "cd '$REMOTE_DIR/deploy/lighthouse' && REBUILD_BACKEND=${REBUILD_BACKEND:-0} REBUILD_RENDERING=${REBUILD_RENDERING:-0} RUN_TOKEN_SMOKE=${RUN_TOKEN_SMOKE:-0} CLEANUP_AFTER_DEPLOY=$CLEANUP_AFTER_DEPLOY CLEANUP_TIMEOUT_SECONDS=$CLEANUP_TIMEOUT_SECONDS RUN_DEPLOY_SMOKE=$RUN_DEPLOY_SMOKE bash deploy.sh"
 
 echo ""
 echo "Deploy complete: https://video.lute-tlz-dddd.top"
