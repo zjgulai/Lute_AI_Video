@@ -20,9 +20,9 @@ This record does not authorize or claim provider generation, publish, delivery a
 
 ## Current Verdict
 
-`deploy_ready_after_merge`: implementation, final local gates, deploy dry-run, production read-only checks, and the initial PR #67 check suite pass. The only remaining repository-state gate is merging the current green PR head and verifying synchronized `main`.
+`deployment_blocked_by_backup_and_secret_rotation`: PR #67 merged successfully as `5985c5cd1eee8ccd4f1dd53790c6d8112563cd3b`, and synchronized `main` passed the previously recorded local, dry-run, and read-only gates. A deeper post-merge operations audit then found two independent L4 blockers: the production backup cron cannot execute its `0644` script, and a production-looking tenant key existed in tracked documentation and Git history.
 
-Maximum current evidence is `L3-production-read-only`. Production is unchanged, `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false`.
+Maximum current evidence remains `L3-production-read-only`. Production is unchanged, `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false`. The earlier code-deploy readiness verdict must not be used as authorization until the backup and key-rotation gates below pass.
 
 ## Evidence Boundary
 
@@ -43,6 +43,7 @@ Maximum current evidence is `L3-production-read-only`. Production is unchanged, 
 | Distribution/Publish | Human acceptance gate and mock connector flow covered | Real TikTok/Shopify publish remains blocked |
 | Webhook | Injected receiver, timeout, and failure isolation covered | External receiver send remains blocked |
 | API-key isolation | Bounded concurrent request/tenant context tests covered | Deployed load pressure is optional operations evidence |
+| Tenant key lifecycle | Admin detail uses the current `description` schema; create requests persist explicit expiry or a 90-day default | Suspected production key rotation/revoke remains L4-only |
 | Critical-view i18n | GatePanel, DistributionView, and InsightReport English assertions covered | Production read-only walkthrough remains L3 evidence |
 | CloudBase / Render | Retained as non-canonical references | Lighthouse remains the only release target |
 | quality_score feedback | Keyframe pilot implemented and documented | Seedance/Remotion consumers remain out of pilot |
@@ -74,16 +75,25 @@ Current gate state:
 - [x] Production read-only checks passed: 12 routes returned `200`; `/api/health` reported PostgreSQL and media/rendering dependencies healthy; backend/frontend/rendering/nginx were running with restart count `0`; `nginx -t` passed; the observation window had zero 5xx, generation submit, provider submit, publish, or delivery-acceptance events.
 - [x] Final full local gates were rerun after document and deploy-guard edits; `git diff --check` and the changed-file secret scan also passed.
 - [x] PR #67 initial head checks passed: Python 3.11, Python 3.12, Ruff, frontend quality, Docker build, docs links, and UI-only visual regression.
-- [ ] The current PR head must remain green at merge time; merge and `main == origin/main` verification are recorded in GitHub and the execution closeout rather than back-written into this pre-deploy artifact.
+- [x] PR #67 remained green, merged as `5985c5cd1eee8ccd4f1dd53790c6d8112563cd3b`, and local `main == origin/main` was verified clean.
+- [x] Backup/security remediation local gates passed: focused `29/29`; Ruff plus full backend `2065 passed, 10 skipped, 12 deselected`; frontend `60` files / `256` tests, ESLint, TypeScript, and Next production build.
+- [x] Disposable PostgreSQL 16 created all `12/12` logical-backup tables and completed a six-row dump -> truncate -> restore round-trip for UUID, TIMESTAMP, TIMESTAMPTZ, JSONB, INET, and Admin FK data.
+- [x] Independent security and critic audits were cross-checked; the accepted fresh-schema, restore, cron, retention, Admin expiry, and DR ordering findings were fixed and locally reverified.
+- [ ] The backup/security remediation PR passes GitHub checks, merges, and leaves synchronized clean `main`.
+- [ ] The suspected tenant key is replaced and revoked with sanitized evidence; no historical plaintext is used for verification.
+- [ ] The root cron invokes the backup script through `/bin/bash`, with exactly one AI Video backup entry and unrelated cron jobs preserved.
+- [ ] A fresh completed database/media backup passes stats, row-count, checksum, per-file media manifest, and no-partial validation in a low-write window; the same backup completes an isolated restore drill.
 
 ## Production Deployment Plan
 
-The first production deployment after merge must use the canonical Lighthouse lane:
+The first production deployment after the new blockers close must use the canonical Lighthouse lane:
 
-1. Record the pre-deploy `origin/main` SHA and run the production backup procedure from `scripts/backup_production.sh`; retain the created backup directory.
-2. From a clean, synchronized `main`, rerun `DRY_RUN=1 RUN_TOKEN_SMOKE=0 REBUILD_BACKEND=0 REBUILD_RENDERING=1 deploy/lighthouse/build-and-deploy.sh` and reject any unexpected delete entry.
-3. Run the same wrapper with `DRY_RUN=0`; keep `RUN_TOKEN_SMOKE=0` and `REBUILD_RENDERING=1` because `rendering/Dockerfile` and its lockfile changed.
-4. Require `deploy/lighthouse/deploy.sh` health checks and `smoke.sh` to pass before declaring deployment complete.
-5. Run the production post-deploy read-only checklist and observe container restart counts and 5xx/provider-submit logs.
+1. Merge the backup/security remediation and record the resulting `origin/main` SHA.
+2. Under exact L4 authorization, minimally sync `backup_production.sh`, `install_backup_cron.sh`, `pg_dump_logical.py`, and `pg_restore_logical.py` without restarting application containers; retain the remote pre-change script copies.
+3. Rotate/revoke the suspected tenant key through the Admin lifecycle and record only masked identifiers and status.
+4. Install the root cron with `/bin/bash`, run one manual backup, and retain the completed backup directory after all integrity checks pass.
+5. From a clean synchronized `main`, rerun `DRY_RUN=1 RUN_TOKEN_SMOKE=0 REBUILD_BACKEND=0 REBUILD_RENDERING=1 deploy/lighthouse/build-and-deploy.sh` and reject any unexpected delete entry.
+6. Run the same wrapper with `DRY_RUN=0`; keep `RUN_TOKEN_SMOKE=0` and `REBUILD_RENDERING=1`.
+7. Require deploy health checks, no-token smoke, the post-deploy read-only checklist, stable restart counts, and a clean provider/publish log gate before declaring deployment complete.
 
 Rollback trigger: any failed image build, unhealthy container, failed nginx validation, persistent 5xx, or unexpected provider/publish activity. Stop token/provider work, restore the pre-deploy source SHA through the same dry-run-first sync lane, rebuild rendering, and use the recorded database/media backup only if state restoration is actually required.
