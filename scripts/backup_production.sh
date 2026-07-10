@@ -19,6 +19,7 @@ REMOTE_DUMP_SCRIPT="/tmp/pg_dump_logical_${TIMESTAMP}.py"
 REMOTE_DUMP_FILE="/tmp/pg_dump_${TIMESTAMP}.jsonl"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 FLOCK_BIN="${FLOCK_BIN:-flock}"
+PG_CLIENT_SOURCE_TAG="${PG_CLIENT_IMAGE:-}"
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S%z')" "$*"
@@ -87,7 +88,7 @@ exec 9>"$LOCK_FILE"
 mkdir "$PARTIAL_DIR"
 
 log "=== Hermes-Evo Backup Start ==="
-log "1/5 Dumping PostgreSQL through backend container"
+log "1/6 Dumping PostgreSQL data through backend container"
 "$DOCKER_BIN" cp "$DUMP_SCRIPT" "${CONTAINER_NAME}:${REMOTE_DUMP_SCRIPT}"
 "$DOCKER_BIN" exec "$CONTAINER_NAME" \
   python3 "$REMOTE_DUMP_SCRIPT" "$REMOTE_DUMP_FILE" \
@@ -96,18 +97,97 @@ log "1/5 Dumping PostgreSQL through backend container"
   "${CONTAINER_NAME}:${REMOTE_DUMP_FILE}" \
   "${PARTIAL_DIR}/pg_dump.jsonl"
 
-log "2/5 Validating PostgreSQL dump"
+read -r PG_SERVER_VERSION_NUM PG_SERVER_MAJOR < <(
+  python3 - "${PARTIAL_DIR}/pg_dump_stats.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+stats = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+version_num = stats.get("server_version_num")
+server_major = stats.get("server_major")
+if not isinstance(version_num, str) or not version_num.isdigit():
+    raise SystemExit("backup stats do not declare PostgreSQL server_version_num")
+if not isinstance(server_major, int) or server_major < 10:
+    raise SystemExit("backup stats do not declare a valid PostgreSQL server_major")
+if int(version_num) // 10000 != server_major:
+    raise SystemExit("PostgreSQL server version metadata is inconsistent")
+print(version_num, server_major)
+PY
+)
+
+if [ -z "$PG_CLIENT_SOURCE_TAG" ]; then
+  PG_CLIENT_SOURCE_TAG="postgres:${PG_SERVER_MAJOR}"
+fi
+if [ "$PG_CLIENT_SOURCE_TAG" != "postgres:${PG_SERVER_MAJOR}" ]; then
+  fail "PG_CLIENT_IMAGE must match PostgreSQL server major ${PG_SERVER_MAJOR}"
+fi
+"$DOCKER_BIN" image inspect "$PG_CLIENT_SOURCE_TAG" >/dev/null 2>&1 \
+  || fail "required PostgreSQL client image is not installed: ${PG_CLIENT_SOURCE_TAG}"
+PG_CLIENT_IMAGE=$(
+  "$DOCKER_BIN" image inspect "$PG_CLIENT_SOURCE_TAG" \
+    --format='{{index .RepoDigests 0}}'
+)
+[[ "$PG_CLIENT_IMAGE" =~ ^postgres@sha256:[0-9a-f]{64}$ ]] \
+  || fail "PostgreSQL client image does not have an official RepoDigest"
+PG_CLIENT_ACTUAL_MAJOR=$(
+  "$DOCKER_BIN" run --rm --network none "$PG_CLIENT_IMAGE" pg_dump --version \
+    | sed -nE 's/^pg_dump \(PostgreSQL\) ([0-9]+).*/\1/p'
+)
+[ "$PG_CLIENT_ACTUAL_MAJOR" = "$PG_SERVER_MAJOR" ] \
+  || fail "PostgreSQL client digest major does not match server major ${PG_SERVER_MAJOR}"
+
+log "2/6 Capturing PostgreSQL schema with ${PG_CLIENT_SOURCE_TAG} (${PG_CLIENT_IMAGE})"
+"$DOCKER_BIN" exec "$CONTAINER_NAME" python3 -c \
+  'import base64, os, sys; from urllib.parse import parse_qs, unquote, urlparse; value = os.environ.get("DATABASE_URL", ""); parsed = urlparse(value); parsed.scheme.startswith("postgres") or sys.exit("DATABASE_URL is not PostgreSQL"); host = parsed.hostname or sys.exit("DATABASE_URL host is missing"); port = parsed.port or 5432; database = unquote(parsed.path.lstrip("/")); user = unquote(parsed.username or ""); password = unquote(parsed.password or ""); sslmode = parse_qs(parsed.query).get("sslmode", ["prefer"])[0]; esc = lambda item: item.replace("\\", "\\\\").replace(":", "\\:"); pgpass = f"{esc(host)}:{port}:{esc(database)}:{esc(user)}:{esc(password)}\n"; encode = lambda item: base64.b64encode(item.encode()).decode(); print(*(encode(item) for item in (pgpass, host, str(port), database, user, sslmode)), sep="\n")' \
+  | "$DOCKER_BIN" run --rm -i \
+      --network "container:${CONTAINER_NAME}" \
+      "$PG_CLIENT_IMAGE" \
+      sh -eu -c '
+        umask 077
+        IFS= read -r pgpass_b64
+        IFS= read -r host_b64
+        IFS= read -r port_b64
+        IFS= read -r database_b64
+        IFS= read -r user_b64
+        IFS= read -r sslmode_b64
+        decode() { printf "%s" "$1" | base64 -d; }
+        printf "%s" "$pgpass_b64" | base64 -d > /tmp/pgpass
+        chmod 600 /tmp/pgpass
+        export PGPASSFILE=/tmp/pgpass
+        export PGHOST="$(decode "$host_b64")"
+        export PGPORT="$(decode "$port_b64")"
+        export PGDATABASE="$(decode "$database_b64")"
+        export PGUSER="$(decode "$user_b64")"
+        export PGSSLMODE="$(decode "$sslmode_b64")"
+        unset pgpass_b64 host_b64 port_b64 database_b64 user_b64 sslmode_b64
+        exec pg_dump --schema-only --format=custom --no-owner --no-privileges
+      ' \
+      >"${PARTIAL_DIR}/pg_schema.dump"
+"$DOCKER_BIN" run --rm -i --network none "$PG_CLIENT_IMAGE" pg_restore --list \
+  <"${PARTIAL_DIR}/pg_schema.dump" \
+  >"${PARTIAL_DIR}/pg_schema.list"
+"$DOCKER_BIN" exec "$CONTAINER_NAME" \
+  python3 "$REMOTE_DUMP_SCRIPT" --schema-signature \
+  >"${PARTIAL_DIR}/pg_schema_signature_after.json"
+
+log "3/6 Validating PostgreSQL data and schema backups"
 python3 - \
   "${PARTIAL_DIR}/pg_dump_stats.json" \
   "${PARTIAL_DIR}/pg_dump.jsonl" \
+  "${PARTIAL_DIR}/pg_schema.list" \
+  "${PARTIAL_DIR}/pg_schema_signature_after.json" \
   "$MIN_PG_ROWS" <<'PY'
 import json
+import re
 import sys
 from pathlib import Path
 
 stats_path = Path(sys.argv[1])
 dump_path = Path(sys.argv[2])
-minimum_rows = int(sys.argv[3])
+schema_list_path = Path(sys.argv[3])
+schema_signature_after_path = Path(sys.argv[4])
+minimum_rows = int(sys.argv[5])
 
 with stats_path.open(encoding="utf-8") as stream:
     stats = json.load(stream)
@@ -140,13 +220,39 @@ if actual_rows != total_rows:
 
 if stats.get("file_size") != dump_path.stat().st_size:
     raise SystemExit("logical dump size does not match pg_dump_stats.json")
+
+schema_tables = set()
+for line in schema_list_path.read_text(encoding="utf-8").splitlines():
+    parts = line.split()
+    if len(parts) >= 7 and parts[3:5] == ["TABLE", "public"]:
+        schema_tables.add(parts[5])
+missing_schema_tables = set(expected_tables) - schema_tables
+if missing_schema_tables:
+    raise SystemExit("schema archive is missing required tables")
+
+before_signature = stats.get("schema_signature")
+after_signature = json.loads(
+    schema_signature_after_path.read_text(encoding="utf-8")
+).get("schema_signature")
+if not isinstance(before_signature, str) or not re.fullmatch(
+    r"[0-9a-f]{64}", before_signature
+):
+    raise SystemExit("backup stats do not declare a valid schema signature")
+if not isinstance(after_signature, str) or not re.fullmatch(
+    r"[0-9a-f]{64}", after_signature
+):
+    raise SystemExit("post-export schema signature is invalid")
+if before_signature != after_signature:
+    raise SystemExit("schema changed during backup")
 PY
 
 PG_SIZE_BYTES=$(wc -c <"${PARTIAL_DIR}/pg_dump.jsonl" | tr -d '[:space:]')
 PG_ROW_COUNT=$(wc -l <"${PARTIAL_DIR}/pg_dump.jsonl" | tr -d '[:space:]')
+PG_SCHEMA_SIZE_BYTES=$(wc -c <"${PARTIAL_DIR}/pg_schema.dump" | tr -d '[:space:]')
 log "PostgreSQL dump: ${PG_SIZE_BYTES} bytes, ${PG_ROW_COUNT} rows"
+log "PostgreSQL schema archive: ${PG_SCHEMA_SIZE_BYTES} bytes"
 
-log "3/5 Copying media snapshot"
+log "4/6 Copying media snapshot"
 mkdir "${PARTIAL_DIR}/output"
 "$DOCKER_BIN" cp \
   "${CONTAINER_NAME}:/app/output/." \
@@ -207,9 +313,16 @@ PY
 )
 log "Media snapshot: ${MEDIA_COUNT} files, ${MEDIA_SIZE_BYTES} bytes"
 
-log "4/5 Writing manifest and publishing completed backup"
+log "5/6 Writing manifest and publishing completed backup"
 PG_SHA256=$(sha256_file "${PARTIAL_DIR}/pg_dump.jsonl")
 STATS_SHA256=$(sha256_file "${PARTIAL_DIR}/pg_dump_stats.json")
+PG_SCHEMA_SHA256=$(sha256_file "${PARTIAL_DIR}/pg_schema.dump")
+PG_SCHEMA_LIST_SHA256=$(sha256_file "${PARTIAL_DIR}/pg_schema.list")
+PG_SCHEMA_SIGNATURE_AFTER_SHA256=$(sha256_file "${PARTIAL_DIR}/pg_schema_signature_after.json")
+PG_SCHEMA_SIGNATURE=$(
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["schema_signature"])' \
+    "${PARTIAL_DIR}/pg_dump_stats.json"
+)
 MEDIA_MANIFEST_SHA256=$(sha256_file "${PARTIAL_DIR}/media_manifest.json")
 BACKEND_IMAGE=$("$DOCKER_BIN" inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
 cat >"${PARTIAL_DIR}/manifest.txt" <<EOF
@@ -223,6 +336,15 @@ pg_dump_size_bytes: ${PG_SIZE_BYTES}
 pg_dump_rows: ${PG_ROW_COUNT}
 pg_dump_sha256: ${PG_SHA256}
 pg_dump_stats_sha256: ${STATS_SHA256}
+pg_server_version_num: ${PG_SERVER_VERSION_NUM}
+pg_server_major: ${PG_SERVER_MAJOR}
+pg_client_source_tag: ${PG_CLIENT_SOURCE_TAG}
+pg_client_image: ${PG_CLIENT_IMAGE}
+pg_schema_size_bytes: ${PG_SCHEMA_SIZE_BYTES}
+pg_schema_sha256: ${PG_SCHEMA_SHA256}
+pg_schema_list_sha256: ${PG_SCHEMA_LIST_SHA256}
+pg_schema_signature: ${PG_SCHEMA_SIGNATURE}
+pg_schema_signature_after_sha256: ${PG_SCHEMA_SIGNATURE_AFTER_SHA256}
 media_count: ${MEDIA_COUNT}
 media_size_bytes: ${MEDIA_SIZE_BYTES}
 media_manifest_sha256: ${MEDIA_MANIFEST_SHA256}
@@ -233,10 +355,46 @@ EOF
 mv "$PARTIAL_DIR" "$BACKUP_DIR"
 log "Published completed backup: ${BACKUP_DIR}"
 
-log "5/5 Removing completed AI Video backups older than ${RETENTION_DAYS} days"
+log "6/6 Removing completed AI Video backups older than ${RETENTION_DAYS} days"
+LATEST_VERIFIED_BACKUP=$(
+  python3 - "$BACKUP_ROOT" <<'PY'
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+pattern = re.compile(r"^20\d{2}-\d{2}-\d{2}_\d{6}$")
+verified = []
+for backup_dir in sorted(root.iterdir()):
+    if not backup_dir.is_dir() or not pattern.fullmatch(backup_dir.name):
+        continue
+    manifest_path = backup_dir / "manifest.txt"
+    marker_path = backup_dir / "restore_verified.json"
+    if not manifest_path.is_file() or not marker_path.is_file():
+        continue
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        continue
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    if marker.get("status") == "passed" and marker.get("manifest_sha256") == digest:
+        verified.append(backup_dir)
+if verified:
+    print(verified[-1])
+PY
+)
+if [ -z "$LATEST_VERIFIED_BACKUP" ]; then
+  log "Skipping retention cleanup: no restore-verified recovery point exists"
+fi
 while IFS= read -r -d '' expired_dir; do
   manifest="${expired_dir}/manifest.txt"
-  if [ -f "$manifest" ] \
+  if [ -z "$LATEST_VERIFIED_BACKUP" ]; then
+    log "Preserving expired backup until a restore-verified point exists: ${expired_dir}"
+  elif [ "$expired_dir" = "$LATEST_VERIFIED_BACKUP" ]; then
+    log "Preserving latest restore-verified backup: ${expired_dir}"
+  elif [ -f "$manifest" ] \
     && grep -Fxq 'project: ai-video' "$manifest" \
     && grep -Fxq 'status: complete' "$manifest"; then
     log "Removing expired backup: ${expired_dir}"

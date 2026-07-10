@@ -527,7 +527,10 @@ not used by any code path.
 
 ## Database
 
-**Production:** PostgreSQL 16 via asyncpg connection pool (min 1, max 10 connections).
+**Production:** Tencent RDS PostgreSQL 18.4 (read-only verified 2026-07-10) via asyncpg
+connection pool (min 1, max 10 connections). Backup schema capture must use the matching
+official `postgres:18` client image; `pg_dump` rejects a PostgreSQL 16 client against this
+server. Local Docker Compose may still use PostgreSQL 16 for development fixtures.
 
 **Development fallback:** SQLite at `output/ai_video.db`.
 
@@ -554,6 +557,8 @@ exercised in tests.
 Admin Panel tables added via Alembic migration `2d6b8e9c0f1a` (2026-05-07).
 
 **Migrations:** Alembic in `migrations/`. Docker Compose auto-loads SQL from `src/storage/migrations/`.
+For disaster recovery, use the backup's `pg_schema.dump`; the live database contains
+historical column types that are not reproduced exactly by the current fresh-init SQL.
 
 **Health check:** `check_pg_health()` verifies connection + required tables exist. `is_pg_available()` used throughout app to skip PG calls when unhealthy.
 

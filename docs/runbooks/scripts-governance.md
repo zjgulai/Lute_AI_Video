@@ -74,6 +74,8 @@ source: human+ai
 | `scripts/install_backup_cron.sh` | manual_deploy_only |
 | `scripts/pg_dump_logical.py` | manual_deploy_only |
 | `scripts/pg_restore_logical.py` | manual_deploy_only |
+| `scripts/restore_backup_database.sh` | manual_deploy_only |
+| `scripts/verify_restored_database.py` | manual_deploy_only |
 | `scripts/phase0_watchdog.sh` | manual_deploy_only |
 | `scripts/release_finalize_v0.4.0.sh` | manual_deploy_only |
 | `scripts/release_smoke_v0.4.0.sh` | manual_deploy_only |

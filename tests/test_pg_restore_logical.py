@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RESTORE_SCRIPT = REPO_ROOT / "scripts" / "pg_restore_logical.py"
 DUMP_SCRIPT = REPO_ROOT / "scripts" / "pg_dump_logical.py"
 INIT_SQL = REPO_ROOT / "src" / "storage" / "migrations" / "001_init.sql"
+VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify_restored_database.py"
 
 
 def _load_script_module(name: str, path: Path) -> ModuleType:
@@ -77,6 +78,65 @@ def test_fresh_postgres_init_covers_logical_backup_table_set() -> None:
     assert "idx_audit_actor" in init_sql
     assert "idx_audit_action" in init_sql
     assert "idx_audit_resource" in init_sql
+
+
+@pytest.mark.asyncio
+async def test_logical_dump_reports_postgres_server_major(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dump = _load_script_module("pg_dump_logical_server_version", DUMP_SCRIPT)
+
+    class FakeTransaction:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class FakeConnection:
+        def transaction(self, **_kwargs: object) -> FakeTransaction:
+            return FakeTransaction()
+
+        async def fetchval(self, query: str, *_args: object) -> object:
+            if "server_version_num" in query:
+                return "180004"
+            return True
+
+        async def fetch(self, query: str, *_args: object) -> list[dict[str, object]]:
+            if "information_schema.columns" in query:
+                return [
+                    {
+                        "table_name": "threads",
+                        "column_name": "id",
+                        "ordinal_position": 1,
+                        "data_type": "text",
+                        "udt_name": "text",
+                        "is_nullable": "NO",
+                    }
+                ]
+            return []
+
+    class AcquireContext:
+        async def __aenter__(self) -> FakeConnection:
+            return FakeConnection()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class FakePool:
+        def acquire(self) -> AcquireContext:
+            return AcquireContext()
+
+    async def fake_get_pool() -> FakePool:
+        return FakePool()
+
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    stats = await dump.dump_to_jsonl(tmp_path / "dump.jsonl")
+
+    assert stats["server_version_num"] == "180004"
+    assert stats["server_major"] == 18
+    assert re.fullmatch(r"[0-9a-f]{64}", stats["schema_signature"])
 
 
 @pytest.mark.asyncio
@@ -165,3 +225,46 @@ async def test_restore_uses_one_transaction_and_coerces_insert_values(
     assert insert_args == (UUID(identifier), datetime(2026, 7, 10, 3, 4, 5))
     assert stats["tables"]["threads"] == {"available": 1, "inserted": 1}
     assert stats["tables"]["audit_logs"] == {"available": 0, "inserted": 0}
+
+
+@pytest.mark.asyncio
+async def test_verify_restored_database_requires_exact_table_count_parity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = _load_script_module("verify_restored_database", VERIFY_SCRIPT)
+    expected = {
+        table: {"rows": 1 if table == "tenants" else 0}
+        for table in verifier.TABLES_TO_VERIFY
+    }
+    stats_path = tmp_path / "pg_dump_stats.json"
+    stats_path.write_text(json.dumps({"tables": expected, "total_rows": 1}) + "\n")
+
+    class FakeConnection:
+        async def fetchval(self, query: str) -> int:
+            return 1 if '"tenants"' in query else 0
+
+    class AcquireContext:
+        async def __aenter__(self) -> FakeConnection:
+            return FakeConnection()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class FakePool:
+        def acquire(self) -> AcquireContext:
+            return AcquireContext()
+
+    async def fake_get_pool() -> FakePool:
+        return FakePool()
+
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    result = await verifier.verify_restored_database(stats_path)
+
+    assert result["status"] == "passed"
+    assert result["table_count"] == len(verifier.TABLES_TO_VERIFY)
+    assert result["total_rows"] == 1
+    assert result["actual_counts"] == {
+        table: 1 if table == "tenants" else 0
+        for table in verifier.TABLES_TO_VERIFY
+    }

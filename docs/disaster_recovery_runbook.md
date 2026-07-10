@@ -23,22 +23,27 @@ source: human+ai
 1. 新备份脚本已通过最小范围同步到生产。
 2. root cron 已通过 `/bin/bash` 调用并核验唯一性。
 3. 已手动生成一个 `status: complete` 的数据库与媒体全量备份。
-4. `pg_dump_stats.json`、JSONL 行数、checksum、manifest 和无 `.partial` 残留检查通过。
+4. `pg_dump_stats.json`、schema archive、JSONL 行数、checksum、manifest 和无 `.partial` 残留检查通过。
+5. 同一备份已在隔离 PostgreSQL 中先恢复 schema、再恢复数据，并逐表核对行数。
 
 ## 一、备份策略
 
 ### 自动备份
 
 - **频率**：每天 03:00（UTC+8）。
-- **保留**：默认 15 天；可用 `RETENTION_DAYS` 调整，只清理名称匹配 `YYYY-MM-DD_HHMMSS` 的已完成目录。
+- **保留**：默认 15 天；可用 `RETENTION_DAYS` 调整。没有与 manifest hash 绑定的 `restore_verified.json` 时不执行删除；存在验证点后只清理其他过期 complete 目录，并始终保留最新的 restore-verified 恢复点。
 - **位置**：`/opt/ai-video-backups/{YYYY-MM-DD_HHMMSS}/`。
 - **原子性**：先写 `.{timestamp}.partial`，数据库与媒体校验通过后再原子重命名；失败会删除 partial，不会执行 retention cleanup。
 - **互斥**：使用 `flock`，并发备份会 fail closed。
 - **数据库一致性**：所有表在同一个 PostgreSQL `repeatable read`、只读事务中导出，避免跨表读取漂移。
+- **schema 一致性边界**：`pg_schema.dump` 在数据事务完成后立即生成，但不能与 JSONL 数据共享同一事务。备份窗口内必须禁止 Alembic、DDL 和 schema deployment；违反该条件的备份不得作为恢复点。
 - **媒体一致性边界**：`output/` 是在线文件快照，不与数据库共享事务。逐文件 SHA-256 能发现复制后损坏，但不能证明高写入期间数据库记录与媒体文件处于同一业务时点。首次基线备份、恢复点备份和恢复演练应在低写入窗口执行；需要严格 RPO 时先进入维护窗口并停止写流量。
 - **内容**：
   - `pg_dump.jsonl`：PostgreSQL 逻辑备份。
   - `pg_dump_stats.json`：可机器解析的表级行数与文件大小统计。
+  - `pg_schema.dump`：由与生产数据库同主版本的官方 PostgreSQL 客户端生成的 custom schema archive。
+  - `pg_schema.list`：`pg_restore --list` 输出，用于校验 archive 可解析且包含全部必需表。
+  - `pg_schema_signature_after.json`：schema archive 导出后的列签名；必须与数据事务内的签名一致。
   - `output/`：媒体文件目录快照。
   - `media_manifest.json`：媒体文件逐文件大小与 SHA-256。
   - `manifest.txt`：镜像、行数、文件数、SHA-256 与完成状态。
@@ -77,6 +82,9 @@ LATEST=$(sudo find /opt/ai-video-backups \
 sudo test -n "$LATEST"
 sudo test -s "$LATEST/pg_dump.jsonl"
 sudo test -s "$LATEST/pg_dump_stats.json"
+sudo test -s "$LATEST/pg_schema.dump"
+sudo test -s "$LATEST/pg_schema.list"
+sudo test -s "$LATEST/pg_schema_signature_after.json"
 sudo test -s "$LATEST/media_manifest.json"
 sudo test -s "$LATEST/manifest.txt"
 sudo python3 -m json.tool "$LATEST/pg_dump_stats.json" >/dev/null
@@ -87,11 +95,64 @@ EXPECTED_PG_SHA=$(sudo awk -F': ' '$1 == "pg_dump_sha256" {print $2}' "$LATEST/m
 ACTUAL_PG_SHA=$(sudo sha256sum "$LATEST/pg_dump.jsonl" | awk '{print $1}')
 EXPECTED_STATS_SHA=$(sudo awk -F': ' '$1 == "pg_dump_stats_sha256" {print $2}' "$LATEST/manifest.txt")
 ACTUAL_STATS_SHA=$(sudo sha256sum "$LATEST/pg_dump_stats.json" | awk '{print $1}')
+EXPECTED_SCHEMA_SHA=$(sudo awk -F': ' '$1 == "pg_schema_sha256" {print $2}' "$LATEST/manifest.txt")
+ACTUAL_SCHEMA_SHA=$(sudo sha256sum "$LATEST/pg_schema.dump" | awk '{print $1}')
+EXPECTED_SCHEMA_LIST_SHA=$(sudo awk -F': ' '$1 == "pg_schema_list_sha256" {print $2}' "$LATEST/manifest.txt")
+ACTUAL_SCHEMA_LIST_SHA=$(sudo sha256sum "$LATEST/pg_schema.list" | awk '{print $1}')
+EXPECTED_SCHEMA_SIGNATURE_AFTER_SHA=$(sudo awk -F': ' '$1 == "pg_schema_signature_after_sha256" {print $2}' "$LATEST/manifest.txt")
+ACTUAL_SCHEMA_SIGNATURE_AFTER_SHA=$(sudo sha256sum "$LATEST/pg_schema_signature_after.json" | awk '{print $1}')
 EXPECTED_MEDIA_SHA=$(sudo awk -F': ' '$1 == "media_manifest_sha256" {print $2}' "$LATEST/manifest.txt")
 ACTUAL_MEDIA_SHA=$(sudo sha256sum "$LATEST/media_manifest.json" | awk '{print $1}')
 test "$EXPECTED_PG_SHA" = "$ACTUAL_PG_SHA"
 test "$EXPECTED_STATS_SHA" = "$ACTUAL_STATS_SHA"
+test "$EXPECTED_SCHEMA_SHA" = "$ACTUAL_SCHEMA_SHA"
+test "$EXPECTED_SCHEMA_LIST_SHA" = "$ACTUAL_SCHEMA_LIST_SHA"
+test "$EXPECTED_SCHEMA_SIGNATURE_AFTER_SHA" = "$ACTUAL_SCHEMA_SIGNATURE_AFTER_SHA"
 test "$EXPECTED_MEDIA_SHA" = "$ACTUAL_MEDIA_SHA"
+PG_CLIENT_IMAGE=$(sudo awk -F': ' '$1 == "pg_client_image" {print $2}' "$LATEST/manifest.txt")
+PG_CLIENT_SOURCE_TAG=$(sudo awk -F': ' '$1 == "pg_client_source_tag" {print $2}' "$LATEST/manifest.txt")
+PG_SERVER_MAJOR=$(sudo awk -F': ' '$1 == "pg_server_major" {print $2}' "$LATEST/manifest.txt")
+[[ "$PG_SERVER_MAJOR" =~ ^[0-9]+$ ]]
+[[ "$PG_CLIENT_SOURCE_TAG" == "postgres:${PG_SERVER_MAJOR}" ]]
+[[ "$PG_CLIENT_IMAGE" =~ ^postgres@sha256:[0-9a-f]{64}$ ]]
+sudo docker image inspect "$PG_CLIENT_IMAGE" >/dev/null
+[[ "$(sudo docker image inspect "$PG_CLIENT_SOURCE_TAG" --format='{{index .RepoDigests 0}}')" == "$PG_CLIENT_IMAGE" ]]
+sudo cat "$LATEST/pg_schema.dump" \
+  | sudo docker run --rm -i --network none "$PG_CLIENT_IMAGE" pg_restore --list \
+  | sudo cmp - "$LATEST/pg_schema.list"
+sudo python3 - "$LATEST/pg_schema.list" <<'PY'
+import sys
+from pathlib import Path
+
+expected = {
+    "tenants", "admin_accounts", "api_keys", "admin_sessions", "threads",
+    "pipeline_states", "brand_packages", "influencers", "video_metrics",
+    "publish_logs", "error_logs", "audit_logs",
+}
+actual = set()
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    parts = line.split()
+    if len(parts) >= 7 and parts[3:5] == ["TABLE", "public"]:
+        actual.add(parts[5])
+if expected - actual:
+    raise SystemExit("schema archive is missing required tables")
+PY
+if sudo test -f "$LATEST/restore_verified.json"; then
+  sudo python3 - "$LATEST" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+backup_dir = Path(sys.argv[1])
+marker = json.loads((backup_dir / "restore_verified.json").read_text(encoding="utf-8"))
+manifest_sha = hashlib.sha256((backup_dir / "manifest.txt").read_bytes()).hexdigest()
+if marker.get("status") != "passed" or marker.get("manifest_sha256") != manifest_sha:
+    raise SystemExit("restore verification marker is invalid")
+PY
+else
+  echo "backup integrity passed, but no restore-verified marker exists"
+fi
 sudo python3 - "$LATEST" <<'PY'
 import hashlib
 import json
@@ -152,7 +213,9 @@ test -z "$(sudo find /opt/ai-video-backups -maxdepth 1 -type d -name '.*.partial
 ### 前置条件
 
 - 新主机已部署 backend、frontend、nginx 与 rendering 容器。
-- PostgreSQL 表结构已初始化。
+- 目标 PostgreSQL 数据库存在、为空，且没有应用连接；不得把 schema archive 直接覆盖到非空生产库。
+- `deploy/lighthouse/.env.prod` 已通过受控 secret 流程更新为目标数据库 DSN，但不得打印或 diff 其内容；backend 要在恢复完成后 force-recreate 才能加载新值。
+- 已按 manifest 的 `pg_client_image` 准备同主版本官方 PostgreSQL 客户端镜像。
 - 目标目录通过上面的完整性核验。
 - 已确认恢复点、RPO 影响和业务负责人 sign-off。
 
@@ -163,31 +226,49 @@ cd /opt/ai-video/deploy/lighthouse
 sudo docker compose -f docker-compose.prod.yml stop nginx backend
 ```
 
-### 步骤 2：恢复 PostgreSQL
+### 步骤 2：通过 fail-closed wrapper 恢复 PostgreSQL
 
 ```bash
+set -Eeuo pipefail
 BACKUP_DIR="/opt/ai-video-backups/<YYYY-MM-DD_HHMMSS>"
+EXPECTED_RESTORE_HOST='<new-empty-rds-host>'
 
-sudo docker cp /opt/ai-video/scripts/pg_restore_logical.py ai_video_backend:/tmp/
-sudo docker cp "$BACKUP_DIR/pg_dump.jsonl" ai_video_backend:/tmp/pg_dump.jsonl
-sudo docker compose -f docker-compose.prod.yml start backend
-sleep 5
-sudo docker exec ai_video_backend \
-  python3 /tmp/pg_restore_logical.py /tmp/pg_dump.jsonl --truncate-first
+# 交互输入空目标库 DSN；不回显、不写日志，wrapper 会核对 hostname 和 public 表数为 0。
+read -rsp 'Target PostgreSQL DATABASE_URL: ' TARGET_DATABASE_URL
+echo
+printf '%s\n' "$TARGET_DATABASE_URL" \
+  | sudo env \
+      EXPECTED_RESTORE_HOST="$EXPECTED_RESTORE_HOST" \
+      RESTORE_SCOPE=production \
+      RESTORE_CONFIRMATION=RESTORE_EMPTY_DATABASE \
+      ALLOW_PRODUCTION_RESTORE=1 \
+      PRODUCTION_RESTORE_CONFIRMATION=I_ACKNOWLEDGE_PRODUCTION_DATABASE_RESTORE \
+      /bin/bash /opt/ai-video/scripts/restore_backup_database.sh "$BACKUP_DIR"
+unset TARGET_DATABASE_URL
 ```
 
-`--truncate-first` 会清空现有表，不能用于只读演练。恢复脚本按当前 schema 的 `information_schema.columns` 将 JSONL 中的 UUID 和时间戳重新转换为 asyncpg 原生类型，并拒绝未知表或未知列。正式恢复前必须在隔离环境验证同一备份。
+wrapper 会验证备份 checksum、digest-pinned PostgreSQL 客户端、目标 hostname、空库状态和 schema list；schema 使用 `--single-transaction`，数据导入使用单独事务，随后逐表核对 12 表行数并写入与 manifest hash 绑定的 `restore_verified.json`。它不会启动 backend，也不允许 `--truncate-first`。schema archive 是恢复生产历史类型、约束、索引和 extension 的单一证据，不得用当前仓库的 `001_init.sql` 替代。
 
 ### 步骤 3：恢复媒体
 
 ```bash
-sudo docker cp "$BACKUP_DIR/output/." ai_video_backend:/app/output/
+BACKEND_IMAGE_ID=$(sudo docker inspect ai_video_backend --format='{{.Image}}')
+sudo docker run --rm \
+  --network none \
+  --read-only \
+  --tmpfs /tmp \
+  --user 0:0 \
+  --volumes-from ai_video_backend \
+  -v "$BACKUP_DIR:/backup:ro" \
+  --entrypoint sh \
+  "$BACKEND_IMAGE_ID" \
+  -eu -c 'cp -a /backup/output/. /app/output/'
 ```
 
 ### 步骤 4：保持入口关闭并执行内部验证
 
 ```bash
-sudo docker compose -f docker-compose.prod.yml restart backend
+sudo docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate backend
 sleep 15
 sudo docker exec ai_video_backend python3 -c "
 import json, urllib.request
@@ -216,7 +297,7 @@ unset RECOVERY_API_KEY
 
 1. 选择最新的 `status: complete` 备份。
 2. 校验 stats、JSONL 行数、checksum 与 media count。
-3. 在非生产数据库执行完整恢复。
+3. 在空的非生产数据库先执行 `pg_restore --schema-only`，再导入 JSONL 数据。
 4. 运行 health 与受保护只读接口检查。
 5. 将时间、备份目录、结果和问题记录到受控运维记录，不写 secret。
 

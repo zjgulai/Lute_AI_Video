@@ -20,9 +20,9 @@ This record does not authorize or claim provider generation, publish, delivery a
 
 ## Current Verdict
 
-`deployment_blocked_by_backup_and_secret_rotation`: PR #67 merged successfully as `5985c5cd1eee8ccd4f1dd53790c6d8112563cd3b`, after which a deeper operations audit found two independent L4 blockers: the production backup cron could not execute its `0644` script, and a production-looking tenant key existed in tracked documentation and Git history. The repository remediation then passed all 7 PR #68 checks and merged as `c05ac4ecb41034bc9d2b45cdfb974a9cb3a243e8`; this closes the code/documentation gap but does not perform the production operations below.
+`deployment_blocked_by_schema_restore_and_secret_rotation`: PR #67 merged successfully as `5985c5cd1eee8ccd4f1dd53790c6d8112563cd3b`, after which a deeper operations audit found two independent L4 blockers: the production backup cron could not execute its `0644` script, and a production-looking tenant key existed in tracked documentation and Git history. PR #68 merged the initial remediation as `c05ac4ecb41034bc9d2b45cdfb974a9cb3a243e8`. Authorized operations then repaired cron and produced a complete data/media backup, but the isolated restore proved that the backup lacked the actual production schema and that the remote fresh-init SQL was not schema-compatible with the live PostgreSQL 18.4 database. The current schema-archive remediation must merge, sync, create a new backup, and pass isolated restore before deployment can proceed.
 
-Maximum current evidence remains `L3-production-read-only`. Production is unchanged, `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false`. The earlier code-deploy readiness verdict must not be used as authorization until the backup and key-rotation gates below pass.
+Maximum current evidence is mixed: repository work remains `L2-fixture-or-dry-run`, read-only inspection is `L3-production-read-only`, and the cron migration, complete backup creation, schema probe, and PostgreSQL 18 client-image installation are scoped `L4-authorized-live` operations. Production application containers were not deployed or restarted; `provider_call=false`, `scenario_submit=false`, `fast_submit=false`, `publish=false`, and `delivery_acceptance=false`. The earlier code-deploy readiness verdict must not be used as authorization until the schema-backed restore and key-rotation gates below pass.
 
 ## Evidence Boundary
 
@@ -80,18 +80,22 @@ Current gate state:
 - [x] Disposable PostgreSQL 16 created all `12/12` logical-backup tables and completed a six-row dump -> truncate -> restore round-trip for UUID, TIMESTAMP, TIMESTAMPTZ, JSONB, INET, and Admin FK data.
 - [x] Independent security and critic audits were cross-checked; the accepted fresh-schema, restore, cron, retention, Admin expiry, and DR ordering findings were fixed and locally reverified.
 - [x] PR #68 passed Python 3.11/3.12, Ruff, frontend quality, Docker build, docs links, and UI-only visual regression; it merged as `c05ac4ecb41034bc9d2b45cdfb974a9cb3a243e8`, and synchronized clean `main` was verified.
+- [x] The root cron now invokes the root-owned runtime backup through `/bin/bash`, with exactly one marked AI Video entry and unrelated cron content preserved.
+- [x] Backup `2026-07-10_161607` passed 12-table/185-row data validation plus full rehash of all 1617 media files; no partial directory remained. This backup does not satisfy restore acceptance because it predates schema-archive capture.
+- [x] Restore diagnosis verified production PostgreSQL 18.4, the remote 7-table fresh-init drift, the live 12-table schema, and a secret-safe `postgres:18` custom schema archive probe containing all required tables.
+- [x] The current candidate restore wrapper completed a real PostgreSQL 18 isolated restore on the production host with exact parity for all 12 tables / 185 rows; production database writes, application restarts, and provider calls remained false. This is candidate validation, not a new complete scheduled backup recovery point.
 - [ ] The suspected tenant key is replaced and revoked with sanitized evidence; no historical plaintext is used for verification.
-- [ ] The root cron invokes the backup script through `/bin/bash`, with exactly one AI Video backup entry and unrelated cron jobs preserved.
-- [ ] A fresh completed database/media backup passes stats, row-count, checksum, per-file media manifest, and no-partial validation in a low-write window; the same backup completes an isolated restore drill.
+- [ ] The schema-archive remediation passes review/CI, merges, is minimally synced, and produces a new backup containing digest-pinned `pg_schema.dump`, `pg_schema.list`, matching before/after column signatures, and manifest checksums.
+- [ ] The new schema-backed backup completes an isolated restore drill with exact row-count parity for all 12 tables.
 
 ## Production Deployment Plan
 
 The first production deployment after the new blockers close must use the canonical Lighthouse lane:
 
 1. Completed: PR #68 merged the backup/security remediation as `c05ac4ecb41034bc9d2b45cdfb974a9cb3a243e8`.
-2. Under exact L4 authorization, minimally sync `backup_production.sh`, `install_backup_cron.sh`, `pg_dump_logical.py`, and `pg_restore_logical.py` without restarting application containers; retain the remote pre-change script copies.
-3. Rotate/revoke the suspected tenant key through the Admin lifecycle and record only tenant, key id, description, status, and time.
-4. Install the root cron with `/bin/bash`, run one manual backup, and retain the completed backup directory after all integrity checks pass.
+2. Completed for the PR #68 version: backup tools were minimally synced, the root cron was migrated, and the pre-change files/crontab were retained without application restart.
+3. Merge and minimally sync `backup_production.sh`, `pg_dump_logical.py`, `pg_restore_logical.py`, `restore_backup_database.sh`, and `verify_restored_database.py`; then create a new complete backup with PostgreSQL 18 schema/data plus media checksums and pass the fail-closed isolated restore wrapper.
+4. Rotate/revoke the suspected tenant key through the Admin lifecycle and record only tenant, key id, description, status, and time.
 5. From a clean synchronized `main`, rerun `DRY_RUN=1 RUN_TOKEN_SMOKE=0 REBUILD_BACKEND=0 REBUILD_RENDERING=1 deploy/lighthouse/build-and-deploy.sh` and reject any unexpected delete entry.
 6. Run the same wrapper with `DRY_RUN=0`; keep `RUN_TOKEN_SMOKE=0` and `REBUILD_RENDERING=1`.
 7. Require deploy health checks, no-token smoke, the post-deploy read-only checklist, stable restart counts, and a clean provider/publish log gate before declaring deployment complete.
