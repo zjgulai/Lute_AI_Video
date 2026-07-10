@@ -54,6 +54,7 @@ deploy/lighthouse/nginx.conf
 deploy/lighthouse/skills.conf
 deploy/lighthouse/auth_gate.conf
 deploy/lighthouse/momcozy-platform.conf
+deploy/lighthouse/plugin-hub.htpasswd
 deploy/lighthouse/*.conf.*backup*
 deploy/lighthouse/*.candidate
 deploy/lighthouse/landing/login.html
