@@ -298,11 +298,32 @@ class TestDeployWorkflow:
         assert "RUN npm ci --omit=dev --no-audit --no-fund" in text
         assert "npm install --omit=dev" not in text
 
+    def test_lighthouse_rendering_build_uses_an_overrideable_alpine_mirror(self):
+        dockerfile = RENDERING_DOCKERFILE.read_text()
+        deploy_script = LIGHTHOUSE_DEPLOY.read_text()
+
+        assert "ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine" in dockerfile
+        assert (
+            'sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" '
+            "/etc/apk/repositories"
+        ) in dockerfile
+        assert (
+            'RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-'
+            'https://mirrors.cloud.tencent.com/alpine}"'
+        ) in deploy_script
+        assert (
+            '$COMPOSE build --build-arg "ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR" '
+            "rendering"
+        ) in deploy_script
+
     def test_lighthouse_deploy_manages_rendering_service_explicitly(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
 
         assert "REBUILD_RENDERING" in text, "rendering rebuild must be controlled by explicit env"
-        assert "$COMPOSE build rendering" in text, "deploy.sh must support rebuilding rendering image"
+        assert (
+            '$COMPOSE build --build-arg "ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR" '
+            "rendering"
+        ) in text, "deploy.sh must support rebuilding rendering image"
         assert "$COMPOSE up -d --force-recreate rendering" in text, (
             "deploy.sh must explicitly recreate rendering instead of relying on backend depends_on"
         )
