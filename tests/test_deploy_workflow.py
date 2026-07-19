@@ -182,6 +182,32 @@ class TestDeployWorkflow:
             "requirements.txt development install path must also include pytest-timeout"
         )
 
+    def test_preflight_installs_media_tools_before_pytest(self, workflow):
+        steps = workflow["jobs"]["preflight"].get("steps") or []
+        step_names = [step.get("name") for step in steps]
+        install_step = _step_by_name(steps, "Install media test tools")
+        pytest_step = _step_by_name(steps, "Test")
+        run = install_step.get("run") or ""
+
+        assert "apt-get update" in run
+        assert "apt-get install -y --no-install-recommends ffmpeg" in run
+        assert step_names.index(install_step["name"]) < step_names.index(pytest_step["name"])
+
+    def test_preflight_installs_openapi_typegen_dependencies_before_pytest(self, workflow):
+        steps = workflow["jobs"]["preflight"].get("steps") or []
+        step_names = [step.get("name") for step in steps]
+        node_step = _step_by_name(steps, "Set up Node.js for OpenAPI type drift guard")
+        install_step = _step_by_name(steps, "Install frontend deps")
+        pytest_step = _step_by_name(steps, "Test")
+
+        assert node_step["with"]["node-version"] == "22"
+        assert node_step["with"]["cache"] == "npm"
+        assert node_step["with"]["cache-dependency-path"] == "web/package-lock.json"
+        assert install_step["working-directory"] == "web"
+        assert install_step["run"] == "npm ci"
+        assert step_names.index(node_step["name"]) < step_names.index(install_step["name"])
+        assert step_names.index(install_step["name"]) < step_names.index(pytest_step["name"])
+
     def test_preflight_frontend_matches_ci_quality_gate(self, workflow):
         preflight = workflow["jobs"]["preflight"]
         steps = preflight.get("steps") or []

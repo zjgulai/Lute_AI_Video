@@ -1137,11 +1137,11 @@ async def test_unified_background_exception_persists_terminal_failure_state(
         label = response.json()["label"]
 
         state = None
-        for _ in range(20):
-            await asyncio.sleep(0)
+        for _ in range(200):
             state = await PipelineStateManager().load(label)
             if state and state.get("pipeline_degraded"):
                 break
+            await asyncio.sleep(0.01)
 
         status_response = await client.get(
             f"/scenario/s3/status/{label}",
