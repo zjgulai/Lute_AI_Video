@@ -1,6 +1,13 @@
 ---
-name: runbook-provider-cost-ledger-per-job-budget
-description: Provider cost ledger and per-job budget recovery. Use for local validation or an explicitly authorized incident review involving DeepSeek reservation, exact usage settlement, ambiguous outcomes, accounting errors, or stale reservations.
+title: Provider Cost Ledger and Per-Job Budget Runbook
+doc_type: workflow
+module: provider-cost
+topic: provider-cost-ledger-per-job-budget
+status: stable
+created: 2026-07-15
+updated: 2026-07-20
+owner: self
+source: human+ai
 ---
 
 # Runbook — Provider Cost Ledger / Per-Job Budget

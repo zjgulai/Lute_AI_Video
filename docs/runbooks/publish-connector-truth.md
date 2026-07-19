@@ -1,9 +1,9 @@
 ---
 title: Publish Connector Truth and Fail-Closed Operations
-doc_type: runbook
+doc_type: workflow
 module: backend
 topic: publish-connector-truth
-status: superseded
+status: stable
 created: 2026-07-14
 updated: 2026-07-14
 owner: self

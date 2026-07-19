@@ -1,3 +1,15 @@
+---
+title: W1-27-W1-30 Provider Cost Ledger and Per-Job Budget Implementation Plan
+doc_type: workflow
+module: provider-cost
+topic: provider-cost-ledger-per-job-budget
+status: stable
+created: 2026-07-15
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # W1-27–W1-30 Provider 成本账本与单任务硬预算实施计划
 
 > **执行规则：** 仅在本计划再次获得用户明确批准后，按 Task 0 → Task 10 顺序在

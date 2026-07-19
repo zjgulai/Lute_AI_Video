@@ -1,3 +1,15 @@
+---
+title: W1-25 Publish Receipt and Protocol Calibration Implementation Plan
+doc_type: workflow
+module: distribution
+topic: publish-receipt-protocol-calibration
+status: stable
+created: 2026-07-14
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # W1-25 Publish Receipt and Protocol Calibration Implementation Plan
 
 > **Execution rule:** Implement this plan task-by-task in the main thread. The

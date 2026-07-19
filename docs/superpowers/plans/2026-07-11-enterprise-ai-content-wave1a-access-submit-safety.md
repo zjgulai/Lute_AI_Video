@@ -3,7 +3,7 @@ title: Enterprise AI Content Wave 1A Access and Submit Safety Implementation Pla
 doc_type: workflow
 module: project
 topic: enterprise-ai-content-wave1a-access-submit-safety
-status: active
+status: stable
 created: 2026-07-11
 updated: 2026-07-11
 owner: self

@@ -59,6 +59,11 @@
       "reason": "No-token private provider account readiness record builder."
     },
     {
+      "path": "scripts/build_w1_31_billing_approval.py",
+      "status": "active_reusable",
+      "reason": "No-provider W1-31 approval-record builder; it does not execute provider mutations."
+    },
+    {
       "path": "scripts/commercial_token_smoke_preflight.py",
       "status": "active_reusable",
       "reason": "No-token C21 authorized-live preflight report."
@@ -127,6 +132,11 @@
       "path": "scripts/prepare_demo_cache.py",
       "status": "active_reusable",
       "reason": "Demo cache preparation utility."
+    },
+    {
+      "path": "scripts/read_w1_31_billing_ledger.py",
+      "status": "active_reusable",
+      "reason": "Read-only W1-31 local billing-ledger inspector."
     },
     {
       "path": "scripts/refresh_brand_assets.sh",
@@ -221,6 +231,11 @@
       "reason": "Database migration operation."
     },
     {
+      "path": "scripts/deploy_alembic_gate.sh",
+      "status": "manual_deploy_only",
+      "reason": "Fail-closed production Alembic readiness and apply gate; manual deployment workflow only."
+    },
+    {
       "path": "scripts/sync_lighthouse_to_output.sh",
       "status": "manual_deploy_only",
       "reason": "Production artifact sync from Lighthouse to local output."
@@ -271,6 +286,11 @@
       "path": "scripts/probe_sora2pro.py",
       "status": "provider_probe",
       "reason": "Direct provider probe; may consume provider credits."
+    },
+    {
+      "path": "scripts/w1_31_provider_billing_reconciliation.py",
+      "status": "provider_probe",
+      "reason": "Retired W1-31 one-shot provider runner; remains provider-sensitive even though execute entrypoints now fail closed."
     }
   ],
   "legacy_one_off_scripts": [

@@ -3,7 +3,7 @@ title: W1-31 单样本 Provider Billing Reconciliation 设计
 doc_type: architecture
 module: backend-operations
 topic: provider-billing-reconciliation
-status: implementing
+status: stable
 created: 2026-07-18
 updated: 2026-07-18
 owner: self

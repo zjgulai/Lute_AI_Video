@@ -3,7 +3,7 @@ title: W1-24 发布连接器真实性与 fail-closed 设计
 doc_type: architecture
 module: backend
 topic: publish-connector-truth
-status: approved
+status: stable
 created: 2026-07-14
 updated: 2026-07-14
 owner: self

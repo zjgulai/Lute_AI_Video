@@ -1,3 +1,15 @@
+---
+title: Single-Use Human Acceptance Record Design
+doc_type: architecture
+module: artifact-acceptance
+topic: single-use-human-acceptance-record
+status: stable
+created: 2026-07-12
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # Single-Use Human Acceptance Record Design
 
 **Status:** Written from the user-approved Option A and final-publishable-artifact boundary on 2026-07-12; awaiting written-spec review before implementation planning.

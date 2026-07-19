@@ -1,3 +1,15 @@
+---
+title: W1-23 Publish Acceptance Consumption Implementation Plan
+doc_type: workflow
+module: distribution
+topic: publish-acceptance-consumption
+status: stable
+created: 2026-07-12
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # W1-23 Publish Acceptance Consumption Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox **- [ ]** syntax for tracking.

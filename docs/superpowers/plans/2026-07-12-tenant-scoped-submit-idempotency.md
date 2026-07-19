@@ -1,3 +1,15 @@
+---
+title: Tenant-Scoped Submit Idempotency Implementation Plan
+doc_type: workflow
+module: submission
+topic: tenant-scoped-submit-idempotency
+status: stable
+created: 2026-07-12
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # Tenant-Scoped Submit Idempotency Implementation Plan
 
 **Approved design:** `docs/superpowers/specs/2026-07-12-tenant-scoped-submit-idempotency-design.md`

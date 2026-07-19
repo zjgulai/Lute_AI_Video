@@ -1,3 +1,15 @@
+---
+title: W1-31 Single-Sample Provider Billing Reconciliation Implementation Plan
+doc_type: workflow
+module: provider-cost
+topic: w1-31-provider-billing-reconciliation
+status: stable
+created: 2026-07-18
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # W1-31 单样本 Provider Billing Reconciliation 实施计划
 
 **目标：** 在不接触生产的前提下，增加一个 exact、private、durable one-shot runner，

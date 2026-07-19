@@ -1,3 +1,15 @@
+---
+title: Publish Acceptance Consumption Design
+doc_type: architecture
+module: distribution
+topic: publish-acceptance-consumption
+status: stable
+created: 2026-07-12
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # Publish Acceptance Consumption Design
 
 **Status:** Approved on 2026-07-12; implementation and local acceptance completed on 2026-07-13 with the `completed_local` evidence ceiling.

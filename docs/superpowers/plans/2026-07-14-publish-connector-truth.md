@@ -1,3 +1,15 @@
+---
+title: W1-24 Publish Connector Truth Implementation Plan
+doc_type: workflow
+module: distribution
+topic: publish-connector-truth
+status: stable
+created: 2026-07-14
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # W1-24 Publish Connector Truth Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task in the main thread. The user explicitly prohibited subagents for this item. Steps use checkbox (`- [ ]`) syntax for tracking.

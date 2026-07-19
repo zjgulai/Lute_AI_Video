@@ -3,7 +3,7 @@ title: W1-27–W1-30 Provider 成本账本与单任务硬预算设计
 doc_type: architecture
 module: backend-storage
 topic: provider-cost-ledger-per-job-budget
-status: approved
+status: stable
 created: 2026-07-15
 updated: 2026-07-15
 owner: self

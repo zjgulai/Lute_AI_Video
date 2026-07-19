@@ -1,9 +1,9 @@
 ---
 title: Publish Receipt and Protocol Calibration
-doc_type: runbook
+doc_type: workflow
 module: backend-frontend
 topic: publish-receipt-protocol-calibration
-status: active
+status: stable
 created: 2026-07-14
 updated: 2026-07-14
 owner: self

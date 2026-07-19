@@ -1,3 +1,15 @@
+---
+title: Tenant-Scoped Submit Idempotency Design
+doc_type: architecture
+module: submission
+topic: tenant-scoped-submit-idempotency
+status: stable
+created: 2026-07-12
+updated: 2026-07-20
+owner: self
+source: human+ai
+---
+
 # Tenant-Scoped Submit Idempotency Design
 
 **Status:** Written from the user-approved Option A on 2026-07-12; awaiting written-spec review before implementation planning.

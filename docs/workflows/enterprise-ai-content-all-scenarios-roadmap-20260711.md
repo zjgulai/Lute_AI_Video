@@ -3,7 +3,7 @@ title: 企业 AI 图文视频全场景收敛路线图
 doc_type: workflow
 module: project
 topic: enterprise-ai-content-all-scenarios-closure
-status: active
+status: stable
 created: 2026-07-11
 updated: 2026-07-20
 owner: self

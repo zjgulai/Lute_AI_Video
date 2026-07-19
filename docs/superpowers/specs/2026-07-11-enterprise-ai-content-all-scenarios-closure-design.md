@@ -3,7 +3,7 @@ title: 企业 AI 图文视频全场景收敛设计
 doc_type: architecture
 module: project
 topic: enterprise-ai-content-all-scenarios-closure
-status: approved
+status: stable
 created: 2026-07-11
 updated: 2026-07-11
 owner: self
