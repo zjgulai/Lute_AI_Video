@@ -2,6 +2,7 @@
 .env
 .DS_Store
 *.pem
+*.sqlite3
 *.baiduyun.uploading.cfg
 .*.baiduyun.uploading.cfg
 *.bak*

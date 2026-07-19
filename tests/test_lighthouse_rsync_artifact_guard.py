@@ -57,6 +57,7 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
         "web/tmp/screenshots",
     },
     "local_workspace_state": {
+        "*.sqlite3",
         ".codegraph",
         ".hermes",
         "worktrees",
@@ -147,6 +148,7 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
         "web/playwright-report",
         "tmp/screenshots",
         "output_uploaded",
+        "*.sqlite3",
         "drafts",
         "ref",
         ".codegraph",

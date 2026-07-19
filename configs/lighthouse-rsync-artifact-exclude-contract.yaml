@@ -50,6 +50,7 @@ exclude_categories:
     - web/tmp
     - web/tmp/screenshots
   local_workspace_state:
+    - "*.sqlite3"
     - .codegraph
     - .hermes
     - worktrees
