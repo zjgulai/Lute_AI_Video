@@ -443,6 +443,15 @@ class TestDeployWorkflow:
             assert "ARG RELEASE_SOURCE_SHA" in text
             assert "org.opencontainers.image.revision" in text
 
+    def test_frontend_release_image_binds_its_loopback_health_probe(self):
+        runtime = (REPO_ROOT / "web/Dockerfile").read_text().split(
+            "FROM node:22-alpine AS runner",
+            1,
+        )[1]
+
+        assert "ENV HOSTNAME=0.0.0.0" in runtime
+        assert "http://127.0.0.1:3000" in runtime
+
     def test_no_inline_plaintext_secrets(self, workflow):
         text = DEPLOY_YML.read_text()
         forbidden_patterns = [
