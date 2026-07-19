@@ -25,7 +25,7 @@ source: human+ai
 - 必须排除 frontend build artifacts：`web/.next`、`web/.next.old`、`web/dist`。
 - 必须排除 report / trace artifacts：`web/playwright-report`、`web/test-results`、`web/blob-report`。
 - 必须排除 screenshots / tmp outputs：`tmp/screenshots`、`tmp/outputs`、`web/tmp`、`web/tmp/screenshots`、`output_uploaded`。
-- 必须排除 local workspace state：`.codegraph`、`.hermes`、`worktrees`、`drafts`、`archive`、`ref`。
+- 必须排除 local workspace state：`*.sqlite3`、`.codegraph`、`.hermes`、`worktrees`、`drafts`、`archive`、`ref`。本地账本或测试数据库不得进入 release sync。
 - 必须排除 production secret / cert：`*.pem`、`deploy/lighthouse/.env.prod`、`deploy/lighthouse/.portal-auth.env`、`server.crt`、`server.key`。
 - `deploy/lighthouse/plugin-hub.htpasswd` 是 remote-only production authentication sidecar，必须由共享 exclude SSOT 保护，不能被 AI Video 发布覆盖或删除。
 - 必须保护 remote-only production sidecars：`backups`、`deploy/lighthouse/backups`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`、`deploy/lighthouse/*.candidate`。这些路径可能承载跨产品入口、认证服务、候选配置或远端回滚证据，不能被 AI Video 发布默认清理或覆盖。
@@ -48,7 +48,7 @@ source: human+ai
    Wrapper 只接受 clean、与 `origin/main` 同步的 `main`；默认 dry-run。真实部署必须显式
    `DRY_RUN=0 RELEASE_SOURCE_SHA="$(git rev-parse HEAD)"`，绑定已复核 source SHA。
    - dry-run 若出现 `deploy/lighthouse/plugin-hub.htpasswd`，先修复 exclude 边界，不允许继续部署。
-4. dry-run 输出如出现 `.env.prod`、证书、`ai_video.pem`、`.next`、`web/playwright-report`、`tmp/screenshots`、`output`、`output_uploaded`、`backups`、`.codegraph`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`、`deploy/lighthouse/*.candidate`、`drafts`、`archive`、`ref`、`landing/login.html` 等路径，先修 exclude，不允许继续部署。
+4. dry-run 输出如出现 `.env.prod`、证书、`ai_video.pem`、`*.sqlite3`、`.next`、`web/playwright-report`、`tmp/screenshots`、`output`、`output_uploaded`、`backups`、`.codegraph`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`、`deploy/lighthouse/*.candidate`、`drafts`、`archive`、`ref`、`landing/login.html` 等路径，先修 exclude，不允许继续部署。
 5. 如需同步 apex landing sidecar，不要取消默认发布排除项；改用：
 
 ```bash
