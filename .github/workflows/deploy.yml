@@ -247,6 +247,8 @@ jobs:
           upload-artifact: false
 
       - name: Scan backend image
+        id: scan-backend
+        continue-on-error: true
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: lighthouse-backend:${{ github.sha }}
@@ -256,6 +258,8 @@ jobs:
           output-file: scan-backend.json
 
       - name: Scan frontend image
+        id: scan-frontend
+        continue-on-error: true
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: lighthouse-frontend:${{ github.sha }}
@@ -265,6 +269,8 @@ jobs:
           output-file: scan-frontend.json
 
       - name: Scan rendering image
+        id: scan-rendering
+        continue-on-error: true
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: lighthouse-rendering:${{ github.sha }}
@@ -272,6 +278,29 @@ jobs:
           severity-cutoff: critical
           output-format: json
           output-file: scan-rendering.json
+
+      - name: Upload vulnerability scan evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: vulnerability-scan-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            scan-backend.json
+            scan-frontend.json
+            scan-rendering.json
+
+      - name: Enforce critical vulnerability scan results
+        if: always()
+        env:
+          BACKEND_SCAN_OUTCOME: ${{ steps.scan-backend.outcome }}
+          FRONTEND_SCAN_OUTCOME: ${{ steps.scan-frontend.outcome }}
+          RENDERING_SCAN_OUTCOME: ${{ steps.scan-rendering.outcome }}
+        run: |
+          test "$BACKEND_SCAN_OUTCOME" = success
+          test "$FRONTEND_SCAN_OUTCOME" = success
+          test "$RENDERING_SCAN_OUTCOME" = success
 
       - name: Package exact reviewed release images and digests
         run: |

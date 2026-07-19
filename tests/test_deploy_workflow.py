@@ -656,6 +656,44 @@ class TestDeployWorkflow:
         assert "release-smoke-frontend" in text
         assert "release-smoke-rendering" in text
 
+    def test_image_scan_failures_upload_evidence_before_failing_closed(self, workflow):
+        steps = workflow["jobs"]["build-images"].get("steps") or []
+        step_names = [step.get("name") for step in steps]
+
+        for component in ("backend", "frontend", "rendering"):
+            scan = _step_by_name(steps, f"Scan {component} image")
+            assert scan["id"] == f"scan-{component}"
+            assert scan["continue-on-error"] is True
+            assert scan["with"]["fail-build"] is True
+            assert scan["with"]["severity-cutoff"] == "critical"
+
+        upload = _step_by_name(steps, "Upload vulnerability scan evidence")
+        enforce = _step_by_name(steps, "Enforce critical vulnerability scan results")
+        assert upload["if"] == "always()"
+        assert upload["uses"] == (
+            "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"
+        )
+        assert upload["with"]["if-no-files-found"] == "error"
+        for component in ("backend", "frontend", "rendering"):
+            assert f"scan-{component}.json" in upload["with"]["path"]
+        assert enforce["if"] == "always()"
+        assert enforce["env"] == {
+            "BACKEND_SCAN_OUTCOME": "${{ steps.scan-backend.outcome }}",
+            "FRONTEND_SCAN_OUTCOME": "${{ steps.scan-frontend.outcome }}",
+            "RENDERING_SCAN_OUTCOME": "${{ steps.scan-rendering.outcome }}",
+        }
+        assert enforce["run"].splitlines() == [
+            'test "$BACKEND_SCAN_OUTCOME" = success',
+            'test "$FRONTEND_SCAN_OUTCOME" = success',
+            'test "$RENDERING_SCAN_OUTCOME" = success',
+        ]
+        assert step_names.index("Upload vulnerability scan evidence") < step_names.index(
+            "Enforce critical vulnerability scan results"
+        )
+        assert step_names.index("Enforce critical vulnerability scan results") < (
+            step_names.index("Package exact reviewed release images and digests")
+        )
+
     def test_deploy_requires_remote_dry_run_artifact_before_environment_approval(self, workflow):
         jobs = workflow["jobs"]
         assert "remote-dry-run" in jobs
