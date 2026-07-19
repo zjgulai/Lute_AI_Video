@@ -30,6 +30,7 @@ LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
 
 # Re-declare build args so they are available as ENV at runtime
 ARG NEXT_PUBLIC_API_BASE_URL
