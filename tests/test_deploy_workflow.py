@@ -670,11 +670,23 @@ class TestDeployWorkflow:
         upload = _step_by_name(steps, "Upload vulnerability scan evidence")
         enforce = _step_by_name(steps, "Enforce critical vulnerability scan results")
         assert upload["if"] == "always()"
+        assert upload["uses"] == (
+            "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"
+        )
         assert upload["with"]["if-no-files-found"] == "error"
         for component in ("backend", "frontend", "rendering"):
             assert f"scan-{component}.json" in upload["with"]["path"]
-            assert f"steps.scan-{component}.outcome" in str(enforce)
         assert enforce["if"] == "always()"
+        assert enforce["env"] == {
+            "BACKEND_SCAN_OUTCOME": "${{ steps.scan-backend.outcome }}",
+            "FRONTEND_SCAN_OUTCOME": "${{ steps.scan-frontend.outcome }}",
+            "RENDERING_SCAN_OUTCOME": "${{ steps.scan-rendering.outcome }}",
+        }
+        assert enforce["run"].splitlines() == [
+            'test "$BACKEND_SCAN_OUTCOME" = success',
+            'test "$FRONTEND_SCAN_OUTCOME" = success',
+            'test "$RENDERING_SCAN_OUTCOME" = success',
+        ]
         assert step_names.index("Upload vulnerability scan evidence") < step_names.index(
             "Enforce critical vulnerability scan results"
         )
