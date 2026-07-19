@@ -17,8 +17,28 @@ PG_DUMP_SCRIPT = REPO_ROOT / "scripts" / "pg_dump_logical.py"
 PG_RESTORE_SCRIPT = REPO_ROOT / "scripts" / "pg_restore_logical.py"
 RESTORE_DATABASE_SCRIPT = REPO_ROOT / "scripts" / "restore_backup_database.sh"
 VERIFY_RESTORE_SCRIPT = REPO_ROOT / "scripts" / "verify_restored_database.py"
+INIT_SQL = REPO_ROOT / "src" / "storage" / "migrations" / "001_init.sql"
 DR_RUNBOOK = REPO_ROOT / "docs" / "disaster_recovery_runbook.md"
 BRAND_ASSETS_RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "brand-assets-refresh.md"
+
+EXPECTED_RECOVERY_TABLES = [
+    "tenants",
+    "admin_accounts",
+    "api_keys",
+    "admin_sessions",
+    "threads",
+    "pipeline_states",
+    "brand_packages",
+    "influencers",
+    "video_metrics",
+    "publish_logs",
+    "error_logs",
+    "audit_logs",
+    "idempotency_records",
+    "acceptance_records",
+    "job_budget_accounts",
+    "provider_cost_attempts",
+]
 
 
 def _write_executable(path: Path, content: str) -> Path:
@@ -33,20 +53,7 @@ def _fake_backup_tools(tmp_path: Path) -> tuple[Path, Path]:
         '{"_table":"api_keys","_data":{"id":"key-1"}}\n'
     )
     dump_size = len(dump_content.encode())
-    schema_tables = [
-        "tenants",
-        "admin_accounts",
-        "api_keys",
-        "admin_sessions",
-        "threads",
-        "pipeline_states",
-        "brand_packages",
-        "influencers",
-        "video_metrics",
-        "publish_logs",
-        "error_logs",
-        "audit_logs",
-    ]
+    schema_tables = EXPECTED_RECOVERY_TABLES
     schema_listing = "".join(
         f"1; 1259 1 TABLE public {table} owner\\n" for table in schema_tables
     )
@@ -55,6 +62,7 @@ def _fake_backup_tools(tmp_path: Path) -> tuple[Path, Path]:
     )
     schema_signature = "a" * 64
     schema_signature_mismatch = "b" * 64
+    alembic_revision = "c8d9e0f1a2b3"
     postgres_digest = "postgres@sha256:" + ("1" * 64)
     dump_stats = json.dumps(
         {
@@ -62,6 +70,7 @@ def _fake_backup_tools(tmp_path: Path) -> tuple[Path, Path]:
             "server_version_num": "180004",
             "server_major": 18,
             "schema_signature": schema_signature,
+            "alembic_revision": alembic_revision,
             "expected_tables": schema_tables,
             "tables": {
                 table: {"rows": 1 if table in {"tenants", "api_keys"} else 0}
@@ -99,9 +108,9 @@ case "$command_name" in
       printf '%s\n' 'postgresql://fixture:fixture@database.example/ai_video'
     elif [[ "$*" == *"--schema-signature"* ]]; then
       if [ "${{FAKE_SCHEMA_SIGNATURE_MISMATCH:-0}}" = "1" ]; then
-        printf '%s\n' '{{"schema_signature":"{schema_signature_mismatch}"}}'
+        printf '%s\n' '{{"schema_signature":"{schema_signature_mismatch}","alembic_revision":"{alembic_revision}"}}'
       else
-        printf '%s\n' '{{"schema_signature":"{schema_signature}"}}'
+        printf '%s\n' '{{"schema_signature":"{schema_signature}","alembic_revision":"{alembic_revision}"}}'
       fi
     elif [[ "$*" == *" python3 "* ]]; then
       printf '%s\n' '{dump_stats}'
@@ -233,7 +242,8 @@ def test_backup_publishes_only_validated_snapshot_then_applies_15_day_retention(
     assert (completed / "pg_schema.dump").read_text() == "fixture-schema-archive"
     assert "TABLE public audit_logs" in (completed / "pg_schema.list").read_text()
     assert json.loads((completed / "pg_schema_signature_after.json").read_text()) == {
-        "schema_signature": "a" * 64
+        "schema_signature": "a" * 64,
+        "alembic_revision": "c8d9e0f1a2b3",
     }
     assert (completed / "output" / "brand_assets" / "fixture.bin").is_file()
     media_manifest = json.loads((completed / "media_manifest.json").read_text())
@@ -270,6 +280,7 @@ def test_backup_publishes_only_validated_snapshot_then_applies_15_day_retention(
     assert "pg_client_source_tag: postgres:18" in manifest
     assert f"pg_client_image: postgres@sha256:{'1' * 64}" in manifest
     assert f"pg_schema_signature: {'a' * 64}" in manifest
+    assert "alembic_revision: c8d9e0f1a2b3" in manifest
     docker_log = Path(env["FAKE_DOCKER_LOG"]).read_text()
     assert "postgresql://" not in docker_log
     assert "--dbname=" not in docker_log
@@ -551,29 +562,48 @@ def test_backup_stats_stdout_remains_machine_readable_json() -> None:
     source = PG_DUMP_SCRIPT.read_text()
     assert 'print(f"Dumping PG to {out_path}...", file=sys.stderr)' in source
     assert "print(json.dumps(stats" in source
-    for table in [
-        "tenants",
-        "api_keys",
-        "admin_accounts",
-        "admin_sessions",
-        "threads",
-        "pipeline_states",
-        "brand_packages",
-        "influencers",
-        "video_metrics",
-        "publish_logs",
-        "error_logs",
-        "audit_logs",
-    ]:
-        assert f'"{table}"' in source
+    assert "information_schema.tables" in source
+    assert "table_name <> 'alembic_version'" in source
+    assert "foreign-key cycle" in source
     assert 'conn.transaction(isolation="repeatable_read", readonly=True)' in source
+
+
+def test_logical_recovery_uses_dynamic_current_schema_contract() -> None:
+    dump_source = PG_DUMP_SCRIPT.read_text()
+    restore_source = PG_RESTORE_SCRIPT.read_text()
+    verify_source = VERIFY_RESTORE_SCRIPT.read_text()
+
+    assert "information_schema.tables" in dump_source
+    assert "information_schema.tables" in restore_source
+    assert 'stats.get("expected_tables")' in verify_source
+    assert "TABLES_TO_DUMP" not in dump_source
+    assert "TABLES_TO_RESTORE" not in restore_source
+    assert "TABLES_TO_VERIFY" not in verify_source
+
+
+def test_publish_log_recovery_schema_preserves_w123_attempt_columns() -> None:
+    source = INIT_SQL.read_text(encoding="utf-8")
+    publish_logs = source.split(
+        "CREATE TABLE IF NOT EXISTS publish_logs (",
+        1,
+    )[1].split(");", 1)[0]
+
+    assert "tenant_id VARCHAR(64)" in publish_logs
+    assert "acceptance_id VARCHAR(36)" in publish_logs
+    assert "updated_at TIMESTAMPTZ" in publish_logs
+    assert "ALTER TABLE publish_logs ADD COLUMN IF NOT EXISTS tenant_id" in source
+    assert "ALTER TABLE publish_logs ADD COLUMN IF NOT EXISTS acceptance_id" in source
+    assert "ALTER TABLE publish_logs ADD COLUMN IF NOT EXISTS updated_at" in source
+    restore_source = RESTORE_DATABASE_SCRIPT.read_text(encoding="utf-8")
+    assert "pg_restore" in restore_source
+    assert "--schema-only" in restore_source
 
 
 def test_restore_whitelists_tables_and_runs_as_one_transaction() -> None:
     source = PG_RESTORE_SCRIPT.read_text()
-    assert "TABLES_TO_RESTORE" in source
-    assert '"audit_logs"' in source
-    assert "unknown table in backup" in source
+    assert "information_schema.tables" in source
+    assert "absent from restored schema" in source
+    assert "invalid database identifier in backup" in source
     assert "async with conn.transaction()" in source
     assert "TRUNCATE TABLE" in source
     assert "ON CONFLICT DO NOTHING" not in source
@@ -592,15 +622,25 @@ def _write_restore_backup_fixture(tmp_path: Path) -> tuple[Path, str]:
         json.dumps(
             {
                 "total_rows": 1,
+                "expected_tables": ["tenants"],
                 "tables": {"tenants": {"rows": 1}},
                 "schema_signature": "a" * 64,
+                "alembic_revision": "c8d9e0f1a2b3",
             }
         )
         + "\n"
     )
     schema.write_text("fixture-schema-archive")
     schema_list.write_text("1; 1259 1 TABLE public tenants owner\n")
-    schema_after.write_text(json.dumps({"schema_signature": "a" * 64}) + "\n")
+    schema_after.write_text(
+        json.dumps(
+            {
+                "schema_signature": "a" * 64,
+                "alembic_revision": "c8d9e0f1a2b3",
+            }
+        )
+        + "\n"
+    )
     digest = "postgres@sha256:" + ("1" * 64)
     manifest = {
         "project": "ai-video",
@@ -613,6 +653,7 @@ def _write_restore_backup_fixture(tmp_path: Path) -> tuple[Path, str]:
         "pg_schema_sha256": hashlib.sha256(schema.read_bytes()).hexdigest(),
         "pg_schema_list_sha256": hashlib.sha256(schema_list.read_bytes()).hexdigest(),
         "pg_schema_signature": "a" * 64,
+        "alembic_revision": "c8d9e0f1a2b3",
         "pg_schema_signature_after_sha256": hashlib.sha256(
             schema_after.read_bytes()
         ).hexdigest(),
@@ -663,7 +704,7 @@ case "$command_name" in
     elif [[ "$*" == *"/run/verify.py"* ]]; then
       IFS= read -r database_url
       [[ "$database_url" == postgresql://* ]]
-      printf '%s\n' '{{"status":"passed","table_count":1,"total_rows":1,"actual_counts":{{"tenants":1}}}}'
+      printf '%s\n' '{{"status":"passed","table_count":1,"total_rows":1,"actual_counts":{{"tenants":1}},"alembic_revision":"c8d9e0f1a2b3"}}'
     else
       printf 'unexpected fake restore docker run command: %s\n' "$*" >&2
       exit 66
@@ -708,6 +749,7 @@ esac
     assert result.returncode == 0, result.stderr
     marker = json.loads((backup_dir / "restore_verified.json").read_text())
     assert marker["status"] == "passed"
+    assert marker["alembic_revision"] == "c8d9e0f1a2b3"
     assert marker["manifest_sha256"] == hashlib.sha256(
         (backup_dir / "manifest.txt").read_bytes()
     ).hexdigest()
@@ -716,6 +758,7 @@ esac
     assert '--dbname="$database_url"' not in log
     assert "--dbname=$database_url" not in log
     assert "--truncate-first" not in log
+    assert "--stats /backup/pg_dump_stats.json" in log
     assert "--single-transaction" in log
 
 

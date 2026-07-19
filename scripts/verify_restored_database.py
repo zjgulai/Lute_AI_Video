@@ -5,46 +5,55 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, "/app")
 
-TABLES_TO_VERIFY = [
-    "tenants",
-    "admin_accounts",
-    "api_keys",
-    "admin_sessions",
-    "threads",
-    "pipeline_states",
-    "brand_packages",
-    "influencers",
-    "video_metrics",
-    "publish_logs",
-    "error_logs",
-    "audit_logs",
-]
+IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+ALEMBIC_REVISION_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 
 
 async def verify_restored_database(stats_path: Path) -> dict[str, object]:
     from src.storage.db import get_pool
 
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    expected_tables = stats.get("expected_tables")
+    if (
+        not isinstance(expected_tables, list)
+        or not expected_tables
+        or len(expected_tables) != len(set(expected_tables))
+        or any(
+            not isinstance(table, str) or not IDENTIFIER_RE.fullmatch(table)
+            for table in expected_tables
+        )
+    ):
+        raise ValueError("backup stats expected table set is invalid")
     table_stats = stats.get("tables")
-    if not isinstance(table_stats, dict) or set(table_stats) != set(TABLES_TO_VERIFY):
+    if not isinstance(table_stats, dict) or set(table_stats) != set(expected_tables):
         raise ValueError("backup stats table set does not match restore contract")
     expected = {
         table: int(table_stats[table].get("rows", -1))
-        for table in TABLES_TO_VERIFY
+        for table in expected_tables
     }
     if any(count < 0 for count in expected.values()):
         raise ValueError("backup stats contain an invalid row count")
+    expected_revision = stats.get("alembic_revision")
+    if not isinstance(expected_revision, str) or not ALEMBIC_REVISION_RE.fullmatch(
+        expected_revision
+    ):
+        raise ValueError("backup stats contain an invalid Alembic revision")
 
     pool = await get_pool()
     actual: dict[str, int] = {}
     async with pool.acquire() as conn:
-        for table in TABLES_TO_VERIFY:
+        for table in expected_tables:
             actual[table] = int(await conn.fetchval(f'SELECT count(*) FROM "{table}"'))
+        revision_rows = await conn.fetch("SELECT version_num FROM alembic_version")
+
+    if len(revision_rows) != 1 or revision_rows[0]["version_num"] != expected_revision:
+        raise ValueError("restored Alembic revision does not match backup stats")
 
     if actual != expected:
         raise ValueError("restored table counts do not match backup stats")
@@ -54,9 +63,10 @@ async def verify_restored_database(stats_path: Path) -> dict[str, object]:
 
     return {
         "status": "passed",
-        "table_count": len(TABLES_TO_VERIFY),
+        "table_count": len(expected_tables),
         "total_rows": total_rows,
         "actual_counts": actual,
+        "alembic_revision": expected_revision,
     }
 
 

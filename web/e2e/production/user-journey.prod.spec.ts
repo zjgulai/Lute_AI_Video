@@ -4,7 +4,11 @@
  * Run: PLAYWRIGHT_PROD_URL=https://video.lute-tlz-dddd.top npm run e2e:prod -- user-journey
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
-import { expectOkJsonWith429Retry, productionApiHeaders } from "./helpers";
+import {
+  expectOkJsonWith429Retry,
+  productionApiHeaders,
+  productionSubmitHeaders,
+} from "./helpers";
 
 type PortfolioResponse = {
   files?: unknown[];
@@ -44,7 +48,9 @@ test.describe("P4-1 — End-to-end user journey", () => {
   test("step 4: backend submits async task and returns task_id < 5s @token-smoke", async ({ request }) => {
     const start = Date.now();
     const resp = await request.post("/api/fast/submit", {
-      headers: productionApiHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("user-journey-submit", {
+        "Content-Type": "application/json",
+      }),
       data: { user_prompt: "P4-1 user-journey probe", duration: 15 },
     });
     const elapsed = Date.now() - start;
@@ -60,7 +66,9 @@ test.describe("P4-1 — End-to-end user journey", () => {
 
   test("step 5: status endpoint reflects progress @token-smoke", async ({ request }) => {
     const submit = await request.post("/api/fast/submit", {
-      headers: productionApiHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("user-journey-status", {
+        "Content-Type": "application/json",
+      }),
       data: { user_prompt: "P4-1 status probe", duration: 15 },
     });
     expect(submit.status()).toBe(200);

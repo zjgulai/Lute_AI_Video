@@ -5,7 +5,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+if os.getenv("PYTHON_DOTENV_DISABLED") != "1":
+    load_dotenv()
 
 # Structlog — configure to render kwargs into strings before stdlib sees them.
 # Without this, `logger.error("msg", error=...)` raises `Logger._log() got
@@ -127,11 +128,16 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 
 # Platform APIs
 TIKTOK_ACCESS_TOKEN = os.getenv("TIKTOK_ACCESS_TOKEN", "")
+TIKTOK_PUBLISH_ENABLED: bool = os.getenv(
+    "TIKTOK_PUBLISH_ENABLED", ""
+).strip().lower() in ("1", "true", "yes", "on")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 FACEBOOK_ACCESS_TOKEN = os.getenv("FACEBOOK_ACCESS_TOKEN", "")
-SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY", "")
 SHOPIFY_STORE_URL = os.getenv("SHOPIFY_STORE_URL", "")
-SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN") or SHOPIFY_API_KEY
+SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
+SHOPIFY_PUBLISH_ENABLED: bool = os.getenv(
+    "SHOPIFY_PUBLISH_ENABLED", ""
+).strip().lower() in ("1", "true", "yes", "on")
 
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -161,7 +167,7 @@ DEEPSEEK_MODEL: str = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro")
 
 # ── SiliconFlow CosyVoice TTS ──
 SILICONFLOW_API_KEY: str = os.environ.get("SILICONFLOW_API_KEY", "")
-SILICONFLOW_API_BASE: str = os.environ.get("SILICONFLOW_API_BASE", "https://api.siliconflow.cn/v1")
+SILICONFLOW_API_BASE: str = os.environ.get("SILICONFLOW_API_BASE", "https://api.siliconflow.com/v1")
 COSYVOICE_MODEL: str = os.environ.get("COSYVOICE_MODEL", "FunAudioLLM/CosyVoice2-0.5B")
 COSYVOICE_VOICE: str = os.environ.get("COSYVOICE_VOICE", "FunAudioLLM/CosyVoice2-0.5B:alex")
 COSYVOICE_VOICE_FEMALE: str = os.environ.get("COSYVOICE_VOICE_FEMALE", "FunAudioLLM/CosyVoice2-0.5B:anna")
@@ -179,6 +185,11 @@ POYO_API_BASE_URL: str = os.environ.get("POYO_API_BASE_URL", "https://api.poyo.a
 POYO_IMAGE_MODEL: str = os.environ.get("POYO_IMAGE_MODEL", "gpt-image-2")
 POYO_VIDEO_MODEL: str = os.environ.get("POYO_VIDEO_MODEL", "seedance-2")
 POYO_TTS_MODEL: str = os.environ.get("POYO_TTS_MODEL", "generate-music")
+
+# Server-owned per-job paid-provider ceiling. Keep the raw optional string at import time;
+# strict Decimal-to-nanos validation occurs only when provider-capable account initialization
+# is requested, so missing/invalid values do not break health or no-media/local-fixture flows.
+PROVIDER_JOB_BUDGET_USD: str | None = os.environ.get("PROVIDER_JOB_BUDGET_USD")
 
 # ── Runtime mode ──
 ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "development")
@@ -205,10 +216,9 @@ OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o")
 OPENAI_IMAGE_API_BASE: str = os.environ.get("OPENAI_IMAGE_API_BASE", "https://api.openai.com/v1")
 ELEVENLABS_API_BASE: str = os.environ.get("ELEVENLABS_API_BASE", "https://api.elevenlabs.io/v1")
 
-# ── Connector base URLs ──
-TIKTOK_API_BASE_URL: str = os.environ.get("TIKTOK_API_BASE_URL", "https://open.tiktokapis.com")
-TIKTOK_API_UPLOAD_URL: str = os.environ.get("TIKTOK_API_UPLOAD_URL", "https://open-api.tiktok.com")
-SHOPIFY_GRAPHQL_URL_TEMPLATE: str = os.environ.get("SHOPIFY_GRAPHQL_URL_TEMPLATE", "https://{store}/admin/api/2024-07/graphql.json")
+# ── Platform metrics query ──
+# Publish endpoints are fixed in their connector modules and cannot be
+# overridden through the environment.
 SHOPIFY_METRICS_SHOPIFYQL_QUERY: str = os.environ.get(
     "SHOPIFY_METRICS_SHOPIFYQL_QUERY",
     "FROM sales SHOW total_sales, orders SINCE -30d",

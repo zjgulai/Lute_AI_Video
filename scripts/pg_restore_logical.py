@@ -4,32 +4,18 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
 import json
 import re
 import sys
-from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
 sys.path.insert(0, "/app")
 
-TABLES_TO_RESTORE = [
-    "tenants",
-    "admin_accounts",
-    "api_keys",
-    "admin_sessions",
-    "threads",
-    "pipeline_states",
-    "brand_packages",
-    "influencers",
-    "video_metrics",
-    "publish_logs",
-    "error_logs",
-    "audit_logs",
-]
-ALLOWED_TABLES = frozenset(TABLES_TO_RESTORE)
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+ALEMBIC_REVISION_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 
 
 def _quote_identifier(identifier: str) -> str:
@@ -39,7 +25,7 @@ def _quote_identifier(identifier: str) -> str:
 
 
 def _load_rows(in_path: Path) -> dict[str, list[dict]]:
-    by_table: dict[str, list[dict]] = defaultdict(list)
+    by_table: dict[str, list[dict]] = {}
     with in_path.open("r", encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, start=1):
             record = json.loads(line)
@@ -48,14 +34,102 @@ def _load_rows(in_path: Path) -> dict[str, list[dict]]:
 
             table = record.get("_table")
             data = record.get("_data")
-            if table not in ALLOWED_TABLES:
-                raise ValueError(f"unknown table in backup at line {line_number}")
+            if not isinstance(table, str):
+                raise ValueError(f"invalid backup table at line {line_number}")
+            _quote_identifier(table)
             if not isinstance(data, dict) or not data:
                 raise ValueError(f"invalid row payload at line {line_number}")
             for column in data:
                 _quote_identifier(column)
-            by_table[table].append(data)
+            by_table.setdefault(table, []).append(data)
     return by_table
+
+
+def _validated_table_order(
+    tables: list[str],
+    foreign_keys: list[tuple[str, str]],
+) -> list[str]:
+    if not tables:
+        raise RuntimeError("restored schema has no public business tables")
+    if len(tables) != len(set(tables)):
+        raise RuntimeError("restored schema contains duplicate public tables")
+    for table in tables:
+        _quote_identifier(table)
+
+    table_set = set(tables)
+    children: dict[str, set[str]] = {table: set() for table in tables}
+    indegree = {table: 0 for table in tables}
+    for child, parent in foreign_keys:
+        if child == parent:
+            continue
+        if child not in table_set or parent not in table_set:
+            raise RuntimeError("foreign key references an undiscovered public table")
+        if child not in children[parent]:
+            children[parent].add(child)
+            indegree[child] += 1
+
+    ready = [table for table, degree in indegree.items() if degree == 0]
+    heapq.heapify(ready)
+    ordered: list[str] = []
+    while ready:
+        table = heapq.heappop(ready)
+        ordered.append(table)
+        for child in sorted(children[table]):
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                heapq.heappush(ready, child)
+    if len(ordered) != len(tables):
+        raise RuntimeError("restored table foreign-key cycle prevents safe insert ordering")
+    return ordered
+
+
+async def _discover_tables(conn: object) -> list[str]:
+    table_rows = await conn.fetch(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_type = 'BASE TABLE'
+          AND table_name <> 'alembic_version'
+        ORDER BY table_name
+        """
+    )
+    foreign_key_rows = await conn.fetch(
+        """
+        SELECT child.relname AS child_table,
+               parent.relname AS parent_table
+        FROM pg_catalog.pg_constraint AS constraint_row
+        JOIN pg_catalog.pg_class AS child
+          ON child.oid = constraint_row.conrelid
+        JOIN pg_catalog.pg_namespace AS child_namespace
+          ON child_namespace.oid = child.relnamespace
+        JOIN pg_catalog.pg_class AS parent
+          ON parent.oid = constraint_row.confrelid
+        JOIN pg_catalog.pg_namespace AS parent_namespace
+          ON parent_namespace.oid = parent.relnamespace
+        WHERE constraint_row.contype = 'f'
+          AND child_namespace.nspname = 'public'
+          AND parent_namespace.nspname = 'public'
+        ORDER BY child_table, parent_table
+        """
+    )
+    return _validated_table_order(
+        [str(row["table_name"]) for row in table_rows],
+        [
+            (str(row["child_table"]), str(row["parent_table"]))
+            for row in foreign_key_rows
+            if row["child_table"] != "alembic_version"
+            and row["parent_table"] != "alembic_version"
+        ],
+    )
+
+
+def _load_alembic_revision(stats_path: Path) -> str:
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    revision = stats.get("alembic_revision")
+    if not isinstance(revision, str) or not ALEMBIC_REVISION_RE.fullmatch(revision):
+        raise ValueError("backup stats contain an invalid Alembic revision")
+    return revision
 
 
 def _coerce_value(value: object, data_type: str) -> object:
@@ -91,22 +165,41 @@ async def _column_types(conn: object, table: str) -> dict[str, str]:
     return {row["column_name"]: row["data_type"] for row in rows}
 
 
-async def restore(in_path: Path, truncate: bool = False) -> dict:
+async def restore(
+    in_path: Path,
+    truncate: bool = False,
+    stats_path: Path | None = None,
+) -> dict:
     from src.storage.db import get_pool
 
     by_table = _load_rows(in_path)
+    alembic_revision = _load_alembic_revision(stats_path) if stats_path else None
     pool = await get_pool()
     stats: dict = {"tables": {}}
 
     async with pool.acquire() as conn:
         async with conn.transaction():
+            tables = await _discover_tables(conn)
+            missing_tables = set(by_table) - set(tables)
+            if missing_tables:
+                raise ValueError("backup table is absent from restored schema")
+            if alembic_revision is not None:
+                current_revisions = await conn.fetch(
+                    "SELECT version_num FROM alembic_version"
+                )
+                if current_revisions:
+                    raise ValueError("restore target Alembic revision is not empty")
+                await conn.execute(
+                    "INSERT INTO alembic_version (version_num) VALUES ($1)",
+                    alembic_revision,
+                )
             if truncate:
                 table_list = ", ".join(
-                    _quote_identifier(table) for table in TABLES_TO_RESTORE
+                    _quote_identifier(table) for table in reversed(tables)
                 )
                 await conn.execute(f"TRUNCATE TABLE {table_list} CASCADE")
 
-            for table in TABLES_TO_RESTORE:
+            for table in tables:
                 rows = by_table.get(table, [])
                 inserted = 0
                 column_types = await _column_types(conn, table) if rows else {}
@@ -141,6 +234,14 @@ async def restore(in_path: Path, truncate: bool = False) -> dict:
 async def main() -> int:
     args = sys.argv[1:]
     truncate = "--truncate-first" in args
+    stats_path: Path | None = None
+    if "--stats" in args:
+        stats_index = args.index("--stats")
+        if stats_index + 1 >= len(args):
+            print("ERROR: --stats requires a path", file=sys.stderr)
+            return 1
+        stats_path = Path(args[stats_index + 1])
+        del args[stats_index : stats_index + 2]
     positional = [arg for arg in args if not arg.startswith("--")]
     if not positional:
         print(
@@ -159,7 +260,7 @@ async def main() -> int:
         file=sys.stderr,
     )
     try:
-        stats = await restore(in_path, truncate=truncate)
+        stats = await restore(in_path, truncate=truncate, stats_path=stats_path)
     except Exception as exc:
         print(f"ERROR: restore failed ({type(exc).__name__})", file=sys.stderr)
         return 1

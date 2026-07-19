@@ -55,6 +55,7 @@ def test_builder_writes_private_record_that_preflight_accepts(tmp_path: Path):
     assert payload["scope"] == APPROVAL_SCOPE
     assert payload["sample_plan_ref"] == SAMPLE_PLAN_REF
     assert payload["approval_statement"] == statement
+    assert payload["expires_at"] == "2026-06-06T20:00:00Z"
     assert payload["provider_model_scope"] == DEFAULT_AUTH_PROVIDER_MODEL_SCOPE
     assert payload["test_scope"] == DEFAULT_AUTH_TEST_SCOPE
     assert payload["budget_limit_usd"] == DEFAULT_AUTH_BUDGET_LIMIT_USD

@@ -6,6 +6,8 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
+from src.models.provider_cost import ProviderCostContractError
+
 
 class SkillResult:
     """Standardized output envelope for all skill executions.
@@ -106,10 +108,22 @@ class SkillCallable(ABC):
             params: Skill-specific parameters.
 
         Returns:
-            SkillResult guaranteed (never raises).
+            SkillResult for local validation/execution failures. Paid-provider
+            accounting and authority violations raise ProviderCostContractError
+            so callers cannot silently fall back or retry a billable mutation.
         """
-        # 1. Validate params
-        param_errors = self.validate_params(params)
+        from src.pipeline.generation_policy import get_effective_provider_max_retries
+
+        effective_params = dict(params)
+        requested_retries = effective_params.get("provider_max_retries")
+        try:
+            requested_retries = int(requested_retries) if requested_retries is not None else self.max_retries - 1
+        except (TypeError, ValueError):
+            requested_retries = self.max_retries - 1
+        effective_params["provider_max_retries"] = get_effective_provider_max_retries(requested_retries)
+
+        # 1. Validate the same capped copy that reaches execute/fallback.
+        param_errors = self.validate_params(effective_params)
         if param_errors:
             return SkillResult(
                 success=False,
@@ -120,22 +134,28 @@ class SkillCallable(ABC):
         last_error = None
 
         max_attempts = self.max_retries
-        provider_max_retries = params.get("provider_max_retries")
+        provider_max_retries = effective_params.get("provider_max_retries")
         if provider_max_retries is not None:
             try:
                 max_attempts = max(1, int(provider_max_retries) + 1)
             except (TypeError, ValueError):
                 max_attempts = self.max_retries
+        max_attempts = get_effective_provider_max_retries(max_attempts - 1) + 1
 
         # 2. Attempt execution with retries
         for attempt in range(max_attempts):
             try:
-                result = await self.execute(params)
+                result = await self.execute(effective_params)
                 if not result.success:
                     last_error = result.error
+                    if result.metadata.get("non_retryable"):
+                        result.metadata["latency_seconds"] = time.time() - start_time
+                        result.metadata["retries"] = attempt
+                        return result
                     if attempt < max_attempts - 1:
                         import asyncio
-                        await asyncio.sleep(2.0 ** attempt)
+
+                        await asyncio.sleep(2.0**attempt)
                     continue
 
                 # 3. Validate output
@@ -144,7 +164,8 @@ class SkillCallable(ABC):
                     last_error = f"Output validation: {'; '.join(output_errors)}"
                     if attempt < max_attempts - 1:
                         import asyncio
-                        await asyncio.sleep(2.0 ** attempt)
+
+                        await asyncio.sleep(2.0**attempt)
                     continue
 
                 # Success!
@@ -152,14 +173,20 @@ class SkillCallable(ABC):
                 result.metadata["retries"] = attempt
                 return result
 
+            except ProviderCostContractError:
+                # Paid-provider authority/accounting failures are fail-closed.
+                # They must never be converted into a local fallback or retried
+                # by the generic skill wrapper.
+                raise
             except Exception as e:
                 last_error = str(e)
                 if attempt < max_attempts - 1:
                     import asyncio
-                    await asyncio.sleep(2.0 ** attempt)
+
+                    await asyncio.sleep(2.0**attempt)
 
         # 4. All retries exhausted — use fallback
-        fallback_result = self.fallback(params)
+        fallback_result = self.fallback(effective_params)
         fallback_result.metadata["latency_seconds"] = time.time() - start_time
         fallback_result.metadata["retries"] = max_attempts
         fallback_result.metadata["fallback_reason"] = last_error

@@ -66,21 +66,33 @@ def _bind_auth_context(ctx: AuthContext) -> None:
     _auth_context_var.set(ctx)
 
 
+_RECOGNIZED_TENANT_PERMISSIONS = frozenset(
+    {"all", "provider:submit", "artifact:accept", "artifact:publish"}
+)
+
+
 def _normalize_permissions(raw: Any) -> frozenset[str]:
-    if raw is None:
-        return frozenset({"all"})
+    """Normalize DB-backed permission JSON without granting on malformed input."""
+
     if isinstance(raw, str):
         try:
             import json
 
             parsed = json.loads(raw)
         except Exception:
-            parsed = [raw]
+            return frozenset()
         raw = parsed
-    if isinstance(raw, list):
-        cleaned = {str(p).strip() for p in raw if str(p).strip()}
-        return frozenset(cleaned or {"all"})
-    return frozenset({"all"})
+    if not isinstance(raw, list) or not raw:
+        return frozenset()
+    if any(
+        not isinstance(permission, str) or not permission.strip()
+        for permission in raw
+    ):
+        return frozenset()
+    cleaned = {permission.strip() for permission in raw}
+    if not cleaned or not cleaned.issubset(_RECOGNIZED_TENANT_PERMISSIONS):
+        return frozenset()
+    return frozenset(cleaned)
 
 
 def _as_utc_datetime(value: datetime) -> datetime:

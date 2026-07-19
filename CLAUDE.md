@@ -16,7 +16,7 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 - **v0.2.0 baseline** (2026-05-09) — 6 scenarios E2E verified, S2/S4 production crashes fixed, frontend UX v2 (4-tab nav, `/works` + `/library`).
 
 > 历史更新记录见 `docs/claude/updates/project-updates-202605-stable.md`。
-> 已知缺口与下一步计划见 `docs/claude/known-gaps-stable.md` + `.kiro/plan/NEXT-STEPS-2026-05-11.md`。
+> 已知缺口与下一步计划见 `docs/claude/known-gaps-stable.md`；当前企业内容收敛入口见 `docs/workflows/enterprise-ai-content-all-scenarios-roadmap-20260711.md`。
 > Claude Code Agent 体系与项目标准见 `docs/claude/project-standard-stable.md`。
 > 详细生产部署指南见 `docs/workflows/deploy-lighthouse-stable.md` + `docs/runbooks/README.md`。
 > 架构决策见 `docs/architecture/adr/README.md`。
@@ -503,7 +503,7 @@ Primary (text):  DeepSeek V4-Pro    https://api.deepseek.com
 Image:           poyo.ai GPT-4o     https://api.poyo.ai    (model: gpt-image-2)
 Video:           poyo.ai Seedance 2  https://api.poyo.ai   (model: seedance-2, 15s + native audio + multi-shot; default since 2026-05-14)
                  or Seedance 2.0    https://api.seedance.ai
-TTS:             SiliconFlow CosyVoice https://api.siliconflow.cn/v1
+TTS:             SiliconFlow CosyVoice https://api.siliconflow.com/v1
                                           (model: FunAudioLLM/CosyVoice2-0.5B)
 Legacy/fallback: OpenAI, Anthropic, Kimi, ElevenLabs
 ```

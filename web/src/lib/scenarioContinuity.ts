@@ -1,4 +1,19 @@
+import {
+  normalizeGenerationSafetyIntent,
+  type GenerationSafetyIntent,
+} from "./scenarioPayload";
+
 type SceneConfig = Record<string, unknown>;
+
+type ScenarioContinuityPayload = GenerationSafetyIntent & {
+  continuity_mode: unknown;
+  continuity_generation_mode: string;
+  storyboard_grid: unknown;
+  clip_group_size: unknown;
+  transition_style: string;
+};
+
+type ScenarioPayload = GenerationSafetyIntent & Partial<ScenarioContinuityPayload>;
 
 function continuityGenerationMode(config: SceneConfig): string {
   if (typeof config.continuity_generation_mode === "string" && config.continuity_generation_mode) {
@@ -10,10 +25,19 @@ function continuityGenerationMode(config: SceneConfig): string {
 export function withScenarioContinuityConfig<T extends Record<string, unknown>>(
   config: SceneConfig,
   payload: T,
-): T {
-  return {
+): T & ScenarioPayload {
+  const safePayload = {
     ...payload,
-    enable_media_synthesis: config.enable_media_synthesis ?? true,
+    ...normalizeGenerationSafetyIntent(config),
+  };
+  const scenario = typeof config.content_scenario === "string"
+    ? config.content_scenario
+    : "product_direct";
+  if (scenario !== "product_direct" && scenario !== "s1") {
+    return safePayload;
+  }
+  return {
+    ...safePayload,
     continuity_mode: config.continuity_mode ?? true,
     continuity_generation_mode: continuityGenerationMode(config),
     storyboard_grid: config.storyboard_grid ?? 12,

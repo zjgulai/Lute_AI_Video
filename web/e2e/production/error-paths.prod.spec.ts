@@ -5,7 +5,7 @@
  * Run: PLAYWRIGHT_PROD_URL=https://video.lute-tlz-dddd.top npm run e2e:prod -- error-paths
  */
 import { test, expect } from "@playwright/test";
-import { productionApiHeaders } from "./helpers";
+import { productionApiHeaders, productionSubmitHeaders } from "./helpers";
 
 function authHeaders(extra: Record<string, string> = {}) {
   return productionApiHeaders(extra);
@@ -14,7 +14,9 @@ function authHeaders(extra: Record<string, string> = {}) {
 test.describe("P4-4 — Error paths", () => {
   test("invalid video_duration string returns 422 with field-level detail", async ({ request }) => {
     const r = await request.post("/api/scenario/s1/submit", {
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("error-s1-invalid-duration", {
+        "Content-Type": "application/json",
+      }),
       data: {
         product_catalog: { products: [{ name: "test", usps: [{ text: "x", priority: "P0" }] }] },
         target_platforms: ["tiktok"],
@@ -33,7 +35,9 @@ test.describe("P4-4 — Error paths", () => {
 
   test("fast/submit missing user_prompt returns 422", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("error-fast-missing-prompt", {
+        "Content-Type": "application/json",
+      }),
       data: { duration: 15 },
     });
     expect(r.status()).toBe(422);
@@ -46,15 +50,30 @@ test.describe("P4-4 — Error paths", () => {
 
   test("fast/submit invalid duration type returns 422", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("error-fast-invalid-duration", {
+        "Content-Type": "application/json",
+      }),
       data: { user_prompt: "test", duration: "abc" },
     });
     expect(r.status()).toBe(422);
   });
 
+  test("fast/submit missing Idempotency-Key returns 400", async ({ request }) => {
+    const r = await request.post("/api/fast/submit", {
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      data: { user_prompt: "idempotency contract probe", duration: 15 },
+    });
+    expect(r.status()).toBe(400);
+    const body = await r.json();
+    expect(body.detail?.code).toBe("idempotency_key_required");
+  });
+
   test("missing X-API-Key returns 401", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "error-fast-missing-auth-0001",
+      },
       data: { user_prompt: "test", duration: 15 },
     });
     expect([401, 403]).toContain(r.status());
@@ -62,7 +81,11 @@ test.describe("P4-4 — Error paths", () => {
 
   test("invalid X-API-Key returns 401", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: { "X-API-Key": "definitely_not_a_valid_key", "Content-Type": "application/json" },
+      headers: {
+        "X-API-Key": "definitely_not_a_valid_key",
+        "Content-Type": "application/json",
+        "Idempotency-Key": "error-fast-invalid-auth-0001",
+      },
       data: { user_prompt: "test", duration: 15 },
     });
     expect([401, 403]).toContain(r.status());
@@ -77,7 +100,9 @@ test.describe("P4-4 — Error paths", () => {
 
   test("malformed JSON body returns 422", async ({ request }) => {
     const r = await request.post("/api/fast/submit", {
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("error-fast-malformed-json", {
+        "Content-Type": "application/json",
+      }),
       data: "not-json",
     });
     expect([400, 422]).toContain(r.status());

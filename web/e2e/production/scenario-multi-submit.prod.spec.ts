@@ -6,7 +6,7 @@
  * - S3/S4/S5 use async submit + status readback for non-blocking smoke
  */
 import { test, expect, type APIRequestContext, type APIResponse } from "@playwright/test";
-import { productionApiHeaders } from "./helpers";
+import { productionApiHeaders, productionSubmitHeaders } from "./helpers";
 
 type ScenarioStatusResponse = {
   label: string;
@@ -95,7 +95,9 @@ test.describe("P4-5 — Multi-scenario production smoke", () => {
 
   test("POST /api/scenario/s3/submit then /api/scenario/s3/status/{label} round-trip @token-smoke", async ({ request }) => {
     const submitResp = await request.post("/api/scenario/s3/submit", {
-      headers: productionApiHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("scenario-s3-submit", {
+        "Content-Type": "application/json",
+      }),
       data: {
         product: {
           name: "Momcozy UV Sterilizer",
@@ -126,7 +128,9 @@ test.describe("P4-5 — Multi-scenario production smoke", () => {
 
   test("POST /api/scenario/s4/submit then /api/scenario/s4/status/{label} round-trip @token-smoke", async ({ request }) => {
     const submitResp = await request.post("/api/scenario/s4/submit", {
-      headers: productionApiHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("scenario-s4-submit", {
+        "Content-Type": "application/json",
+      }),
       data: {
         product_info: {
           name: "Momcozy UV Sterilizer",
@@ -156,7 +160,9 @@ test.describe("P4-5 — Multi-scenario production smoke", () => {
 
   test("POST /api/scenario/s5/submit then /api/scenario/s5/status/{label} round-trip @token-smoke", async ({ request }) => {
     const submitResp = await request.post("/api/scenario/s5/submit", {
-      headers: productionApiHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("scenario-s5-submit", {
+        "Content-Type": "application/json",
+      }),
       data: {
         brand_id: "momcozy",
         video_duration: 15,

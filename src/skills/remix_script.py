@@ -15,6 +15,7 @@ from typing import Any
 
 import structlog
 
+from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -164,6 +165,10 @@ class RemixScriptSkill(SkillCallable):
 
         # Product context for LLM-driven remix
         product_context = params.get("product_context", {})
+        variant = params.get("variant")
+        operation_scope = params.get("operation_scope", "execution")
+        if not isinstance(operation_scope, str) or not operation_scope:
+            operation_scope = "execution"
 
         # Build remix segments — try LLM-driven if product context is available
         if product_context.get("pain_points") or product_context.get("target_audience"):
@@ -176,7 +181,11 @@ class RemixScriptSkill(SkillCallable):
                     product_context=product_context,
                     speech_style=speech_style,
                     hook_type=hook_type,
+                    variant=variant if isinstance(variant, str) else None,
+                    operation_scope=operation_scope,
                 )
+            except ProviderCostContractError:
+                raise
             except Exception as e:
                 logger.warning("remix_script: LLM path failed, using rules", error=str(e)[:200])
                 segments = self._build_remix_segments(
@@ -261,15 +270,17 @@ class RemixScriptSkill(SkillCallable):
         remix_segments = []
         for seg in original_segments:
             seg_type = seg.get("type", "body")
-            replacement = SEGMENT_REPLACEMENT.get(seg_type, {
-                "keep": "general style",
-                "replace": "content",
-            })
+            replacement = SEGMENT_REPLACEMENT.get(
+                seg_type,
+                {
+                    "keep": "general style",
+                    "replace": "content",
+                },
+            )
 
             remix_seg = RemixScriptSegment(
                 segment_type=seg_type,
-                keep_notes=f"Keep {replacement['keep']}. "
-                           f"Original: {seg.get('description', '-')[:100]}",
+                keep_notes=f"Keep {replacement['keep']}. Original: {seg.get('description', '-')[:100]}",
                 replace_notes=f"Replace with {product_name} content: {replacement['replace']}",
                 remix_description=self._build_segment_description(
                     seg_type=seg_type,
@@ -291,6 +302,8 @@ class RemixScriptSkill(SkillCallable):
         product_context: dict[str, Any],
         speech_style: str = "",
         hook_type: str = "",
+        variant: str | None = None,
+        operation_scope: str = "execution",
     ) -> list[RemixScriptSegment]:
         """LLM-driven remix: one call processes all segments with full context.
 
@@ -327,19 +340,26 @@ Return ONLY valid JSON with this structure:
 - Segments: {json.dumps(segments, indent=2)}
 
 New Product: {product_name}
-USPs: {', '.join(usps)}
+USPs: {", ".join(usps)}
 Brand: {brand_name}
 
 Product Context:
-- Pain Points: {', '.join(pain_points) if pain_points else 'N/A'}
-- Target Audience: {target_audience or 'N/A'}
-- Competitor Context: {', '.join(competitor_context) if competitor_context else 'N/A'}
-- Usage Scenario: {usage_scenario or 'N/A'}
+- Pain Points: {", ".join(pain_points) if pain_points else "N/A"}
+- Target Audience: {target_audience or "N/A"}
+- Competitor Context: {", ".join(competitor_context) if competitor_context else "N/A"}
+- Usage Scenario: {usage_scenario or "N/A"}
 
 Remix {len(segments)} segments for the new product."""
 
         try:
-            raw = await llm.invoke_json(system, user)
+            raw = await llm.invoke_json(
+                system,
+                user,
+                operation_key="skill.remix_script",
+                operation_instance=(
+                    f"{operation_scope}.variant.{variant}" if variant else f"{operation_scope}.primary"
+                ),
+            )
             if isinstance(raw, dict) and "segments" in raw:
                 llm_segments = raw["segments"]
                 # Convert LLM output dicts to RemixScriptSegment objects
@@ -352,9 +372,12 @@ Remix {len(segments)} segments for the new product."""
                     )
                     for s in llm_segments
                 ]
+        except ProviderCostContractError:
+            raise
         except Exception as e:
-            logger.warning("remix_script: LLM failed, falling back to rule-based",
-                           error=str(e)[:200], product_name=product_name)
+            logger.warning(
+                "remix_script: LLM failed, falling back to rule-based", error=str(e)[:200], product_name=product_name
+            )
 
         # Fallback to rule-based
         return self._build_remix_segments(
@@ -408,26 +431,21 @@ Remix {len(segments)} segments for the new product."""
                 keep_notes=f"Keep demo pacing, reaction style, and {style_tag}",
                 replace_notes=f"Replace with {product_name} demonstration",
                 remix_description=(
-                    f"Visual demonstration of {product_name}. "
-                    f"Highlight ease of use, results, or quality."
+                    f"Visual demonstration of {product_name}. Highlight ease of use, results, or quality."
                 ),
             ),
             RemixScriptSegment(
                 segment_type="pitch",
                 keep_notes="Keep urgency level and offer framing from original",
                 replace_notes=f"Replace with {product_name} offer and value proposition",
-                remix_description=(
-                    f"Pitch {product_name} with urgency. "
-                    f"Mention value: {', '.join(usps[:2])}"
-                ),
+                remix_description=(f"Pitch {product_name} with urgency. Mention value: {', '.join(usps[:2])}"),
             ),
             RemixScriptSegment(
                 segment_type="cta",
                 keep_notes=f"Keep CTA energy and {style_tag} sign-off",
                 replace_notes=f"Replace with {product_name} link and new offer CTA",
                 remix_description=(
-                    f"Clear call to action with {product_name} link. "
-                    f"Include urgency or scarcity element."
+                    f"Clear call to action with {product_name} link. Include urgency or scarcity element."
                 ),
             ),
         ]
@@ -529,12 +547,14 @@ Remix {len(segments)} segments for the new product."""
         result.brief_id = params.get("brief_id", "")
         result.influencer_name = params.get("influencer_name", "Influencer")
         result.product_name = product_name
-        result.segments = [RemixScriptSegment(
-            segment_type="body",
-            keep_notes="Keep general influencer style",
-            replace_notes=f"Replace with {product_name} content",
-            remix_description=f"Remix with {product_name}: product showcase",
-        )]
+        result.segments = [
+            RemixScriptSegment(
+                segment_type="body",
+                keep_notes="Keep general influencer style",
+                replace_notes=f"Replace with {product_name} content",
+                remix_description=f"Remix with {product_name}: product showcase",
+            )
+        ]
         result.full_remix_script = (
             f"[REMIX SCRIPT - FALLBACK]\n"
             f"Product: {product_name}\n"
@@ -542,8 +562,7 @@ Remix {len(segments)} segments for the new product."""
             f"Replacement: Product showcase with USP: {', '.join(usps[:2]) if usps else 'quality'}\n"
         )
         result.production_notes = (
-            f"Fallback mode — keep original video structure, "
-            f"overlay {product_name} visuals and audio"
+            f"Fallback mode — keep original video structure, overlay {product_name} visuals and audio"
         )
         return SkillResult(
             success=True,

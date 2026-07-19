@@ -56,7 +56,13 @@ async def test_s1_start_empty_body_returns_422():
 async def test_distribution_platforms_reflects_env(monkeypatch):
     """Task C: when platform tokens are absent, connected must be False."""
     monkeypatch.delenv("TIKTOK_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("TIKTOK_PUBLISH_ENABLED", raising=False)
+    monkeypatch.delenv("SHOPIFY_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("SHOPIFY_PUBLISH_ENABLED", raising=False)
     monkeypatch.delenv("SHOPIFY_API_KEY", raising=False)
+    monkeypatch.delenv("SHOPIFY_ADMIN_TOKEN", raising=False)
+    monkeypatch.delenv("SHOPIFY_API_PASSWORD", raising=False)
+    monkeypatch.delenv("SHOPIFY_GRAPHQL_URL_TEMPLATE", raising=False)
     monkeypatch.delenv("SHOPIFY_STORE_URL", raising=False)
 
     transport = ASGITransport(app=app)

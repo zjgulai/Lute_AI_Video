@@ -26,19 +26,20 @@ REQUIRED_TEST_FILES = (
     "tests/test_fault_injection.py",
 )
 
-REQUIRED_EMPTY_ENV_VARS = (
-    "DEEPSEEK_API_KEY",
-    "POYO_API_KEY",
-    "SEEDANCE_API_KEY",
-    "SILICONFLOW_API_KEY",
-    "ELEVENLABS_API_KEY",
-    "TIKTOK_ACCESS_TOKEN",
-    "TIKTOK_OPEN_ID",
-    "SHOPIFY_STORE_URL",
-    "SHOPIFY_ADMIN_TOKEN",
-    "SUPABASE_URL",
-    "SUPABASE_SERVICE_KEY",
-)
+REQUIRED_ENV_VALUES = {
+    "DEEPSEEK_API_KEY": "",
+    "POYO_API_KEY": "",
+    "SEEDANCE_API_KEY": "",
+    "SILICONFLOW_API_KEY": "",
+    "ELEVENLABS_API_KEY": "",
+    "TIKTOK_ACCESS_TOKEN": "",
+    "TIKTOK_PUBLISH_ENABLED": "false",
+    "SHOPIFY_STORE_URL": "",
+    "SHOPIFY_ACCESS_TOKEN": "",
+    "SHOPIFY_PUBLISH_ENABLED": "false",
+    "SUPABASE_URL": "",
+    "SUPABASE_SERVICE_KEY": "",
+}
 
 FORBIDDEN_TOKENS = (
     "RUN_TOKEN_SMOKE=1",
@@ -57,7 +58,8 @@ def test_scenario_hermetic_script_is_executable_and_covers_s1_s5():
 
     assert script_mode & stat.S_IXUSR, "scenario hermetic regression script must be executable"
     assert "PYTEST_INCLUDE_HERMETIC_SLOW" in script_text
-    assert "python -m pytest" in script_text
+    assert '"$PYTHON_BIN" -m pytest' in script_text
+    assert 'PYTHON_BIN="${PYTHON:-.venv/bin/python}"' in script_text
 
     for test_file in REQUIRED_TEST_FILES:
         assert test_file in script_text
@@ -67,8 +69,8 @@ def test_scenario_hermetic_script_is_executable_and_covers_s1_s5():
 def test_scenario_hermetic_script_clears_external_credentials():
     script_text = SCRIPT.read_text()
 
-    for env_var in REQUIRED_EMPTY_ENV_VARS:
-        assert f'export {env_var}=""' in script_text
+    for env_var, value in REQUIRED_ENV_VALUES.items():
+        assert f'export {env_var}="{value}"' in script_text
 
     for forbidden in FORBIDDEN_TOKENS:
         assert forbidden not in script_text

@@ -111,13 +111,13 @@ if [ "${RUN_TOKEN_SMOKE:-0}" = "1" ]; then
     -H "X-API-Key: $API_KEY" \
     -d '{"user_prompt":"smoke test","duration":5,"enable_tts":false}' \
     "$BASE/api/fast/generate")
-  # 200 = 全程跑通; 500 = 内部错(可能 LLM key 不可用,但路径已通); 401 = key 错
+  # 只有 200 证明本次 provider-backed business smoke 成功；500 是失败。
   case "$status" in
-    200|500)
-      echo "  [OK]   POST /api/fast/generate → $status (路径可达)"
+    200)
+      echo "  [OK]   POST /api/fast/generate → $status (business success)"
       ;;
     *)
-      echo "  [FAIL] POST /api/fast/generate → expected 200/500, got $status"
+      echo "  [FAIL] POST /api/fast/generate → expected 200, got $status"
       FAILED=$((FAILED + 1))
       ;;
   esac

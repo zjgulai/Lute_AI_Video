@@ -1,8 +1,56 @@
 import { describe, expect, it } from "vitest";
 
-import { buildScenarioAutoSubmitPayload } from "./scenarioPayload";
+import {
+  buildS1EditedStateUpdate,
+  buildScenarioAutoSubmitPayload,
+  withExplicitMediaGenerationIntent,
+} from "./scenarioPayload";
 
 describe("buildScenarioAutoSubmitPayload", () => {
+  it.each([
+    "product_direct",
+    "brand_campaign",
+    "influencer_remix",
+    "live_shoot_to_video",
+    "brand_vlog",
+  ])("defaults %s submissions to no-media pending-review retry-zero", (contentScenario) => {
+    const payload = buildScenarioAutoSubmitPayload({
+      content_scenario: contentScenario,
+      product_catalog: { name: "Fixture" },
+    });
+
+    expect(payload.enable_media_synthesis).toBe(false);
+    expect(payload.artifact_disposition).toBe("pending_review");
+    expect(payload.provider_max_retries).toBe(0);
+  });
+
+  it("preserves exact false and zero values", () => {
+    const payload = buildScenarioAutoSubmitPayload({
+      content_scenario: "product_direct",
+      product_catalog: { name: "Fixture" },
+      enable_media_synthesis: false,
+      artifact_disposition: "pending_review",
+      provider_max_retries: 0,
+    });
+
+    expect(payload).toMatchObject({
+      enable_media_synthesis: false,
+      artifact_disposition: "pending_review",
+      provider_max_retries: 0,
+    });
+  });
+
+  it("adds provider-on intent only for an explicit user generation action", () => {
+    const payload = withExplicitMediaGenerationIntent({ user_prompt: "make a video" });
+
+    expect(payload).toEqual({
+      user_prompt: "make a video",
+      enable_media_synthesis: true,
+      artifact_disposition: "pending_review",
+      provider_max_retries: 0,
+    });
+  });
+
   it("preserves S2 campaign fields in a brand_package object", () => {
     const payload = buildScenarioAutoSubmitPayload({
       content_scenario: "brand_campaign",
@@ -115,5 +163,41 @@ describe("buildScenarioAutoSubmitPayload", () => {
       story_description: "morning bottle cleaning routine",
       video_duration: 30,
     });
+  });
+
+  it.each([
+    ["influencer_remix", ["week"]],
+    ["live_shoot_to_video", ["target_languages", "week"]],
+    ["brand_vlog", ["target_platforms", "target_languages", "week"]],
+  ])("omits backend-unsupported common fields for %s", (contentScenario, forbiddenKeys) => {
+    const payload = buildScenarioAutoSubmitPayload({
+      content_scenario: contentScenario,
+      target_platforms: ["tiktok"],
+      target_languages: ["en"],
+      content_calendar_week: "2026-W28",
+      product_catalog: { name: "Fixture" },
+    });
+
+    for (const key of forbiddenKeys) {
+      expect(payload).not.toHaveProperty(key);
+    }
+  });
+});
+
+describe("buildS1EditedStateUpdate", () => {
+  it("sends only user-editable fields for one step", () => {
+    const payload = buildS1EditedStateUpdate("scripts", [{ text: "edited" }]);
+
+    expect(payload).toEqual({
+      steps: {
+        scripts: {
+          edited: true,
+          edited_output: [{ text: "edited" }],
+        },
+      },
+    });
+    expect(payload).not.toHaveProperty("current_step");
+    expect((payload.steps as Record<string, unknown>).scripts).not.toHaveProperty("status");
+    expect((payload.steps as Record<string, unknown>).scripts).not.toHaveProperty("output");
   });
 });

@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type APIResponse } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 
 export const PRODUCTION_API_KEY = process.env.PLAYWRIGHT_API_KEY?.trim() ?? "";
 const DEMO_API_KEY = "ai_video_demo_2026";
@@ -24,6 +25,16 @@ export function productionApiHeaders(extra: Record<string, string> = {}): Record
     "X-API-Key": requireProductionApiKey(),
     ...extra,
   };
+}
+
+export function productionSubmitHeaders(
+  operation: string,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  return productionApiHeaders({
+    "Idempotency-Key": `${operation}-${randomUUID()}`,
+    ...extra,
+  });
 }
 
 export function isExpectedProductionPageNoise(message: string): boolean {

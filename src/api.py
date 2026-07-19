@@ -15,7 +15,9 @@ import os
 import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from datetime import UTC, datetime
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -26,6 +28,7 @@ load_dotenv()
 try:
     from fastapi import Depends, FastAPI
     from fastapi.middleware.cors import CORSMiddleware
+
     HAS_FASTAPI = True
 except ImportError:
     FastAPI = None  # type: ignore[assignment]
@@ -35,6 +38,7 @@ except ImportError:
 
 try:
     from src.storage import init_db
+
     HAS_STORAGE = True
 except ImportError:
     init_db = None  # type: ignore[assignment]
@@ -53,6 +57,7 @@ if HAS_FASTAPI:
             await init_db()
             try:
                 from src.storage.db import check_pg_health, is_pg_available
+
                 health = await check_pg_health()
                 _log = logging.getLogger("api.startup")
                 _log.info(
@@ -68,23 +73,25 @@ if HAS_FASTAPI:
                         "alembic upgrade head"
                     )
             except Exception as exc:
-                logging.getLogger("api.startup").warning(
-                    "persistence health check failed: %s", exc
-                )
+                logging.getLogger("api.startup").warning("persistence health check failed: %s", exc)
         # P2-1: Restore active threads from disk (standalone mode only)
         from src.routers._state import _restore_thread_index
+
         _restore_thread_index()
         # P1-10: Start background thread cache eviction loop
         from src.routers._state import _periodic_cache_eviction
         from src.tasks.bg_registry import register_background_task as _register_background_task
+
         _register_background_task(
             asyncio.create_task(_periodic_cache_eviction()),
             label="cache_eviction",
         )
         # P0: Production API key sanity check — fail-fast if required keys missing
         from src.config import ENVIRONMENT
+
         if ENVIRONMENT == "production":
             from src.config import DEEPSEEK_API_KEY, POYO_API_KEY, SEEDANCE_API_KEY, SILICONFLOW_API_KEY
+
             missing = []
             if not DEEPSEEK_API_KEY:
                 missing.append("DEEPSEEK_API_KEY")
@@ -101,11 +108,10 @@ if HAS_FASTAPI:
         # Portfolio: auto-rebuild assets/portfolio/index.json on pipeline.completed
         try:
             from src.tools.portfolio_hook import register_portfolio_hook
+
             register_portfolio_hook()
         except Exception as _exc:
-            logging.getLogger("api.startup").warning(
-                "portfolio hook registration failed: %s", _exc
-            )
+            logging.getLogger("api.startup").warning("portfolio hook registration failed: %s", _exc)
 
         # Admin Panel: background tasks (health checks + cleanup)
         try:
@@ -121,9 +127,7 @@ if HAS_FASTAPI:
                     try:
                         await run_health_checks()
                     except Exception as exc:
-                        logging.getLogger("api.admin").warning(
-                            "admin health check failed: %s", exc
-                        )
+                        logging.getLogger("api.admin").warning("admin health check failed: %s", exc)
 
             async def _admin_session_cleanup_loop():
                 while True:
@@ -131,9 +135,7 @@ if HAS_FASTAPI:
                     try:
                         await cleanup_expired_sessions()
                     except Exception as exc:
-                        logging.getLogger("api.admin").warning(
-                            "admin session cleanup failed: %s", exc
-                        )
+                        logging.getLogger("api.admin").warning("admin session cleanup failed: %s", exc)
 
             async def _admin_log_cleanup_loop():
                 while True:
@@ -141,9 +143,7 @@ if HAS_FASTAPI:
                     try:
                         await cleanup_old_logs()
                     except Exception as exc:
-                        logging.getLogger("api.admin").warning(
-                            "admin log cleanup failed: %s", exc
-                        )
+                        logging.getLogger("api.admin").warning("admin log cleanup failed: %s", exc)
 
             _register_background_task(
                 asyncio.create_task(_admin_health_loop()),
@@ -159,9 +159,7 @@ if HAS_FASTAPI:
             )
             logging.getLogger("api.startup").info("admin background tasks registered")
         except Exception as _exc:
-            logging.getLogger("api.startup").warning(
-                "admin background tasks registration failed: %s", _exc
-            )
+            logging.getLogger("api.startup").warning("admin background tasks registration failed: %s", _exc)
 
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
@@ -169,8 +167,15 @@ if HAS_FASTAPI:
         try:
             yield
         finally:
+            from src.services.submission_idempotency import (
+                shutdown_submission_idempotency_service_if_initialized,
+            )
             from src.tasks.bg_registry import cancel_background_tasks
-            await cancel_background_tasks()
+
+            try:
+                await shutdown_submission_idempotency_service_if_initialized()
+            finally:
+                await cancel_background_tasks()
 
     app = FastAPI(title="Short Video Agent API", version=APP_VERSION, lifespan=_lifespan)
 
@@ -191,7 +196,13 @@ if HAS_FASTAPI:
         CORSMiddleware,
         allow_origins=allow_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Client-Trace-Id"],
+        allow_headers=[
+            "Content-Type",
+            "X-API-Key",
+            "Authorization",
+            "X-Client-Trace-Id",
+            "Idempotency-Key",
+        ],
         allow_credentials=True,  # Admin Panel: HttpOnly cookie auth
     )
 
@@ -251,7 +262,10 @@ if HAS_FASTAPI:
         _duration_ms = (time.perf_counter() - _start) * 1000
         _request_log.info(
             "%s %s → %s (%.0fms)",
-            request.method, request.url.path, response.status_code, _duration_ms,
+            request.method,
+            request.url.path,
+            response.status_code,
+            _duration_ms,
         )
         return response
 
@@ -325,41 +339,90 @@ if HAS_FASTAPI:
                 new_response.raw_headers.append((name, value))
         return new_response
 
+    _LEGACY_PUBLISH_HEADERS = {
+        "Deprecation": "true",
+        "Link": '</distribution/publish>; rel="successor-version"',
+    }
+
+    @app.middleware("http")
+    async def legacy_publish_deprecation_middleware(request, call_next):
+        response = await call_next(request)
+        parts = request.url.path.split("/")
+        is_legacy_publish = request.method == "POST" and len(parts) == 3 and parts[1] == "publish" and bool(parts[2])
+        if is_legacy_publish:
+            response.headers.update(_LEGACY_PUBLISH_HEADERS)
+        return response
+
     # ── Mount domain routers (P1-11) ──
     from src.routers import health
     from src.routers._deps import verify_api_key
+    from src.services.provider_execution import provider_execution_request_scope
+
     app.include_router(health.router)
 
     from src.routers import prometheus
+
     app.include_router(prometheus.router)
 
     from src.routers import pipeline
-    app.include_router(pipeline.router, dependencies=[Depends(verify_api_key)])
+
+    app.include_router(
+        pipeline.router,
+        dependencies=[
+            Depends(provider_execution_request_scope),
+            Depends(verify_api_key),
+        ],
+    )
 
     from src.routers import scenario
-    app.include_router(scenario.router, dependencies=[Depends(verify_api_key)])
+
+    app.include_router(
+        scenario.router,
+        dependencies=[
+            Depends(provider_execution_request_scope),
+            Depends(verify_api_key),
+        ],
+    )
+
+    from src.routers import submissions
+
+    app.include_router(submissions.router, dependencies=[Depends(verify_api_key)])
+
+    from src.routers import acceptance_records
+
+    app.include_router(
+        acceptance_records.router,
+        dependencies=[Depends(verify_api_key)],
+    )
 
     from src.routers import distribution
+
     app.include_router(distribution.router, dependencies=[Depends(verify_api_key)])
 
     from src.routers import metrics
+
     app.include_router(metrics.router, dependencies=[Depends(verify_api_key)])
 
     from src.routers import assets
+
     app.include_router(assets.router, dependencies=[Depends(verify_api_key)])
 
     from src.routers import media
+
     app.include_router(media.router)
 
     from src.routers import portfolio
+
     app.include_router(portfolio.router, dependencies=[Depends(verify_api_key)])
 
     from src.routers import toolbox
+
     app.include_router(toolbox.router, dependencies=[Depends(verify_api_key)])
 
     # Mount legacy asset management endpoints
     try:
         from src import api_assets
+
         app.include_router(api_assets.router, dependencies=[Depends(verify_api_key)])
     except (ImportError, RuntimeError) as _e:
         logging.warning("api_assets router skipped: %s", _e)
@@ -367,6 +430,7 @@ if HAS_FASTAPI:
     # Mount telemetry endpoints
     try:
         from src import telemetry_endpoint
+
         if telemetry_endpoint.router:
             app.include_router(
                 telemetry_endpoint.router,
@@ -378,8 +442,52 @@ if HAS_FASTAPI:
     # Mount admin panel router (session-cookie auth, independent of API key)
     try:
         from src.routers.admin import router as admin_router
+
         # No prefix — admin.py endpoints already use /api/admin/* full paths
         app.include_router(admin_router)
         logging.getLogger("api.startup").info("admin router mounted at /api/admin/*")
     except (ImportError, RuntimeError) as _e:
         logging.warning("admin router skipped: %s", _e)
+
+    _fastapi_openapi = app.openapi
+
+    def _rewrite_publish_schema_refs(value: Any) -> Any:
+        if isinstance(value, dict):
+            rewritten: dict[str, Any] = {}
+            for key, nested in value.items():
+                if isinstance(nested, str) and nested.startswith("#/$defs/"):
+                    rewritten[key] = "#/components/schemas/" + nested.removeprefix("#/$defs/")
+                else:
+                    rewritten[key] = _rewrite_publish_schema_refs(nested)
+            return rewritten
+        if isinstance(value, list):
+            return [_rewrite_publish_schema_refs(item) for item in value]
+        return value
+
+    def _openapi_with_exact_publish_request_schema() -> dict[str, Any]:
+        schema = _fastapi_openapi()
+        publish_request_schema = distribution.PublishAttemptRequest.model_json_schema(mode="validation")
+        publish_definitions = publish_request_schema.pop("$defs", {})
+        rewritten_publish_definitions = {
+            name: _rewrite_publish_schema_refs(definition) for name, definition in publish_definitions.items()
+        }
+        publish_request_schema = _rewrite_publish_schema_refs(publish_request_schema)
+
+        existing_component_schemas = schema.get("components", {}).get("schemas", {})
+        for name, definition in rewritten_publish_definitions.items():
+            if name in existing_component_schemas and existing_component_schemas[name] != definition:
+                raise RuntimeError(f"OpenAPI component collision: {name}")
+
+        component_schemas = schema.setdefault("components", {}).setdefault("schemas", {})
+        for name, definition in rewritten_publish_definitions.items():
+            if name not in component_schemas:
+                component_schemas[name] = definition
+        # FastAPI serializes OpenAPI with exclude_none=True, which strips explicit
+        # default: null values from schemas supplied through openapi_extra.
+        for path in ("/distribution/publish", "/publish/{video_id}"):
+            schema["paths"][path]["post"]["requestBody"]["content"]["application/json"]["schema"] = deepcopy(
+                publish_request_schema
+            )
+        return schema
+
+    app.openapi = _openapi_with_exact_publish_request_schema  # type: ignore[method-assign]

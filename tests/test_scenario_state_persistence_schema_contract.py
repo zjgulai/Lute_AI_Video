@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = REPO_ROOT / "configs" / "scenario-state-persistence-contract.yaml"
 RUNBOOK_PATH = REPO_ROOT / "docs" / "runbooks" / "scenario-state-persistence-schema.md"
 DOCS_SCOPE_PATH = REPO_ROOT / "configs" / "docs-link-check-scope.txt"
+FRESH_INIT_SQL_PATH = REPO_ROOT / "src" / "storage" / "migrations" / "001_init.sql"
 
 
 def _load_contract() -> dict[str, Any]:
@@ -38,6 +39,19 @@ def test_scenario_state_persistence_contract_is_documented_and_in_scope():
     assert contract["scenarios"] == ["s1", "s2", "s3", "s4", "s5"]
     assert RUNBOOK_PATH.exists(), "scenario state persistence schema runbook is missing"
     assert "docs/runbooks/scenario-state-persistence-schema.md" in scope_targets
+
+
+def test_fresh_init_schema_contains_regeneration_audit_columns() -> None:
+    sql = FRESH_INIT_SQL_PATH.read_text()
+
+    assert (
+        "ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS regenerate_chain "
+        "JSONB DEFAULT '[]';"
+    ) in sql
+    assert (
+        "ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS soft_degraded_reasons "
+        "JSONB DEFAULT '[]';"
+    ) in sql
 
 
 def _contract_state(label: str = "contract-pg-projection") -> dict[str, Any]:
@@ -69,6 +83,242 @@ def test_repository_payload_coerces_trace_id_to_string():
     })
 
     assert payload["trace_id"] == "55663019"
+
+
+def test_pg_projection_preserves_bounded_lifecycle_via_persisted_config():
+    from src.pipeline.state_manager import _hydrate_execution_lifecycle, _repository_payload
+
+    state = {
+        **_contract_state(label="bounded-pg-projection"),
+        "status": "completed_bounded",
+        "lifecycle_status": "completed_bounded",
+        "completion_kind": "no_media",
+        "request_succeeded": True,
+        "success": False,
+        "full_media_success": False,
+        "pipeline_complete": False,
+        "publish_allowed": False,
+        "delivery_accepted": False,
+        "execution_profile_id": "generation-execution.v1:s1:no-media",
+        "provider_job_caps": {},
+    }
+    state["config"].update(
+        {
+            "effective_generation_execution_profile": {
+                "profile_id": "generation-execution.v1:s1:no-media",
+                "provider_job_caps": {},
+            },
+            "provider_job_caps": {},
+        }
+    )
+
+    payload = _repository_payload(state)
+    pg_projection = {"label": state["label"], **payload}
+    hydrated = _hydrate_execution_lifecycle(pg_projection)
+
+    assert hydrated["status"] == "completed_bounded"
+    assert hydrated["lifecycle_status"] == "completed_bounded"
+    assert hydrated["completion_kind"] == "no_media"
+    assert hydrated["request_succeeded"] is True
+    assert hydrated["success"] is False
+    assert hydrated["full_media_success"] is False
+    assert hydrated["pipeline_complete"] is False
+    assert hydrated["publish_allowed"] is False
+    assert hydrated["delivery_accepted"] is False
+    assert hydrated["execution_profile_id"] == "generation-execution.v1:s1:no-media"
+    assert hydrated["provider_job_caps"] == {}
+
+
+def test_lifecycle_hydration_rejects_success_escalation() -> None:
+    from src.pipeline.state_manager import _hydrate_execution_lifecycle
+
+    state = _contract_state(label="tampered-lifecycle")
+    state["config"]["execution_lifecycle"] = {
+        "status": "completed_bounded",
+        "lifecycle_status": "completed_bounded",
+        "completion_kind": "no_media",
+        "request_succeeded": True,
+        "success": True,
+        "full_media_success": True,
+        "pipeline_complete": True,
+        "publish_allowed": True,
+        "delivery_accepted": True,
+    }
+
+    with pytest.raises(ValueError, match="lifecycle"):
+        _hydrate_execution_lifecycle(state)
+
+
+def test_lifecycle_hydration_rejects_top_level_only_claims() -> None:
+    from src.pipeline.state_manager import _hydrate_execution_lifecycle
+
+    state = {
+        **_contract_state(label="top-level-only-lifecycle"),
+        "status": "completed_bounded",
+        "lifecycle_status": "completed_bounded",
+        "success": False,
+    }
+
+    with pytest.raises(ValueError, match="envelope"):
+        _hydrate_execution_lifecycle(state)
+
+
+def test_lifecycle_hydration_rejects_top_level_envelope_mismatch() -> None:
+    from src.pipeline.state_manager import _hydrate_execution_lifecycle
+
+    state = _contract_state(label="mismatched-lifecycle")
+    state["config"]["execution_lifecycle"] = {
+        "status": "completed_bounded",
+        "lifecycle_status": "completed_bounded",
+        "completion_kind": "no_media",
+        "request_succeeded": True,
+        "success": False,
+        "full_media_success": False,
+        "pipeline_complete": False,
+        "publish_allowed": False,
+        "delivery_accepted": False,
+    }
+    state["success"] = True
+
+    with pytest.raises(ValueError, match="mismatch"):
+        _hydrate_execution_lifecycle(state)
+
+
+def test_lifecycle_hydration_rejects_profile_and_caps_claim_tamper() -> None:
+    from src.pipeline.state_manager import _hydrate_execution_lifecycle
+
+    lifecycle = {
+        "status": "completed_bounded",
+        "lifecycle_status": "completed_bounded",
+        "completion_kind": "bounded_media",
+        "request_succeeded": True,
+        "success": False,
+        "full_media_success": False,
+        "pipeline_complete": False,
+        "publish_allowed": False,
+        "delivery_accepted": False,
+        "execution_profile_id": "generation-execution.v1:s1:tampered",
+        "provider_job_caps": {"video": True},
+    }
+    state = {
+        **_contract_state(label="tampered-profile-lifecycle"),
+        **lifecycle,
+    }
+    state["config"].update(
+        {
+            "effective_generation_execution_profile": {
+                "profile_id": "generation-execution.v1:s1:bounded-seedance",
+                "provider_job_caps": {"video": 1},
+            },
+            "provider_job_caps": {"video": 1},
+            "execution_lifecycle": dict(lifecycle),
+        }
+    )
+
+    with pytest.raises(ValueError, match="profile/caps"):
+        _hydrate_execution_lifecycle(state)
+
+
+def test_pg_projection_preserves_regenerate_audit_fields() -> None:
+    from src.pipeline.state_manager import _repository_payload
+
+    payload = _repository_payload(
+        {
+            **_contract_state(label="regenerate-audit-pg"),
+            "regenerate_chain": [{"upstream_step": "scripts", "attempt": 1}],
+            "soft_degraded_reasons": [{"reason": "fixture"}],
+        }
+    )
+
+    assert payload["regenerate_chain"] == [
+        {"upstream_step": "scripts", "attempt": 1}
+    ]
+    assert payload["soft_degraded_reasons"] == [{"reason": "fixture"}]
+
+
+def test_preexecution_provider_caps_do_not_create_partial_lifecycle_envelope() -> None:
+    from src.pipeline.state_manager import _repository_payload
+
+    state = {
+        **_contract_state(label="preexecution-caps"),
+        "provider_job_caps": {"video": 1},
+    }
+    state["config"]["provider_job_caps"] = {"video": 1}
+
+    payload = _repository_payload(state)
+
+    assert "execution_lifecycle" not in payload["config"]
+
+
+@pytest.mark.asyncio
+async def test_real_state_manager_pg_roundtrip_preserves_bounded_lifecycle_and_audit_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.pipeline import state_manager as state_manager_module
+
+    rows: dict[str, dict[str, Any]] = {}
+
+    class FakeRepository:
+        async def get_by_label(self, label: str) -> dict[str, Any] | None:
+            row = rows.get(label)
+            return dict(row) if row is not None else None
+
+        async def create(self, data: dict[str, Any]) -> None:
+            rows[data["label"]] = {"id": "row-1", **data}
+
+        async def update(self, row_id: str, data: dict[str, Any]) -> None:
+            assert row_id == "row-1"
+            label = next(label for label, row in rows.items() if row["id"] == row_id)
+            rows[label] = {"id": row_id, "label": label, **data}
+
+    monkeypatch.setattr(state_manager_module.PipelineStateManager, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(state_manager_module, "HAS_STORAGE", True)
+    monkeypatch.setattr(state_manager_module, "is_pg_available", lambda: True)
+    monkeypatch.setattr(state_manager_module, "PipelineStateRepository", FakeRepository)
+
+    profile_id = "generation-execution.v1:s1:no-media"
+    lifecycle = {
+        "status": "completed_bounded",
+        "lifecycle_status": "completed_bounded",
+        "completion_kind": "no_media",
+        "request_succeeded": True,
+        "success": False,
+        "full_media_success": False,
+        "pipeline_complete": False,
+        "publish_allowed": False,
+        "delivery_accepted": False,
+        "execution_profile_id": profile_id,
+        "provider_job_caps": {},
+    }
+    state = {
+        **_contract_state(label="bounded-real-pg-roundtrip"),
+        **lifecycle,
+        "regenerate_chain": [{"upstream_step": "scripts", "attempt": 1}],
+        "soft_degraded_reasons": [{"reason": "optional fixture fallback"}],
+    }
+    state["config"].update(
+        {
+            "effective_generation_execution_profile": {
+                "profile_id": profile_id,
+                "provider_job_caps": {},
+            },
+            "provider_job_caps": {},
+            "execution_lifecycle": dict(lifecycle),
+        }
+    )
+
+    manager = state_manager_module.PipelineStateManager(use_pg=True)
+    await manager.save(state["label"], state)
+    loaded = await manager.load(state["label"])
+    fs_state = json.loads(
+        (tmp_path / "pipeline_states" / f"{state['label']}.json").read_text()
+    )
+
+    assert rows[state["label"]]["regenerate_chain"] == state["regenerate_chain"]
+    assert rows[state["label"]]["soft_degraded_reasons"] == state["soft_degraded_reasons"]
+    assert fs_state == state
+    assert loaded == state
 
 
 @pytest.mark.asyncio

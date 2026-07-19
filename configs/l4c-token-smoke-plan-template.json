@@ -5,6 +5,9 @@
   "created": "2026-06-11",
   "updated": "2026-06-11",
   "owner": "self",
+  "plan_record_ref": "",
+  "workflow_run_ref": "",
+  "commit_sha": "",
   "target_base_url": "https://video.lute-tlz-dddd.top",
   "allowed_specs": [
     "fast-mode-submit.prod.spec.ts"
@@ -19,6 +22,7 @@
   "serial_workers_required": true,
   "run_token_smoke_required": true,
   "media_generation": {
+    "fast_allowed": false,
     "s1_allowed": false,
     "s5_allowed": false,
     "notes": "Set explicit booleans before L4C. Do not infer media generation permission from spec names."
@@ -38,6 +42,9 @@
   },
   "notes": [
     "Copy this template to tmp/outputs/ or a private location before filling it.",
+    "For the protected workflow, bind plan_record_ref and approval_record_ref to the exact logical audit refs supplied at dispatch.",
+    "Bind workflow_run_ref to GITHUB_RUN_ID:GITHUB_RUN_ATTEMPT and commit_sha to the exact GITHUB_SHA before approving the protected job.",
+    "Set media_generation.fast_allowed=true only when the exact Fast media single-submit spec is approved.",
     "Do not store API keys or provider secrets in this file.",
     "template_only must be false and status must be approved before the validator can pass."
   ]

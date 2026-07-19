@@ -20,7 +20,7 @@ vi.mock("./api", () => ({
   logStateChange: vi.fn(),
 }));
 
-import PipelineStatusBar from "./PipelineStatusBar";
+import PipelineStatusBar, { deriveSnapshot } from "./PipelineStatusBar";
 import { getScenarioStatus } from "./api";
 
 const notificationInstances = vi.fn();
@@ -166,5 +166,33 @@ describe("PipelineStatusBar notifications", () => {
     } finally {
       cleanup();
     }
+  });
+
+  it.each([
+    { status: "completed_bounded" },
+    { status: "completed_full" },
+    { status: "running", lifecycle_status: "completed_bounded" },
+    { status: "running", lifecycle_status: "completed_full" },
+  ])("treats every completion lifecycle as terminal: %o", (payload) => {
+    expect(deriveSnapshot({
+      ...payload,
+      current_step: null,
+      steps: { strategy: { status: "done" } },
+      errors: [],
+    }).status).toBe("completed");
+  });
+
+  it.each([
+    { status: "failed" },
+    { status: "recovery_required" },
+    { status: "running", lifecycle_status: "failed" },
+    { status: "running", lifecycle_status: "recovery_required" },
+  ])("treats explicit failure lifecycle as terminal error: %o", (payload) => {
+    expect(deriveSnapshot({
+      ...payload,
+      current_step: null,
+      steps: { strategy: { status: "error" } },
+      errors: ["safe failure"],
+    }).status).toBe("error");
   });
 });

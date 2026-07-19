@@ -35,12 +35,31 @@ def test_gate_approve_idempotency_contract_is_documented_and_in_scope() -> None:
 
 
 def _gate_1_state(label: str = "gate-approve-idempotency") -> dict[str, Any]:
-    return {
+    from src.pipeline.generation_policy import (
+        EffectiveGenerationPolicy,
+        resolve_generation_execution_profile,
+    )
+
+    policy = EffectiveGenerationPolicy(
+        tenant_id="default",
+        scenario="s1",
+        enable_media_synthesis=False,
+        artifact_disposition="pending_review",
+        provider_max_retries=0,
+    )
+    state = {
         "schema_version": 1,
         "label": label,
         "scenario": "s1",
         "tenant_id": "default",
-        "config": {"product_catalog": {"product_name": "Test"}, "brand_guidelines": {}},
+        "config": {
+            "product_catalog": {"product_name": "Test"},
+            "brand_guidelines": {},
+            "enable_media_synthesis": False,
+            "artifact_disposition": "pending_review",
+            "provider_max_retries": 0,
+            "effective_generation_policy": policy.model_dump(mode="json"),
+        },
         "steps": {
             "strategy": {"output": {}, "status": "done"},
             "scripts": {"output": [{"text": "original"}], "status": "done"},
@@ -62,11 +81,19 @@ def _gate_1_state(label: str = "gate-approve-idempotency") -> dict[str, Any]:
             }
         },
     }
+    profile = resolve_generation_execution_profile(
+        state,
+        require_persisted_profile=False,
+    )
+    state["config"]["effective_generation_execution_profile"] = profile.model_dump()
+    state["config"]["provider_job_caps"] = dict(profile.provider_job_caps)
+    return state
 
 
 @pytest.mark.asyncio
 async def test_repeated_approve_same_selection_is_idempotent_and_preserves_state(
     isolated_state_dir,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     manager = PipelineStateManager()
     state = _gate_1_state()
@@ -74,6 +101,20 @@ async def test_repeated_approve_same_selection_is_idempotent_and_preserves_state
 
     first = await approve_gate(state["label"], "gate_1_script", ["c1"])
     first_state = await manager.load(state["label"])
+
+    retry_saves = 0
+    original_save = PipelineStateManager.save
+
+    async def counted_save(
+        self: PipelineStateManager,
+        label: str,
+        value: dict[str, Any],
+    ) -> None:
+        nonlocal retry_saves
+        retry_saves += 1
+        await original_save(self, label, value)
+
+    monkeypatch.setattr(PipelineStateManager, "save", counted_save)
 
     retry = await approve_gate(state["label"], "gate_1_script", ["c1"])
     retry_state = await manager.load(state["label"])
@@ -87,6 +128,7 @@ async def test_repeated_approve_same_selection_is_idempotent_and_preserves_state
     assert retry["selected_variants"] == ["creative"]
     assert retry["next_step"] == "compliance"
     assert retry_state == first_state
+    assert retry_saves == 0
 
 
 @pytest.mark.asyncio
@@ -100,7 +142,7 @@ async def test_router_does_not_start_background_resume_for_idempotent_approve(
 
     class FakeStateManager:
         async def load(self, label: str) -> dict[str, Any]:
-            return {"label": label, "tenant_id": "default"}
+            return {"label": label, "tenant_id": "default", "scenario": "s1"}
 
     async def fake_approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dict[str, Any]:
         return {

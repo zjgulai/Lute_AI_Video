@@ -20,7 +20,7 @@ source: human+ai
 
 - `rendering/` 只能做本地 Remotion bundle/render、clip concat、audio mux 和 health probe。
 - `rendering/` 禁止读取 `POYO_API_KEY`、`DEEPSEEK_API_KEY`、`SILICONFLOW_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`SEEDANCE_API_KEY`、发布平台 token 或 `RUN_TOKEN_SMOKE`。
-- `rendering/` 禁止引用 provider API host，例如 `api.poyo.ai`、`api.deepseek.com`、`api.siliconflow.cn`。
+- `rendering/` 禁止引用 provider API host，例如 `api.poyo.ai`、`api.deepseek.com`、`api.siliconflow.cn`、`api.siliconflow.com`。
 - 允许的环境变量只限本地运行控制：`NODE_ENV`、`PORT`、`OUTPUT_DIR`、`PUPPETEER_SKIP_DOWNLOAD`、`PUPPETEER_EXECUTABLE_PATH`、`REMOTION_CHROME_EXECUTABLE`。
 - Lighthouse `rendering` service 不使用 `env_file`，只接收 `NODE_ENV=production`、`PORT=3001` 和 `OUTPUT_DIR=/app/output`。
 - 本地 `docker-compose.yml` 不单独定义 provider-enabled rendering service，只把 `./rendering` 作为后端容器内本地工具目录挂载。

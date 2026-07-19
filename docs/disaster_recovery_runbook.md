@@ -127,7 +127,8 @@ from pathlib import Path
 expected = {
     "tenants", "admin_accounts", "api_keys", "admin_sessions", "threads",
     "pipeline_states", "brand_packages", "influencers", "video_metrics",
-    "publish_logs", "error_logs", "audit_logs",
+    "publish_logs", "error_logs", "audit_logs", "idempotency_records",
+    "acceptance_records", "job_budget_accounts", "provider_cost_attempts",
 }
 actual = set()
 for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():

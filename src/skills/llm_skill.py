@@ -6,7 +6,7 @@ Used for most content generation skills (strategy, script, prompts).
 Provides built-in:
 - Parameter injection into prompt templates
 - Output format enforcement via output_schema
-- Retry + validation + fallback
+- Validation and explicit local fallback for unconfigured/non-accounting errors
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 
 import structlog
 
+from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 
 logger = structlog.get_logger()
@@ -32,7 +33,8 @@ class LLMSkill(SkillCallable):
         output_schema: Optional Pydantic-like dict schema for output validation.
             Format: {"type": "object", "properties": {"field": {"type": "string"}, ...}}
         fallback_data: Static fallback data returned when all retries fail.
-        max_retries: Number of LLM call retries before fallback.
+        max_retries: Retained compatibility metadata; paid mutations are never
+            retried by this skill.
     """
 
     def __init__(
@@ -61,17 +63,31 @@ class LLMSkill(SkillCallable):
 
         system = self._inject_params(self._system_prompt, params)
         user = self._inject_params(self._user_message_template, params)
-
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ]
+        variant = params.get("variant", "primary")
+        operation_scope = params.get("operation_scope", "execution")
+        if not isinstance(operation_scope, str) or not operation_scope:
+            operation_scope = "execution"
+        operation_instance = params.get("operation_instance")
+        if not isinstance(operation_instance, str) or not operation_instance:
+            operation_instance = (
+                f"{operation_scope}.variant.{variant}" if variant != "primary" else f"{operation_scope}.primary"
+            )
 
         try:
             if self._output_schema:
-                raw_result = await llm.invoke_json(system, user)
+                raw_result = await llm.invoke_json(
+                    system,
+                    user,
+                    operation_key="skill.llm",
+                    operation_instance=operation_instance,
+                )
             else:
-                raw_result = await llm.invoke(messages)
+                raw_result = await llm.invoke(
+                    system,
+                    user,
+                    operation_key="skill.llm",
+                    operation_instance=operation_instance,
+                )
                 return SkillResult(success=True, data=raw_result)
 
             # If output_schema is a Pydantic model class
@@ -83,6 +99,8 @@ class LLMSkill(SkillCallable):
             # Plain dict schema — return as-is
             return SkillResult(success=True, data=raw_result)
 
+        except ProviderCostContractError:
+            raise
         except Exception as e:
             logger.warning(
                 "llm_skill: execution failed",

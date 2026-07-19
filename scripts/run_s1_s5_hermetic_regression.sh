@@ -12,13 +12,27 @@ export SEEDANCE_API_KEY=""
 export SILICONFLOW_API_KEY=""
 export ELEVENLABS_API_KEY=""
 export TIKTOK_ACCESS_TOKEN=""
-export TIKTOK_OPEN_ID=""
+export TIKTOK_PUBLISH_ENABLED="false"
 export SHOPIFY_STORE_URL=""
-export SHOPIFY_ADMIN_TOKEN=""
+export SHOPIFY_ACCESS_TOKEN=""
+export SHOPIFY_PUBLISH_ENABLED="false"
 export SUPABASE_URL=""
 export SUPABASE_SERVICE_KEY=""
 
-python -m pytest \
+PYTHON_BIN="${PYTHON:-.venv/bin/python}"
+if [[ "$PYTHON_BIN" == */* ]]; then
+  [[ -x "$PYTHON_BIN" ]] || {
+    printf 'hermetic regression Python interpreter is unavailable: %s\n' "$PYTHON_BIN" >&2
+    exit 1
+  }
+else
+  command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
+    printf 'hermetic regression Python interpreter is unavailable: %s\n' "$PYTHON_BIN" >&2
+    exit 1
+  }
+fi
+
+"$PYTHON_BIN" -m pytest \
   tests/test_s1_e2e.py \
   tests/test_s2_e2e.py \
   tests/test_s2_deprecated_shim_boundary.py \

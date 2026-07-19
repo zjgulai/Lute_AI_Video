@@ -5,7 +5,7 @@ module: testing
 topic: s1-s5-hermetic-regression
 status: stable
 created: 2026-05-31
-updated: 2026-05-31
+updated: 2026-07-14
 owner: self
 source: human+ai
 ---
@@ -44,7 +44,9 @@ The script explicitly clears external provider and publishing credentials:
 - `SILICONFLOW_API_KEY`
 - `ELEVENLABS_API_KEY`
 - `TIKTOK_ACCESS_TOKEN`
-- `SHOPIFY_ADMIN_TOKEN`
+- `TIKTOK_PUBLISH_ENABLED`
+- `SHOPIFY_ACCESS_TOKEN`
+- `SHOPIFY_PUBLISH_ENABLED`
 - `SUPABASE_SERVICE_KEY`
 
 Do not add production URLs, `RUN_TOKEN_SMOKE=1`, curl commands or scenario submit smoke calls to this script. Real generation remains P2 after POYO recharge.

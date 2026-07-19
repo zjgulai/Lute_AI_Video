@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 
 from src.pipeline.gate_manager import (
     SCENARIO_GATE_DEFINITIONS,
@@ -18,8 +19,13 @@ from src.pipeline.gate_manager import (
 )
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import _get_gate_after_steps, _get_gate_id_for_step
+from tests.generation_policy_test_utils import (
+    attach_execution_policy,
+    bound_generation_policy,
+)
 
 # ── 静态配置验证 ──
+
 
 class TestScenarioGateDefinitions:
     """验证 SCENARIO_GATE_DEFINITIONS 各场景 gate 定义完整且一致。"""
@@ -47,9 +53,7 @@ class TestScenarioGateDefinitions:
         step_order = SCENARIO_STEP_ORDERS.get(scenario, [])
         for gate_id, definition in defs.items():
             after = definition["after_step"]
-            assert after in step_order, (
-                f"{scenario}.{gate_id}.after_step={after} 不在 {scenario} 的 step_order 中"
-            )
+            assert after in step_order, f"{scenario}.{gate_id}.after_step={after} 不在 {scenario} 的 step_order 中"
 
     @pytest.mark.parametrize("scenario", ["s1", "s2", "s3", "s4", "s5"])
     def test_candidate_step_has_skill_mapping(self, scenario: str):
@@ -58,9 +62,7 @@ class TestScenarioGateDefinitions:
         for gate_id, definition in defs.items():
             cs = definition.get("candidate_step")
             if cs is not None:
-                assert cs in STEP_TO_SKILL_NAME, (
-                    f"{scenario}.{gate_id}.candidate_step={cs} 不在 STEP_TO_SKILL_NAME"
-                )
+                assert cs in STEP_TO_SKILL_NAME, f"{scenario}.{gate_id}.candidate_step={cs} 不在 STEP_TO_SKILL_NAME"
                 # NOTE: video_prompts / thumbnails 映射为 None 是已知设计
                 # (S4 gate_2_prompts / gate_3_thumbnails 从 state 组装而非 skill 生成)
 
@@ -117,7 +119,16 @@ class TestS4SpecificGates:
 
     def test_s4_step_order_matches(self):
         s4_order = SCENARIO_STEP_ORDERS["s4"]
-        assert s4_order == ["scripts", "continuity_storyboard_grid", "video_prompts", "thumbnails", "seedance_clips", "tts_audio", "assemble_final", "audit"]
+        assert s4_order == [
+            "scripts",
+            "continuity_storyboard_grid",
+            "video_prompts",
+            "thumbnails",
+            "seedance_clips",
+            "tts_audio",
+            "assemble_final",
+            "audit",
+        ]
 
 
 class TestS5SpecificGates:
@@ -150,6 +161,7 @@ class TestS5SpecificGates:
 
 
 # ── 动态查询函数验证 ──
+
 
 class TestGetGateAfterSteps:
     """验证 _get_gate_after_steps 返回正确的 after_step 集合。"""
@@ -220,6 +232,7 @@ class TestScenarioGateLifecycle:
                 },
             },
         }
+        attach_execution_policy(state, scenario="s4", media=False)
         await PipelineStateManager().save("s4-gate-advance", state)
 
         result = await approve_gate("s4-gate-advance", "gate_1_script", ["s4_c0"])
@@ -241,18 +254,24 @@ class TestScenarioGateLifecycle:
                     "approved": False,
                     "selected_ids": [],
                     "candidates": [
-                        {"id": "s5_c0", "variant": "standard", "data": {"product_catalog": {"name": "X1"}}, "score": {"overall": 0.9}},
+                        {
+                            "id": "s5_c0",
+                            "variant": "standard",
+                            "data": {"product_catalog": {"name": "X1"}},
+                            "score": {"overall": 0.9},
+                        },
                     ],
                 },
             },
         }
+        attach_execution_policy(state, scenario="s5", media=False)
         await PipelineStateManager().save("s5-gate-advance", state)
 
         result = await approve_gate("s5-gate-advance", "gate_1_strategy", ["s5_c0"])
         assert result["next_step"] == "continuity_storyboard_grid"
 
     @pytest.mark.asyncio
-    async def test_s4_final_gate_generates_state_assembled_candidate(self, isolated_state_dir):
+    async def test_s4_thumbnail_gate_is_blocked_outside_exact_profile(self, isolated_state_dir):
         state = {
             "label": "s4-final-gate",
             "scenario": "s4",
@@ -262,14 +281,16 @@ class TestScenarioGateLifecycle:
                 "scripts": {"output": [{"id": "s1"}]},
             },
         }
+        attach_execution_policy(state, scenario="s4", media=True)
         await PipelineStateManager().save("s4-final-gate", state)
 
-        result = await generate_candidates("s4-final-gate", "gate_3_thumbnails")
-        assert result["gate_id"] == "gate_3_thumbnails"
-        assert result["candidates"][0]["data"]["script_count"] == 1
+        with pytest.raises(HTTPException) as exc:
+            await generate_candidates("s4-final-gate", "gate_3_thumbnails")
+        assert exc.value.status_code == 422
+        assert "outside execution profile" in str(exc.value.detail)
 
     @pytest.mark.asyncio
-    async def test_s5_final_gate_generates_state_assembled_candidate(self, isolated_state_dir):
+    async def test_s5_final_gate_is_blocked_outside_exact_profile(self, isolated_state_dir):
         state = {
             "label": "s5-final-gate",
             "scenario": "s5",
@@ -280,14 +301,17 @@ class TestScenarioGateLifecycle:
                 "seedance_clips": {"output": {"total_duration": 15}},
             },
         }
+        attach_execution_policy(state, scenario="s5", media=True)
         await PipelineStateManager().save("s5-final-gate", state)
 
-        result = await generate_candidates("s5-final-gate", "gate_3_final")
-        assert result["gate_id"] == "gate_3_final"
-        assert result["candidates"][0]["data"]["final_video_path"] == "/tmp/final.mp4"
+        with pytest.raises(HTTPException) as exc:
+            await generate_candidates("s5-final-gate", "gate_3_final")
+        assert exc.value.status_code == 422
+        assert "outside execution profile" in str(exc.value.detail)
 
 
 # ── _build_skill_params 验证 ──
+
 
 class TestBuildSkillParamsForScenarios:
     """验证 _build_skill_params 为各场景的 candidate_step 正确构建参数。"""
@@ -378,11 +402,16 @@ class TestBuildSkillParamsForScenarios:
 
 # ── step_runner gate 触发验证(S3/S4/S5) ──
 
+
 class TestStepRunnerGatePauseForScenarios:
     """验证 StepRunner 在非 S1 场景下正确触发 gate 暂停。"""
 
     @pytest.mark.asyncio
-    async def test_s3_step_by_step_pauses_at_remix_script_gate(self, isolated_state_dir):
+    async def test_s3_step_by_step_pauses_at_remix_script_gate(
+        self,
+        isolated_state_dir,
+        isolated_provider_cost_db,
+    ):
         from unittest.mock import AsyncMock, patch
 
         from src.pipeline.step_runner import StepRunner
@@ -394,10 +423,17 @@ class TestStepRunnerGatePauseForScenarios:
             "product": {"name": "Test Product"},
             "influencer_name": "TestInfluencer",
         }
-        label = await step_runner.init_state(config=config, mode="step_by_step", scenario="s3")
+        async with bound_generation_policy("s3", media=False):
+            label = await step_runner.init_state(
+                config=config,
+                mode="step_by_step",
+                scenario="s3",
+            )
 
         # 预跑 video_analysis 和 character_identity(没有 gate)
-        with patch("src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline.run_step", new_callable=AsyncMock) as mock_run:
+        with patch(
+            "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline.run_step", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = {"mock": "data"}
             await step_runner.run_step(label, "video_analysis")
             await step_runner.run_step(label, "character_identity")
@@ -413,7 +449,11 @@ class TestStepRunnerGatePauseForScenarios:
         assert state["current_step"] == "remix_script"
 
     @pytest.mark.asyncio
-    async def test_s4_step_by_step_pauses_at_scripts_gate(self, isolated_state_dir):
+    async def test_s4_step_by_step_pauses_at_scripts_gate(
+        self,
+        isolated_state_dir,
+        isolated_provider_cost_db,
+    ):
         from unittest.mock import AsyncMock, patch
 
         from src.pipeline.step_runner import StepRunner
@@ -425,9 +465,16 @@ class TestStepRunnerGatePauseForScenarios:
             "product_info": {"name": "Test"},
             "topic": "test topic",
         }
-        label = await step_runner.init_state(config=config, mode="step_by_step", scenario="s4")
+        async with bound_generation_policy("s4", media=False):
+            label = await step_runner.init_state(
+                config=config,
+                mode="step_by_step",
+                scenario="s4",
+            )
 
-        with patch("src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline.run_step", new_callable=AsyncMock) as mock_run:
+        with patch(
+            "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline.run_step", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = {"scripts": [{"text": "mock"}]}
             state = await step_runner.run_step(label, "scripts")
 
@@ -437,7 +484,11 @@ class TestStepRunnerGatePauseForScenarios:
         assert state["current_step"] == "scripts"
 
     @pytest.mark.asyncio
-    async def test_s5_step_by_step_pauses_at_vlog_strategy_gate(self, isolated_state_dir):
+    async def test_s5_step_by_step_pauses_at_vlog_strategy_gate(
+        self,
+        isolated_state_dir,
+        isolated_provider_cost_db,
+    ):
         from unittest.mock import AsyncMock, patch
 
         from src.pipeline.step_runner import StepRunner
@@ -449,9 +500,16 @@ class TestStepRunnerGatePauseForScenarios:
             "product_sku": {"name": "Test SKU"},
             "scene_id": "living-room",
         }
-        label = await step_runner.init_state(config=config, mode="step_by_step", scenario="s5")
+        async with bound_generation_policy("s5", media=False):
+            label = await step_runner.init_state(
+                config=config,
+                mode="step_by_step",
+                scenario="s5",
+            )
 
-        with patch("src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline.run_step", new_callable=AsyncMock) as mock_run:
+        with patch(
+            "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline.run_step", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = {"strategy": "mock vlog strategy"}
             state = await step_runner.run_step(label, "vlog_strategy")
 
@@ -461,20 +519,27 @@ class TestStepRunnerGatePauseForScenarios:
         assert state["current_step"] == "vlog_strategy"
 
     @pytest.mark.asyncio
-    async def test_s3_auto_mode_skips_gate(self, isolated_state_dir):
+    async def test_s3_auto_mode_skips_gate(
+        self,
+        isolated_state_dir,
+        isolated_provider_cost_db,
+    ):
         from unittest.mock import AsyncMock, patch
 
         from src.pipeline.step_runner import StepRunner
 
         sm = PipelineStateManager()
         step_runner = StepRunner(sm)
-        label = await step_runner.init_state(
-            config={"video_url": "", "product": {"name": "Test"}},
-            mode="auto",
-            scenario="s3",
-        )
+        async with bound_generation_policy("s3", media=False):
+            label = await step_runner.init_state(
+                config={"video_url": "", "product": {"name": "Test"}},
+                mode="auto",
+                scenario="s3",
+            )
 
-        with patch("src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline.run_step", new_callable=AsyncMock) as mock_run:
+        with patch(
+            "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline.run_step", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = {"scripts": [{"text": "mock"}]}
             state = await step_runner.run_step(label, "remix_script")
 

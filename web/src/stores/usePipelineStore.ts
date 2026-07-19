@@ -8,6 +8,7 @@ import {
   partializePipelineStorePersistence,
 } from "./persistence";
 import type { PersistedPipelineState } from "./persistence";
+import type { PendingSubmission } from "@/lib/idempotentSubmission";
 
 export interface ActivePipeline {
   label: string;
@@ -90,6 +91,7 @@ interface PipelineState {
   showSteps: boolean;
   activePipeline: ActivePipeline | null;
   dismissedPipelineLabels: string[];
+  pendingSubmission: PendingSubmission | null;
 
   setThreadId: (id: string | null) => void;
   setReviewState: (state: ReviewState | null) => void;
@@ -109,6 +111,8 @@ interface PipelineState {
   startActivePipeline: (p: ActivePipeline) => void;
   clearActivePipeline: () => void;
   dismissPipeline: (label: string) => void;
+  setPendingSubmission: (pending: PendingSubmission) => void;
+  clearPendingSubmission: () => void;
   resetWorkflow: () => void;
   resetAll: () => void;
 }
@@ -133,6 +137,7 @@ export const usePipelineStore = create<PipelineState>()(
       showSteps: false,
       activePipeline: null,
       dismissedPipelineLabels: [],
+      pendingSubmission: null,
 
       setThreadId: (threadId) => set({ threadId }),
       setReviewState: (reviewState) => set({ reviewState }),
@@ -157,6 +162,8 @@ export const usePipelineStore = create<PipelineState>()(
             ? s.dismissedPipelineLabels
             : [...s.dismissedPipelineLabels.slice(-9), label],
         })),
+      setPendingSubmission: (pendingSubmission) => set({ pendingSubmission }),
+      clearPendingSubmission: () => set({ pendingSubmission: null }),
       resetWorkflow: () =>
         set({
           workflowConfig: null,

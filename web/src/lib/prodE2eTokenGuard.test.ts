@@ -24,11 +24,21 @@ const MUTATING_ENDPOINT_PATTERNS = [
 const SAFE_NEGATIVE_MUTATION_TEST_TITLES = new Set([
   "invalid video_duration string returns 422 with field-level detail",
   "fast/submit missing user_prompt returns 422",
+  "fast/submit missing Idempotency-Key returns 400",
   "fast/submit invalid duration type returns 422",
   "missing X-API-Key returns 401",
   "invalid X-API-Key returns 401",
   "malformed JSON body returns 422",
 ]);
+
+const WORKFLOW_SINGLE_SUBMIT_SPECS = [
+  "e2e/production/fast-mode-single-submit.prod.spec.ts",
+  "e2e/production/scenario-s1-no-media-single-submit.prod.spec.ts",
+  "e2e/production/scenario-s2-no-media-single-submit.prod.spec.ts",
+  "e2e/production/scenario-s3-no-media-single-submit.prod.spec.ts",
+  "e2e/production/scenario-s4-no-media-single-submit.prod.spec.ts",
+  "e2e/production/scenario-s5-no-media-single-submit.prod.spec.ts",
+] as const;
 
 function getProductionSpecFiles(): string[] {
   const productionDir = join(process.cwd(), "e2e/production");
@@ -36,6 +46,12 @@ function getProductionSpecFiles(): string[] {
     .filter((fileName) => fileName.endsWith(".prod.spec.ts"))
     .sort()
     .map((fileName) => `e2e/production/${fileName}`);
+}
+
+function getTokenSmokeSpecFiles(): string[] {
+  return getProductionSpecFiles().filter((specPath) =>
+    readWebFile(specPath).includes("@token-smoke"),
+  );
 }
 
 function extractTestBlocks(source: string): Array<{ title: string; body: string }> {
@@ -68,14 +84,99 @@ describe("Production E2E token smoke guardrails", () => {
     expect(config).toContain("grepInvert: /@token-smoke/");
   });
 
+  it("disables sensitive artifacts and enforces TLS verification in token-smoke mode", () => {
+    const config = readWebFile("playwright.prod.config.ts");
+
+    expect(config).toContain('trace: runTokenSmoke ? "off" : "retain-on-failure"');
+    expect(config).toContain('screenshot: runTokenSmoke ? "off" : "only-on-failure"');
+    expect(config).toContain("ignoreHTTPSErrors: !runTokenSmoke");
+  });
+
   it("requires explicit workflow opt-in for token-smoke specs", () => {
     const workflow = readRepoFileFromWeb(".github/workflows/e2e-prod.yml");
 
-    expect(workflow).toContain("run_token_smoke");
+    expect(workflow).toContain("token_smoke_spec");
+    expect(workflow).toContain("approval_record_path");
+    expect(workflow).toContain("plan_path");
     expect(workflow).toContain("RUN_TOKEN_SMOKE");
-    expect(workflow).toContain("Verify token smoke opt-in key");
-    expect(workflow).toContain("PROD_DEMO_API_KEY");
-    expect(workflow).toContain("non-demo production key");
+    expect(workflow).toContain("Validate token smoke authorization");
+    expect(workflow).toContain("environment: production-provider");
+    expect(workflow).toContain("PROD_TOKEN_SMOKE_API_KEY");
+    expect(workflow).toContain("PLAYWRIGHT_TOKEN_SMOKE_SPEC");
+    expect(workflow).toContain("--workers=1 --retries=0");
+    expect(workflow).not.toContain("run_token_smoke:");
+  });
+
+  it("keeps all workflow-allowlisted single-submit specs on the truthful lifecycle contract", () => {
+    const config = readWebFile("playwright.prod.config.ts");
+    for (const specPath of WORKFLOW_SINGLE_SUBMIT_SPECS) {
+      expect(config).toContain(specPath);
+    }
+
+    const fastSpec = readWebFile(WORKFLOW_SINGLE_SUBMIT_SPECS[0]);
+    for (const token of [
+      "enable_media_synthesis: true",
+      'expect(result?.status).toBe("completed_full")',
+      'expect(result?.lifecycle_status).toBe("completed_full")',
+      'expect(result?.completion_kind).toBe("full_media")',
+      "expect(result?.request_succeeded).toBe(true)",
+      "expect(result?.success).toBe(true)",
+      "expect(result?.full_media_success).toBe(true)",
+      "expect(result?.pipeline_complete).toBe(true)",
+      "expect(result?.publish_allowed).toBe(false)",
+      "expect(result?.delivery_accepted).toBe(false)",
+    ]) {
+      expect(fastSpec).toContain(token);
+    }
+
+    for (const specPath of WORKFLOW_SINGLE_SUBMIT_SPECS.slice(1)) {
+      const source = readWebFile(specPath);
+      for (const token of [
+        "enable_media_synthesis: false",
+        "artifact_disposition: artifactDisposition",
+        "provider_max_retries: providerMaxRetries",
+        'expect(body.status).toBe("completed_bounded")',
+        'expect(body.lifecycle_status).toBe("completed_bounded")',
+        'expect(body.completion_kind).toBe("no_media")',
+        "expect(body.request_succeeded).toBe(true)",
+        "expect(body.success).toBe(false)",
+        "expect(body.full_media_success).toBe(false)",
+        "expect(body.pipeline_complete).toBe(false)",
+        "expect(body.publish_allowed).toBe(false)",
+        "expect(body.delivery_accepted).toBe(false)",
+      ]) {
+        expect(source, `${specPath} is missing ${token}`).toContain(token);
+      }
+    }
+  });
+
+  it("inventories every token-smoke spec and keeps non-allowlisted specs unreachable", () => {
+    const config = readWebFile("playwright.prod.config.ts");
+    const validator = readRepoFileFromWeb("scripts/l4c_token_smoke_plan.py");
+    const configAllowlist = config.match(/const tokenSmokeSpecs = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+    const validatorAllowlist = validator.match(
+      /WORKFLOW_SINGLE_SPEC_PATHS = frozenset\(\s*\{([\s\S]*?)\}\s*\)/,
+    )?.[1] ?? "";
+    const tokenSmokeInventory = getTokenSmokeSpecFiles();
+    const approvedCapable = new Set<string>(WORKFLOW_SINGLE_SUBMIT_SPECS);
+
+    expect(tokenSmokeInventory.length).toBeGreaterThan(WORKFLOW_SINGLE_SUBMIT_SPECS.length);
+    expect(configAllowlist).not.toBe("");
+    expect(validatorAllowlist).not.toBe("");
+    expect(config).toContain("if (runTokenSmoke && !tokenSmokeSpecs.has(tokenSmokeSpec))");
+    expect(config).toContain("testMatch: tokenSmokeTestMatch");
+
+    for (const specPath of WORKFLOW_SINGLE_SUBMIT_SPECS) {
+      expect(configAllowlist, `Playwright allowlist missing ${specPath}`).toContain(specPath);
+      expect(validatorAllowlist, `validator allowlist missing ${specPath}`).toContain(specPath);
+      expect(tokenSmokeInventory).toContain(specPath);
+    }
+
+    for (const specPath of tokenSmokeInventory) {
+      if (approvedCapable.has(specPath)) continue;
+      expect(configAllowlist, `${specPath} must be unreachable in token mode`).not.toContain(specPath);
+      expect(validatorAllowlist, `${specPath} must be rejected by CI validation`).not.toContain(specPath);
+    }
   });
 
   it("documents production token-smoke secret and manual opt-in", () => {
@@ -84,7 +185,10 @@ describe("Production E2E token smoke guardrails", () => {
 
     for (const token of [
       "PROD_DEMO_API_KEY",
-      "run_token_smoke",
+      "PROD_TOKEN_SMOKE_API_KEY",
+      "token_smoke_spec",
+      "approval_record_path",
+      "plan_path",
       "RUN_TOKEN_SMOKE=1",
       "@token-smoke",
       demoKey,
@@ -121,6 +225,9 @@ describe("Production E2E token smoke guardrails", () => {
 
   it("tags known production specs that create real backend tasks", () => {
     const expectedTaggedTests: Record<string, string[]> = {
+      "e2e/production/fast-mode-single-submit.prod.spec.ts": [
+        "single Fast Mode submit/status writes pending_review artifact @token-smoke",
+      ],
       "e2e/production/fast-mode-submit.prod.spec.ts": [
         "POST /api/fast/submit returns task_id quickly (~2-5s) @token-smoke",
         "submit + status round-trip — task is queryable + has stage field @token-smoke",

@@ -149,6 +149,8 @@ after = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")).get(
     "schema_signature"
 )
 manifest_signature = sys.argv[3]
+stats = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+revision = stats.get("alembic_revision")
 if not all(
     isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
     for value in (before, after, manifest_signature)
@@ -156,7 +158,13 @@ if not all(
     raise SystemExit("schema signature evidence is invalid")
 if len({before, after, manifest_signature}) != 1:
     raise SystemExit("schema signature evidence does not match")
+if revision != json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")).get(
+    "alembic_revision"
+):
+    raise SystemExit("Alembic revision changed during backup")
 PY
+[ "$(manifest_field alembic_revision)" = "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["alembic_revision"])' "${BACKUP_DIR}/pg_dump_stats.json")" ] \
+  || fail "manifest Alembic revision does not match backup stats"
 
 PG_SERVER_MAJOR=$(manifest_field pg_server_major)
 PG_CLIENT_SOURCE_TAG=$(manifest_field pg_client_source_tag)
@@ -251,7 +259,7 @@ printf '%s\n' "$TARGET_DATABASE_URL" \
       -v "${RESTORE_SCRIPT}:/run/restore.py:ro" \
       --entrypoint sh \
       "$BACKEND_IMAGE_ID" \
-      -eu -c 'IFS= read -r database_url; export DATABASE_URL="$database_url"; unset database_url; cd /app; exec python3 /run/restore.py /backup/pg_dump.jsonl'
+      -eu -c 'IFS= read -r database_url; export DATABASE_URL="$database_url"; unset database_url; cd /app; exec python3 /run/restore.py /backup/pg_dump.jsonl --stats /backup/pg_dump_stats.json'
 
 VERIFY_OUTPUT=$(mktemp)
 printf '%s\n' "$TARGET_DATABASE_URL" \
@@ -293,6 +301,7 @@ marker = {
     "table_count": summary.get("table_count"),
     "total_rows": summary.get("total_rows"),
     "actual_counts": summary.get("actual_counts"),
+    "alembic_revision": summary.get("alembic_revision"),
 }
 marker_path = Path(sys.argv[2])
 marker_path.write_text(json.dumps(marker, sort_keys=True) + "\n", encoding="utf-8")

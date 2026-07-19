@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { getMediaUrl } from "./api";
+import RuntimeMediaAudio from "./RuntimeMediaAudio";
 import RuntimeMediaImage from "./RuntimeMediaImage";
+import RuntimeMediaLink from "./RuntimeMediaLink";
+import RuntimeMediaVideo from "./RuntimeMediaVideo";
 import { useI18n } from "@/i18n/I18nProvider";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -20,6 +22,7 @@ import {
   normalizeWorkflowStatePayload,
 } from "@/lib/pipelineState";
 import { getSoftDegradedSummary } from "@/lib/softDegraded";
+import { buildS1EditedStateUpdate } from "@/lib/scenarioPayload";
 import type { WorkflowState } from "@/stores/usePipelineStore";
 
 type UnknownRecord = Record<string, unknown>;
@@ -243,7 +246,7 @@ export default function VideoWorkflow({
         edited: true,
         edited_output: newOutput,
       };
-      await updateS1State(label, { steps: updatedSteps });
+      await updateS1State(label, buildS1EditedStateUpdate(stepName, newOutput));
       onStateChange({ ...state, steps: updatedSteps });
       setEditingStep(null);
       showToast(t("toast.saveSuccess"), "success");
@@ -927,7 +930,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
     const details = clipOutput.details;
     const totalDur = clipOutput.totalDuration;
     const targetDur = clipOutput.targetDuration;
-    const urls = rawUrls.map((url: string) => getMediaUrl(url));
+    const urls = rawUrls;
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
       <div className="space-y-2 p-2">
@@ -952,7 +955,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
             const verOk = ver.all_ok !== false;
             return (
               <div key={i} className={`apple-card overflow-hidden ${isStub ? "border-[rgba(255,149,0,0.30)]" : ""} ${isFiller ? "border-[rgba(122,150,187,0.30)]" : ""}`}>
-                <video src={url} controls className="w-full h-32 object-cover" />
+                <RuntimeMediaVideo src={url} controls className="w-full h-32 object-cover" />
                 <div className="p-2 space-y-1">
                   <div className="flex items-center gap-1 flex-wrap">
                     <span className="text-[12px] font-mono text-[var(--text-muted)]">#{i + 1}</span>
@@ -992,7 +995,7 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
 
   if (stepName === "thumbnail_images") {
     const rawUrls = extractThumbnailImagePaths(output);
-    const urls = rawUrls.map((url: string) => getMediaUrl(url));
+    const urls = rawUrls;
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
       <div className="grid grid-cols-2 gap-2 p-2">
@@ -1008,13 +1011,13 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
 
   if (stepName === "tts_audio") {
     const rawUrls = extractTtsAudioPaths(output);
-    const urls = rawUrls.map((url: string) => getMediaUrl(url));
+    const urls = rawUrls;
     if (urls.length === 0) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noMedia")}</p>;
     return (
       <div className="space-y-2 p-2">
         {urls.map((url: string, i: number) => (
           <div key={i} className="apple-card p-3 bg-[var(--bg-card)]">
-            <audio src={url} controls preload="metadata" className="w-full" />
+            <RuntimeMediaAudio src={url} controls preload="metadata" className="w-full" />
           </div>
         ))}
       </div>
@@ -1023,16 +1026,16 @@ function StepOutput({ stepName, output }: { stepName: string; output: unknown })
 
   if (stepName === "assemble_final") {
     const rawUrl = extractFinalVideoPath(output);
-    const finalUrl = getMediaUrl(rawUrl);
+    const finalUrl = rawUrl;
     if (!finalUrl) return <p className="text-xs text-[var(--text-muted)] p-2">{to("step.noData")}</p>;
     return (
       <div className="p-2">
         <div className="apple-card overflow-hidden">
-          <video src={finalUrl} controls className="w-full" />
+          <RuntimeMediaVideo src={finalUrl} controls className="w-full" />
           <div className="p-2">
-            <a href={finalUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[var(--fortune-red)] hover:underline">
+            <RuntimeMediaLink href={finalUrl} purpose="download" download target="_blank" rel="noopener noreferrer" className="text-[12px] text-[var(--fortune-red)] hover:underline">
               {to("result.downloadVideo")}
-            </a>
+            </RuntimeMediaLink>
           </div>
         </div>
       </div>

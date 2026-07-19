@@ -22,13 +22,14 @@
     "PROD_DEMO_API_KEY",
     "RUN_TOKEN_SMOKE",
     "SEEDANCE_API_KEY",
-    "SHOPIFY_ADMIN_TOKEN",
+    "SHOPIFY_ACCESS_TOKEN",
+    "SHOPIFY_PUBLISH_ENABLED",
     "SHOPIFY_STORE_URL",
     "SILICONFLOW_API_KEY",
     "SUPABASE_SERVICE_KEY",
     "SUPABASE_URL",
     "TIKTOK_ACCESS_TOKEN",
-    "TIKTOK_OPEN_ID"
+    "TIKTOK_PUBLISH_ENABLED"
   ],
   "forbidden_provider_markers": [
     "api.anthropic.com",
@@ -36,7 +37,8 @@
     "api.openai.com",
     "api.poyo.ai",
     "api.seedance.ai",
-    "api.siliconflow.cn"
+    "api.siliconflow.cn",
+    "api.siliconflow.com"
   ],
   "rendering_compose_env": [
     "NODE_ENV=production",

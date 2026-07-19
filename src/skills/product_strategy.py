@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.models import Brief, Language, Platform, VideoType, WeeklyCalendar
+from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -281,22 +282,25 @@ class ProductStrategySkill(SkillCallable):
         pc = params.get("product_catalog", {})
         bg = params.get("brand_guidelines", {})
         scenario = params.get("content_scenario", "product_direct")
-        is_brand = (scenario == "brand_campaign")
+        is_brand = scenario == "brand_campaign"
 
         # P2-1: Guard: if all campaign fields are empty, fall back to product prompt
         if is_brand:
             brand_guidelines = params.get("brand_guidelines", {})
-            has_campaign_data = any([
-                brand_guidelines.get("campaign_goal"),
-                brand_guidelines.get("brand_values"),
-                brand_guidelines.get("visual_identity"),
-                brand_guidelines.get("competitor_campaigns"),
-            ])
+            has_campaign_data = any(
+                [
+                    brand_guidelines.get("campaign_goal"),
+                    brand_guidelines.get("brand_values"),
+                    brand_guidelines.get("visual_identity"),
+                    brand_guidelines.get("competitor_campaigns"),
+                ]
+            )
             if not has_campaign_data:
                 is_brand = False
 
         # Format params for injection
         import json
+
         injected = {
             "product_catalog": json.dumps(pc, indent=2, ensure_ascii=False),
             "brand_guidelines": json.dumps(bg, indent=2, ensure_ascii=False),
@@ -316,8 +320,24 @@ class ProductStrategySkill(SkillCallable):
             placeholder = "{" + key + "}"
             user = user.replace(placeholder, val)
 
+        operation_scope = params.get("operation_scope", "execution")
+        if not isinstance(operation_scope, str) or not operation_scope:
+            operation_scope = "execution"
+        variant = params.get("variant")
+        operation_instance = (
+            f"{operation_scope}.variant.{variant}"
+            if isinstance(variant, str) and variant
+            else f"{operation_scope}.primary"
+        )
+
         try:
-            raw = await llm.invoke_json(system, user, model="deepseek-chat")
+            raw = await llm.invoke_json(
+                system,
+                user,
+                model="deepseek-v4-flash",
+                operation_key="skill.product_strategy",
+                operation_instance=operation_instance,
+            )
 
             # Parse into WeeklyCalendar
             if isinstance(raw, dict) and "briefs" in raw:
@@ -330,10 +350,13 @@ class ProductStrategySkill(SkillCallable):
                         except Exception:
                             # Repair invalid brief with defaults instead of skipping
                             repaired = dict(b)
-                            if "video_type" not in repaired or repaired["video_type"] not in VideoType.__members__.values():
+                            if (
+                                "video_type" not in repaired
+                                or repaired["video_type"] not in VideoType.__members__.values()
+                            ):
                                 repaired["video_type"] = "product_usage"
                             if "id" not in repaired or not repaired["id"]:
-                                repaired["id"] = f"BRIEF-AUTO-{len(briefs)+1:03d}"
+                                repaired["id"] = f"BRIEF-AUTO-{len(briefs) + 1:03d}"
                             if "target_platforms" not in repaired or not repaired["target_platforms"]:
                                 repaired["target_platforms"] = ["tiktok"]
                             if "target_languages" not in repaired or not repaired["target_languages"]:
@@ -359,8 +382,11 @@ class ProductStrategySkill(SkillCallable):
 
             return SkillResult(success=False, data={"raw": raw}, error="Unexpected LLM output format")
 
+        except ProviderCostContractError:
+            raise
         except Exception as e:
             import structlog
+
             logger = structlog.get_logger()
             _logger_ps.warning("strategy_skill: LLM failed", error=str(e))
             return SkillResult(success=False, error=str(e))
@@ -385,6 +411,7 @@ class ProductStrategySkill(SkillCallable):
 
     def validate_output(self, data: Any) -> list[str]:
         import structlog
+
         logger = structlog.get_logger()
         errors = []
         if data is None:
@@ -404,6 +431,7 @@ class ProductStrategySkill(SkillCallable):
             product_name = pc.get("product_name") or pc.get("name", "")
 
         import copy
+
         fallback = copy.deepcopy(FALLBACK_BRIEFS)
         for brief in fallback:
             brief.topic = brief.topic.replace("[product]", product_name or "this product")

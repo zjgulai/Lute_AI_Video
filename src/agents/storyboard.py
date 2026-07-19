@@ -6,6 +6,7 @@ Uses LLM to translate textual scripts into frame-by-frame shot descriptions.
 import structlog
 
 from src.models import Script, Shot, Storyboard
+from src.models.provider_cost import ProviderCostContractError
 from src.tools.llm_client import llm
 
 logger = structlog.get_logger()
@@ -35,7 +36,7 @@ class StoryboardAgent:
 
     async def run(self, scripts: list[Script]) -> list[Storyboard]:
         storyboards = []
-        for script in scripts:
+        for script_index, script in enumerate(scripts):
             if self.use_mock:
                 sb = self._mock_storyboard(script)
             elif self.use_skills:
@@ -58,8 +59,12 @@ class StoryboardAgent:
                     data = await llm.invoke_json(
                         STORYBOARD_SYSTEM_PROMPT,
                         f"Script:\n{script.model_dump_json(indent=2)}",
+                        operation_key="agent.storyboard",
+                        operation_instance=f"script.{script_index}",
                     )
                     sb = Storyboard(**data)
+                except ProviderCostContractError:
+                    raise
                 except Exception as e:
                     logger.error("storyboard: LLM failed", error=str(e))
                     sb = self._mock_storyboard(script)

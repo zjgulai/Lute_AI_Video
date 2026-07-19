@@ -9,12 +9,16 @@ import json
 import logging
 import os
 import time
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.graph.pipeline import compile_pipeline
+from src.pipeline.generation_policy import (
+    ArtifactDisposition,
+    validate_generation_request_shape,
+)
 from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS
 from src.pipeline.step_utils import get_step_output_from_state
 
@@ -52,14 +56,29 @@ _label_thread_map: dict[str, str] = {}
 
 
 # ── Pydantic models ──
-class PipelineStartRequest(BaseModel):
+class GenerationSafetyRequest(BaseModel):
+    """Shared strict safety fields for every provider-backed submit surface."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enable_media_synthesis: StrictBool = False
+    artifact_disposition: ArtifactDisposition = "pending_review"
+    provider_max_retries: Annotated[int, Field(strict=True, ge=0, le=0)] = 0
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_client_generation_authority(cls, value: Any) -> Any:
+        return validate_generation_request_shape(value)
+
+
+class PipelineStartRequest(GenerationSafetyRequest):
     product_catalog: dict[str, Any] = {}
     brand_guidelines: dict[str, Any] = {}
     target_platforms: list[str] = ["shopify", "amazon", "tiktok", "reddit"]
     target_languages: list[str] = DEFAULT_LANGUAGES
     content_calendar_week: str = "2026-W17"
     api_keys: dict[str, str] = {}
-    content_scenario: str = "influencer_remix"
+    content_scenario: str = "product_direct"
 
 
 class ReviewAction(BaseModel):
@@ -67,17 +86,15 @@ class ReviewAction(BaseModel):
     reviewer_notes: str = ""
 
 
-class FastModeRequest(BaseModel):
+class FastModeRequest(GenerationSafetyRequest):
     user_prompt: str
     duration: int = 5
     enable_tts: bool = True
-    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
-    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     # P1-C: 用户填的多供应商 key 通过此字段下发,scenario.py 入口注入 contextvars
     api_keys: dict[str, str] = {}
 
 
-class S1StartRequest(BaseModel):
+class S1StartRequest(GenerationSafetyRequest):
     product_catalog: dict[str, Any]
     brand_guidelines: dict[str, Any] = {}
     target_platforms: list[str] = []
@@ -87,9 +104,6 @@ class S1StartRequest(BaseModel):
     output_label: str | None = None
     mode: str = "auto"
     brand_mode: bool = False
-    enable_media_synthesis: bool = True
-    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
-    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     continuity_mode: bool | str = True
     continuity_generation_mode: str = "standard"
     storyboard_grid: int = 12
@@ -99,16 +113,13 @@ class S1StartRequest(BaseModel):
     api_keys: dict[str, str] = {}
 
 
-class S2BrandCampaignRequest(BaseModel):
+class S2BrandCampaignRequest(GenerationSafetyRequest):
     brand_package: dict[str, Any] = {}
     target_platforms: list[str] = ["tiktok", "shopify"]
     target_languages: list[str] = DEFAULT_LANGUAGES
     week: str = ""
     video_duration: int = 60
     output_label: str | None = None
-    enable_media_synthesis: bool = True
-    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
-    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     media_stop_step: Literal[
         "seedance_clips",
         "tts_audio",
@@ -122,7 +133,7 @@ class S2BrandCampaignRequest(BaseModel):
     api_keys: dict[str, str] = {}
 
 
-class S3InfluencerRemixRequest(BaseModel):
+class S3InfluencerRemixRequest(GenerationSafetyRequest):
     video_url: str = ""
     product: dict[str, Any] = {}
     influencer_name: str = "Influencer"
@@ -131,14 +142,11 @@ class S3InfluencerRemixRequest(BaseModel):
     target_languages: list[str] = DEFAULT_LANGUAGES
     video_duration: int = 30
     output_label: str | None = None
-    enable_media_synthesis: bool = True
-    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
-    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 
 
-class S4LiveShootRequest(BaseModel):
+class S4LiveShootRequest(GenerationSafetyRequest):
     footage_assets: list[dict[str, Any]] = []
     product_info: dict[str, Any] = {}
     topic: str = ""
@@ -146,14 +154,11 @@ class S4LiveShootRequest(BaseModel):
     brand_guidelines: dict[str, Any] = {}
     video_duration: int = 30
     output_label: str | None = None
-    enable_media_synthesis: bool = True
-    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
-    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 
 
-class S5BrandVlogRequest(BaseModel):
+class S5BrandVlogRequest(GenerationSafetyRequest):
     brand_id: str = "momcozy"
     product_sku: dict[str, Any] = {}
     scene_id: str | None = None
@@ -161,9 +166,6 @@ class S5BrandVlogRequest(BaseModel):
     story_description: str = ""
     video_duration: int = 30
     output_label: str | None = None
-    enable_media_synthesis: bool = True
-    artifact_disposition: Literal["default", "pending_review", "quarantine"] = "default"
-    provider_max_retries: int | None = Field(default=None, ge=0, le=10)
     commercial_injection_plan: dict[str, Any] | None = None
     api_keys: dict[str, str] = {}
 

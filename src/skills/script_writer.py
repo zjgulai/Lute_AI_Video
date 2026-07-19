@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 
 from src.config import DEFAULT_LANGUAGES
+from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 
@@ -16,6 +17,7 @@ import re
 
 # Characters allowed in LLM prompt-injected strings (alphanumeric, Chinese, spaces, basic punctuation)
 _PROMPT_SAFE_PATTERN = re.compile(r"[a-zA-Z0-9一-鿿぀-ゟ가-힯 ,.!?'\-+&/()@#:;《》【】…、—・%×]+")
+
 
 def _sanitize_prompt_value(value: str, max_len: int = 200) -> str:
     """Strip dangerous characters and truncate for LLM prompt injection safety."""
@@ -72,6 +74,7 @@ def _normalize_script_duration(script: dict[str, Any], video_duration: int) -> d
 
     script["total_duration"] = video_duration
     return script
+
 
 # ── System Prompts ──────────────────────────────────────────────────────
 
@@ -264,6 +267,9 @@ class ScriptWriterSkill(SkillCallable):
         languages = params.get("target_languages", DEFAULT_LANGUAGES)
         brand_guidelines = params.get("brand_guidelines", {})
         variant = params.get("variant", "standard")
+        operation_scope = params.get("operation_scope", "execution")
+        if not isinstance(operation_scope, str) or not operation_scope:
+            operation_scope = "execution"
         video_duration = _coerce_video_duration(params.get("video_duration", 30))
         logger.info(
             "script-writer: generating",
@@ -274,7 +280,7 @@ class ScriptWriterSkill(SkillCallable):
         )
 
         # Parallel LLM calls: each brief × language combination runs concurrently
-        async def _gen_one(brief: dict[str, Any], lang: str) -> dict[str, Any]:
+        async def _gen_one(brief: dict[str, Any], lang: str, *, brief_index: int) -> dict[str, Any]:
             try:
                 script = await self._call_llm(
                     brief,
@@ -283,15 +289,25 @@ class ScriptWriterSkill(SkillCallable):
                     llm,
                     variant=variant,
                     video_duration=video_duration,
+                    operation_instance=(
+                        f"{operation_scope}.variant.{variant}.brief.{brief_index}.lang."
+                        f"{str(lang).lower().replace('-', '_')}"
+                    ),
                 )
                 if script is None:
                     script = self._gen_fallback(brief, lang, video_duration=video_duration)
                 return script
+            except ProviderCostContractError:
+                raise
             except Exception:
                 logger.warning("script-writer: LLM call failed, using fallback", brief_id=brief.get("id"), lang=lang)
                 return self._gen_fallback(brief, lang, video_duration=video_duration)
 
-        tasks = [_gen_one(brief, lang) for brief in briefs for lang in languages]
+        tasks = [
+            _gen_one(brief, lang, brief_index=brief_index)
+            for brief_index, brief in enumerate(briefs)
+            for lang in languages
+        ]
         scripts = await asyncio.gather(*tasks)
 
         # Self-check each script: hook strength, USP coverage, duration compliance
@@ -318,6 +334,7 @@ class ScriptWriterSkill(SkillCallable):
         llm: Any,
         variant: str = "standard",
         video_duration: int = 30,
+        operation_instance: str = "primary",
     ) -> dict[str, Any] | None:
         """Call the LLM to generate a script for one brief
 
@@ -345,7 +362,7 @@ class ScriptWriterSkill(SkillCallable):
         variant_suffix = VARIANT_PROMPT_SUFFIXES.get(variant, "")
 
         # Validate language code
-        if not re.match(r'^[a-z]{2}(-[A-Z]{2})?$', language):
+        if not re.match(r"^[a-z]{2}(-[A-Z]{2})?$", language):
             language = "en"
         is_zh = language.startswith("zh")
         # Phase 2+3: primary prompt is English. Chinese prompt kept for backward compatibility.
@@ -386,7 +403,15 @@ class ScriptWriterSkill(SkillCallable):
         ).replace("30-second", f"{video_duration}-second")
 
         try:
-            raw = await llm.invoke_json(system_prompt, user_message, model="deepseek-chat")
+            raw = await llm.invoke_json(
+                system_prompt,
+                user_message,
+                model="deepseek-v4-flash",
+                operation_key="skill.script_writer",
+                operation_instance=operation_instance,
+            )
+        except ProviderCostContractError:
+            raise
         except Exception:
             logger.warning("script-writer: LLM invoke failed", brief_id=brief.get("id"))
             return None
@@ -492,9 +517,7 @@ class ScriptWriterSkill(SkillCallable):
 
         segments = script.get("segments", [])
         total_duration = float(script.get("total_duration", 30))
-        all_text = " ".join(
-            (seg.get("voiceover", "") or "") for seg in segments
-        ).lower()
+        all_text = " ".join((seg.get("voiceover", "") or "") for seg in segments).lower()
 
         checks: dict[str, Any] = {}
 
@@ -543,7 +566,9 @@ class ScriptWriterSkill(SkillCallable):
         completeness_ok = len(missing) <= 1  # allow 1 missing
         checks["segment_completeness"] = {
             "ok": completeness_ok,
-            "observation": f"missing segments: {', '.join(sorted(missing))}" if missing else "all required segments present",
+            "observation": f"missing segments: {', '.join(sorted(missing))}"
+            if missing
+            else "all required segments present",
         }
 
         # Overall self-check score

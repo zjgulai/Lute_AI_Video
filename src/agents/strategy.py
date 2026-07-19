@@ -17,6 +17,7 @@ from src.agents.prompts.strategy_en import (
 )
 from src.config import MOCK_PRODUCT_CATEGORY, MOCK_PRODUCT_NAME
 from src.models import Brief, Language, Platform, VideoType, WeeklyCalendar
+from src.models.provider_cost import ProviderCostContractError
 from src.tools.llm_client import llm
 
 logger = structlog.get_logger()
@@ -199,9 +200,16 @@ class StrategyAgent:
             if addendum:
                 system_prompt = system_prompt + "\n\n" + addendum
 
-            data = await llm.invoke_json(system_prompt, user_message, model="deepseek-chat")
+            data = await llm.invoke_json(
+                system_prompt,
+                user_message,
+                model="deepseek-v4-flash",
+                operation_key="agent.strategy",
+            )
             briefs = [Brief(**b) for b in data["briefs"]]
             return WeeklyCalendar(week=data.get("week", week), briefs=briefs)
+        except ProviderCostContractError:
+            raise
         except Exception as e:
             logger.error("strategy_agent: LLM call failed", error=str(e))
             logger.info("strategy_agent: falling back to mock data")

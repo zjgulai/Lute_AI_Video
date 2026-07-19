@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FilmSlate, MagnifyingGlass, WarningCircle, X } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
+import { apiFetch, isDemoMode } from "@/components/api";
 import TopHeader from "@/components/TopHeader";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
 import RuntimeMediaImage from "@/components/RuntimeMediaImage";
+import RuntimeMediaVideo from "@/components/RuntimeMediaVideo";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 import { errorMessage } from "@/lib/errors";
@@ -384,7 +385,7 @@ export default function WorksPage() {
             {pagedWorks.map(({ work, scene }) => {
               const sceneLabel =
                 scene === "other" ? "" : t(`scene.${scene}.title`);
-              const thumbUrl = work.thumbnailPath ? getMediaUrl(work.thumbnailPath) : "";
+              const thumbUrl = work.thumbnailPath ?? "";
               const title = work.label || humanizeFilename(work.filename);
               return (
                 <button
@@ -465,9 +466,9 @@ export default function WorksPage() {
               <X size={20} weight="fill" />
             </button>
             <div className="rounded-xl overflow-hidden bg-black/60">
-              <video
-                src={getMediaUrl(preview.path)}
-                poster={preview.thumbnailPath ? getMediaUrl(preview.thumbnailPath) : undefined}
+              <RuntimeMediaVideo
+                src={preview.path}
+                poster={preview.thumbnailPath ?? undefined}
                 controls
                 autoPlay
                 muted

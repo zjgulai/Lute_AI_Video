@@ -1,6 +1,6 @@
-"""GPT Image Generate Skill — produces real .png + self-verifies it.
+"""GPT Image Generate Skill — produces a cataloged PoYo .png + self-verifies it.
 
-Wraps GPTImageClient.generate (gpt-image-2 / DALL·E backed) with the SkillCallable
+Wraps GPTImageClient.generate (cataloged PoYo gpt-image-2) with the SkillCallable
 contract. Self-verifies: file exists, size > 1KB, valid PNG magic bytes.
 
 Output schema:
@@ -35,10 +35,10 @@ MIN_FILE_SIZE_BYTES = 1024  # 1KB minimum for a real PNG
 
 
 class GPTImageGenerateSkill(SkillCallable):
-    """Generates a single real image via OpenAI gpt-image-2 and verifies it."""
+    """Generates a single real image via cataloged PoYo gpt-image-2."""
 
     name = "gpt-image-generate-skill"
-    description = "Calls OpenAI gpt-image-2 to generate a real .png and self-verifies the output"
+    description = "Calls cataloged PoYo gpt-image-2 and self-verifies the output"
     max_retries = 2
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
@@ -52,6 +52,7 @@ class GPTImageGenerateSkill(SkillCallable):
 
         from src.config import OPENAI_API_KEY, POYO_API_KEY
         from src.tools.gpt_image_client import GPTImageClient
+        from src.tools.llm_client import get_request_api_key
 
         client = GPTImageClient(
             output_dir=output_dir,
@@ -69,9 +70,28 @@ class GPTImageGenerateSkill(SkillCallable):
             try:
                 await client.close()
             except Exception as exc:
-                logger.warning("gpt_image_generate: client.close failed", error=str(exc))
+                logger.warning(
+                    "gpt_image_generate: client.close failed",
+                    error_code=type(exc).__name__,
+                )
 
-        has_key = bool(OPENAI_API_KEY or POYO_API_KEY)
+        if api_result.get("_poyo_state") == "submitted":
+            return SkillResult(
+                success=False,
+                error="provider_pending",
+                metadata={
+                    "poyo_state": "submitted",
+                    "task_id": api_result.get("task_id", ""),
+                    "non_retryable": True,
+                },
+            )
+
+        has_key = bool(
+            get_request_api_key("OPENAI_API_KEY")
+            or get_request_api_key("POYO_API_KEY")
+            or OPENAI_API_KEY
+            or POYO_API_KEY
+        )
         is_stub = (not has_key) or "STUB" in (api_result.get("image_url") or "")
         local_path_str = api_result.get("local_path", "")
         local_path = Path(local_path_str) if local_path_str else None
@@ -86,8 +106,13 @@ class GPTImageGenerateSkill(SkillCallable):
         if not is_stub and not verification["all_ok"]:
             return SkillResult(
                 success=False,
-                error=f"image verification failed: {verification['failures']}",
-                metadata={"verification": verification, "image_path": str(local_path) if local_path else ""},
+                error="provider_cost_artifact_failed",
+                metadata={
+                    "verification": verification,
+                    "image_path": str(local_path) if local_path else "",
+                    "non_retryable": True,
+                    "paid_artifact": True,
+                },
             )
 
         file_size = local_path.stat().st_size if (local_path and local_path.exists()) else 0

@@ -19,13 +19,30 @@ env:
   PYTHONUNBUFFERED: "1"
 
 jobs:
-  preflight:
-    name: Preflight (lint + test + build)
+  provenance:
+    name: Verify exact main provenance
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v6
+      - name: Verify workflow SHA is the exact origin main tip
+        run: |
+          remote_output=$(git ls-remote --exit-code origin refs/heads/main)
+          remote_main=$(printf '%s\n' "$remote_output" | awk '$2 == "refs/heads/main" {print $1}')
+          count=$(printf '%s\n' "$remote_output" | awk '$2 == "refs/heads/main" {count += 1} END {print count + 0}')
+          test "$count" = "1"
+          test "$remote_main" = "${{ github.sha }}"
+
+  preflight:
+    name: Preflight (lint + test + build)
+    needs: provenance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
           cache: "pip"
@@ -50,13 +67,14 @@ jobs:
           SILICONFLOW_API_KEY: ""
           ELEVENLABS_API_KEY: ""
           TIKTOK_ACCESS_TOKEN: ""
-          TIKTOK_OPEN_ID: ""
+          TIKTOK_PUBLISH_ENABLED: "false"
           SHOPIFY_STORE_URL: ""
-          SHOPIFY_ADMIN_TOKEN: ""
+          SHOPIFY_ACCESS_TOKEN: ""
+          SHOPIFY_PUBLISH_ENABLED: "false"
           SUPABASE_URL: ""
           SUPABASE_SERVICE_KEY: ""
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: "npm"
@@ -87,48 +105,261 @@ jobs:
       - name: Docker compose config validation (no start)
         run: |
           : > .env
-          : > deploy/lighthouse/.env.prod
           docker compose -f docker-compose.yml config --quiet
-          docker compose -f deploy/lighthouse/docker-compose.prod.yml config --quiet
+          AI_VIDEO_SHARED_ROOT=/tmp/ai-video-shared AI_VIDEO_ENV_FILE=/dev/null \
+            PORTAL_AUTH_ENV_FILE=/dev/null RELEASE_SOURCE_SHA=${{ github.sha }} \
+            RELEASE_IMAGE_TAG=${{ github.sha }} \
+            docker compose -f deploy/lighthouse/docker-compose.release.yml config --quiet
+
+      - name: Verify local-only artifacts are excluded from release sync
+        run: |
+          for pattern in .superpowers .kiro tmp '*.pem' '*.sqlite3' '.env'; do
+            grep -Fx -- "$pattern" deploy/lighthouse/rsync-excludes.txt >/dev/null
+          done
 
   build-images:
-    name: Build + cache backend image
-    needs: preflight
+    name: Build + inspect release images
+    needs: [provenance, preflight]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Build backend image (cache only)
-        uses: docker/build-push-action@v7
+      - name: Build backend image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: ./Dockerfile.backend
           push: false
-          load: false
-          tags: ai-video-backend:deploy-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          load: true
+          tags: lighthouse-backend:${{ github.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
           build-args: |
+            RELEASE_SOURCE_SHA=${{ github.sha }}
             APT_MIRROR=deb.debian.org
             PIP_INDEX_URL=https://pypi.org/simple/
 
+      - name: Build frontend image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          push: false
+          load: true
+          tags: lighthouse-frontend:${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          build-args: |
+            RELEASE_SOURCE_SHA=${{ github.sha }}
+            NEXT_PUBLIC_API_BASE_URL=/api
+            NEXT_PUBLIC_IS_DEMO=false
+            NEXT_PUBLIC_API_KEY=
+
+      - name: Build rendering image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ./rendering
+          file: ./rendering/Dockerfile
+          push: false
+          load: true
+          tags: lighthouse-rendering:${{ github.sha }}
+          cache-from: type=gha,scope=rendering
+          cache-to: type=gha,mode=max,scope=rendering
+          build-args: |
+            RELEASE_SOURCE_SHA=${{ github.sha }}
+
+      - name: Verify release image revision labels and backend runtime config
+        run: |
+          for image in \
+            lighthouse-backend:${{ github.sha }} \
+            lighthouse-frontend:${{ github.sha }} \
+            lighthouse-rendering:${{ github.sha }}; do
+            revision=$(docker image inspect \
+              --format='{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+              "$image")
+            test "$revision" = "${{ github.sha }}"
+          done
+          docker run --rm --network none --entrypoint python3 \
+            -e ENVIRONMENT=production \
+            -e API_KEY=release-image-import-smoke-only \
+            -e MEDIA_SIGN_SECRET=release-image-import-smoke-secret-32bytes \
+            lighthouse-backend:${{ github.sha }} -c \
+            'from pathlib import Path; from src.services.provider_price_catalog import ProviderPriceCatalog; assert Path("/app/configs/provider-cost-catalog.v1.json").is_file(); ProviderPriceCatalog.load_default(); import src.api'
+
+      - name: Smoke exact frontend and rendering image runtimes
+        run: |
+          set -Eeuo pipefail
+          cleanup() {
+            docker rm -f release-smoke-frontend release-smoke-rendering >/dev/null 2>&1 || true
+            docker network rm release-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker network create --internal release-smoke >/dev/null
+          docker run -d --name release-smoke-frontend --network release-smoke \
+            lighthouse-frontend:${{ github.sha }} >/dev/null
+          docker run -d --name release-smoke-rendering --network release-smoke \
+            lighthouse-rendering:${{ github.sha }} >/dev/null
+          for attempt in $(seq 1 30); do
+            frontend_ok=0
+            rendering_ok=0
+            docker exec release-smoke-frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 && frontend_ok=1
+            docker exec release-smoke-rendering wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1 && rendering_ok=1
+            if [ "$frontend_ok" = 1 ] && [ "$rendering_ok" = 1 ]; then
+              exit 0
+            fi
+            [ "$attempt" = 30 ] || sleep 2
+          done
+          docker logs release-smoke-frontend >&2 || true
+          docker logs release-smoke-rendering >&2 || true
+          exit 1
+
+      - name: Generate backend SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: lighthouse-backend:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom-backend.spdx.json
+          upload-artifact: false
+
+      - name: Generate frontend SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: lighthouse-frontend:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom-frontend.spdx.json
+          upload-artifact: false
+
+      - name: Generate rendering SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: lighthouse-rendering:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom-rendering.spdx.json
+          upload-artifact: false
+
+      - name: Scan backend image
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: lighthouse-backend:${{ github.sha }}
+          fail-build: true
+          severity-cutoff: critical
+          output-format: json
+          output-file: scan-backend.json
+
+      - name: Scan frontend image
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: lighthouse-frontend:${{ github.sha }}
+          fail-build: true
+          severity-cutoff: critical
+          output-format: json
+          output-file: scan-frontend.json
+
+      - name: Scan rendering image
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: lighthouse-rendering:${{ github.sha }}
+          fail-build: true
+          severity-cutoff: critical
+          output-format: json
+          output-file: scan-rendering.json
+
+      - name: Package exact reviewed release images and digests
+        run: |
+          docker image inspect --format='{{.Id}}' \
+            lighthouse-backend:${{ github.sha }} > image-digests.txt
+          docker image inspect --format='{{.Id}}' \
+            lighthouse-frontend:${{ github.sha }} >> image-digests.txt
+          docker image inspect --format='{{.Id}}' \
+            lighthouse-rendering:${{ github.sha }} >> image-digests.txt
+          docker save \
+            lighthouse-backend:${{ github.sha }} \
+            lighthouse-frontend:${{ github.sha }} \
+            lighthouse-rendering:${{ github.sha }} \
+            | gzip -1 > release-images-${{ github.sha }}.tar.gz
+          sha256sum release-images-${{ github.sha }}.tar.gz \
+            > release-images-${{ github.sha }}.tar.gz.sha256
+
+      - name: Upload reviewed release bundle
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-bundle-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release-images-${{ github.sha }}.tar.gz
+            release-images-${{ github.sha }}.tar.gz.sha256
+            image-digests.txt
+            sbom-*.spdx.json
+            scan-*.json
+
+  remote-dry-run:
+    name: Remote rsync dry-run evidence
+    needs: [provenance, preflight, build-images]
+    runs-on: ubuntu-latest
+    environment:
+      name: production-read-only-dry-run
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup pinned SSH identity
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DRY_RUN_SSH_KEY" > ~/.ssh/dry_run_key
+          printf '%s\n' "$DRY_RUN_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/dry_run_key ~/.ssh/known_hosts
+          ssh-keygen -F "$DRY_RUN_HOST" -f ~/.ssh/known_hosts >/dev/null
+        env:
+          DRY_RUN_HOST: ${{ secrets.DRY_RUN_HOST }}
+          DRY_RUN_SSH_KEY: ${{ secrets.DRY_RUN_SSH_KEY }}
+          DRY_RUN_KNOWN_HOSTS: ${{ secrets.DRY_RUN_KNOWN_HOSTS }}
+
+      - name: Prove immutable release path is absent
+        run: |
+          ssh -i ~/.ssh/dry_run_key -o StrictHostKeyChecking=yes \
+            "${{ secrets.DRY_RUN_USER }}@${{ secrets.DRY_RUN_HOST }}" \
+            "test ! -e '${{ secrets.DRY_RUN_TARGET_DIR }}/releases-${{ github.sha }}'"
+
+      - name: Capture rsync dry-run deletion artifact
+        run: |
+          rsync -avz --delete --dry-run --itemize-changes \
+            --chmod=F644,D755 \
+            --exclude-from='deploy/lighthouse/rsync-excludes.txt' \
+            -e "ssh -i ~/.ssh/dry_run_key -o StrictHostKeyChecking=yes" \
+            ./ "${{ secrets.DRY_RUN_USER }}@${{ secrets.DRY_RUN_HOST }}:${{ secrets.DRY_RUN_TARGET_DIR }}/releases-${{ github.sha }}/" \
+            > rsync-dry-run-${{ github.sha }}.txt
+
+      - name: Upload rsync dry-run evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: rsync-dry-run-${{ github.sha }}
+          path: rsync-dry-run-${{ github.sha }}.txt
+          if-no-files-found: error
+          retention-days: 14
+
   deploy:
     name: Deploy to Lighthouse
-    needs: [preflight, build-images]
+    needs: [preflight, build-images, remote-dry-run]
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://101.34.52.232
+      url: https://video.lute-tlz-dddd.top
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Download exact reviewed release bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-bundle-${{ github.sha }}
+          path: ${{ runner.temp }}/release-bundle
 
       - name: Verify required secrets
         run: |
           missing=0
-          for var in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_TARGET_DIR; do
+          for var in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_TARGET_DIR DEPLOY_KNOWN_HOSTS; do
             if [ -z "${!var}" ]; then
               echo "::error::Missing required secret: $var"
               missing=1
@@ -142,38 +373,57 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_TARGET_DIR: ${{ secrets.DEPLOY_TARGET_DIR }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
 
-      - name: Setup SSH
+      - name: Setup pinned SSH identity
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F "$DEPLOY_HOST" -f ~/.ssh/known_hosts >/dev/null
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
 
-      - name: Rsync to server
+      - name: Prepare reviewed release directory
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "test ! -e '${{ secrets.DEPLOY_TARGET_DIR }}/releases-${{ github.sha }}' && mkdir '${{ secrets.DEPLOY_TARGET_DIR }}/releases-${{ github.sha }}'"
+
+      - name: Rsync reviewed release to server
         run: |
           rsync -avz --delete \
             --chmod=F644,D755 \
             --exclude-from='deploy/lighthouse/rsync-excludes.txt' \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new" \
-            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_TARGET_DIR }}/"
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_TARGET_DIR }}/releases-${{ github.sha }}/"
+
+      - name: Upload exact reviewed image archive
+        run: |
+          rsync -avz \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            "${{ runner.temp }}/release-bundle/release-images-${{ github.sha }}.tar.gz" \
+            "${{ runner.temp }}/release-bundle/release-images-${{ github.sha }}.tar.gz.sha256" \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_TARGET_DIR }}/releases-${{ github.sha }}/"
 
       - name: Trigger remote deploy
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd ${{ secrets.DEPLOY_TARGET_DIR }} && REBUILD_BACKEND=1 REBUILD_RENDERING=1 RUN_TOKEN_SMOKE=0 bash deploy/lighthouse/deploy.sh"
+            "cd '${{ secrets.DEPLOY_TARGET_DIR }}/releases-${{ github.sha }}/deploy/lighthouse' && AI_VIDEO_SHARED_ROOT='${{ secrets.DEPLOY_TARGET_DIR }}' RELEASE_SOURCE_SHA=${{ github.sha }} RELEASE_IMAGE_ARCHIVE='${{ secrets.DEPLOY_TARGET_DIR }}/releases-${{ github.sha }}/release-images-${{ github.sha }}.tar.gz' RUN_TOKEN_SMOKE=0 RUN_DEPLOY_SMOKE=0 ALLOW_MAINTENANCE_WINDOW=1 bash deploy.sh"
 
       - name: Smoke test /health
         run: |
           sleep 15
-          response=$(curl -sk --max-time 30 "https://${{ secrets.DEPLOY_HOST }}/health" || echo "FAIL")
-          echo "Response: $response"
-          if [[ "$response" != *'"status":"ok"'* ]]; then
-            echo "::error::/health did not return ok"
-            exit 1
-          fi
+          curl -fsS --max-time 30 "https://video.lute-tlz-dddd.top/api/health" \
+            | python3 -c 'import json,sys; payload=json.load(sys.stdin); persistence=payload.get("persistence") or {}; assert payload.get("status")=="ok"; assert persistence.get("backend")=="postgresql"; assert persistence.get("status")=="healthy"; assert persistence.get("tables_verified") is True'
 
       - name: Log deploy event
         run: |
-          echo "::notice::Deployed ${{ github.sha }} to https://${{ secrets.DEPLOY_HOST }} (reason: ${{ inputs.reason || 'tag push' }})"
+          printf '%s\n' "::notice::Deployed $GITHUB_SHA to production (reason: ${DEPLOY_REASON})"
+        env:
+          DEPLOY_REASON: ${{ inputs.reason || 'tag push' }}

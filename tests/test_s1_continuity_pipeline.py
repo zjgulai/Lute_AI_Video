@@ -1,6 +1,25 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
+
+from tests.generation_policy_test_utils import bound_generation_policy
+
+
+def _authorize_generation_route(monkeypatch: pytest.MonkeyPatch, scenario) -> None:
+    from src.routers import _deps
+
+    monkeypatch.setattr(
+        scenario,
+        "get_auth_context",
+        lambda: _deps.AuthContext(
+            tenant_id="tenant-a",
+            permissions=frozenset({"provider:submit"}),
+            key_type=_deps.ApiKeyType.TENANT,
+            key_id="s1-continuity-route-test",
+        ),
+    )
 
 
 def test_s1_step_order_includes_continuity_before_keyframes() -> None:
@@ -152,10 +171,7 @@ def test_script_writer_fallback_respects_requested_video_duration() -> None:
 
     assert script["total_duration"] == 15
     assert script["segments"][-1]["end_time"] == 15
-    assert sum(
-        segment["end_time"] - segment["start_time"]
-        for segment in script["segments"]
-    ) == 15
+    assert sum(segment["end_time"] - segment["start_time"] for segment in script["segments"]) == 15
 
 
 @pytest.mark.asyncio
@@ -313,9 +329,7 @@ def _sample_continuity_grid() -> dict:
                 "beat_summary": "context_setup -> product_intro",
                 "transition_intent": "bridge the setup into first product contact",
                 "seedance_prompt": "Clock, cold bottle, parent approaches warmer.",
-                "transition_to_next": (
-                    "match cut from cold bottle movement to bottle placement"
-                ),
+                "transition_to_next": ("match cut from cold bottle movement to bottle placement"),
                 "transition_type": "match_cut",
             },
             {
@@ -326,9 +340,7 @@ def _sample_continuity_grid() -> dict:
                 "scene_beat": "product_interaction",
                 "beat_summary": "product_action -> result_proof",
                 "transition_intent": "carry feature interaction into visible user payoff",
-                "seedance_prompt": (
-                    "Bottle placed into warmer, button press, indicator light."
-                ),
+                "seedance_prompt": ("Bottle placed into warmer, button press, indicator light."),
                 "transition_to_next": "action cut from indicator to bottle removal",
                 "transition_type": "action_cut",
             },
@@ -356,18 +368,14 @@ async def test_seedance_prompt_uses_continuity_clip_groups() -> None:
     assert prompts[0]["segment_type"] == "clip_group"
     assert prompts[0]["clip_index"] == 1
     assert prompts[0]["duration_seconds"] == 4
-    assert prompts[0]["transition_to_next"] == (
-        "match cut from cold bottle movement to bottle placement"
-    )
+    assert prompts[0]["transition_to_next"] == ("match cut from cold bottle movement to bottle placement")
     assert prompts[0]["transition_type"] == "match_cut"
     assert prompts[0]["scene_beat"] == "context_setup"
     assert prompts[0]["beat_summary"] == "context_setup -> product_intro"
     assert prompts[0]["transition_intent"] == "bridge the setup into first product contact"
     assert prompts[1]["clip_index"] == 2
     assert prompts[1]["duration_seconds"] == 6
-    assert prompts[1]["transition_to_next"] == (
-        "action cut from indicator to bottle removal"
-    )
+    assert prompts[1]["transition_to_next"] == ("action cut from indicator to bottle removal")
     assert prompts[1]["scene_beat"] == "product_interaction"
     assert "same bottle warmer on the same countertop" in prompts[0]["segment_prompt"]
     assert "Narrative beat: context_setup." in prompts[0]["segment_prompt"]
@@ -409,12 +417,8 @@ async def test_seedance_prompt_rejects_invalid_continuity_clip_groups() -> None:
     )
 
     assert invalid_number_result.success is False
-    assert "clip_groups[0].duration must be numeric" in (
-        invalid_number_result.error or ""
-    )
-    assert "clip_groups[0].clip_index must be numeric" in (
-        invalid_number_result.error or ""
-    )
+    assert "clip_groups[0].duration must be numeric" in (invalid_number_result.error or "")
+    assert "clip_groups[0].clip_index must be numeric" in (invalid_number_result.error or "")
 
 
 @pytest.mark.asyncio
@@ -602,9 +606,7 @@ async def test_video_prompts_continuity_fallback_uses_script_segments(
     assert len(calls) == 2
     assert "continuity_storyboard_grid" in calls[0]["params"]
     assert "script_segments" in calls[1]["params"]
-    assert errors == [
-        "video_prompts_continuity_failed: continuity builder failed"
-    ]
+    assert errors == ["video_prompts_continuity_failed: continuity builder failed"]
 
 
 @pytest.mark.asyncio
@@ -625,8 +627,7 @@ async def test_run_step_continuity_storyboard_grid_calls_skill(monkeypatch: pyte
                 "product_name": "Momcozy Nutri Bottle Warmer",
                 "visual_identity": {},
                 "micro_shots": [
-                    {"index": index, "continuity_in": "in", "continuity_out": "out"}
-                    for index in range(1, 13)
+                    {"index": index, "continuity_in": "in", "continuity_out": "out"} for index in range(1, 13)
                 ],
                 "clip_groups": [
                     {
@@ -699,18 +700,21 @@ async def test_run_step_continuity_storyboard_grid_calls_skill(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
-async def test_step_runner_persists_continuity_state_fields() -> None:
+async def test_step_runner_persists_continuity_state_fields(
+    isolated_provider_cost_db,
+) -> None:
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_runner import StepRunner
 
     state_manager = PipelineStateManager(use_pg=False)
     runner = StepRunner(state_manager)
-    label = await runner.init_state(
-        config={"product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"}},
-        mode="auto",
-        label="s1_continuity_test",
-        scenario="s1",
-    )
+    async with bound_generation_policy("s1", media=False):
+        label = await runner.init_state(
+            config={"product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"}},
+            mode="auto",
+            label="s1_continuity_test",
+            scenario="s1",
+        )
     state = await state_manager.load(label)
     assert state is not None
     state["steps"]["storyboards"]["output"] = [{"script_id": "script-1", "shots": []}]
@@ -829,8 +833,10 @@ async def test_direct_run_preserves_explicit_continuity_false(
 @pytest.mark.asyncio
 async def test_scenario_s1_no_media_stops_before_provider_backed_steps(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
 ) -> None:
     from src.routers import scenario
+    from src.routers._state import S1StartRequest
     from src.tools import translate
 
     executed_steps: list[str] = []
@@ -866,15 +872,15 @@ async def test_scenario_s1_no_media_stops_before_provider_backed_steps(
 
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
-    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
+    _authorize_generation_route(monkeypatch, scenario)
 
     result = await scenario.run_s1_product_direct(
-        {
-            "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
-            "target_platforms": ["tiktok"],
-            "video_duration": 15,
-            "enable_media_synthesis": False,
-        }
+        S1StartRequest(
+            product_catalog={"product_name": "Momcozy Nutri Bottle Warmer"},
+            target_platforms=["tiktok"],
+            video_duration=15,
+            enable_media_synthesis=False,
+        )
     )
 
     assert result["keyframe_images"] == []
@@ -892,10 +898,12 @@ async def test_scenario_s1_no_media_stops_before_provider_backed_steps(
 
 
 @pytest.mark.asyncio
-async def test_scenario_s1_dict_entry_preserves_explicit_continuity_false(
+async def test_scenario_s1_request_entry_preserves_explicit_continuity_false(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
 ) -> None:
     from src.routers import scenario
+    from src.routers._state import S1StartRequest
     from src.tools import translate
 
     captured: dict[str, object] = {}
@@ -929,17 +937,21 @@ async def test_scenario_s1_dict_entry_preserves_explicit_continuity_false(
                 "media_synthesis_errors": [],
             }
 
+        async def run_step(self, label: str, step_name: str) -> dict:
+            return await self.resume(label)
+
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
-    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
+    _authorize_generation_route(monkeypatch, scenario)
 
     await scenario.run_s1_product_direct(
-        {
-            "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
-            "continuity_mode": False,
-            "storyboard_grid": 12,
-            "clip_group_size": 3,
-        }
+        S1StartRequest(
+            product_catalog={"product_name": "Momcozy Nutri Bottle Warmer"},
+            continuity_mode=False,
+            storyboard_grid=12,
+            clip_group_size=3,
+            enable_media_synthesis=False,
+        )
     )
 
     config = captured["config"]
@@ -949,10 +961,12 @@ async def test_scenario_s1_dict_entry_preserves_explicit_continuity_false(
 
 
 @pytest.mark.asyncio
-async def test_scenario_s1_response_extracts_persisted_assemble_list(
+async def test_scenario_s1_bounded_response_does_not_expose_persisted_assemble_list(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
 ) -> None:
     from src.routers import scenario
+    from src.routers._state import S1StartRequest
     from src.tools import translate
 
     async def fake_translate_catalog(product_catalog: dict) -> dict:
@@ -992,23 +1006,35 @@ async def test_scenario_s1_response_extracts_persisted_assemble_list(
 
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
-    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
+    _authorize_generation_route(monkeypatch, scenario)
+
+    async def fake_bounded_resume(step_runner, label, _disposition, _retries):
+        return await step_runner.resume(label)
+
+    monkeypatch.setattr(scenario, "_resume_s1_bounded_media_pilot", fake_bounded_resume)
 
     result = await scenario.run_s1_product_direct(
-        {"product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"}}
+        S1StartRequest(
+            product_catalog={"product_name": "Momcozy Nutri Bottle Warmer"},
+            enable_media_synthesis=True,
+            artifact_disposition="pending_review",
+            provider_max_retries=0,
+        )
     )
 
     assert result["clip_paths"] == ["/tmp/clip-1.mp4"]
-    assert result["final_video_path"] == "/tmp/final.mp4"
-    assert result["render_json_path"] == "/tmp/final_input.json"
+    assert result["final_video_path"] == ""
+    assert result["render_json_path"] == ""
 
 
 @pytest.mark.asyncio
-async def test_scenario_s1_typeerror_fallback_preserves_explicit_continuity_false(
+async def test_scenario_s1_typeerror_never_replays_legacy_pipeline(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
 ) -> None:
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
     from src.routers import scenario
+    from src.routers._state import S1StartRequest
     from src.tools import translate
 
     captured: dict[str, object] = {}
@@ -1032,6 +1058,9 @@ async def test_scenario_s1_typeerror_fallback_preserves_explicit_continuity_fals
         async def resume(self, label: str) -> dict:
             raise TypeError("structlog fallback")
 
+        async def run_step(self, label: str, step_name: str) -> dict:
+            raise TypeError("structlog fallback")
+
     async def fake_run(
         self: S1ProductDirectPipeline,
         product_catalog: dict,
@@ -1043,32 +1072,29 @@ async def test_scenario_s1_typeerror_fallback_preserves_explicit_continuity_fals
 
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
-    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
     monkeypatch.setattr(S1ProductDirectPipeline, "run", fake_run)
+    _authorize_generation_route(monkeypatch, scenario)
 
-    result = await scenario.run_s1_product_direct(
-        {
-            "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
-            "continuity_mode": False,
-            "continuity_generation_mode": "high_quality",
-            "storyboard_grid": "24",
-            "clip_group_size": 4,
-            "transition_style": "soft_crossfade",
-        }
-    )
+    with pytest.raises(TypeError, match="structlog fallback"):
+        await scenario.run_s1_product_direct(
+            S1StartRequest(
+                product_catalog={"product_name": "Momcozy Nutri Bottle Warmer"},
+                continuity_mode=False,
+                continuity_generation_mode="high_quality",
+                storyboard_grid="24",
+                clip_group_size=4,
+                transition_style="soft_crossfade",
+                enable_media_synthesis=False,
+            )
+        )
 
-    kwargs = captured["kwargs"]
-    assert result == {"success": True}
-    assert kwargs["continuity_mode"] is False
-    assert kwargs["continuity_generation_mode"] == "high_quality"
-    assert kwargs["storyboard_grid"] == "24"
-    assert kwargs["clip_group_size"] == 4
-    assert kwargs["transition_style"] == "soft_crossfade"
+    assert captured == {}
 
 
 @pytest.mark.asyncio
 async def test_scenario_s1_start_preserves_explicit_continuity_false(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
 ) -> None:
     from src.routers import scenario
     from src.routers._state import S1StartRequest
@@ -1095,6 +1121,7 @@ async def test_scenario_s1_start_preserves_explicit_continuity_false(
             return {"label": label, "steps": {}}
 
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
+    _authorize_generation_route(monkeypatch, scenario)
 
     result = await scenario.start_s1_pipeline(
         S1StartRequest(
@@ -1117,8 +1144,11 @@ async def test_scenario_s1_start_preserves_explicit_continuity_false(
 @pytest.mark.asyncio
 async def test_unified_scenario_s1_entry_preserves_explicit_continuity_false(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
 ) -> None:
     from src.routers import scenario
+    from src.services import submission_idempotency
+    from src.services.submission_idempotency import SubmissionClaim
     from src.tools import translate
 
     captured: dict[str, object] = {}
@@ -1140,17 +1170,40 @@ async def test_unified_scenario_s1_entry_preserves_explicit_continuity_false(
             captured["config"] = config
             captured["mode"] = mode
             captured["scenario"] = scenario
-            return "s1_unified_entry_test"
+            captured["label"] = label
+            return label or "s1_unified_entry_test"
 
         async def resume(self, label: str) -> dict:
             return {"label": label, "steps": {}}
 
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
-    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
     monkeypatch.setattr(scenario, "_register_background_task", lambda task, label: None)
+    _authorize_generation_route(monkeypatch, scenario)
 
-    result = await scenario.submit_scenario(
+    class FakeSubmissionIdempotency:
+        async def claim_submission(self, **_kwargs: Any) -> SubmissionClaim:
+            return SubmissionClaim(outcome="owner", record={"id": "submission-fixture"})
+
+        async def transition(self, **kwargs: Any) -> dict[str, Any]:
+            return {"id": kwargs["record_id"], "record_status": kwargs["new_status"]}
+
+        def start_heartbeat(self, **_kwargs: Any) -> None:
+            return None
+
+        async def mark_terminal(self, **kwargs: Any) -> dict[str, Any]:
+            return {"id": kwargs["record_id"], "record_status": kwargs["status"]}
+
+        async def stop_heartbeat(self, **_kwargs: Any) -> None:
+            return None
+
+    monkeypatch.setattr(
+        submission_idempotency,
+        "get_submission_idempotency_service",
+        lambda: FakeSubmissionIdempotency(),
+    )
+
+    result = await scenario._submit_scenario_validated(
         "s1",
         {
             "product_catalog": {"product_name": "Momcozy Nutri Bottle Warmer"},
@@ -1160,10 +1213,11 @@ async def test_unified_scenario_s1_entry_preserves_explicit_continuity_false(
             "clip_group_size": 3,
             "transition_style": "soft_crossfade",
         },
+        "continuity-s1-submit-0001",
     )
 
     config = captured["config"]
-    assert result["label"] == "s1_unified_entry_test"
+    assert result["label"] == captured["label"]
     assert captured["scenario"] == "s1"
     assert config["continuity_mode"] is False
     assert config["continuity_generation_mode"] == "high_quality"
@@ -1239,9 +1293,7 @@ async def test_seedance_grouped_prompts_keep_transition_metadata(
         continuity_mode="standard",
     )
 
-    seedance_calls = [
-        call for call in calls if call["skill_name"] == "seedance-video-generate-skill"
-    ]
+    seedance_calls = [call for call in calls if call["skill_name"] == "seedance-video-generate-skill"]
     assert len(result["clip_paths"]) == 2
     assert result["clip_details"][0]["clip_index"] == 1
     assert result["clip_details"][0]["transition_to_next"] == "match cut"
@@ -1377,6 +1429,7 @@ async def test_seedance_high_quality_passes_continuity_frame_to_next_clip(
         return f"/tmp/frame_for_{video_path.rsplit('/', maxsplit=1)[-1]}.jpg"
 
     import src.pipeline.s1_product_pipeline as s1_module
+
     monkeypatch.setattr(SkillRegistry, "execute", fake_execute)
     monkeypatch.setattr(s1_module, "extract_clip_last_frame", fake_extract)
 
@@ -1402,13 +1455,9 @@ async def test_seedance_high_quality_passes_continuity_frame_to_next_clip(
         continuity_mode="high_quality",
     )
 
-    seedance_calls = [
-        call for call in calls if call["skill_name"] == "seedance-video-generate-skill"
-    ]
+    seedance_calls = [call for call in calls if call["skill_name"] == "seedance-video-generate-skill"]
     assert "continuity_frame_path" not in seedance_calls[0]["params"]
-    assert seedance_calls[1]["params"]["continuity_frame_path"] == (
-        "/tmp/frame_for_test_hq_seg_0.mp4.jpg"
-    )
+    assert seedance_calls[1]["params"]["continuity_frame_path"] == ("/tmp/frame_for_test_hq_seg_0.mp4.jpg")
     assert result["clip_details"][0]["continuity_frame"] is False
     assert result["clip_details"][1]["continuity_frame"] is True
 
@@ -1417,15 +1466,11 @@ def test_continuity_generation_mode_preserves_false_skip_contract() -> None:
 
     from src.pipeline.continuity_utils import normalize_continuity_config
 
-    disabled = normalize_continuity_config(
-        {"continuity_mode": False}
-    )
+    disabled = normalize_continuity_config({"continuity_mode": False})
     disabled_string = normalize_continuity_config(
         {"continuity_mode": "off", "continuity_generation_mode": "high_quality"}
     )
-    high_quality = normalize_continuity_config(
-        {"continuity_mode": "high_quality"}
-    )
+    high_quality = normalize_continuity_config({"continuity_mode": "high_quality"})
     explicit_generation = normalize_continuity_config(
         {"continuity_mode": True, "continuity_generation_mode": "high_quality"}
     )
@@ -1474,10 +1519,7 @@ def test_continuity_audit_split_marks_asset_ready_when_publish_warns() -> None:
             {"is_stub": False, "verification": {"all_ok": True}},
         ],
         continuity_grid={
-            "micro_shots": [
-                {"continuity_in": "in", "continuity_out": "out"}
-                for _ in range(12)
-            ],
+            "micro_shots": [{"continuity_in": "in", "continuity_out": "out"} for _ in range(12)],
             "clip_groups": [
                 {
                     "transition_to_next": "match cut",
@@ -1515,8 +1557,13 @@ def test_continuity_audit_split_marks_asset_ready_when_publish_warns() -> None:
     assert report["asset_ready_audit"]["checks"]["director_intent_metadata"] is True
     assert report["continuity_direction_summary"]["scene_beats"][0] == "context_setup"
     assert report["continuity_direction_summary"]["clip_directions"][0]["scene_beat"] == "context_setup"
-    assert report["continuity_direction_summary"]["clip_directions"][0]["beat_summary"] == "context_setup -> product_intro"
-    assert report["continuity_direction_summary"]["clip_directions"][0]["transition_intent"] == "bridge setup into product interaction"
+    assert (
+        report["continuity_direction_summary"]["clip_directions"][0]["beat_summary"] == "context_setup -> product_intro"
+    )
+    assert (
+        report["continuity_direction_summary"]["clip_directions"][0]["transition_intent"]
+        == "bridge setup into product interaction"
+    )
     assert report["continuity_score"] >= 0.8
 
 
@@ -1538,10 +1585,7 @@ def test_continuity_audit_split_fails_asset_when_final_video_missing() -> None:
             {"is_stub": False},
         ],
         continuity_grid={
-            "micro_shots": [
-                {"continuity_in": "in", "continuity_out": "out"}
-                for _ in range(12)
-            ],
+            "micro_shots": [{"continuity_in": "in", "continuity_out": "out"} for _ in range(12)],
             "clip_groups": [
                 {
                     "scene_beat": "context_setup",
@@ -1592,10 +1636,7 @@ def test_continuity_audit_split_fails_asset_when_clip_is_stub() -> None:
             {"is_stub": False},
         ],
         continuity_grid={
-            "micro_shots": [
-                {"continuity_in": "in", "continuity_out": "out"}
-                for _ in range(12)
-            ],
+            "micro_shots": [{"continuity_in": "in", "continuity_out": "out"} for _ in range(12)],
             "clip_groups": [
                 {
                     "scene_beat": "context_setup",
@@ -1692,10 +1733,7 @@ async def test_audit_run_step_handles_invalid_clip_detail(
             "thumbnail_images": {"output": ["/tmp/thumb.png"]},
             "continuity_storyboard_grid": {
                 "output": {
-                    "micro_shots": [
-                        {"continuity_in": "in", "continuity_out": "out"}
-                        for _ in range(12)
-                    ],
+                    "micro_shots": [{"continuity_in": "in", "continuity_out": "out"} for _ in range(12)],
                 },
             },
             "seedance_clips": {

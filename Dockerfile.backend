@@ -1,4 +1,6 @@
 FROM python:3.14-slim
+ARG RELEASE_SOURCE_SHA
+LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
 WORKDIR /app
 
 # 2026-05-15 incident: apt-get install gcc/libpq-dev/ffmpeg (~200MB across 49
@@ -53,6 +55,7 @@ RUN python -c 'import hashlib, pathlib, re; lines = []; [lines.append(re.sub(r"\
 # Copy all backend source code
 COPY src ./src
 COPY scripts ./scripts
+COPY configs ./configs
 COPY pyproject.toml ./
 
 # Phase 0 #1 (2026-05-15): alembic migrations must travel with the image so

@@ -15,6 +15,7 @@ from typing import Any, Literal
 import structlog
 
 from src.config import OUTPUT_DIR
+from src.models.provider_cost import ProviderCostContractError
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     all_clips_are_stubs,
@@ -352,7 +353,16 @@ class S5BrandVlogPipeline:
         )
 
         result: dict[str, Any] = {
-            "success": success,
+            "success": (
+                success
+                and final_state.get("lifecycle_status") == "completed_bounded"
+                and not final_state.get("pipeline_degraded")
+            ),
+            "_execution_completed": (
+                final_state.get("lifecycle_status") == "completed_bounded"
+                and not final_state.get("pipeline_degraded")
+            ),
+            "pipeline_degraded": final_state.get("pipeline_degraded") is True,
             "label": label,
             "scenario": "brand_vlog",
             "trace_id": trace_id,
@@ -534,12 +544,18 @@ class S5BrandVlogPipeline:
 只输出 JSON 数组，不要任何 markdown 或解释。"""
 
         try:
-            result = await llm.invoke_json(system_prompt, user_prompt)
+            result = await llm.invoke_json(
+                system_prompt,
+                user_prompt,
+                operation_key="pipeline.s5.vlog_strategy",
+            )
             if isinstance(result, list) and len(result) > 0:
                 logger.info("s5_vlog: strategy generated", shots=len(result))
                 return result
             else:
                 errors.append(f"vlog_strategy: unexpected LLM output type: {type(result).__name__}")
+        except ProviderCostContractError:
+            raise
         except Exception as e:
             logger.error("s5_vlog: strategy LLM failed", error=str(e))
             errors.append(f"vlog_strategy_llm_failed: {e}")
@@ -835,6 +851,7 @@ class S5BrandVlogPipeline:
                         "resolution": "720p",
                         "output_label": f"{label}_seg_{i}",
                         "model": s5_model,
+                        "operation_instance": f"seedance_clips.segment.{i}",
                     }
                     if artifact_output_dir:
                         gen_params["output_dir"] = artifact_output_dir
@@ -906,6 +923,7 @@ class S5BrandVlogPipeline:
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
                     "model": s5_model,
+                    "operation_instance": f"seedance_clips.segment.{i}",
                 }
                 if artifact_output_dir:
                     gen_params["output_dir"] = artifact_output_dir
@@ -985,8 +1003,12 @@ class S5BrandVlogPipeline:
             "text": full_text,
             "language": "zh",
             "output_label": "vlog_tts",
+            "operation_instance": "vlog.primary",
         })
         if res.success and res.data:
+            single_path = res.data.get("audio_path")
+            if isinstance(single_path, str) and single_path:
+                return [single_path]
             paths = res.data.get("audio_paths", [])
             if isinstance(paths, list):
                 return paths

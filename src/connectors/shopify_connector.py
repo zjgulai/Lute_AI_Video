@@ -1,61 +1,239 @@
-"""Shopify connector — publish content to Shopify via the Admin API.
-
-Uses the Shopify Admin API (GraphQL) to upload video files and associate
-them with products. Falls back to mock mode when credentials are absent.
-"""
+"""Strict Shopify Admin GraphQL 2026-07 product-video connector."""
 
 import asyncio
+import inspect
+import ipaddress
 import logging
+import math
 import os
-from datetime import datetime
-from typing import Any
-from uuid import uuid4
+import re
+import subprocess
+import time
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TypeAlias
+from urllib.parse import urlsplit
 
 import httpx
+from pydantic import ValidationError
 
-from src.config import SHOPIFY_GRAPHQL_URL_TEMPLATE, SHOPIFY_METRICS_SHOPIFYQL_QUERY
-from src.connectors.base import PlatformConnector
+from src.config import SHOPIFY_METRICS_SHOPIFYQL_QUERY
+from src.connectors.base import (
+    ConnectorCredentialNotReady,
+    ConnectorCredentialState,
+    ConnectorOutcomeAmbiguous,
+    ConnectorPreflightRejected,
+    ConnectorPreflightUnavailable,
+    ConnectorStatusUnavailable,
+    PlatformConnector,
+    ShopifyPreflightSnapshot,
+)
+from src.models.publish_attempt import PublishReceiptV1, ShopifyPublishOptions
 from src.tasks.metrics_poller import PlatformMetricsError, classify_platform_http_status
 
 logger = logging.getLogger(__name__)
 
-# Shopify Admin GraphQL endpoint (version 2024-07 or later supports fileCreate)
-_SHOPIFY_GRAPHQL_URL = SHOPIFY_GRAPHQL_URL_TEMPLATE
+_SHOPIFY_ADMIN_API_VERSION = "2026-07"
+
+_STORE_HOST_RE = re.compile(
+    r"^(?=.{1,253}$)"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.myshopify\.com$"
+)
+_LEGACY_PUBLISH_ENV_NAMES = (
+    "SHOPIFY_API_KEY",
+    "SHOPIFY_ADMIN_TOKEN",
+    "SHOPIFY_API_PASSWORD",
+    "SHOPIFY_GRAPHQL_URL_TEMPLATE",
+)
+_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
+_MIME_BY_SUFFIX = {
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+}
+_MAX_VIDEO_BYTES = 1024 * 1024 * 1024
+_MAX_VIDEO_DURATION_SECONDS = 600.0
+_VIDEO_GID_RE = re.compile(r"^gid://shopify/Video/[1-9][0-9]*$")
+_PARAMETER_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+_REQUIRED_SCOPES = frozenset({"read_products", "write_products", "write_files"})
+
+MediaProbe: TypeAlias = Callable[[Path], float | Awaitable[float]]
+Sleep: TypeAlias = Callable[[float], Awaitable[None]]
+Clock: TypeAlias = Callable[[], float]
+Now: TypeAlias = Callable[[], datetime]
+
+_PREFLIGHT_QUERY = """
+query PublishPreflight($productId: ID!) {
+  product(id: $productId) { id }
+  currentAppInstallation { accessScopes { handle } }
+}
+"""
+_STAGED_UPLOADS_MUTATION = """
+mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
+  stagedUploadsCreate(input: $input) {
+    stagedTargets { url resourceUrl parameters { name value } }
+    userErrors { field message }
+  }
+}
+"""
+_FILE_CREATE_MUTATION = """
+mutation FileCreate($files: [FileCreateInput!]!) {
+  fileCreate(files: $files) {
+    files { ... on Video { id fileStatus } }
+    userErrors { field message }
+  }
+}
+"""
+_VIDEO_STATUS_QUERY = """
+query VideoStatus($id: ID!) {
+  node(id: $id) { ... on Video { id fileStatus } }
+}
+"""
+_FILE_UPDATE_MUTATION = """
+mutation FileUpdate($files: [FileUpdateInput!]!) {
+  fileUpdate(files: $files) {
+    files { ... on Video { id fileStatus } }
+    userErrors { field message }
+  }
+}
+"""
+_PRODUCT_MEDIA_READBACK_QUERY = """
+query ProductMediaReadback($productId: ID!) {
+  product(id: $productId) {
+    id
+    media(first: 250) { nodes { ... on Video { id } } }
+  }
+}
+"""
 
 
-def _is_mock_mode() -> bool:
-    """Return True when no real Shopify API credentials are available.
-
-    Checks SHOPIFY_ACCESS_TOKEN (canonical), falls back to SHOPIFY_API_KEY (legacy).
-    Ref: debt-audit-report-2026-06-09.md item CFG-2.
-    """
-    token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get("SHOPIFY_API_KEY", "")
-    store_url = os.environ.get("SHOPIFY_STORE_URL", "")
-    return not token or not store_url
+class _ShopifyDeterministicFailure(RuntimeError):
+    pass
 
 
-def _admin_url() -> str:
-    """Return the base admin URL for the configured Shopify store."""
-    store = os.environ.get("SHOPIFY_STORE_URL", "mock-store.myshopify.com")
-    return f"https://{store}/admin"
+@dataclass(frozen=True, slots=True)
+class _ShopifyMedia:
+    path: Path
+    size_bytes: int
+    mime_type: str
+    duration_seconds: float
 
 
-def _headers() -> dict[str, Any]:
-    """Build headers for Shopify Admin API requests."""
-    token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
-        "SHOPIFY_API_KEY", ""
+@dataclass(frozen=True, slots=True)
+class _StagedTarget:
+    upload_url: str
+    resource_url: str
+    parameters: Mapping[str, str]
+
+
+def _default_media_probe(path: Path) -> float:
+    completed = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError("media probe unavailable")
+    value = float(completed.stdout.strip())
+    if not math.isfinite(value) or value <= 0:
+        raise RuntimeError("media probe unavailable")
+    return value
+
+
+def _read_nonempty_env(name: str) -> str | None:
+    raw = os.environ.get(name)
+    if not isinstance(raw, str):
+        return None
+    value = raw.strip()
+    return value or None
+
+
+def _selected_token() -> str | None:
+    return _read_nonempty_env("SHOPIFY_ACCESS_TOKEN")
+
+
+def _publish_enabled() -> bool:
+    raw = os.environ.get("SHOPIFY_PUBLISH_ENABLED")
+    return isinstance(raw, str) and raw.strip().lower() in _TRUTHY_VALUES
+
+
+def _valid_store_host(value: str) -> bool:
+    if not value or any(character.isspace() for character in value):
+        return False
+    try:
+        parsed = urlsplit(f"//{value}")
+        parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == ""
+        and parsed.path == ""
+        and parsed.query == ""
+        and parsed.fragment == ""
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.port is None
+        and parsed.hostname is not None
+        and parsed.netloc == value
+        and parsed.hostname == value
+        and value == value.lower()
+        and _STORE_HOST_RE.fullmatch(value) is not None
     )
 
-    if token:
-        return {
-            "X-Shopify-Access-Token": token,
-            "Content-Type": "application/json",
-        }
-    # Fallback to basic auth (API key + password)
+
+def _credential_state() -> ConnectorCredentialState:
+    if any(_read_nonempty_env(name) is not None for name in _LEGACY_PUBLISH_ENV_NAMES):
+        return ConnectorCredentialState(False, "invalid_configuration")
+    if not _publish_enabled():
+        return ConnectorCredentialState(False, "publishing_disabled")
+    token = _selected_token()
+    store = os.environ.get("SHOPIFY_STORE_URL")
+    if token is None or not isinstance(store, str) or not store:
+        return ConnectorCredentialState(False, "missing_credentials")
+    if not _valid_store_host(store):
+        return ConnectorCredentialState(False, "invalid_configuration")
+    return ConnectorCredentialState(True, None)
+
+
+def _require_credentials() -> tuple[str, str]:
+    state = _credential_state()
+    token = _selected_token()
+    store = os.environ.get("SHOPIFY_STORE_URL")
+    if (
+        not state.ready
+        or token is None
+        or not isinstance(store, str)
+        or not _valid_store_host(store)
+    ):
+        raise ConnectorCredentialNotReady(state.reason or "invalid_configuration")
+    return token, store
+
+
+def _graphql_url(store: str) -> str:
+    if not _valid_store_host(store):
+        raise ValueError("Shopify store host is invalid")
+    return f"https://{store}/admin/api/{_SHOPIFY_ADMIN_API_VERSION}/graphql.json"
+
+
+def _headers(token: str) -> dict[str, str]:
     return {
+        "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
     }
-
 
 def _shopify_metrics_query(post_id: str) -> str:
     template = os.environ.get(
@@ -173,8 +351,55 @@ def _normalize_shopifyql_metrics(table_data: Any) -> dict[str, Any]:
 
 
 class ShopifyConnector(PlatformConnector):
-    def __init__(self, http_client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        http_client: httpx.AsyncClient | None = None,
+        *,
+        media_probe: MediaProbe | None = None,
+        sleep: Sleep = asyncio.sleep,
+        monotonic: Clock = time.monotonic,
+        now: Now | None = None,
+        max_status_polls: int = 6,
+        poll_interval_seconds: float = 2.0,
+        poll_deadline_seconds: float = 30.0,
+    ) -> None:
+        if (
+            isinstance(max_status_polls, bool)
+            or not isinstance(max_status_polls, int)
+            or max_status_polls <= 0
+            or not math.isfinite(poll_interval_seconds)
+            or poll_interval_seconds < 0
+            or not math.isfinite(poll_deadline_seconds)
+            or poll_deadline_seconds <= 0
+        ):
+            raise ValueError("Shopify polling configuration is invalid")
         self._http_client = http_client
+        self._media_probe = media_probe or _default_media_probe
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self._now = now or (lambda: datetime.now(UTC))
+        self._max_status_polls = max_status_polls
+        self._poll_interval_seconds = poll_interval_seconds
+        self._poll_deadline_seconds = poll_deadline_seconds
+
+    async def _post(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        if self._http_client is not None:
+            return await self._http_client.post(
+                url,
+                follow_redirects=False,
+                **kwargs,
+            )
+        async with httpx.AsyncClient(
+            timeout=timeout_seconds,
+            follow_redirects=False,
+        ) as client:
+            return await client.post(url, **kwargs)
 
     async def fetch_metrics(self, post_id: str) -> dict[str, Any]:
         """Fetch performance metrics for a Shopify media/post id.
@@ -185,25 +410,23 @@ class ShopifyConnector(PlatformConnector):
         `SHOPIFY_METRICS_SHOPIFYQL_QUERY` with a `{post_id}` placeholder once
         the selected Shopify dimension is confirmed for the pilot.
         """
-        token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
-            "SHOPIFY_API_KEY", ""
-        )
+        token = os.environ.get("SHOPIFY_ACCESS_TOKEN", "")
         store_url = os.environ.get("SHOPIFY_STORE_URL", "")
         if not token or not store_url:
             raise PlatformMetricsError(
                 "auth",
-                "SHOPIFY_ACCESS_TOKEN/SHOPIFY_API_KEY and SHOPIFY_STORE_URL are required for Shopify metrics",
+                "SHOPIFY_ACCESS_TOKEN and SHOPIFY_STORE_URL are required for Shopify metrics",
             )
 
         query = _shopify_metrics_query(post_id)
-        resp = await self._post_shopifyql_query(store_url, query)
-        if resp.status_code != 200:
+        response = await self._post_shopifyql_query(store_url, token, query)
+        if response.status_code != 200:
             raise PlatformMetricsError(
-                classify_platform_http_status(resp.status_code),
-                f"Shopify metrics HTTP {resp.status_code}",
+                classify_platform_http_status(response.status_code),
+                f"Shopify metrics HTTP {response.status_code}",
             )
 
-        data = resp.json()
+        data = response.json()
         errors = data.get("errors")
         if errors:
             raise PlatformMetricsError(
@@ -231,8 +454,13 @@ class ShopifyConnector(PlatformConnector):
             )
         return metrics
 
-    async def _post_shopifyql_query(self, store_url: str, shopifyql: str) -> httpx.Response:
-        graphql_url = _SHOPIFY_GRAPHQL_URL.format(store=store_url)
+    async def _post_shopifyql_query(
+        self,
+        store_url: str,
+        token: str,
+        shopifyql: str,
+    ) -> httpx.Response:
+        graphql_url = _graphql_url(store_url)
         graphql_query = """
         query ShopifyMetrics($query: String!) {
             shopifyqlQuery(query: $query) {
@@ -252,490 +480,698 @@ class ShopifyConnector(PlatformConnector):
         if self._http_client is not None:
             return await self._http_client.post(
                 graphql_url,
-                headers=_headers(),
+                headers=_headers(token),
                 json=payload,
             )
         async with httpx.AsyncClient(timeout=30.0) as client:
             return await client.post(
                 graphql_url,
-                headers=_headers(),
+                headers=_headers(token),
                 json=payload,
             )
 
-    async def publish(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Publish content to Shopify.
-
-        Accepts content with fields:
-            title        (str) — video title
-            video_path   (str) — local file path to the video
-            product_name (str) — product name to associate the video with
-
-        Returns dict with keys:
-            success, post_id, url, status, error, platform, published_at
-        """
-        token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
-            "SHOPIFY_API_KEY", ""
+    async def preflight(self, content: dict[str, Any]) -> ShopifyPreflightSnapshot:
+        token, store = _require_credentials()
+        media, options, _ = await self._validate_local_content(content)
+        data = await self._preflight_query(
+            store=store,
+            token=token,
+            product_id=options.product_id,
         )
-        store_url = os.environ.get("SHOPIFY_STORE_URL", "")
-
-        if not token or not store_url:
-            logger.info(
-                "SHOPIFY_ACCESS_TOKEN/SHOPIFY_API_KEY or SHOPIFY_STORE_URL not set — using mock publish"
+        product = data.get("product")
+        installation = data.get("currentAppInstallation")
+        if product is None or product is False:
+            raise ConnectorPreflightRejected
+        if not isinstance(product, Mapping):
+            raise ConnectorPreflightUnavailable
+        if product.get("id") != options.product_id:
+            raise ConnectorPreflightRejected
+        if not isinstance(installation, Mapping):
+            raise ConnectorPreflightUnavailable
+        raw_scopes = installation.get("accessScopes")
+        if (
+            not isinstance(raw_scopes, list)
+            or any(
+                not isinstance(item, Mapping)
+                or not isinstance(item.get("handle"), str)
+                for item in raw_scopes
             )
-            return await self._mock_publish(content)
+        ):
+            raise ConnectorPreflightUnavailable
+        scopes = {item["handle"] for item in raw_scopes}
+        if not _REQUIRED_SCOPES <= scopes:
+            raise ConnectorPreflightRejected
+        return ShopifyPreflightSnapshot(
+            product_id=options.product_id,
+            required_scopes_verified=True,
+            media_duration_seconds=media.duration_seconds,
+            observed_at=self._utc_now(),
+        )
 
-        video_path = content.get("video_path", "")
-        title = content.get("title", "AI-generated video")
-        product_name = content.get("product_name", "")
-
-        if not video_path or not os.path.isfile(video_path):
-            logger.warning("Video file not found at %s", video_path)
-            return {
-                "success": False,
-                "error": f"Video file not found: {video_path}",
-                "status": "failed",
-                "platform": "shopify",
-            }
-
+    async def publish(
+        self,
+        content: dict[str, Any],
+        *,
+        preflight: ShopifyPreflightSnapshot | None = None,
+    ) -> dict[str, Any]:
+        token, store = _require_credentials()
+        if not isinstance(preflight, ShopifyPreflightSnapshot):
+            raise ConnectorPreflightUnavailable
+        video_id: str | None = None
+        provider_status: str | None = None
+        product_id = preflight.product_id
         try:
-            # Step 1: Upload video file via Shopify Files API (fileCreate)
-            file_result = await self._upload_video(
-                store_url, video_path, title
+            media, options, title = await self._validate_local_content(content)
+            if not self._snapshot_matches(
+                preflight=preflight,
+                options=options,
+                duration_seconds=media.duration_seconds,
+            ):
+                raise ConnectorOutcomeAmbiguous
+            target = await self._create_staged_target(
+                store=store,
+                token=token,
+                media=media,
             )
-            if not file_result.get("success"):
-                return {
-                    "success": False,
-                    "error": file_result.get("error", "File upload failed"),
-                    "status": "failed",
-                    "platform": "shopify",
-                }
-
-            media_id = file_result.get("media_id", "")
-
-            # Step 2: If a product name is given, associate the video with it
-            post_url = f"{_admin_url()}/products"
-            if product_name:
-                product_result = await self._associate_with_product(
-                    store_url, media_id, product_name
-                )
-                if product_result.get("success"):
-                    product_id = product_result.get("product_id", "")
-                    post_url = f"{_admin_url()}/products/{product_id}"
-                else:
-                    logger.warning(
-                        "Failed to associate video with product '%s': %s",
-                        product_name,
-                        product_result.get("error"),
+            await self._upload_staged_target(target=target, media=media)
+            video_id, provider_status = await self._create_video_file(
+                store=store,
+                token=token,
+                resource_url=target.resource_url,
+                title=title,
+            )
+            if provider_status == "FAILED":
+                return self._failure_result(
+                    receipt=self._receipt(
+                        video_id=video_id,
+                        product_id=product_id,
+                        provider_status="FAILED",
                     )
-
+                )
+            provider_status = await self._poll_video_status(
+                store=store,
+                token=token,
+                video_id=video_id,
+                product_id=product_id,
+            )
+            if provider_status == "FAILED":
+                return self._failure_result(
+                    receipt=self._receipt(
+                        video_id=video_id,
+                        product_id=product_id,
+                        provider_status="FAILED",
+                    )
+                )
+            await self._add_product_reference(
+                store=store,
+                token=token,
+                video_id=video_id,
+                product_id=product_id,
+            )
+            await self._verify_product_reference(
+                store=store,
+                token=token,
+                video_id=video_id,
+                product_id=product_id,
+            )
+            receipt = self._receipt(
+                video_id=video_id,
+                product_id=product_id,
+                provider_status="READY",
+                verified_by="file_query_and_product_readback",
+            )
+            receipt.validate_published()
             return {
                 "success": True,
-                "post_id": media_id,
-                "url": post_url,
+                "simulated": False,
+                "platform": "shopify",
                 "status": "published",
-                "platform": "shopify",
-                "published_at": datetime.now().isoformat(),
+                "post_id": None,
+                "url": None,
+                "receipt": receipt.model_dump(mode="json"),
             }
+        except _ShopifyDeterministicFailure:
+            receipt = (
+                self._receipt(
+                    video_id=video_id,
+                    product_id=product_id,
+                    provider_status=provider_status,
+                )
+                if video_id is not None
+                else None
+            )
+            return self._failure_result(receipt=receipt)
+        except ConnectorOutcomeAmbiguous as exc:
+            if exc.partial_receipt is not None:
+                raise
+            receipt = (
+                self._receipt(
+                    video_id=video_id,
+                    product_id=product_id,
+                    provider_status=provider_status,
+                )
+                if video_id is not None
+                else None
+            )
+            raise ConnectorOutcomeAmbiguous(
+                partial_receipt=(
+                    receipt.model_dump(mode="json") if receipt is not None else None
+                )
+            ) from None
+        except (ConnectorPreflightRejected, ConnectorPreflightUnavailable) as exc:
+            logger.warning(
+                "shopify_publish_outcome_ambiguous error_class=%s",
+                type(exc).__name__,
+            )
+            raise ConnectorOutcomeAmbiguous from None
         except Exception as exc:
-            logger.exception("Shopify API publish error")
-            return {
-                "success": False,
-                "error": str(exc),
-                "status": "failed",
-                "platform": "shopify",
-            }
+            logger.warning(
+                "shopify_publish_outcome_ambiguous error_class=%s",
+                type(exc).__name__,
+            )
+            receipt = (
+                self._receipt(
+                    video_id=video_id,
+                    product_id=product_id,
+                    provider_status=provider_status,
+                )
+                if video_id is not None
+                else None
+            )
+            raise ConnectorOutcomeAmbiguous(
+                partial_receipt=(
+                    receipt.model_dump(mode="json") if receipt is not None else None
+                )
+            ) from None
 
-    async def _upload_video(
-        self, store_url: str, video_path: str, title: str
-    ) -> dict[str, Any]:
-        """Upload a video file to Shopify using the GraphQL fileCreate mutation.
-
-        Returns dict with keys: success, media_id, error.
-        """
-        graphql_url = _SHOPIFY_GRAPHQL_URL.format(store=store_url)
-        headers = _headers()
-        headers["Content-Type"] = "application/json"
-
-        # Stage 1: Request a staged upload URL
-        staging_mutation = """
-        mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
-            stagedUploadsCreate(input: $input) {
-                stagedTargets {
-                    url
-                    resourceUrl
-                    parameters {
-                        name
-                        value
-                    }
-                }
-                userErrors {
-                    field
-                    message
-                }
-            }
-        }
-        """
-
-        file_size = os.path.getsize(video_path)
-        filename = os.path.basename(video_path)
-
-        staging_variables = {
-            "input": [
-                {
-                    "resource": "FILE",
-                    "filename": filename,
-                    "mimeType": "video/mp4",
-                    "fileSize": str(file_size),
-                }
-            ]
-        }
-
+    async def _validate_local_content(
+        self,
+        content: Mapping[str, Any],
+    ) -> tuple[_ShopifyMedia, ShopifyPublishOptions, str]:
+        video_path = content.get("video_path")
+        title = content.get("title")
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                # Stage 1: Get upload URL
-                resp = await client.post(
-                    graphql_url,
-                    headers=headers,
-                    json={
-                        "query": staging_mutation,
-                        "variables": staging_variables,
-                    },
-                )
-
-                if resp.status_code != 200:
-                    return {
-                        "success": False,
-                        "error": f"Shopify staging HTTP {resp.status_code}: {resp.text[:300]}",
-                    }
-
-                data = resp.json()
-                user_errors = (
-                    data.get("data", {})
-                    .get("stagedUploadsCreate", {})
-                    .get("userErrors", [])
-                )
-                if user_errors:
-                    error_msg = "; ".join(
-                        e.get("message", "Unknown error") for e in user_errors
-                    )
-                    return {"success": False, "error": error_msg}
-
-                targets = (
-                    data.get("data", {})
-                    .get("stagedUploadsCreate", {})
-                    .get("stagedTargets", [])
-                )
-                if not targets:
-                    return {
-                        "success": False,
-                        "error": "No staged upload targets returned",
-                    }
-
-                target = targets[0]
-                upload_url = target["url"]
-                parameters = target["parameters"]
-
-                # Build multipart form for the actual upload
-                files = {}
-                for param in parameters:
-                    files[param["name"]] = (
-                        "blob",
-                        param["value"].encode(),
-                        "text/plain",
-                    )
-                files["file"] = (filename, open(video_path, "rb"), "video/mp4")
-
-                # Stage 2: Upload file to the staged URL
-                upload_resp = await client.post(upload_url, files=files)
-
-                if upload_resp.status_code not in (200, 201):
-                    return {
-                        "success": False,
-                        "error": f"Shopify file upload HTTP {upload_resp.status_code}: {upload_resp.text[:300]}",
-                    }
-
-                # Stage 3: Create the media record with fileCreate mutation
-                create_mutation = """
-                mutation fileCreate($files: [FileCreateInput!]!) {
-                    fileCreate(files: $files) {
-                        files {
-                            id
-                            alt
-                            createdAt
-                            fileStatus
-                            ... on MediaFile {
-                                preview {
-                                    url
-                                }
-                            }
-                        }
-                        userErrors {
-                            field
-                            message
-                        }
-                    }
-                }
-                """
-
-                create_variables = {
-                    "files": [
-                        {
-                            "alt": title,
-                            "contentType": "VIDEO",
-                            "originalSource": target["resourceUrl"],
-                        }
-                    ]
-                }
-
-                create_resp = await client.post(
-                    graphql_url,
-                    headers=headers,
-                    json={
-                        "query": create_mutation,
-                        "variables": create_variables,
-                    },
-                )
-
-                if create_resp.status_code != 200:
-                    return {
-                        "success": False,
-                        "error": f"Shopify fileCreate HTTP {create_resp.status_code}: {create_resp.text[:300]}",
-                    }
-
-                create_data = create_resp.json()
-                create_errors = (
-                    create_data.get("data", {})
-                    .get("fileCreate", {})
-                    .get("userErrors", [])
-                )
-                if create_errors:
-                    error_msg = "; ".join(
-                        e.get("message", "Unknown error") for e in create_errors
-                    )
-                    return {"success": False, "error": error_msg}
-
-                created_files = (
-                    create_data.get("data", {})
-                    .get("fileCreate", {})
-                    .get("files", [])
-                )
-                if not created_files:
-                    return {
-                        "success": False,
-                        "error": "No files returned from fileCreate",
-                    }
-
-                file_id = created_files[0].get("id", "")
-                return {"success": True, "media_id": file_id}
-
-        except Exception as exc:
-            logger.exception("Shopify video upload exception")
-            return {"success": False, "error": str(exc)}
-
-    async def _associate_with_product(
-        self, store_url: str, media_id: str, product_name: str
-    ) -> dict[str, Any]:
-        """Search for a product by name and associate the media with it.
-
-        Uses the productCreateMedia mutation to attach the uploaded video.
-
-        Returns dict with keys: success, product_id, error.
-        """
-        graphql_url = _SHOPIFY_GRAPHQL_URL.format(store=store_url)
-        headers = _headers()
-        headers["Content-Type"] = "application/json"
-
-        # First, search for the product by title
-        search_query = """
-        query searchProducts($query: String!) {
-            products(first: 1, query: $query) {
-                edges {
-                    node {
-                        id
-                        title
-                    }
-                }
-            }
-        }
-        """
-
+            options = ShopifyPublishOptions.model_validate(
+                content.get("platform_options")
+            )
+        except ValidationError:
+            raise ConnectorPreflightRejected from None
+        if (
+            not isinstance(video_path, str)
+            or not video_path
+            or not isinstance(title, str)
+            or not title
+            or len(title) > 300
+            or _CONTROL_RE.search(title)
+        ):
+            raise ConnectorPreflightRejected
+        path = Path(video_path)
+        mime_type = _MIME_BY_SUFFIX.get(path.suffix.lower())
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                search_resp = await client.post(
-                    graphql_url,
-                    headers=headers,
-                    json={
-                        "query": search_query,
-                        "variables": {"query": f"title:{product_name}"},
-                    },
-                )
+            size_bytes = path.stat().st_size
+        except OSError:
+            raise ConnectorPreflightRejected from None
+        if (
+            mime_type is None
+            or size_bytes <= 0
+            or size_bytes > _MAX_VIDEO_BYTES
+        ):
+            raise ConnectorPreflightRejected
+        try:
+            duration = self._media_probe(path)
+            if inspect.isawaitable(duration):
+                duration = await duration
+            if (
+                isinstance(duration, bool)
+                or not isinstance(duration, int | float)
+                or not math.isfinite(float(duration))
+                or duration <= 0
+            ):
+                raise ValueError("duration is invalid")
+        except Exception:
+            raise ConnectorPreflightUnavailable from None
+        if duration > _MAX_VIDEO_DURATION_SECONDS:
+            raise ConnectorPreflightRejected
+        return (
+            _ShopifyMedia(
+                path=path,
+                size_bytes=size_bytes,
+                mime_type=mime_type,
+                duration_seconds=float(duration),
+            ),
+            options,
+            title,
+        )
 
-                if search_resp.status_code != 200:
-                    return {
-                        "success": False,
-                        "error": f"Product search HTTP {search_resp.status_code}",
-                    }
-
-                search_data = search_resp.json()
-                products = (
-                    search_data.get("data", {})
-                    .get("products", {})
-                    .get("edges", [])
-                )
-
-                if not products:
-                    logger.warning(
-                        "No Shopify product found matching '%s'", product_name
-                    )
-                    return {
-                        "success": False,
-                        "error": f"Product '{product_name}' not found",
-                    }
-
-                product_id = products[0]["node"]["id"]
-
-                # Now associate the media with the product
-                associate_mutation = """
-                mutation productCreateMedia($media: [CreateMediaInput!]!) {
-                    productCreateMedia(media: $media) {
-                        media {
-                            ... on MediaFile {
-                                id
-                                fileStatus
-                            }
-                        }
-                        userErrors {
-                            field
-                            message
-                        }
-                    }
-                }
-                """
-
-                associate_variables = {
-                    "media": [
-                        {
-                            "originalSource": media_id,
-                            "mediaContentType": "VIDEO",
-                            "productId": product_id,
-                        }
-                    ]
-                }
-
-                assoc_resp = await client.post(
-                    graphql_url,
-                    headers=headers,
-                    json={
-                        "query": associate_mutation,
-                        "variables": associate_variables,
-                    },
-                )
-
-                if assoc_resp.status_code != 200:
-                    return {
-                        "success": False,
-                        "error": f"productCreateMedia HTTP {assoc_resp.status_code}",
-                    }
-
-                assoc_data = assoc_resp.json()
-                assoc_errors = (
-                    assoc_data.get("data", {})
-                    .get("productCreateMedia", {})
-                    .get("userErrors", [])
-                )
-                if assoc_errors:
-                    error_msg = "; ".join(
-                        e.get("message", "Unknown error") for e in assoc_errors
-                    )
-                    return {"success": False, "error": error_msg}
-
-                return {"success": True, "product_id": product_id}
-
+    async def _preflight_query(
+        self,
+        *,
+        store: str,
+        token: str,
+        product_id: str,
+    ) -> Mapping[str, Any]:
+        try:
+            response = await self._post(
+                _graphql_url(store),
+                timeout_seconds=30.0,
+                headers=_headers(token),
+                json={
+                    "query": _PREFLIGHT_QUERY,
+                    "variables": {"productId": product_id},
+                },
+            )
         except Exception as exc:
-            logger.exception("Shopify product association exception")
-            return {"success": False, "error": str(exc)}
+            logger.warning(
+                "shopify_preflight_unavailable error_class=%s",
+                type(exc).__name__,
+            )
+            raise ConnectorPreflightUnavailable from None
+        if 400 <= response.status_code < 500:
+            raise ConnectorPreflightRejected
+        if response.status_code != 200:
+            raise ConnectorPreflightUnavailable
+        try:
+            payload = response.json()
+        except Exception:
+            raise ConnectorPreflightUnavailable from None
+        if not isinstance(payload, Mapping):
+            raise ConnectorPreflightUnavailable
+        errors = payload.get("errors")
+        if errors:
+            raise ConnectorPreflightRejected
+        data = payload.get("data")
+        if not isinstance(data, Mapping):
+            raise ConnectorPreflightUnavailable
+        return data
+
+    async def _create_staged_target(
+        self,
+        *,
+        store: str,
+        token: str,
+        media: _ShopifyMedia,
+    ) -> _StagedTarget:
+        response = await self._graphql_post(
+            store=store,
+            token=token,
+            query=_STAGED_UPLOADS_MUTATION,
+            variables={
+                "input": [
+                    {
+                        "resource": "VIDEO",
+                        "filename": media.path.name,
+                        "mimeType": media.mime_type,
+                        "fileSize": str(media.size_bytes),
+                    }
+                ]
+            },
+            timeout_seconds=60.0,
+        )
+        mutation = self._mutation_result(response, "stagedUploadsCreate")
+        targets = mutation.get("stagedTargets")
+        if (
+            not isinstance(targets, list)
+            or len(targets) != 1
+            or not isinstance(targets[0], Mapping)
+        ):
+            raise ConnectorOutcomeAmbiguous
+        target = targets[0]
+        upload_url = target.get("url")
+        resource_url = target.get("resourceUrl")
+        raw_parameters = target.get("parameters")
+        if (
+            not isinstance(upload_url, str)
+            or not isinstance(resource_url, str)
+            or not self._is_safe_staged_url(upload_url)
+            or not self._is_safe_staged_url(resource_url)
+            or not isinstance(raw_parameters, list)
+            or not raw_parameters
+            or len(raw_parameters) > 64
+        ):
+            raise ConnectorOutcomeAmbiguous
+        parameters: dict[str, str] = {}
+        for item in raw_parameters:
+            if not isinstance(item, Mapping):
+                raise ConnectorOutcomeAmbiguous
+            name = item.get("name")
+            value = item.get("value")
+            if (
+                not isinstance(name, str)
+                or _PARAMETER_NAME_RE.fullmatch(name) is None
+                or name in parameters
+                or not isinstance(value, str)
+                or not value
+                or len(value) > 8192
+                or _CONTROL_RE.search(value)
+            ):
+                raise ConnectorOutcomeAmbiguous
+            parameters[name] = value
+        return _StagedTarget(
+            upload_url=upload_url,
+            resource_url=resource_url,
+            parameters=parameters,
+        )
+
+    async def _upload_staged_target(
+        self,
+        *,
+        target: _StagedTarget,
+        media: _ShopifyMedia,
+    ) -> None:
+        try:
+            with media.path.open("rb") as video_file:
+                response = await self._post(
+                    target.upload_url,
+                    timeout_seconds=300.0,
+                    data=dict(target.parameters),
+                    files={
+                        "file": (media.path.name, video_file, media.mime_type),
+                    },
+                )
+        except Exception as exc:
+            logger.warning(
+                "shopify_staged_upload_ambiguous error_class=%s",
+                type(exc).__name__,
+            )
+            raise ConnectorOutcomeAmbiguous from None
+        if 400 <= response.status_code < 500:
+            raise _ShopifyDeterministicFailure
+        if response.status_code not in {200, 201, 204}:
+            raise ConnectorOutcomeAmbiguous
+
+    async def _create_video_file(
+        self,
+        *,
+        store: str,
+        token: str,
+        resource_url: str,
+        title: str,
+    ) -> tuple[str, str]:
+        response = await self._graphql_post(
+            store=store,
+            token=token,
+            query=_FILE_CREATE_MUTATION,
+            variables={
+                "files": [
+                    {
+                        "alt": title,
+                        "contentType": "VIDEO",
+                        "originalSource": resource_url,
+                    }
+                ]
+            },
+            timeout_seconds=60.0,
+        )
+        mutation = self._mutation_result(response, "fileCreate")
+        files = mutation.get("files")
+        if (
+            not isinstance(files, list)
+            or len(files) != 1
+            or not isinstance(files[0], Mapping)
+        ):
+            raise ConnectorOutcomeAmbiguous
+        video_id = files[0].get("id")
+        status = files[0].get("fileStatus")
+        if (
+            not isinstance(video_id, str)
+            or _VIDEO_GID_RE.fullmatch(video_id) is None
+            or status not in {"UPLOADED", "PROCESSING", "READY", "FAILED"}
+        ):
+            raise ConnectorOutcomeAmbiguous
+        return video_id, status
+
+    async def _poll_video_status(
+        self,
+        *,
+        store: str,
+        token: str,
+        video_id: str,
+        product_id: str,
+    ) -> str:
+        started = self._monotonic()
+        last_status: str | None = None
+        for index in range(self._max_status_polls):
+            last_status = await self._fetch_video_status(
+                store=store,
+                token=token,
+                video_id=video_id,
+            )
+            if last_status in {"READY", "FAILED"}:
+                return last_status
+            if index == self._max_status_polls - 1:
+                break
+            if self._monotonic() - started >= self._poll_deadline_seconds:
+                break
+            await self._sleep(self._poll_interval_seconds)
+        raise ConnectorOutcomeAmbiguous(
+            partial_receipt=self._receipt(
+                video_id=video_id,
+                product_id=product_id,
+                provider_status=last_status,
+            ).model_dump(mode="json")
+        )
+
+    async def _fetch_video_status(
+        self,
+        *,
+        store: str,
+        token: str,
+        video_id: str,
+    ) -> str:
+        response = await self._graphql_post(
+            store=store,
+            token=token,
+            query=_VIDEO_STATUS_QUERY,
+            variables={"id": video_id},
+            timeout_seconds=30.0,
+        )
+        data = self._query_result(response)
+        node = data.get("node")
+        if not isinstance(node, Mapping):
+            raise ConnectorOutcomeAmbiguous
+        status = node.get("fileStatus")
+        if (
+            node.get("id") != video_id
+            or status not in {"UPLOADED", "PROCESSING", "READY", "FAILED"}
+        ):
+            raise ConnectorOutcomeAmbiguous
+        return status
+
+    async def _add_product_reference(
+        self,
+        *,
+        store: str,
+        token: str,
+        video_id: str,
+        product_id: str,
+    ) -> None:
+        response = await self._graphql_post(
+            store=store,
+            token=token,
+            query=_FILE_UPDATE_MUTATION,
+            variables={
+                "files": [
+                    {
+                        "id": video_id,
+                        "referencesToAdd": [product_id],
+                    }
+                ]
+            },
+            timeout_seconds=60.0,
+        )
+        mutation = self._mutation_result(response, "fileUpdate")
+        files = mutation.get("files")
+        if (
+            not isinstance(files, list)
+            or len(files) != 1
+            or not isinstance(files[0], Mapping)
+            or files[0].get("id") != video_id
+        ):
+            raise ConnectorOutcomeAmbiguous
+
+    async def _verify_product_reference(
+        self,
+        *,
+        store: str,
+        token: str,
+        video_id: str,
+        product_id: str,
+    ) -> None:
+        response = await self._graphql_post(
+            store=store,
+            token=token,
+            query=_PRODUCT_MEDIA_READBACK_QUERY,
+            variables={"productId": product_id},
+            timeout_seconds=30.0,
+        )
+        data = self._query_result(response)
+        product = data.get("product")
+        if not isinstance(product, Mapping) or product.get("id") != product_id:
+            raise ConnectorOutcomeAmbiguous
+        media = product.get("media")
+        nodes = media.get("nodes") if isinstance(media, Mapping) else None
+        if not isinstance(nodes, list):
+            raise ConnectorOutcomeAmbiguous
+        matching = [
+            node
+            for node in nodes
+            if isinstance(node, Mapping) and node.get("id") == video_id
+        ]
+        if len(matching) != 1:
+            raise ConnectorOutcomeAmbiguous
+
+    async def _graphql_post(
+        self,
+        *,
+        store: str,
+        token: str,
+        query: str,
+        variables: Mapping[str, Any],
+        timeout_seconds: float,
+    ) -> httpx.Response:
+        try:
+            return await self._post(
+                _graphql_url(store),
+                timeout_seconds=timeout_seconds,
+                headers=_headers(token),
+                json={"query": query, "variables": dict(variables)},
+            )
+        except Exception as exc:
+            logger.warning(
+                "shopify_graphql_outcome_ambiguous error_class=%s",
+                type(exc).__name__,
+            )
+            raise ConnectorOutcomeAmbiguous from None
+
+    @staticmethod
+    def _mutation_result(
+        response: httpx.Response,
+        field: str,
+    ) -> Mapping[str, Any]:
+        if 400 <= response.status_code < 500:
+            raise _ShopifyDeterministicFailure
+        if response.status_code != 200:
+            raise ConnectorOutcomeAmbiguous
+        data = ShopifyConnector._query_result(response)
+        mutation = data.get(field)
+        if not isinstance(mutation, Mapping):
+            raise ConnectorOutcomeAmbiguous
+        user_errors = mutation.get("userErrors")
+        if not isinstance(user_errors, list):
+            raise ConnectorOutcomeAmbiguous
+        if user_errors:
+            raise _ShopifyDeterministicFailure
+        return mutation
+
+    @staticmethod
+    def _query_result(response: httpx.Response) -> Mapping[str, Any]:
+        if response.status_code != 200:
+            raise ConnectorOutcomeAmbiguous
+        try:
+            payload = response.json()
+        except Exception:
+            raise ConnectorOutcomeAmbiguous from None
+        if not isinstance(payload, Mapping) or payload.get("errors"):
+            raise ConnectorOutcomeAmbiguous
+        data = payload.get("data")
+        if not isinstance(data, Mapping):
+            raise ConnectorOutcomeAmbiguous
+        return data
+
+    def _receipt(
+        self,
+        *,
+        video_id: str,
+        product_id: str,
+        provider_status: str | None,
+        verified_by: str | None = None,
+    ) -> PublishReceiptV1:
+        return PublishReceiptV1.model_validate(
+            {
+                "schema_version": "publish-receipt.v1",
+                "platform": "shopify",
+                "protocol_version": "shopify-admin-2026-07",
+                "completion_scope": "shopify_product_media",
+                "provider_operation_id": None,
+                "provider_resource_id": video_id,
+                "target_id": product_id,
+                "provider_status": provider_status,
+                "post_id": None,
+                "post_url": None,
+                "public_visibility_verified": False,
+                "observed_at": self._utc_now(),
+                "verified_by": verified_by,
+                "simulated": False,
+            }
+        )
+
+    @staticmethod
+    def _failure_result(
+        *,
+        receipt: PublishReceiptV1 | None,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "success": False,
+            "simulated": False,
+            "error": "shopify_publish_failed",
+            "status": "failed",
+            "platform": "shopify",
+        }
+        if receipt is not None:
+            result["receipt"] = receipt.model_dump(mode="json")
+        return result
+
+    @staticmethod
+    def _snapshot_matches(
+        *,
+        preflight: ShopifyPreflightSnapshot,
+        options: ShopifyPublishOptions,
+        duration_seconds: float,
+    ) -> bool:
+        return (
+            preflight.platform == "shopify"
+            and preflight.product_id == options.product_id
+            and preflight.required_scopes_verified is True
+            and preflight.media_duration_seconds == duration_seconds
+        )
+
+    @staticmethod
+    def _is_safe_staged_url(value: str) -> bool:
+        if any(character.isspace() for character in value):
+            return False
+        try:
+            parsed = urlsplit(value)
+            port = parsed.port
+        except ValueError:
+            return False
+        hostname = parsed.hostname
+        if (
+            parsed.scheme != "https"
+            or hostname is None
+            or hostname != hostname.lower()
+            or port is not None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+            or not parsed.path
+            or "." not in hostname
+            or hostname == "localhost"
+            or hostname.endswith(".local")
+        ):
+            return False
+        try:
+            ipaddress.ip_address(hostname)
+        except ValueError:
+            return True
+        return False
+
+    def _utc_now(self) -> datetime:
+        value = self._now()
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("Shopify observation time must be UTC")
+        return value.astimezone(UTC)
 
     async def get_status(self, post_id: str) -> dict[str, Any]:
-        """Get publish status for a Shopify media item.
-
-        Falls back to mock when credentials are absent.
-        """
-        token = os.environ.get("SHOPIFY_ACCESS_TOKEN") or os.environ.get(
-            "SHOPIFY_API_KEY", ""
-        )
-        store_url = os.environ.get("SHOPIFY_STORE_URL", "")
-
-        if not token or not store_url:
-            return self._mock_status(post_id)
-
-        graphql_url = _SHOPIFY_GRAPHQL_URL.format(store=store_url)
-        headers = _headers()
-        headers["Content-Type"] = "application/json"
-
-        query = """
-        query mediaStatus($id: ID!) {
-            node(id: $id) {
-                ... on MediaFile {
-                    id
-                    fileStatus
-                    preview {
-                        url
-                    }
-                }
-            }
-        }
-        """
-
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(
-                    graphql_url,
-                    headers=headers,
-                    json={"query": query, "variables": {"id": post_id}},
-                )
-
-                if resp.status_code == 200:
-                    data = resp.json()
-                    node = data.get("data", {}).get("node", {})
-                    return {
-                        "post_id": post_id,
-                        "status": node.get("fileStatus", "unknown"),
-                        "preview_url": (
-                            node.get("preview", {}) or {}
-                        ).get("url", ""),
-                    }
-
-                return {
-                    "post_id": post_id,
-                    "status": "unknown",
-                    "preview_url": "",
-                }
-        except Exception:
-            logger.exception("Shopify status query error")
-            return self._mock_status(post_id)
-
-    # ------------------------------------------------------------------
-    # Mock fallback
-    # ------------------------------------------------------------------
-
-    async def _mock_publish(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Simulate a Shopify publish (used when credentials are absent)."""
-        await asyncio.sleep(1.5)
-
-        mock_id = f"sp_mock_{uuid4().hex[:8]}"
-        return {
-            "success": True,
-            "post_id": mock_id,
-            "url": "https://mock-store.myshopify.com/blogs/news/mock-post",
-            "status": "published",
-            "platform": "shopify",
-            "published_at": datetime.now().isoformat(),
-        }
-
-    def _mock_status(self, post_id: str) -> dict[str, Any]:
-        """Return mock publish status."""
-        return {
-            "post_id": post_id,
-            "status": "published",
-            "sales": 3,
-        }
+        del post_id
+        _require_credentials()
+        raise ConnectorStatusUnavailable

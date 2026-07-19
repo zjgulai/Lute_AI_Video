@@ -15,20 +15,27 @@ import { sceneToPath, sceneToScenarioId } from "@/lib/scenarioRouting";
 import { buildScenarioAutoSubmitPayload } from "@/lib/scenarioPayload";
 import { extractGalleryResultFields, normalizePipelineResult } from "@/lib/pipelineResult";
 import {
+  createPendingSubmission,
+  recoverPendingSubmission,
+  submitIdempotently,
+  type PendingSubmission,
+  type SubmissionResolution,
+  type SubmissionScenario,
+} from "@/lib/idempotentSubmission";
+import {
   normalizeStepByStepState,
   normalizeWorkflowState,
 } from "@/lib/pipelineState";
 import {
   fetchState,
   submitReview,
-  runS1ProductDirect,
   startS1StepByStep,
   fetchS1State,
-  getMediaUrl,
   isDemoMode,
   submitScenario,
   hasApiKey,
   isApiError,
+  getSubmissionByIdempotencyKey,
 } from "@/components/api";
 import SceneTabs from "@/components/SceneTabs";
 import SceneForm from "@/components/SceneForm";
@@ -95,6 +102,27 @@ type SceneConfig = UnknownRecord & {
   clip_group_size?: number;
   transition_style?: string;
 };
+
+type ScenarioRecoveryUiState =
+  | "idle"
+  | "confirming"
+  | "unknown"
+  | "conflict"
+  | "recovery_required";
+
+const SCENARIO_TO_SCENE: Record<SubmissionScenario, string> = {
+  s1: "product_direct",
+  s2: "brand_campaign",
+  s3: "influencer_remix",
+  s4: "live_shoot",
+  s5: "brand_vlog",
+};
+
+function asSubmissionScenario(value: string): SubmissionScenario {
+  return ["s1", "s2", "s3", "s4", "s5"].includes(value)
+    ? value as SubmissionScenario
+    : "s1";
+}
 
 function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
@@ -239,6 +267,7 @@ export default function Home() {
 
   const [keyConfigured, setKeyConfigured] = useState<boolean>(() => hasApiKey());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [scenarioRecoveryUi, setScenarioRecoveryUi] = useState<ScenarioRecoveryUiState>("idle");
 
   const {
     threadId, setThreadId,
@@ -257,6 +286,9 @@ export default function Home() {
     showSteps,
     startActivePipeline,
     clearActivePipeline,
+    pendingSubmission,
+    setPendingSubmission,
+    clearPendingSubmission,
   } = usePipelineStore();
 
   const {
@@ -342,12 +374,22 @@ export default function Home() {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const liveSubmissionKeyRef = useRef<string | null>(null);
+  const recoveringSubmissionKeyRef = useRef<string | null>(null);
+  const stoppedWaitingKeyRef = useRef<string | null>(null);
 
   /** Cancel current async operation, recover partial state if possible. */
   const handleCancel = useCallback(async () => {
     abortRef.current?.abort();
     setLoading(false);
     setShowStageProgress(false);
+    if (pendingSubmission?.kind === "scenario") {
+      stoppedWaitingKeyRef.current = pendingSubmission.idempotencyKey;
+      setScenarioRecoveryUi("unknown");
+      setSmartCreateLabel(null);
+      clearActivePipeline();
+      showToast(t("submission.waitingStopped"), "info");
+    }
     if (stepByStepLabel) {
       try {
         const partial = await fetchS1State(stepByStepLabel);
@@ -359,7 +401,10 @@ export default function Home() {
     setShowStageProgress,
     setShowStepByStep,
     setStepByStepState,
+    setSmartCreateLabel,
     showToast,
+    pendingSubmission,
+    clearActivePipeline,
     stepByStepLabel,
     t,
   ]);
@@ -521,6 +566,163 @@ export default function Home() {
     setStage("recommend");
   }, [setMode, setStage]);
 
+  const bindScenarioResolution = useCallback((
+    resolution: SubmissionResolution,
+    scenario: SubmissionScenario,
+    scene: string,
+  ): boolean => {
+    if (resolution.kind === "unknown") {
+      setActiveScene(scene);
+      setStage("generate");
+      setMode("smart");
+      setSmartCreateLabel(null);
+      clearActivePipeline();
+      setScenarioRecoveryUi("unknown");
+      setShowStageProgress(false);
+      stopGenerating();
+      return false;
+    }
+    if (resolution.kind === "recovery_required") {
+      setActiveScene(scene);
+      setStage("generate");
+      setMode("smart");
+      setSmartCreateLabel(null);
+      clearActivePipeline();
+      setScenarioRecoveryUi("recovery_required");
+      setShowStageProgress(false);
+      stopGenerating();
+      return false;
+    }
+
+    setScenarioRecoveryUi("idle");
+    setSmartCreateLabel(resolution.resourceId);
+    setActiveScene(scene);
+    setStage("generate");
+    setMode("smart");
+    setShowStageProgress(true);
+    startActivePipeline({
+      label: resolution.resourceId,
+      scenario,
+      scene,
+      startedAt: Date.now(),
+    });
+    return true;
+  }, [
+    clearActivePipeline,
+    setActiveScene,
+    setMode,
+    setShowStageProgress,
+    setSmartCreateLabel,
+    setStage,
+    startActivePipeline,
+    stopGenerating,
+  ]);
+
+  const submitScenarioSafely = useCallback(async ({
+    scenario,
+    scene,
+    payload,
+    signal,
+  }: {
+    scenario: SubmissionScenario;
+    scene: string;
+    payload: unknown;
+    signal?: AbortSignal;
+  }): Promise<SubmissionResolution> => {
+    const existing = usePipelineStore.getState().pendingSubmission;
+    if (existing) {
+      if (existing.kind !== "scenario" || !existing.scenario) {
+        setScenarioRecoveryUi("unknown");
+        throw new Error("pending_submission_exists");
+      }
+      recoveringSubmissionKeyRef.current = existing.idempotencyKey;
+      stoppedWaitingKeyRef.current = null;
+      setScenarioRecoveryUi("confirming");
+      try {
+        const resolution = await recoverPendingSubmission({
+          pending: existing,
+          persist: setPendingSubmission,
+          readback: getSubmissionByIdempotencyKey,
+        });
+        bindScenarioResolution(
+          resolution,
+          existing.scenario,
+          SCENARIO_TO_SCENE[existing.scenario],
+        );
+        return resolution;
+      } finally {
+        recoveringSubmissionKeyRef.current = null;
+      }
+    }
+    const pending = createPendingSubmission({ kind: "scenario", scenario });
+    liveSubmissionKeyRef.current = pending.idempotencyKey;
+    setScenarioRecoveryUi("confirming");
+    try {
+      const resolution = await submitIdempotently({
+        pending,
+        persist: setPendingSubmission,
+        submit: (idempotencyKey) => submitScenario(scenario, payload, {
+          idempotencyKey,
+          ...(signal ? { signal } : {}),
+        }),
+        readback: getSubmissionByIdempotencyKey,
+      });
+      if (stoppedWaitingKeyRef.current === pending.idempotencyKey) {
+        setScenarioRecoveryUi("unknown");
+        setShowStageProgress(false);
+        stopGenerating();
+      } else {
+        bindScenarioResolution(resolution, scenario, scene);
+      }
+      return resolution;
+    } catch (error) {
+      if (isApiError(error) && error.info.status === 409) {
+        setScenarioRecoveryUi("conflict");
+      } else {
+        setScenarioRecoveryUi("unknown");
+      }
+      throw error;
+    } finally {
+      liveSubmissionKeyRef.current = null;
+    }
+  }, [
+    bindScenarioResolution,
+    setPendingSubmission,
+    setShowStageProgress,
+    stopGenerating,
+  ]);
+
+  const continueScenarioRecovery = useCallback(async (
+    pending?: PendingSubmission | null,
+  ) => {
+    const candidate = pending ?? usePipelineStore.getState().pendingSubmission;
+    if (!candidate || candidate.kind !== "scenario" || !candidate.scenario) return;
+    if (recoveringSubmissionKeyRef.current === candidate.idempotencyKey) return;
+    recoveringSubmissionKeyRef.current = candidate.idempotencyKey;
+    stoppedWaitingKeyRef.current = null;
+    setScenarioRecoveryUi("confirming");
+    try {
+      const resolution = await recoverPendingSubmission({
+        pending: candidate,
+        persist: setPendingSubmission,
+        readback: getSubmissionByIdempotencyKey,
+      });
+      bindScenarioResolution(
+        resolution,
+        candidate.scenario,
+        SCENARIO_TO_SCENE[candidate.scenario],
+      );
+    } finally {
+      recoveringSubmissionKeyRef.current = null;
+    }
+  }, [bindScenarioResolution, setPendingSubmission]);
+
+  useEffect(() => {
+    if (!pendingSubmission || pendingSubmission.kind !== "scenario") return;
+    if (liveSubmissionKeyRef.current === pendingSubmission.idempotencyKey) return;
+    void continueScenarioRecovery(pendingSubmission);
+  }, [continueScenarioRecovery, pendingSubmission]);
+
   const startSmartCreate = (config: SceneConfig) => wrapStart(async () => {
     const scenario = config.content_scenario || "product_direct";
     const scenarioId = sceneToScenarioId(scenario);
@@ -545,53 +747,17 @@ export default function Home() {
     try {
       const submitPayload = buildScenarioAutoSubmitPayload(config, videoDuration);
       // Phase 1B: Unified async submit — returns label immediately, pipeline runs in background
-      const submitResult = await submitScenario(
-        scenarioId,
-        withScenarioContinuityConfig(config, submitPayload),
-        { signal: abortRef.current?.signal }
-      );
-      setSmartCreateLabel(submitResult.label);
-      startActivePipeline({
-        label: submitResult.label,
-        scenario: scenarioId,
+      await submitScenarioSafely({
+        scenario: asSubmissionScenario(scenarioId),
         scene: scenario,
-        startedAt: Date.now(),
+        payload: withScenarioContinuityConfig(config, submitPayload),
+        signal: abortRef.current?.signal,
       });
     } catch (e: unknown) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      // Fallback: legacy blocking endpoint for s1 only
-      if (scenarioId === "s1") {
-        try {
-          const result = await runS1ProductDirect(
-            withScenarioContinuityConfig(config, {
-              product_catalog: config.product_catalog,
-              brand_guidelines: config.brand_guidelines,
-              target_platforms: config.target_platforms,
-              target_languages: config.target_languages || ["en"],
-              week: config.content_calendar_week || "",
-              video_duration: config.video_duration || 30,
-            }),
-            { signal: abortRef.current?.signal }
-          );
-          const label = result?.label || `s1_${Date.now()}`;
-          setSmartCreateLabel(label);
-          startActivePipeline({
-            label,
-            scenario: scenarioId,
-            scene: scenario,
-            startedAt: Date.now(),
-          });
-        } catch (fallbackErr: unknown) {
-          if (fallbackErr instanceof DOMException && fallbackErr.name === "AbortError") return;
-          reportSubmitError(fallbackErr, "toast.execFailed");
-          setShowStageProgress(false);
-          stopGenerating();
-        }
-      } else {
-        reportSubmitError(e, "toast.execFailed");
-        setShowStageProgress(false);
-        stopGenerating();
-      }
+      reportSubmitError(e, "toast.execFailed");
+      setShowStageProgress(false);
+      stopGenerating();
     }
   });
 
@@ -602,7 +768,8 @@ export default function Home() {
       showToast,
       t,
     });
-  }, [clearActivePipeline, showToast, stopGenerating, t]);
+    clearPendingSubmission();
+  }, [clearActivePipeline, clearPendingSubmission, showToast, stopGenerating, t]);
 
   const handleStart = (config: SceneConfig) => wrapStart(async () => {
     setFieldErrors({});
@@ -662,23 +829,16 @@ export default function Home() {
     if (effectiveMode === "auto") {
       setLoadingText(t("app.loading"));
       try {
-        const submitResult = await submitScenario(
-          sceneToScenarioId(scenario),
-          withScenarioContinuityConfig(
+        const scenarioId = asSubmissionScenario(sceneToScenarioId(scenario));
+        await submitScenarioSafely({
+          scenario: scenarioId,
+          scene: scenario,
+          payload: withScenarioContinuityConfig(
             config,
             buildScenarioAutoSubmitPayload(config, videoDuration),
           ),
-          { signal: abortRef.current?.signal }
-        );
-        setSmartCreateLabel(submitResult.label);
-        startActivePipeline({
-          label: submitResult.label,
-          scenario: sceneToScenarioId(scenario),
-          scene: scenario,
-          startedAt: Date.now(),
+          signal: abortRef.current?.signal,
         });
-        setShowStageProgress(true);
-        startGenerating(t("exec.narrative.analyzing"));
       } catch (e: unknown) {
         reportSubmitError(e, "toast.execFailed");
       }
@@ -796,7 +956,7 @@ export default function Home() {
 
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
   const requestAbandon = () => {
-    if (threadId || oneshotResult) {
+    if (threadId || oneshotResult || pendingSubmission) {
       setShowAbandonConfirm(true);
     } else {
       resetAll();
@@ -804,6 +964,7 @@ export default function Home() {
   };
   const confirmAbandon = () => {
     setShowAbandonConfirm(false);
+    clearPendingSubmission();
     resetAll();
   };
 
@@ -933,7 +1094,7 @@ export default function Home() {
               >
                 <ShieldCheck size={16} weight="fill" />
               </Link>
-              {Boolean(threadId || oneshotResult) && (
+              {Boolean(threadId || oneshotResult || pendingSubmission) && (
                 <button
                   type="button"
                   onClick={requestAbandon}
@@ -1006,12 +1167,6 @@ export default function Home() {
                 selectedVersion={null}
                 onSelect={() => {
                   // Track which version the user selected
-                }}
-                onDownload={(label) => {
-                  const v = compareVersions.find(v => v.label === label);
-                  if (v?.videoPath) {
-                    window.open(getMediaUrl(v.videoPath), '_blank');
-                  }
                 }}
                 onNewCreation={() => {
                   resetAll();
@@ -1111,6 +1266,13 @@ export default function Home() {
               label={smartCreateLabel}
               scenario={sceneToScenarioId(activeScene || "product_direct")}
               onError={handleSmartCreateError}
+              onRecoveryRequired={() => {
+                setScenarioRecoveryUi("recovery_required");
+                setSmartCreateLabel(null);
+                setShowStageProgress(false);
+                stopGenerating();
+                clearActivePipeline();
+              }}
               onComplete={(result) => {
                 setOneshotResult(result);
                 setOneshotScenario(activeScene || "product_direct");
@@ -1118,8 +1280,54 @@ export default function Home() {
                 setStage("result");
                 setShowStageProgress(false);
                 clearActivePipeline();
+                clearPendingSubmission();
               }}
             />
+          ) : null}
+
+          {stage === "generate" && mode === "smart" && smartCreateLabel === null && pendingSubmission?.kind === "scenario" ? (
+            <div className="apple-card p-6 space-y-4" role="status" aria-live="polite">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--text-h1)]">
+                  {scenarioRecoveryUi === "confirming"
+                    ? t("submission.confirmingTitle")
+                    : scenarioRecoveryUi === "recovery_required"
+                      ? t("submission.recoveryRequiredTitle")
+                      : scenarioRecoveryUi === "conflict"
+                        ? t("submission.conflictTitle")
+                        : t("submission.unknownTitle")}
+                </h2>
+                <p className="mt-2 text-sm text-[var(--text-body)]">
+                  {scenarioRecoveryUi === "confirming"
+                    ? t("submission.confirmingBody")
+                    : scenarioRecoveryUi === "recovery_required"
+                      ? t("submission.recoveryRequiredBody")
+                      : scenarioRecoveryUi === "conflict"
+                        ? t("submission.conflictBody")
+                        : t("submission.unknownBody")}
+                </p>
+              </div>
+              {scenarioRecoveryUi !== "confirming" && (
+                <div className="flex flex-wrap gap-2">
+                  {scenarioRecoveryUi !== "conflict" && (
+                    <button
+                      type="button"
+                      onClick={() => void continueScenarioRecovery(pendingSubmission)}
+                      className="apple-btn apple-btn-primary px-4 py-2 text-xs"
+                    >
+                      {t("submission.continueChecking")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={requestAbandon}
+                    className="px-4 py-2 rounded-xl text-xs border border-[var(--border-default)] text-[var(--text-body)]"
+                  >
+                    {t("submission.abandon")}
+                  </button>
+                </div>
+              )}
+            </div>
           ) : null}
 
           {/* Stage 3: Result — one-shot result view */}
@@ -1230,7 +1438,7 @@ export default function Home() {
           )}
 
           {/* Fallback: if nothing matches, recover to home stage */}
-          {!showSelector && !showOneshot && !showStepByStep && !showWorkflow && !showCompletion && !showReview && (
+          {!showSelector && !showOneshot && !showStepByStep && !showWorkflow && !showCompletion && !showReview && !(stage === "generate" && pendingSubmission?.kind === "scenario") && (
             <div className="apple-card p-8 text-center space-y-3">
               <p className="text-sm text-[var(--text-body)]">{t("app.pageLoading")}</p>
               <button
@@ -1249,7 +1457,7 @@ export default function Home() {
           <ExecutionBar
             label={generatingLabel}
             progress={generatingProgress}
-            onCancel={() => abortRef.current?.abort()}
+            onCancel={() => void handleCancel()}
           />
         )}
 

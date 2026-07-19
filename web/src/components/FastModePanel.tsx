@@ -1,11 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Lightning, Clock, SpeakerHigh, CaretDown, CaretUp, Copy, ArrowCounterClockwise, Play, Article, Cpu, Timer, HardDrives } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { submitFastMode, pollFastStatus, isDemoMode, isApiError, type FastModeResult, type FastStatusResponse } from "./api";
+import { getSubmissionByIdempotencyKey, submitFastMode, pollFastStatus, isDemoMode, isApiError, resolveMediaPreview, type FastModeResult, type FastStatusResponse } from "./api";
 import { DEMO_FAST_MODE_RESULT } from "@/demo-data";
 import { useSubmitting } from "@/hooks/useSubmitting";
+import RuntimeMediaVideo from "./RuntimeMediaVideo";
+import { withExplicitMediaGenerationIntent } from "@/lib/scenarioPayload";
+import { classifyGenerationResult } from "@/lib/generationLifecycle";
+import {
+  createPendingSubmission,
+  recoverPendingSubmission,
+  submitIdempotently,
+  type PendingSubmission,
+  type SubmissionResolution,
+} from "@/lib/idempotentSubmission";
+import { usePipelineStore } from "@/stores/usePipelineStore";
+
+type FastRecoveryUiState =
+  | "idle"
+  | "confirming"
+  | "unknown"
+  | "conflict"
+  | "recovery_required";
 
 export default function FastModePanel() {
   const { t } = useI18n();
@@ -19,14 +37,129 @@ export default function FastModePanel() {
   const [copied, setCopied] = useState(false);
   const [progressStage, setProgressStage] = useState<FastStatusResponse["stage"] | null>(null);
   const [progressSec, setProgressSec] = useState(0);
+  const [recoveryUi, setRecoveryUi] = useState<FastRecoveryUiState>("idle");
+  const [recovering, setRecovering] = useState(false);
+  const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
+  const pendingSubmission = usePipelineStore((state) => state.pendingSubmission);
+  const setPendingSubmission = usePipelineStore((state) => state.setPendingSubmission);
+  const clearPendingSubmission = usePipelineStore((state) => state.clearPendingSubmission);
+  const liveSubmissionKeyRef = useRef<string | null>(null);
+  const recoveringSubmissionKeyRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const videoPreview = result?.video_url
+    ? resolveMediaPreview(result.video_url)
+    : { kind: "invalid" as const, url: "" as const };
+  const lifecycleState = result ? classifyGenerationResult(result) : null;
+
+  const pollOriginalFastJob = useCallback(async (
+    resourceId: string,
+    signal?: AbortSignal,
+  ) => {
+    setProgressStage("queued");
+    try {
+      const nextResult = await pollFastStatus(resourceId, {
+        ...(signal ? { signal } : {}),
+        intervalMs: 2000,
+        maxWaitMs: 600_000,
+        onProgress: (snapshot) => {
+          setProgressStage(snapshot.stage);
+          setProgressSec(snapshot.elapsed_sec);
+        },
+      });
+      setResult(nextResult);
+      setRecoveryUi("idle");
+      clearPendingSubmission();
+    } catch (pollError) {
+      const name = pollError && typeof pollError === "object"
+        ? String((pollError as { name?: unknown }).name || "")
+        : "";
+      const message = pollError instanceof Error ? pollError.message : String(pollError);
+      if (name === "AbortError") {
+        setRecoveryUi("unknown");
+        setError(t("submission.waitingStopped"));
+      } else if (message === "recovery_required") {
+        setRecoveryUi("recovery_required");
+        setError(t("submission.recoveryRequiredBody"));
+      } else if (name === "FastTerminalError") {
+        setRecoveryUi("idle");
+        setError(message || t("fastMode.result.generationFailed"));
+        clearPendingSubmission();
+      } else {
+        setRecoveryUi("unknown");
+        setError(t("submission.pollingUnknown"));
+      }
+    } finally {
+      setProgressStage(null);
+    }
+  }, [clearPendingSubmission, t]);
+
+  const handleResolution = useCallback(async (
+    resolution: SubmissionResolution,
+    signal?: AbortSignal,
+  ) => {
+    if (resolution.kind === "unknown") {
+      setRecoveryUi("unknown");
+      setError(t("submission.unknownBody"));
+      return;
+    }
+    if (resolution.kind === "recovery_required") {
+      setRecoveryUi("recovery_required");
+      setError(t("submission.recoveryRequiredBody"));
+      return;
+    }
+    setRecoveryUi("idle");
+    await pollOriginalFastJob(resolution.resourceId, signal);
+  }, [pollOriginalFastJob, t]);
+
+  const continueFastRecovery = useCallback(async (
+    pending?: PendingSubmission | null,
+  ) => {
+    const candidate = pending ?? usePipelineStore.getState().pendingSubmission;
+    if (!candidate || candidate.kind !== "fast") return;
+    if (recoveringSubmissionKeyRef.current === candidate.idempotencyKey) return;
+    recoveringSubmissionKeyRef.current = candidate.idempotencyKey;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    const recoverySignal = abortRef.current.signal;
+    setRecovering(true);
+    setRecoveryUi("confirming");
+    setError("");
+    try {
+      const resolution = await recoverPendingSubmission({
+        pending: candidate,
+        persist: setPendingSubmission,
+        readback: (idempotencyKey) => getSubmissionByIdempotencyKey(
+          idempotencyKey,
+          { signal: recoverySignal },
+        ),
+        signal: recoverySignal,
+      });
+      await handleResolution(resolution, recoverySignal);
+    } finally {
+      recoveringSubmissionKeyRef.current = null;
+      setRecovering(false);
+    }
+  }, [handleResolution, setPendingSubmission]);
+
+  useEffect(() => {
+    if (!pendingSubmission || pendingSubmission.kind !== "fast") return;
+    if (liveSubmissionKeyRef.current === pendingSubmission.idempotencyKey) return;
+    void continueFastRecovery(pendingSubmission);
+  }, [continueFastRecovery, pendingSubmission]);
 
   function handleGenerate() {
     if (!userPrompt.trim()) return;
+    if (usePipelineStore.getState().pendingSubmission) {
+      setRecoveryUi("unknown");
+      setError(t("submission.unknownBody"));
+      return;
+    }
     void wrap(async () => {
       setError("");
       setResult(null);
       setProgressStage(null);
       setProgressSec(0);
+      setRecoveryUi("idle");
       if (isDemoMode()) {
         await new Promise((r) => setTimeout(r, 800));
         setResult({
@@ -44,34 +177,59 @@ export default function FastModePanel() {
         });
         return;
       }
+      const pending = createPendingSubmission({ kind: "fast" });
+      liveSubmissionKeyRef.current = pending.idempotencyKey;
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
       try {
-        const { task_id } = await submitFastMode({
-          user_prompt: userPrompt.trim(),
-          duration,
-          enable_tts: enableTTS,
+        setRecoveryUi("confirming");
+        const resolution = await submitIdempotently({
+          pending,
+          persist: setPendingSubmission,
+          submit: (idempotencyKey) => submitFastMode(
+            withExplicitMediaGenerationIntent({
+              user_prompt: userPrompt.trim(),
+              duration,
+              enable_tts: enableTTS,
+            }),
+            {
+              idempotencyKey,
+              signal: abortRef.current?.signal,
+            },
+          ),
+          readback: getSubmissionByIdempotencyKey,
         });
-        setProgressStage("queued");
-        const res = await pollFastStatus(task_id, {
-          intervalMs: 2000,
-          maxWaitMs: 600_000,
-          onProgress: (s) => {
-            setProgressStage(s.stage);
-            setProgressSec(s.elapsed_sec);
-          },
-        });
-        setResult(res);
+        await handleResolution(resolution, abortRef.current?.signal);
       } catch (e: unknown) {
         if (isApiError(e)) {
           const tail = e.info.retryAfterSec != null ? ` (retry in ${e.info.retryAfterSec}s)` : "";
           setError(e.info.message + tail);
+          setRecoveryUi(e.info.status === 409 ? "conflict" : "unknown");
         } else {
           const msg = e instanceof Error ? e.message : String(e);
           setError(msg || "Generation failed");
+          setRecoveryUi("unknown");
         }
       } finally {
+        liveSubmissionKeyRef.current = null;
         setProgressStage(null);
       }
     });
+  }
+
+  function handleStopWaiting() {
+    abortRef.current?.abort(new DOMException("Stopped waiting", "AbortError"));
+    setRecoveryUi("unknown");
+    setError(t("submission.waitingStopped"));
+  }
+
+  function confirmAbandon() {
+    abortRef.current?.abort(new DOMException("Submission abandoned", "AbortError"));
+    clearPendingSubmission();
+    setRecoveryUi("idle");
+    setError("");
+    setProgressStage(null);
+    setShowAbandonConfirm(false);
   }
 
   function handleCopyPrompt() {
@@ -184,11 +342,11 @@ export default function FastModePanel() {
         {/* Generate button */}
         <button
           onClick={handleGenerate}
-          disabled={loading || !userPrompt.trim()}
+          disabled={loading || recovering || Boolean(pendingSubmission) || !userPrompt.trim()}
           className="w-full apple-btn apple-btn-primary text-sm py-2.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           style={{ backgroundColor: "var(--gold-foil)" }}
         >
-          {loading ? (
+          {loading || recovering ? (
             <span className="flex items-center justify-center gap-2">
               <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
               {t("fastMode.generating")}
@@ -201,16 +359,83 @@ export default function FastModePanel() {
           )}
         </button>
 
-        {loading && progressStage && (
+        {(loading || recovering) && progressStage && (
           <div className="text-xs text-[var(--text-body)] bg-[rgba(215,168,52,0.05)] px-3 py-2 rounded-lg">
             <div className="flex items-center justify-between">
               <span>
                 {progressStage === "queued" && t("fastMode.progress.queued")}
+                {progressStage === "reserved" && t("submission.confirmingTitle")}
+                {progressStage === "initializing" && t("submission.confirmingTitle")}
                 {progressStage === "llm" && t("fastMode.progress.enhancingPrompt")}
                 {progressStage === "video" && t("fastMode.progress.generatingVideo")}
                 {progressStage === "tts" && t("fastMode.progress.synthesizingVoiceover")}
               </span>
               <span className="font-mono text-[var(--text-muted)]">{progressSec.toFixed(1)}s</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleStopWaiting}
+              className="mt-2 text-[12px] text-[var(--text-muted)] underline"
+            >
+              {t("submission.stopWaiting")}
+            </button>
+          </div>
+        )}
+
+        {recovering && !progressStage && (
+          <div className="text-xs text-[var(--text-body)] bg-[rgba(215,168,52,0.05)] px-3 py-3 rounded-lg" role="status" aria-live="polite">
+            <p className="font-medium">{t("submission.confirmingTitle")}</p>
+            <p className="mt-1 text-[var(--text-muted)]">{t("submission.confirmingBody")}</p>
+          </div>
+        )}
+
+        {pendingSubmission?.kind === "fast" && recoveryUi !== "idle" && !loading && !recovering && (
+          <div className="text-xs text-[var(--text-body)] bg-[rgba(215,168,52,0.05)] px-3 py-3 rounded-lg" role="status" aria-live="polite">
+            <p className="font-medium">
+              {recoveryUi === "recovery_required"
+                ? t("submission.recoveryRequiredTitle")
+                : recoveryUi === "conflict"
+                  ? t("submission.conflictTitle")
+                  : t("submission.unknownTitle")}
+            </p>
+            <p className="mt-1 text-[var(--text-muted)]">
+              {recoveryUi === "recovery_required"
+                ? t("submission.recoveryRequiredBody")
+                : recoveryUi === "conflict"
+                  ? t("submission.conflictBody")
+                  : t("submission.unknownBody")}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {recoveryUi !== "conflict" && (
+                <button
+                  type="button"
+                  onClick={() => void continueFastRecovery(pendingSubmission)}
+                  className="apple-btn apple-btn-primary px-3 py-1.5 text-[12px]"
+                >
+                  {t("submission.continueChecking")}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowAbandonConfirm(true)}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border-default)] text-[12px]"
+              >
+                {t("submission.abandon")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showAbandonConfirm && pendingSubmission?.kind === "fast" && (
+          <div role="alertdialog" aria-modal="true" className="rounded-lg border border-[var(--crimson-mist)]/30 p-3 text-xs">
+            <p>{t("submission.abandonConfirm")}</p>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => setShowAbandonConfirm(false)} className="px-3 py-1.5 rounded-lg border border-[var(--border-default)]">
+                {t("confirm.cancel")}
+              </button>
+              <button type="button" onClick={confirmAbandon} className="px-3 py-1.5 rounded-lg bg-[var(--crimson-mist)] text-white">
+                {t("submission.abandon")}
+              </button>
             </div>
           </div>
         )}
@@ -235,21 +460,47 @@ export default function FastModePanel() {
             )}
           </div>
 
-          {/* Error or Video Player */}
-          {!result.success ? (
+          {/* Error, bounded completion, or full media */}
+          {lifecycleState === "error" ? (
             <div className="rounded-xl bg-[rgba(196,91,80,0.05)] border border-[rgba(196,91,80,0.20)] p-4">
               <p className="text-xs text-[var(--crimson-mist)] font-medium">{t("fastMode.result.generationFailed")}</p>
               <p className="text-[12px] text-[var(--crimson-mist)]/70 mt-1">{result.error || t("fastMode.result.unknownError")}</p>
             </div>
-          ) : result.video_url && (
-            <div className="rounded-xl overflow-hidden bg-black">
-              <video
-                src={result.video_url}
-                controls
-                className="w-full max-h-[400px]"
-                poster=""
-              />
-            </div>
+          ) : (
+            <>
+              {lifecycleState === "bounded" && (
+                <div
+                  role="status"
+                  data-lifecycle-state="bounded"
+                  className="rounded-xl bg-[rgba(215,168,52,0.06)] border border-[rgba(215,168,52,0.24)] p-4"
+                >
+                  <p className="text-xs text-[var(--gold-foil)] font-medium">
+                    {t("result.bounded")}
+                  </p>
+                  <p className="text-[12px] text-[var(--text-body)] mt-1">
+                    {t("result.boundedNotice")}
+                  </p>
+                </div>
+              )}
+              {videoPreview.kind !== "invalid" && (
+                <div className="rounded-xl overflow-hidden bg-black">
+                  {videoPreview.kind === "runtime" ? (
+                    <RuntimeMediaVideo
+                      src={videoPreview.url}
+                      controls
+                      className="w-full max-h-[400px]"
+                    />
+                  ) : (
+                    <video
+                      src={videoPreview.url}
+                      controls
+                      className="w-full max-h-[400px]"
+                      poster=""
+                    />
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Video info */}

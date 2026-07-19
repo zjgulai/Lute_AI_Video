@@ -17,6 +17,7 @@ import QuickTemplate from "./QuickTemplate";
 import StickyActionBar from "./StickyActionBar";
 import { CaretRight, Play } from "@phosphor-icons/react";
 import { applyGuidedContinuityDefaults } from "@/lib/guidedScenarioConfig";
+import { withExplicitMediaGenerationIntent } from "@/lib/scenarioPayload";
 
 interface Props {
   scene: string;
@@ -206,7 +207,7 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
       config.topic = values.topic || "";
     }
 
-    onSubmit(config);
+    onSubmit(withExplicitMediaGenerationIntent(config));
   }, [effectiveScene, selectedVideoType, values, onSubmit]);
 
   // 检查必填项是否完成

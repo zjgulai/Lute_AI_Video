@@ -12,11 +12,13 @@ import {
   MusicNotes,
 } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
+import { apiFetch, isDemoMode } from "@/components/api";
 import { errorMessage } from "@/lib/errors";
 import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
 import RuntimeMediaImage from "@/components/RuntimeMediaImage";
+import RuntimeMediaAudio from "@/components/RuntimeMediaAudio";
+import RuntimeMediaVideo from "@/components/RuntimeMediaVideo";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface MaterialAsset {
@@ -441,8 +443,8 @@ export default function MaterialsTab() {
         <>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {pagedAssets.map((asset) => {
-            const url = getMediaUrl(asset.filePath);
-            const thumb = asset.thumbnailPath ? getMediaUrl(asset.thumbnailPath) : "";
+            const url = asset.filePath;
+            const thumb = asset.thumbnailPath ?? "";
             const isVideo = isVideoMime(asset.mimeType);
             const isImage = isImageMime(asset.mimeType);
             const isAudio = isAudioMime(asset.mimeType);
@@ -529,9 +531,9 @@ export default function MaterialsTab() {
             </button>
             <div className="rounded-xl overflow-hidden bg-black/60">
               {isVideoMime(preview.mimeType) ? (
-                <video
-                  src={getMediaUrl(preview.filePath)}
-                  poster={preview.thumbnailPath ? getMediaUrl(preview.thumbnailPath) : undefined}
+                <RuntimeMediaVideo
+                  src={preview.filePath}
+                  poster={preview.thumbnailPath ?? undefined}
                   controls
                   autoPlay
                   muted
@@ -540,11 +542,11 @@ export default function MaterialsTab() {
                   className="max-w-[85vw] max-h-[75vh] object-contain"
                 />
               ) : isImageMime(preview.mimeType) ? (
-                <RuntimeMediaImage src={getMediaUrl(preview.filePath)} alt={preview.originalName} className="max-w-[85vw] max-h-[75vh] object-contain" />
+                <RuntimeMediaImage src={preview.filePath} alt={preview.originalName} className="max-w-[85vw] max-h-[75vh] object-contain" />
               ) : (
                 <div className="px-12 py-16 text-center">
                   <MusicNotes size={48} weight="fill" className="text-white/40 mx-auto mb-4" />
-                  <audio src={getMediaUrl(preview.filePath)} controls preload="metadata" className="w-64" />
+                  <RuntimeMediaAudio src={preview.filePath} controls preload="metadata" className="w-64" />
                 </div>
               )}
             </div>

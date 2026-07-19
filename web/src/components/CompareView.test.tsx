@@ -73,7 +73,6 @@ describe("CompareView continuity diagnostics", () => {
     const { container, cleanup } = renderCompareView({
       versions: [version],
       onSelect: () => {},
-      onDownload: () => {},
       onNewCreation: () => {},
       onBack: () => {},
       onPublish: async () => {},
@@ -120,7 +119,6 @@ describe("CompareView continuity diagnostics", () => {
     const { container, cleanup } = renderCompareView({
       versions: [version],
       onSelect: () => {},
-      onDownload: () => {},
       onNewCreation: () => {},
       onBack: () => {},
       onPublish: async () => {},
@@ -189,7 +187,6 @@ describe("CompareView continuity diagnostics", () => {
     const { container, cleanup } = renderCompareView({
       versions: [versionA, versionB],
       onSelect: () => {},
-      onDownload: () => {},
       onNewCreation: () => {},
       onBack: () => {},
       onPublish: async () => {},
@@ -262,7 +259,6 @@ describe("CompareView continuity diagnostics", () => {
     const { container, cleanup } = renderCompareView({
       versions: [versionA, versionB],
       onSelect: () => {},
-      onDownload: () => {},
       onNewCreation: () => {},
       onBack: () => {},
       onPublish: async () => {},

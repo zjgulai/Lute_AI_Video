@@ -6,6 +6,10 @@ import pytest
 
 from src.pipeline import step_runner
 from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
+from tests.generation_policy_test_utils import (
+    attach_execution_policy,
+    attach_test_provider_execution_authority,
+)
 
 
 def test_all_clips_are_stubs_returns_false_when_no_clips():
@@ -68,7 +72,12 @@ def test_result_indicates_all_stubs_false_for_unrelated_result():
 
 
 @pytest.mark.asyncio
-async def test_step_runner_marks_pipeline_degraded_on_seedance_all_stubs(monkeypatch, tmp_path):
+async def test_step_runner_marks_pipeline_degraded_on_seedance_all_stubs(
+    monkeypatch,
+    tmp_path,
+    isolated_provider_cost_db,
+):
+    del isolated_provider_cost_db
     monkeypatch.setenv("STATE_FILE_DIR", str(tmp_path))
 
     from src.pipeline.state_manager import PipelineStateManager
@@ -95,11 +104,17 @@ async def test_step_runner_marks_pipeline_degraded_on_seedance_all_stubs(monkeyp
         "config": {},
         "mode": "auto",
     }
+    attach_execution_policy(state, scenario="s5", media=True)
+    await attach_test_provider_execution_authority(state)
 
-    monkeypatch.setattr(step_runner, "_get_scenario_config", lambda scenario: {
-        "step_order": ["seedance_clips", "assemble_final"],
-        "pipeline_class": "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline",
-    })
+    monkeypatch.setattr(
+        step_runner,
+        "_get_scenario_config",
+        lambda scenario: {
+            "step_order": ["seedance_clips", "assemble_final"],
+            "pipeline_class": "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline",
+        },
+    )
 
     async def _fake_run_step(self, step_name: str, st: dict[str, Any]) -> Any:
         return {
@@ -118,7 +133,12 @@ async def test_step_runner_marks_pipeline_degraded_on_seedance_all_stubs(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_step_runner_does_not_flag_degraded_for_real_clips(monkeypatch, tmp_path):
+async def test_step_runner_does_not_flag_degraded_for_real_clips(
+    monkeypatch,
+    tmp_path,
+    isolated_provider_cost_db,
+):
+    del isolated_provider_cost_db
     monkeypatch.setenv("STATE_FILE_DIR", str(tmp_path))
 
     from src.pipeline.state_manager import PipelineStateManager
@@ -145,11 +165,17 @@ async def test_step_runner_does_not_flag_degraded_for_real_clips(monkeypatch, tm
         "config": {},
         "mode": "auto",
     }
+    attach_execution_policy(state, scenario="s5", media=True)
+    await attach_test_provider_execution_authority(state)
 
-    monkeypatch.setattr(step_runner, "_get_scenario_config", lambda scenario: {
-        "step_order": ["seedance_clips", "assemble_final"],
-        "pipeline_class": "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline",
-    })
+    monkeypatch.setattr(
+        step_runner,
+        "_get_scenario_config",
+        lambda scenario: {
+            "step_order": ["seedance_clips", "assemble_final"],
+            "pipeline_class": "src.pipeline.s5_brand_vlog_pipeline.S5BrandVlogPipeline",
+        },
+    )
 
     async def _fake_run_step(self, step_name: str, st: dict[str, Any]) -> Any:
         return {

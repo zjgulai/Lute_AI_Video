@@ -1,0 +1,105 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "3"
+
+services:
+  backend:
+    image: lighthouse-backend:${RELEASE_IMAGE_TAG:?RELEASE_IMAGE_TAG is required}
+    build:
+      context: ../..
+      dockerfile: Dockerfile.backend
+      args:
+        RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+    container_name: ai_video_backend
+    restart: on-failure:5
+    expose:
+      - "8001"
+    env_file:
+      - ${AI_VIDEO_ENV_FILE:?AI_VIDEO_ENV_FILE is required}
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - RENDERING_SERVICE_URL=http://rendering:3001
+    volumes:
+      - backend_output:/app/output
+    networks:
+      - ai_video_net
+    depends_on:
+      - rendering
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
+
+  rendering:
+    image: lighthouse-rendering:${RELEASE_IMAGE_TAG:?RELEASE_IMAGE_TAG is required}
+    build:
+      context: ../../rendering
+      dockerfile: Dockerfile
+      args:
+        RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+        ALPINE_MIRROR: ${RENDERING_ALPINE_MIRROR:-https://mirrors.cloud.tencent.com/alpine}
+    container_name: ai_video_rendering
+    restart: unless-stopped
+    expose:
+      - "3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - backend_output:/app/output
+    networks:
+      - ai_video_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+
+  frontend:
+    image: lighthouse-frontend:${RELEASE_IMAGE_TAG:?RELEASE_IMAGE_TAG is required}
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+      args:
+        RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+        NEXT_PUBLIC_API_BASE_URL: /api
+        NEXT_PUBLIC_IS_DEMO: "false"
+        NEXT_PUBLIC_API_KEY: ""
+    container_name: ai_video_frontend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - HOSTNAME=0.0.0.0
+    networks:
+      - ai_video_net
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+
+volumes:
+  backend_output:
+
+networks:
+  ai_video_net:
+    driver: bridge
+
+name: lighthouse

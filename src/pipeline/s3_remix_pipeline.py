@@ -169,6 +169,7 @@ class S3Result:
         self.publish_allowed: bool | None = None
         self.approved_brand_token_write: bool | None = None
         self.steps_completed: int | None = None
+        self._execution_completed: bool = False
 
     # Back-compat alias used by some tests
     @property
@@ -211,6 +212,7 @@ class S3Result:
             "publish_allowed": self.publish_allowed,
             "approved_brand_token_write": self.approved_brand_token_write,
             "steps_completed": self.steps_completed,
+            "_execution_completed": self._execution_completed,
         }
 
 
@@ -552,7 +554,11 @@ class S3InfluencerRemixPipeline:
                 result.steps_completed = S3_BOUNDED_MEDIA_STEP_ORDER.index(S3_BOUNDED_MEDIA_STOP_STEP) + 1
 
         result.errors = errors
-        result.success = len(errors) == 0
+        result._execution_completed = (
+            final_state.get("lifecycle_status") == "completed_bounded"
+            and not final_state.get("pipeline_degraded")
+        )
+        result.success = len(errors) == 0 and result._execution_completed
         logger.info("s3: pipeline complete",
                     success=result.success,
                     prompts=len(result.video_prompts),
@@ -1096,6 +1102,7 @@ class S3InfluencerRemixPipeline:
                     "resolution": "720p",
                     "output_label": f"{label}_clip_{i}",
                     "model": s3_model,
+                    "operation_instance": f"seedance_clips.segment.{i}",
                 }
                 if artifact_output_dir:
                     gen_params["output_dir"] = artifact_output_dir
@@ -1190,6 +1197,7 @@ class S3InfluencerRemixPipeline:
             res = await self._registry.execute("elevenlabs-tts-skill", {
                 "text": text,
                 "language": language,
+                "operation_instance": f"segment.{i}",
             })
             if res.success and res.data:
                 path = res.data.get("audio_path", "")

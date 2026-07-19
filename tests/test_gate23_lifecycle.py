@@ -25,6 +25,7 @@ from src.pipeline.gate_manager import (
     get_gate_state,
 )
 from src.pipeline.state_manager import PipelineStateManager
+from tests.generation_policy_test_utils import attach_execution_policy
 
 # ── Gate 2 keyframe ──
 
@@ -54,7 +55,7 @@ def _gate_2_state(label: str, candidate_ids: list[str]) -> dict:
             zip(candidate_ids, ["standard", "creative", "conservative"], strict=False)
         )
     ]
-    return {
+    return attach_execution_policy({
         "label": label,
         "scenario": "s1",
         "config": {"product_catalog": {"name": "X"}, "brand_guidelines": {}},
@@ -77,7 +78,7 @@ def _gate_2_state(label: str, candidate_ids: list[str]) -> dict:
                 "approved": False,
             },
         },
-    }
+    }, scenario="s1", media=True)
 
 
 class TestGate2KeyframeLifecycle:
@@ -191,7 +192,7 @@ def _gate_3_state(label: str, candidate_ids: list[str]) -> dict:
             zip(candidate_ids, ["standard", "creative", "conservative"], strict=False)
         )
     ]
-    return {
+    return attach_execution_policy({
         "label": label,
         "scenario": "s1",
         "config": {"product_catalog": {"name": "X"}, "brand_guidelines": {}},
@@ -214,7 +215,7 @@ def _gate_3_state(label: str, candidate_ids: list[str]) -> dict:
                 "approved": False,
             },
         },
-    }
+    }, scenario="s1", media=True)
 
 
 class TestGate3ClipsLifecycle:
@@ -240,8 +241,8 @@ class TestGate3ClipsLifecycle:
         assert "error" not in result, f"unexpected error: {result.get('error')}"
         assert result["approved"] is True
         assert result["selected_ids"] == ["g3_c0"]
-        # next_step after seedance_clips: tts_audio
-        assert result["next_step"] == "tts_audio"
+        # The bounded profile terminates at seedance_clips.
+        assert result["next_step"] is None
 
         reloaded = await sm.load("g3-approve")
         clips_step = reloaded["steps"]["seedance_clips"]
@@ -251,7 +252,7 @@ class TestGate3ClipsLifecycle:
         assert "clip_paths" in clips_step["edited_output"]
         assert clips_step["edited_output"]["clip_paths"] == ["/tmp/g3_c0_clip.mp4"]
         assert clips_step["edited_output"]["total_duration"] == 5.0
-        assert reloaded["current_step"] == "tts_audio"
+        assert reloaded["current_step"] is None
 
     @pytest.mark.asyncio
     async def test_approve_exceeds_max_selections_returns_error(self, isolated_state_dir):

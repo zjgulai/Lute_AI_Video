@@ -33,6 +33,12 @@ const STEP_ESTIMATED_SECONDS: Record<string, number> = {
 };
 
 type StatusKind = "running" | "paused" | "completed" | "error";
+const TERMINAL_SCENARIO_STATUSES = new Set([
+  "completed",
+  "completed_bounded",
+  "completed_full",
+]);
+const FAILED_SCENARIO_STATUSES = new Set(["error", "failed", "recovery_required"]);
 
 interface StatusSnapshot {
   status: StatusKind;
@@ -60,7 +66,7 @@ function estimateRemainingSeconds(remainingSteps: string[]): number {
   return remainingSteps.reduce((acc, name) => acc + (STEP_ESTIMATED_SECONDS[name] ?? 30), 0);
 }
 
-function deriveSnapshot(data: Record<string, unknown>): StatusSnapshot {
+export function deriveSnapshot(data: Record<string, unknown>): StatusSnapshot {
   const stepsObj = (data?.steps as Record<string, { status?: string }>) || {};
   const stepEntries = Object.entries(stepsObj) as [string, { status?: string }][];
   const totalSteps = stepEntries.length;
@@ -71,10 +77,18 @@ function deriveSnapshot(data: Record<string, unknown>): StatusSnapshot {
     .map(([name]) => name);
 
   const rawStatus = data?.status as string | undefined;
+  const lifecycleStatus = data?.lifecycle_status as string | undefined;
   let status: StatusKind = "running";
-  if (rawStatus === "completed") status = "completed";
+  if (
+    (rawStatus && TERMINAL_SCENARIO_STATUSES.has(rawStatus))
+    || (lifecycleStatus && TERMINAL_SCENARIO_STATUSES.has(lifecycleStatus))
+  ) status = "completed";
   else if (rawStatus === "paused") status = "paused";
-  else if (rawStatus === "error" || data?.pipeline_degraded) status = "error";
+  else if (
+    (rawStatus && FAILED_SCENARIO_STATUSES.has(rawStatus))
+    || (lifecycleStatus && FAILED_SCENARIO_STATUSES.has(lifecycleStatus))
+    || data?.pipeline_degraded
+  ) status = "error";
 
   return {
     status,

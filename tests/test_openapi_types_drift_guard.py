@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ SCRIPT = REPO_ROOT / "scripts" / "check_openapi_types_drift.py"
 PACKAGE_JSON = REPO_ROOT / "web" / "package.json"
 CONTRACT = REPO_ROOT / "configs" / "openapi-generated-types-drift-contract.yaml"
 RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "openapi-generated-types-drift.md"
+GENERATED_TYPES = REPO_ROOT / "web" / "src" / "types" / "api.generated.ts"
 
 
 def test_openapi_typegen_scripts_use_local_schema_and_pinned_generator():
@@ -106,3 +108,59 @@ def test_openapi_drift_contract_and_runbook_document_no_remote_schema():
         "不访问生产",
     ]:
         assert token in runbook
+
+
+def test_generated_types_include_acceptance_create_read_revoke_only():
+    generated = GENERATED_TYPES.read_text(encoding="utf-8")
+
+    for token in [
+        '"/acceptance-records"',
+        '"/acceptance-records/{acceptance_id}"',
+        '"/acceptance-records/{acceptance_id}/revoke"',
+        "AcceptanceRecordResponse",
+    ]:
+        assert token in generated
+    assert '"/acceptance-records/{acceptance_id}/consume"' not in generated
+
+    create_operation = re.search(
+        r"(?ms)^    create_acceptance_record_acceptance_records_post: \{\n"
+        r".*?^    \};$",
+        generated,
+    )
+    assert create_operation is not None
+    create_contract = create_operation.group(0)
+    assert "requestBody: {" in create_contract
+    assert "requestBody?: never;" not in create_contract
+    for field in [
+        "source_resource_type",
+        "source_resource_id",
+        "artifact_path",
+        "decision",
+        "review_notes",
+        "expires_in_seconds?",
+    ]:
+        assert field in create_contract
+    assert 'source_resource_type: "fast" | "scenario";' in create_contract
+    assert 'decision: "accepted" | "rejected";' in create_contract
+
+
+def test_generated_types_include_w1_25_receipt_and_attempt_readback() -> None:
+    generated = GENERATED_TYPES.read_text(encoding="utf-8")
+
+    for token in [
+        '"/distribution/publish-attempts/{attempt_id}"',
+        "PublishAttemptReadbackResponse",
+        "PublishReceiptV1",
+        "DurableTikTokStatusResponse",
+        "TikTokPublishOptions",
+        "ShopifyPublishOptions",
+        "publish_preflight_rejected",
+        "publish_preflight_unavailable",
+    ]:
+        assert token in generated
+
+    assert "receipt: components[\"schemas\"][\"PublishReceiptV1\"]" in generated
+    assert (
+        "platform_options: components[\"schemas\"][\"TikTokPublishOptions\"]"
+        " | components[\"schemas\"][\"ShopifyPublishOptions\"]"
+    ) in generated

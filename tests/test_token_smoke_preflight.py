@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 from src.pipeline.token_smoke_preflight import (
     ACCOUNT_READINESS_RECORD_ENV,
     ACCOUNT_READINESS_SCOPE,
@@ -29,6 +31,167 @@ from src.pipeline.token_smoke_preflight import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "commercial_token_smoke_preflight.py"
+E2E_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-prod.yml"
+PLAYWRIGHT_PROD_CONFIG = REPO_ROOT / "web" / "playwright.prod.config.ts"
+TOKEN_SMOKE_RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "production-e2e-token-smoke.md"
+L4C_PLAN_TEMPLATE = REPO_ROOT / "configs" / "l4c-token-smoke-plan-template.json"
+
+
+def test_production_token_workflow_is_single_spec_and_environment_protected():
+    workflow_text = E2E_PROD_WORKFLOW.read_text()
+    workflow = yaml.safe_load(workflow_text)
+    trigger = workflow.get(True) or workflow.get("on")
+    inputs = trigger["workflow_dispatch"]["inputs"]
+    jobs = workflow["jobs"]
+    token_job = jobs["e2e-prod-token-smoke"]
+    token_steps = token_job["steps"]
+    validator_step = next(step for step in token_steps if step.get("name") == "Validate token smoke authorization")
+    token_step = next(step for step in token_steps if step.get("name") == "Run validated single token smoke spec")
+
+    assert {"token_smoke_spec", "approval_record_path", "plan_path"} <= set(inputs)
+    assert inputs["token_smoke_spec"]["default"] == ""
+    assert token_job["environment"] == "production-provider"
+    assert token_job["needs"] == "e2e-prod-readonly"
+    assert token_job["env"]["PLAYWRIGHT_PROD_URL"] == "https://video.lute-tlz-dddd.top"
+    assert token_job["env"]["PLAYWRIGHT_STRICT_TLS"] == "1"
+    assert "PLAYWRIGHT_API_KEY" not in token_job["env"]
+    assert validator_step["env"]["PLAYWRIGHT_API_KEY"] == (
+        "${{ secrets.PROD_TOKEN_SMOKE_API_KEY }}"
+    )
+    assert token_step["env"]["PLAYWRIGHT_API_KEY"] == (
+        "${{ secrets.PROD_TOKEN_SMOKE_API_KEY }}"
+    )
+    api_key_step_names = {
+        step.get("name", "")
+        for step in token_steps
+        if "PLAYWRIGHT_API_KEY" in step.get("env", {})
+    }
+    assert api_key_step_names == {
+        "Validate token smoke authorization",
+        "Run validated single token smoke spec",
+    }
+    assert yaml.safe_dump(token_job).count(
+        "${{ secrets.PROD_TOKEN_SMOKE_API_KEY }}"
+    ) == 2
+    assert "inputs.base_url" not in yaml.safe_dump(token_job)
+    assert "github.ref == 'refs/heads/main'" in token_job["if"]
+    assert workflow["concurrency"] == {
+        "group": "e2e-prod-production",
+        "cancel-in-progress": False,
+    }
+    assert token_job["concurrency"] == {
+        "group": "e2e-prod-token-smoke-production",
+        "cancel-in-progress": False,
+    }
+    assert "l4c_token_smoke_plan.py" in validator_step["run"]
+    assert "PLAYWRIGHT_TOKEN_SMOKE_SPEC" in token_step["run"]
+    assert '"$PLAYWRIGHT_TOKEN_SMOKE_SPEC"' in token_step["run"]
+    assert "--workers=1" in token_step["run"]
+    assert "--retries=0" in token_step["run"]
+    assert "npx playwright test -c playwright.prod.config.ts --reporter" not in token_step["run"]
+    assert "environment: production-provider" in workflow_text
+
+    token_step_names = {step.get("name", "") for step in token_steps}
+    assert "Upload token-smoke trace artifacts" not in token_step_names
+    assert "web/test-results/" not in yaml.safe_dump(token_job)
+    assert "Upload token-smoke Playwright HTML report" in token_step_names
+
+
+def test_token_workflow_materializes_environment_records_without_input_controlled_paths():
+    workflow = yaml.safe_load(E2E_PROD_WORKFLOW.read_text())
+    token_job = workflow["jobs"]["e2e-prod-token-smoke"]
+    validator_step = next(
+        step
+        for step in token_job["steps"]
+        if step.get("name") == "Validate token smoke authorization"
+    )
+    validator_env = validator_step["env"]
+    validator_run = validator_step["run"]
+
+    assert validator_run.lstrip().startswith("set -euo pipefail")
+    assert "PROD_TOKEN_SMOKE_PLAN_B64" not in token_job["env"]
+    assert "PROD_TOKEN_SMOKE_APPROVAL_B64" not in token_job["env"]
+    assert validator_env["PROD_TOKEN_SMOKE_PLAN_B64"] == (
+        "${{ secrets.PROD_TOKEN_SMOKE_PLAN_B64 }}"
+    )
+    assert validator_env["PROD_TOKEN_SMOKE_APPROVAL_B64"] == (
+        "${{ secrets.PROD_TOKEN_SMOKE_APPROVAL_B64 }}"
+    )
+    assert '$RUNNER_TEMP/l4c-token-smoke-plan.json' in validator_run
+    assert '$RUNNER_TEMP/l4c-token-smoke-approval.json' in validator_run
+    assert "umask 077" in validator_run
+    assert (
+        'printf \'%s\' "$PROD_TOKEN_SMOKE_PLAN_B64" | base64 --decode'
+        in validator_run
+    )
+    assert (
+        'printf \'%s\' "$PROD_TOKEN_SMOKE_APPROVAL_B64" | base64 --decode'
+        in validator_run
+    )
+    assert '--plan-record "$PLAN_RECORD"' in validator_run
+    assert '--approval-record "$APPROVAL_RECORD"' in validator_run
+    assert '--plan-ref "$PLAN_REF_INPUT"' in validator_run
+    assert '--approval-ref "$APPROVAL_REF_INPUT"' in validator_run
+    assert '--workflow-run-ref "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT"' in validator_run
+    assert '--commit-sha "$GITHUB_SHA"' in validator_run
+    assert "trap " in validator_run
+    assert 'rm -f "$PLAN_RECORD" "$APPROVAL_RECORD"' in validator_run
+
+    assert '--plan-record "$PLAN_REF_INPUT"' not in validator_run
+    assert '--approval-record "$APPROVAL_REF_INPUT"' not in validator_run
+    assert '> "$PLAN_REF_INPUT"' not in validator_run
+    assert '> "$APPROVAL_REF_INPUT"' not in validator_run
+    assert 'echo "$PROD_TOKEN_SMOKE_PLAN_B64"' not in validator_run
+    assert 'echo "$PROD_TOKEN_SMOKE_APPROVAL_B64"' not in validator_run
+    assert "set -x" not in validator_run
+
+
+def test_token_smoke_runbook_preserves_secret_and_budget_evidence_boundaries():
+    source = TOKEN_SMOKE_RUNBOOK.read_text()
+
+    for token in (
+        "PROD_TOKEN_SMOKE_PLAN_B64",
+        "PROD_TOKEN_SMOKE_APPROVAL_B64",
+        "Base64 is transport encoding, not encryption",
+        "$RUNNER_TEMP/l4c-token-smoke-plan.json",
+        "$RUNNER_TEMP/l4c-token-smoke-approval.json",
+        "logical audit ref",
+        "strict TLS",
+        "disables Playwright traces",
+        "not a server-side durable reservation or hard spending cap",
+        "approved_at<=now<expires_at",
+        "expires_at-approved_at<=4h",
+        "workflow_run_ref",
+        "commit_sha",
+        "only the validation and token execution steps",
+    ):
+        assert token in source
+
+    template = json.loads(L4C_PLAN_TEMPLATE.read_text())
+    assert template["workflow_run_ref"] == ""
+    assert template["commit_sha"] == ""
+
+
+def test_production_readonly_workflow_never_enables_token_smoke():
+    workflow = yaml.safe_load(E2E_PROD_WORKFLOW.read_text())
+    readonly_job = workflow["jobs"]["e2e-prod-readonly"]
+    run_step = next(step for step in readonly_job["steps"] if step.get("name") == "Run read-only production E2E suite")
+
+    assert readonly_job["env"]["RUN_TOKEN_SMOKE"] == "0"
+    assert "playwright.prod.config.ts" in run_step["run"]
+    assert "PLAYWRIGHT_TOKEN_SMOKE_SPEC" not in run_step["run"]
+
+
+def test_playwright_token_mode_requires_and_matches_one_validated_spec():
+    source = PLAYWRIGHT_PROD_CONFIG.read_text()
+
+    assert "PLAYWRIGHT_TOKEN_SMOKE_SPEC" in source
+    assert "throw new Error" in source
+    assert "testMatch" in source
+    assert "retries: runTokenSmoke ? 0 : 1" in source
+    assert "workers: runTokenSmoke ? 1" in source
+    assert 'trace: runTokenSmoke ? "off" : "retain-on-failure"' in source
+    assert "ignoreHTTPSErrors: !runTokenSmoke" in source
 
 
 def test_missing_approval_record_blocks_even_when_token_flag_and_keys_are_set():

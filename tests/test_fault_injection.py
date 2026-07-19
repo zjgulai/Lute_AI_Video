@@ -17,6 +17,7 @@ import pytest
 from src.pipeline.state_manager import PipelineStateManager
 from src.pipeline.step_runner import StepRunner
 from src.telemetry import error_collector, pipeline_metrics
+from tests.generation_policy_test_utils import bound_generation_policy
 
 
 @pytest.fixture(autouse=True)
@@ -35,14 +36,15 @@ class TestStepRunnerDegradedPath:
     """Verify StepRunner._execute_step sets pipeline_degraded on exception."""
 
     @pytest.mark.asyncio
-    async def test_run_step_exception_sets_degraded(self):
+    async def test_run_step_exception_sets_degraded(self, isolated_provider_cost_db):
         """When pipeline.run_step raises, state.pipeline_degraded becomes True."""
         runner = StepRunner(PipelineStateManager())
-        label = await runner.init_state(
-            config={"product_catalog": {"products": [{"name": "Test"}]}},
-            mode="auto",
-            scenario="s1",
-        )
+        async with bound_generation_policy("s1", media=False):
+            label = await runner.init_state(
+                config={"product_catalog": {"products": [{"name": "Test"}]}},
+                mode="auto",
+                scenario="s1",
+            )
         state = await runner.state_manager.load(label)
 
         with patch(
@@ -58,14 +60,15 @@ class TestStepRunnerDegradedPath:
         assert result["steps"]["strategy"]["status"] == "error"
 
     @pytest.mark.asyncio
-    async def test_degraded_halts_subsequent_steps(self):
+    async def test_degraded_halts_subsequent_steps(self, isolated_provider_cost_db):
         """Once degraded, run() stops executing further steps."""
         runner = StepRunner(PipelineStateManager())
-        label = await runner.init_state(
-            config={"product_catalog": {"products": [{"name": "Test"}]}},
-            mode="auto",
-            scenario="s1",
-        )
+        async with bound_generation_policy("s1", media=False):
+            label = await runner.init_state(
+                config={"product_catalog": {"products": [{"name": "Test"}]}},
+                mode="auto",
+                scenario="s1",
+            )
         state = await runner.state_manager.load(label)
 
         call_count = 0
@@ -90,14 +93,18 @@ class TestStepRunnerDegradedPath:
         assert result["steps"]["strategy"]["status"] == "error"
 
     @pytest.mark.asyncio
-    async def test_error_collector_receives_structured_error(self):
+    async def test_error_collector_receives_structured_error(
+        self,
+        isolated_provider_cost_db,
+    ):
         """ErrorCollector captures the error with label, step, trace_id."""
         runner = StepRunner(PipelineStateManager())
-        label = await runner.init_state(
-            config={"product_catalog": {"products": [{"name": "Test"}]}},
-            mode="auto",
-            scenario="s1",
-        )
+        async with bound_generation_policy("s1", media=True):
+            label = await runner.init_state(
+                config={"product_catalog": {"products": [{"name": "Test"}]}},
+                mode="auto",
+                scenario="s1",
+            )
         state = await runner.state_manager.load(label)
         trace_id = state["trace_id"]
 
@@ -106,7 +113,7 @@ class TestStepRunnerDegradedPath:
             new_callable=AsyncMock,
             side_effect=ConnectionError("Seedance refused"),
         ):
-            await runner._execute_step(state, "keyframe_images", force=True)
+            await runner._execute_step(state, "keyframe_images", force=False)
 
         errors = error_collector.get_errors(label=label)
         assert len(errors) == 1
@@ -117,14 +124,15 @@ class TestStepRunnerDegradedPath:
         assert err["label"] == label
 
     @pytest.mark.asyncio
-    async def test_structured_errors_populated(self):
+    async def test_structured_errors_populated(self, isolated_provider_cost_db):
         """state.structured_errors contains PipelineError dict from classify_error."""
         runner = StepRunner(PipelineStateManager())
-        label = await runner.init_state(
-            config={"product_catalog": {"products": [{"name": "Test"}]}},
-            mode="auto",
-            scenario="s1",
-        )
+        async with bound_generation_policy("s1", media=False):
+            label = await runner.init_state(
+                config={"product_catalog": {"products": [{"name": "Test"}]}},
+                mode="auto",
+                scenario="s1",
+            )
         state = await runner.state_manager.load(label)
 
         with patch(
@@ -143,14 +151,15 @@ class TestStepRunnerDegradedPath:
         assert se["recoverable"] is True  # timeout is recoverable
 
     @pytest.mark.asyncio
-    async def test_pipeline_metrics_records_failure(self):
+    async def test_pipeline_metrics_records_failure(self, isolated_provider_cost_db):
         """PipelineMetrics records the failed step with success=False."""
         runner = StepRunner(PipelineStateManager())
-        label = await runner.init_state(
-            config={"product_catalog": {"products": [{"name": "Test"}]}},
-            mode="auto",
-            scenario="s1",
-        )
+        async with bound_generation_policy("s1", media=False):
+            label = await runner.init_state(
+                config={"product_catalog": {"products": [{"name": "Test"}]}},
+                mode="auto",
+                scenario="s1",
+            )
         state = await runner.state_manager.load(label)
 
         with patch(
@@ -207,12 +216,15 @@ class TestTelemetryEndpoint:
 class TestDegradedGuardInRouting:
     """Verify routing functions terminate to __end__ when pipeline_degraded is set."""
 
-    @pytest.mark.parametrize("route_fn_name", [
-        "route_after_strategy",
-        "route_after_script",
-        "route_after_editing",
-        "route_after_thumbnail",
-    ])
+    @pytest.mark.parametrize(
+        "route_fn_name",
+        [
+            "route_after_strategy",
+            "route_after_script",
+            "route_after_editing",
+            "route_after_thumbnail",
+        ],
+    )
     def test_all_routes_terminate_on_degraded(self, route_fn_name):
         from src.graph.routing import (
             route_after_editing,
@@ -220,6 +232,7 @@ class TestDegradedGuardInRouting:
             route_after_strategy,
             route_after_thumbnail,
         )
+
         route_map = {
             "route_after_strategy": route_after_strategy,
             "route_after_script": route_after_script,
@@ -229,6 +242,4 @@ class TestDegradedGuardInRouting:
         route_fn = route_map[route_fn_name]
         state = {"pipeline_degraded": True}
         result = route_fn(state)
-        assert result == "__end__", (
-            f"{route_fn_name} should return __end__ when degraded, got {result}"
-        )
+        assert result == "__end__", f"{route_fn_name} should return __end__ when degraded, got {result}"

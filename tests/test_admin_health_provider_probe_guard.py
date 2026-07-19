@@ -51,6 +51,10 @@ async def test_admin_health_can_opt_in_to_external_provider_probes(monkeypatch):
 
     await logs.run_health_checks()
 
-    assert calls == ["postgres", "deepseek", "poyo", "siliconflow", "remotion"]
+    assert calls == ["postgres", "remotion"]
     services = logs._health_history[-1]["services"]
     assert all(services[name]["status"] == "healthy" for name in calls)
+    for name in ("deepseek", "poyo", "siliconflow"):
+        assert services[name]["status"] == "disabled"
+        assert services[name]["reason"] == "external_provider_health_checks_disabled"
+        assert services[name]["config_ready"] is False

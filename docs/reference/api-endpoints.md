@@ -6,13 +6,39 @@
 
 ## Authentication
 
-All endpoints **except** `GET /health` require the `X-API-Key` header.
+The machine-readable public boundary is
+`configs/backend-route-auth-contract.yaml`. Only these routes have a public or
+specialized authentication entry:
+
+- `GET /health` is unauthenticated for load-balancer and deployment health
+  checks.
+- `GET /metrics` is the Prometheus scrape endpoint; production exposure is
+  controlled by the nginx/network layer.
+- `GET /api/media/{media_path:path}` allows unsigned access only below the
+  explicit `brand_assets` and `demo` roots. Every protected tenant path
+  requires a scoped, expiring tenant-bound token.
+- `POST /api/admin/auth/login` uses rate limiting and password verification to
+  create the admin session and CSRF cookies.
+
+Ordinary tenant/application routers require the `X-API-Key` header:
 
 ```
 X-API-Key: <your-api-key>
 ```
 
-If the `API_KEY` environment variable is not set, the server generates a temporary key on startup and logs it to the console.
+Admin routes use the admin session rather than a tenant API key. Except for the
+login route, every admin endpoint requires the session; every state-changing
+admin request also requires the matching CSRF cookie/header contract.
+
+The service fails fast when neither `API_KEY` nor an explicitly configured
+development `TEST_BUNDLE_KEY` is available; it does not generate or log a
+temporary credential.
+
+The W1-27–W1-30 provider-cost ledger and per-job budget work adds no public HTTP
+endpoint or caller-controlled budget field. Provider account/attempt readback,
+operation scopes, recovery, and billing facts remain server-owned internal
+contracts; Task 10 verification is local/fixture/disposable-database evidence
+only and does not prove production migration or invoice reconciliation.
 
 ---
 
@@ -27,6 +53,8 @@ If the `API_KEY` environment variable is not set, the server generates a tempora
 7. [Distribution](#7-distribution)
 8. [Telemetry](#8-telemetry)
 9. [File Upload & Media](#9-file-upload--media)
+10. [Canonical Async Submission & Recovery](#10-canonical-async-submission--recovery)
+11. [Artifact Acceptance Records](#11-artifact-acceptance-records)
 
 ---
 
@@ -572,10 +600,11 @@ Run the S4 Live Shoot to Video pipeline. Produces a video from raw footage asset
 
 ## 5. Legacy Pipeline
 
-`/pipeline/*` is a compatibility layer. New UI flows use `/scenario/*` and
-StepRunner directly; legacy callers can keep using `/pipeline/*`, but the
-router now proxies to StepRunner instead of resuming the original LangGraph
-checkpoint graph.
+`/pipeline/*` is an S1 Product Direct compatibility layer. New UI flows use
+`/scenario/*` and StepRunner directly. Legacy S1 callers can keep using
+`/pipeline/*`; S2-S5 callers must use `POST /scenario/{scenario}/submit`.
+The compatibility router proxies to StepRunner instead of resuming the original
+LangGraph checkpoint graph.
 
 ### POST /pipeline/start
 
@@ -598,7 +627,10 @@ translated to English before state initialization.
   "target_platforms": ["shopify", "amazon", "tiktok", "reddit"],
   "target_languages": ["en"],
   "content_calendar_week": "2026-W18",
-  "content_scenario": "influencer_remix",
+  "content_scenario": "product_direct",
+  "enable_media_synthesis": false,
+  "artifact_disposition": "pending_review",
+  "provider_max_retries": 0,
   "api_keys": {
     "openai": "sk-...",
     "elevenlabs": "..."
@@ -608,7 +640,16 @@ translated to English before state initialization.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `api_keys` | object | `{}` | Optional API keys injected into env for this process |
+| `content_scenario` | string | `"product_direct"` | Only `"product_direct"` and `"s1"` are supported by this S1-shaped legacy contract. Other scenarios return `422`. |
+| `enable_media_synthesis` | strict boolean | `false` | Request intent/config defaults to no-media. Until the Task 4 execution guard is present, this field alone is not runtime proof that later media steps cannot run. |
+| `artifact_disposition` | string | `"pending_review"` | Only `pending_review` or `quarantine`. |
+| `provider_max_retries` | strict integer | `0` | Mutation retry is fixed at zero until durable idempotency exists. |
+| `api_keys` | object | `{}` | Optional request-scoped provider keys; they are not written to process-wide environment variables. |
+
+The authenticated API key must carry `provider:submit` or `all`, including a
+no-media request because S1 strategy/script steps still invoke a text provider.
+Client-supplied tenant, effective-policy, budget, approval, publish, delivery,
+or transparency authority fields are rejected with `422`.
 
 **Response:**
 ```json
@@ -1229,60 +1270,249 @@ List available distribution platforms and their connection status.
 
 ### POST /distribution/publish
 
-Publish content to a platform (TikTok or Shopify).
+Canonical acceptance-bound publish for exactly one TikTok or Shopify attempt.
+The authenticated key must carry `artifact:publish` or `all`;
+`artifact:accept` alone and `provider:submit` alone receive `403`.
 
 **Headers:** `X-API-Key`
 
 **Request body:**
 ```json
 {
+  "acceptance_id": "3f4b5088-4138-47c6-96ae-c918b8297010",
   "platform": "tiktok",
-  "content": {
-    "video_path": "/output/renders/final.mp4",
-    "caption": "Check out our new ergonomic chair! #officegoals",
-    "hashtags": ["ergonomic", "office", "comfort"]
+  "metadata": {
+    "title": "Approved campaign video",
+    "description": "One acceptance-bound publish attempt",
+    "hook": "A reviewed opening line",
+    "product_name": "Product name",
+    "hashtags": ["approved", "campaign"],
+    "tags": []
+  },
+  "platform_options": {
+    "platform": "tiktok",
+    "privacy_level": "SELF_ONLY",
+    "disable_comment": true,
+    "disable_duet": true,
+    "disable_stitch": true,
+    "brand_content_toggle": false,
+    "brand_organic_toggle": true
   }
 }
 ```
 
+`acceptance_id` must be an exact lowercase UUID4. `platform` is exactly
+`tiktok` or `shopify`. `platform_options` is required, strict, and must carry
+the same platform discriminator. TikTok requires an allowed privacy value,
+five exact booleans, and explicit commercial toggles; the server always sends
+the AI-content label. Shopify accepts only an exact positive
+`gid://shopify/Product/<id>` as `product_id`. `metadata` is required and strict;
+its allowed fields are `title`, `description`, `hook`, `product_name`,
+`hashtags`, and `tags`. Extra fields, client artifact paths, human-approval
+objects, multi-platform arrays, null text, unsafe URLs/control characters, and
+oversized metadata are rejected with sanitized `422` details. There is no
+silent compatibility default for missing platform options.
+
 **Response:**
 ```json
 {
+  "publish_attempt_id": "91ec3593-cc3c-42bf-99ee-c98655c5826b",
+  "acceptance_id": "3f4b5088-4138-47c6-96ae-c918b8297010",
+  "platform": "tiktok",
+  "status": "published",
   "success": true,
-  "post_id": "tiktok_post_123456",
-  "url": "https://tiktok.com/@brand/video/123456",
-  "error": null
+  "post_id": "1234567890123456789",
+  "post_url": "https://www.tiktok.com/@brand/video/1234567890123456789",
+  "receipt": {
+    "schema_version": "publish-receipt.v1",
+    "platform": "tiktok",
+    "protocol_version": "tiktok-content-posting-v2",
+    "completion_scope": "tiktok_direct_post",
+    "provider_operation_id": "v_pub_file_20260714_01",
+    "provider_resource_id": "1234567890123456789",
+    "target_id": null,
+    "provider_status": "PUBLISH_COMPLETE",
+    "post_id": "1234567890123456789",
+    "post_url": "https://www.tiktok.com/@brand/video/1234567890123456789",
+    "public_visibility_verified": true,
+    "observed_at": "2026-07-14T08:00:00Z",
+    "verified_by": "video_query",
+    "simulated": false
+  },
+  "acceptance_consumed": true,
+  "retry_allowed": false
 }
 ```
 
 **Key fields:**
-- `post_id` -- Platform-specific post identifier.
-- `url` -- Public URL to the published post.
-- The publish is logged to `PublishLogRepository` when PostgreSQL is available.
+- `publish_attempt_id` -- Server-generated durable attempt UUID4.
+- `post_id` / `post_url` -- Bounded safe platform projection; either may be
+  null when the receipt has no corresponding value. Shopify always returns
+  both as null because product-media association is not public-post proof.
+- `receipt` -- Strict `publish-receipt.v1`; every newly written published
+  attempt must have one. TikTok operation ID is never projected as a post ID.
+- `acceptance_consumed=true` -- This attempt consumed the W1-22 authority.
+- `retry_allowed=false` -- Success never authorizes reuse of the acceptance.
+
+### POST /publish/{video_id} (deprecated)
+
+Compatibility adapter for the same strict request, response, permission, and
+shared service as `POST /distribution/publish`. The bounded `video_id` path is
+not authority and is not forwarded to the connector. All controlled legacy
+responses include:
+
+```http
+Deprecation: true
+Link: </distribution/publish>; rel="successor-version"
+```
+
+Clients should migrate to the canonical route. The adapter does not accept the
+historical `content.video_path` or body `delivery_acceptance` shape.
+
+### Stable publish errors
+
+Both adapters declare the same response statuses:
+
+| HTTP | Contract |
+|---:|---|
+| `200` | One strict published response object. |
+| `401` | Missing/invalid API key; auth runs before body/path parsing. |
+| `403` | Principal lacks `artifact:publish|all`. |
+| `404` / `409` / `500` / `502` / `503` | Typed stable publish error detail below. |
+| `422` | Sanitized JSON/body/path validation using only `type`, `loc`, and `msg`. |
+
+Publish errors use this bounded detail shape:
+
+```json
+{
+  "detail": {
+    "code": "publish_connector_failed",
+    "publish_attempt_id": "91ec3593-cc3c-42bf-99ee-c98655c5826b",
+    "acceptance_consumed": true,
+    "retry_allowed": false
+  }
+}
+```
+
+| HTTP | Stable code | Meaning |
+|---:|---|---|
+| `404` | `acceptance_not_found` | Tenant-safe acceptance lookup failed. |
+| `409` | `acceptance_expired` | Acceptance expired before consume. |
+| `409` | `acceptance_not_available` | Rejected, revoked, consumed, or concurrent loser. |
+| `409` | `acceptance_artifact_integrity_mismatch` | Accepted bytes changed or disappeared. |
+| `409` | `publish_preflight_rejected` | A trusted read-only platform response deterministically rejected current options, media, product, or scopes; acceptance remains unconsumed. |
+| `503` | `acceptance_store_unavailable` | Inspection proved not consumed; only an explicit later request may proceed. |
+| `503` | `publish_connector_not_ready` | Known mock/missing configuration before attempt. |
+| `503` | `publish_attempt_store_unavailable` | Durable `prepared` insert failed. |
+| `500` | `publish_artifact_unavailable_after_consume` | Canonical artifact resolution failed after consume. |
+| `500` | `publish_attempt_state_unknown` | Consume or durable state cannot be safely proven. |
+| `502` | `publish_connector_failed` | Connector explicitly returned `success=false`. |
+| `502` | `publish_connector_not_ready_after_consume` | Credentials became unavailable after acceptance consume and before any outbound connector call. |
+| `502` | `publish_connector_simulated` | A connector returned `simulated=true`; the attempt fails closed and never becomes published. |
+| `502` | `publish_preflight_unavailable` | Read-only preflight outcome is uncertain; acceptance remains unconsumed. |
+| `502` | `publish_outcome_ambiguous` | Timeout, exception, or indeterminate connector result. |
+
+`acceptance_consumed` is `true|false|null`; `null` is unknown and always has
+`retry_allowed=false`. There is no automatic retry, no acceptance restore, and
+no public consume endpoint. See
+[Publish acceptance consumption](../runbooks/publish-acceptance-consumption.md)
+for recovery and rollback.
 
 ---
 
-### GET /distribution/status/{platform}/{post_id}
+### GET /distribution/publish-attempts/{attempt_id}
 
-Get the publish status for a post on a platform.
+Read one safe durable publish-attempt projection. The authenticated key must
+carry `artifact:publish` or `all`. Lookup is bound to the authenticated tenant;
+a missing or cross-tenant attempt returns the same 404.
 
 **Headers:** `X-API-Key`
-
-**Path parameters:**
-- `platform` -- `"tiktok"` or `"shopify"`.
-- `post_id` -- Post identifier returned from the publish endpoint.
 
 **Response:**
 ```json
 {
-  "post_id": "tiktok_post_123456",
+  "publish_attempt_id": "91ec3593-cc3c-42bf-99ee-c98655c5826b",
+  "acceptance_id": "3f4b5088-4138-47c6-96ae-c918b8297010",
+  "platform": "tiktok",
   "status": "published",
-  "views": 1500,
-  "url": "https://tiktok.com/@brand/video/123456"
+  "error_code": null,
+  "post_id": "1234567890123456789",
+  "post_url": "https://www.tiktok.com/@brand/video/1234567890123456789",
+  "receipt": {
+    "schema_version": "publish-receipt.v1",
+    "platform": "tiktok",
+    "protocol_version": "tiktok-content-posting-v2",
+    "completion_scope": "tiktok_direct_post",
+    "provider_operation_id": "v_pub_file_20260714_01",
+    "provider_resource_id": "1234567890123456789",
+    "target_id": null,
+    "provider_status": "PUBLISH_COMPLETE",
+    "post_id": "1234567890123456789",
+    "post_url": "https://www.tiktok.com/@brand/video/1234567890123456789",
+    "public_visibility_verified": true,
+    "observed_at": "2026-07-14T08:00:00Z",
+    "verified_by": "video_query",
+    "simulated": false
+  },
+  "acceptance_consumed": true,
+  "retry_allowed": false,
+  "created_at": "2026-07-14T07:59:58Z",
+  "updated_at": "2026-07-14T08:00:00Z"
 }
 ```
 
-The response structure varies by platform connector implementation.
+The route does not return metadata, artifact paths, raw attempt content, signed
+upload/staged URLs, provider payloads, or credentials. It performs no external
+call and no write. Historical `published` rows may return `receipt: null` as
+legacy/unverified; they cannot authorize durable status lookup.
+
+| HTTP | Stable code | Meaning |
+|---:|---|---|
+| `404` | `publish_attempt_not_found` | Attempt is absent or belongs to another tenant. |
+| `503` | `publish_attempt_store_unavailable` | Durable state cannot be safely decoded or read. |
+
+---
+
+### GET /distribution/status/{platform}/{post_id} (deprecated)
+
+Read an exact persisted TikTok receipt for the authenticated tenant. The key
+must carry `artifact:publish` or `all`. This compatibility route performs no
+connector call, external status refresh, or database write.
+
+**Headers:** `X-API-Key`
+
+**Path parameters:**
+- `platform` -- Only `"tiktok"` remains readable; `"shopify"` is retired.
+- `post_id` -- Positive-decimal public TikTok post ID from a durable receipt.
+
+**Trusted response:**
+```json
+{
+  "platform": "tiktok",
+  "post_id": "1234567890123456789",
+  "status": "PUBLISH_COMPLETE",
+  "post_url": "https://www.tiktok.com/@brand/video/1234567890123456789",
+  "simulated": false,
+  "observed_at": "2026-07-14T08:00:00Z",
+  "verified_by": "video_query"
+}
+```
+
+Only an exact valid `publish-receipt.v1` on a trusted published attempt can
+produce 200. The route never passes public post ID as a TikTok publish
+operation ID and never selects one contradictory duplicate as “latest.”
+
+| HTTP | Stable code | Meaning |
+|---:|---|---|
+| `200` | none | Trusted durable TikTok terminal receipt with `simulated=false`. |
+| `400` | `distribution_status_platform_unsupported` | Platform is neither TikTok nor the retired Shopify branch. |
+| `404` | `distribution_status_not_found` | No exact trusted TikTok receipt exists for this tenant/post ID. |
+| `410` | `distribution_status_route_deprecated` | Shopify status compatibility is retired. |
+| `503` | `publish_attempt_store_unavailable` | Receipt data is malformed, unavailable, or contradictory. |
+
+Status lookup has no mock fallback, external refresh, or automatic retry. See
+[Publish receipt protocol calibration](../runbooks/publish-receipt-protocol-calibration.md)
+for incident handling and rollback boundaries.
 
 ---
 
@@ -1350,6 +1580,311 @@ Returns `413` if the file exceeds 100 MB. Returns `400` if the file type is not 
 
 ---
 
+## 10. Canonical Async Submission & Recovery
+
+Fast Mode and S1-S5 use a durable, tenant-scoped idempotency ledger on their
+canonical asynchronous submit paths. This contract prevents a lost or delayed
+HTTP response from creating a second paid job.
+
+The following endpoints require both headers:
+
+```http
+X-API-Key: <tenant-api-key>
+Idempotency-Key: <opaque-action-key>
+```
+
+`Idempotency-Key` is not an authentication credential. It must contain 16-128
+characters and match `^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$`. It is
+case-sensitive, must occur exactly once, and must not be placed in the request
+body or URL. The server stores only its SHA-256 digest; the raw value is never
+returned or logged by this API.
+
+One explicit Start/Generate action must use one stable key. Do not generate a
+new key merely because a response timed out or the browser reloaded.
+
+### POST /fast/submit
+
+Submit Fast Mode generation and return the durable job identity without
+waiting for generation to finish.
+
+**Headers:** `X-API-Key`, `Idempotency-Key`
+
+**Request body:** The validated Fast Mode request used by `/fast/generate`, for
+example:
+
+```json
+{
+  "user_prompt": "Create a 15-second vertical product introduction",
+  "duration": 15,
+  "enable_tts": false
+}
+```
+
+**First accepted response:**
+
+```json
+{
+  "task_id": "fast_1783830000_a1b2c3d4",
+  "status": "queued",
+  "started_at_unix": 1783830000,
+  "idempotent_replay": false
+}
+```
+
+An exact same-tenant replay returns the original `task_id` and current stored
+submit status with `idempotent_replay: true`. Poll the original resource with
+`GET /fast/status/{task_id}` only after the response/readback status is
+`queued`, `running`, or terminal.
+
+### POST /scenario/{scenario}/submit
+
+Submit S1-S5 (`scenario` is `s1`, `s2`, `s3`, `s4`, or `s5`) for background
+execution. The request body is the validated scenario-specific body used by
+the corresponding blocking endpoint.
+
+**Headers:** `X-API-Key`, `Idempotency-Key`
+
+**First accepted response:**
+
+```json
+{
+  "label": "s1_1783830000_a1b2c3d4",
+  "status": "queued",
+  "trace_id": "a1b2c3d4",
+  "idempotent_replay": false
+}
+```
+
+An exact same-tenant replay returns the original `label` and current stored
+submit status with `idempotent_replay: true`. Poll the original resource with
+`GET /scenario/{scenario}/status/{label}` only after the response/readback
+status is `queued`, `running`, or terminal. A replay observed while the owner
+is still preparing the job may truthfully return `reserved` or `initializing`;
+continue idempotency readback instead of posting again.
+
+### GET /submissions/idempotency
+
+Read the original submission by sending its `Idempotency-Key` header. This is
+an authenticated tenant read and does not perform a second provider-submit
+authorization or generation mutation.
+
+**Headers:** `X-API-Key`, `Idempotency-Key`
+
+**Response:**
+
+```json
+{
+  "resource_type": "scenario",
+  "resource_id": "s1_1783830000_a1b2c3d4",
+  "scenario": "s1",
+  "status": "running",
+  "submit_response": {
+    "label": "s1_1783830000_a1b2c3d4",
+    "status": "running",
+    "trace_id": "a1b2c3d4",
+    "idempotent_replay": false
+  },
+  "stage": "running",
+  "effective_policy_version": "generation-safety.v1",
+  "created_at": "2026-07-12T00:00:00Z",
+  "updated_at": "2026-07-12T00:00:04Z"
+}
+```
+
+Terminal readback may additionally include an allowlisted `result_snapshot`
+and `safe_error_code`. It never returns the raw idempotency key, request body,
+authentication material, provider credentials, or raw exception text.
+
+Unknown keys and keys owned by another tenant both return the same `404`
+`submission_not_found` response. If the browser account/API key changed while
+a submission was pending, restore the original tenant context and read again;
+do not infer that the original job never existed.
+
+### Replay, conflict, and tenant rules
+
+- Same tenant + same key + same canonical business request returns the original
+  resource. It never creates a second execution owner.
+- Reusing the key in the same tenant with a changed payload, effective policy,
+  operation, or scenario returns `409 idempotency_payload_conflict` without
+  translation, state initialization, task creation, or provider work.
+- The key namespace is tenant-global: using one key for Fast and S1 in the same
+  tenant conflicts. Different tenants may independently use the same opaque
+  raw value and cannot read each other's record.
+- Request-scoped provider credentials are excluded from the fingerprint and
+  are not persisted for replay. A definitively failed job remains the original
+  job; a corrected attempt is a new explicit action with a new key.
+- Records do not automatically expire or reopen a used key.
+
+### Error contract and ambiguous responses
+
+Errors use `{"detail":{"code":"..."}}` (plus the normal response `_meta`
+wrapper where applicable):
+
+| HTTP | Code | Meaning / caller action |
+|---|---|---|
+| `400` | `idempotency_key_required` | Required header is missing. Upgrade the caller before submitting. |
+| `400` | `idempotency_key_invalid` | Header is duplicated or does not match the length/format contract. |
+| `409` | `idempotency_payload_conflict` | The tenant/key already belongs to a different canonical request. Do not auto-generate a replacement key. |
+| `404` | `submission_not_found` | Readback key is unknown in this tenant, including cross-tenant lookup. |
+| `422` | Sanitized validation detail (`type` / `loc` / `msg`) | A body field such as unsupported `idempotency_key`, scenario payload, or type is invalid. Request input, provider credentials, and validation context are never echoed. |
+| `503` | `idempotency_store_unavailable` | Durable authority was unavailable before claim/downstream work. Definitive pre-claim failure; never auto-retry a mutation. |
+| `503` | `submission_state_uncertain` | A claim may exist but a later durable transition was uncertain. Treat as ambiguous and use GET readback with the same key. |
+| `500` | `submission_initialization_failed` | Initialization could not complete. Treat a dispatched response as ambiguous until same-key readback resolves it. |
+
+Network failure, client timeout/abort after dispatch, unstructured proxy
+`500`/`502`/`503`/`504`, and `submission_state_uncertain` are ambiguous. The
+caller must keep the original pending key and use bounded
+`GET /submissions/idempotency` readback. It must not send a blind second POST.
+
+`recovery_required` preserves the original resource identity but means the
+nonterminal owner was lost and this release will not automatically resume paid
+work. Render that state directly, keep it separate from `404`, and require an
+explicit abandon/new-action decision before creating another key.
+
+Blocking and legacy mutations such as `/fast/generate`, `/scenario/s1` through
+`/scenario/s5`, `/scenario/s1/start`, `/pipeline/start`, gate, regenerate,
+publish, and delivery endpoints are outside this replay contract and remain
+non-replayable in this batch.
+
+See [Submission idempotency recovery](../runbooks/submission-idempotency-recovery.md)
+for browser recovery and migration/operations sequencing.
+
+---
+
+## 11. Artifact Acceptance Records
+
+W1-22 records a reviewer decision against the exact bytes of a canonical async
+Fast or S1-S5 final video. All three routes require `X-API-Key` with
+`artifact:accept` or `all`; a key with only `provider:submit` receives
+`403 Insufficient permission`.
+
+An accepted source must be a tenant-owned durable submission with an exact
+canonical `pending_review` final-video path. For an accepted decision it must
+also be `completed`, `full_media_success=true`, non-stub, and non-degraded. A
+rejected decision still requires a terminal source with a valid final-video
+projection. Tenant, reviewer, scenario, digest, size, status, expiry, and
+consume metadata are server-owned.
+
+### POST /acceptance-records
+
+Create one accepted/rejected decision. This route additionally requires one
+action-stable `Idempotency-Key` header (16-128 characters using the canonical
+opaque-key grammar).
+
+**Request:**
+
+```json
+{
+  "source_resource_type": "scenario",
+  "source_resource_id": "s1_1783830000_a1b2c3d4",
+  "artifact_path": "tenants/tenant-a/pending_review/s1_1783830000_a1b2c3d4/assemble/final.mp4",
+  "decision": "accepted",
+  "review_notes": "Final video reviewed against the approved brief.",
+  "expires_in_seconds": 3600
+}
+```
+
+**Owner response:** `201`
+
+**Idempotent replay response:** `200`, returns the original record with
+`idempotent_replay: true`. Same tenant/key with a different fingerprint returns
+`409 acceptance_payload_conflict` and does not change the original decision.
+
+**Response shape:**
+
+```json
+{
+  "acceptance_id": "3f4b5088-4138-47c6-96ae-c918b8297010",
+  "tenant_id": "tenant-a",
+  "source_resource_type": "scenario",
+  "source_resource_id": "s1_1783830000_a1b2c3d4",
+  "scenario": "s1",
+  "artifact": {
+    "path": "tenants/tenant-a/pending_review/s1_1783830000_a1b2c3d4/assemble/final.mp4",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "size_bytes": 123456,
+    "kind": "video"
+  },
+  "decision": "accepted",
+  "status": "available",
+  "reviewer": {"key_id": "reviewer-key-id", "key_type": "tenant"},
+  "review_notes": "Final video reviewed against the approved brief.",
+  "expires_at": "2026-07-12T12:00:00Z",
+  "consumed_at": null,
+  "revoked_at": null,
+  "idempotent_replay": false,
+  "created_at": "2026-07-12T11:00:00Z",
+  "updated_at": "2026-07-12T11:00:00Z"
+}
+```
+
+Creating a rejection transactionally revokes an older available record for the
+same tenant and artifact path before inserting the rejected record. The
+rejection itself is never consumable.
+
+### GET /acceptance-records/{acceptance_id}
+
+Tenant-bound read. Success is `200`. Unknown and cross-tenant IDs both return
+`404 acceptance_not_found`. Read reconciles expiry using database time; a
+reconciled record is returned with `status: "expired"` and is not reopened.
+
+### POST /acceptance-records/{acceptance_id}/revoke
+
+Revoke one available record. Success is `200`; replaying revoke on an already
+revoked record returns the same revoked record and original timestamp with
+`200`. Consumed, expired, or rejected records return
+`409 acceptance_not_revocable`.
+
+### Safe error contract
+
+| HTTP | Code / shape | Meaning |
+|---:|---|---|
+| `400` | `acceptance_key_required` | Create is missing the action-stable key. |
+| `400` | `acceptance_key_invalid` | The key is duplicated or fails length/format validation. |
+| `403` | `Insufficient permission` | `artifact:accept|all` is absent; `provider:submit` alone is insufficient. |
+| `404` | `acceptance_not_found` | Source, record, or artifact is not visible in the authenticated tenant. |
+| `409` | `acceptance_payload_conflict` | Same create key has a different fingerprint. |
+| `409` | `acceptance_source_not_terminal` | Durable source is still running. |
+| `409` | `acceptance_source_not_eligible` | Source is not an eligible final-video projection. |
+| `409` | `acceptance_artifact_mismatch` | Requested path is not the durable exact final path. |
+| `409` | `acceptance_already_available` | Another available record owns the tenant/path. |
+| `409` | `acceptance_not_revocable` | Current state cannot be revoked. |
+| `409` | `acceptance_not_available` | Internal single-use consume found a non-available record. |
+| `409` | `acceptance_expired` | Internal consume reconciled DB-time expiry. |
+| `409` | `acceptance_artifact_integrity_mismatch` | Internal consume found changed/missing bytes. |
+| `422` | sanitized `type` / `loc` / `msg` | Invalid JSON/body; input, context, URL, credentials, and raw exceptions are not echoed. |
+| `503` | `acceptance_store_unavailable` | Durable ledger is unavailable; there is no memory/filesystem fallback. |
+
+### Consume and release boundary
+
+There is **no HTTP consume** endpoint and **no UI** added by W1-22. The
+`consume_for_publish(...)` service call is internal and single-use: it checks
+database-time expiry, re-hashes the exact file, verifies path/digest/size
+integrity, and atomically lets only one consumer change `available` to
+`consumed`. Read `200` does not perform this integrity check and is not publish
+authority.
+
+W1-23 now consumes this internal authority through the authenticated canonical
+and deprecated publish adapters. The acceptance row records
+`consumed_by_operation=distribution.publish` and
+`consumed_by_resource_id=<publish_attempt_id>` for correlation. If consume-store
+truth is uncertain, one internal read-only inspection returns only
+available/this-attempt/other-attempt/not-available/unknown truth; it does not
+consume again, restore authority, or call a connector. There remains no HTTP
+consume endpoint and no W1-23 review UI.
+
+Current evidence is `W1-23 completed_local` only: `production unchanged`,
+`provider_call=false`, `live_publish=false`. It does not claim production
+migration, live acceptance, publish, delivery, or immutable artifact snapshot.
+
+See [Artifact acceptance lifecycle](../runbooks/artifact-acceptance-lifecycle.md)
+for operator recovery, expiry, integrity, rejection, and the ordered recovery
+table contract (including the provider-cost ledger tables).
+See [Publish acceptance consumption](../runbooks/publish-acceptance-consumption.md)
+for no-automatic-retry/no-restore rules and attempt correlation.
+
+---
+
 ## Summary of Endpoints
 
 | # | Method | Path | Section |
@@ -1394,9 +1929,17 @@ Returns `413` if the file exceeds 100 MB. Returns `400` if the file type is not 
 | 38 | POST | `/api/assets/remix-brief` | Assets |
 | 39 | GET | `/distribution/platforms` | Distribution |
 | 40 | POST | `/distribution/publish` | Distribution |
-| 41 | GET | `/distribution/status/{platform}/{post_id}` | Distribution |
-| 42 | GET | `/telemetry/metrics` | Telemetry |
-| 43 | GET | `/telemetry/errors` | Telemetry |
-| 44 | POST | `/api/upload` | File Upload & Media |
+| 41 | POST | `/publish/{video_id}` | Distribution (deprecated adapter) |
+| 42 | GET | `/distribution/publish-attempts/{attempt_id}` | Distribution |
+| 43 | GET | `/distribution/status/{platform}/{post_id}` | Distribution (deprecated durable readback) |
+| 44 | GET | `/telemetry/metrics` | Telemetry |
+| 45 | GET | `/telemetry/errors` | Telemetry |
+| 46 | POST | `/api/upload` | File Upload & Media |
+| 47 | POST | `/fast/submit` | Canonical Async Submission & Recovery |
+| 48 | POST | `/scenario/{scenario}/submit` | Canonical Async Submission & Recovery |
+| 49 | GET | `/submissions/idempotency` | Canonical Async Submission & Recovery |
+| 50 | POST | `/acceptance-records` | Artifact Acceptance Records |
+| 51 | GET | `/acceptance-records/{acceptance_id}` | Artifact Acceptance Records |
+| 52 | POST | `/acceptance-records/{acceptance_id}/revoke` | Artifact Acceptance Records |
 
-**Total: 44 endpoints**
+**Documented here: 52 endpoints**

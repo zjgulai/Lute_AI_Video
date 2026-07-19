@@ -1,6 +1,29 @@
 """Test fixtures shared across all test modules."""
 
 import os
+import sys
+
+# Capture the opt-in disposable PG18 lane exactly once, before any test-side
+# src.config import can load dotenv. If configuration arrived first, fail closed.
+_W1_23_SNAPSHOT_MODULE_NAMES = ("tests.conftest", "conftest")
+_W1_23_SNAPSHOT_OWNER = next(
+    (
+        module
+        for module_name in _W1_23_SNAPSHOT_MODULE_NAMES
+        if (module := sys.modules.get(module_name)) is not None and hasattr(module, "W1_23_PG18_DSN_AT_PYTEST_START")
+    ),
+    None,
+)
+if _W1_23_SNAPSHOT_OWNER is None:
+    W1_23_PG18_DSN_AT_PYTEST_START = None if "src.config" in sys.modules else os.environ.get("W1_23_PG18_DSN")
+else:
+    W1_23_PG18_DSN_AT_PYTEST_START = getattr(
+        _W1_23_SNAPSHOT_OWNER,
+        "W1_23_PG18_DSN_AT_PYTEST_START",
+    )
+_W1_23_CURRENT_CONFTEST = sys.modules[__name__]
+for _W1_23_CONFTEST_ALIAS in _W1_23_SNAPSHOT_MODULE_NAMES:
+    sys.modules.setdefault(_W1_23_CONFTEST_ALIAS, _W1_23_CURRENT_CONFTEST)
 
 # 测试环境固定 API_KEY,避免每次 import src.routers._deps 时随机生成
 # 导致请求 header 与 verify_api_key 比对失败。设在文件最顶部以保证
@@ -9,6 +32,14 @@ os.environ.setdefault("API_KEY", "test-api-key-for-pytest")
 os.environ["ENVIRONMENT"] = "test"
 os.environ["ALLOW_MOCK_MODE"] = "1"
 os.environ["RUN_TOKEN_SMOKE"] = "0"
+os.environ["DATABASE_URL"] = ""
+# Keep hermetic tests on the exact approved SiliconFlow contract even when a
+# developer .env contains historical regional/custom values.
+os.environ["SILICONFLOW_API_BASE"] = "https://api.siliconflow.com/v1"
+os.environ["COSYVOICE_MODEL"] = "FunAudioLLM/CosyVoice2-0.5B"
+# Explicit hermetic server-side cap for route tests that exercise Task 4
+# account initialization. Production still has no implicit fallback.
+os.environ["PROVIDER_JOB_BUDGET_USD"] = "5.00"
 
 PROVIDER_KEY_ENV_NAMES = (
     "DEEPSEEK_API_KEY",
@@ -81,6 +112,7 @@ def auth_headers() -> dict[str, str]:
 @pytest.fixture
 def auditor():
     from src.agents.auditor import AuditorAgent
+
     return AuditorAgent()
 
 
@@ -90,6 +122,8 @@ def _isolate_provider_test_context(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "test")
     monkeypatch.setenv("ALLOW_MOCK_MODE", "1")
     monkeypatch.setenv("RUN_TOKEN_SMOKE", "0")
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("PROVIDER_JOB_BUDGET_USD", "5.00")
     for provider_key in PROVIDER_KEY_ENV_NAMES:
         monkeypatch.setenv(provider_key, "")
 
@@ -132,6 +166,21 @@ def _reset_asyncpg_pool():
     _db_mod._pool = None
 
 
+@pytest.fixture(autouse=True)
+def _reset_api_rate_limit_store():
+    """Keep the in-memory fallback limiter isolated between HTTP tests."""
+
+    def clear_if_loaded() -> None:
+        api_module = sys.modules.get("src.api")
+        rate_store = getattr(api_module, "_rate_store", None)
+        if rate_store is not None:
+            rate_store.clear()
+
+    clear_if_loaded()
+    yield
+    clear_if_loaded()
+
+
 @pytest.fixture
 def isolated_state_dir(tmp_path, monkeypatch):
     """每个 test 给 PipelineStateManager 一个独立 tmp 目录,避免污染 output/。"""
@@ -141,6 +190,32 @@ def isolated_state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(PipelineStateManager, "__init__", lambda self, use_pg=False: None)
     monkeypatch.setattr(PipelineStateManager, "use_pg", False, raising=False)
     yield tmp_path
+
+
+@pytest.fixture
+def isolated_provider_cost_db(tmp_path, monkeypatch):
+    """Disposable SQLite authority ledger for execution-context integration tests."""
+    import sqlite3
+
+    from src.storage import db as db_module
+
+    connection = sqlite3.connect(
+        str(tmp_path / "provider-execution-fixture.db"),
+        check_same_thread=False,
+    )
+    connection.row_factory = sqlite3.Row
+
+    async def no_pool():
+        return None
+
+    monkeypatch.setattr(db_module, "_pool", None)
+    monkeypatch.setattr(db_module, "_pg_available", False)
+    monkeypatch.setattr(db_module, "_sqlite_conn", connection)
+    monkeypatch.setattr(db_module, "get_pool", no_pool)
+    monkeypatch.setattr(db_module, "is_pg_available", lambda: False)
+    db_module._create_sqlite_tables()
+    yield connection
+    connection.close()
 
 
 @pytest.fixture
@@ -294,37 +369,62 @@ def sample_videos(tmp_path_factory):
     # Black screen video (3s, 720x1280)
     black = out / "black.mp4"
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=720x1280:d=3",
-         "-pix_fmt", "yuv420p", "-an", str(black)],
-        capture_output=True, check=True,
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=720x1280:d=3", "-pix_fmt", "yuv420p", "-an", str(black)],
+        capture_output=True,
+        check=True,
     )
     videos["black"] = black
 
     # Truly static video (3s, all frames identical pure-red)
     static = out / "static.mp4"
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=red:s=720x1280:d=3",
-         "-pix_fmt", "yuv420p", "-an", str(static)],
-        capture_output=True, check=True,
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=red:s=720x1280:d=3", "-pix_fmt", "yuv420p", "-an", str(static)],
+        capture_output=True,
+        check=True,
     )
     videos["static"] = static
 
     # Normal motion video (3s, 30fps)
     normal = out / "normal.mp4"
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=duration=3:size=720x1280:rate=30",
-         "-pix_fmt", "yuv420p", "-an", str(normal)],
-        capture_output=True, check=True,
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=3:size=720x1280:rate=30",
+            "-pix_fmt",
+            "yuv420p",
+            "-an",
+            str(normal),
+        ],
+        capture_output=True,
+        check=True,
     )
     videos["normal"] = normal
 
     # Video with audio track (for av_sync test)
     with_audio = out / "with_audio.mp4"
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=duration=3:size=720x1280:rate=30",
-         "-f", "lavfi", "-i", "sine=frequency=1000:duration=3",
-         "-pix_fmt", "yuv420p", "-shortest", str(with_audio)],
-        capture_output=True, check=True,
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=3:size=720x1280:rate=30",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=1000:duration=3",
+            "-pix_fmt",
+            "yuv420p",
+            "-shortest",
+            str(with_audio),
+        ],
+        capture_output=True,
+        check=True,
     )
     videos["with_audio"] = with_audio
 

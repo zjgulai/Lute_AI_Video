@@ -6,6 +6,7 @@ import pytest
 
 from src.pipeline import step_runner
 from src.skills.keyframe_images import KeyframeImagesSkill
+from tests.generation_policy_test_utils import attach_test_provider_execution_authority
 
 
 def _storyboard(score: float | None) -> dict[str, Any]:
@@ -26,6 +27,7 @@ class _StubGptImageSkill:
 
     async def execute(self, params: dict[str, Any]) -> Any:
         from src.skills.base import SkillResult
+
         return SkillResult(success=True, data={"image_path": f"/tmp/{params['image_id']}.png"})
 
     async def safe_execute(self, params: dict[str, Any]) -> Any:
@@ -44,6 +46,7 @@ def _patch_gpt_image(monkeypatch: pytest.MonkeyPatch):
         skill = self._skills.get(name) if hasattr(self, "_skills") else None
         if skill is None:
             from src.skills.base import SkillResult
+
             return SkillResult(success=False, error=f"unknown skill: {name}")
         return await skill.safe_execute(params)
 
@@ -123,9 +126,18 @@ def test_scenario_step_map_routes_storyboard_to_storyboards():
 
 
 @pytest.mark.asyncio
-async def test_handle_regenerate_signal_appends_chain_and_requeues_upstream(tmp_path, monkeypatch):
+async def test_handle_regenerate_signal_appends_chain_and_requeues_upstream(
+    tmp_path,
+    monkeypatch,
+    isolated_provider_cost_db,
+):
+    del isolated_provider_cost_db
     monkeypatch.setenv("STATE_FILE_DIR", str(tmp_path))
 
+    from src.pipeline.generation_policy import (
+        EffectiveGenerationPolicy,
+        resolve_generation_execution_profile,
+    )
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_runner import StepRunner
 
@@ -136,16 +148,37 @@ async def test_handle_regenerate_signal_appends_chain_and_requeues_upstream(tmp_
 
     monkeypatch.setattr(state_mgr, "save", _save_noop, raising=True)
     runner = StepRunner(state_mgr)
+    effective_policy = EffectiveGenerationPolicy(
+        tenant_id="tenant-test",
+        scenario="s1",
+        enable_media_synthesis=False,
+        artifact_disposition="pending_review",
+        provider_max_retries=0,
+    )
     state = {
         "label": "test_d11_chain",
+        "tenant_id": "tenant-test",
         "scenario": "s1",
         "trace_id": "trace-d11",
+        "config": {
+            "enable_media_synthesis": False,
+            "artifact_disposition": "pending_review",
+            "provider_max_retries": 0,
+            "effective_generation_policy": effective_policy.model_dump(mode="json"),
+        },
         "steps": {
             "storyboards": {"status": "done", "completed_at": "2026-05-16T10:00:00"},
             "keyframe_images": {"status": "pending"},
         },
         "current_step": "keyframe_images",
     }
+    execution_profile = resolve_generation_execution_profile(
+        state,
+        require_persisted_profile=False,
+    )
+    state["config"]["effective_generation_execution_profile"] = execution_profile.model_dump()
+    state["config"]["provider_job_caps"] = dict(execution_profile.provider_job_caps)
+    await attach_test_provider_execution_authority(state)
 
     async def _save_noop2(label: str, st: dict[str, Any]) -> None:
         pass

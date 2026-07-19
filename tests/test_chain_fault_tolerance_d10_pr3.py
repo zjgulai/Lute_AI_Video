@@ -8,6 +8,10 @@ import pytest
 from src.pipeline import step_runner
 from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
 from src.skills.base import SkillResult
+from tests.generation_policy_test_utils import (
+    attach_execution_policy,
+    attach_test_provider_execution_authority,
+)
 
 
 def test_validate_footage_assets_returns_two_lists():
@@ -17,55 +21,67 @@ def test_validate_footage_assets_returns_two_lists():
 
 
 def test_validate_footage_assets_keeps_filename():
-    valid, invalid = S4LiveShootPipeline._validate_footage_assets([
-        {"filename": "kitchen.mp4", "file_size": 1024},
-    ])
+    valid, invalid = S4LiveShootPipeline._validate_footage_assets(
+        [
+            {"filename": "kitchen.mp4", "file_size": 1024},
+        ]
+    )
     assert len(valid) == 1
     assert len(invalid) == 0
     assert valid[0]["filename"] == "kitchen.mp4"
 
 
 def test_validate_footage_assets_keeps_url_or_path_or_asset_id():
-    valid, _ = S4LiveShootPipeline._validate_footage_assets([
-        {"path": "/tmp/a.mp4", "file_size": 100},
-        {"url": "https://x/b.mp4", "file_size": 200},
-        {"asset_id": "asset-c", "file_size": 300},
-    ])
+    valid, _ = S4LiveShootPipeline._validate_footage_assets(
+        [
+            {"path": "/tmp/a.mp4", "file_size": 100},
+            {"url": "https://x/b.mp4", "file_size": 200},
+            {"asset_id": "asset-c", "file_size": 300},
+        ]
+    )
     assert len(valid) == 3
 
 
 def test_validate_footage_assets_drops_corrupted():
-    valid, invalid = S4LiveShootPipeline._validate_footage_assets([
-        {"filename": "good.mp4"},
-        {"filename": "bad.mp4", "is_corrupted": True},
-    ])
+    valid, invalid = S4LiveShootPipeline._validate_footage_assets(
+        [
+            {"filename": "good.mp4"},
+            {"filename": "bad.mp4", "is_corrupted": True},
+        ]
+    )
     assert len(valid) == 1
     assert len(invalid) == 1
     assert invalid[0]["reason"] == "is_corrupted"
 
 
 def test_validate_footage_assets_drops_zero_size():
-    valid, invalid = S4LiveShootPipeline._validate_footage_assets([
-        {"filename": "zero.mp4", "file_size": 0},
-    ])
+    valid, invalid = S4LiveShootPipeline._validate_footage_assets(
+        [
+            {"filename": "zero.mp4", "file_size": 0},
+        ]
+    )
     assert len(valid) == 0
     assert invalid[0]["reason"] == "zero_size"
 
 
 def test_validate_footage_assets_drops_no_reference():
-    valid, invalid = S4LiveShootPipeline._validate_footage_assets([
-        {"file_size": 100},
-        {"description": "no path or filename"},
-    ])
+    valid, invalid = S4LiveShootPipeline._validate_footage_assets(
+        [
+            {"file_size": 100},
+            {"description": "no path or filename"},
+        ]
+    )
     assert len(valid) == 0
     assert all(i["reason"] == "no_reference" for i in invalid)
 
 
 def test_validate_footage_assets_drops_non_dict():
-    valid, invalid = S4LiveShootPipeline._validate_footage_assets([
-        "not_a_dict",  # type: ignore[list-item]
-        42,  # type: ignore[list-item]
-    ])
+    valid, invalid = S4LiveShootPipeline._validate_footage_assets(
+        [
+            "not_a_dict",  # type: ignore[list-item]
+            42,  # type: ignore[list-item]
+        ]
+    )
     assert valid == []
     assert len(invalid) == 2
     assert all(i["reason"] == "not_a_dict" for i in invalid)
@@ -77,16 +93,20 @@ def test_extract_stock_footage_urls_default_empty():
 
 
 def test_extract_stock_footage_urls_returns_strings():
-    out = S4LiveShootPipeline._extract_stock_footage_urls({
-        "stock_footage_urls": ["https://stock/a.mp4", "https://stock/b.mp4"],
-    })
+    out = S4LiveShootPipeline._extract_stock_footage_urls(
+        {
+            "stock_footage_urls": ["https://stock/a.mp4", "https://stock/b.mp4"],
+        }
+    )
     assert out == ["https://stock/a.mp4", "https://stock/b.mp4"]
 
 
 def test_extract_stock_footage_urls_filters_non_strings():
-    out = S4LiveShootPipeline._extract_stock_footage_urls({
-        "stock_footage_urls": ["https://stock/a.mp4", "", None, 42, "https://stock/b.mp4"],
-    })
+    out = S4LiveShootPipeline._extract_stock_footage_urls(
+        {
+            "stock_footage_urls": ["https://stock/a.mp4", "", None, 42, "https://stock/b.mp4"],
+        }
+    )
     assert out == ["https://stock/a.mp4", "https://stock/b.mp4"]
 
 
@@ -99,10 +119,12 @@ def test_extract_stock_footage_urls_handles_non_dict():
 async def test_s4_scripts_uses_stock_fallback_when_all_footage_invalid():
     pipeline = S4LiveShootPipeline()
     reg = AsyncMock()
-    reg.execute = AsyncMock(return_value=SkillResult(
-        success=True,
-        data={"scripts": [{"id": "SCR-1", "segments": [{"visual_description": "x"}]}]},
-    ))
+    reg.execute = AsyncMock(
+        return_value=SkillResult(
+            success=True,
+            data={"scripts": [{"id": "SCR-1", "segments": [{"visual_description": "x"}]}]},
+        )
+    )
 
     config = {
         "footage_assets": [
@@ -128,10 +150,12 @@ async def test_s4_scripts_uses_stock_fallback_when_all_footage_invalid():
 async def test_s4_scripts_emits_no_stock_fallback_sentinel_when_no_stock():
     pipeline = S4LiveShootPipeline()
     reg = AsyncMock()
-    reg.execute = AsyncMock(return_value=SkillResult(
-        success=True,
-        data={"scripts": [{"id": "SCR-1", "segments": []}]},
-    ))
+    reg.execute = AsyncMock(
+        return_value=SkillResult(
+            success=True,
+            data={"scripts": [{"id": "SCR-1", "segments": []}]},
+        )
+    )
 
     config = {
         "footage_assets": [{"filename": "bad.mp4", "is_corrupted": True}],
@@ -151,10 +175,12 @@ async def test_s4_scripts_emits_no_stock_fallback_sentinel_when_no_stock():
 async def test_s4_scripts_filters_invalid_keeps_valid_no_sentinel():
     pipeline = S4LiveShootPipeline()
     reg = AsyncMock()
-    reg.execute = AsyncMock(return_value=SkillResult(
-        success=True,
-        data={"scripts": [{"id": "SCR-1", "segments": []}]},
-    ))
+    reg.execute = AsyncMock(
+        return_value=SkillResult(
+            success=True,
+            data={"scripts": [{"id": "SCR-1", "segments": []}]},
+        )
+    )
 
     config = {
         "footage_assets": [
@@ -177,10 +203,12 @@ async def test_s4_scripts_filters_invalid_keeps_valid_no_sentinel():
 async def test_s4_scripts_no_filtering_when_all_valid():
     pipeline = S4LiveShootPipeline()
     reg = AsyncMock()
-    reg.execute = AsyncMock(return_value=SkillResult(
-        success=True,
-        data={"scripts": [{"id": "SCR-1", "segments": []}]},
-    ))
+    reg.execute = AsyncMock(
+        return_value=SkillResult(
+            success=True,
+            data={"scripts": [{"id": "SCR-1", "segments": []}]},
+        )
+    )
 
     raw = [
         {"filename": "a.mp4", "file_size": 100},
@@ -203,10 +231,12 @@ async def test_s4_scripts_no_filtering_when_all_valid():
 async def test_s4_scripts_empty_footage_no_sentinel():
     pipeline = S4LiveShootPipeline()
     reg = AsyncMock()
-    reg.execute = AsyncMock(return_value=SkillResult(
-        success=True,
-        data={"scripts": [{"id": "SCR-1"}]},
-    ))
+    reg.execute = AsyncMock(
+        return_value=SkillResult(
+            success=True,
+            data={"scripts": [{"id": "SCR-1"}]},
+        )
+    )
 
     config = {
         "footage_assets": [],
@@ -236,7 +266,12 @@ def test_step_runner_detect_signal_returns_none_for_normal_list():
 
 
 @pytest.mark.asyncio
-async def test_step_runner_appends_soft_degraded_for_s4_list_sentinel(monkeypatch, tmp_path):
+async def test_step_runner_appends_soft_degraded_for_s4_list_sentinel(
+    monkeypatch,
+    tmp_path,
+    isolated_provider_cost_db,
+):
+    del isolated_provider_cost_db
     monkeypatch.setenv("STATE_FILE_DIR", str(tmp_path))
 
     from src.pipeline.state_manager import PipelineStateManager
@@ -263,11 +298,17 @@ async def test_step_runner_appends_soft_degraded_for_s4_list_sentinel(monkeypatc
         "config": {},
         "mode": "auto",
     }
+    attach_execution_policy(state, scenario="s4", media=False)
+    await attach_test_provider_execution_authority(state)
 
-    monkeypatch.setattr(step_runner, "_get_scenario_config", lambda scenario: {
-        "step_order": ["scripts", "video_prompts"],
-        "pipeline_class": "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
-    })
+    monkeypatch.setattr(
+        step_runner,
+        "_get_scenario_config",
+        lambda scenario: {
+            "step_order": ["scripts", "video_prompts"],
+            "pipeline_class": "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
+        },
+    )
 
     async def _fake_run_step(self, step_name: str, st: dict[str, Any]) -> Any:
         return [

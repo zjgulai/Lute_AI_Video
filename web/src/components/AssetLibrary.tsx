@@ -1,16 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getMediaUrl, apiFetch } from "./api";
+import { apiFetch } from "./api";
 import { useI18n } from "@/i18n/I18nProvider";
+import RuntimeMediaAudio from "./RuntimeMediaAudio";
 import RuntimeMediaImage from "./RuntimeMediaImage";
+import RuntimeMediaLink from "./RuntimeMediaLink";
+import RuntimeMediaVideo from "./RuntimeMediaVideo";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface Asset {
   filename: string;
   path: string;
-  mediaUrl: string;
-  thumbnailUrl: string;
+  mediaPath: string;
+  thumbnailPath: string;
   size: number;
   type: "video" | "image" | "audio";
   created: string;
@@ -50,8 +53,8 @@ export default function AssetLibrary({ onClose }: Props) {
           return {
             filename: f.filename as string,
             path,
-            mediaUrl: getMediaUrl(path),
-            thumbnailUrl: thumbnailPath ? getMediaUrl(thumbnailPath) : "",
+            mediaPath: path,
+            thumbnailPath,
             size: f.size_bytes as number,
             type,
             created: f.produced_at
@@ -86,10 +89,6 @@ export default function AssetLibrary({ onClose }: Props) {
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  };
-
-  const openNewTab = (asset: Asset) => {
-    if (asset.mediaUrl) window.open(asset.mediaUrl, "_blank", "noopener,noreferrer");
   };
 
   const closePreview = () => setPreview(null);
@@ -216,9 +215,9 @@ export default function AssetLibrary({ onClose }: Props) {
                 >
                   <div className="aspect-video bg-[var(--bg-panel)] rounded-lg flex items-center justify-center mb-2 overflow-hidden img-zoom relative">
                     {asset.type === "image" ? (
-                      asset.mediaUrl ? (
+                      asset.mediaPath ? (
                         <RuntimeMediaImage
-                          src={asset.mediaUrl}
+                          src={asset.mediaPath}
                           alt={asset.filename}
                           className="w-full h-full object-cover pointer-events-none select-none"
                           draggable={false}
@@ -231,10 +230,10 @@ export default function AssetLibrary({ onClose }: Props) {
                         </div>
                       )
                     ) : asset.type === "video" ? (
-                      asset.thumbnailUrl ? (
+                      asset.thumbnailPath ? (
                         <>
                           <RuntimeMediaImage
-                            src={asset.thumbnailUrl}
+                            src={asset.thumbnailPath}
                             alt={asset.filename}
                             className="w-full h-full object-cover pointer-events-none select-none"
                             draggable={false}
@@ -306,13 +305,14 @@ export default function AssetLibrary({ onClose }: Props) {
                 {preview.filename}
               </p>
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
+                <RuntimeMediaLink
+                  href={preview.mediaPath}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-[11px] px-2 py-1 rounded-lg bg-white/10 text-white hover:bg-white/20"
-                  onClick={() => openNewTab(preview)}
                 >
                   {t("asset.openInNewTab")}
-                </button>
+                </RuntimeMediaLink>
                 <button
                   ref={previewCloseRef}
                   type="button"
@@ -329,8 +329,8 @@ export default function AssetLibrary({ onClose }: Props) {
             </div>
             <div className="flex-1 min-h-0 flex items-center justify-center bg-black p-2">
               {preview.type === "video" && (
-                <video
-                  src={preview.mediaUrl}
+                <RuntimeMediaVideo
+                  src={preview.mediaPath}
                   className="max-h-[75vh] max-w-full object-contain"
                   controls
                   autoPlay
@@ -339,7 +339,7 @@ export default function AssetLibrary({ onClose }: Props) {
               )}
               {preview.type === "image" && (
                 <RuntimeMediaImage
-                  src={preview.mediaUrl}
+                  src={preview.mediaPath}
                   alt={preview.filename}
                   className="max-h-[75vh] max-w-full object-contain"
                 />
@@ -347,7 +347,7 @@ export default function AssetLibrary({ onClose }: Props) {
               {preview.type === "audio" && (
                 <div className="w-full max-w-md p-6 flex flex-col items-center gap-4">
                   <span className="text-4xl">{getIcon("audio")}</span>
-                  <audio src={preview.mediaUrl} controls preload="metadata" className="w-full" />
+                  <RuntimeMediaAudio src={preview.mediaPath} controls preload="metadata" className="w-full" />
                 </div>
               )}
             </div>

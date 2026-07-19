@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -11,6 +12,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from src.models.commercial_contracts import MediaJobRecord, MediaJobSpec
+from src.models.provider_cost import ProviderCostContractError
 from src.pipeline.production_job_ledger import ProductionJobLedger
 from src.pipeline.token_smoke_preflight import (
     DEFAULT_AUTH_MODEL,
@@ -20,6 +22,15 @@ from src.pipeline.token_smoke_preflight import (
     TokenSmokePreflightReport,
     build_token_smoke_preflight_report,
 )
+from src.services.provider_cost import (
+    ValidatedProviderBudgetAuthorization,
+    validate_provider_budget_authorization_json,
+)
+from src.services.provider_execution import (
+    ProviderExecutionContext,
+    bind_provider_execution_context,
+    reset_provider_execution_context,
+)
 
 EXECUTE_ENV = "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE"
 
@@ -27,6 +38,14 @@ HarnessMode = Literal["disabled", "dry_run", "execute"]
 HarnessStatus = Literal["disabled", "dry_run_ready", "blocked", "submitted"]
 ProviderSubmitter = Callable[[MediaJobSpec], Mapping[str, Any]]
 ProviderSubmitterFactory = Callable[[], ProviderSubmitter | None]
+ProviderExecutionContextInitializer = Callable[
+    [list[MediaJobSpec], ValidatedProviderBudgetAuthorization],
+    ProviderExecutionContext,
+]
+
+
+class _ExactJsonNumber(str):
+    """Distinguish original JSON number tokens from quoted strings."""
 
 
 class AuthorizedLiveArtifactRef(BaseModel):
@@ -79,6 +98,7 @@ def run_authorized_live_harness(
     approval_record_path: str | Path | None = None,
     submitter: ProviderSubmitter | None = None,
     submitter_factory: ProviderSubmitterFactory | None = None,
+    execution_context_initializer: ProviderExecutionContextInitializer | None = None,
 ) -> AuthorizedLiveHarnessReport:
     """Run the C9 harness gate without implicit provider calls."""
     env = os.environ if env is None else env
@@ -134,9 +154,73 @@ def run_authorized_live_harness(
             preflight=preflight,
         )
 
+    if submitter is None and submitter_factory is None:
+        return AuthorizedLiveHarnessReport(
+            harness_id=harness_id,
+            mode=mode,
+            status="blocked",
+            job_spec=job_spec,
+            job_specs=job_specs,
+            job_records=job_records,
+            artifact_manifest=artifact_manifest,
+            blocked_reasons=["provider submitter is not configured"],
+            preflight=preflight,
+        )
+
+    try:
+        authorization = _load_strict_budget_authorization(preflight)
+    except (OSError, ProviderCostContractError, TypeError, ValueError):
+        return AuthorizedLiveHarnessReport(
+            harness_id=harness_id,
+            mode=mode,
+            status="blocked",
+            job_spec=job_spec,
+            job_specs=job_specs,
+            job_records=job_records,
+            artifact_manifest=artifact_manifest,
+            blocked_reasons=["provider budget authorization is invalid"],
+            preflight=preflight,
+        )
+
+    if execution_context_initializer is None:
+        return AuthorizedLiveHarnessReport(
+            harness_id=harness_id,
+            mode=mode,
+            status="blocked",
+            job_spec=job_spec,
+            job_specs=job_specs,
+            job_records=job_records,
+            artifact_manifest=artifact_manifest,
+            blocked_reasons=["provider execution context initializer is not configured"],
+            preflight=preflight,
+        )
+    try:
+        execution_context = execution_context_initializer(job_specs, authorization)
+        if not isinstance(execution_context, ProviderExecutionContext):
+            raise ProviderCostContractError(
+                "provider_execution_context_missing",
+                "authorized-live execution context is invalid",
+            )
+    except ProviderCostContractError as exc:
+        return AuthorizedLiveHarnessReport(
+            harness_id=harness_id,
+            mode=mode,
+            status="blocked",
+            job_spec=job_spec,
+            job_specs=job_specs,
+            job_records=job_records,
+            artifact_manifest=artifact_manifest,
+            blocked_reasons=[f"provider execution context initialization failed: {exc.code}"],
+            preflight=preflight,
+        )
+
     configured_submitter = submitter
     if configured_submitter is None and submitter_factory is not None:
-        configured_submitter = submitter_factory()
+        token = bind_provider_execution_context(execution_context)
+        try:
+            configured_submitter = submitter_factory()
+        finally:
+            reset_provider_execution_context(token)
 
     if configured_submitter is None:
         return AuthorizedLiveHarnessReport(
@@ -151,7 +235,11 @@ def run_authorized_live_harness(
             preflight=preflight,
         )
 
-    submitted_records, response_refs, artifact_outputs = _submit_job_specs(job_specs, configured_submitter)
+    submitted_records, response_refs, artifact_outputs = _submit_job_specs(
+        job_specs,
+        configured_submitter,
+        execution_context,
+    )
     _attach_provider_outputs_to_manifest(artifact_manifest, artifact_outputs)
     return AuthorizedLiveHarnessReport(
         harness_id=harness_id,
@@ -165,6 +253,80 @@ def run_authorized_live_harness(
         provider_response_refs=response_refs,
         preflight=preflight,
     )
+
+
+def _load_strict_budget_authorization(
+    preflight: TokenSmokePreflightReport,
+) -> ValidatedProviderBudgetAuthorization:
+    """Adapt one passing legacy C21 record into exact Task 3 authority."""
+
+    record_ref = preflight.approval_record_ref
+    if not isinstance(record_ref, str) or not record_ref:
+        raise ValueError("authorized-live approval reference is missing")
+    raw = Path(record_ref).read_text()
+    if len(raw) > 64_000:
+        raise ValueError("authorized-live approval record is too large")
+    payload = json.loads(
+        raw,
+        parse_int=_ExactJsonNumber,
+        parse_float=_ExactJsonNumber,
+        parse_constant=_reject_json_constant,
+        object_pairs_hook=_unique_json_object,
+    )
+    if not isinstance(payload, dict):
+        raise ValueError("authorized-live approval record must be an object")
+    stop_loss = payload.get("budget_stop_loss")
+    if not isinstance(stop_loss, dict):
+        raise ValueError("authorized-live approval stop-loss is missing")
+
+    display = payload.get("budget_limit")
+    if not isinstance(display, str) or not display.startswith("$") or display.count("$") != 1:
+        raise ValueError("authorized-live approval budget display is invalid")
+    normalized_display = display[1:]
+    budget_token = _required_exact_number(payload, "budget_limit_usd")
+    max_total_token = _required_exact_number(stop_loss, "max_total_cost_usd")
+    per_job_token = _required_exact_number(stop_loss, "per_job_cost_ceiling_usd")
+    canonical = (
+        "{"
+        f'"approval_id":{json.dumps(payload.get("approval_id"))},'
+        f'"provider":{json.dumps(payload.get("provider"))},'
+        f'"model":{json.dumps(payload.get("model"))},'
+        f'"approved_at":{json.dumps(payload.get("approved_at"))},'
+        f'"expires_at":{json.dumps(payload.get("expires_at"))},'
+        f'"budget_limit":{json.dumps(normalized_display)},'
+        f'"budget_limit_usd":{budget_token},'
+        '"budget_stop_loss":{'
+        f'"max_total_cost_usd":{max_total_token},'
+        f'"per_job_cost_ceiling_usd":{per_job_token}'
+        "}"
+        "}"
+    )
+    return validate_provider_budget_authorization_json(
+        canonical,
+        expected_provider=preflight.approved_provider or "",
+        expected_model=preflight.approved_model or "",
+        now=datetime.now(UTC),
+    )
+
+
+def _required_exact_number(payload: Mapping[str, Any], field_name: str) -> _ExactJsonNumber:
+    value = payload.get(field_name)
+    if not isinstance(value, _ExactJsonNumber):
+        raise ValueError(f"authorized-live approval {field_name} must be a JSON number")
+    return value
+
+
+def _reject_json_constant(token: str) -> _ExactJsonNumber:
+    raise ValueError(f"authorized-live approval constant is forbidden: {token}")
+
+
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("authorized-live approval contains duplicate keys")
+        result[key] = value
+    return result
 
 
 def _build_sample_job_spec(preflight: TokenSmokePreflightReport | None = None) -> MediaJobSpec:
@@ -253,6 +415,7 @@ def _prepare_job_records(job_specs: list[MediaJobSpec]) -> list[MediaJobRecord]:
 def _submit_job_specs(
     job_specs: list[MediaJobSpec],
     submitter: ProviderSubmitter,
+    execution_context: ProviderExecutionContext,
 ) -> tuple[list[MediaJobRecord], dict[str, str], dict[str, dict[str, str]]]:
     ledger = ProductionJobLedger()
     submitted_records: list[MediaJobRecord] = []
@@ -260,7 +423,11 @@ def _submit_job_specs(
     artifact_outputs: dict[str, dict[str, str]] = {}
     for spec in job_specs:
         ledger.prepare(spec)
-        response = submitter(spec)
+        token = bind_provider_execution_context(execution_context)
+        try:
+            response = submitter(spec)
+        finally:
+            reset_provider_execution_context(token)
         provider_job_id = str(response.get("provider_job_id") or response.get("job_id") or spec.job_id)
         media_url = _required_provider_string(response, "media_url", spec.job_id)
         response_refs[spec.job_id] = provider_job_id

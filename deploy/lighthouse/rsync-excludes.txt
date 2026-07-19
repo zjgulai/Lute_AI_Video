@@ -8,6 +8,7 @@
 node_modules
 .claude
 .kiro
+.superpowers
 .hermes
 .codegraph
 worktrees

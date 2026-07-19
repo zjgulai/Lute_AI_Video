@@ -231,12 +231,46 @@ def _skipped_external_provider_health(name: str) -> dict[str, Any]:
     }
 
 
+def _external_provider_readiness(name: str) -> dict[str, Any]:
+    """Report configuration readiness without opening a provider connection."""
+
+    from src.config import (
+        DEEPSEEK_API_BASE,
+        DEEPSEEK_API_KEY,
+        POYO_API_BASE_URL,
+        POYO_API_KEY,
+        SILICONFLOW_API_BASE,
+        SILICONFLOW_API_KEY,
+    )
+
+    expected = {
+        "deepseek": (DEEPSEEK_API_KEY, DEEPSEEK_API_BASE, "https://api.deepseek.com"),
+        "poyo": (POYO_API_KEY, POYO_API_BASE_URL, "https://api.poyo.ai"),
+        "siliconflow": (
+            SILICONFLOW_API_KEY,
+            SILICONFLOW_API_BASE,
+            "https://api.siliconflow.com/v1",
+        ),
+    }
+    key, endpoint, canonical_endpoint = expected.get(name, ("", "", ""))
+    config_ready = bool(key.strip()) and endpoint.rstrip("/") == canonical_endpoint.rstrip("/")
+    return {
+        "status": "disabled",
+        "latency_ms": 0,
+        "reason": "external_provider_health_checks_disabled",
+        "service": name,
+        "config_ready": config_ready,
+    }
+
+
 async def _check_single_service(name: str) -> dict[str, Any]:
-    """Check a single external service. Returns {status, latency_ms}."""
+    """Check one local service; provider entries are config-only readiness."""
     import time as _time
 
     start = _time.time()
     try:
+        if name in _EXTERNAL_PROVIDER_HEALTH_SERVICES:
+            return _external_provider_readiness(name)
         if name == "postgres":
             from src.storage.db import get_pool, is_pg_available
             if not is_pg_available():
@@ -245,32 +279,6 @@ async def _check_single_service(name: str) -> dict[str, Any]:
             assert pool is not None
             async with pool.acquire() as conn:
                 await conn.fetchrow("SELECT 1")
-        elif name == "deepseek":
-            from src.tools.llm_client import LLMClient
-            client = LLMClient(timeout=10.0)
-            await client.ainvoke("", "hi")
-        elif name == "poyo":
-            import httpx
-
-            from src.config import POYO_API_BASE_URL, POYO_API_KEY
-            async with httpx.AsyncClient(timeout=10.0) as http_client:
-                resp = await http_client.get(
-                    f"{POYO_API_BASE_URL}/v1/models",
-                    headers={"Authorization": f"Bearer {POYO_API_KEY}"},
-                )
-                if resp.status_code >= 500:
-                    raise Exception(f"POYO returned {resp.status_code}")
-        elif name == "siliconflow":
-            import httpx
-
-            from src.config import SILICONFLOW_API_BASE, SILICONFLOW_API_KEY
-            async with httpx.AsyncClient(timeout=10.0) as http_client:
-                resp = await http_client.get(
-                    f"{SILICONFLOW_API_BASE}/models",
-                    headers={"Authorization": f"Bearer {SILICONFLOW_API_KEY}"},
-                )
-                if resp.status_code >= 500:
-                    raise Exception(f"SiliconFlow returned {resp.status_code}")
         elif name == "remotion":
             from src.tools.remotion_renderer import RemotionRenderer
             result = RemotionRenderer().validate_environment()
@@ -302,7 +310,7 @@ async def run_health_checks(*, include_external_providers: bool | None = None) -
     services["postgres"] = await _check_single_service("postgres")
     if external_enabled:
         for svc in _EXTERNAL_PROVIDER_HEALTH_SERVICES:
-            services[svc] = await _check_single_service(svc)
+            services[svc] = _external_provider_readiness(svc)
     else:
         for svc in _EXTERNAL_PROVIDER_HEALTH_SERVICES:
             services[svc] = _skipped_external_provider_health(svc)

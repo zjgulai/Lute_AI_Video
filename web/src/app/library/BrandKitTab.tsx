@@ -4,9 +4,10 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UploadSimple, Image as ImageIcon, WarningCircle, ArrowSquareOut } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { apiFetch, getMediaUrl, isDemoMode } from "@/components/api";
+import { apiFetch, isDemoMode } from "@/components/api";
 import EmptyState from "@/components/EmptyState";
 import RuntimeMediaImage from "@/components/RuntimeMediaImage";
+import RuntimeMediaLink from "@/components/RuntimeMediaLink";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
 
 interface BrandPreset {
@@ -275,7 +276,7 @@ export default function BrandKitTab() {
               >
                 <div className="aspect-square bg-[var(--bg-panel)] overflow-hidden">
                   <RuntimeMediaImage
-                    src={getMediaUrl(g.coverPath)}
+                    src={g.coverPath}
                     alt={g.prettyName}
                     className="w-full h-full object-cover"
                   />
@@ -364,16 +365,16 @@ export default function BrandKitTab() {
             </header>
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {expandedGroup.files.map((f) => (
-                <a
+                <RuntimeMediaLink
                   key={f.id}
-                  href={getMediaUrl(f.path)}
+                  href={f.path}
                   target="_blank"
                   rel="noreferrer"
                   className="apple-card overflow-hidden hover:shadow-md transition-all"
                 >
                   <div className="aspect-square bg-[var(--bg-panel)]">
                     <RuntimeMediaImage
-                      src={getMediaUrl(f.path)}
+                      src={f.path}
                       alt={f.filename}
                       className="w-full h-full object-cover"
                     />
@@ -382,7 +383,7 @@ export default function BrandKitTab() {
                     <span className="text-[10px] text-[var(--text-muted)]">{f.filename}</span>
                     <span className="text-[10px] text-[var(--text-muted)]">{formatBytes(f.size_bytes)}</span>
                   </div>
-                </a>
+                </RuntimeMediaLink>
               ))}
             </div>
           </div>

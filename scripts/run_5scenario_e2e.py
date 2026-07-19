@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ REQUIRED_RUN_ENV = (
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "tmp" / "outputs"
 POLL_INTERVAL_SECONDS = 30.0
 MAX_POLL_MINUTES = 45
+SUBMISSION_READBACK_DELAYS_SECONDS = (0.0, 1.0, 2.0, 5.0)
 
 # ── Payload fixtures (minimal valid, derived from tests + D2 report) ──
 
@@ -255,20 +257,104 @@ def submit_scenario(
     scenario: str,
     payload: dict[str, Any],
     api_key: str,
+    idempotency_key: str,
     verify_ssl: bool,
     timeout_seconds: float = 30.0,
 ) -> str:
     url = f"{api_base}/scenario/{scenario}/submit"
-    headers = {"Content-Type": "application/json", "X-API-Key": api_key}
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-Key": api_key,
+        "Idempotency-Key": idempotency_key,
+    }
     log(f"Submitting {scenario}...")
-    resp = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds, verify=verify_ssl)
-    resp.raise_for_status()
-    data = resp.json()
-    label = data.get("label", "")
-    if not label:
-        raise ValueError(f"submit response missing label for {scenario}: {data}")
-    log(f"  label={label}")
-    return str(label)
+    ambiguous_error: Exception | None = None
+    try:
+        resp = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=timeout_seconds,
+            verify=verify_ssl,
+        )
+        if resp.status_code >= 500:
+            ambiguous_error = requests.HTTPError(response=resp)
+        else:
+            resp.raise_for_status()
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                ambiguous_error = exc
+            else:
+                label = data.get("label", "")
+                if label:
+                    log(f"  label={label}")
+                    return str(label)
+                ambiguous_error = ValueError(f"submit response missing label for {scenario}")
+    except requests.HTTPError:
+        raise
+    except requests.RequestException as exc:
+        ambiguous_error = exc
+
+    if ambiguous_error is None:
+        raise RuntimeError("submit response was neither accepted nor rejected")
+
+    log("  submit response was ambiguous; checking durable submission state")
+    label = readback_scenario_submission(
+        api_base=api_base,
+        scenario=scenario,
+        api_key=api_key,
+        idempotency_key=idempotency_key,
+        verify_ssl=verify_ssl,
+        timeout_seconds=timeout_seconds,
+    )
+    if label:
+        log(f"  recovered label={label}")
+        return label
+    raise ambiguous_error
+
+
+def readback_scenario_submission(
+    *,
+    api_base: str,
+    scenario: str,
+    api_key: str,
+    idempotency_key: str,
+    verify_ssl: bool,
+    timeout_seconds: float = 30.0,
+) -> str | None:
+    """Recover an ambiguous submit with bounded GETs and no second POST."""
+
+    url = f"{api_base}/submissions/idempotency"
+    headers = {
+        "X-API-Key": api_key,
+        "Idempotency-Key": idempotency_key,
+    }
+    for delay in SUBMISSION_READBACK_DELAYS_SECONDS:
+        if delay:
+            time.sleep(delay)
+        try:
+            response = requests.get(
+                url,
+                headers=headers,
+                timeout=timeout_seconds,
+                verify=verify_ssl,
+            )
+        except requests.RequestException:
+            continue
+        if response.status_code == 404 or response.status_code >= 500:
+            continue
+        response.raise_for_status()
+        data = response.json()
+        if data.get("resource_type") != "scenario" or data.get("scenario") != scenario:
+            raise ValueError("submission readback returned an unexpected resource")
+        submit_response = data.get("submit_response") or {}
+        label = data.get("resource_id") or (
+            submit_response.get("label") if isinstance(submit_response, dict) else None
+        )
+        if label:
+            return str(label)
+    return None
 
 
 def poll_status(
@@ -313,7 +399,7 @@ def wait_for_completion(
         current = status_data.get("current_step", "")
         log(f"  [{i+1}] status={status} progress={progress:.0%} current={current}")
 
-        if status in ("completed", "error", "failed"):
+        if status in ("completed", "error", "failed", "recovery_required"):
             return status_data
 
         errors = status_data.get("errors", [])
@@ -424,11 +510,13 @@ def run_scenario(
     log(f"SCENARIO {name} ({scenario})")
     log(f"{'='*50}")
     start = time.time()
+    idempotency_key = f"scenario-smoke-{scenario}-{uuid.uuid4()}"
     label = submit_scenario(
         api_base=api_base,
         scenario=scenario,
         payload=payload,
         api_key=api_key,
+        idempotency_key=idempotency_key,
         verify_ssl=verify_ssl,
     )
     result = wait_for_completion(
