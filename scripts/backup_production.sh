@@ -234,6 +234,10 @@ before_signature = stats.get("schema_signature")
 after_signature = json.loads(
     schema_signature_after_path.read_text(encoding="utf-8")
 ).get("schema_signature")
+before_revision = stats.get("alembic_revision")
+after_revision = json.loads(
+    schema_signature_after_path.read_text(encoding="utf-8")
+).get("alembic_revision")
 if not isinstance(before_signature, str) or not re.fullmatch(
     r"[0-9a-f]{64}", before_signature
 ):
@@ -244,6 +248,12 @@ if not isinstance(after_signature, str) or not re.fullmatch(
     raise SystemExit("post-export schema signature is invalid")
 if before_signature != after_signature:
     raise SystemExit("schema changed during backup")
+if (
+    not isinstance(before_revision, str)
+    or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", before_revision)
+    or before_revision != after_revision
+):
+    raise SystemExit("Alembic revision changed during backup")
 PY
 
 PG_SIZE_BYTES=$(wc -c <"${PARTIAL_DIR}/pg_dump.jsonl" | tr -d '[:space:]')
@@ -323,6 +333,10 @@ PG_SCHEMA_SIGNATURE=$(
   python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["schema_signature"])' \
     "${PARTIAL_DIR}/pg_dump_stats.json"
 )
+ALEMBIC_REVISION=$(
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["alembic_revision"])' \
+    "${PARTIAL_DIR}/pg_dump_stats.json"
+)
 MEDIA_MANIFEST_SHA256=$(sha256_file "${PARTIAL_DIR}/media_manifest.json")
 BACKEND_IMAGE=$("$DOCKER_BIN" inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
 cat >"${PARTIAL_DIR}/manifest.txt" <<EOF
@@ -344,6 +358,7 @@ pg_schema_size_bytes: ${PG_SCHEMA_SIZE_BYTES}
 pg_schema_sha256: ${PG_SCHEMA_SHA256}
 pg_schema_list_sha256: ${PG_SCHEMA_LIST_SHA256}
 pg_schema_signature: ${PG_SCHEMA_SIGNATURE}
+alembic_revision: ${ALEMBIC_REVISION}
 pg_schema_signature_after_sha256: ${PG_SCHEMA_SIGNATURE_AFTER_SHA256}
 media_count: ${MEDIA_COUNT}
 media_size_bytes: ${MEDIA_SIZE_BYTES}

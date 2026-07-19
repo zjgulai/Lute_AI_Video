@@ -43,6 +43,7 @@ source: human+ai
 | `scripts/build_pending_review_asset_packet.py` | active_reusable |
 | `scripts/build_pending_review_decision_record.py` | active_reusable |
 | `scripts/build_provider_account_readiness_record.py` | active_reusable |
+| `scripts/build_w1_31_billing_approval.py` | active_reusable |
 | `scripts/commercial_token_smoke_preflight.py` | active_reusable |
 | `scripts/l4c_token_smoke_plan.py` | active_reusable |
 | `scripts/create_admin.py` | active_reusable |
@@ -57,6 +58,7 @@ source: human+ai
 | `scripts/portfolio_index.py` | active_reusable |
 | `scripts/portfolio_thumbnail_coverage.py` | active_reusable |
 | `scripts/prepare_demo_cache.py` | active_reusable |
+| `scripts/read_w1_31_billing_ledger.py` | active_reusable |
 | `scripts/refresh_brand_assets.sh` | active_reusable |
 | `scripts/render_video.py` | active_reusable |
 | `scripts/run_pipeline.py` | active_reusable |
@@ -80,6 +82,7 @@ source: human+ai
 | `scripts/release_finalize_v0.4.0.sh` | manual_deploy_only |
 | `scripts/release_smoke_v0.4.0.sh` | manual_deploy_only |
 | `scripts/run_alembic_upgrade.sh` | manual_deploy_only |
+| `scripts/deploy_alembic_gate.sh` | manual_deploy_only |
 | `scripts/sync_lighthouse_to_output.sh` | manual_deploy_only |
 | `scripts/sync_output_to_lighthouse.sh` | manual_deploy_only |
 
@@ -95,6 +98,7 @@ source: human+ai
 | `scripts/diagnose_poyo.py` | provider_probe |
 | `scripts/discover_poyo_models.py` | provider_probe |
 | `scripts/probe_sora2pro.py` | provider_probe |
+| `scripts/w1_31_provider_billing_reconciliation.py` | provider_probe |
 
 ### legacy_one_off_scripts
 

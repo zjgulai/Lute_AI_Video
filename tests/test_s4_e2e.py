@@ -23,6 +23,7 @@ import src.skills.thumbnail_prompt as thumbnail_prompt_skill
 from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
+from tests.generation_policy_test_utils import bound_generation_policy
 
 
 @pytest.fixture(autouse=True)
@@ -53,8 +54,8 @@ PRODUCT_INFO_FIXTURE = {
 
 
 @pytest.mark.asyncio
-async def test_s4_full_pipeline_mock():
-    """S4 full run() returns expected output shape in mock mode."""
+async def test_s4_direct_run_without_effective_policy_fails_closed():
+    """A direct run cannot silently grant itself provider authority."""
     pipeline = S4LiveShootPipeline()
     result = await pipeline.run(
         footage_assets=FOOTAGE_FIXTURE,
@@ -68,8 +69,9 @@ async def test_s4_full_pipeline_mock():
     assert isinstance(result.get("scripts"), list)
     assert isinstance(result.get("video_prompts"), list)
     assert isinstance(result.get("thumbnail_sets"), list)
-    assert "all stub clips" in " ".join(result.get("errors", []))
-    assert result.get("steps_completed") == 7
+    assert result.get("_execution_completed") is False
+    assert result.get("final_video_path") == ""
+    assert "Script generation failed" in result.get("errors", [])
 
 
 def test_s4_import_does_not_register_media_prompt_or_generation_skills():
@@ -135,6 +137,11 @@ async def test_s4_no_media_stops_before_provider_backed_steps(monkeypatch: pytes
                 "errors": [],
                 "media_synthesis_errors": [],
                 "pipeline_degraded": False,
+                "lifecycle_status": (
+                    "completed_bounded"
+                    if step_name == "continuity_storyboard_grid"
+                    else None
+                ),
             }
 
     monkeypatch.setattr(s4_live_shoot_pipeline, "StepRunner", FakeStepRunner)
@@ -167,8 +174,10 @@ async def test_s4_no_media_stops_before_provider_backed_steps(monkeypatch: pytes
 @pytest.mark.asyncio
 async def test_scenario_s4_route_passes_bounded_media_controls(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db: Any,
 ) -> None:
-    from src.routers import scenario
+    del isolated_provider_cost_db
+    from src.routers import _deps, scenario
     from src.routers._state import S4LiveShootRequest
 
     captured: dict[str, object] = {}
@@ -176,11 +185,25 @@ async def test_scenario_s4_route_passes_bounded_media_controls(
     class FakeS4Pipeline:
         async def run(self, **kwargs):
             captured.update(kwargs)
-            return {"success": True, "scenario": "s4_live_shoot"}
+            return {
+                "success": True,
+                "_execution_completed": True,
+                "scenario": "s4_live_shoot",
+            }
 
     monkeypatch.setattr(
         "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
         FakeS4Pipeline,
+    )
+    monkeypatch.setattr(
+        scenario,
+        "get_auth_context",
+        lambda: _deps.AuthContext(
+            tenant_id="tenant-a",
+            permissions=frozenset({"provider:submit"}),
+            key_type=_deps.ApiKeyType.TENANT,
+            key_id="s4-bounded-route-test",
+        ),
     )
 
     response = await scenario.run_s4_live_shoot(
@@ -193,11 +216,17 @@ async def test_scenario_s4_route_passes_bounded_media_controls(
             output_label="s4_bounded_contract",
             enable_media_synthesis=True,
             artifact_disposition="pending_review",
-            provider_max_retries=3,
+            provider_max_retries=0,
         )
     )
 
-    assert response["success"] is True
+    assert response["status"] == "completed_bounded"
+    assert response["completion_kind"] == "bounded_media"
+    assert response["request_succeeded"] is True
+    assert response["success"] is False
+    assert response["full_media_success"] is False
+    assert response["publish_allowed"] is False
+    assert response["delivery_accepted"] is False
     assert captured["output_label"] == "s4_bounded_contract"
     assert captured["artifact_disposition"] == "pending_review"
     assert captured["provider_max_retries"] == 0
@@ -274,6 +303,11 @@ async def test_s4_bounded_media_stops_after_seedance_and_clears_publishable_outp
                 "errors": [],
                 "media_synthesis_errors": [],
                 "pipeline_degraded": False,
+                "lifecycle_status": (
+                    "completed_bounded"
+                    if step_name == "seedance_clips"
+                    else None
+                ),
             }
 
     monkeypatch.setattr(s4_live_shoot_pipeline, "StepRunner", FakeStepRunner)
@@ -287,7 +321,7 @@ async def test_s4_bounded_media_stops_after_seedance_and_clears_publishable_outp
         output_label="s4_bounded_fixture",
         enable_media_synthesis=True,
         artifact_disposition="pending_review",
-        provider_max_retries=5,
+        provider_max_retries=0,
     )
 
     assert executed_steps == s4_live_shoot_pipeline.S4_BOUNDED_MEDIA_STEP_ORDER
@@ -317,8 +351,9 @@ async def test_s4_bounded_media_stops_after_seedance_and_clears_publishable_outp
 
 @pytest.mark.asyncio
 @pytest.mark.hermetic_slow
-async def test_s4_step_runner_init_and_resume():
+async def test_s4_step_runner_init_and_resume(isolated_provider_cost_db: Any):
     """S4 via StepRunner: init_state + resume produces valid state."""
+    del isolated_provider_cost_db
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_runner import StepRunner
 
@@ -331,20 +366,27 @@ async def test_s4_step_runner_init_and_resume():
         "brand_name": "TestBrand",
     }
 
-    runner = StepRunner(PipelineStateManager())
-    label = await runner.init_state(config=config, mode="auto", scenario="s4")
-    assert label.startswith("s4_")
+    async with bound_generation_policy("s4", media=False, tenant_id="momcozy-marketing"):
+        runner = StepRunner(PipelineStateManager())
+        label = await runner.init_state(config=config, mode="auto", scenario="s4")
+        assert label.startswith("s4_")
 
-    final_state = await runner.resume(label)
+        final_state = await runner.resume(label)
     assert final_state.get("scenario") == "s4"
     steps = final_state.get("steps", {})
     assert "scripts" in steps
     assert "video_prompts" in steps
     assert "thumbnails" in steps
 
-    # All steps should be done (mock mode is fast)
-    for step_name in ["scripts", "video_prompts", "thumbnails"]:
+    assert final_state.get("lifecycle_status") == "completed_bounded"
+    assert final_state.get("completion_kind") == "no_media"
+    assert final_state.get("request_succeeded") is True
+
+    # Only the no-media profile's pre-media steps may run.
+    for step_name in ["scripts", "continuity_storyboard_grid"]:
         assert steps[step_name]["status"] == "done", f"Step {step_name} not done"
+    assert steps["video_prompts"]["status"] == "pending"
+    assert steps["thumbnails"]["status"] == "pending"
 
 
 @pytest.mark.asyncio
@@ -693,32 +735,55 @@ def test_s4_fallback_clip_groups_include_topic_and_stock_context():
 @pytest.mark.asyncio
 async def test_scenario_s4_route_passes_enable_media_synthesis_false(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db: Any,
 ) -> None:
-    from src.routers import scenario
+    del isolated_provider_cost_db
+    from src.routers import _deps, scenario
+    from src.routers._state import S4LiveShootRequest
 
     captured: dict[str, Any] = {}
 
     class FakeS4Pipeline:
         async def run(self, **kwargs):
             captured.update(kwargs)
-            return {"success": True, "scenario": "s4_live_shoot"}
+            return {
+                "success": True,
+                "_execution_completed": True,
+                "scenario": "s4_live_shoot",
+            }
 
     monkeypatch.setattr(
         "src.pipeline.s4_live_shoot_pipeline.S4LiveShootPipeline",
         FakeS4Pipeline,
     )
-
-    response = await scenario.run_s4_live_shoot(
-        {
-            "footage_assets": [],
-            "product_info": {"name": "Momcozy UV Sterilizer", "brand_name": "Momcozy"},
-            "topic": "kitchen hygiene",
-            "target_platforms": ["tiktok"],
-            "video_duration": 15,
-            "enable_media_synthesis": False,
-        }
+    monkeypatch.setattr(
+        scenario,
+        "get_auth_context",
+        lambda: _deps.AuthContext(
+            tenant_id="tenant-a",
+            permissions=frozenset({"provider:submit"}),
+            key_type=_deps.ApiKeyType.TENANT,
+            key_id="s4-route-test",
+        ),
     )
 
-    assert response["success"] is True
+    response = await scenario.run_s4_live_shoot(
+        S4LiveShootRequest(
+            footage_assets=[],
+            product_info={"name": "Momcozy UV Sterilizer", "brand_name": "Momcozy"},
+            topic="kitchen hygiene",
+            target_platforms=["tiktok"],
+            video_duration=15,
+            enable_media_synthesis=False,
+        )
+    )
+
+    assert response["status"] == "completed_bounded"
+    assert response["completion_kind"] == "no_media"
+    assert response["request_succeeded"] is True
+    assert response["success"] is False
+    assert response["full_media_success"] is False
+    assert response["publish_allowed"] is False
+    assert response["delivery_accepted"] is False
     assert captured["enable_media_synthesis"] is False
     assert captured["video_duration"] == 15

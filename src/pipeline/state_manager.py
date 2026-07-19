@@ -51,7 +51,24 @@ _STATE_REPOSITORY_FIELDS = (
     "trace_id",
     "structured_errors",
     "tenant_id",
+    "regenerate_chain",
+    "soft_degraded_reasons",
 )
+
+_EXECUTION_LIFECYCLE_FIELDS = (
+    "status",
+    "lifecycle_status",
+    "completion_kind",
+    "request_succeeded",
+    "success",
+    "full_media_success",
+    "pipeline_complete",
+    "publish_allowed",
+    "delivery_accepted",
+    "execution_profile_id",
+    "provider_job_caps",
+)
+_CORE_EXECUTION_LIFECYCLE_FIELDS = frozenset(_EXECUTION_LIFECYCLE_FIELDS[:9])
 
 
 def _validate_label(label: str) -> None:
@@ -95,11 +112,162 @@ def _check_schema_version(state: dict[str, Any] | None, label: str) -> None:
 
 def _repository_payload(state: dict[str, Any]) -> dict[str, Any]:
     """Build the canonical PG projection for persisted scenario state."""
-    payload = {field: state.get(field) for field in _STATE_REPOSITORY_FIELDS}
+    state_for_pg = dict(state)
+    lifecycle_status = state.get("lifecycle_status")
+    has_terminal_lifecycle = (
+        lifecycle_status in {"completed_bounded", "policy_blocked"}
+        and state.get("status") == lifecycle_status
+    )
+    if has_terminal_lifecycle:
+        lifecycle = {
+            field: state[field]
+            for field in _EXECUTION_LIFECYCLE_FIELDS
+            if field in state
+        }
+        config = dict(state.get("config") or {})
+        config["execution_lifecycle"] = lifecycle
+        state_for_pg["config"] = config
+    payload = {field: state_for_pg.get(field) for field in _STATE_REPOSITORY_FIELDS}
     trace_id = payload.get("trace_id")
     if trace_id is not None and not isinstance(trace_id, str):
         payload["trace_id"] = str(trace_id)
     return payload
+
+
+def _strict_json_equal(left: Any, right: Any) -> bool:
+    """JSON comparison that does not treat booleans as integers."""
+
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return set(left) == set(right) and all(
+            _strict_json_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _strict_json_equal(a, b) for a, b in zip(left, right, strict=True)
+        )
+    return left == right
+
+
+def _hydrate_execution_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
+    """Restore bounded lifecycle fields stored inside the PG config JSON."""
+
+    config = state.get("config")
+    lifecycle = config.get("execution_lifecycle") if isinstance(config, dict) else None
+    top_level_fields = {
+        field for field in _EXECUTION_LIFECYCLE_FIELDS if field in state
+    }
+    if not isinstance(lifecycle, dict):
+        if top_level_fields & _CORE_EXECUTION_LIFECYCLE_FIELDS:
+            raise ValueError(
+                "top-level execution lifecycle requires a complete config envelope"
+            )
+        return state
+    required = {
+        "status",
+        "lifecycle_status",
+        "completion_kind",
+        "request_succeeded",
+        "success",
+        "full_media_success",
+        "pipeline_complete",
+        "publish_allowed",
+        "delivery_accepted",
+    }
+    allowed = required | {"execution_profile_id", "provider_job_caps"}
+    if set(lifecycle) - allowed or not required.issubset(lifecycle):
+        raise ValueError("execution lifecycle envelope has invalid fields")
+    status = lifecycle["status"]
+    if status not in {"completed_bounded", "policy_blocked"}:
+        raise ValueError("execution lifecycle status is invalid")
+    if lifecycle["lifecycle_status"] != status:
+        raise ValueError("execution lifecycle status mismatch")
+    for key in (
+        "request_succeeded",
+        "success",
+        "full_media_success",
+        "pipeline_complete",
+        "publish_allowed",
+        "delivery_accepted",
+    ):
+        if type(lifecycle[key]) is not bool:
+            raise ValueError(f"execution lifecycle {key} must be boolean")
+    expected_request_succeeded = status == "completed_bounded"
+    if lifecycle["request_succeeded"] is not expected_request_succeeded:
+        raise ValueError("execution lifecycle request_succeeded invariant failed")
+    if any(
+        lifecycle[key]
+        for key in (
+            "success",
+            "full_media_success",
+            "pipeline_complete",
+            "publish_allowed",
+            "delivery_accepted",
+        )
+    ):
+        raise ValueError("execution lifecycle cannot escalate bounded success")
+    if status == "completed_bounded" and lifecycle["completion_kind"] not in {
+        "no_media",
+        "bounded_media",
+    }:
+        raise ValueError("execution lifecycle completion_kind is invalid")
+    if status == "policy_blocked" and lifecycle["completion_kind"] != "legacy_no_policy_blocked":
+        raise ValueError("execution lifecycle blocked completion_kind is invalid")
+
+    if status == "completed_bounded":
+        profile_id = lifecycle.get("execution_profile_id")
+        provider_caps = lifecycle.get("provider_job_caps")
+        persisted_profile = config.get("effective_generation_execution_profile")
+        persisted_caps = config.get("provider_job_caps")
+        if (
+            type(profile_id) is not str
+            or type(provider_caps) is not dict
+            or type(persisted_profile) is not dict
+            or persisted_profile.get("profile_id") != profile_id
+            or not _strict_json_equal(
+                persisted_profile.get("provider_job_caps"),
+                provider_caps,
+            )
+            or not _strict_json_equal(persisted_caps, provider_caps)
+        ):
+            raise ValueError("execution lifecycle profile/caps mismatch")
+
+    for field in top_level_fields:
+        if field not in lifecycle or not _strict_json_equal(state[field], lifecycle[field]):
+            raise ValueError(f"execution lifecycle top-level mismatch: {field}")
+    hydrated = dict(state)
+    for field in _EXECUTION_LIFECYCLE_FIELDS:
+        if field in lifecycle:
+            hydrated[field] = lifecycle[field]
+    return hydrated
+
+
+async def persist_background_failure(
+    state_manager: Any,
+    *,
+    label: str,
+    reason: str,
+    error: Exception,
+) -> None:
+    """Persist a fail-closed terminal state for escaped background failures."""
+
+    state = await state_manager.load(label)
+    if state is None:
+        return
+    for field in _CORE_EXECUTION_LIFECYCLE_FIELDS:
+        state.pop(field, None)
+    config = state.get("config")
+    if isinstance(config, dict):
+        config.pop("execution_lifecycle", None)
+    state["pipeline_degraded"] = True
+    state["degraded_reason"] = reason
+    state["current_step"] = None
+    errors = state.setdefault("errors", [])
+    message = f"{reason}: {type(error).__name__}"
+    if message not in errors:
+        errors.append(message)
+    await state_manager.save(label, state)
 
 
 class PipelineStateManager:
@@ -241,14 +409,18 @@ class PipelineStateManager:
                         "trace_id": _safe_get("trace_id"),
                         "structured_errors": _safe_get("structured_errors", []) or [],
                         "tenant_id": _safe_get("tenant_id"),
+                        "regenerate_chain": _safe_get("regenerate_chain", []) or [],
+                        "soft_degraded_reasons": _safe_get("soft_degraded_reasons", []) or [],
                     }
             except Exception as e:
                 logger.warning("PG load failed, using filesystem: %s", str(e)[:100])
+                fs_state = _hydrate_execution_lifecycle(fs_state) if fs_state is not None else None
                 _check_schema_version(fs_state, label)
                 return fs_state
 
         # PG has data — return it (primary source of truth)
         if pg_state is not None:
+            pg_state = _hydrate_execution_lifecycle(pg_state)
             _check_schema_version(pg_state, label)
             return pg_state
 
@@ -263,10 +435,12 @@ class PipelineStateManager:
                 await repo.create({"label": label, **_repository_payload(fs_state)})
             except Exception as e:
                 logger.warning("PG backfill failed for %s: %s", label, str(e)[:100])
+            fs_state = _hydrate_execution_lifecycle(fs_state)
             _check_schema_version(fs_state, label)
             return fs_state
 
         # Neither has data
+        fs_state = _hydrate_execution_lifecycle(fs_state) if fs_state is not None else None
         _check_schema_version(fs_state, label)
         return fs_state
 

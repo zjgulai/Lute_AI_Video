@@ -1,0 +1,24 @@
+{
+  "template_only": true,
+  "schema_version": "w1-31-provider-billing-reconciliation.v1",
+  "scope": "w1-31-provider-billing-reconciliation",
+  "provider": "poyo",
+  "model": "gpt-image-2",
+  "sample": {
+    "workflow": "text-to-image",
+    "quality": "low",
+    "size": "1:1",
+    "effective_resolution": "1K",
+    "image_count": 1,
+    "prompt_profile_id": "neutral-calibration-cube-v1"
+  },
+  "budget_limit_usd": "0.01",
+  "expected_usd_nanos": 10000000,
+  "expected_provider_credit_micro_units": 2000000,
+  "max_provider_calls": 1,
+  "max_retries": 0,
+  "production_allowed": false,
+  "publish_allowed": false,
+  "delivery_allowed": false,
+  "operator_note": "Use scripts/build_w1_31_billing_approval.py; never put credentials in this file."
+}

@@ -2,8 +2,8 @@
 
 Phase 0 ships 3 code fixes pre-deployment:
 - #1: PG schema adds 5 runtime-state columns; state_manager save+load round-trip them
-- #2: BudgetExceededError moved inside try-catch so it propagates as degraded
-       state (was previously raising past handler -> HTTP 500 / stuck pending)
+- #2: the former process-local budget guard is retired; durable provider-cost
+       authority is the only runtime budget boundary
 - #3: BrandComplianceSkill reads per-term severity from medical_lexicon,
        so FLAGGED / COMPETITOR tiers produce severity='low' not 'high'
 
@@ -30,6 +30,7 @@ class TestStateRoundTripFields:
     @pytest.mark.asyncio
     async def test_fs_roundtrip_preserves_all_runtime_fields(self, tmp_path, monkeypatch):
         from src.pipeline import state_manager
+
         # OUTPUT_DIR is a class attribute on PipelineStateManager
         monkeypatch.setattr(state_manager.PipelineStateManager, "OUTPUT_DIR", tmp_path)
 
@@ -65,49 +66,21 @@ class TestStateRoundTripFields:
         SELECT validates them. Without this, SQL injection guard rejects
         the new columns."""
         from src.storage.repository import BaseRepository
+
         allowed = BaseRepository._ALLOWED_FIELDS["pipeline_states"]
-        for col in ("schema_version", "pipeline_degraded", "degraded_reason",
-                    "trace_id", "structured_errors"):
+        for col in ("schema_version", "pipeline_degraded", "degraded_reason", "trace_id", "structured_errors"):
             assert col in allowed, f"{col} missing from _ALLOWED_FIELDS"
 
 
-# Phase 0 #2: BudgetExceededError goes through degraded handler
+# Phase 0 #2: process-local budget authority is retired
 
 
-class TestBudgetExceededDegradesNotRaises:
-    """Regression: Expert mode budget overflow must produce degraded state,
-    not bubble out as raw exception. Pre-Phase-0 placement was outside try,
-    causing HTTP 500 / stuck pending state."""
+class TestRetiredProcessLocalBudget:
+    def test_step_runner_has_no_process_local_budget_import(self):
+        from pathlib import Path
 
-    @pytest.mark.asyncio
-    async def test_budget_exceeded_sets_pipeline_degraded(self, tmp_path, monkeypatch):
-        from src.pipeline import state_manager, step_runner
-        from src.tools import cost_tracker
-
-        monkeypatch.setattr(state_manager.PipelineStateManager, "OUTPUT_DIR", tmp_path)
-        cost_tracker._records.clear()
-
-        label = "phase0_budget_test"
-        cost_tracker.set_thread_id(label)
-        # Pre-load $6 cost > $5 cap
-        cost_tracker.track("poyo_video", units=20)
-
-        mgr = state_manager.PipelineStateManager()
-        runner = step_runner.StepRunner(mgr)
-        await runner.init_state(
-            config={"product_catalog": {"name": "Test"}, "target_platforms": ["tiktok"]},
-            mode="expert",
-            label=label,
-            scenario="s1",
-        )
-        final_state = await runner.run_step(label, "strategy")
-
-        # Pipeline degraded handler caught the BudgetExceededError
-        assert final_state.get("pipeline_degraded") is True
-        assert final_state.get("degraded_reason") == "strategy"
-        errors = final_state.get("errors", [])
-        assert any("budget" in str(e).lower() for e in errors)
-        cost_tracker._records.clear()
+        source = Path("src/pipeline/step_runner.py").read_text(encoding="utf-8")
+        assert "cost_tracker" not in source
 
 
 # Phase 0 #3: severity-aware lexicon
@@ -155,12 +128,14 @@ class TestSeverityAwareLexicon:
         """The Oracle-flagged false-positive case: 'natural lighting' in
         a benign S5 prompt-style script must NOT be BLOCKED."""
         skill = BrandComplianceSkill()
-        r = await skill.execute({
-            "scripts": [{"id": "s1", "segments": [{
-                "voiceover": "Soft natural lighting with organic cotton packaging."
-            }]}],
-            "brand_guidelines": {"brand_name": "Brand"},
-        })
+        r = await skill.execute(
+            {
+                "scripts": [
+                    {"id": "s1", "segments": [{"voiceover": "Soft natural lighting with organic cotton packaging."}]}
+                ],
+                "brand_guidelines": {"brand_name": "Brand"},
+            }
+        )
         assert r.success
         report = r.data["reports"][0]
         # Status is FLAGGED, not BLOCKED
@@ -173,12 +148,12 @@ class TestSeverityAwareLexicon:
     async def test_banned_word_still_blocks(self):
         """Regression: BANNED tier must still produce BLOCKED status."""
         skill = BrandComplianceSkill()
-        r = await skill.execute({
-            "scripts": [{"id": "s1", "segments": [{
-                "voiceover": "Our miracle bottle cures cancer in babies."
-            }]}],
-            "brand_guidelines": {"brand_name": "Brand"},
-        })
+        r = await skill.execute(
+            {
+                "scripts": [{"id": "s1", "segments": [{"voiceover": "Our miracle bottle cures cancer in babies."}]}],
+                "brand_guidelines": {"brand_name": "Brand"},
+            }
+        )
         assert r.data["reports"][0]["status"] == "BLOCKED"
 
     @pytest.mark.asyncio
@@ -186,19 +161,18 @@ class TestSeverityAwareLexicon:
         """Back-compat: caller-provided forbidden_content entries (not in
         lexicon) keep their pre-Phase-0 high-severity behavior."""
         skill = BrandComplianceSkill()
-        r = await skill.execute({
-            "scripts": [{"id": "s1", "segments": [{
-                "voiceover": "Contains brand-X-forbidden-phrase example."
-            }]}],
-            "brand_guidelines": {
-                "brand_name": "Brand",
-                "forbidden_content": ["brand-X-forbidden-phrase"],
-            },
-        })
+        r = await skill.execute(
+            {
+                "scripts": [{"id": "s1", "segments": [{"voiceover": "Contains brand-X-forbidden-phrase example."}]}],
+                "brand_guidelines": {
+                    "brand_name": "Brand",
+                    "forbidden_content": ["brand-X-forbidden-phrase"],
+                },
+            }
+        )
         # Custom rule -> still high severity -> BLOCKED
         report = r.data["reports"][0]
-        custom_flags = [f for f in report["flags"]
-                        if "brand-X" in f.get("message", "")]
+        custom_flags = [f for f in report["flags"] if "brand-X" in f.get("message", "")]
         assert custom_flags
         assert custom_flags[0]["severity"] == "high"
         assert report["status"] == "BLOCKED"

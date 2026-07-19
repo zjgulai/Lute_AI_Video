@@ -10,6 +10,7 @@ import importlib
 import json
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,6 +32,7 @@ from src.skills.base import SkillResult
 from src.skills.elevenlabs_tts import ElevenLabsTTSSkill
 from src.skills.gpt_image_generate import GPTImageGenerateSkill
 from src.skills.registry import SkillRegistry
+from tests.generation_policy_test_utils import bound_generation_policy
 
 _RUN_CACHE: dict[str, S3Result] = {}
 
@@ -38,11 +40,13 @@ _STANDARD_RUN_KWARGS = {
     "video_url": "https://tiktok.com/@user/video/standard",
     "product": {"name": "Test Product", "usps": ["quality"], "brand_name": "LactFit"},
     "influencer_name": "Test Influencer",
+    "enable_media_synthesis": False,
 }
 
 
 @pytest.fixture(autouse=True)
-def _reload_s3_skills():
+def _reload_s3_skills(isolated_provider_cost_db: Any):
+    del isolated_provider_cost_db
     original_global_skills = dict(SkillRegistry._global_skills)
     SkillRegistry.clear_global()
     for module in (
@@ -243,7 +247,12 @@ async def _run_cached(**kwargs) -> S3Result:
     key = json.dumps(kwargs, sort_keys=True, ensure_ascii=False)
     cached = _RUN_CACHE.get(key)
     if cached is None:
-        cached = await S3InfluencerRemixPipeline().run(**kwargs)
+        async with bound_generation_policy(
+            "s3",
+            media=False,
+            tenant_id="momcozy-marketing",
+        ):
+            cached = await S3InfluencerRemixPipeline().run(**kwargs)
         _RUN_CACHE[key] = cached
     return deepcopy(cached)
 
@@ -331,6 +340,11 @@ class TestS3Pipeline:
                     "errors": [],
                     "media_synthesis_errors": [],
                     "pipeline_degraded": False,
+                    "lifecycle_status": (
+                        "completed_bounded"
+                        if step_name == "continuity_storyboard_grid"
+                        else None
+                    ),
                 }
 
         monkeypatch.setattr(s3_remix_pipeline, "StepRunner", FakeStepRunner)
@@ -361,19 +375,20 @@ class TestS3Pipeline:
     @pytest.mark.asyncio
     @pytest.mark.hermetic_slow
     async def test_full_pipeline(self):
-        """Full S3 pipeline from video URL to thumbnail prompts.
-
-        This is the R8 milestone E2E test.
-        """
+        """S3 no-media profile completes the pre-media analysis chain."""
         result = await _run_cached(**_STANDARD_RUN_KWARGS)
 
-        assert isinstance(result, S3Result)
         assert result.success, f"Pipeline failed: {result.errors}"
+        assert result._execution_completed is True
         assert result.errors == []
         assert result.video_analysis is not None
         assert result.remix_script is not None
-        assert len(result.video_prompts) > 0
-        assert len(result.thumbnail_prompts) > 0
+        assert result.video_prompts == []
+        assert result.thumbnail_prompts == []
+        assert result.clip_paths == []
+        assert result.audio_paths == []
+        assert result.thumbnail_image_paths == []
+        assert result.final_video_path == ""
 
     @pytest.mark.asyncio
     @pytest.mark.hermetic_slow
@@ -404,27 +419,18 @@ class TestS3Pipeline:
     @pytest.mark.asyncio
     @pytest.mark.hermetic_slow
     async def test_video_prompts_per_segment(self):
-        """Should generate one video prompt per segment."""
+        """No-media profile must not enter provider-backed video prompts."""
         result = await _run_cached(**_STANDARD_RUN_KWARGS)
 
-        assert len(result.video_prompts) > 0
-        for p in result.video_prompts:
-            assert "segment_index" in p or "clip_index" in p
-            assert "segment_type" in p or "purpose" in p
-            assert isinstance(p.get("duration_seconds"), (int, float))
-            assert p.get("shot_type") or p.get("camera")
+        assert result.video_prompts == []
 
     @pytest.mark.asyncio
     @pytest.mark.hermetic_slow
     async def test_thumbnail_prompts(self):
-        """Should generate thumbnail variants."""
+        """No-media profile must not enter provider-backed thumbnail prompts."""
         result = await _run_cached(**_STANDARD_RUN_KWARGS)
 
-        assert len(result.thumbnail_prompts) > 0
-        for t in result.thumbnail_prompts:
-            assert "style" in t
-            assert "prompt" in t
-            assert "aspect_ratio" in t
+        assert result.thumbnail_prompts == []
 
     @pytest.mark.asyncio
     @pytest.mark.hermetic_slow
@@ -432,11 +438,17 @@ class TestS3Pipeline:
         """Should handle errors gracefully."""
         from src.pipeline.s3_remix_pipeline import S3InfluencerRemixPipeline
 
-        pipeline = S3InfluencerRemixPipeline()
-        result = await pipeline.run(
-            video_url="",
-            product={"name": "Product"},
-        )
+        async with bound_generation_policy(
+            "s3",
+            media=False,
+            tenant_id="momcozy-marketing",
+        ):
+            pipeline = S3InfluencerRemixPipeline()
+            result = await pipeline.run(
+                video_url="",
+                product={"name": "Product"},
+                enable_media_synthesis=False,
+            )
         # Should fail at validate_params on video-analysis-skill
         assert result.success is False
         assert len(result.errors) > 0
@@ -674,54 +686,17 @@ class TestS3Pipeline:
         assert result.success is False
         assert result.video_analysis is not None
         assert result.remix_script is not None
-        assert len(result.video_prompts) > 0
+        assert result.video_prompts == []
         assert any("video_analysis_failed" in err for err in result.errors)
 
 
 @pytest.mark.asyncio
 async def test_scenario_s3_route_passes_enable_media_synthesis_false(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
 ) -> None:
-    from src.routers import scenario
-    from src.tools import translate
-
-    captured: dict[str, object] = {}
-
-    async def fake_translate_catalog(product: dict) -> dict:
-        return product
-
-    class FakeS3Pipeline:
-        async def run(self, **kwargs):
-            captured.update(kwargs)
-            result = S3Result()
-            result.success = True
-            return result
-
-    monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
-    monkeypatch.setattr(
-        "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
-        FakeS3Pipeline,
-    )
-
-    response = await scenario.run_s3_influencer_remix(
-        {
-            "video_url": "https://tiktok.com/@momcozy/video/1000000000",
-            "product": {"name": "Momcozy UV Sterilizer"},
-            "influencer_name": "Test Influencer",
-            "video_duration": 15,
-            "enable_media_synthesis": False,
-        }
-    )
-
-    assert response["success"] is True
-    assert captured["enable_media_synthesis"] is False
-
-
-@pytest.mark.asyncio
-async def test_scenario_s3_route_passes_bounded_media_controls(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from src.routers import scenario
+    del isolated_provider_cost_db
+    from src.routers import _deps, scenario
     from src.routers._state import S3InfluencerRemixRequest
     from src.tools import translate
 
@@ -735,12 +710,82 @@ async def test_scenario_s3_route_passes_bounded_media_controls(
             captured.update(kwargs)
             result = S3Result()
             result.success = True
+            result._execution_completed = True
             return result
 
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr(
         "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
         FakeS3Pipeline,
+    )
+    monkeypatch.setattr(
+        scenario,
+        "get_auth_context",
+        lambda: _deps.AuthContext(
+            tenant_id="tenant-a",
+            permissions=frozenset({"provider:submit"}),
+            key_type=_deps.ApiKeyType.TENANT,
+            key_id="s3-route-test",
+        ),
+    )
+
+    response = await scenario.run_s3_influencer_remix(
+        S3InfluencerRemixRequest(
+            video_url="https://tiktok.com/@momcozy/video/1000000000",
+            product={"name": "Momcozy UV Sterilizer"},
+            influencer_name="Test Influencer",
+            video_duration=15,
+            enable_media_synthesis=False,
+        )
+    )
+
+    assert response["status"] == "completed_bounded"
+    assert response["completion_kind"] == "no_media"
+    assert response["request_succeeded"] is True
+    assert response["success"] is False
+    assert response["full_media_success"] is False
+    assert response["publish_allowed"] is False
+    assert response["delivery_accepted"] is False
+    assert captured["enable_media_synthesis"] is False
+
+
+@pytest.mark.asyncio
+async def test_scenario_s3_route_passes_bounded_media_controls(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db,
+) -> None:
+    del isolated_provider_cost_db
+    from src.routers import _deps, scenario
+    from src.routers._state import S3InfluencerRemixRequest
+    from src.tools import translate
+
+    captured: dict[str, object] = {}
+
+    async def fake_translate_catalog(product: dict) -> dict:
+        return product
+
+    class FakeS3Pipeline:
+        async def run(self, **kwargs):
+            captured.update(kwargs)
+            result = S3Result()
+            result.success = True
+            result._execution_completed = True
+            return result
+
+    monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
+    monkeypatch.setattr(
+        "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
+        FakeS3Pipeline,
+    )
+    monkeypatch.setattr(
+        scenario,
+        "get_auth_context",
+        lambda: _deps.AuthContext(
+            tenant_id="tenant-a",
+            permissions=frozenset({"provider:submit"}),
+            key_type=_deps.ApiKeyType.TENANT,
+            key_id="s3-bounded-route-test",
+        ),
     )
 
     response = await scenario.run_s3_influencer_remix(
@@ -752,11 +797,17 @@ async def test_scenario_s3_route_passes_bounded_media_controls(
             output_label="s3_bounded_contract",
             enable_media_synthesis=True,
             artifact_disposition="pending_review",
-            provider_max_retries=3,
+            provider_max_retries=0,
         )
     )
 
-    assert response["success"] is True
+    assert response["status"] == "completed_bounded"
+    assert response["completion_kind"] == "bounded_media"
+    assert response["request_succeeded"] is True
+    assert response["success"] is False
+    assert response["full_media_success"] is False
+    assert response["publish_allowed"] is False
+    assert response["delivery_accepted"] is False
     assert captured["output_label"] == "s3_bounded_contract"
     assert captured["artifact_disposition"] == "pending_review"
     assert captured["provider_max_retries"] == 0
@@ -841,6 +892,11 @@ async def test_s3_bounded_media_stops_after_seedance_and_clears_publishable_outp
                 "errors": [],
                 "media_synthesis_errors": [],
                 "pipeline_degraded": False,
+                "lifecycle_status": (
+                    "completed_bounded"
+                    if step_name == "seedance_clips"
+                    else None
+                ),
             }
 
     monkeypatch.setattr(s3_remix_pipeline, "StepRunner", FakeStepRunner)
@@ -853,7 +909,7 @@ async def test_s3_bounded_media_stops_after_seedance_and_clears_publishable_outp
         output_label="s3_bounded_fixture",
         enable_media_synthesis=True,
         artifact_disposition="pending_review",
-        provider_max_retries=5,
+        provider_max_retries=0,
     )
 
     assert executed_steps == s3_remix_pipeline.S3_BOUNDED_MEDIA_STEP_ORDER

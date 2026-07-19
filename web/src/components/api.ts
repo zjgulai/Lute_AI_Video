@@ -5,6 +5,7 @@ import { errorMessage } from "@/lib/errors";
 import type { ContinuityDiagnosticsPayload } from "@/lib/continuityDiagnostics";
 import type { ReviewState } from "@/components/types";
 import type { components } from "@/types/api.generated";
+import type { GenerationSafetyIntent } from "@/lib/scenarioPayload";
 import {
   PROVIDER_API_KEY_NAMES,
   REQUEST_PROVIDER_API_KEY_NAMES,
@@ -56,6 +57,238 @@ type PublishResult = Record<string, unknown> & {
   post_url?: string;
   error?: string;
 };
+
+type PublishPlatform = "tiktok" | "shopify";
+
+export type PublishReceipt = components["schemas"]["PublishReceiptV1"];
+export type PublishAttemptReadback =
+  components["schemas"]["PublishAttemptReadbackResponse"];
+export type DurableTikTokStatus =
+  components["schemas"]["DurableTikTokStatusResponse"];
+type TikTokPublishOptions = components["schemas"]["TikTokPublishOptions"];
+type ShopifyPublishOptions = components["schemas"]["ShopifyPublishOptions"];
+type PublishPlatformOptions = TikTokPublishOptions | ShopifyPublishOptions;
+
+type PublishMetadata = {
+  title?: string;
+  description?: string;
+  hook?: string;
+  product_name?: string;
+  hashtags?: string[];
+  tags?: string[];
+};
+
+type PublishRequestOptions = {
+  signal?: AbortSignal;
+  acceptanceId?: string;
+  platformOptions?: PublishPlatformOptions;
+};
+
+type PublishTextKey = "title" | "description" | "hook" | "product_name";
+
+const ACCEPTANCE_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const LEGACY_VIDEO_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const SHOPIFY_PRODUCT_GID_RE = /^gid:\/\/shopify\/Product\/[1-9][0-9]*$/;
+const TIKTOK_PRIVACY_LEVELS = new Set([
+  "PUBLIC_TO_EVERYONE",
+  "MUTUAL_FOLLOW_FRIENDS",
+  "FOLLOWER_OF_CREATOR",
+  "SELF_ONLY",
+]);
+const PUBLISH_METADATA_KEYS = new Set([
+  "title",
+  "description",
+  "hook",
+  "product_name",
+  "hashtags",
+  "tags",
+]);
+const PUBLISH_METADATA_TEXT_LIMITS: Record<PublishTextKey, number> = {
+  title: 300,
+  description: 5000,
+  hook: 1000,
+  product_name: 300,
+};
+const PUBLISH_METADATA_CONTROL_RE = /[\u0000-\u001f\u007f]/;
+const PUBLISH_METADATA_MAX_BYTES = 16 * 1024;
+
+function requireAcceptanceId(value: string | undefined): string {
+  if (!value || !ACCEPTANCE_ID_RE.test(value)) {
+    throw new Error("Publish acceptance is required");
+  }
+  return value;
+}
+
+function requirePublishPlatform(value: string): PublishPlatform {
+  if (value !== "tiktok" && value !== "shopify") {
+    throw new Error("Unsupported publish platform");
+  }
+  return value;
+}
+
+function requireLegacyVideoId(value: string): string {
+  if (typeof value !== "string" || !LEGACY_VIDEO_ID_RE.test(value)) {
+    throw new Error("Legacy publish video ID is invalid");
+  }
+  return value;
+}
+
+function requirePublishPlatformOptions(
+  platform: PublishPlatform,
+  value: unknown,
+): PublishPlatformOptions {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Publish platform options are required");
+  }
+  const record = value as Record<string, unknown>;
+  if (platform === "tiktok") {
+    const keys = [
+      "platform",
+      "privacy_level",
+      "disable_comment",
+      "disable_duet",
+      "disable_stitch",
+      "brand_content_toggle",
+      "brand_organic_toggle",
+    ];
+    if (
+      Object.keys(record).length !== keys.length
+      || keys.some((key) => !(key in record))
+      || record.platform !== "tiktok"
+      || typeof record.privacy_level !== "string"
+      || !TIKTOK_PRIVACY_LEVELS.has(record.privacy_level)
+      || typeof record.disable_comment !== "boolean"
+      || typeof record.disable_duet !== "boolean"
+      || typeof record.disable_stitch !== "boolean"
+      || typeof record.brand_content_toggle !== "boolean"
+      || typeof record.brand_organic_toggle !== "boolean"
+    ) {
+      throw new Error("TikTok publish options are invalid");
+    }
+    return {
+      platform: "tiktok",
+      privacy_level: record.privacy_level as TikTokPublishOptions["privacy_level"],
+      disable_comment: record.disable_comment,
+      disable_duet: record.disable_duet,
+      disable_stitch: record.disable_stitch,
+      brand_content_toggle: record.brand_content_toggle,
+      brand_organic_toggle: record.brand_organic_toggle,
+    };
+  }
+
+  if (
+    Object.keys(record).length !== 2
+    || !("platform" in record)
+    || !("product_id" in record)
+    || record.platform !== "shopify"
+    || typeof record.product_id !== "string"
+    || !SHOPIFY_PRODUCT_GID_RE.test(record.product_id)
+  ) {
+    throw new Error("Shopify publish options are invalid");
+  }
+  return {
+    platform: "shopify",
+    product_id: record.product_id,
+  };
+}
+
+function hasUnpairedSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      if (index + 1 >= value.length) return true;
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return true;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function unicodeCodePointLength(value: string): number {
+  return Array.from(value).length;
+}
+
+function requirePublishMetadata(value: unknown): PublishMetadata {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Publish metadata is invalid");
+  }
+
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some((key) => !PUBLISH_METADATA_KEYS.has(key))) {
+    throw new Error("Publish metadata is invalid");
+  }
+
+  const normalized: PublishMetadata = {};
+  for (const key of Object.keys(PUBLISH_METADATA_TEXT_LIMITS) as PublishTextKey[]) {
+    const field = record[key];
+    if (field === undefined) continue;
+    if (
+      typeof field !== "string"
+      || PUBLISH_METADATA_CONTROL_RE.test(field)
+      || hasUnpairedSurrogate(field)
+    ) {
+      throw new Error("Publish metadata is invalid");
+    }
+    const text = field.trim();
+    if (
+      !text
+      || unicodeCodePointLength(text) > PUBLISH_METADATA_TEXT_LIMITS[key]
+    ) {
+      throw new Error("Publish metadata is invalid");
+    }
+    normalized[key] = text;
+  }
+
+  for (const key of ["hashtags", "tags"] as const) {
+    const field = record[key];
+    if (field === undefined) continue;
+    if (!Array.isArray(field) || field.length > 30) {
+      throw new Error("Publish metadata is invalid");
+    }
+    const values = field.map((item) => {
+      if (
+        typeof item !== "string"
+        || PUBLISH_METADATA_CONTROL_RE.test(item)
+        || hasUnpairedSurrogate(item)
+      ) {
+        throw new Error("Publish metadata is invalid");
+      }
+      const text = item.trim();
+      if (
+        !text
+        || unicodeCodePointLength(text) > 100
+        || text.startsWith("#")
+      ) {
+        throw new Error("Publish metadata is invalid");
+      }
+      return text;
+    });
+    if (new Set(values).size !== values.length) {
+      throw new Error("Publish metadata is invalid");
+    }
+    normalized[key] = values;
+  }
+
+  const canonicalProjection = {
+    title: normalized.title ?? null,
+    description: normalized.description ?? null,
+    hook: normalized.hook ?? null,
+    product_name: normalized.product_name ?? null,
+    hashtags: normalized.hashtags ?? [],
+    tags: normalized.tags ?? [],
+  };
+  const encodedBytes = new TextEncoder().encode(
+    JSON.stringify(canonicalProjection),
+  ).byteLength;
+  if (encodedBytes > PUBLISH_METADATA_MAX_BYTES) {
+    throw new Error("Publish metadata is invalid");
+  }
+  return normalized;
+}
 
 type DistributionResponse = {
   distribution_plans?: Array<Record<string, unknown>>;
@@ -666,6 +899,24 @@ function isMediaUrl(url: string): boolean {
   return url.includes("/api/media/") || url.includes("/files");
 }
 
+/** Check if a URL is one of the canonical or deprecated publish mutations. */
+function isPublishMutationUrl(url: string, method: string): boolean {
+  if (method.toUpperCase() !== "POST") return false;
+  try {
+    const pathname = new URL(url, "http://localhost").pathname;
+    const segments = pathname.split("/").filter(Boolean);
+    if (segments.length < 2) return false;
+    const route = segments.at(-2);
+    const tail = segments.at(-1) ?? "";
+    return (
+      (route === "distribution" && tail === "publish")
+      || (route === "publish" && LEGACY_VIDEO_ID_RE.test(tail))
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Check if a URL is the health endpoint. */
 function isHealthUrl(url: string): boolean {
   return url.endsWith("/health") || url.includes("/health?");
@@ -691,7 +942,7 @@ const _nativeFetch = globalThis.fetch.bind(globalThis);
  * P1-A: 统一 fetch wrapper — 自动注入 X-API-Key + 用 getApiBase() 把相对路径
  * 补全成绝对 URL,P1-B 日志脱敏请求体里的 api_keys / token / secret / password / auth。
  *
- * P3-5: 增加默认 timeout(30s/300s) 和 retry(1 次,仅对网络错误和 5xx)。
+ * P3-5: 增加默认 timeout(30s/300s)；仅幂等读取对网络错误和 5xx 重试 1 次。
  *
  * 业务调用方:
  *  - 相对路径(推荐):`apiFetch("/scenario/s1", {...})` → 自动拼 getApiBase()
@@ -732,10 +983,61 @@ function _maybeHandleAuthExpiry(res: Response, absUrl: string): void {
 
 export type ApiFetchInit = RequestInit & {
   suppressAuthExpiryRedirect?: boolean;
+  timeoutMs?: number;
+  maxRetries?: number;
 };
 
+export function isRetryableHttpMethod(method: string): boolean {
+  return ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
+}
+
+function createAttemptSignal(
+  callerSignal: AbortSignal | null,
+  timeoutMs: number,
+): {
+  signal: AbortSignal;
+  timeoutTriggered: () => boolean;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  let didTimeout = false;
+  const relayCallerAbort = () => {
+    if (!controller.signal.aborted) {
+      controller.abort(
+        callerSignal?.reason ?? new DOMException("Aborted", "AbortError"),
+      );
+    }
+  };
+
+  if (callerSignal?.aborted) {
+    relayCallerAbort();
+  } else {
+    callerSignal?.addEventListener("abort", relayCallerAbort, { once: true });
+  }
+
+  const timeoutId = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    didTimeout = true;
+    controller.abort(new DOMException("Request timeout", "TimeoutError"));
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    timeoutTriggered: () => didTimeout,
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      callerSignal?.removeEventListener("abort", relayCallerAbort);
+    },
+  };
+}
+
 export async function apiFetch(url: string, init?: ApiFetchInit): Promise<Response> {
-  const { suppressAuthExpiryRedirect = false, ...requestInit } = init ?? {};
+  const {
+    suppressAuthExpiryRedirect = false,
+    timeoutMs: timeoutOverrideMs,
+    maxRetries: maxRetriesOverride,
+    ...requestInit
+  } = init ?? {};
   // P1-A: 自动把相对路径补全 + 注入 auth header
   // 2026-05-09 dedup: when base ends with "/api" (production behind nginx) and
   // url already starts with "/api/" (e.g. /api/files, /api/admin/...), strip
@@ -770,27 +1072,29 @@ export async function apiFetch(url: string, init?: ApiFetchInit): Promise<Respon
   const start = performance.now();
   const method = (requestInit.method || "GET").toUpperCase();
   const shortUrl = absUrl.replace(getApiBase(), "") || absUrl;
-  const skipBody = isMediaUrl(absUrl);
+  const mediaBody = isMediaUrl(absUrl);
+  const publishBody = isPublishMutationUrl(absUrl, method);
+  const skipBody = mediaBody || publishBody;
 
   // Merge trace ID
   mergedHeaders["X-Client-Trace-Id"] = traceId;
+  const callerSignal = requestInit.signal;
   const mergedInit: RequestInit = { ...requestInit, headers: mergedHeaders };
 
-  // P3-5: Apply timeout via AbortController (respect caller's signal)
-  const timeoutMs = _getTimeoutMs(absUrl);
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const abortController = new AbortController();
-  if (!mergedInit.signal) {
-    mergedInit.signal = abortController.signal;
-    timeoutId = setTimeout(() => abortController.abort(new DOMException("Request timeout", "TimeoutError")), timeoutMs);
-  }
+  // P3-5: Each retry attempt receives an independent timeout controller.
+  const timeoutMs = timeoutOverrideMs ?? _getTimeoutMs(absUrl);
 
   // ── Log request ──
   if (_apiLogEnabled) {
     if (isHealthUrl(absUrl)) {
       console.log(`[HERMES:HEALTH] ${method} ${shortUrl} trace_id=${traceId}`);
+    } else if (publishBody) {
+      console.log(
+        `[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`,
+        "[body omitted]",
+      );
     } else {
-      const bodyPreview = skipBody ? "" : safeBodyPreview(requestInit.body);
+      const bodyPreview = mediaBody ? "" : safeBodyPreview(requestInit.body);
       if (bodyPreview) {
         console.log(`[HERMES:REQ] ${method} ${shortUrl} trace_id=${traceId}`, bodyPreview);
       } else {
@@ -801,11 +1105,22 @@ export async function apiFetch(url: string, init?: ApiFetchInit): Promise<Respon
 
   // P3-5: Inner fetch with retry logic
   let lastError: unknown;
-  const maxRetries = isHealthUrl(absUrl) ? 0 : API_FETCH_MAX_RETRIES;
+  const defaultMaxRetries = !callerSignal && !isHealthUrl(absUrl) && isRetryableHttpMethod(method)
+    ? API_FETCH_MAX_RETRIES
+    : 0;
+  const maxRetries = isRetryableHttpMethod(method)
+    ? typeof maxRetriesOverride === "number"
+      ? Math.max(0, Math.floor(maxRetriesOverride))
+      : defaultMaxRetries
+    : 0;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const attemptSignalState = createAttemptSignal(callerSignal ?? null, timeoutMs);
+    const attemptSignal = attemptSignalState.signal;
+    const attemptInit: RequestInit = { ...mergedInit, signal: attemptSignal };
+
     try {
-      const res = await _nativeFetch(absUrl, mergedInit);
-      if (timeoutId) clearTimeout(timeoutId);
+      const res = await _nativeFetch(absUrl, attemptInit);
+      attemptSignalState.cleanup();
 
       const duration = Math.round(performance.now() - start);
       const serverTraceId = res.headers.get("X-Trace-Id") || res.headers.get("x-trace-id") || "";
@@ -828,7 +1143,7 @@ export async function apiFetch(url: string, init?: ApiFetchInit): Promise<Respon
         if (_apiLogEnabled) {
           console.error(
             `[HERMES:ERR] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`,
-            errText.slice(0, 500) || "[no body]"
+            publishBody ? "[body omitted]" : errText.slice(0, 500) || "[no body]",
           );
         }
         if (!suppressAuthExpiryRedirect) {
@@ -840,8 +1155,13 @@ export async function apiFetch(url: string, init?: ApiFetchInit): Promise<Respon
       if (_apiLogEnabled) {
         if (isHealthUrl(absUrl)) {
           console.log(`[HERMES:HEALTH] ${res.status} OK (${duration}ms) trace_id=${traceChain}`);
-        } else if (skipBody) {
+        } else if (mediaBody) {
           console.log(`[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain} [media/binary]`);
+        } else if (publishBody) {
+          console.log(
+            `[HERMES:RES] ${res.status} ${res.statusText} (${duration}ms) trace_id=${traceChain}`,
+            "[body omitted]",
+          );
         } else {
           const contentType = res.headers.get("content-type") || "";
           if (contentType.includes("application/json")) {
@@ -859,31 +1179,44 @@ export async function apiFetch(url: string, init?: ApiFetchInit): Promise<Respon
       }
       return res;
     } catch (err: unknown) {
-      lastError = err;
-      const errName = err instanceof Error ? err.name : "";
-      const isRetryable = errName === "TypeError" || errName === "TimeoutError" || errName === "AbortError";
+      const timeoutTriggered = attemptSignalState.timeoutTriggered();
+      attemptSignalState.cleanup();
+      const normalizedError = timeoutTriggered
+        ? attemptSignal.reason ?? new DOMException("Request timeout", "TimeoutError")
+        : err;
+      lastError = normalizedError;
+      const errName = normalizedError instanceof Error ? normalizedError.name : "";
+      if (callerSignal && (errName === "AbortError" || callerSignal.aborted)) {
+        throw normalizedError;
+      }
+      const isRetryable = timeoutTriggered || errName === "TypeError" || errName === "TimeoutError";
       if (isRetryable && attempt < maxRetries) {
         if (_apiLogEnabled) {
           const duration = Math.round(performance.now() - start);
-          console.warn(`[HERMES:RETRY] NETWORK_ERROR (${duration}ms) trace_id=${traceId} attempt=${attempt + 1}/${maxRetries + 1} ${errorMessage(err, "")}`);
+          console.warn(`[HERMES:RETRY] NETWORK_ERROR (${duration}ms) trace_id=${traceId} attempt=${attempt + 1}/${maxRetries + 1} ${errorMessage(normalizedError, "")}`);
         }
         await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         continue;
       }
-      if (timeoutId) clearTimeout(timeoutId);
       break;
     }
   }
 
   const duration = Math.round(performance.now() - start);
   if (_apiLogEnabled) {
-    console.error(`[HERMES:ERR] NETWORK_ERROR (${duration}ms) trace_id=${traceId}`, (lastError as { message?: string } | undefined)?.message || "Unknown error");
+    console.error(
+      `[HERMES:ERR] NETWORK_ERROR (${duration}ms) trace_id=${traceId}`,
+      publishBody
+        ? "[body omitted]"
+        : (lastError as { message?: string } | undefined)?.message || "Unknown error",
+    );
   }
   throw lastError;
 }
 
 export interface ApiErrorInfo {
   status: number;
+  code: string | null;
   message: string;
   fieldErrors: Record<string, string>;
   retryAfterSec: number | null;
@@ -892,6 +1225,7 @@ export interface ApiErrorInfo {
 export async function parseApiError(res: Response): Promise<ApiErrorInfo> {
   const info: ApiErrorInfo = {
     status: res.status,
+    code: null,
     message: res.statusText || `HTTP ${res.status}`,
     fieldErrors: {},
     retryAfterSec: null,
@@ -920,6 +1254,14 @@ export async function parseApiError(res: Response): Promise<ApiErrorInfo> {
     const obj = body as Record<string, unknown>;
     if (typeof obj.detail === "string") {
       info.message = obj.detail;
+    } else if (obj.detail && typeof obj.detail === "object" && !Array.isArray(obj.detail)) {
+      const detail = obj.detail as Record<string, unknown>;
+      if (typeof detail.code === "string") info.code = detail.code;
+      if (typeof detail.message === "string") {
+        info.message = detail.message;
+      } else if (typeof detail.code === "string") {
+        info.message = detail.code;
+      }
     } else if (Array.isArray(obj.detail)) {
       const messages: string[] = [];
       for (const item of obj.detail) {
@@ -941,6 +1283,9 @@ export async function parseApiError(res: Response): Promise<ApiErrorInfo> {
     }
     if (typeof obj.retry_after_sec === "number" && obj.retry_after_sec > 0) {
       info.retryAfterSec = obj.retry_after_sec;
+    }
+    if (info.code === null && typeof obj.code === "string") {
+      info.code = obj.code;
     }
   }
 
@@ -1181,6 +1526,8 @@ export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<u
 }
 
 const MEDIA_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+const SIGNED_MEDIA_PARAMS = ["token", "expires", "tenant", "purpose"] as const;
+type MediaUrlPurpose = "view" | "download";
 
 function decodeMediaPath(raw: string): string | null {
   let decoded = raw;
@@ -1233,8 +1580,99 @@ function encodeSafeMediaPath(filePath: string): string {
   return segments.map((s) => encodeURIComponent(s)).join("/");
 }
 
+type ParsedSignedMediaUrl = {
+  url: string;
+  encodedPath: string;
+  expiresAt: number;
+  purpose: MediaUrlPurpose;
+};
+
+function trustedMediaRelativeUrl(filePath: string): string | null {
+  const raw = filePath.trim();
+  if (raw.startsWith("/api/media/")) return raw;
+  if (!MEDIA_SCHEME_RE.test(raw)) return null;
+  try {
+    const candidate = new URL(raw);
+    const base = getApiBase();
+    const trustedOrigin = base.startsWith("http")
+      ? new URL(base).origin
+      : typeof window !== "undefined" && window.location.origin !== "null"
+        ? window.location.origin
+        : null;
+    if (
+      !trustedOrigin
+      || candidate.origin !== trustedOrigin
+      || candidate.username
+      || candidate.password
+      || !candidate.pathname.startsWith("/api/media/")
+    ) {
+      return null;
+    }
+    return `${candidate.pathname}${candidate.search}${candidate.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function parseSignedMediaUrl(filePath: string): ParsedSignedMediaUrl | null {
+  const raw = filePath.trim();
+  const relative = trustedMediaRelativeUrl(raw);
+  if (!relative || relative.includes("#")) return null;
+  const queryIndex = relative.indexOf("?");
+  if (queryIndex < 0 || queryIndex !== relative.lastIndexOf("?")) return null;
+
+  const pathname = relative.slice(0, queryIndex);
+  const encodedPath = encodeSafeMediaPath(pathname);
+  if (!encodedPath || pathname !== `/api/media/${encodedPath}`) return null;
+
+  const params = new URLSearchParams(relative.slice(queryIndex + 1));
+  const keys = Array.from(params.keys());
+  if (
+    keys.length !== SIGNED_MEDIA_PARAMS.length
+    || keys.some((key) => !SIGNED_MEDIA_PARAMS.includes(key as (typeof SIGNED_MEDIA_PARAMS)[number]))
+    || SIGNED_MEDIA_PARAMS.some((key) => params.getAll(key).length !== 1)
+  ) {
+    return null;
+  }
+
+  const token = params.get("token") ?? "";
+  const expires = params.get("expires") ?? "";
+  const tenant = params.get("tenant") ?? "";
+  const purpose = params.get("purpose") ?? "";
+  if (!token || !tenant || !/^\d+$/.test(expires) || (purpose !== "view" && purpose !== "download")) {
+    return null;
+  }
+  const expiresAt = Number(expires);
+  if (!Number.isSafeInteger(expiresAt)) return null;
+
+  return { url: raw, encodedPath, expiresAt, purpose };
+}
+
+function isStaticPublicUrl(filePath: string): boolean {
+  if (
+    (!filePath.startsWith("/portfolio/") && !filePath.startsWith("/brand/"))
+    || hasUnsafeMediaInput(filePath)
+  ) {
+    return false;
+  }
+  const decoded = decodeMediaPath(filePath);
+  if (!decoded) return false;
+  const segments = decoded.split("/").slice(2);
+  return segments.length > 0 && segments.every((segment) => segment && segment !== "." && segment !== "..");
+}
+
 export function getMediaUrl(filePath: string, forceReal: boolean = false): string {
-  if (!filePath || hasUnsafeMediaInput(filePath)) return "";
+  if (!filePath) return "";
+  const signed = parseSignedMediaUrl(filePath);
+  if (signed) return signed.url;
+  const trimmed = filePath.trim();
+  if (isStaticPublicUrl(trimmed)) return trimmed;
+  const trustedRelative = trustedMediaRelativeUrl(trimmed);
+  if (trustedRelative && !trustedRelative.includes("?") && !trustedRelative.includes("#")) {
+    const encodedPath = encodeSafeMediaPath(trustedRelative);
+    if (encodedPath && trustedRelative === `/api/media/${encodedPath}`) return trimmed;
+  }
+  if (hasUnsafeMediaInput(filePath)) return "";
   if (!forceReal && isDemoMode()) {
     const name = filePath.trim().replace(/\\/g, "/").split("/").pop() || "";
     const prefix = readEnv("NEXT_PUBLIC_ASSET_PREFIX") || "";
@@ -1249,27 +1687,96 @@ export function getMediaUrl(filePath: string, forceReal: boolean = false): strin
   return `/api/media/${encodedPath}`;
 }
 
-/** P1-8: Generate a short-lived signed URL for media access (15 min expiry).
- *
- * Use this when sharing media links externally or when stricter access
- * control is needed. Falls back to unsigned URL on signing failure.
- */
-export async function getSignedMediaUrl(filePath: string): Promise<string> {
+/** True only when a value resolves to an internal media path that requires signing. */
+export function isProtectedMediaPath(filePath: string): boolean {
+  const mediaUrl = getMediaUrl(filePath);
+  const relative = trustedMediaRelativeUrl(mediaUrl);
+  if (!relative) return false;
+  const mediaPath = relative.split("?", 1)[0].slice("/api/media/".length);
+  return !mediaPath.startsWith("brand_assets/") && !mediaPath.startsWith("demo/");
+}
+
+export type MediaPreview =
+  | { kind: "runtime"; url: string }
+  | { kind: "external"; url: string }
+  | { kind: "invalid"; url: "" };
+
+function hasTrustedAbsoluteOrigin(filePath: string): boolean {
+  const raw = filePath.trim();
+  if (!MEDIA_SCHEME_RE.test(raw)) return false;
+  try {
+    const candidate = new URL(raw);
+    const trustedOrigins = new Set<string>();
+    const base = getApiBase();
+    if (base.startsWith("http")) trustedOrigins.add(new URL(base).origin);
+    if (typeof window !== "undefined" && window.location.origin !== "null") {
+      trustedOrigins.add(window.location.origin);
+    }
+    return trustedOrigins.has(candidate.origin);
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve media previews without ever downgrading malformed same-origin media to raw DOM URLs. */
+export function resolveMediaPreview(filePath: string): MediaPreview {
+  const runtimeUrl = getMediaUrl(filePath);
+  if (runtimeUrl) return { kind: "runtime", url: runtimeUrl };
+
+  if (hasTrustedAbsoluteOrigin(filePath)) return { kind: "invalid", url: "" };
+  if (trustedMediaRelativeUrl(filePath)) return { kind: "invalid", url: "" };
+  const raw = filePath.trim();
+  if (!raw || raw.startsWith("//") || !MEDIA_SCHEME_RE.test(raw)) {
+    return { kind: "invalid", url: "" };
+  }
+  try {
+    const external = new URL(raw);
+    if (
+      (external.protocol !== "http:" && external.protocol !== "https:")
+      || external.username
+      || external.password
+    ) {
+      return { kind: "invalid", url: "" };
+    }
+    return { kind: "external", url: external.href };
+  } catch {
+    return { kind: "invalid", url: "" };
+  }
+}
+
+/** Generate a tenant- and purpose-bound short-lived media URL. */
+export async function getSignedMediaUrl(
+  filePath: string,
+  purpose: MediaUrlPurpose = "view",
+): Promise<string> {
   const encodedPath = encodeSafeMediaPath(filePath);
   if (!encodedPath) return "";
 
   try {
-    const res = await apiFetch(`/api/media/sign?path=${encodeURIComponent(encodedPath)}`, {
+    const query = new URLSearchParams({ path: encodedPath, purpose });
+    const res = await apiFetch(`/api/media/sign?${query.toString()}`, {
       headers: getHeaders(),
     });
-    if (res.ok) {
-      const data = await res.json();
-      return data.url || getMediaUrl(filePath);
+    if (!res.ok) return "";
+    const data: unknown = await res.json();
+    if (!isRecord(data) || typeof data.url !== "string") return "";
+    const signed = parseSignedMediaUrl(data.url);
+    if (
+      !signed
+      || signed.encodedPath !== encodedPath
+      || signed.purpose !== purpose
+      || signed.expiresAt <= Math.floor(Date.now() / 1000)
+    ) {
+      return "";
     }
+    const base = getApiBase().replace(/\/$/, "");
+    if (base.startsWith("http") && signed.url.startsWith("/")) {
+      return `${new URL(base).origin}${signed.url}`;
+    }
+    return signed.url;
   } catch {
-    /* fallback to unsigned */
+    return "";
   }
-  return getMediaUrl(filePath);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1412,6 +1919,39 @@ export async function runS5BrandVlog(body: {
 
 // ── Unified Async Execution (Phase 1A) ──
 
+const ASYNC_SUBMIT_TIMEOUT_MS = 15_000;
+
+export type AsyncSubmissionStatus =
+  | "reserved"
+  | "initializing"
+  | "queued"
+  | "running"
+  | "completed"
+  | "completed_bounded"
+  | "completed_full"
+  | "done"
+  | "failed"
+  | "error"
+  | "recovery_required";
+
+export interface ScenarioSubmitResponse {
+  label: string;
+  status: AsyncSubmissionStatus;
+  trace_id: string;
+  idempotent_replay?: boolean;
+}
+
+export interface SubmissionReadbackResponse {
+  resource_type: "scenario" | "fast";
+  resource_id: string;
+  scenario: "s1" | "s2" | "s3" | "s4" | "s5" | "fast";
+  status: AsyncSubmissionStatus;
+  submit_response: Record<string, unknown>;
+  result_snapshot?: Record<string, unknown> | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 /**
  * Submit a scenario for async background execution.
  * Returns immediately with { label, status, trace_id }.
@@ -1420,13 +1960,34 @@ export async function runS5BrandVlog(body: {
 export async function submitScenario(
   scenario: string,
   body: unknown,
-  options?: { signal?: AbortSignal }
-): Promise<{ label: string; status: string; trace_id: string }> {
+  options: { idempotencyKey: string; signal?: AbortSignal },
+): Promise<ScenarioSubmitResponse> {
   const res = await apiFetch("/scenario/" + scenario + "/submit", {
     method: "POST",
-    headers: getHeaders(),
+    headers: {
+      ...getHeaders(),
+      "Idempotency-Key": options.idempotencyKey,
+    },
     body: JSON.stringify(withProviderApiKeys(body)),
     signal: options?.signal,
+    timeoutMs: ASYNC_SUBMIT_TIMEOUT_MS,
+  });
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function getSubmissionByIdempotencyKey(
+  idempotencyKey: string,
+  options?: { signal?: AbortSignal },
+): Promise<SubmissionReadbackResponse> {
+  const res = await apiFetch("/submissions/idempotency", {
+    method: "GET",
+    headers: {
+      ...getHeaders(false),
+      "Idempotency-Key": idempotencyKey,
+    },
+    signal: options?.signal,
+    maxRetries: 0,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
@@ -1444,6 +2005,14 @@ export async function getScenarioStatus(
   label: string;
   scenario: string;
   status: string;
+  lifecycle_status?: string | null;
+  completion_kind?: string | null;
+  request_succeeded?: boolean;
+  success?: boolean;
+  full_media_success?: boolean;
+  pipeline_complete?: boolean;
+  publish_allowed?: boolean;
+  delivery_accepted?: boolean;
   current_step: string | null;
   current_step_injection?: Record<string, unknown> | null;
   progress: number;
@@ -1502,11 +2071,27 @@ export async function fetchPlatforms(options?: { signal?: AbortSignal }): Promis
   return data.platforms || [];
 }
 
-export async function publishContent(platform: string, content: unknown, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
+export async function publishContent(
+  platform: string,
+  metadata: unknown,
+  options?: PublishRequestOptions,
+): Promise<Record<string, unknown>> {
+  const acceptanceId = requireAcceptanceId(options?.acceptanceId);
+  const strictPlatform = requirePublishPlatform(platform);
+  const strictMetadata = requirePublishMetadata(metadata);
+  const strictPlatformOptions = requirePublishPlatformOptions(
+    strictPlatform,
+    options?.platformOptions,
+  );
   const res = await apiFetch("/distribution/publish", {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({ platform, content }),
+    body: JSON.stringify({
+      acceptance_id: acceptanceId,
+      platform: strictPlatform,
+      metadata: strictMetadata,
+      platform_options: strictPlatformOptions,
+    }),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Publish failed (" + res.status + ")");
@@ -1522,12 +2107,53 @@ export async function fetchPublishStatus(platform: string, postId: string, optio
   return res.json();
 }
 
+export async function fetchPublishAttempt(
+  attemptId: string,
+  options?: { signal?: AbortSignal },
+): Promise<PublishAttemptReadback> {
+  if (!ACCEPTANCE_ID_RE.test(attemptId)) {
+    throw new Error("Publish attempt ID is invalid");
+  }
+  const res = await apiFetch(
+    "/distribution/publish-attempts/" + encodeURIComponent(attemptId),
+    {
+      headers: getHeaders(false),
+      signal: options?.signal,
+      maxRetries: 0,
+    },
+  );
+  if (!res.ok) throw new Error("Failed to fetch publish attempt (" + res.status + ")");
+  return res.json();
+}
+
 // ── Layer 5: Publish, Metrics, Dashboard APIs ──
 
-export async function publishVideo(videoId: string, platforms: string[], metadata: unknown, options?: { signal?: AbortSignal }): Promise<PublishResult | PublishResult[]> {
-  const res = await apiFetch("/publish/" + videoId, {
-    method: "POST", headers: getHeaders(),
-    body: JSON.stringify({ platforms, metadata }),
+export async function publishVideo(
+  videoId: string,
+  platforms: string[],
+  metadata: unknown,
+  options?: PublishRequestOptions,
+): Promise<PublishResult> {
+  const acceptanceId = requireAcceptanceId(options?.acceptanceId);
+  const strictVideoId = requireLegacyVideoId(videoId);
+  if (platforms.length !== 1) {
+    throw new Error("Exactly one publish platform is required");
+  }
+  const strictPlatform = requirePublishPlatform(platforms[0]);
+  const strictMetadata = requirePublishMetadata(metadata);
+  const strictPlatformOptions = requirePublishPlatformOptions(
+    strictPlatform,
+    options?.platformOptions,
+  );
+  const res = await apiFetch("/publish/" + strictVideoId, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      acceptance_id: acceptanceId,
+      platform: strictPlatform,
+      metadata: strictMetadata,
+      platform_options: strictPlatformOptions,
+    }),
     signal: options?.signal,
   });
   if (!res.ok) throw new Error("Publish failed (" + res.status + ")");
@@ -1711,7 +2337,15 @@ export async function fetchToolboxAuditSummary(
 // ── Fast Mode: direct text-to-video (no pipeline) ──
 
 export interface FastModeResult {
+  status?: "completed_bounded" | "completed_full" | "error";
+  lifecycle_status?: "completed_bounded" | "completed_full" | "error";
+  completion_kind?: "no_media" | "bounded_media" | "full_media" | "execution_failed";
+  request_succeeded?: boolean;
   success: boolean;
+  full_media_success?: boolean;
+  pipeline_complete?: boolean;
+  publish_allowed?: boolean;
+  delivery_accepted?: boolean;
   video_path: string;
   video_url: string;
   filename: string;
@@ -1725,6 +2359,8 @@ export interface FastModeResult {
   model_info: { llm: string; video: string; tts: string | null };
   is_stub: boolean;
   tts_path: string | null;
+  tts_is_fallback?: boolean;
+  tts_fallback_reason?: string | null;
   error?: string;
 }
 
@@ -1732,7 +2368,7 @@ export async function generateFastMode(body: {
   user_prompt: string;
   duration: number;
   enable_tts: boolean;
-}, options?: { signal?: AbortSignal }): Promise<FastModeResult> {
+} & GenerationSafetyIntent, options?: { signal?: AbortSignal }): Promise<FastModeResult> {
   const res = await apiFetch("/fast/generate", {
     method: "POST",
     headers: getHeaders(),
@@ -1745,29 +2381,42 @@ export async function generateFastMode(body: {
 
 export interface FastSubmitResponse {
   task_id: string;
-  status: "queued";
+  status: AsyncSubmissionStatus;
   started_at_unix: number;
+  idempotent_replay?: boolean;
 }
 
 export interface FastStatusResponse {
   task_id: string;
-  status: "running" | "done" | "failed";
-  stage: "queued" | "llm" | "video" | "tts";
+  status: AsyncSubmissionStatus | "done";
+  lifecycle_status?: AsyncSubmissionStatus | null;
+  stage: "reserved" | "initializing" | "queued" | "llm" | "video" | "tts" | "completed" | "failed" | "recovery_required";
   elapsed_sec: number;
   result: FastModeResult | null;
   error: string | null;
+}
+
+export class FastTerminalError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FastTerminalError";
+  }
 }
 
 export async function submitFastMode(body: {
   user_prompt: string;
   duration: number;
   enable_tts: boolean;
-}, options?: { signal?: AbortSignal }): Promise<FastSubmitResponse> {
+} & GenerationSafetyIntent, options: { idempotencyKey: string; signal?: AbortSignal }): Promise<FastSubmitResponse> {
   const res = await apiFetch("/fast/submit", {
     method: "POST",
-    headers: getHeaders(),
+    headers: {
+      ...getHeaders(),
+      "Idempotency-Key": options.idempotencyKey,
+    },
     body: JSON.stringify(body),
     signal: options?.signal,
+    timeoutMs: ASYNC_SUBMIT_TIMEOUT_MS,
   });
   if (!res.ok) throw new ApiError(await parseApiError(res));
   return res.json();
@@ -1802,9 +2451,16 @@ export async function pollFastStatus(
     if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const snap = await fetchFastStatus(taskId, { signal: opts?.signal });
     opts?.onProgress?.(snap);
-    if (snap.status === "done" && snap.result) return snap.result;
-    if (snap.status === "failed") {
-      throw new Error(snap.error || "Fast Mode generation failed");
+    const terminalStatus = snap.lifecycle_status ?? snap.status;
+    if (
+      ["done", "completed", "completed_bounded", "completed_full"].includes(terminalStatus)
+      && snap.result
+    ) return snap.result;
+    if (snap.status === "failed" || terminalStatus === "failed" || terminalStatus === "error") {
+      throw new FastTerminalError(snap.error || "Fast Mode generation failed");
+    }
+    if (snap.status === "recovery_required" || terminalStatus === "recovery_required") {
+      throw new Error("recovery_required");
     }
     await new Promise((r) => setTimeout(r, interval));
   }

@@ -24,6 +24,9 @@ RUN npm run build
 # ── Stage 2: Runtime ──
 FROM node:22-alpine AS runner
 
+ARG RELEASE_SOURCE_SHA
+LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
+
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

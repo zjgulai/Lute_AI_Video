@@ -94,7 +94,9 @@ def _result_indicates_soft_degraded(result: Any) -> dict[str, Any] | None:
     candidate: Any = None
     if isinstance(result, dict) and result.get("_soft_degraded") is True:
         candidate = result
-    elif isinstance(result, list) and result and isinstance(result[0], dict) and result[0].get("_soft_degraded") is True:
+    elif (
+        isinstance(result, list) and result and isinstance(result[0], dict) and result[0].get("_soft_degraded") is True
+    ):
         candidate = result[0]
     if candidate is None:
         return None
@@ -220,6 +222,86 @@ def _mirror_continuity_output(state: dict[str, Any], result: Any) -> None:
         state["continuity_storyboard_metadata"] = result["metadata"]
 
 
+def _mark_completed_bounded(
+    state: dict[str, Any],
+    *,
+    profile: Any | None,
+    completion_kind: str | None = None,
+) -> dict[str, Any]:
+    """Persist truthful terminal semantics for an intentionally bounded run."""
+
+    kind = completion_kind or (profile.completion_kind if profile is not None else "no_media")
+    state.update(
+        {
+            "status": "completed_bounded",
+            "lifecycle_status": "completed_bounded",
+            "completion_kind": kind,
+            "request_succeeded": True,
+            "success": False,
+            "full_media_success": False,
+            "pipeline_complete": False,
+            "publish_allowed": False,
+            "delivery_accepted": False,
+            "current_step": None,
+        }
+    )
+    if profile is not None:
+        state["execution_profile_id"] = profile.profile_id
+        state["provider_job_caps"] = dict(profile.provider_job_caps)
+    state.setdefault("config", {})["execution_lifecycle"] = {
+        key: state[key]
+        for key in (
+            "status",
+            "lifecycle_status",
+            "completion_kind",
+            "request_succeeded",
+            "success",
+            "full_media_success",
+            "pipeline_complete",
+            "publish_allowed",
+            "delivery_accepted",
+            "execution_profile_id",
+            "provider_job_caps",
+        )
+        if key in state
+    }
+    return state
+
+
+def _mark_policy_blocked(state: dict[str, Any]) -> dict[str, Any]:
+    """Stop a legacy state with no durable authority without claiming success."""
+
+    state.update(
+        {
+            "status": "policy_blocked",
+            "lifecycle_status": "policy_blocked",
+            "completion_kind": "legacy_no_policy_blocked",
+            "request_succeeded": False,
+            "success": False,
+            "full_media_success": False,
+            "pipeline_complete": False,
+            "publish_allowed": False,
+            "delivery_accepted": False,
+            "current_step": None,
+        }
+    )
+    state.setdefault("config", {})["execution_lifecycle"] = {
+        key: state[key]
+        for key in (
+            "status",
+            "lifecycle_status",
+            "completion_kind",
+            "request_succeeded",
+            "success",
+            "full_media_success",
+            "pipeline_complete",
+            "publish_allowed",
+            "delivery_accepted",
+        )
+    }
+    return state
+
+
 class StepRunner:
     """Runs individual steps of the S1 pipeline using state persistence."""
 
@@ -240,7 +322,70 @@ class StepRunner:
 
         scenario_cfg = _get_scenario_config(scenario)
         step_order = scenario_cfg["step_order"]
-        config = _with_continuity_defaults(config, scenario)
+        config = dict(_with_continuity_defaults(config, scenario))
+
+        # Request-time generation authority is server-owned.  Blocking
+        # scenario wrappers build their own config before reaching StepRunner,
+        # so project the bound policy here as the final persistence boundary.
+        # Runtime enforcement remains in the dedicated execution-policy guard.
+        from src.pipeline.generation_policy import get_effective_generation_policy
+        from src.services.provider_execution import (
+            PROVIDER_EXECUTION_CONFIG_KEY,
+            get_provider_execution_context,
+            project_provider_execution_context,
+        )
+
+        effective_policy = get_effective_generation_policy()
+        execution_context = get_provider_execution_context()
+        if effective_policy is not None:
+            if execution_context is None:
+                from src.models.provider_cost import ProviderCostContractError
+
+                raise ProviderCostContractError(
+                    "provider_execution_context_missing",
+                    "provider execution context must be initialized before state",
+                )
+            if effective_policy.scenario != scenario:
+                raise ValueError(
+                    "Effective generation policy scenario mismatch: "
+                    f"policy={effective_policy.scenario} state={scenario}"
+                )
+            if (
+                execution_context.tenant_id != effective_policy.tenant_id
+                or execution_context.scenario_or_resource_type != scenario
+                or execution_context.generation_policy_version != effective_policy.version
+            ):
+                from src.models.provider_cost import ProviderCostContractError
+
+                raise ProviderCostContractError(
+                    "provider_execution_context_missing",
+                    "provider execution context conflicts with generation policy",
+                )
+            execution_projection = project_provider_execution_context(execution_context)
+            supplied_projection = config.get(PROVIDER_EXECUTION_CONFIG_KEY)
+            if supplied_projection is not None and supplied_projection != execution_projection:
+                from src.models.provider_cost import ProviderCostContractError
+
+                raise ProviderCostContractError(
+                    "provider_execution_context_missing",
+                    "provider execution projection cannot be supplied by a caller",
+                )
+            config.update(
+                {
+                    "enable_media_synthesis": effective_policy.enable_media_synthesis,
+                    "artifact_disposition": effective_policy.artifact_disposition,
+                    "provider_max_retries": effective_policy.provider_max_retries,
+                    "effective_generation_policy": effective_policy.model_dump(mode="json"),
+                    PROVIDER_EXECUTION_CONFIG_KEY: execution_projection,
+                }
+            )
+        elif PROVIDER_EXECUTION_CONFIG_KEY in config:
+            from src.models.provider_cost import ProviderCostContractError
+
+            raise ProviderCostContractError(
+                "provider_execution_context_missing",
+                "provider execution projection requires bound server authority",
+            )
 
         # Build empty step statuses
         steps = {}
@@ -260,11 +405,25 @@ class StepRunner:
         from src.routers._deps import get_auth_context
 
         auth_ctx = get_auth_context()
+        state_tenant_id = (
+            auth_ctx.tenant_id
+            if auth_ctx
+            else execution_context.tenant_id
+            if execution_context is not None
+            else config.get("tenant_id", "default")
+        )
+        if execution_context is not None and state_tenant_id != execution_context.tenant_id:
+            from src.models.provider_cost import ProviderCostContractError
+
+            raise ProviderCostContractError(
+                "provider_execution_context_missing",
+                "provider execution tenant conflicts with state owner",
+            )
         state = {
             "schema_version": STATE_SCHEMA_VERSION,
             "label": label,
             "scenario": scenario,
-            "tenant_id": auth_ctx.tenant_id if auth_ctx else config.get("tenant_id", "default"),
+            "tenant_id": state_tenant_id,
             "config": config,
             "steps": steps,
             "current_step": step_order[0],
@@ -277,6 +436,16 @@ class StepRunner:
             "degraded_reason": None,
             "structured_errors": [],
         }
+
+        if effective_policy is not None:
+            from src.pipeline.generation_policy import resolve_generation_execution_profile
+
+            profile = resolve_generation_execution_profile(
+                state,
+                require_persisted_profile=False,
+            )
+            config["effective_generation_execution_profile"] = profile.model_dump()
+            config["provider_job_caps"] = dict(profile.provider_job_caps)
 
         await self.state_manager.save(label, state)
         logger.info("step_runner: state initialized", label=label, mode=mode, trace_id=trace_id)
@@ -304,6 +473,18 @@ class StepRunner:
         if step_name not in scenario_cfg["step_order"]:
             raise ValueError(f"Unknown step name: {step_name}")
 
+        from src.pipeline.generation_policy import assert_generation_step_allowed
+        from src.services.provider_execution import (
+            persist_trusted_regeneration_epoch,
+        )
+
+        assert_generation_step_allowed(state, step_name, force=True)
+        await persist_trusted_regeneration_epoch(
+            state,
+            state_writer=self.state_manager,
+            operation_key=f"step.regenerate.{step_name}",
+        )
+
         return await self._execute_step(state, step_name, force=True)
 
     async def resume(self, label: str) -> dict[str, Any]:
@@ -312,14 +493,43 @@ class StepRunner:
         if state is None:
             raise ValueError(f"State not found for label: {label}")
 
-        current = state.get("current_step")
-        if current is None:
-            logger.info("step_runner: no current_step, pipeline already complete", label=label)
+        from fastapi import HTTPException
+
+        from src.pipeline.generation_policy import resolve_generation_execution_profile
+
+        config = state.get("config")
+        if not isinstance(config, dict) or "effective_generation_policy" not in config:
+            _mark_policy_blocked(state)
+            await self.state_manager.save(label, state)
             return state
 
-        # Find the index of current_step
-        scenario_cfg = _get_scenario_config(state.get("scenario", "s1"))
-        step_order = scenario_cfg["step_order"]
+        profile = resolve_generation_execution_profile(state)
+        step_order = list(profile.allowed_steps)
+        current = state.get("current_step")
+        if current is None:
+            incomplete = [step for step in step_order if state.get("steps", {}).get(step, {}).get("status") != "done"]
+            if incomplete or state.get("pipeline_degraded"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Empty execution cursor has incomplete or failed profile steps",
+                )
+            if state.get("status") != "completed_bounded":
+                _mark_completed_bounded(state, profile=profile)
+                await self.state_manager.save(label, state)
+            return state
+
+        if current not in step_order:
+            canonical_order = _get_scenario_config(state.get("scenario", "s1"))["step_order"]
+            completed_allowed = all(state.get("steps", {}).get(step, {}).get("status") == "done" for step in step_order)
+            if current in canonical_order and completed_allowed and not state.get("pipeline_degraded"):
+                _mark_completed_bounded(state, profile=profile)
+                await self.state_manager.save(label, state)
+                return state
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid current_step for execution profile: {current}",
+            )
+
         try:
             start_idx = step_order.index(current)
         except ValueError:
@@ -332,7 +542,9 @@ class StepRunner:
         for step_name in step_order[start_idx:]:
             # P0: Degraded guard — if any previous step set pipeline_degraded, stop
             if state.get("pipeline_degraded"):
-                logger.error("step_runner: pipeline degraded, halting", step=step_name, reason=state.get("degraded_reason"))
+                logger.error(
+                    "step_runner: pipeline degraded, halting", step=step_name, reason=state.get("degraded_reason")
+                )
                 success = False
                 break
             # Gate check: if this step has a gate awaiting approval, pause and return
@@ -364,6 +576,10 @@ class StepRunner:
                     )
                     return state
 
+        if not state.get("pipeline_degraded") and state.get("current_step") is None:
+            _mark_completed_bounded(state, profile=profile)
+            await self.state_manager.save(label, state)
+
         pipeline_duration_ms = (time.perf_counter() - pipeline_start) * 1000
         scenario = state.get("scenario", "unknown")
         trace_id = state.get("trace_id", "unknown")
@@ -388,6 +604,9 @@ class StepRunner:
 
     async def _execute_step(self, state: dict[str, Any], step_name: str, force: bool = False) -> dict[str, Any]:
         """Execute a single step and update state."""
+        from src.pipeline.generation_policy import assert_generation_step_allowed
+
+        profile = assert_generation_step_allowed(state, step_name, force=force)
         steps = state.get("steps", {})
         if step_name not in steps:
             raise ValueError(f"Step '{step_name}' not found in state steps")
@@ -395,7 +614,7 @@ class StepRunner:
 
         # Resolve scenario-specific step order for next-step navigation
         scenario_cfg = _get_scenario_config(state.get("scenario", "s1"))
-        step_order = scenario_cfg["step_order"]
+        step_order = list(profile.allowed_steps)
 
         # Skip if already done and not forcing
         if step_data["status"] == "done" and not force:
@@ -444,25 +663,32 @@ class StepRunner:
         # P1-1: In auto mode, skip intermediate save to reduce I/O.
         # The final save on step completion is sufficient for recovery.
         # step_by_step mode still saves so human review sees the latest state.
-        if state.get("mode") != "auto":
+        from src.pipeline.generation_policy import ATTEMPT_GUARDED_STEPS
+
+        if state.get("mode") != "auto" or step_name in ATTEMPT_GUARDED_STEPS:
             await self.state_manager.save(state["label"], state)
 
-        # Instantiate pipeline and run the step (lazy import to avoid circular dep)
-        pipeline_module, pipeline_class_name = scenario_cfg["pipeline_class"].rsplit(".", 1)
-        pipeline_module = __import__(pipeline_module, fromlist=[pipeline_class_name])
-        pipeline_class = getattr(pipeline_module, pipeline_class_name)
-        pipeline = pipeline_class()
         step_start = time.perf_counter()
         trace_id = state.get("trace_id", "unknown")
         try:
-            # Sprint 3 P3-4 (Phase 0 fix): hard budget enforcement for Expert
-            # mode. Inside try: so BudgetExceededError flows through the
-            # existing degraded handler — sets pipeline_degraded=True,
-            # degraded_reason, structured_errors. Without this, the prior
-            # placement (outside try) caused HTTP 500 / stuck pending state.
-            from src.tools.cost_tracker import check_budget
-            check_budget(state.get("label"), state.get("mode", "auto"))
-            result = await pipeline.run_step(step_name, state)
+            from src.pipeline.generation_policy import persisted_generation_policy_scope
+            from src.services.provider_execution import (
+                persisted_provider_execution_scope,
+                provider_operation_scope,
+                resolve_provider_operation_scope,
+            )
+
+            async with persisted_provider_execution_scope(state):
+                with persisted_generation_policy_scope(state):
+                    async with provider_operation_scope(
+                        resolve_provider_operation_scope(state.get("scenario", "s1"), step_name)
+                    ):
+                        # Instantiate only after all immutable execution guards passed.
+                        pipeline_module, pipeline_class_name = scenario_cfg["pipeline_class"].rsplit(".", 1)
+                        pipeline_module = __import__(pipeline_module, fromlist=[pipeline_class_name])
+                        pipeline_class = getattr(pipeline_module, pipeline_class_name)
+                        pipeline = pipeline_class()
+                        result = await pipeline.run_step(step_name, state)
         except Exception as exc:
             step_duration_ms = (time.perf_counter() - step_start) * 1000
             logger.error("step_runner: step failed", step=step_name, error=str(exc), trace_id=trace_id)
@@ -471,6 +697,7 @@ class StepRunner:
             state["pipeline_degraded"] = True
             state["degraded_reason"] = step_name
             from src.tools.error_classifier import classify_error
+
             structured = classify_error(exc, context=step_name, node=step_name)
             state.setdefault("structured_errors", [])
             state["structured_errors"].append(structured.model_dump())
@@ -531,13 +758,15 @@ class StepRunner:
 
         soft_signal = _result_indicates_soft_degraded(result)
         if soft_signal is not None:
-            state.setdefault("soft_degraded_reasons", []).append({
-                "ts": datetime.now().isoformat(),
-                "step": step_name,
-                "reason": soft_signal["reason"],
-                "detail": soft_signal["detail"],
-                "trace_id": trace_id,
-            })
+            state.setdefault("soft_degraded_reasons", []).append(
+                {
+                    "ts": datetime.now().isoformat(),
+                    "step": step_name,
+                    "reason": soft_signal["reason"],
+                    "detail": soft_signal["detail"],
+                    "trace_id": trace_id,
+                }
+            )
             logger.warning(
                 "step_runner: soft degraded, continuing with fallback",
                 step=step_name,
@@ -564,9 +793,17 @@ class StepRunner:
 
         next_step = _get_next_step(step_name, step_order)
         state["current_step"] = next_step
+        if next_step is None and not state.get("pipeline_degraded"):
+            _mark_completed_bounded(state, profile=profile)
 
         await self.state_manager.save(state["label"], state)
-        logger.info("step_runner: step complete", step=step_name, label=state["label"], trace_id=trace_id, duration_ms=round(step_duration_ms, 2))
+        logger.info(
+            "step_runner: step complete",
+            step=step_name,
+            label=state["label"],
+            trace_id=trace_id,
+            duration_ms=round(step_duration_ms, 2),
+        )
         return state
 
     async def _handle_regenerate_signal(
@@ -603,18 +840,32 @@ class StepRunner:
             await self.state_manager.save(state["label"], state)
             return state
 
+        from src.pipeline.generation_policy import assert_generation_step_allowed
+        from src.services.provider_execution import (
+            persist_trusted_regeneration_epoch,
+        )
+
+        assert_generation_step_allowed(state, upstream_step, force=True)
+        await persist_trusted_regeneration_epoch(
+            state,
+            state_writer=self.state_manager,
+            operation_key=f"feedback.regenerate.{upstream_step}",
+        )
+
         chain: list[dict[str, Any]] = state.setdefault("regenerate_chain", [])
         attempt = int(signal.get("attempt", 0)) + 1
-        chain.append({
-            "ts": datetime.now().isoformat(),
-            "consumer": signal.get("consumer", step_name),
-            "upstream_skill": upstream_skill,
-            "upstream_step": upstream_step,
-            "score": signal.get("score"),
-            "reason": signal.get("reason", ""),
-            "attempt": attempt,
-            "trace_id": trace_id,
-        })
+        chain.append(
+            {
+                "ts": datetime.now().isoformat(),
+                "consumer": signal.get("consumer", step_name),
+                "upstream_skill": upstream_skill,
+                "upstream_step": upstream_step,
+                "score": signal.get("score"),
+                "reason": signal.get("reason", ""),
+                "attempt": attempt,
+                "trace_id": trace_id,
+            }
+        )
 
         upstream_step_data = steps[upstream_step]
         upstream_step_data["status"] = "pending"

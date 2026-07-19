@@ -12,7 +12,20 @@ from src.pipeline.scenario_injection_plan import (
     SCENARIO_INJECTION_MODE_KEY,
     get_step_injection_from_state,
 )
+from src.routers._deps import ApiKeyType, AuthContext
 from src.routers._state import S1StartRequest, S2BrandCampaignRequest, S5BrandVlogRequest
+
+
+@pytest.fixture(autouse=True)
+def _authorized_generation_context(monkeypatch: pytest.MonkeyPatch, isolated_provider_cost_db) -> None:
+    del isolated_provider_cost_db
+    auth = AuthContext(
+        tenant_id="tenant-a",
+        permissions=frozenset({"provider:submit"}),
+        key_type=ApiKeyType.TENANT,
+        key_id="commercial-injection-test",
+    )
+    monkeypatch.setattr("src.routers.scenario.get_auth_context", lambda: auth)
 
 
 def _plan_payload(scenario: str, step: str = "strategy") -> dict[str, Any]:
@@ -116,7 +129,7 @@ async def test_s2_run_passes_commercial_injection_plan_to_pipeline(monkeypatch: 
 
     async def fake_run(self: S2BrandCampaignPipeline, **kwargs: Any) -> dict[str, Any]:
         captured.update(kwargs)
-        return {"success": True, "scenario": "s2"}
+        return {"success": True, "_execution_completed": True, "scenario": "s2"}
 
     monkeypatch.setattr(S2BrandCampaignPipeline, "run", fake_run)
 
@@ -127,7 +140,11 @@ async def test_s2_run_passes_commercial_injection_plan_to_pipeline(monkeypatch: 
         )
     )
 
-    assert result["success"] is True
+    assert result["status"] == "completed_bounded"
+    assert result["completion_kind"] == "no_media"
+    assert result["request_succeeded"] is True
+    assert result["success"] is False
+    assert result["full_media_success"] is False
     assert captured["commercial_injection_plan"]["scenario"] == "s2"
     assert captured["commercial_injection_plan"]["steps"][0]["gate_checks"] == ["rights_pass"]
 
@@ -141,7 +158,7 @@ async def test_s5_run_passes_commercial_injection_plan_to_pipeline(monkeypatch: 
 
     async def fake_run(self: S5BrandVlogPipeline, **kwargs: Any) -> dict[str, Any]:
         captured.update(kwargs)
-        return {"success": True, "scenario": "s5"}
+        return {"success": True, "_execution_completed": True, "scenario": "s5"}
 
     monkeypatch.setattr(S5BrandVlogPipeline, "run", fake_run)
 
@@ -153,7 +170,11 @@ async def test_s5_run_passes_commercial_injection_plan_to_pipeline(monkeypatch: 
         )
     )
 
-    assert result["success"] is True
+    assert result["status"] == "completed_bounded"
+    assert result["completion_kind"] == "no_media"
+    assert result["request_succeeded"] is True
+    assert result["success"] is False
+    assert result["full_media_success"] is False
     assert captured["commercial_injection_plan"]["scenario"] == "s5"
     assert captured["commercial_injection_plan"]["steps"][0]["step"] == "vlog_strategy"
 
@@ -167,6 +188,8 @@ async def test_unified_submit_attaches_commercial_injection_to_step_runner_confi
 ) -> None:
     from src.pipeline import step_runner
     from src.routers import scenario
+    from src.services import submission_idempotency
+    from src.services.submission_idempotency import SubmissionClaim
 
     captured: dict[str, Any] = {}
 
@@ -184,14 +207,36 @@ async def test_unified_submit_attaches_commercial_injection_to_step_runner_confi
             captured["config"] = config
             captured["mode"] = mode
             captured["scenario"] = scenario
-            return f"{scenario}_injection_submit"
+            captured["label"] = label
+            return label or f"{scenario}_injection_submit"
 
         async def resume(self, label: str) -> dict[str, Any]:
             return {"label": label}
 
     monkeypatch.setattr(step_runner, "StepRunner", FakeStepRunner)
     monkeypatch.setattr(scenario, "_register_background_task", lambda task, label: None)
-    monkeypatch.setattr("src.tools.cost_tracker.set_thread_id", lambda label: None)
+
+    class FakeSubmissionIdempotency:
+        async def claim_submission(self, **_kwargs: Any) -> SubmissionClaim:
+            return SubmissionClaim(outcome="owner", record={"id": "submission-fixture"})
+
+        async def transition(self, **kwargs: Any) -> dict[str, Any]:
+            return {"id": kwargs["record_id"], "record_status": kwargs["new_status"]}
+
+        def start_heartbeat(self, **_kwargs: Any) -> None:
+            return None
+
+        async def mark_terminal(self, **kwargs: Any) -> dict[str, Any]:
+            return {"id": kwargs["record_id"], "record_status": kwargs["status"]}
+
+        async def stop_heartbeat(self, **_kwargs: Any) -> None:
+            return None
+
+    monkeypatch.setattr(
+        submission_idempotency,
+        "get_submission_idempotency_service",
+        lambda: FakeSubmissionIdempotency(),
+    )
 
     body: dict[str, Any] = {"commercial_injection_plan": _plan_payload(scenario_id, step=step_name)}
     if scenario_id == "s2":
@@ -199,11 +244,15 @@ async def test_unified_submit_attaches_commercial_injection_to_step_runner_confi
     if scenario_id == "s5":
         body["product_sku"] = {"name": "Bottle Warmer"}
 
-    result = await scenario.submit_scenario(scenario_id, body)
+    result = await scenario._submit_scenario_validated(
+        scenario_id,
+        body,
+        f"commercial-{scenario_id}-submit-0001",
+    )
     await asyncio.sleep(0)
 
     config = captured["config"]
-    assert result["label"] == f"{scenario_id}_injection_submit"
+    assert result["label"] == captured["label"]
     assert captured["scenario"] == scenario_id
     assert config[SCENARIO_INJECTION_MODE_KEY] == "read_only_blueprint"
     assert get_step_injection_from_state({"scenario": scenario_id, "config": config}, step_name) is not None

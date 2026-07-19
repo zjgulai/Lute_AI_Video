@@ -33,6 +33,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--approved-by", required=True, help="Concrete operator or owner name")
     parser.add_argument("--approval-statement", required=True, help="Exact C21 authorization statement")
     parser.add_argument("--approved-at", help="ISO8601 approval timestamp; defaults to current UTC")
+    parser.add_argument("--expires-at", help="ISO8601 expiry timestamp; defaults to four hours after approval")
     parser.add_argument("--provider", default=DEFAULT_AUTH_PROVIDER)
     parser.add_argument("--model", default=DEFAULT_AUTH_MODEL)
     parser.add_argument("--provider-model-scope", default=DEFAULT_AUTH_PROVIDER_MODEL_SCOPE)
@@ -77,6 +78,7 @@ def main() -> int:
         payload = build_authorized_live_approval_payload(
             approved_by=args.approved_by,
             approved_at=args.approved_at,
+            expires_at=args.expires_at,
             approval_statement=args.approval_statement,
             provider=args.provider,
             model=args.model,

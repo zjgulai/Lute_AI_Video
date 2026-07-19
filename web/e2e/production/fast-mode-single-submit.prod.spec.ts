@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { delay, productionApiHeaders } from "./helpers";
+import { delay, productionApiHeaders, productionSubmitHeaders } from "./helpers";
 
 const maxSubmitCount = Number(process.env.PLAYWRIGHT_MAX_SUBMIT_COUNT ?? "1");
 const providerMaxRetries = Number(process.env.PLAYWRIGHT_PROVIDER_MAX_RETRIES ?? "0");
@@ -21,11 +21,14 @@ test.describe("Production smoke — Fast Mode single-submit token smoke", () => 
     expect(submitCount, "submit count exceeded authorized max_submit_count").toBeLessThanOrEqual(maxSubmitCount);
 
     const submit = await request.post("/api/fast/submit", {
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("fast-single-submit", {
+        "Content-Type": "application/json",
+      }),
       data: {
         user_prompt: "a single red apple on a plain white background, product-safe object shot",
         duration: 10,
         enable_tts: false,
+        enable_media_synthesis: true,
         artifact_disposition: artifactDisposition,
         provider_max_retries: providerMaxRetries,
       },
@@ -61,7 +64,15 @@ test.describe("Production smoke — Fast Mode single-submit token smoke", () => 
     expect(finalSnapshot, "Fast Mode task must complete before the smoke timeout").not.toBeNull();
     const result = finalSnapshot?.result as Record<string, unknown> | undefined;
     expect(result, "done status must include result").toBeTruthy();
+    expect(result?.status).toBe("completed_full");
+    expect(result?.lifecycle_status).toBe("completed_full");
+    expect(result?.completion_kind).toBe("full_media");
+    expect(result?.request_succeeded).toBe(true);
     expect(result?.success).toBe(true);
+    expect(result?.full_media_success).toBe(true);
+    expect(result?.pipeline_complete).toBe(true);
+    expect(result?.publish_allowed).toBe(false);
+    expect(result?.delivery_accepted).toBe(false);
     expect(result?.is_stub).toBe(false);
     expect(result?.artifact_disposition).toBe(artifactDisposition);
     if (artifactDisposition === "pending_review") {

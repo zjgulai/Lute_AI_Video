@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { productionApiHeaders } from "./helpers";
+import { productionApiHeaders, productionSubmitHeaders } from "./helpers";
 
 function authHeaders(extra: Record<string, string> = {}) {
   return productionApiHeaders(extra);
@@ -9,7 +9,9 @@ test.describe("Production smoke — Fast Mode async submit", () => {
   test("POST /api/fast/submit returns task_id quickly (~2-5s) @token-smoke", async ({ request }) => {
     const start = Date.now();
     const r = await request.post("/api/fast/submit", {
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("fast-submit-smoke", {
+        "Content-Type": "application/json",
+      }),
       data: {
         user_prompt: "a single red apple on white background",
         duration: 10,
@@ -36,7 +38,9 @@ test.describe("Production smoke — Fast Mode async submit", () => {
 
   test("submit + status round-trip — task is queryable + has stage field @token-smoke", async ({ request }) => {
     const r1 = await request.post("/api/fast/submit", {
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: productionSubmitHeaders("fast-status-smoke", {
+        "Content-Type": "application/json",
+      }),
       data: { user_prompt: "blue ocean wave", duration: 10, enable_tts: false },
     });
     expect(r1.status()).toBe(200);

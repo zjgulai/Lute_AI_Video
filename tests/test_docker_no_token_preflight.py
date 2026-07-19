@@ -27,9 +27,10 @@ PROVIDER_SECRET_NAMES = {
     "SILICONFLOW_API_KEY",
     "ELEVENLABS_API_KEY",
     "TIKTOK_ACCESS_TOKEN",
-    "TIKTOK_OPEN_ID",
+    "TIKTOK_PUBLISH_ENABLED",
     "SHOPIFY_STORE_URL",
-    "SHOPIFY_ADMIN_TOKEN",
+    "SHOPIFY_ACCESS_TOKEN",
+    "SHOPIFY_PUBLISH_ENABLED",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_KEY",
     "RUN_TOKEN_SMOKE",
@@ -76,29 +77,37 @@ def _job_text(job: dict[str, Any]) -> str:
     return yaml.safe_dump(job, sort_keys=True)
 
 
-def test_ci_and_deploy_docker_builds_are_cache_only_and_secret_free():
-    workflow_jobs = [
-        (_load_workflow(CI_YML)["jobs"]["docker-build"], "Build backend image (validate, no push)"),
-        (_load_workflow(DEPLOY_YML)["jobs"]["build-images"], "Build backend image (cache only)"),
-    ]
+def test_ci_and_deploy_docker_builds_are_secret_free():
+    ci_job = _load_workflow(CI_YML)["jobs"]["docker-build"]
+    build_step = _step_by_name(
+        ci_job.get("steps") or [], "Build backend image (validate, no push)"
+    )
+    build_with = build_step.get("with") or {}
+    assert build_with.get("push") is False
+    assert build_with.get("load") is False
+    assert set(_build_args_map(build_step)) == {"APT_MIRROR", "PIP_INDEX_URL"}
 
-    for job, step_name in workflow_jobs:
+    deploy_job = _load_workflow(DEPLOY_YML)["jobs"]["build-images"]
+    for step_name in ("Build backend image", "Build frontend image", "Build rendering image"):
+        job = deploy_job
         build_step = _step_by_name(job.get("steps") or [], step_name)
         build_with = build_step.get("with") or {}
 
-        assert build_step.get("uses") == "docker/build-push-action@v7"
+        assert build_step.get("uses") == (
+            "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a"
+        )
         assert build_with.get("push") is False
-        assert build_with.get("load") is False
-        assert build_with.get("file") == "./Dockerfile.backend"
+        assert build_with.get("load") is True
 
         build_args = _build_args_map(build_step)
-        assert set(build_args) == {"APT_MIRROR", "PIP_INDEX_URL"}
+        assert build_args.get("RELEASE_SOURCE_SHA") == "${{ github.sha }}"
         assert not (set(build_args) & PROVIDER_SECRET_NAMES)
 
+    for job in (ci_job, deploy_job):
         job_text = _job_text(job)
         assert "secrets." not in job_text
         for secret_name in PROVIDER_SECRET_NAMES:
-            assert secret_name not in job_text
+            assert f"secrets.{secret_name}" not in job_text
 
 
 def test_ci_and_deploy_validate_compose_config_without_starting_services():
@@ -112,12 +121,15 @@ def test_ci_and_deploy_validate_compose_config_without_starting_services():
         run = step.get("run") or ""
 
         assert ": > .env" in run
-        assert ": > deploy/lighthouse/.env.prod" in run
         assert "docker compose -f docker-compose.yml config --quiet" in run
         assert (
-            "docker compose -f deploy/lighthouse/docker-compose.prod.yml config --quiet"
+            "docker compose -f deploy/lighthouse/docker-compose.release.yml config --quiet"
             in run
         )
+        assert "RELEASE_SOURCE_SHA=" in run
+        assert "RELEASE_IMAGE_TAG=" in run
+        assert "AI_VIDEO_ENV_FILE=/dev/null" in run
+        assert "PORTAL_AUTH_ENV_FILE=/dev/null" in run
 
         for forbidden in FORBIDDEN_COMPOSE_PREVIEW_COMMANDS:
             assert forbidden not in run

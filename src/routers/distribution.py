@@ -1,146 +1,224 @@
-"""distribution router — extracted from api.py (P1-11)."""
+"""Authenticated distribution and acceptance-backed publish adapters."""
 
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+import re
+from typing import Annotated
 
-try:
-    from src.storage import HAS_STORAGE
-    from src.storage.repository import PublishLogRepository
-except ImportError:
-    HAS_STORAGE = False
-    PublishLogRepository = None  # type: ignore[misc,assignment]
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from pydantic import BeforeValidator, ValidationError
 
-if TYPE_CHECKING:
-    pass
-
-from src.routers._deps import _safe_error, verify_api_key
+from src.models.publish_attempt import (
+    DurableTikTokStatusResponse,
+    PublishAttemptErrorResponse,
+    PublishAttemptReadbackResponse,
+    PublishAttemptRequest,
+    PublishAttemptResponse,
+)
+from src.routers._deps import (
+    AuthContext,
+    require_permission,
+    verify_api_key,
+)
+from src.services.publish_attempt import (
+    PublishAttemptError,
+    get_publish_attempt_service,
+)
+from src.storage.publish_attempt_repository import PublishAttemptStoreUnavailable
 
 router = APIRouter()
 
+_LEGACY_VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]+$"
+_LEGACY_VIDEO_ID_RE = re.compile(_LEGACY_VIDEO_ID_PATTERN)
+_PUBLISH_PERMISSION = require_permission("artifact:publish")
+_ATTEMPT_ID_PATTERN = (
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-"
+    r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+)
+_TIKTOK_POST_ID_PATTERN = r"^[1-9][0-9]*$"
 
-def _as_mapping(value: object) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
+_PUBLISH_OPENAPI_EXTRA = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": PublishAttemptRequest.model_json_schema(
+                    mode="validation"
+                )
+            }
+        },
+    },
+}
+
+_PUBLISH_RESPONSES = {
+    401: {"description": "Invalid API key"},
+    403: {"description": "Insufficient permission"},
+    404: {"model": PublishAttemptErrorResponse},
+    409: {"model": PublishAttemptErrorResponse},
+    422: {"description": "Safe validation projection"},
+    500: {"model": PublishAttemptErrorResponse},
+    502: {"model": PublishAttemptErrorResponse},
+    503: {"model": PublishAttemptErrorResponse},
+}
 
 
-def _extract_publish_authorization(body: Mapping[str, Any]) -> Mapping[str, Any]:
-    content = _as_mapping(body.get("content"))
-    metadata = _as_mapping(body.get("metadata"))
-    for candidate in (
-        body.get("delivery_acceptance"),
-        content.get("delivery_acceptance"),
-        metadata.get("delivery_acceptance"),
+def _validate_legacy_video_id(value: object) -> object:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 128
+        or _LEGACY_VIDEO_ID_RE.fullmatch(value) is None
     ):
-        if isinstance(candidate, Mapping):
-            return candidate
-    return {}
-
-
-def _require_human_publish_authorization(body: Mapping[str, Any]) -> None:
-    acceptance = _extract_publish_authorization(body)
-    if not acceptance:
         raise HTTPException(
-            status_code=403,
-            detail="Human delivery acceptance is required before publishing",
+            status_code=422,
+            detail=[
+                {
+                    "type": "value_error",
+                    "loc": ["path", "video_id"],
+                    "msg": "Invalid path parameter",
+                }
+            ],
         )
+    return value
 
-    source = str(
-        acceptance.get("source")
-        or acceptance.get("decision_source")
-        or acceptance.get("confirmed_by_type")
-        or ""
-    ).strip().lower()
-    if source != "human":
+
+async def _parse_publish_request(request: Request) -> PublishAttemptRequest:
+    try:
+        payload = await request.json()
+    except Exception:
         raise HTTPException(
-            status_code=403,
-            detail="Publish authorization must come from a human decision source",
-        )
-
-    if acceptance.get("delivery_accepted") is not True:
-        raise HTTPException(
-            status_code=403,
-            detail="delivery_accepted=true is required before publishing",
-        )
-    if acceptance.get("publish_allowed") is not True:
-        raise HTTPException(
-            status_code=403,
-            detail="publish_allowed=true is required before publishing",
-        )
-    if acceptance.get("approved_brand_token_write") is True:
-        raise HTTPException(
-            status_code=403,
-            detail="Publishing cannot write or imply approved brand token approval",
-        )
-
-    reviewer = str(
-        acceptance.get("reviewer")
-        or acceptance.get("reviewer_id")
-        or acceptance.get("accepted_by")
-        or ""
-    ).strip()
-    if not reviewer:
-        raise HTTPException(
-            status_code=403,
-            detail="Human reviewer identity is required before publishing",
-        )
-
-
-@router.post("/distribution/publish", dependencies=[Depends(verify_api_key)])
-async def distribution_publish(body: dict[str, Any]):
-    """Publish content to a platform (TikTok or Shopify).
-
-    Request body:
-        platform: "tiktok" | "shopify"
-        content: dict with platform-specific fields
-
-    Returns:
-        Publish result dict from the connector.
-    """
-    from src.connectors.registry import publish_to_platform
-
-    _require_human_publish_authorization(body)
+            status_code=422,
+            detail=[
+                {"type": "json_invalid", "loc": ["body"], "msg": "Invalid JSON"}
+            ],
+        ) from None
 
     try:
-        result = await publish_to_platform(body["platform"], body["content"])
-        if HAS_STORAGE and PublishLogRepository is not None:
-            repo = PublishLogRepository()  # type: ignore[misc]
-            await repo.create({
-                "platform": body["platform"],
-                "post_id": result.get("post_id"),
-                "content": body["content"],
-                "status": "published" if result.get("success") else "failed",
-                "url": result.get("url"),
-                "error": result.get("error"),
-            })
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=_safe_error(e))
-    except Exception as e:
-        import logging
-        logging.error("distribution publish failed: %s", e)
-        raise HTTPException(status_code=500, detail=_safe_error(e))
+        return PublishAttemptRequest.model_validate(payload)
+    except ValidationError as exc:
+        safe_errors = [
+            {
+                "type": str(item.get("type") or "value_error"),
+                "loc": list(item.get("loc") or ("body",)),
+                "msg": str(item.get("msg") or "Invalid request"),
+            }
+            for item in exc.errors(
+                include_url=False,
+                include_context=False,
+            )
+        ]
+        raise HTTPException(status_code=422, detail=safe_errors) from None
 
 
-@router.get("/distribution/status/{platform}/{post_id}", dependencies=[Depends(verify_api_key)])
-async def distribution_status(platform: str, post_id: str):
-    """Get publish status for a post on a platform.
-
-    Returns:
-        Status dict from the connector.
-    """
-    from src.connectors.registry import get_connector
-
+@router.post(
+    "/distribution/publish",
+    response_model=PublishAttemptResponse,
+    responses=_PUBLISH_RESPONSES,
+    openapi_extra=_PUBLISH_OPENAPI_EXTRA,
+)
+async def distribution_publish(
+    request: Request,
+    auth: AuthContext = Depends(_PUBLISH_PERMISSION),
+) -> PublishAttemptResponse:
+    """Execute one canonical acceptance-backed publish attempt."""
+    body = await _parse_publish_request(request)
     try:
-        connector = get_connector(platform)
-        result = await connector.get_status(post_id)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=_safe_error(e))
-    except Exception as e:
-        import logging
-        logging.error("distribution status failed: %s", e)
-        raise HTTPException(status_code=500, detail=_safe_error(e))
+        return await get_publish_attempt_service().execute(
+            auth=auth,
+            request=body,
+            route_kind="canonical",
+        )
+    except PublishAttemptError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail.model_dump(mode="json"),
+        ) from None
+
+
+@router.get(
+    "/distribution/publish-attempts/{attempt_id}",
+    response_model=PublishAttemptReadbackResponse,
+    responses={
+        401: {"description": "Invalid API key"},
+        403: {"description": "Insufficient permission"},
+        404: {"description": "Publish attempt not found"},
+        503: {"description": "Publish attempt store unavailable"},
+    },
+)
+async def distribution_publish_attempt(
+    attempt_id: Annotated[
+        str,
+        Path(
+            min_length=36,
+            max_length=36,
+            pattern=_ATTEMPT_ID_PATTERN,
+        ),
+    ],
+    auth: AuthContext = Depends(_PUBLISH_PERMISSION),
+) -> PublishAttemptReadbackResponse:
+    """Return one safe tenant-bound durable publish-attempt projection."""
+    try:
+        readback = await get_publish_attempt_service().get_attempt_readback(
+            auth=auth,
+            attempt_id=attempt_id,
+        )
+    except PublishAttemptStoreUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "publish_attempt_store_unavailable"},
+        ) from None
+    if readback is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "publish_attempt_not_found"},
+        )
+    return readback
+
+
+@router.get(
+    "/distribution/status/{platform}/{post_id}",
+    response_model=DurableTikTokStatusResponse,
+    deprecated=True,
+)
+async def distribution_status(
+    platform: str,
+    post_id: Annotated[
+        str,
+        Path(
+            min_length=1,
+            max_length=128,
+            pattern=_TIKTOK_POST_ID_PATTERN,
+        ),
+    ],
+    auth: AuthContext = Depends(_PUBLISH_PERMISSION),
+) -> DurableTikTokStatusResponse:
+    """Read one trusted persisted TikTok receipt without a provider call."""
+    if platform == "shopify":
+        raise HTTPException(
+            status_code=410,
+            detail={"code": "distribution_status_route_deprecated"},
+        )
+    if platform != "tiktok":
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "distribution_status_platform_unsupported"},
+        )
+    try:
+        status = await get_publish_attempt_service().get_durable_tiktok_status(
+            auth=auth,
+            post_id=post_id,
+        )
+    except PublishAttemptStoreUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "publish_attempt_store_unavailable"},
+        )
+    if status is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "distribution_status_not_found"},
+        )
+    return status
 
 
 @router.get("/distribution/platforms", dependencies=[Depends(verify_api_key)])
@@ -150,76 +228,53 @@ async def distribution_platforms():
     Returns:
         Array of platform metadata dicts.
     """
-    from src.connectors.shopify_connector import _is_mock_mode as _shopify_mock
-    from src.connectors.tiktok_connector import _is_mock_mode as _tiktok_mock
-    return [
-        {"id": "tiktok", "name": "TikTok", "connected": not _tiktok_mock()},
-        {"id": "shopify", "name": "Shopify", "connected": not _shopify_mock()},
-    ]
-
-
-@router.post("/publish/{video_id}", dependencies=[Depends(verify_api_key)])
-async def publish_video(video_id: str, body: dict[str, Any]):
-    """Publish a video to selected platforms.
-
-    Request body:
-        platforms: ["tiktok", "shopify"]
-        metadata: { hook, hashtags, product_name, ... }
-
-    Returns:
-        [{ platform, success, post_id, post_url, error }]
-    """
-    from src.connectors.publish_engine import PublishEngine
-
-    platforms = body.get("platforms", [])
-    metadata = body.get("metadata", {})
-
-    _require_human_publish_authorization(body)
-
-    if not platforms:
-        raise HTTPException(status_code=400, detail="No platforms specified")
-
-    from src.config import OUTPUT_DIR
-
-    video_path = metadata.get("video_path", "")
-    if not video_path:
-        candidates = list(OUTPUT_DIR.rglob(f"{video_id}.*"))
-        if candidates:
-            video_path = str(candidates[0])
-        else:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Video file for '{video_id}' not found",
-            )
-
-    metadata["video_path"] = video_path
-
-    engine = PublishEngine()
-    results = await engine.publish(video_path, metadata, platforms)
-
-    if HAS_STORAGE and PublishLogRepository is not None:
-        try:
-            repo = PublishLogRepository()  # type: ignore[misc]
-            for r in results:
-                await repo.create({
-                    "platform": r.platform,
-                    "post_id": r.post_id,
-                    "content": {"video_id": video_id, "metadata": metadata},
-                    "status": "published" if r.success else "failed",
-                    "url": r.post_url,
-                    "error": r.error,
-                })
-        except Exception as exc:
-            import logging
-            logging.warning("Failed to log publish result: %s", exc)
+    from src.connectors.registry import inspect_publish_readiness
 
     return [
         {
-            "platform": r.platform,
-            "success": r.success,
-            "post_id": r.post_id,
-            "post_url": r.post_url,
-            "error": r.error,
-        }
-        for r in results
+            "id": "tiktok",
+            "name": "TikTok",
+            "connected": inspect_publish_readiness("tiktok").ready,
+        },
+        {
+            "id": "shopify",
+            "name": "Shopify",
+            "connected": inspect_publish_readiness("shopify").ready,
+        },
     ]
+
+
+@router.post(
+    "/publish/{video_id}",
+    response_model=PublishAttemptResponse,
+    responses=_PUBLISH_RESPONSES,
+    deprecated=True,
+    openapi_extra=_PUBLISH_OPENAPI_EXTRA,
+)
+async def publish_video(
+    request: Request,
+    video_id: Annotated[
+        str,
+        Path(
+            min_length=1,
+            max_length=128,
+            pattern=_LEGACY_VIDEO_ID_PATTERN,
+        ),
+        BeforeValidator(_validate_legacy_video_id),
+    ],
+    auth: AuthContext = Depends(_PUBLISH_PERMISSION),
+) -> PublishAttemptResponse:
+    """Execute one publish attempt through the deprecated path adapter."""
+    del video_id
+    body = await _parse_publish_request(request)
+    try:
+        return await get_publish_attempt_service().execute(
+            auth=auth,
+            request=body,
+            route_kind="legacy_adapter",
+        )
+    except PublishAttemptError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail.model_dump(mode="json"),
+        ) from None

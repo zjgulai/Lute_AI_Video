@@ -32,6 +32,10 @@ from src.pipeline.scenario_injection_plan import (
     with_injection_config,
     with_optional_injection_config,
 )
+from tests.generation_policy_test_utils import (
+    attach_execution_policy,
+    attach_test_provider_execution_authority,
+)
 
 
 def test_scenario_injection_plan_is_read_only_and_excludes_candidate_tokens():
@@ -390,7 +394,11 @@ async def test_c6_s5_run_passes_read_only_injection_plan_to_step_runner(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_c6_step_runner_exposes_current_step_injection_before_run_step(monkeypatch):
+async def test_c6_step_runner_exposes_current_step_injection_before_run_step(
+    monkeypatch,
+    isolated_provider_cost_db,
+):
+    del isolated_provider_cost_db
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
     from src.pipeline.step_runner import StepRunner
 
@@ -418,6 +426,8 @@ async def test_c6_step_runner_exposes_current_step_injection_before_run_step(mon
         "media_synthesis_errors": [],
         "gates": {},
     }
+    attach_execution_policy(state, scenario="s1", media=False)
+    await attach_test_provider_execution_authority(state)
 
     class FakeStateManager:
         async def load(self, label):
@@ -431,7 +441,6 @@ async def test_c6_step_runner_exposes_current_step_injection_before_run_step(mon
         captured["runtime_step_injection"] = runtime_state["steps"][step_name].get(STEP_INJECTION_DATA_KEY)
         return []
 
-    monkeypatch.setattr("src.tools.cost_tracker.check_budget", lambda label, mode: None)
     monkeypatch.setattr(S1ProductDirectPipeline, "run_step", fake_run_step)
 
     await StepRunner(FakeStateManager()).run_step("c6_step_runner_fixture", "strategy")
@@ -443,7 +452,11 @@ async def test_c6_step_runner_exposes_current_step_injection_before_run_step(mon
 
 
 @pytest.mark.asyncio
-async def test_c11_step_runner_exposes_runtime_injection_before_run_step(monkeypatch):
+async def test_c11_step_runner_exposes_runtime_injection_before_run_step(
+    monkeypatch,
+    isolated_provider_cost_db,
+):
+    del isolated_provider_cost_db
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
     from src.pipeline.step_runner import StepRunner
 
@@ -475,6 +488,8 @@ async def test_c11_step_runner_exposes_runtime_injection_before_run_step(monkeyp
         "media_synthesis_errors": [],
         "gates": {},
     }
+    attach_execution_policy(state, scenario="s1", media=False)
+    await attach_test_provider_execution_authority(state)
 
     class FakeStateManager:
         async def load(self, label):
@@ -485,12 +500,9 @@ async def test_c11_step_runner_exposes_runtime_injection_before_run_step(monkeyp
 
     async def fake_run_step(self, step_name, runtime_state):
         captured["current_runtime_injection"] = runtime_state.get(CURRENT_RUNTIME_INJECTION_KEY)
-        captured["step_runtime_injection"] = runtime_state["steps"][step_name].get(
-            STEP_RUNTIME_INJECTION_DATA_KEY
-        )
+        captured["step_runtime_injection"] = runtime_state["steps"][step_name].get(STEP_RUNTIME_INJECTION_DATA_KEY)
         return []
 
-    monkeypatch.setattr("src.tools.cost_tracker.check_budget", lambda label, mode: None)
     monkeypatch.setattr(S1ProductDirectPipeline, "run_step", fake_run_step)
 
     await StepRunner(FakeStateManager()).run_step("c11_step_runner_fixture", "strategy")

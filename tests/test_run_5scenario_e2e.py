@@ -2,14 +2,40 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import requests
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "run_5scenario_e2e.py"
 DEMO_KEY = "ai_video_demo_2026"
+
+
+def _load_script_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("run_5scenario_e2e_under_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class _Response:
+    def __init__(self, status_code: int, payload: dict[str, Any]) -> None:
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(response=self)
 
 
 def _run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -94,3 +120,83 @@ def test_invalid_scenario_key_is_rejected_by_parser():
     result = _run_script("--scenario", "unknown")
     assert result.returncode == 2
     assert "invalid choice: 'unknown'" in result.stderr
+
+
+def test_async_scenario_submit_uses_caller_owned_idempotency_key_once(monkeypatch):
+    module = _load_script_module()
+    post_calls: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> _Response:
+        post_calls.append({"url": url, **kwargs})
+        return _Response(200, {"label": "s1_fixture", "status": "queued"})
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+    monkeypatch.setattr(
+        module.requests,
+        "get",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("readback is unnecessary")),
+    )
+
+    key = "scenario-smoke-s1-00000001"
+    label = module.submit_scenario(
+        api_base="https://example.invalid/api",
+        scenario="s1",
+        payload={"product_catalog": {}},
+        api_key="fixture-api-key",
+        idempotency_key=key,
+        verify_ssl=True,
+    )
+
+    assert label == "s1_fixture"
+    assert len(post_calls) == 1
+    assert post_calls[0]["headers"]["Idempotency-Key"] == key
+
+
+def test_ambiguous_submit_recovers_by_readback_without_second_post(monkeypatch):
+    module = _load_script_module()
+    post_headers: list[dict[str, str]] = []
+    readback_headers: list[dict[str, str]] = []
+    sleeps: list[float] = []
+    readbacks = iter(
+        [
+            _Response(404, {"detail": {"code": "submission_not_found"}}),
+            _Response(
+                200,
+                {
+                    "resource_type": "scenario",
+                    "resource_id": "s3_recovered",
+                    "scenario": "s3",
+                    "status": "queued",
+                    "submit_response": {"label": "s3_recovered"},
+                },
+            ),
+        ]
+    )
+
+    def fake_post(_url: str, **kwargs: Any) -> _Response:
+        post_headers.append(kwargs["headers"])
+        raise requests.Timeout("ambiguous fixture")
+
+    def fake_get(_url: str, **kwargs: Any) -> _Response:
+        readback_headers.append(kwargs["headers"])
+        return next(readbacks)
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(module.time, "sleep", sleeps.append)
+
+    key = "scenario-smoke-s3-00000001"
+    label = module.submit_scenario(
+        api_base="https://example.invalid/api",
+        scenario="s3",
+        payload={"video_url": "https://example.invalid/video"},
+        api_key="fixture-api-key",
+        idempotency_key=key,
+        verify_ssl=True,
+    )
+
+    assert label == "s3_recovered"
+    assert len(post_headers) == 1
+    assert post_headers[0]["Idempotency-Key"] == key
+    assert [headers["Idempotency-Key"] for headers in readback_headers] == [key, key]
+    assert sleeps == [1.0]

@@ -7,7 +7,7 @@ import json
 import math
 import os
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -135,6 +135,7 @@ def build_authorized_live_approval_payload(
     approved_by: str,
     approval_statement: str,
     approved_at: str | None = None,
+    expires_at: str | None = None,
     provider: str = DEFAULT_AUTH_PROVIDER,
     model: str = DEFAULT_AUTH_MODEL,
     provider_model_scope: str = DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
@@ -150,9 +151,15 @@ def build_authorized_live_approval_payload(
     test_scope = test_scope.strip()
     budget_limit = budget_limit.strip()
     approved_at = approved_at.strip() if approved_at else _utc_now_z()
+    expires_at = expires_at.strip() if expires_at else _authorization_expiry(approved_at)
 
-    if _looks_like_template_placeholder(approved_by) or _looks_like_template_placeholder(approved_at):
-        raise ValueError("approved_by and approved_at must be concrete non-template values")
+    if (
+        _looks_like_template_placeholder(approved_by)
+        or _looks_like_template_placeholder(approved_at)
+        or _looks_like_template_placeholder(expires_at)
+    ):
+        raise ValueError("approved_by, approved_at, and expires_at must be concrete non-template values")
+    _validate_authorization_window(approved_at, expires_at)
 
     budget_value = _positive_finite_number(budget_limit_usd)
     if budget_value is None:
@@ -202,6 +209,7 @@ def build_authorized_live_approval_payload(
         "provider_calls_allowed": True,
         "approved_by": approved_by,
         "approved_at": approved_at,
+        "expires_at": expires_at,
         "provider": provider,
         "model": model,
         "provider_model_scope": provider_model_scope,
@@ -232,6 +240,28 @@ def build_authorized_live_approval_payload(
         "approval_statement": approval_statement,
         "approval_origin": "operator_supplied_exact_statement",
     }
+
+
+def _authorization_expiry(approved_at: str) -> str:
+    approved = _parse_authorization_timestamp(approved_at, "approved_at")
+    return (approved + timedelta(hours=4)).isoformat().replace("+00:00", "Z")
+
+
+def _validate_authorization_window(approved_at: str, expires_at: str) -> None:
+    approved = _parse_authorization_timestamp(approved_at, "approved_at")
+    expires = _parse_authorization_timestamp(expires_at, "expires_at")
+    if expires <= approved:
+        raise ValueError("expires_at must be later than approved_at")
+
+
+def _parse_authorization_timestamp(value: str, field_name: str) -> datetime:
+    try:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO8601 timestamp") from exc
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError(f"{field_name} must be timezone-aware")
+    return timestamp.astimezone(UTC)
 
 
 def build_provider_account_readiness_payload(
@@ -301,12 +331,14 @@ def _check_api_keys(env: Mapping[str, str]) -> list[PreflightCheck]:
     checks: list[PreflightCheck] = []
     for key_name in REQUIRED_API_KEY_ENVS:
         present = bool(env.get(key_name))
-        checks.append(PreflightCheck(
-            name=f"api_key:{key_name}",
-            status="pass" if present else "block",
-            detail=f"{key_name} is {'set' if present else 'missing'}; value is not inspected or printed",
-            evidence_refs=[key_name],
-        ))
+        checks.append(
+            PreflightCheck(
+                name=f"api_key:{key_name}",
+                status="pass" if present else "block",
+                detail=f"{key_name} is {'set' if present else 'missing'}; value is not inspected or printed",
+                evidence_refs=[key_name],
+            )
+        )
     return checks
 
 
@@ -379,7 +411,9 @@ def _check_approval_record(path: Path | None) -> tuple[PreflightCheck, dict[str,
             detail="approval record requires approved_by and approved_at",
             evidence_refs=[str(path)],
         ), None
-    if _looks_like_template_placeholder(payload.get("approved_by")) or _looks_like_template_placeholder(payload.get("approved_at")):
+    if _looks_like_template_placeholder(payload.get("approved_by")) or _looks_like_template_placeholder(
+        payload.get("approved_at")
+    ):
         return PreflightCheck(
             name="authorized_live_approval",
             status="block",
@@ -696,7 +730,9 @@ def _check_provider_account_readiness(
             evidence_refs=[str(path)],
         )
 
-    if _looks_like_template_placeholder(payload.get("checked_by")) or _looks_like_template_placeholder(payload.get("checked_at")):
+    if _looks_like_template_placeholder(payload.get("checked_by")) or _looks_like_template_placeholder(
+        payload.get("checked_at")
+    ):
         return PreflightCheck(
             name="provider_account_readiness",
             status="block",
@@ -791,7 +827,8 @@ def _check_provider_capability_evidence(approval_payload: Mapping[str, Any] | No
     unsupported_required_models = [
         f"{item['provider']}/{item['model']}"
         for item in _contract_required_provider_models(sample_plan_contract)
-        if str(item["provider"]).lower() != provider.lower() or not _contract_supports_model(contract, str(item["model"]))
+        if str(item["provider"]).lower() != provider.lower()
+        or not _contract_supports_model(contract, str(item["model"]))
     ]
     if unsupported_required_models:
         return PreflightCheck(
@@ -929,7 +966,10 @@ def _sample_plan_binding_violations(
     violations = []
     expected_provider_model_scope = _contract_string(contract, "provider_model_scope")
     expected_test_scope = _contract_string(contract, "test_scope")
-    if expected_provider_model_scope and _approval_string(approval_payload, "provider_model_scope") != expected_provider_model_scope:
+    if (
+        expected_provider_model_scope
+        and _approval_string(approval_payload, "provider_model_scope") != expected_provider_model_scope
+    ):
         violations.append("approval record provider_model_scope must match sample plan contract")
     if expected_test_scope and _approval_string(approval_payload, "test_scope") != expected_test_scope:
         violations.append("approval record test_scope must match sample plan contract")
@@ -1070,12 +1110,7 @@ def _looks_like_template_placeholder(value: Any) -> bool:
     if not isinstance(value, str):
         return False
     normalized = value.strip().lower()
-    return (
-        not normalized
-        or normalized.startswith("<")
-        or "replace_me" in normalized
-        or "example" in normalized
-    )
+    return not normalized or normalized.startswith("<") or "replace_me" in normalized or "example" in normalized
 
 
 def _utc_now_z() -> str:

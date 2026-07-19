@@ -194,6 +194,107 @@ describe("StageProgress continuity diagnostics", () => {
     expect(getScenarioStatus).not.toHaveBeenCalled();
   });
 
+  it("offers an explicit read-only continue action after polling exhausts", async () => {
+    vi.mocked(getScenarioStatus).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { container, cleanup } = renderStageProgress({
+      label: "s1_poll_recovery",
+      scenario: "s1",
+      onComplete: () => {},
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(240_000);
+    });
+
+    const continueButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => /Continue checking|继续查询/.test(button.textContent || ""),
+    );
+    expect(continueButton).toBeTruthy();
+    const failedCallCount = vi.mocked(getScenarioStatus).mock.calls.length;
+
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      status: "running",
+      steps: { strategy: { status: "running" } },
+      errors: [],
+      soft_degraded_reasons: [],
+      continuity_diagnostics: null,
+    } as never);
+    await act(async () => {
+      continueButton?.click();
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+
+    expect(vi.mocked(getScenarioStatus).mock.calls.length).toBeGreaterThan(failedCallCount);
+    expect(container.textContent).not.toMatch(/Connection lost|连接中断/);
+    cleanup();
+  });
+
+  it.each(["failed", "recovery_required"])(
+    "stops polling on the explicit %s terminal state without calling completion",
+    async (terminalStatus) => {
+      const onComplete = vi.fn();
+      const onRecoveryRequired = vi.fn();
+      vi.mocked(getScenarioStatus).mockResolvedValue({
+        status: terminalStatus,
+        lifecycle_status: terminalStatus,
+        steps: { strategy: { status: "error" } },
+        errors: [terminalStatus],
+        soft_degraded_reasons: [],
+        continuity_diagnostics: null,
+      } as never);
+      const { container, cleanup } = renderStageProgress({
+        label: `s1_${terminalStatus}`,
+        scenario: "s1",
+        onComplete,
+        onRecoveryRequired,
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_100);
+      });
+      expect(getScenarioStatus).toHaveBeenCalledTimes(1);
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(onRecoveryRequired).toHaveBeenCalledTimes(
+        terminalStatus === "recovery_required" ? 1 : 0,
+      );
+      expect(container.textContent).toMatch(/Error|出错/);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(getScenarioStatus).toHaveBeenCalledTimes(1);
+      cleanup();
+    },
+  );
+
+  it("renders lifecycle-only failure as terminal error even without an errors array", async () => {
+    const onComplete = vi.fn();
+    const onError = vi.fn();
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      status: "running",
+      lifecycle_status: "failed",
+      steps: { strategy: { status: "error" } },
+      errors: [],
+      soft_degraded_reasons: [],
+      continuity_diagnostics: null,
+    } as never);
+    const { container, cleanup } = renderStageProgress({
+      label: "s1_lifecycle_failed",
+      scenario: "s1",
+      onComplete,
+      onError,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+    expect(getScenarioStatus).toHaveBeenCalledTimes(1);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(["scenario_execution_failed"]);
+    expect(container.textContent).toMatch(/Error|出错/);
+    cleanup();
+  });
+
   it("renders tooltip-backed continuity diagnostics for long running-stage text", async () => {
     const longBeatSummary =
       "context setup into product introduction with layered proof beats and detail emphasis for continuity review";
@@ -329,6 +430,68 @@ describe("StageProgress continuity diagnostics", () => {
     });
 
     expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("treats completed_bounded as terminal without promoting it to full success", async () => {
+    const onComplete = vi.fn();
+    const onError = vi.fn();
+
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      label: "s1_bounded_complete",
+      scenario: "s1",
+      status: "completed_bounded",
+      lifecycle_status: "completed_bounded",
+      completion_kind: "no_media",
+      request_succeeded: true,
+      success: false,
+      full_media_success: false,
+      pipeline_complete: false,
+      publish_allowed: false,
+      delivery_accepted: false,
+      current_step: null,
+      progress: 1,
+      pipeline_degraded: false,
+      gate_status: null,
+      steps: {
+        strategy: { status: "done" },
+      },
+      errors: [],
+      soft_degraded_reasons: [],
+      continuity_diagnostics: null,
+    } as never);
+
+    const { cleanup } = renderStageProgress({
+      label: "s1_bounded_complete",
+      scenario: "s1",
+      onComplete,
+      onError,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3700);
+    });
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({
+      status: "completed_bounded",
+      lifecycle_status: "completed_bounded",
+      completion_kind: "no_media",
+      request_succeeded: true,
+      success: false,
+      full_media_success: false,
+      pipeline_complete: false,
+      publish_allowed: false,
+      delivery_accepted: false,
+    }));
+    expect(onError).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(getScenarioStatus).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    cleanup();
   });
 
   it("stops polling after repeated status failures reach the threshold", async () => {

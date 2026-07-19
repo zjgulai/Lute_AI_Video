@@ -13,9 +13,13 @@ import QualityDashboard from "./QualityDashboard";
 import PerformanceDashboard from "./PerformanceDashboard";
 import PublishPanel from "./PublishPanel";
 import DirectorPlayback from "./DirectorPlayback";
+import RuntimeMediaAudio from "./RuntimeMediaAudio";
 import RuntimeMediaImage from "./RuntimeMediaImage";
+import RuntimeMediaLink from "./RuntimeMediaLink";
+import RuntimeMediaVideo from "./RuntimeMediaVideo";
 
 import { errorMessage } from "@/lib/errors";
+import { classifyGenerationResult } from "@/lib/generationLifecycle";
 const PLATFORM_ICON_MAP: Record<string, React.ComponentType<IconProps>> = {
   shopify: ShoppingBag,
   amazon: ShoppingCart,
@@ -83,7 +87,15 @@ type PublishRowResult = Record<string, unknown> & {
 };
 
 type OneShotResult = Record<string, unknown> & {
+  status?: string;
+  lifecycle_status?: string;
+  completion_kind?: string;
+  request_succeeded?: boolean;
   success?: boolean;
+  full_media_success?: boolean;
+  pipeline_complete?: boolean;
+  publish_allowed?: boolean;
+  delivery_accepted?: boolean;
   steps_completed?: number;
   briefs?: ResultItem[];
   scripts?: ScriptItem[];
@@ -143,7 +155,9 @@ export default function OneShotResultView({ scenario, result: rawResult, onReset
   const scripts = result?.scripts || [];
   const videoPrompts = result?.video_prompts || [];
   const thumbnails = result?.thumbnail_sets || result?.thumbnails || [];
-  const success: boolean = result?.success !== false;
+  const lifecycleState = classifyGenerationResult(result);
+  const fullSuccess = lifecycleState === "full";
+  const bounded = lifecycleState === "bounded";
   const stepsCompleted: number = result?.steps_completed || 0;
   const finalVideo: string = result?.final_video_path || "";
   const thumbImages: string[] = result?.thumbnail_image_paths || [];
@@ -172,18 +186,39 @@ export default function OneShotResultView({ scenario, result: rawResult, onReset
       <div className="apple-card p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${success ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]" : "bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)]"}`}>
+            <div
+              data-lifecycle-state={lifecycleState}
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                fullSuccess
+                  ? "bg-[rgba(215,92,112,0.10)] text-[var(--fortune-red)]"
+                  : bounded
+                    ? "bg-[rgba(215,168,52,0.10)] text-[var(--gold-foil)]"
+                    : "bg-[rgba(196,91,80,0.10)] text-[var(--crimson-mist)]"
+              }`}
+            >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                {success
+                {fullSuccess
                   ? <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                  : bounded
+                    ? <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" /></>
                   : <><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></>
                 }
               </svg>
             </div>
             <div>
-              <h2 className="text-base font-semibold text-[var(--text-h1)]">{t(SCENARIO_LABELS[scenario] || scenario)} {t("result.complete")}</h2>
+              <h2 className="text-base font-semibold text-[var(--text-h1)]">
+                {t(SCENARIO_LABELS[scenario] || scenario)} {bounded
+                  ? t("result.bounded")
+                  : fullSuccess
+                    ? t("result.complete")
+                    : t("result.error")}
+              </h2>
               <p className="text-xs text-[var(--text-body)] mt-0.5">
-                {success ? `${t("result.generated")} ${stepsCompleted || briefs.length + scripts.length + thumbnails.length} ${t("result.items")}` : t("result.error")}
+                {bounded
+                  ? t("result.boundedNotice")
+                  : fullSuccess
+                    ? `${t("result.generated")} ${stepsCompleted || briefs.length + scripts.length + thumbnails.length} ${t("result.items")}`
+                    : t("result.error")}
               </p>
             </div>
           </div>
@@ -507,7 +542,7 @@ function ThumbnailsView({ sets, thumbImages, onRegenerate }: { sets: ThumbnailSe
               <div key={i} className="relative bg-black rounded-lg overflow-hidden aspect-[9/16]">
                 {getMediaUrl(p) ? (
                   <RuntimeMediaImage
-                    src={getMediaUrl(p)}
+                    src={p}
                     alt={`thumbnail-${i}`}
                     className="w-full h-full object-cover"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -620,19 +655,19 @@ function MediaView({
                 {t("perf.publishTitle")}
               </button>
               {getMediaUrl(finalVideo) && (
-                <a
-                  href={getMediaUrl(finalVideo)}
+                <RuntimeMediaLink
+                  href={finalVideo}
                   download
                   className="text-[12px] text-[var(--fortune-red)] hover:underline cursor-pointer"
                 >
                   {t("result.download")}
-                </a>
+                </RuntimeMediaLink>
               )}
             </div>
           </div>
           {getMediaUrl(finalVideo) ? (
-            <video
-              src={getMediaUrl(finalVideo)}
+            <RuntimeMediaVideo
+              src={finalVideo}
               controls
               className="w-full rounded-xl bg-black"
               style={{ maxHeight: 480, colorScheme: 'dark' }}
@@ -673,8 +708,8 @@ function MediaView({
             {clipPaths.map((p, i) => (
               <div key={i} className="space-y-1">
                 {getMediaUrl(p) ? (
-                  <video
-                    src={getMediaUrl(p)}
+                  <RuntimeMediaVideo
+                    src={p}
                     controls
                     className="w-full rounded-xl bg-black"
                     style={{ maxHeight: 220, colorScheme: 'dark' }}
@@ -708,7 +743,7 @@ function MediaView({
               <div key={i} className="relative bg-black rounded-xl overflow-hidden aspect-[9/16] group">
                 {getMediaUrl(p) ? (
                   <RuntimeMediaImage
-                    src={getMediaUrl(p)}
+                    src={p}
                     alt={`thumbnail-${i}`}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -718,8 +753,8 @@ function MediaView({
                     <span className="text-[12px] text-[var(--text-muted)]">Thumbnail (Demo)</span>
                   </div>
                 )}
-                <a
-                  href={getMediaUrl(p) || "#"}
+                <RuntimeMediaLink
+                  href={p}
                   download
                   className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
@@ -728,7 +763,7 @@ function MediaView({
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
-                </a>
+                </RuntimeMediaLink>
               </div>
             ))}
           </div>
@@ -760,7 +795,7 @@ function MediaView({
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] text-[var(--text-h1)] truncate">{p.split("/").pop()}</p>
                   {getMediaUrl(p) ? (
-                    <audio src={getMediaUrl(p)} controls preload="metadata" className="w-full h-8" />
+                    <RuntimeMediaAudio src={p} controls preload="metadata" className="w-full h-8" />
                   ) : (
                     <p className="text-[12px] text-[var(--text-muted)] py-1">Audio preview unavailable (demo mode)</p>
                   )}

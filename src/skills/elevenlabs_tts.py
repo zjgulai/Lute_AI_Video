@@ -24,8 +24,10 @@ from typing import Any
 
 import structlog
 
+from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
+from src.tools.llm_client import get_request_api_key
 
 logger = structlog.get_logger()
 
@@ -48,19 +50,20 @@ class ElevenLabsTTSSkill(SkillCallable):
         text = params["text"]
         language = params.get("language", "en")
         voice_id = params.get("voice_id", self.DEFAULT_VOICE_ID)
-        stability = float(params.get("stability", 0.5))
-        similarity_boost = float(params.get("similarity_boost", 0.75))
         output_dir = Path(params["output_dir"]) if params.get("output_dir") else None
 
-        from src.config import ELEVENLABS_API_KEY, POYO_API_KEY, SILICONFLOW_API_KEY
+        from src.config import OUTPUT_DIR
+
+        siliconflow_key = get_request_api_key("SILICONFLOW_API_KEY") or ""
+        elevenlabs_key = get_request_api_key("ELEVENLABS_API_KEY") or ""
+        poyo_key = get_request_api_key("POYO_API_KEY") or ""
 
         # ── Priority 1: SiliconFlow CosyVoice (Pro version TTS) ──
-        if SILICONFLOW_API_KEY:
+        if siliconflow_key:
             from src.tools.cosyvoice_client import VOICE_PRESETS as COSY_PRESETS
             from src.tools.cosyvoice_client import CosyVoiceClient
 
-            cosy_client = CosyVoiceClient(output_dir=output_dir)
-            path: Path | None = None
+            cosy_client = CosyVoiceClient(api_key=siliconflow_key, output_dir=output_dir)
             try:
                 # Map ElevenLabs voice_id to CosyVoice voice if possible.
                 # Support voice_gender param for category-based selection (default female for maternal/baby).
@@ -79,33 +82,42 @@ class ElevenLabsTTSSkill(SkillCallable):
                     language=language,
                     response_format="mp3",
                     speed=1.0,
+                    operation_instance=params.get("operation_instance", "primary"),
                 )
-            except Exception as e:
-                return SkillResult(success=False, error=f"cosyvoice_tts_call_failed: {e}")
+            except ProviderCostContractError:
+                raise
+            except Exception:
+                return SkillResult(success=False, error="cosyvoice_tts_call_failed")
             finally:
-                await cosy_client.close()
+                # Cleanup is best-effort and must never replace the provider
+                # outcome (especially an ambiguous paid mutation).
+                try:
+                    await cosy_client.close()
+                except Exception:
+                    logger.warning(
+                        "elevenlabs_tts: client close failed",
+                        error_code="tts_client_close_failed",
+                    )
 
             is_stub = path.name.startswith("stub_")
             used_voice = cosy_voice or COSY_PRESETS.get(language, COSY_PRESETS["en"])
 
-        # ── Priority 2: ElevenLabs (legacy fallback) ──
+        # ── Legacy providers are not cost-integrated in this batch ──
+        elif elevenlabs_key or poyo_key:
+            raise ProviderCostContractError(
+                "provider_cost_legacy_path_blocked",
+                "legacy TTS provider has no exact provider-cost rule",
+            )
         else:
-            from src.tools.elevenlabs_client import VOICE_PRESETS, ElevenLabsClient
+            # No credential means an explicit pre-submit, zero-attempt local
+            # fallback. Do not construct a legacy provider client merely to
+            # discover that it has no key.
+            resolved_output_dir = output_dir or OUTPUT_DIR / "audio"
+            path = resolved_output_dir / f"tts_{language}_fallback.mp3"
+            self._build_stub_mp3(path)
+            is_stub = True
+            from src.tools.elevenlabs_client import VOICE_PRESETS
 
-            client = ElevenLabsClient(output_dir=output_dir)
-            try:
-                path: Path = await client.synthesize(
-                    text=text,
-                    voice_id=voice_id,
-                    language=language,
-                    stability=stability,
-                    similarity_boost=similarity_boost,
-                )
-            except Exception as e:
-                return SkillResult(success=False, error=f"tts_call_failed: {e}")
-
-            has_key = bool(ELEVENLABS_API_KEY or POYO_API_KEY)
-            is_stub = (not has_key) or path.name.startswith("stub_")
             used_voice = voice_id or VOICE_PRESETS.get(language, VOICE_PRESETS["en"])
 
         # Stub mode: ensure placeholder file exists with at least minimal mp3 header
@@ -226,11 +238,10 @@ class ElevenLabsTTSSkill(SkillCallable):
             )
             if result.returncode == 0:
                 return float(result.stdout.strip() or "0.0")
-        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
+        except Exception:
             logger.debug(
                 "elevenlabs_tts: ffprobe duration failed",
-                audio_path=str(path),
-                error=str(exc)[:200],
+                error_code="audio_duration_probe_failed",
             )
         return 0.0
 
@@ -313,8 +324,8 @@ class ElevenLabsTTSSkill(SkillCallable):
 try:
     SkillRegistry.register(ElevenLabsTTSSkill())
     logger.info("elevenlabs_tts_skill: registered")
-except ValueError as exc:
+except ValueError:
     logger.debug(
         "elevenlabs_tts_skill: already registered",
-        error=str(exc)[:200],
+        error_code="skill_already_registered",
     )

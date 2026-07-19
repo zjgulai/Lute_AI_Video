@@ -19,14 +19,29 @@ from datetime import datetime
 from typing import Any, Literal
 
 import structlog
+from fastapi import HTTPException
 
 from src.config import DEFAULT_LANGUAGES
+from src.models.provider_cost import ProviderCostContractError
 from src.pipeline.candidate_scorer import score_candidate
 from src.pipeline.continuity_utils import extract_continuity_diagnostics
+from src.pipeline.generation_policy import (
+    MEDIA_PROVIDER_STEPS,
+    assert_generation_step_allowed,
+    persisted_generation_policy_scope,
+    resolve_generation_execution_profile,
+)
 from src.pipeline.model_router import select_model
 from src.pipeline.model_thresholds import get_threshold, is_acceptable
 from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS, get_scenario_step_order
 from src.pipeline.state_manager import PipelineStateManager
+from src.services.provider_execution import (
+    derive_provider_operation_scope,
+    persist_trusted_regeneration_epoch,
+    persisted_provider_execution_scope,
+    provider_operation_scope,
+    resolve_provider_operation_scope,
+)
 from src.skills.registry import SkillRegistry
 
 logger = structlog.get_logger()
@@ -119,7 +134,7 @@ _S5_GATE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "after_step": "vlog_strategy",
         "label": "Select Strategy",
         "candidate_step": "vlog_strategy",
-        "max_selections": 2,
+        "max_selections": 1,
     },
     "gate_2_clips": {
         "after_step": "seedance_clips",
@@ -153,12 +168,18 @@ STEP_TO_SKILL_NAME: dict[str, str | None] = {
     "seedance_clips": "seedance-video-generate-skill",
     "assemble_final": None,
     "remix_script": "remix-script-skill",
-    "vlog_strategy": "product-strategy-skill",
+    "vlog_strategy": None,
     "video_prompts": None,
     "thumbnails": None,
 }
 
 STEP_ORDER = SCENARIO_STEP_ORDERS["s1"]
+
+# Task 5 closes the durable LLM ledger path for text Gate regeneration.  Media
+# and artifact-producing Gate paths remain blocked until their own attempt
+# ledgers exist; entering a text path still requires persisted execution
+# authority and the same fail-closed provider contract as ordinary execution.
+LEDGER_BACKED_TEXT_GATE_STEPS = frozenset({"scripts", "remix_script"})
 
 
 def _get_scenario_from_state(state: dict[str, Any]) -> str:
@@ -261,8 +282,35 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
 
     candidate_step = definition.get("candidate_step")
 
+    guard_step = candidate_step or definition["after_step"]
+    assert_generation_step_allowed(state, guard_step)
+    if candidate_step in MEDIA_PROVIDER_STEPS:
+        raise HTTPException(
+            status_code=422,
+            detail="Media Gate generation requires a durable provider attempt ledger",
+        )
+
+    existing_gate = state.get("gates", {}).get(gate_id, {})
+    if (
+        isinstance(existing_gate, dict)
+        and existing_gate.get("generated_at")
+        and isinstance(existing_gate.get("candidates"), list)
+    ):
+        return {
+            "candidates": existing_gate["candidates"],
+            "gate_id": gate_id,
+            "label": label,
+            "idempotent": True,
+        }
+
     # ── State-assembled final/manual-review gates ──
-    if gate_id in {"gate_4_final", "gate_3_final", "gate_3_thumbnails"}:
+    if gate_id in {
+        "gate_4_final",
+        "gate_3_final",
+        "gate_3_thumbnails",
+        "gate_2_prompts",
+        "gate_1_strategy",
+    }:
         steps_data = state.get("steps", {})
         candidate = _build_state_assembled_candidate(gate_id, steps_data)
 
@@ -303,101 +351,101 @@ async def generate_candidates(label: str, gate_id: str) -> dict[str, Any]:
         "scenario": scenario,
     }
 
-    # Variant configurations
-    variants: list[tuple[str, dict[str, Any]]] = [
-        ("standard", {"temperature": 0.7, "variant": "standard"}),
-        ("creative", {"temperature": 0.9, "variant": "creative"}),
-        ("conservative", {"temperature": 0.5, "variant": "conservative"}),
-    ]
-
-    wanted_count = 3
-    valid_candidates: list[dict[str, Any]] = []
-    CANDIDATE_VARIANTS = [
+    candidate_variants = [
         {"variant": "standard", "params": {"temperature": 0.7}},
         {"variant": "creative", "params": {"temperature": 0.9}},
         {"variant": "conservative", "params": {"temperature": 0.5}},
     ]
+    candidates: list[dict[str, Any]] = []
+    operation_scope = derive_provider_operation_scope(
+        resolve_provider_operation_scope(scenario, candidate_step),
+        slot=f"gate.{gate_id}",
+    )
 
-    for attempt in range(wanted_count + 1):  # +1 for retry on failure
-        if len(valid_candidates) >= wanted_count:
-            break
-
-        variant = CANDIDATE_VARIANTS[len(valid_candidates) % 3]
+    for slot, variant in enumerate(candidate_variants):
         variant_name = variant["variant"]
-
-        # Build skill-specific params for each candidate step
-        skill_params = _build_skill_params(candidate_step, state, variant_name, variant["params"])
+        skill_params = _build_skill_params(
+            candidate_step,
+            state,
+            variant_name,
+            variant["params"],
+            gate_id=gate_id,
+        )
+        skill_params["operation_scope"] = f"gate.{gate_id}"
 
         try:
-            skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
-            if skill_name is None:
-                raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
-            skill_result = await SkillRegistry().execute(skill_name, skill_params)
-            if skill_result.success and skill_result.data:
-                candidate_data = skill_result.data
-                # Exclude error-only data
-                if isinstance(candidate_data, dict) and "_error" in candidate_data:
-                    if attempt < 3:  # retry once
-                        continue
-                    # After all retries exhausted, fall through to error handling
-                    raise RuntimeError(str(candidate_data["_error"]))
-            else:
-                if attempt < 3:
-                    continue
-                raise RuntimeError("Skill execution returned no data")
+            async with persisted_provider_execution_scope(state):
+                with persisted_generation_policy_scope(state):
+                    async with provider_operation_scope(operation_scope):
+                        skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
+                        if skill_name is None:
+                            raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
+                        skill_result = await SkillRegistry().execute(skill_name, skill_params)
+                        if not skill_result.success or not skill_result.data:
+                            raise RuntimeError(skill_result.error or "Skill execution returned no data")
+                        candidate_data = skill_result.data
+                        if isinstance(candidate_data, dict) and "_error" in candidate_data:
+                            raise RuntimeError(str(candidate_data["_error"]))
+
+                        try:
+                            score_result = await score_candidate(
+                                step_name=candidate_step,
+                                candidate_data=candidate_data,
+                                params={
+                                    **scoring_params,
+                                    "operation_instance": f"gate.{gate_id}.candidate.{variant_name}",
+                                },
+                            )
+                        except ProviderCostContractError:
+                            raise
+                        except Exception as exc:
+                            logger.warning(
+                                "gate_manager: scoring failed, using default",
+                                gate_id=gate_id,
+                                variant=variant_name,
+                                error=str(exc),
+                            )
+                            score_result = {
+                                "overall": 0.5,
+                                "breakdown": {},
+                                "explanation": "Scoring error, defaulted to 0.5",
+                                "heuristic": True,
+                            }
+        except ProviderCostContractError:
+            raise
         except Exception as exc:
             logger.warning(
-                "gate_manager: candidate generation failed, retrying",
-                attempt=attempt,
+                "gate_manager: candidate slot generation failed",
+                slot=slot,
                 gate_id=gate_id,
                 variant=variant_name,
                 error=str(exc),
             )
-            if attempt >= 2:  # After all retries exhausted
-                valid_candidates.append({
-                    "id": f"{gate_id}_c{len(valid_candidates)}",
+            candidates.append(
+                {
+                    "id": f"{gate_id}_c{slot}",
                     "variant": variant_name,
-                    "data": {"content": f"Generation failed after retries: {str(exc)[:200]}"},
+                    "data": {"content": f"Generation failed: {str(exc)[:200]}"},
                     "score": {"overall": 0, "error": True},
                     "recommended": False,
-                })
+                }
+            )
             continue
 
-        # Score the candidate
-        try:
-            score_result = await score_candidate(
-                step_name=candidate_step,
-                candidate_data=candidate_data,
-                params=scoring_params,
-            )
-        except Exception as exc:
-            logger.warning(
-                "gate_manager: scoring failed, using default",
-                gate_id=gate_id,
-                variant=variant_name,
-                error=str(exc),
-            )
-            score_result = {
-                "overall": 0.5,
-                "breakdown": {},
-                "explanation": "Scoring error, defaulted to 0.5",
-                "heuristic": True,
+        candidates.append(
+            {
+                "id": f"{gate_id}_c{slot}",
+                "variant": variant_name,
+                "data": candidate_data,
+                "score": score_result,
+                "acceptable": is_acceptable(
+                    score_result.get("overall", 0.0),
+                    candidate_step,
+                    model_id=select_model(scenario),
+                ),
+                "recommended": False,
             }
-
-        valid_candidates.append({
-            "id": f"{gate_id}_c{len(valid_candidates)}",
-            "variant": variant_name,
-            "data": candidate_data,
-            "score": score_result,
-            "acceptable": is_acceptable(
-                score_result.get("overall", 0.0),
-                candidate_step,
-                model_id=select_model(scenario),
-            ),
-            "recommended": False,
-        })
-
-    candidates = valid_candidates
+        )
 
     # Determine the recommended (highest-scoring) candidate.
     # Only mark `recommended=True` when score crosses the model-aware
@@ -471,20 +519,47 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
     if definition is None:
         return {"error": f"Unknown gate: {gate_id} for scenario {scenario}", "gate_id": gate_id, "scenario": scenario}
 
+    # Preflight the persisted authority and exact next cursor before mutating
+    # gate state, edited output, A/B tracking, or persistence.
+    profile = resolve_generation_execution_profile(state)
+    after_step = definition["after_step"]
+    if after_step not in profile.allowed_steps:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Gate {gate_id} is outside execution profile {profile.profile_id}",
+        )
+    after_index = profile.allowed_steps.index(after_step)
+    next_step = profile.allowed_steps[after_index + 1] if after_index + 1 < len(profile.allowed_steps) else None
+
     gates_state = dict(state.get("gates", {}))
     gate_state = gates_state.get(gate_id, {})
     candidates = gate_state.get("candidates", [])
+    if not isinstance(gate_state, dict) or not isinstance(candidates, list) or not candidates:
+        raise HTTPException(status_code=422, detail=f"Gate {gate_id} state is incomplete")
+    if any(not isinstance(candidate, dict) or not candidate.get("id") for candidate in candidates):
+        raise HTTPException(status_code=422, detail=f"Gate {gate_id} candidates are invalid")
     candidate_map = {c["id"]: c for c in candidates}
+    if len(candidate_map) != len(candidates):
+        raise HTTPException(status_code=422, detail=f"Gate {gate_id} candidate IDs are not unique")
 
     # Treat identical retries as idempotent: network retries or double-clicks
     # must not re-write approval timestamps or trigger another resume.
     if gate_state.get("approved", False):
         existing_selected_ids = gate_state.get("selected_ids", [])
         if selected_ids == existing_selected_ids:
+            if gate_state.get("status") != "approved":
+                raise HTTPException(status_code=422, detail=f"Gate {gate_id} approval state is invalid")
+            if any(candidate_id not in candidate_map for candidate_id in existing_selected_ids):
+                raise HTTPException(status_code=422, detail=f"Gate {gate_id} selection is invalid")
+            if gate_state.get("next_step") != next_step:
+                raise HTTPException(status_code=422, detail=f"Gate {gate_id} next_step is invalid")
+            if state.get("current_step") != next_step:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Gate approval retry cursor does not match the recorded next_step",
+                )
             selected_variants = [
-                candidate_map[cid].get("variant", "unknown")
-                for cid in existing_selected_ids
-                if cid in candidate_map
+                candidate_map[cid].get("variant", "unknown") for cid in existing_selected_ids if cid in candidate_map
             ]
             return {
                 "gate_id": gate_id,
@@ -501,6 +576,15 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
             "label": label,
             "approved": True,
         }
+
+    current_step = state.get("current_step")
+    if current_step != after_step:
+        raise HTTPException(
+            status_code=422,
+            detail="Gate approval current_step must equal the gate after_step",
+        )
+    if next_step is not None:
+        assert_generation_step_allowed(state, next_step)
 
     if gate_state.get("status") != "awaiting_approval":
         return {
@@ -540,17 +624,18 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
     gate_state["approved"] = True
     gate_state["status"] = "approved"
     gate_state["approved_at"] = datetime.now().isoformat()
+    gate_state["next_step"] = next_step
     gates_state[gate_id] = gate_state
     state["gates"] = gates_state
 
     # ── A/B test tracking: record which variant was chosen ──
     try:
         from src.quality.ab_tracker import ABTracker
+
         tracker = ABTracker()
         # Extract scores for all candidates
         all_scores = {
-            c.get("variant", c.get("id", "unknown")): c.get("score", {}).get("overall", 0)
-            for c in candidates
+            c.get("variant", c.get("id", "unknown")): c.get("score", {}).get("overall", 0) for c in candidates
         }
         primary = selected_candidates[0]
         tracker.record_gate_choice(
@@ -568,7 +653,7 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
 
     # Set the selected candidate's data as the step output for downstream consumption
     # Use the first selected candidate's data as the "edited" output
-    step_order = _get_step_order(scenario)
+    step_order = list(profile.allowed_steps)
     candidate_step = definition.get("candidate_step")
     if candidate_step and candidate_step in step_order:
         primary_candidate = selected_candidates[0]
@@ -608,15 +693,13 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
         steps_data[candidate_step] = step_data
         state["steps"] = steps_data
 
-    # Advance current_step past the gate's after_step
-    after_step = definition["after_step"]
+    # Advance current_step according to the exact profile, never canonical index.
     if after_step in step_order:
-        next_step = _get_next_step(after_step, scenario)
         if next_step:
             # Only advance if current_step is at or before after_step
-            current_step = state.get("current_step")
-            if current_step is None or _step_index(current_step, scenario) <= _step_index(after_step, scenario):
-                state["current_step"] = next_step
+            state["current_step"] = next_step
+        else:
+            state["current_step"] = None
     else:
         # If no after_step defined, just advance the current_step
         pass
@@ -692,6 +775,17 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
     candidate_step = definition.get("candidate_step")
     if candidate_step is None:
         return {"error": f"Gate {gate_id} has no candidate_step", "gate_id": gate_id}
+    assert_generation_step_allowed(state, candidate_step)
+    if candidate_step in MEDIA_PROVIDER_STEPS:
+        raise HTTPException(
+            status_code=422,
+            detail="Media Gate regeneration requires a durable provider attempt ledger",
+        )
+    if candidate_step not in LEDGER_BACKED_TEXT_GATE_STEPS:
+        raise HTTPException(
+            status_code=422,
+            detail="Provider-backed Gate regeneration requires a durable attempt ledger",
+        )
 
     steps_data = state.get("steps", {})
     step_data = steps_data.get(candidate_step, {})
@@ -716,30 +810,48 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
     }
     temperature = temperature_map.get(variant_name, 0.7)
 
-    skill_params = _build_skill_params(
-        candidate_step, state, variant_name, {"temperature": temperature}
+    skill_params = _build_skill_params(candidate_step, state, variant_name, {"temperature": temperature})
+    skill_params["operation_scope"] = f"gate.{gate_id}"
+
+    operation_scope = derive_provider_operation_scope(
+        resolve_provider_operation_scope(scenario, candidate_step),
+        slot=f"gate.{gate_id}",
     )
 
+    await persist_trusted_regeneration_epoch(
+        state,
+        state_writer=state_manager,
+        operation_key=f"gate.regenerate.{candidate_step}",
+    )
     new_candidate_id = f"{gate_id}_{variant_name}_{int(time.time())}"
 
+    execution_failed = False
     try:
-        skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
-        if skill_name is None:
-            raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
-        skill_result = await SkillRegistry().execute(skill_name, skill_params)
-        # P0: Guard against success=True but empty data — treat as failure
-        if skill_result.success and skill_result.data:
-            candidate_data = skill_result.data
-        elif skill_result.success and not skill_result.data:
-            logger.warning(
-                "gate_manager: regenerate skill returned success but empty data",
-                gate_id=gate_id,
-                variant=variant_name,
-            )
-            candidate_data = {"_error": "Skill returned success but no data"}
-        else:
-            candidate_data = {"_error": skill_result.error or "Skill execution failed"}
+        async with persisted_provider_execution_scope(state):
+            with persisted_generation_policy_scope(state):
+                async with provider_operation_scope(operation_scope):
+                    skill_name = STEP_TO_SKILL_NAME.get(candidate_step, candidate_step)
+                    if skill_name is None:
+                        raise RuntimeError(f"Gate {gate_id} has no skill mapping for step: {candidate_step}")
+                    skill_result = await SkillRegistry().execute(skill_name, skill_params)
+                    # P0: Guard against success=True but empty data — treat as failure
+                    if skill_result.success and skill_result.data:
+                        candidate_data = skill_result.data
+                    elif skill_result.success and not skill_result.data:
+                        logger.warning(
+                            "gate_manager: regenerate skill returned success but empty data",
+                            gate_id=gate_id,
+                            variant=variant_name,
+                        )
+                        execution_failed = True
+                        candidate_data = {"_error": "Skill returned success but no data"}
+                    else:
+                        execution_failed = True
+                        candidate_data = {"_error": skill_result.error or "Skill execution failed"}
+    except ProviderCostContractError:
+        raise
     except Exception as exc:
+        execution_failed = True
         logger.error(
             "gate_manager: regenerate skill execution failed",
             gate_id=gate_id,
@@ -748,26 +860,37 @@ async def regenerate_candidate(label: str, gate_id: str, candidate_id: str) -> d
         )
         candidate_data = {"_error": str(exc)}
 
-    # Score the regenerated candidate
-    try:
-        score_result = await score_candidate(
-            step_name=candidate_step,
-            candidate_data=candidate_data,
-            params=scoring_params,
-        )
-    except Exception as exc:
-        logger.warning(
-            "gate_manager: rescoring failed, using default",
-            gate_id=gate_id,
-            candidate_id=candidate_id,
-            error=str(exc),
-        )
-        score_result = {
-            "overall": 0.5,
-            "breakdown": {},
-            "explanation": "Scoring error, defaulted to 0.5",
-            "heuristic": True,
-        }
+    # Do not spend a scorer call when the single regeneration slot failed.
+    if execution_failed:
+        score_result = {"overall": 0, "error": True}
+    else:
+        try:
+            async with persisted_provider_execution_scope(state):
+                with persisted_generation_policy_scope(state):
+                    async with provider_operation_scope(operation_scope):
+                        score_result = await score_candidate(
+                            step_name=candidate_step,
+                            candidate_data=candidate_data,
+                            params={
+                                **scoring_params,
+                                "operation_instance": f"gate.{gate_id}.candidate.{variant_name}",
+                            },
+                        )
+        except ProviderCostContractError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "gate_manager: rescoring failed, using default",
+                gate_id=gate_id,
+                candidate_id=candidate_id,
+                error=str(exc),
+            )
+            score_result = {
+                "overall": 0.5,
+                "breakdown": {},
+                "explanation": "Scoring error, defaulted to 0.5",
+                "heuristic": True,
+            }
 
     candidates[target_idx] = {
         "id": new_candidate_id,
@@ -834,6 +957,55 @@ def _build_state_assembled_candidate(
     steps_data: dict[str, Any],
 ) -> dict[str, Any]:
     """Assemble final/manual-review candidates directly from persisted state."""
+    review_step_by_gate = {
+        "gate_2_prompts": "video_prompts",
+        "gate_1_strategy": "vlog_strategy",
+    }
+    review_step = review_step_by_gate.get(gate_id)
+    if review_step is not None:
+        step_data = steps_data.get(review_step, {})
+        if not isinstance(step_data, dict) or step_data.get("status") != "done":
+            raise HTTPException(
+                status_code=422,
+                detail=f"Gate {gate_id} requires completed {review_step} output",
+            )
+        output = (
+            step_data.get("edited_output")
+            if step_data.get("edited") and step_data.get("edited_output") is not None
+            else step_data.get("output")
+        )
+        if output is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Gate {gate_id} requires persisted {review_step} output",
+            )
+        if gate_id == "gate_1_strategy" and (
+            not isinstance(output, dict)
+            or not isinstance(output.get("shots"), list)
+            or not isinstance(output.get("scripts"), list)
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="S5 strategy review requires {shots: list, scripts: list}",
+            )
+        if gate_id == "gate_2_prompts" and not isinstance(output, list):
+            raise HTTPException(
+                status_code=422,
+                detail="S4 prompt review requires a list output",
+            )
+        return {
+            "id": f"{gate_id}_c0",
+            "variant": "persisted",
+            "data": output,
+            "score": {
+                "overall": 0.5,
+                "heuristic": True,
+                "unscored": True,
+                "explanation": "not provider-scored; human review required",
+            },
+            "recommended": False,
+        }
+
     if gate_id == "gate_3_thumbnails":
         thumbnail_out = steps_data.get("thumbnails", {}).get("output") or []
         scripts_out = steps_data.get("scripts", {}).get("output") or []
@@ -845,10 +1017,12 @@ def _build_state_assembled_candidate(
                 "script_count": len(scripts_out) if isinstance(scripts_out, list) else 0,
             },
             "score": {
-                "overall": 0.9,
-                "explanation": "Thumbnail review bundle ready",
+                "overall": 0.5,
+                "heuristic": True,
+                "unscored": True,
+                "explanation": "not provider-scored; human review required",
             },
-            "recommended": True,
+            "recommended": False,
         }
 
     assemble_out = steps_data.get("assemble_final", {}).get("output")
@@ -878,10 +1052,12 @@ def _build_state_assembled_candidate(
             "duration": total_duration,
         },
         "score": {
-            "overall": 0.9,
-            "explanation": "Final assembled video ready for review",
+            "overall": 0.5,
+            "heuristic": True,
+            "unscored": True,
+            "explanation": "not provider-scored; human review required",
         },
-        "recommended": True,
+        "recommended": False,
     }
 
 
@@ -894,7 +1070,14 @@ def _extract_step_input(state: dict[str, Any], step_name: str) -> Any:
     return step_data.get("output")
 
 
-def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name: str, variant_params: dict[str, Any]) -> dict[str, Any]:
+def _build_skill_params(
+    candidate_step: str,
+    state: dict[str, Any],
+    variant_name: str,
+    variant_params: dict[str, Any],
+    *,
+    gate_id: str | None = None,
+) -> dict[str, Any]:
     """Build skill-specific parameters for candidate generation.
 
     Each skill expects a different parameter set. This function maps
@@ -905,6 +1088,7 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
     strategy_output = steps_data.get("strategy", {}).get("output") or {}
     brand_guidelines = config.get("brand_guidelines") or {}
     target_languages = config.get("target_languages", DEFAULT_LANGUAGES)
+    provider_max_retries = config.get("provider_max_retries", 0)
 
     if candidate_step == "scripts":
         if isinstance(strategy_output, list):
@@ -916,16 +1100,19 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
         if not briefs:
             # Fallback: construct a minimal brief from config
             product_catalog = config.get("product_catalog", {})
-            briefs = [{
-                "id": "fb_1",
-                "topic": product_catalog.get("product_name", "Product"),
-                "audience": product_catalog.get("target_audience", "general"),
-                "platforms": product_catalog.get("platforms", ["shopify"]),
-            }]
+            briefs = [
+                {
+                    "id": "fb_1",
+                    "topic": product_catalog.get("product_name", "Product"),
+                    "audience": product_catalog.get("target_audience", "general"),
+                    "platforms": product_catalog.get("platforms", ["shopify"]),
+                }
+            ]
         return {
             "briefs": briefs,
             "brand_guidelines": brand_guidelines,
             "target_languages": target_languages,
+            "provider_max_retries": provider_max_retries,
             "variant": variant_name,
             **variant_params,
         }
@@ -942,6 +1129,7 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
             "brand_guidelines": brand_guidelines,
             "size": "1024x1792",
             "quality": "high",
+            "provider_max_retries": provider_max_retries,
             "variant": variant_name,
             **variant_params,
         }
@@ -977,8 +1165,14 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
             "resolution": "720p",
             "output_label": f"{state.get('label', 'default')}_gate3",
             "keyframe_image_path": keyframe_path,
+            "provider_max_retries": provider_max_retries,
             "variant": variant_name,
             **variant_params,
+            "operation_instance": (
+                f"gate.{gate_id}.candidate.{variant_name}"
+                if gate_id
+                else f"candidate.{variant_name}"
+            ),
         }
 
     if candidate_step == "remix_script":
@@ -993,6 +1187,7 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
                 "target_platforms": config.get("target_platforms", ["tiktok"]),
                 "target_languages": target_languages,
             },
+            "provider_max_retries": provider_max_retries,
             "variant": variant_name,
             **variant_params,
         }
@@ -1005,6 +1200,7 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
             "content_scenario": "brand_vlog",
             "target_platforms": config.get("target_platforms", ["tiktok", "shopify"]),
             "target_languages": target_languages,
+            "provider_max_retries": provider_max_retries,
             "variant": variant_name,
             **variant_params,
         }
@@ -1012,6 +1208,7 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
     if candidate_step == "assemble_final":
         return {
             "input_data": _extract_step_input(state, "assemble_final") or {},
+            "provider_max_retries": provider_max_retries,
             "variant": variant_name,
             **variant_params,
         }
@@ -1020,6 +1217,7 @@ def _build_skill_params(candidate_step: str, state: dict[str, Any], variant_name
     return {
         "input_data": _extract_step_input(state, candidate_step),
         "state": state,
+        "provider_max_retries": provider_max_retries,
         "variant": variant_name,
         **variant_params,
     }

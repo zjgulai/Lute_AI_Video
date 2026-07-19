@@ -1,11 +1,7 @@
-"""DALL-E image generation client — thumbnail production.
+"""Retired DALL-E thumbnail compatibility client.
 
-Replaces the thumbnail stub with real AI image generation.
-Generates 4 variants per video.
-
-API: OpenAI Images API (DALL-E 3)
-
-Every public method has asyncio.timeout() protection (120s default).
+The unpriced DALL-E 3 mutation path is blocked before HTTP client construction.
+No-key callers retain an explicit local stub for legacy no-media flows.
 """
 
 from __future__ import annotations
@@ -14,10 +10,11 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-import httpx
 import structlog
 
-from src.config import OPENAI_API_KEY, OPENAI_IMAGE_API_BASE, OUTPUT_DIR
+from src.config import OPENAI_API_KEY, OUTPUT_DIR
+from src.models.provider_cost import ProviderCostContractError
+from src.tools.llm_client import get_request_api_key
 
 logger = structlog.get_logger()
 
@@ -29,20 +26,18 @@ class DalleTimeoutError(asyncio.TimeoutError):
 
 
 class DalleClient:
-    """Generates thumbnail images using DALL-E 3."""
+    """Expose only the no-key stub; direct DALL-E mutation is blocked."""
 
     def __init__(self, api_key: str | None = None, output_dir: Path | None = None):
-        self.api_key = api_key or OPENAI_API_KEY
+        self.api_key = api_key or get_request_api_key("OPENAI_API_KEY") or OPENAI_API_KEY
+        if self.api_key:
+            raise ProviderCostContractError(
+                "provider_cost_legacy_path_blocked",
+                "direct DALL-E mutation is outside the frozen provider catalog",
+            )
         self.output_dir = output_dir or OUTPUT_DIR / "thumbnails"
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._client = httpx.AsyncClient(
-            base_url=OPENAI_IMAGE_API_BASE,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=90.0,
-        )
+        self._client = None
 
     async def generate(
         self,
@@ -51,10 +46,7 @@ class DalleClient:
         size: str = "1024x1792",  # Vertical 9:16 for TikTok/Shorts
         quality: str = "standard",
     ) -> dict[str, Any]:
-        """Generate a single thumbnail image.
-
-        Wrapped in asyncio.timeout() to prevent pipeline hangs.
-        Falls back to stub on timeout or any error.
+        """Return a local no-attempt stub; paid DALL-E is not cataloged.
 
         Args:
             prompt: DALL-E generation prompt.
@@ -63,57 +55,11 @@ class DalleClient:
             quality: 'standard' or 'hd'.
 
         Returns:
-            {variant_id, prompt, image_url, local_path}
+            ``{variant_id, prompt, image_url, local_path}`` stub metadata.
         """
-        if not self.api_key:
-            logger.warning("dalle: no API key — returning stub")
-            return self._stub_result(variant_id, prompt)
-
-        from src.tools.retry import retry_with_backoff
-
-        async def _do_generate():
-            async with asyncio.timeout(DALLE_TIMEOUT_SECONDS):
-                response = await self._client.post(
-                    "/images/generations",
-                    json={
-                        "model": "dall-e-3",
-                        "prompt": prompt,
-                        "n": 1,
-                        "size": size,
-                        "quality": quality,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-
-                image_url = data["data"][0]["url"]
-
-                # Download and save locally
-                img_response = await httpx.AsyncClient().get(image_url)
-                filename = f"thumb_{variant_id}_{hash(prompt) & 0xFFFF:04x}.png"
-                filepath = self.output_dir / filename
-                filepath.write_bytes(img_response.content)
-
-                logger.info("dalle: generated", variant=variant_id, file=filename)
-                return {
-                    "variant_id": variant_id,
-                    "prompt": prompt,
-                    "image_url": image_url,
-                    "local_path": str(filepath),
-                }
-
-        try:
-            return await retry_with_backoff(_do_generate)
-        except TimeoutError:
-            logger.error(
-                "dalle: generation timed out",
-                variant=variant_id,
-                timeout=DALLE_TIMEOUT_SECONDS,
-            )
-            return self._stub_result(variant_id, prompt)
-        except Exception as e:
-            logger.error("dalle: generation failed", variant=variant_id, error=str(e))
-            return self._stub_result(variant_id, prompt)
+        del size, quality
+        logger.warning("dalle: legacy provider path disabled — returning zero-attempt stub")
+        return self._stub_result(variant_id, prompt)
 
     async def generate_variants(
         self,
@@ -150,8 +96,6 @@ class DalleClient:
     @property
     def cost_estimate(self) -> dict[str, Any]:
         return {
-            "model": "dall-e-3",
-            "price_per_image_standard": "$0.04",
-            "price_per_image_hd": "$0.08",
-            "sizes": ["1024x1024", "1024x1792", "1792x1024"],
+            "status": "blocked",
+            "reason": "provider_cost_legacy_path_blocked",
         }

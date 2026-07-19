@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/i18n/I18nProvider";
 import RecommendPanel, { buildLocalRecommendation } from "./RecommendPanel";
-import { startS1StepByStep } from "./api";
+import { runS1Step, startS1StepByStep } from "./api";
 
 vi.mock("./api", () => ({
   isDemoMode: vi.fn(() => false),
@@ -80,6 +80,51 @@ describe("RecommendPanel scenario mode boundaries", () => {
     expect(startS1StepByStep).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Launch a calmer care routine");
     expect(container.textContent).toContain("Step-by-step");
+    cleanup();
+  });
+
+  it("keeps S1 recommendation rendering provider-free", async () => {
+    const { container, cleanup } = await renderRecommendPanel({
+      config: {
+        content_scenario: "product_direct",
+        product_catalog: { products: [{ name: "Momcozy M9" }] },
+        target_platforms: ["tiktok"],
+        video_duration: 30,
+      },
+      onBack: vi.fn(),
+      onStart: vi.fn(),
+    });
+
+    expect(startS1StepByStep).not.toHaveBeenCalled();
+    expect(runS1Step).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Momcozy M9");
+    cleanup();
+  });
+
+  it("keeps generation behind one explicit Start action", async () => {
+    const onStart = vi.fn();
+    const { container, cleanup } = await renderRecommendPanel({
+      config: {
+        content_scenario: "product_direct",
+        product_catalog: { products: [{ name: "Momcozy M9" }] },
+        target_platforms: ["tiktok"],
+        video_duration: 30,
+      },
+      onBack: vi.fn(),
+      onStart,
+    });
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const startButton = buttons.at(-1);
+    expect(startButton).toBeTruthy();
+
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(startS1StepByStep).not.toHaveBeenCalled();
+    expect(runS1Step).not.toHaveBeenCalled();
+    expect(onStart).toHaveBeenCalledTimes(1);
     cleanup();
   });
 });

@@ -8,30 +8,46 @@ on:
       - "web/playwright.prod.config.ts"
       - "web/package.json"
       - "web/package-lock.json"
+      - "scripts/l4c_token_smoke_plan.py"
       - ".github/workflows/e2e-prod.yml"
   workflow_dispatch:
     inputs:
       base_url:
-        description: "Base URL to test (defaults to https://video.lute-tlz-dddd.top)"
+        description: "Base URL to test"
         required: false
         default: "https://video.lute-tlz-dddd.top"
-      run_token_smoke:
-        description: "Run @token-smoke specs that can create real provider tasks"
+        type: string
+      token_smoke_spec:
+        description: "Validated single token-smoke spec; empty runs read-only only"
         required: false
-        default: false
-        type: boolean
+        default: ""
+        type: string
+      approval_record_path:
+        description: "Logical audit ref bound inside the private approval JSON"
+        required: false
+        default: ""
+        type: string
+      plan_path:
+        description: "Logical audit ref bound inside the private L4C plan JSON"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: e2e-prod-production
+  cancel-in-progress: false
+
 jobs:
-  e2e-prod:
+  e2e-prod-readonly:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       PLAYWRIGHT_PROD_URL: ${{ github.event.inputs.base_url || 'https://video.lute-tlz-dddd.top' }}
       PLAYWRIGHT_API_KEY: ${{ secrets.PROD_DEMO_API_KEY || 'ai_video_demo_2026' }}
-      RUN_TOKEN_SMOKE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_token_smoke || false }}
+      RUN_TOKEN_SMOKE: "0"
       CI: "true"
     defaults:
       run:
@@ -51,29 +67,115 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Verify token smoke opt-in key
-        if: ${{ env.RUN_TOKEN_SMOKE == 'true' }}
-        run: |
-          if [ "$PLAYWRIGHT_API_KEY" = "ai_video_demo_2026" ]; then
-            echo "::error::run_token_smoke=true requires PROD_DEMO_API_KEY to be configured with a non-demo production key"
-            exit 1
-          fi
+      - name: Run read-only production E2E suite
+        run: RUN_TOKEN_SMOKE=0 npx playwright test -c playwright.prod.config.ts --reporter=list,html
 
-      - name: Run production E2E suite
-        run: npx playwright test -c playwright.prod.config.ts --reporter=list,html
-
-      - name: Upload Playwright HTML report on failure
+      - name: Upload read-only Playwright HTML report on failure
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report-${{ github.run_attempt }}
+          name: playwright-readonly-report-${{ github.run_attempt }}
           path: web/playwright-report/
           retention-days: 14
 
-      - name: Upload trace artifacts on failure
+      - name: Upload read-only trace artifacts on failure
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-traces-${{ github.run_attempt }}
+          name: playwright-readonly-traces-${{ github.run_attempt }}
           path: web/test-results/
           retention-days: 7
+
+  e2e-prod-token-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.token_smoke_spec != '' }}
+    needs: e2e-prod-readonly
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-provider
+    concurrency:
+      group: e2e-prod-token-smoke-production
+      cancel-in-progress: false
+    env:
+      PLAYWRIGHT_PROD_URL: "https://video.lute-tlz-dddd.top"
+      PLAYWRIGHT_STRICT_TLS: "1"
+      TOKEN_SMOKE_SPEC_INPUT: ${{ inputs.token_smoke_spec }}
+      APPROVAL_REF_INPUT: ${{ inputs.approval_record_path }}
+      PLAN_REF_INPUT: ${{ inputs.plan_path }}
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate token smoke authorization
+        env:
+          PLAYWRIGHT_API_KEY: ${{ secrets.PROD_TOKEN_SMOKE_API_KEY }}
+          PROD_TOKEN_SMOKE_PLAN_B64: ${{ secrets.PROD_TOKEN_SMOKE_PLAN_B64 }}
+          PROD_TOKEN_SMOKE_APPROVAL_B64: ${{ secrets.PROD_TOKEN_SMOKE_APPROVAL_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PLAYWRIGHT_API_KEY" ] || [ "$PLAYWRIGHT_API_KEY" = "ai_video_demo_2026" ]; then
+            echo "::error::production-provider must provide a non-demo PROD_TOKEN_SMOKE_API_KEY"
+            exit 1
+          fi
+          if [ -z "$PROD_TOKEN_SMOKE_PLAN_B64" ] || [ -z "$PROD_TOKEN_SMOKE_APPROVAL_B64" ]; then
+            echo "::error::production-provider must provide private token-smoke plan and approval records"
+            exit 1
+          fi
+          if [ -z "$PLAN_REF_INPUT" ] || [ -z "$APPROVAL_REF_INPUT" ]; then
+            echo "::error::token smoke requires logical plan and approval audit refs"
+            exit 1
+          fi
+          PLAN_RECORD="$RUNNER_TEMP/l4c-token-smoke-plan.json"
+          APPROVAL_RECORD="$RUNNER_TEMP/l4c-token-smoke-approval.json"
+          trap 'rm -f "$PLAN_RECORD" "$APPROVAL_RECORD"' EXIT
+          rm -f "$PLAN_RECORD" "$APPROVAL_RECORD"
+          umask 077
+          printf '%s' "$PROD_TOKEN_SMOKE_PLAN_B64" | base64 --decode > "$PLAN_RECORD"
+          printf '%s' "$PROD_TOKEN_SMOKE_APPROVAL_B64" | base64 --decode > "$APPROVAL_RECORD"
+          python scripts/l4c_token_smoke_plan.py \
+            --ci-validate \
+            --base-url "$PLAYWRIGHT_PROD_URL" \
+            --plan-record "$PLAN_RECORD" \
+            --approval-record "$APPROVAL_RECORD" \
+            --plan-ref "$PLAN_REF_INPUT" \
+            --approval-ref "$APPROVAL_REF_INPUT" \
+            --workflow-run-ref "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT" \
+            --commit-sha "$GITHUB_SHA" \
+            --selected-spec "$TOKEN_SMOKE_SPEC_INPUT" \
+            --env-file "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run validated single token smoke spec
+        working-directory: web
+        env:
+          RUN_TOKEN_SMOKE: "1"
+          PLAYWRIGHT_PROD_WORKERS: "1"
+          PLAYWRIGHT_API_KEY: ${{ secrets.PROD_TOKEN_SMOKE_API_KEY }}
+        run: |
+          RUN_TOKEN_SMOKE=1 \
+          PLAYWRIGHT_PROD_WORKERS=1 \
+          PLAYWRIGHT_MAX_SUBMIT_COUNT="$PLAYWRIGHT_MAX_SUBMIT_COUNT" \
+          PLAYWRIGHT_PROVIDER_MAX_RETRIES=0 \
+          PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review \
+          npx playwright test -c playwright.prod.config.ts "$PLAYWRIGHT_TOKEN_SMOKE_SPEC" \
+            --workers=1 --retries=0 --reporter=list,html
+
+      - name: Upload token-smoke Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-token-smoke-report-${{ github.run_attempt }}
+          path: web/playwright-report/
+          retention-days: 30

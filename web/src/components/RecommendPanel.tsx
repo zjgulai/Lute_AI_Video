@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Sparkle } from "@phosphor-icons/react";
 import { useI18n } from "@/i18n/I18nProvider";
 import DurationSlider from "./DurationSlider";
-import { startS1StepByStep, runS1Step, isDemoMode } from "./api";
+import { isDemoMode } from "./api";
 import { errorMessage } from "@/lib/errors";
 
 interface Props {
@@ -103,6 +103,7 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   const [error, setError] = useState("");
 
   const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
 
   const fetchRecommendation = useCallback(async () => {
     // Demo mode: use mock data, skip all API calls
@@ -127,43 +128,13 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
       return;
     }
 
-    if (!stepByStepSupported) {
-      const localRecommendation = buildLocalRecommendation(config);
-      setSummary(localRecommendation.summary);
-      setTone(localRecommendation.tone);
-      setPlatforms(localRecommendation.platforms);
-      setDuration(localRecommendation.duration);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // Initialize pipeline and run strategy step
-      const initResult = await startS1StepByStep({ ...config, mode: "step_by_step" });
-      const label = initResult.label;
-      const strategyResult = await runS1Step(label, "strategy");
-
-      // Extract recommendation from strategy output
-      const briefs = strategyResult?.data || strategyResult?.steps?.strategy?.output || [];
-      const firstBrief = Array.isArray(briefs) ? briefs[0] : briefs;
-
-      if (firstBrief) {
-        setSummary(firstBrief.key_message || firstBrief.topic || "");
-        setTone(firstBrief.tone || "");
-      }
-
-      // Platforms from config
-      setPlatforms((config.target_platforms as string[]) || ["tiktok", "shopify"]);
-
-      // AI-recommended duration — infer from strategy or default to 30
-      setDuration((config.video_duration as number) || 30);
-
-      setLoading(false);
-    } catch (e: unknown) {
-      setError(errorMessage(e, "Failed to get recommendation"));
-      setLoading(false);
-    }
-  }, [config, stepByStepSupported]);
+    const localRecommendation = buildLocalRecommendation(config);
+    setSummary(localRecommendation.summary);
+    setTone(localRecommendation.tone);
+    setPlatforms(localRecommendation.platforms);
+    setDuration(localRecommendation.duration);
+    setLoading(false);
+  }, [config]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -171,7 +142,8 @@ export default function RecommendPanel({ config, onBack, onStart }: Props) {
   }, [fetchRecommendation]);
 
   function handleStart() {
-    if (starting) return;
+    if (startingRef.current) return;
+    startingRef.current = true;
     setStarting(true);
     const selectedMode = stepByStepSupported ? mode : "smart";
     onStart({

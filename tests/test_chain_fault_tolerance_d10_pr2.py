@@ -8,6 +8,10 @@ import pytest
 from src.pipeline import step_runner
 from src.pipeline.s3_remix_pipeline import S3InfluencerRemixPipeline as S3RemixPipeline
 from src.skills.base import SkillResult
+from tests.generation_policy_test_utils import (
+    attach_execution_policy,
+    attach_test_provider_execution_authority,
+)
 
 
 def test_detect_soft_degraded_signal_returns_payload():
@@ -43,10 +47,12 @@ def test_detect_soft_degraded_handles_missing_optional_fields():
 async def test_s3_video_analysis_failure_returns_soft_degraded_sentinel():
     pipeline = S3RemixPipeline()
     pipeline._registry = AsyncMock()
-    pipeline._registry.execute = AsyncMock(return_value=SkillResult(
-        success=False,
-        error="DeepSeek timeout after 60s",
-    ))
+    pipeline._registry.execute = AsyncMock(
+        return_value=SkillResult(
+            success=False,
+            error="DeepSeek timeout after 60s",
+        )
+    )
 
     state: dict[str, Any] = {
         "label": "s3_test",
@@ -75,10 +81,12 @@ async def test_s3_video_analysis_failure_returns_soft_degraded_sentinel():
 async def test_s3_video_analysis_success_returns_payload_unchanged():
     pipeline = S3RemixPipeline()
     pipeline._registry = AsyncMock()
-    pipeline._registry.execute = AsyncMock(return_value=SkillResult(
-        success=True,
-        data={"hook_type": "pain_point", "segments": [{"start": 0, "end": 3}]},
-    ))
+    pipeline._registry.execute = AsyncMock(
+        return_value=SkillResult(
+            success=True,
+            data={"hook_type": "pain_point", "segments": [{"start": 0, "end": 3}]},
+        )
+    )
 
     state: dict[str, Any] = {
         "label": "s3_test_ok",
@@ -173,7 +181,12 @@ async def test_s3_remix_script_no_fallback_prompt_when_upstream_clean():
 
 
 @pytest.mark.asyncio
-async def test_step_runner_appends_to_soft_degraded_reasons(monkeypatch, tmp_path):
+async def test_step_runner_appends_to_soft_degraded_reasons(
+    monkeypatch,
+    tmp_path,
+    isolated_provider_cost_db,
+):
+    del isolated_provider_cost_db
     monkeypatch.setenv("STATE_FILE_DIR", str(tmp_path))
 
     from src.pipeline.state_manager import PipelineStateManager
@@ -200,11 +213,17 @@ async def test_step_runner_appends_to_soft_degraded_reasons(monkeypatch, tmp_pat
         "config": {},
         "mode": "auto",
     }
+    attach_execution_policy(state, scenario="s3", media=False)
+    await attach_test_provider_execution_authority(state)
 
-    monkeypatch.setattr(step_runner, "_get_scenario_config", lambda scenario: {
-        "step_order": ["video_analysis", "remix_script"],
-        "pipeline_class": "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
-    })
+    monkeypatch.setattr(
+        step_runner,
+        "_get_scenario_config",
+        lambda scenario: {
+            "step_order": ["video_analysis", "remix_script"],
+            "pipeline_class": "src.pipeline.s3_remix_pipeline.S3InfluencerRemixPipeline",
+        },
+    )
 
     async def _fake_run_step(self, step_name: str, st: dict[str, Any]) -> Any:
         return {

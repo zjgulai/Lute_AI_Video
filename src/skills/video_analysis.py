@@ -16,6 +16,7 @@ from typing import Any
 
 import structlog
 
+from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 from src.tools.video_downloader import VideoDownloader
@@ -568,9 +569,16 @@ Focus on: what products are shown, the setting/environment, how the influencer a
 and visual style elements."""
 
         try:
-            raw = await llm.invoke_json(system, user)
+            raw = await llm.invoke_json(
+                system,
+                user,
+                operation_key="skill.video_analysis",
+                operation_instance="primary",
+            )
             if isinstance(raw, dict):
                 return raw
+        except ProviderCostContractError:
+            raise
         except Exception as exc:
             logger.warning(
                 "video_analysis: visual llm analysis failed",

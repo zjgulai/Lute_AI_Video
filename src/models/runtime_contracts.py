@@ -7,7 +7,7 @@ frontend-facing APIs where plain ``dict[str, Any]`` has caused drift.
 
 from __future__ import annotations
 
-from typing import Any, NotRequired
+from typing import Any, Literal, NotRequired
 
 from typing_extensions import TypedDict  # noqa: UP035 - FastAPI/Pydantic needs this on Python 3.11.
 
@@ -18,6 +18,8 @@ class SeedanceVideoResult(TypedDict, total=False):
     prompt_used: str
     duration: int
     _stub_mode: str
+    _poyo_state: Literal["submitted", "settled", "released"]
+    task_id: str
 
 
 class FastModeTiming(TypedDict):
@@ -34,7 +36,17 @@ class FastModeModelInfo(TypedDict):
 
 
 class FastModeResult(TypedDict):
+    status: Literal["completed_bounded", "completed_full", "error"]
+    lifecycle_status: Literal["completed_bounded", "completed_full", "error"]
+    completion_kind: Literal[
+        "no_media", "bounded_media", "full_media", "execution_failed"
+    ]
+    request_succeeded: bool
     success: bool
+    full_media_success: bool
+    pipeline_complete: bool
+    publish_allowed: bool
+    delivery_accepted: bool
     video_path: str
     video_url: str
     filename: str
@@ -48,11 +60,14 @@ class FastModeResult(TypedDict):
     model_info: FastModeModelInfo
     is_stub: bool
     tts_path: str | None
+    tts_is_fallback: bool
+    tts_fallback_reason: str | None
     error: NotRequired[str]
     artifact_disposition: NotRequired[str]
     artifact_review_status: NotRequired[str | None]
     artifact_storage_scope: NotRequired[str]
     artifact_run_id: NotRequired[str | None]
+    effective_policy_version: NotRequired[str]
 
 
 class ClipDetail(TypedDict, total=False):

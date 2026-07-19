@@ -1219,6 +1219,7 @@ class S1ProductDirectPipeline:
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
                     "model": s1_model,
+                    "operation_instance": f"seedance_clips.segment.{i}",
                 }
                 if artifact_output_dir:
                     gen_params["output_dir"] = artifact_output_dir
@@ -1343,6 +1344,7 @@ class S1ProductDirectPipeline:
                 "resolution": "720p",
                 "output_label": f"{label}_clip_filler",
                 "model": s1_model,
+                "operation_instance": f"seedance_clips.filler.{len(clip_paths)}",
             }
             if artifact_output_dir:
                 filler_params["output_dir"] = artifact_output_dir
@@ -1428,7 +1430,7 @@ class S1ProductDirectPipeline:
         if tts_job_cap is not None:
             scripts_to_synthesize = scripts_to_synthesize[:max(0, int(tts_job_cap))]
 
-        for script in scripts_to_synthesize:
+        for script_index, script in enumerate(scripts_to_synthesize):
             # Collect all non-empty voiceovers from segments
             voiceover_parts: list[str] = []
             for seg in script.get("segments", []):
@@ -1455,12 +1457,12 @@ class S1ProductDirectPipeline:
                     "tts: merged voiceover exceeds poyo 200-char limit — will be truncated",
                     script_id=script.get("id"),
                     char_count=len(merged_text),
-                    text_preview=merged_text[:120],
                 )
 
             tts_params: dict[str, Any] = {
                 "text": merged_text,
                 "language": language,
+                "operation_instance": f"script.{script_index}",
             }
             if artifact_output_dir:
                 tts_params["output_dir"] = artifact_output_dir

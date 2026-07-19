@@ -2,8 +2,8 @@
 
 import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { getMediaUrl } from "./api";
 import RuntimeMediaImage from "./RuntimeMediaImage";
+import RuntimeMediaVideo from "./RuntimeMediaVideo";
 import { Play, Article, MusicNotes, VideoCamera, FileImage } from "@phosphor-icons/react";
 
 export type AssetType = "video" | "image" | "audio" | "text";
@@ -69,15 +69,15 @@ function VideoCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       <div className="relative aspect-[3/2] bg-black overflow-hidden">
         {asset.thumbnail && !posterFailed ? (
           <RuntimeMediaImage
-            src={getMediaUrl(asset.thumbnail)}
+            src={asset.thumbnail}
             alt={asset.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
             onError={() => setPosterFailed(true)}
           />
         ) : asset.filePath ? (
-          <video
-            src={getMediaUrl(asset.filePath)}
+          <RuntimeMediaVideo
+            src={asset.filePath}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             preload="metadata"
             muted
@@ -125,12 +125,7 @@ function ImageCard({ asset, onClick, t }: { asset: AssetItem; onClick: () => voi
       <div className="relative aspect-square bg-[var(--color-bg-secondary)] overflow-hidden">
         {asset.thumbnail || asset.filePath ? (
           <RuntimeMediaImage
-            src={(() => {
-              const raw = asset.thumbnail || asset.filePath || "";
-              return raw.startsWith("/") && !raw.startsWith("/api/")
-                ? raw
-                : getMediaUrl(raw);
-            })()}
+            src={asset.thumbnail || asset.filePath || ""}
             alt={asset.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"

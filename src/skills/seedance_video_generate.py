@@ -4,8 +4,8 @@ This skill replaces the prompt-only step. It:
 1. Calls SeedanceClient.text_to_video (or image_to_video) and waits for the file.
 2. Self-verifies the generated mp4: file exists, size > threshold, valid mp4 header,
    duration >= minimum.
-3. If verification fails AND API key was present, retries via SkillCallable.safe_execute.
-4. If API key absent or all retries fail, falls back to a deterministic stub mp4 marker.
+3. Paid artifact verification failures remain explicit, non-retryable failures.
+4. Only the no-key/local branch may produce a deterministic stub mp4 marker.
 
 Output schema:
     {
@@ -62,13 +62,13 @@ class SeedanceVideoGenerateSkill(SkillCallable):
 
     name = "seedance-video-generate-skill"
     description = "Calls Seedance 2.0 to generate a real .mp4 clip and self-verifies the output"
-    max_retries = 2  # Each Seedance call is 30-60s; cap retries to keep demo timeline sane
+    max_retries = 2  # Local/no-key skill retries; paid mutation retry authority is zero.
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
         prompt = params.get("prompt", "")
         if not prompt or not prompt.strip():
             prompt = f"{params.get('output_label', 'clip')} natural usage scene, authentic context"
-            logger.info("seedance: using fallback prompt", prompt=prompt)
+            logger.info("seedance: using fallback prompt")
 
         # ── P4: Prompt quality guard — warn on generic rotation/showcase patterns ──
         _generic_patterns = [
@@ -83,7 +83,6 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 "seedance_video_generate: generic rotation pattern detected in prompt — "
                 "video likely lacks narrative variety. Review seedance_prompt skill output.",
                 hits=hits,
-                prompt_preview=(prompt[:120] if isinstance(prompt, str) else str(prompt)[:120]),
             )
 
         duration = int(params.get("duration", DEFAULT_DURATION))
@@ -94,6 +93,12 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         output_label = params.get("output_label", "clip")
         output_dir = Path(params["output_dir"]) if params.get("output_dir") else None
         provider_max_retries = params.get("provider_max_retries")
+        operation_instance = params.get("operation_instance")
+        operation_kwargs: dict[str, Any] = (
+            {"operation_instance": operation_instance}
+            if isinstance(operation_instance, str)
+            else {}
+        )
         # Sprint 1 P1-2: per-call model override (set by ModelRouter at the
         # pipeline layer). When None, SeedanceClient falls back to env default.
         model: str | None = params.get("model")
@@ -126,30 +131,36 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                         duration=duration,
                         style_preserve=True,
                         model=model,
+                        resolution=resolution,
+                        **operation_kwargs,
                     )
                 else:
                     # Image doesn't exist or is too small — fall through to text_to_video
-                    logger.warning("seedance: best_image_path missing or too small, falling back to text_to_video",
-                                   path=best_image_path)
+                    logger.warning(
+                        "seedance: best_image_path missing or too small, falling back to text_to_video"
+                    )
                     api_result = await client.text_to_video(
                         prompt=prompt,
                         image_refs=None,
                         duration=duration,
                         resolution=resolution,
                         model=model,
+                        **operation_kwargs,
                     )
             elif image_refs:
                 ref_url = image_refs[0]
                 # Validate file existence for image_refs too
                 if not Path(ref_url).exists() or Path(ref_url).stat().st_size < 100:
-                    logger.warning("seedance: image_refs[0] missing or too small, falling back to text_to_video",
-                                   path=ref_url)
+                    logger.warning(
+                        "seedance: image_refs[0] missing or too small, falling back to text_to_video"
+                    )
                     api_result = await client.text_to_video(
                         prompt=prompt,
                         image_refs=None,
                         duration=duration,
                         resolution=resolution,
                         model=model,
+                        **operation_kwargs,
                     )
                 else:
                     api_result = await client.image_to_video(
@@ -158,6 +169,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                         duration=duration,
                         style_preserve=True,
                         model=model,
+                        resolution=resolution,
+                        **operation_kwargs,
                     )
             else:
                 api_result = await client.text_to_video(
@@ -166,6 +179,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                     duration=duration,
                     resolution=resolution,
                     model=model,
+                    **operation_kwargs,
                 )
         finally:
             # Best-effort close httpx client
@@ -174,10 +188,21 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             except Exception as exc:
                 logger.debug(
                     "seedance_video_generate: client close failed",
-                    error=str(exc)[:200],
+                    error_code=type(exc).__name__,
                 )
 
-        is_stub = "_stub_mode" in api_result or not api_result.get("video_url", "").startswith(("http://", "https://"))
+        if api_result.get("_poyo_state") == "submitted":
+            return SkillResult(
+                success=False,
+                error="provider_pending",
+                metadata={
+                    "poyo_state": "submitted",
+                    "task_id": api_result.get("task_id", ""),
+                    "non_retryable": True,
+                },
+            )
+
+        is_stub = "_stub_mode" in api_result
         local_path_str = api_result.get("local_path", "")
         local_path = Path(local_path_str) if local_path_str else None
 
@@ -191,10 +216,12 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         if not is_stub and not verification["all_ok"]:
             return SkillResult(
                 success=False,
-                error=f"video verification failed: {verification['failures']}",
+                error="provider_cost_artifact_failed",
                 metadata={
                     "verification": verification,
                     "video_path": str(local_path) if local_path else "",
+                    "non_retryable": True,
+                    "paid_artifact": True,
                 },
             )
 
@@ -219,8 +246,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             except Exception as exc:
                 logger.warning(
                     "seedance_video_generate: poster extraction failed",
-                    video_path=str(local_path),
-                    error=str(exc)[:200],
+                    artifact_name=local_path.name,
+                    error_code=type(exc).__name__,
                 )
 
         return SkillResult(
@@ -380,8 +407,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
             logger.debug(
                 "seedance_video_generate: ffprobe duration failed",
-                video_path=str(path),
-                error=str(exc)[:200],
+                artifact_name=path.name,
+                error_code=type(exc).__name__,
             )
         return 0.0
 
@@ -491,7 +518,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         logger.debug(
             "frame_variance_check",
             duration_ms=round(elapsed_ms, 1),
-            path=str(path),
+            artifact_name=path.name,
             variance_ok=variance_ok,
         )
 
@@ -546,8 +573,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 subprocess.CalledProcessError, Exception) as exc:
             logger.debug(
                 "seedance_video_generate: last-frame extraction failed",
-                video_path=str(src),
-                error=str(exc)[:200],
+                artifact_name=src.name,
+                error_code=type(exc).__name__,
             )
             if frame_path and frame_path.exists():
                 try:
@@ -555,8 +582,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 except OSError as cleanup_exc:
                     logger.debug(
                         "seedance_video_generate: temp frame cleanup failed",
-                        frame_path=str(frame_path),
-                        error=str(cleanup_exc)[:200],
+                        artifact_name=frame_path.name,
+                        error_code=type(cleanup_exc).__name__,
                     )
         return ""
 
@@ -584,8 +611,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             # ffmpeg unavailable or failed — write minimal magic-byte stub
             logger.warning(
                 "seedance_video_generate: ffmpeg stub generation failed",
-                output_path=str(path),
-                error=str(exc)[:200],
+                artifact_name=path.name,
+                error_code=type(exc).__name__,
             )
             marker = label.encode()[:8].ljust(8, b"\0")
             path.write_bytes(b"\x00\x00\x00\x14" + b"ftyp" + b"isom" + marker)
@@ -651,5 +678,5 @@ try:
 except ValueError as exc:
     logger.debug(
         "seedance_video_generate_skill: already registered",
-        error=str(exc)[:200],
+        error_code=type(exc).__name__,
     )

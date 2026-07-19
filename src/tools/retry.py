@@ -145,6 +145,9 @@ async def retry_with_backoff(
     Raises:
         MaxRetriesExceededError: All retry attempts failed.
     """
+    from src.pipeline.generation_policy import get_effective_provider_max_retries
+
+    max_retries = get_effective_provider_max_retries(max_retries)
     last_exc: Exception | None = None
 
     for attempt in range(max_retries + 1):  # +1 for initial attempt

@@ -1,18 +1,17 @@
 """Publish engine — orchestrates video publishing to multiple platforms.
 
 Provides a unified interface for publishing videos to TikTok and Shopify.
-Each platform method delegates to the corresponding real connector, which
-falls back to mock mode when credentials are absent.
+Each platform method delegates to the corresponding real connector.
 """
 
-import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from src.connectors.base import ConnectorOutcomeAmbiguous
 from src.connectors.shopify_connector import ShopifyConnector
 from src.connectors.tiktok_connector import TikTokConnector
-
-logger = logging.getLogger(__name__)
+from src.models.publish_attempt import PublishReceiptV1
 
 
 @dataclass
@@ -21,9 +20,79 @@ class PublishResult:
 
     platform: str = ""
     success: bool = False
-    post_id: str = ""
-    post_url: str = ""
+    simulated: bool = False
+    post_id: str | None = None
+    post_url: str | None = None
+    receipt: dict[str, Any] | None = None
     error: str = ""
+
+
+_MISSING = object()
+
+
+def _project_connector_result(
+    *,
+    platform: str,
+    connector_result: object,
+) -> PublishResult:
+    if not isinstance(connector_result, Mapping):
+        raise ConnectorOutcomeAmbiguous
+    simulated = connector_result.get("simulated", _MISSING)
+    if type(simulated) is not bool:
+        raise ConnectorOutcomeAmbiguous
+    if simulated is True:
+        return PublishResult(
+            platform=platform,
+            success=False,
+            simulated=True,
+            error="publish_connector_simulated",
+        )
+    success = connector_result.get("success", _MISSING)
+    if type(success) is not bool:
+        raise ConnectorOutcomeAmbiguous
+    if success is False:
+        return PublishResult(
+            platform=platform,
+            success=False,
+            simulated=False,
+            error="publish_connector_failed",
+        )
+    reported_platform = connector_result.get("platform")
+    if reported_platform != platform:
+        raise ConnectorOutcomeAmbiguous
+    raw_receipt = connector_result.get("receipt")
+    if not isinstance(raw_receipt, Mapping):
+        raise ConnectorOutcomeAmbiguous
+    try:
+        receipt = PublishReceiptV1.model_validate(dict(raw_receipt))
+        receipt.validate_published()
+    except (TypeError, ValueError):
+        raise ConnectorOutcomeAmbiguous from None
+    if (
+        receipt.platform != platform
+        or connector_result.get("post_id") != receipt.post_id
+        or connector_result.get("url") != receipt.post_url
+    ):
+        raise ConnectorOutcomeAmbiguous
+    return PublishResult(
+        platform=platform,
+        success=True,
+        simulated=False,
+        post_id=receipt.post_id,
+        post_url=receipt.post_url,
+        receipt=receipt.model_dump(mode="json"),
+    )
+
+
+def _platform_options(metadata: Mapping[str, Any], platform: str) -> object:
+    options = metadata.get("platform_options")
+    if isinstance(options, Mapping) and options.get("platform") == platform:
+        return dict(options)
+    if isinstance(options, Mapping):
+        selected = options.get(platform)
+        if isinstance(selected, Mapping):
+            return dict(selected)
+    return options
 
 
 class PublishEngine:
@@ -60,7 +129,8 @@ class PublishEngine:
                 result = PublishResult(
                     platform=platform,
                     success=False,
-                    error=f"Unsupported platform: {platform}",
+                    simulated=False,
+                    error="unsupported_platform",
                 )
             results.append(result)
         return results
@@ -74,9 +144,7 @@ class PublishEngine:
           * hook       — used as the video description / title.
           * hashtags   — list of str appended to the description.
 
-        Delegates to TikTokConnector.publish() which calls the real TikTok
-        Content Posting API when TIKTOK_ACCESS_TOKEN is set, otherwise falls
-        back to mock mode.
+        Delegates to TikTokConnector.publish().
         """
         title = metadata.get("hook", "AI-generated video")
         tags = metadata.get("hashtags", [])
@@ -94,23 +162,18 @@ class PublishEngine:
             "description": description,
             "video_path": video_path,
             "tags": tags,
+            "platform_options": _platform_options(metadata, "tiktok"),
         }
 
-        try:
-            connector_result = await self._tiktok.publish(content)
-            pr = PublishResult(platform="tiktok")
-            if connector_result.get("success"):
-                pr.success = True
-                pr.post_id = connector_result.get("post_id", "")
-                pr.post_url = connector_result.get("url", "")
-            else:
-                pr.error = connector_result.get("error", "TikTok publish failed")
-            return pr
-        except Exception as exc:
-            logger.exception("TikTok publish error")
-            return PublishResult(
-                platform="tiktok", success=False, error=str(exc)
-            )
+        preflight = await self._tiktok.preflight(content)
+        connector_result = await self._tiktok.publish(
+            content,
+            preflight=preflight,
+        )
+        return _project_connector_result(
+            platform="tiktok",
+            connector_result=connector_result,
+        )
 
     async def publish_to_shopify(
         self, video_path: str, metadata: dict[str, Any]
@@ -121,8 +184,7 @@ class PublishEngine:
           * product_name — the store product to associate the video with.
           * hook         — used as a fallback title.
 
-        Delegates to ShopifyConnector.publish() which calls the real Shopify
-        Admin API when SHOPIFY_API_KEY is set, otherwise falls back to mock.
+        Delegates to ShopifyConnector.publish().
         """
         product_name = metadata.get("product_name", "")
         title = metadata.get("hook", "AI-generated video")
@@ -131,20 +193,15 @@ class PublishEngine:
             "title": title,
             "video_path": video_path,
             "product_name": product_name,
+            "platform_options": _platform_options(metadata, "shopify"),
         }
 
-        try:
-            connector_result = await self._shopify.publish(content)
-            pr = PublishResult(platform="shopify")
-            if connector_result.get("success"):
-                pr.success = True
-                pr.post_id = connector_result.get("post_id", "")
-                pr.post_url = connector_result.get("url", "")
-            else:
-                pr.error = connector_result.get("error", "Shopify publish failed")
-            return pr
-        except Exception as exc:
-            logger.exception("Shopify publish error")
-            return PublishResult(
-                platform="shopify", success=False, error=str(exc)
-            )
+        preflight = await self._shopify.preflight(content)
+        connector_result = await self._shopify.publish(
+            content,
+            preflight=preflight,
+        )
+        return _project_connector_result(
+            platform="shopify",
+            connector_result=connector_result,
+        )

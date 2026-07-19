@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 
 from src.pipeline.gate_manager import (
     GATE_DEFINITIONS,
@@ -27,8 +28,13 @@ from src.pipeline.gate_manager import (
     regenerate_candidate,
 )
 from src.pipeline.state_manager import PipelineStateManager
+from tests.generation_policy_test_utils import (
+    attach_execution_policy,
+    bound_generation_policy,
+)
 
 # ── GATE_DEFINITIONS 静态契约 ──
+
 
 class TestGateDefinitionsContract:
     """4 个 gate 必须有 after_step / label / max_selections / candidate_step 字段。"""
@@ -66,6 +72,7 @@ class TestGateDefinitionsContract:
 
 # ── STEP_ORDER 不变量 ──
 
+
 class TestStepOrderInvariants:
     def test_step_order_has_13_steps(self):
         # 与 step_runner.py 必须保持同步
@@ -80,27 +87,31 @@ class TestStepOrderInvariants:
     def test_no_duplicates(self):
         assert len(STEP_ORDER) == len(set(STEP_ORDER))
 
-    @pytest.mark.parametrize("step,expected_next", [
-        ("strategy", "scripts"),
-        ("scripts", "compliance"),
-        ("compliance", "storyboards"),
-        ("storyboards", "continuity_storyboard_grid"),
-        ("continuity_storyboard_grid", "keyframe_images"),
-        ("keyframe_images", "video_prompts"),
-        ("video_prompts", "thumbnail_prompts"),
-        ("thumbnail_prompts", "seedance_clips"),
-        ("seedance_clips", "tts_audio"),
-        ("tts_audio", "thumbnail_images"),
-        ("thumbnail_images", "assemble_final"),
-        ("assemble_final", "audit"),
-        ("audit", None),
-        ("nonexistent", None),
-    ])
+    @pytest.mark.parametrize(
+        "step,expected_next",
+        [
+            ("strategy", "scripts"),
+            ("scripts", "compliance"),
+            ("compliance", "storyboards"),
+            ("storyboards", "continuity_storyboard_grid"),
+            ("continuity_storyboard_grid", "keyframe_images"),
+            ("keyframe_images", "video_prompts"),
+            ("video_prompts", "thumbnail_prompts"),
+            ("thumbnail_prompts", "seedance_clips"),
+            ("seedance_clips", "tts_audio"),
+            ("tts_audio", "thumbnail_images"),
+            ("thumbnail_images", "assemble_final"),
+            ("assemble_final", "audit"),
+            ("audit", None),
+            ("nonexistent", None),
+        ],
+    )
     def test_get_next_step(self, step, expected_next):
         assert _get_next_step(step) == expected_next
 
 
 # ── get_gate_state 错误路径 ──
+
 
 class TestGetGateStateErrors:
     @pytest.mark.asyncio
@@ -125,9 +136,7 @@ class TestGateStateLifecycle:
     """有 state 文件时的 gate state 生命周期。"""
 
     @pytest.mark.asyncio
-    async def test_default_status_when_gate_not_yet_initialized(
-        self, isolated_state_dir
-    ):
+    async def test_default_status_when_gate_not_yet_initialized(self, isolated_state_dir):
         # 创建 state 文件,但里面没 gates 字段
         sm = PipelineStateManager()
         await sm.save("test-label-1", {"label": "test-label-1", "steps": {}})
@@ -141,39 +150,42 @@ class TestGateStateLifecycle:
     @pytest.mark.asyncio
     async def test_returns_persisted_gate_state(self, isolated_state_dir):
         sm = PipelineStateManager()
-        await sm.save("test-label-2", {
-            "label": "test-label-2",
-            "steps": {
-                "audit": {
-                    "output": {
-                        "continuity_score": 0.8,
-                        "asset_ready_audit": {
-                            "status": "PASS",
-                            "checks": {"director_intent_metadata": True},
-                        },
-                        "continuity_direction_summary": {
-                            "clip_directions": [
-                                {
-                                    "scene_beat": "context_setup",
-                                    "beat_summary": "context_setup -> product_intro",
-                                    "transition_intent": "bridge setup into product interaction",
-                                }
-                            ],
-                            "scene_beats": ["context_setup"],
-                            "transition_intents": ["bridge setup into product interaction"],
-                        },
+        await sm.save(
+            "test-label-2",
+            {
+                "label": "test-label-2",
+                "steps": {
+                    "audit": {
+                        "output": {
+                            "continuity_score": 0.8,
+                            "asset_ready_audit": {
+                                "status": "PASS",
+                                "checks": {"director_intent_metadata": True},
+                            },
+                            "continuity_direction_summary": {
+                                "clip_directions": [
+                                    {
+                                        "scene_beat": "context_setup",
+                                        "beat_summary": "context_setup -> product_intro",
+                                        "transition_intent": "bridge setup into product interaction",
+                                    }
+                                ],
+                                "scene_beats": ["context_setup"],
+                                "transition_intents": ["bridge setup into product interaction"],
+                            },
+                        }
                     }
-                }
+                },
+                "gates": {
+                    "gate_1_script": {
+                        "status": "awaiting_approval",
+                        "candidates": [{"id": "c1", "variant": "standard"}],
+                        "selected_ids": ["c1"],
+                        "approved": False,
+                    }
+                },
             },
-            "gates": {
-                "gate_1_script": {
-                    "status": "awaiting_approval",
-                    "candidates": [{"id": "c1", "variant": "standard"}],
-                    "selected_ids": ["c1"],
-                    "approved": False,
-                }
-            },
-        })
+        )
         result = await get_gate_state("test-label-2", "gate_1_script")
         assert result["status"] == "awaiting_approval"
         assert result["candidates"] == [{"id": "c1", "variant": "standard"}]
@@ -184,17 +196,18 @@ class TestGateStateLifecycle:
 
 # ── gate_4_final 候选组装(不依赖 LLM,验证拼装逻辑) ──
 
+
 class TestGate4FinalAssembly:
-    """gate_4_final 不调 SkillRegistry,直接从 state.steps 里拼装 final candidate。
-    这个 gate 的代码路径是端到端关键最后一步。"""
+    """Final-media Gate remains blocked until a durable attempt ledger exists."""
 
     @pytest.mark.asyncio
-    async def test_assembles_from_steps_state(self, isolated_state_dir):
+    async def test_final_gate_is_blocked_even_with_complete_state(self, isolated_state_dir):
         sm = PipelineStateManager()
         # 模拟一个完整的 pipeline state,包含 assemble_final/audit/thumbnail/seedance
         # assemble_final.output 实际是 (video_path, metadata) tuple — 看 gate_manager.py:166
         state = {
             "label": "final-test-1",
+            "scenario": "s1",
             "steps": {
                 "assemble_final": {"output": ["/tmp/test-video.mp4", {"meta": "info"}]},
                 "audit": {"output": {"duration_seconds": 30, "score": 0.92}},
@@ -202,31 +215,20 @@ class TestGate4FinalAssembly:
                 "seedance_clips": {"output": {"total_duration": 30, "clips": []}},
             },
         }
+        attach_execution_policy(state, scenario="s1", media=True)
         await sm.save("final-test-1", state)
 
-        result = await generate_candidates("final-test-1", "gate_4_final")
-
-        assert "error" not in result, f"unexpected error: {result.get('error')}"
-        assert result["gate_id"] == "gate_4_final"
-        assert len(result["candidates"]) == 1, "gate_4_final 应该只有 1 个候选"
-
-        candidate = result["candidates"][0]
-        assert candidate["id"] == "gate_4_final_c0"
-        assert candidate["variant"] == "standard"
-        assert candidate["recommended"] is True
-        # data 字段填了 video / audit / thumbnail / duration
-        data = candidate["data"]
-        assert data["final_video_path"] == "/tmp/test-video.mp4"
-        assert data["audit_report"]["score"] == 0.92
-        assert data["thumbnail_image_paths"] == ["/tmp/thumb1.png", "/tmp/thumb2.png"]
-        assert data["duration"] == 30
+        with pytest.raises(HTTPException) as exc:
+            await generate_candidates("final-test-1", "gate_4_final")
+        assert exc.value.status_code == 422
+        assert "outside execution profile" in str(exc.value.detail)
 
     @pytest.mark.asyncio
-    async def test_assemble_handles_dict_video_path(self, isolated_state_dir):
-        """assemble_final 可能返回 dict(video_path 字段)而不是直接的 str。"""
+    async def test_final_gate_dict_output_cannot_bypass_profile(self, isolated_state_dir):
         sm = PipelineStateManager()
         state = {
             "label": "final-test-2",
+            "scenario": "s1",
             "steps": {
                 "assemble_final": {"output": {"video_path": "/tmp/dict-video.mp4"}},
                 "audit": {"output": {"duration_seconds": 45}},
@@ -234,16 +236,18 @@ class TestGate4FinalAssembly:
                 "seedance_clips": {"output": {}},
             },
         }
+        attach_execution_policy(state, scenario="s1", media=True)
         await sm.save("final-test-2", state)
-        result = await generate_candidates("final-test-2", "gate_4_final")
-        assert result["candidates"][0]["data"]["final_video_path"] == "/tmp/dict-video.mp4"
+        with pytest.raises(HTTPException) as exc:
+            await generate_candidates("final-test-2", "gate_4_final")
+        assert exc.value.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_persists_gate_state_after_assembly(self, isolated_state_dir):
-        """gate_4_final 组装后必须把 candidate 写回 state.gates。"""
+    async def test_blocked_final_gate_does_not_persist_candidate(self, isolated_state_dir):
         sm = PipelineStateManager()
         state = {
             "label": "final-test-3",
+            "scenario": "s1",
             "steps": {
                 "assemble_final": {"output": ["/tmp/v.mp4", {}]},
                 "audit": {"output": {}},
@@ -251,19 +255,19 @@ class TestGate4FinalAssembly:
                 "seedance_clips": {"output": {}},
             },
         }
+        attach_execution_policy(state, scenario="s1", media=True)
         await sm.save("final-test-3", state)
-        await generate_candidates("final-test-3", "gate_4_final")
+        with pytest.raises(HTTPException):
+            await generate_candidates("final-test-3", "gate_4_final")
 
         # Reload 看 gates 字段是否被写入
         reloaded = await sm.load("final-test-3")
         assert reloaded is not None
-        assert "gate_4_final" in reloaded["gates"]
-        gate_state = reloaded["gates"]["gate_4_final"]
-        assert gate_state["status"] == "awaiting_approval"
-        assert len(gate_state["candidates"]) == 1
+        assert "gate_4_final" not in reloaded.get("gates", {})
 
 
 # ── approve_gate / regenerate_candidate 错误路径 ──
+
 
 class TestApproveGateErrors:
     @pytest.mark.asyncio
@@ -295,21 +299,25 @@ class TestRegenerateCandidateErrors:
     @pytest.mark.asyncio
     async def test_nonexistent_candidate_id_returns_error(self, isolated_state_dir):
         sm = PipelineStateManager()
-        await sm.save("regen-test-1", {
-            "label": "regen-test-1",
-            "steps": {},
-            "gates": {
-                "gate_1_script": {
-                    "status": "awaiting_approval",
-                    "candidates": [{"id": "real-candidate", "variant": "standard"}],
-                }
+        await sm.save(
+            "regen-test-1",
+            {
+                "label": "regen-test-1",
+                "steps": {},
+                "gates": {
+                    "gate_1_script": {
+                        "status": "awaiting_approval",
+                        "candidates": [{"id": "real-candidate", "variant": "standard"}],
+                    }
+                },
             },
-        })
+        )
         result = await regenerate_candidate("regen-test-1", "gate_1_script", "fake-candidate-id")
         assert "error" in result
 
 
 # ── approve_gate 成功路径 ──
+
 
 class TestApproveGateSuccess:
     """approve_gate 成功路径：选 candidate → 写入 edited_output → 推进 current_step。"""
@@ -326,9 +334,7 @@ class TestApproveGateSuccess:
             },
             "steps": {
                 "strategy": {
-                    "output": {
-                        "briefs": [{"topic": "test", "usp_priority": ["usp1"]}]
-                    },
+                    "output": {"briefs": [{"topic": "test", "usp_priority": ["usp1"]}]},
                     "status": "done",
                 },
                 "scripts": {
@@ -365,6 +371,7 @@ class TestApproveGateSuccess:
                 }
             },
         }
+        attach_execution_policy(state, scenario="s1", media=False)
         await sm.save("approve-test-1", state)
 
         result = await approve_gate("approve-test-1", "gate_1_script", ["gate_1_c1"])
@@ -410,14 +417,25 @@ class TestApproveGateSuccess:
                 "gate_1_script": {
                     "status": "awaiting_approval",
                     "candidates": [
-                        {"id": "c0", "variant": "standard", "data": {"scripts": [{"text": "s"}]}, "score": {"overall": 0.8}},
-                        {"id": "c1", "variant": "creative", "data": {"scripts": [{"text": "c"}]}, "score": {"overall": 0.9}},
+                        {
+                            "id": "c0",
+                            "variant": "standard",
+                            "data": {"scripts": [{"text": "s"}]},
+                            "score": {"overall": 0.8},
+                        },
+                        {
+                            "id": "c1",
+                            "variant": "creative",
+                            "data": {"scripts": [{"text": "c"}]},
+                            "score": {"overall": 0.9},
+                        },
                     ],
                     "selected_ids": [],
                     "approved": False,
                 }
             },
         }
+        attach_execution_policy(state, scenario="s1", media=False)
         await sm.save("approve-test-2", state)
 
         result = await approve_gate("approve-test-2", "gate_1_script", ["c0", "c1"])
@@ -449,6 +467,7 @@ class TestApproveGateSuccess:
                 }
             },
         }
+        attach_execution_policy(state, scenario="s1", media=False)
         await sm.save("approve-test-3", state)
 
         result = await approve_gate("approve-test-3", "gate_1_script", ["c0", "c1", "c2"])
@@ -473,9 +492,11 @@ class TestApproveGateSuccess:
                     ],
                     "selected_ids": ["c0"],
                     "approved": True,
+                    "next_step": "compliance",
                 }
             },
         }
+        attach_execution_policy(state, scenario="s1", media=False)
         await sm.save("approve-test-4", state)
 
         result = await approve_gate("approve-test-4", "gate_1_script", ["c0"])
@@ -508,6 +529,7 @@ class TestApproveGateSuccess:
                 }
             },
         }
+        attach_execution_policy(state, scenario="s1", media=False)
         await sm.save("approve-test-5", state)
 
         result = await approve_gate("approve-test-5", "gate_1_script", ["c1"])
@@ -517,11 +539,16 @@ class TestApproveGateSuccess:
 
 # ── step_runner gate 暂停/恢复 ──
 
+
 class TestStepRunnerGatePause:
     """StepRunner 在 step_by_step 模式下遇到 gate after_step 时正确暂停。"""
 
     @pytest.mark.asyncio
-    async def test_step_by_step_pauses_at_gate_after_scripts(self, isolated_state_dir):
+    async def test_step_by_step_pauses_at_gate_after_scripts(
+        self,
+        isolated_state_dir,
+        isolated_provider_cost_db,
+    ):
         """mode=step_by_step 时,scripts step 完成后应触发 gate_1 暂停。"""
         from unittest.mock import AsyncMock, patch
 
@@ -533,7 +560,12 @@ class TestStepRunnerGatePause:
             "target_platforms": ["tiktok"],
         }
         step_runner = StepRunner(sm)
-        label = await step_runner.init_state(config=config, mode="step_by_step", scenario="s1")
+        async with bound_generation_policy("s1", media=False):
+            label = await step_runner.init_state(
+                config=config,
+                mode="step_by_step",
+                scenario="s1",
+            )
 
         # Mock pipeline.run_step 让它返回模拟结果(不触发真实 LLM)
         mock_result = {
@@ -544,7 +576,9 @@ class TestStepRunnerGatePause:
             "count": 2,
         }
 
-        with patch("src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock) as mock_run:
+        with patch(
+            "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = mock_result
             state = await step_runner.run_step(label, "scripts")
 
@@ -565,7 +599,11 @@ class TestStepRunnerGatePause:
         assert state.get("gate_status") == "awaiting_approval"
 
     @pytest.mark.asyncio
-    async def test_auto_mode_skips_gate_pause(self, isolated_state_dir):
+    async def test_auto_mode_skips_gate_pause(
+        self,
+        isolated_state_dir,
+        isolated_provider_cost_db,
+    ):
         """mode=auto 时,scripts step 完成后不应触发 gate 暂停。"""
         from unittest.mock import AsyncMock, patch
 
@@ -577,11 +615,18 @@ class TestStepRunnerGatePause:
             "target_platforms": ["tiktok"],
         }
         step_runner = StepRunner(sm)
-        label = await step_runner.init_state(config=config, mode="auto", scenario="s1")
+        async with bound_generation_policy("s1", media=False):
+            label = await step_runner.init_state(
+                config=config,
+                mode="auto",
+                scenario="s1",
+            )
 
         mock_result = {"scripts": [{"text": "auto mode script"}]}
 
-        with patch("src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock) as mock_run:
+        with patch(
+            "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = mock_result
             state = await step_runner.run_step(label, "scripts")
 
@@ -627,6 +672,7 @@ class TestStepRunnerGatePause:
                 }
             },
         }
+        attach_execution_policy(state, scenario="s1", media=True)
         await sm.save("resume-gate-test", state)
 
         # resume 应该检测到 gate_2 是 awaiting_approval,在 pre-step 暂停
@@ -639,7 +685,11 @@ class TestStepRunnerGatePause:
         assert final_state["gates"]["gate_2_keyframe"]["status"] == "awaiting_approval"
 
     @pytest.mark.asyncio
-    async def test_resume_pauses_at_post_step_gate(self, isolated_state_dir):
+    async def test_resume_pauses_at_post_step_gate(
+        self,
+        isolated_state_dir,
+        isolated_provider_cost_db,
+    ):
         """resume 执行完 step 后,如果 step 触发了 gate,在 post-step 检查点暂停。"""
         from unittest.mock import AsyncMock, patch
 
@@ -654,7 +704,12 @@ class TestStepRunnerGatePause:
             "target_platforms": ["tiktok"],
             "brand_mode": True,
         }
-        label = await step_runner.init_state(config=config, mode="step_by_step", scenario="s1")
+        async with bound_generation_policy("s1", media=True):
+            label = await step_runner.init_state(
+                config=config,
+                mode="step_by_step",
+                scenario="s1",
+            )
 
         # 修改 state:strategy/scripts/compliance 已完成,gate_1 已 approved
         state = await sm.load(label)
@@ -679,7 +734,9 @@ class TestStepRunnerGatePause:
 
         # 用 step_by_step 模式 resume(从 storyboards 开始)
         # storyboards → continuity_storyboard_grid → keyframe_images(gate_2) → 暂停
-        with patch("src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock) as mock_run:
+        with patch(
+            "src.pipeline.s1_product_pipeline.S1ProductDirectPipeline.run_step", new_callable=AsyncMock
+        ) as mock_run:
             mock_run.return_value = {"storyboards": "mock"}
             final_state = await step_runner.resume(label)
 

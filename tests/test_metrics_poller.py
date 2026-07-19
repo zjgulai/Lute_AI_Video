@@ -465,7 +465,7 @@ async def test_shopify_fetch_metrics_maps_shopifyql_table(monkeypatch) -> None:
         "cvr": 0.02,
     }
     assert fake.requests[0]["url"] == (
-        "https://example.myshopify.com/admin/api/2024-07/graphql.json"
+        "https://example.myshopify.com/admin/api/2026-07/graphql.json"
     )
     assert fake.requests[0]["headers"]["X-Shopify-Access-Token"] == "shopify-token"
     assert "shopifyqlQuery" in fake.requests[0]["json"]["query"]
@@ -649,7 +649,9 @@ async def test_dry_run_due_posts_returns_allowlisted_candidate() -> None:
     assert readiness["source_contract"]["live_pull_ready"] is False
 
 
-def test_shopify_access_token_falls_back_to_legacy_api_key(monkeypatch) -> None:
+def test_shopify_access_token_does_not_fall_back_to_legacy_api_key(
+    monkeypatch,
+) -> None:
     import src.config as config
 
     with monkeypatch.context() as m:
@@ -659,9 +661,9 @@ def test_shopify_access_token_falls_back_to_legacy_api_key(monkeypatch) -> None:
 
         reloaded = importlib.reload(config)
 
-        assert reloaded.SHOPIFY_API_KEY == "legacy-shopify-key"
-        assert reloaded.SHOPIFY_ACCESS_TOKEN == "legacy-shopify-key"
+        assert reloaded.SHOPIFY_ACCESS_TOKEN == ""
         assert reloaded.SHOPIFY_STORE_URL == "example.myshopify.com"
+        assert reloaded.SHOPIFY_PUBLISH_ENABLED is False
 
     importlib.reload(config)
 
@@ -795,6 +797,9 @@ async def test_active_post_source_summary_counts_video_metrics_and_publish_logs(
     assert summary["video_metrics"]["used_by_metrics_poller"] is True
     assert summary["video_metrics"]["active_candidate_rows"] == 1
     assert summary["publish_logs"]["used_by_metrics_poller"] is False
+    assert summary["publish_logs"]["reason"] == (
+        "publish_logs lacks the full metrics pull candidate contract"
+    )
     assert summary["publish_logs"]["published_with_post_id"] == 1
     assert summary["manual_allowlist"]["creates_active_post_source"] is False
     assert summary["manual_seed"]["requires_explicit_db_write_authorization"] is True

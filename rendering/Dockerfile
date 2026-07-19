@@ -1,5 +1,8 @@
 FROM node:22-alpine
 
+ARG RELEASE_SOURCE_SHA
+LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
+
 # Keep the official Alpine source for ordinary local and CI builds. Lighthouse
 # deploys can override this at build time when the default CDN is unreliable.
 ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine

@@ -5,7 +5,7 @@ module: ci-cd
 topic: production-e2e-token-smoke
 status: stable
 created: 2026-05-31
-updated: 2026-06-13
+updated: 2026-07-11
 owner: self
 source: human+ai
 ---
@@ -18,12 +18,52 @@ source: human+ai
 
 Default production E2E must remain non-token:
 
-- `run_token_smoke`: `false`
-- `RUN_TOKEN_SMOKE`: `false`
+- `token_smoke_spec`: empty
+- `RUN_TOKEN_SMOKE`: `0`
 - `@token-smoke`: skipped
 - `PLAYWRIGHT_API_KEY`: authenticated production checks require a non-demo production key
 
 If `PLAYWRIGHT_API_KEY` is missing or still equals `ai_video_demo_2026`, authenticated checks skip through `web/e2e/production/helpers.ts`. That result is not a production acceptance gate.
+
+## Current Machine Gate (2026-07-11)
+
+The workflow has two serialized jobs. `e2e-prod-readonly` always sets `RUN_TOKEN_SMOKE=0`. `e2e-prod-token-smoke` requires the read-only job to pass, runs only for a manual dispatch from `refs/heads/main` with a non-empty `token_smoke_spec`, and is bound to the GitHub Environment `production-provider`. Workflow-level and token-job concurrency groups prevent overlapping production dispatches.
+
+The token job always targets the canonical `https://video.lute-tlz-dddd.top`; the user-controlled `base_url` input is read-only-job-only and is never combined with `PROD_TOKEN_SMOKE_API_KEY`. The token API key is not job-level environment state: only the validation and token execution steps receive it, so checkout, setup-node, npm install, browser install, and artifact upload cannot read it. Token mode uses strict TLS, disables Playwright traces, and retains only the HTML report. It does not upload `test-results` or trace archives that could capture authorization headers.
+
+The token job accepts exactly three authorization inputs:
+
+- `token_smoke_spec`: one fixed `e2e/production/*-single-submit.prod.spec.ts` allowlisted by both `scripts/l4c_token_smoke_plan.py` and `web/playwright.prod.config.ts`;
+- `plan_path`: a logical audit ref, not a filesystem destination. The private plan must bind this value in `plan_record_ref` and contain exactly that one spec, total budget equal to its per-spec budget, `max_submit_count=1`, `provider_max_retries=0`, and tenant `pending_review` storage;
+- `approval_record_path`: a logical audit ref, not a filesystem destination. Both private records must bind this exact value in their approval reference fields.
+
+The approval record must contain `template_only=false`, `scope=l4c-token-smoke`, `status=approved`, `provider_calls_allowed=true`, `approved_by`, `checked_by`, strict `approved_at` and `expires_at`, the exact `token_smoke_spec`, `budget_limit_usd`, `plan_record_ref`, and a self-referencing logical `approval_record_ref`. The time contract is fail-closed: `approved_at<=now<expires_at`, both values use exact `YYYY-MM-DDTHH:MM:SSZ`, and `0<expires_at-approved_at<=4h`. It must not contain a provider secret. For `fast-mode-single-submit.prod.spec.ts`, the plan must additionally set `media_generation.fast_allowed=true` and the approval must set `media_synthesis_allowed=true`; missing, false, or mismatched authority blocks before Playwright.
+
+Both records also bind `workflow_run_ref` and `commit_sha`. `workflow_run_ref` must equal the current `GITHUB_RUN_ID:GITHUB_RUN_ATTEMPT`; `commit_sha` must equal the current 40-character lowercase `GITHUB_SHA`. The validator compares both records to the live dispatch values. A copied approval secret therefore cannot authorize a later attempt, rerun, branch, or commit.
+
+The private record contents come only from the protected Environment secrets `PROD_TOKEN_SMOKE_PLAN_B64` and `PROD_TOKEN_SMOKE_APPROVAL_B64`. Store base64 of the UTF-8 JSON records in those secrets. Base64 is transport encoding, not encryption; the GitHub Environment, reviewer policy, and secret access controls provide confidentiality. The validator shell starts with `set -euo pipefail`, decodes with `umask 077` into fixed files under `$RUNNER_TEMP`, never writes to an input-controlled path, never prints the values, and removes both files through an exit trap whether decoding or validation succeeds or fails.
+
+Before Node or Playwright setup, the workflow runs:
+
+```bash
+python scripts/l4c_token_smoke_plan.py \
+  --ci-validate \
+  --base-url "https://video.lute-tlz-dddd.top" \
+  --plan-record "$RUNNER_TEMP/l4c-token-smoke-plan.json" \
+  --approval-record "$RUNNER_TEMP/l4c-token-smoke-approval.json" \
+  --plan-ref "$PLAN_REF_INPUT" \
+  --approval-ref "$APPROVAL_REF_INPUT" \
+  --workflow-run-ref "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT" \
+  --commit-sha "$GITHUB_SHA" \
+  --selected-spec "$TOKEN_SMOKE_SPEC_INPUT" \
+  --env-file "$GITHUB_ENV"
+```
+
+Only a passed validator may emit `PLAYWRIGHT_TOKEN_SMOKE_SPEC`, `PLAYWRIGHT_MAX_SUBMIT_COUNT=1`, `PLAYWRIGHT_PROVIDER_MAX_RETRIES=0`, `PLAYWRIGHT_ARTIFACT_DISPOSITION=pending_review`, and the approved budget. Playwright then runs that one quoted spec with `--workers=1 --retries=0`. Empty spec means the token job is skipped; it never means “run all token specs.” `budget_limit_usd` is currently approval and stop-loss evidence only; it is not a server-side durable reservation or hard spending cap. Operator/provider-console monitoring remains required until the durable cost ledger and atomic budget reservation are implemented.
+
+Stop immediately on the first test/provider failure, rate/quota/content rejection, budget/cap mismatch, missing local artifact, disposition mismatch, or approval/plan drift. Do not retry automatically. Preserve the Playwright HTML report; token traces and `test-results` archives remain disabled. Then capture task/status, observed submit count, provider retry count, artifact path/review status, and explicit `publish_allowed=false` / `delivery_accepted=false` evidence before any later authorization.
+
+Repository configuration proves only the code-side gate. It does not prove that GitHub Environment reviewers, deployment branch rules, or `PROD_TOKEN_SMOKE_API_KEY` are configured. The owner must verify those controls in GitHub before a live dispatch.
 
 Historical baselines:
 
@@ -76,15 +116,18 @@ The current formal plan is `docs/workflows/ai-video-project-2-0-e2e-test-plan-st
 - `L4C`: production `@token-smoke` expansion, only by separately authorized slices. `L4C-1R` has the submit-count and artifact-disposition guard in code, and the authorized retry after the output-volume permission fix passed for the minimal Fast Mode single-submit path. `L4C-2` first failed/stopped and exposed the S2 no-media media-generation boundary bug; after root-cause fixes and prep syncs, `L4C-4R` through `L4C-8R` now cover S1-S5 no-media clean-log single-submit with DeepSeek text only and no poyo/Seedance/TTS/assemble/keyframe execution. Any third Fast Mode submit, S1-S5 media run, S1 gate run, or wider `L4C-2+` needs a new plan record and new explicit authorization.
 - `L4D`: staged real media provider smoke. Image-only plus tenant readback (`L4D-1/L4D-4R-prep`), video-only (`L4D-2`), image+video paired chain (`L4D-3`), frontend/library read-only readback (`L4D-4`), S2 bounded-media implementation/sync/keyframe isolation (`L4D-5-fix-prep` through `L4D-5X`), S2 bounded media provider smoke (`L4D-5Y`), and frontend/library read-only regression (`L4D-5Z`) have passed. This only proves S2 bounded media through `seedance_clips`, not S2 full media/final assembly, S1/S3/S4/S5 media generation, publish, delivery acceptance, or approved brand token writes.
 
-## Required Secret For Token Smoke
+## Required Secrets For Token Smoke
 
-Configure this GitHub Actions repository secret only after recharge and after the POYO account is funded:
+Configure the three `PROD_TOKEN_SMOKE_*` secrets only inside the protected `production-provider` GitHub Environment, after recharge and provider-account readiness are confirmed. `PROD_DEMO_API_KEY` remains the separately scoped read-only workflow secret because the read-only job does not enter that Environment.
 
 | Secret | Purpose |
 |---|---|
-| `PROD_DEMO_API_KEY` | Non-demo production API key used by `e2e-prod.yml`; the legacy name is misleading, but the value must not be `ai_video_demo_2026` |
+| `PROD_DEMO_API_KEY` | Read-only production E2E key; the legacy name is misleading and authenticated checks skip if it is absent/demo |
+| `PROD_TOKEN_SMOKE_API_KEY` | Non-demo key exposed only to the protected validation and token execution steps, never job-level setup/install/upload steps |
+| `PROD_TOKEN_SMOKE_PLAN_B64` | Base64 transport encoding of the approved, secret-free L4C plan JSON; decoded only to a fixed `$RUNNER_TEMP` file |
+| `PROD_TOKEN_SMOKE_APPROVAL_B64` | Base64 transport encoding of the approved, secret-free L4C approval JSON; decoded only to a fixed `$RUNNER_TEMP` file |
 
-The workflow intentionally fails if `run_token_smoke=true` while `PLAYWRIGHT_API_KEY` is still `ai_video_demo_2026`.
+The token job fails before validation if the API key is missing/demo, either encoded record is missing, either logical audit ref is missing, the read-only job failed, the dispatch is not on `main`, or another protected production run holds the concurrency group.
 
 ## Manual Run
 
@@ -93,8 +136,18 @@ Use GitHub UI for non-token production E2E:
 1. Actions → `e2e-prod`
 2. Run workflow
 3. Set `base_url` to `https://video.lute-tlz-dddd.top`
-4. Keep `run_token_smoke` as `false`
+4. Leave `token_smoke_spec`, `approval_record_path`, and `plan_path` empty
 5. Review failures before retrying
+
+For an explicitly authorized token slice, first verify the `production-provider` Environment reviewers and all three secrets, then supply the one spec plus both non-empty logical audit refs. The refs must exactly match the decoded records; they are not runner paths. Never enter a glob, option, multiple paths, or a non-single-submit spec. Dispatch only from `main`.
+
+The protected run is prepared per dispatch:
+
+1. Dispatch from `main` with the exact spec and logical refs; do not approve the `production-provider` job yet.
+2. After GitHub assigns the run, record `GITHUB_RUN_ID:GITHUB_RUN_ATTEMPT` and the run's `GITHUB_SHA`.
+3. Create fresh plan and approval records bound to those exact values. Set strict UTC-second timestamps with an expiry no more than four hours after approval.
+4. Base64-encode each secret-free JSON record locally, update the two Environment B64 secrets, then approve the protected job.
+5. Any rerun or new attempt requires fresh records, refs/timestamps as applicable, and updated B64 secrets; do not reuse the prior approval.
 
 Local equivalent:
 
@@ -280,6 +333,8 @@ python scripts/l4c_token_smoke_plan.py --json \
 ```
 
 The validator is intentionally no-execute. A passed report means the L4C packet is structurally ready for operator review; it is not provider runtime evidence and it is not delivery acceptance.
+
+Local CI validation remains backward compatible: when `--plan-ref` and `--approval-ref` are both omitted, approval references are checked against the actual private file paths. When either logical ref option is used, both are required and the plan plus approval records must bind them exactly; a logical ref is never opened or used as an output path. Likewise, omitting both `--workflow-run-ref` and `--commit-sha` is local structural-validation mode only. The protected workflow always supplies both dispatch identifiers and requires exact plan/approval binding, so a local pass without them is not live workflow authorization evidence.
 
 Historical L4C-1 command actually used on 2026-06-11:
 

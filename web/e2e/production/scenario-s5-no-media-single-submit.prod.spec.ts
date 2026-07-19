@@ -37,6 +37,8 @@ test.describe("Production smoke — S5 no-media single-submit token smoke", () =
         story_description: "A calm 15-second countertop routine for new parents.",
         video_duration: 15,
         enable_media_synthesis: false,
+        artifact_disposition: artifactDisposition,
+        provider_max_retries: providerMaxRetries,
         commercial_injection_plan: null,
       },
     });
@@ -48,7 +50,15 @@ test.describe("Production smoke — S5 no-media single-submit token smoke", () =
     expect(response.status(), "single S5 no-media submit should complete").toBe(200);
     const body = await response.json();
 
-    expect(body.success).toBe(true);
+    expect(body.status).toBe("completed_bounded");
+    expect(body.lifecycle_status).toBe("completed_bounded");
+    expect(body.completion_kind).toBe("no_media");
+    expect(body.request_succeeded).toBe(true);
+    expect(body.success).toBe(false);
+    expect(body.full_media_success).toBe(false);
+    expect(body.pipeline_complete).toBe(false);
+    expect(body.publish_allowed).toBe(false);
+    expect(body.delivery_accepted).toBe(false);
     expect(body.scenario).toBe("brand_vlog");
     expect(body.video_duration).toBe(15);
     expect(Array.isArray(body.scripts)).toBe(true);

@@ -2,8 +2,9 @@
 
 import React from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { getMediaUrl } from "./api";
 import InlineTooltip from "./InlineTooltip";
+import RuntimeMediaLink from "./RuntimeMediaLink";
+import RuntimeMediaVideo from "./RuntimeMediaVideo";
 import {
   extractContinuityDiagnosticsFromAuditReport,
   getContinuityDiagnosticsSummary,
@@ -42,8 +43,8 @@ export default function DirectorPlayback({ result, scenario }: Props) {
         defaultOpen={true}
       >
         {videoPath ? (
-          <video
-            src={getMediaUrl(videoPath)}
+          <RuntimeMediaVideo
+            src={videoPath}
             controls
             className="w-full rounded-xl"
             style={{ aspectRatio: "9/16", maxHeight: 480, colorScheme: 'dark' }}
@@ -191,20 +192,14 @@ export default function DirectorPlayback({ result, scenario }: Props) {
 
       {/* Section 7: Download */}
       <div className="flex justify-center pt-4">
-        <button
+        {videoPath && <RuntimeMediaLink
+          href={videoPath}
+          download="video.mp4"
           className="apple-btn apple-btn-primary gap-2"
-          onClick={() => {
-            if (videoPath) {
-              const a = document.createElement("a");
-              a.href = getMediaUrl(videoPath);
-              a.download = "video.mp4";
-              a.click();
-            }
-          }}
         >
           <DownloadSimple size={16} weight="fill" />
           {t("playback.download")}
-        </button>
+        </RuntimeMediaLink>}
       </div>
     </div>
   );

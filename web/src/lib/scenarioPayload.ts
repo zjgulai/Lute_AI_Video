@@ -29,7 +29,39 @@ export type SceneSubmitConfig = UnknownRecord & {
   selected_models?: unknown;
   story_description?: string;
   product_views?: unknown;
+  enable_media_synthesis?: boolean;
+  artifact_disposition?: "pending_review" | "quarantine";
+  provider_max_retries?: number;
 };
+
+export type GenerationSafetyIntent = {
+  enable_media_synthesis: boolean;
+  artifact_disposition: "pending_review" | "quarantine";
+  provider_max_retries: 0;
+};
+
+export function normalizeGenerationSafetyIntent(
+  config: Record<string, unknown>,
+): GenerationSafetyIntent {
+  return {
+    enable_media_synthesis: config.enable_media_synthesis === true,
+    artifact_disposition: config.artifact_disposition === "quarantine"
+      ? "quarantine"
+      : "pending_review",
+    provider_max_retries: 0,
+  };
+}
+
+export function withExplicitMediaGenerationIntent<T extends Record<string, unknown>>(
+  payload: T,
+): T & GenerationSafetyIntent {
+  return {
+    ...payload,
+    enable_media_synthesis: true,
+    artifact_disposition: "pending_review",
+    provider_max_retries: 0,
+  };
+}
 
 function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
@@ -49,15 +81,10 @@ function firstProduct(config: SceneSubmitConfig): UnknownRecord {
   return {};
 }
 
-function commonPayload(config: SceneSubmitConfig, fallbackVideoDuration: number): UnknownRecord {
+function basePayload(config: SceneSubmitConfig, fallbackVideoDuration: number): UnknownRecord {
   return definedEntries({
-    target_platforms: config.target_platforms || ["tiktok"],
-    target_languages: config.target_languages || ["en"],
-    week: config.week || config.content_calendar_week || "",
     video_duration: config.video_duration || fallbackVideoDuration,
-    enable_media_synthesis: config.enable_media_synthesis,
-    artifact_disposition: config.artifact_disposition,
-    provider_max_retries: config.provider_max_retries,
+    ...normalizeGenerationSafetyIntent(config),
     commercial_injection_plan: config.commercial_injection_plan,
   });
 }
@@ -169,18 +196,23 @@ export function buildScenarioAutoSubmitPayload(
   fallbackVideoDuration = 30,
 ): UnknownRecord {
   const scenario = config.content_scenario || "product_direct";
-  const common = commonPayload(config, fallbackVideoDuration);
+  const base = basePayload(config, fallbackVideoDuration);
 
   if (scenario === "brand_campaign") {
     return {
-      ...common,
+      ...base,
+      target_platforms: config.target_platforms || ["tiktok"],
+      target_languages: config.target_languages || ["en"],
+      week: config.week || config.content_calendar_week || "",
       brand_package: buildBrandPackage(config),
     };
   }
 
   if (scenario === "influencer_remix") {
     return {
-      ...common,
+      ...base,
+      target_platforms: config.target_platforms || ["tiktok"],
+      target_languages: config.target_languages || ["en"],
       video_url: config.video_url || "",
       product: buildS3Product(config),
       influencer_name: config.influencer_name || "Influencer",
@@ -190,7 +222,8 @@ export function buildScenarioAutoSubmitPayload(
 
   if (scenario === "live_shoot" || scenario === "live_shoot_to_video") {
     return {
-      ...common,
+      ...base,
+      target_platforms: config.target_platforms || ["tiktok"],
       footage_assets: normalizeFootageAssets(config.footage_assets),
       product_info: buildProductInfo(config),
       topic: config.topic || "",
@@ -200,7 +233,7 @@ export function buildScenarioAutoSubmitPayload(
 
   if (scenario === "brand_vlog") {
     return {
-      ...common,
+      ...base,
       brand_id: config.brand_id || "momcozy",
       product_sku: buildS5ProductSku(config),
       scene_id: config.scene_id || "living-room",
@@ -210,8 +243,25 @@ export function buildScenarioAutoSubmitPayload(
   }
 
   return {
-    ...common,
+    ...base,
+    target_platforms: config.target_platforms || ["tiktok"],
+    target_languages: config.target_languages || ["en"],
+    week: config.week || config.content_calendar_week || "",
     product_catalog: config.product_catalog,
     brand_guidelines: config.brand_guidelines,
+  };
+}
+
+export function buildS1EditedStateUpdate(
+  stepName: string,
+  editedOutput: unknown,
+): UnknownRecord {
+  return {
+    steps: {
+      [stepName]: {
+        edited: true,
+        edited_output: editedOutput,
+      },
+    },
   };
 }

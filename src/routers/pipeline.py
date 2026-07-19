@@ -25,6 +25,11 @@ except ImportError:
 
 from src.config import DEFAULT_LANGUAGES
 from src.models import REVIEW_NODES, ApprovalStatus
+from src.pipeline.generation_policy import (
+    GenerationScenario,
+    bind_effective_generation_policy,
+    resolve_generation_policy,
+)
 from src.pipeline.runtime_injection_executor import (
     CURRENT_RUNTIME_INJECTION_KEY,
     STEP_RUNTIME_INJECTION_DATA_KEY,
@@ -47,6 +52,9 @@ from src.routers._state import (
     _save_thread_index,
     _thread_label_map,
     _touch_thread_cache,
+)
+from src.services.provider_execution import (
+    initialize_and_bind_provider_execution_context,
 )
 
 router = APIRouter()
@@ -117,7 +125,17 @@ def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dic
         CURRENT_RUNTIME_INJECTION_KEY: project_current_runtime_injection_visibility(state),
         "errors": state.get("errors", []),
         "structured_errors": [],
-        "pipeline_complete": False,
+        "pipeline_degraded": state.get("pipeline_degraded") is True,
+        "degraded_reason": state.get("degraded_reason"),
+        "status": state.get("status"),
+        "lifecycle_status": state.get("lifecycle_status"),
+        "completion_kind": state.get("completion_kind"),
+        "request_succeeded": state.get("request_succeeded") is True,
+        "success": state.get("success") is True,
+        "full_media_success": state.get("full_media_success") is True,
+        "pipeline_complete": state.get("pipeline_complete") is True,
+        "publish_allowed": state.get("publish_allowed") is True,
+        "delivery_accepted": state.get("delivery_accepted") is True,
     }
 
     step_commercial_injections: dict[str, dict[str, Any]] = {}
@@ -152,22 +170,25 @@ def _steprunner_state_to_legacy(label: str, state: dict[str, Any] | None) -> dic
     legacy_state["distribution_plans"] = []
     assemble = steps.get("assemble_final", {})
     if isinstance(assemble, dict):
-        legacy_state["distribution_plans"] = assemble.get("output", {}).get("distribution_plans", []) if isinstance(assemble.get("output"), dict) else []
-    legacy_state["analytics_reports"] = steps.get("audit", {}).get("output", {}) if isinstance(steps.get("audit"), dict) else {}
+        legacy_state["distribution_plans"] = (
+            assemble.get("output", {}).get("distribution_plans", []) if isinstance(assemble.get("output"), dict) else []
+        )
+    legacy_state["analytics_reports"] = (
+        steps.get("audit", {}).get("output", {}) if isinstance(steps.get("audit"), dict) else {}
+    )
 
     # Human reviews — StepRunner doesn't have checkpoint reviews; default empty
     legacy_state["human_reviews"] = {}
-    legacy_state["pipeline_complete"] = all(
-        s.get("status") == "done"
-        for s in steps.values()
-        if isinstance(s, dict)
-    ) and len(steps) > 0
-
     return legacy_state
 
 
 def _get_state_status(legacy_state: dict[str, Any]) -> str:
     """Derive status string from legacy state."""
+    lifecycle_status = legacy_state.get("lifecycle_status")
+    if lifecycle_status in {"completed_bounded", "policy_blocked"}:
+        return lifecycle_status
+    if legacy_state.get("pipeline_degraded") is True:
+        return "error"
     if legacy_state.get("pipeline_complete"):
         return "complete"
     if legacy_state.get("status") == "not_found":
@@ -194,6 +215,7 @@ def _assert_state_access(state: dict[str, Any] | None) -> None:
 async def _load_steprunner_state(label: str) -> dict[str, Any] | None:
     """Load state from PipelineStateManager by label."""
     from src.pipeline.state_manager import PipelineStateManager
+
     manager = PipelineStateManager()
     return await manager.load(label)
 
@@ -210,12 +232,33 @@ async def start_pipeline(req: PipelineStartRequest):
     Returns a synthetic thread_id for backward compatibility.
     The actual execution is delegated to StepRunner.
     """
-    from src.pipeline.state_manager import PipelineStateManager
+    from src.pipeline.state_manager import PipelineStateManager, persist_background_failure
     from src.pipeline.step_runner import StepRunner
     from src.routers._state import _register_background_task
     from src.tools.translate import translate_catalog_to_english
 
     thread_id = str(uuid.uuid4())
+
+    auth = get_auth_context()
+    if auth is None:
+        raise HTTPException(status_code=401, detail="Missing authenticated request context")
+    if req.content_scenario not in {"product_direct", "s1"}:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Legacy /pipeline/start supports only product_direct/s1; use /scenario/{scenario}/submit for S2-S5"
+            ),
+        )
+    canonical_scenario: GenerationScenario = "s1"
+    policy = resolve_generation_policy(req, auth=auth, scenario=canonical_scenario)
+    bind_effective_generation_policy(policy)
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=thread_id,
+        scenario_or_resource_type=canonical_scenario,
+        generation_policy_version=policy.version,
+    )
 
     # Inject API keys from request into environment
     if req.api_keys:
@@ -233,7 +276,10 @@ async def start_pipeline(req: PipelineStartRequest):
         "week": req.content_calendar_week,
         "video_duration": 30,
         "brand_mode": False,
-        "enable_media_synthesis": True,
+        "enable_media_synthesis": policy.enable_media_synthesis,
+        "artifact_disposition": policy.artifact_disposition,
+        "provider_max_retries": policy.provider_max_retries,
+        "effective_generation_policy": policy.model_dump(mode="json"),
         "content_scenario": req.content_scenario,
     }
 
@@ -241,7 +287,11 @@ async def start_pipeline(req: PipelineStartRequest):
     step_runner = StepRunner(state_manager)
 
     # Initialize state
-    label = await step_runner.init_state(config=config, mode="auto")
+    label = await step_runner.init_state(
+        config=config,
+        mode="auto",
+        scenario=canonical_scenario,
+    )
 
     # Map thread_id ↔ label for subsequent queries
     _thread_label_map[thread_id] = label
@@ -255,7 +305,14 @@ async def start_pipeline(req: PipelineStartRequest):
         try:
             await step_runner.resume(label)
         except Exception as exc:
+            await persist_background_failure(
+                state_manager,
+                label=label,
+                reason="legacy_background_run_failed",
+                error=exc,
+            )
             import structlog
+
             log = structlog.get_logger()
             log.error("pipeline_proxy: resume failed", thread_id=thread_id, label=label, error=str(exc)[:200])
 
@@ -279,7 +336,11 @@ async def get_pipeline_state(thread_id: str):
     if not label:
         # Legacy: check if this is an old LangGraph thread
         if thread_id in _active_threads:
-            return {"thread_id": thread_id, "status": "legacy", "message": "Legacy LangGraph thread — state no longer available"}
+            return {
+                "thread_id": thread_id,
+                "status": "legacy",
+                "message": "Legacy LangGraph thread — state no longer available",
+            }
         return {"thread_id": thread_id, "status": "not_found"}
 
     _touch_thread_cache(thread_id)
@@ -292,7 +353,13 @@ async def get_pipeline_state(thread_id: str):
 
         # Determine current review node (StepRunner has no checkpoint reviews)
         current_review = None
-        if status != "complete":
+        gates = state.get("gates", {}) if isinstance(state, dict) else {}
+        awaiting_review = (
+            any(isinstance(gate, dict) and gate.get("status") == "awaiting_approval" for gate in gates.values())
+            if isinstance(gates, dict)
+            else False
+        )
+        if status == "interrupted" and awaiting_review:
             for node_name in REVIEW_NODES:
                 current_review = node_name
                 break
@@ -321,6 +388,7 @@ async def submit_review(thread_id: str, review_node: str, action: ReviewAction):
     /scenario/{s}/gate/{label}/{gate_id}/approve instead.
     """
     import structlog
+
     log = structlog.get_logger()
 
     log.warning(
@@ -398,9 +466,16 @@ async def export_pipeline_output(thread_id: str):
 
     # Internal fields to strip
     _internal = {
-        "retry_counts", "self_verifications", "rejection_feedback",
-        "pipeline_metrics", "messages", "errors", "structured_errors",
-        "current_step", "pipeline_complete", "mock_quality",
+        "retry_counts",
+        "self_verifications",
+        "rejection_feedback",
+        "pipeline_metrics",
+        "messages",
+        "errors",
+        "structured_errors",
+        "current_step",
+        "pipeline_complete",
+        "mock_quality",
     }
 
     export = {k: v for k, v in legacy.items() if k not in _internal}

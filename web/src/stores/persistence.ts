@@ -1,7 +1,8 @@
 import type { PersistStorage, StateStorage, StorageValue } from "zustand/middleware";
+import type { PendingSubmission } from "@/lib/idempotentSubmission";
 
 export const APP_STORE_PERSIST_VERSION = 1;
-export const PIPELINE_STORE_PERSIST_VERSION = 1;
+export const PIPELINE_STORE_PERSIST_VERSION = 2;
 const MAX_DISMISSED_PIPELINE_LABELS = 10;
 
 export interface PersistedAppState {
@@ -20,6 +21,7 @@ export interface PersistedActivePipeline {
 export interface PersistedPipelineState {
   activePipeline: PersistedActivePipeline | null;
   dismissedPipelineLabels: string[];
+  pendingSubmission: PendingSubmission | null;
 }
 
 const DEFAULT_APP_STATE: PersistedAppState = {
@@ -31,7 +33,12 @@ const DEFAULT_APP_STATE: PersistedAppState = {
 const DEFAULT_PIPELINE_STATE: PersistedPipelineState = {
   activePipeline: null,
   dismissedPipelineLabels: [],
+  pendingSubmission: null,
 };
+
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/;
+const PENDING_PHASES = new Set(["submitting", "recovering", "bound", "unknown"]);
+const SCENARIOS = new Set(["s1", "s2", "s3", "s4", "s5"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -75,6 +82,42 @@ function sanitizeActivePipeline(value: unknown): PersistedActivePipeline | null 
   };
 }
 
+function sanitizePendingSubmission(value: unknown): PendingSubmission | null {
+  if (!isRecord(value)) return null;
+  const {
+    kind,
+    scenario,
+    idempotencyKey,
+    createdAt,
+    phase,
+    resourceId,
+  } = value;
+  if (kind !== "scenario" && kind !== "fast") return null;
+  if (kind === "scenario" && (typeof scenario !== "string" || !SCENARIOS.has(scenario))) {
+    return null;
+  }
+  if (typeof idempotencyKey !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)) {
+    return null;
+  }
+  if (typeof createdAt !== "number" || !Number.isFinite(createdAt) || createdAt <= 0) {
+    return null;
+  }
+  if (typeof phase !== "string" || !PENDING_PHASES.has(phase)) return null;
+  if (resourceId !== undefined && (typeof resourceId !== "string" || resourceId.length === 0)) {
+    return null;
+  }
+  if (phase === "bound" && typeof resourceId !== "string") return null;
+
+  return {
+    kind,
+    ...(kind === "scenario" ? { scenario: scenario as PendingSubmission["scenario"] } : {}),
+    idempotencyKey,
+    createdAt,
+    phase: phase as PendingSubmission["phase"],
+    ...(typeof resourceId === "string" ? { resourceId } : {}),
+  };
+}
+
 export function migrateAppStorePersistence(persistedState: unknown, version: number): PersistedAppState {
   void version;
   const state = unwrapPersistedState(persistedState);
@@ -101,6 +144,7 @@ export function migratePipelineStorePersistence(
   return {
     activePipeline: sanitizeActivePipeline(state.activePipeline),
     dismissedPipelineLabels: sanitizeDismissedLabels(state.dismissedPipelineLabels),
+    pendingSubmission: sanitizePendingSubmission(state.pendingSubmission),
   };
 }
 
@@ -115,6 +159,7 @@ export function partializeAppStorePersistence(state: {
 export function partializePipelineStorePersistence(state: {
   activePipeline: unknown;
   dismissedPipelineLabels: unknown;
+  pendingSubmission: unknown;
 }): PersistedPipelineState {
   return migratePipelineStorePersistence(state, PIPELINE_STORE_PERSIST_VERSION);
 }

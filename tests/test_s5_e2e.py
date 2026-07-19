@@ -263,7 +263,17 @@ async def test_s5_no_media_run_stops_before_video_prompts(monkeypatch):
                 }
             if "continuity_storyboard_grid" in captured["steps"]:
                 steps["continuity_storyboard_grid"] = {"output": {"clip_groups": []}}
-            return {"steps": steps, "errors": [], "media_synthesis_errors": []}
+            return {
+                "steps": steps,
+                "errors": [],
+                "media_synthesis_errors": [],
+                "pipeline_degraded": False,
+                "lifecycle_status": (
+                    "completed_bounded"
+                    if step_name == "continuity_storyboard_grid"
+                    else None
+                ),
+            }
 
         async def resume(self, label):
             captured["resume_called"] = True
@@ -296,24 +306,35 @@ async def test_s5_no_media_run_stops_before_video_prompts(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_scenario_s5_route_passes_enable_media_synthesis_false(monkeypatch):
+async def test_scenario_s5_route_passes_enable_media_synthesis_false(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db: Any,
+) -> None:
+    del isolated_provider_cost_db
     from src.pipeline import s5_brand_vlog_pipeline
-    from src.routers import scenario
+    from src.routers import _deps, scenario
 
     captured: dict[str, Any] = {}
 
     async def fake_run(self: S5BrandVlogPipeline, **kwargs: Any) -> dict[str, Any]:
         captured.update(kwargs)
-        return {"success": True, "scenario": "brand_vlog"}
-
-    class FakeRequest:
-        async def json(self) -> dict[str, Any]:
-            return {
-                "enable_media_synthesis": False,
-                "scene_id": "living-room",
-            }
+        return {
+            "success": True,
+            "_execution_completed": True,
+            "scenario": "brand_vlog",
+        }
 
     monkeypatch.setattr(s5_brand_vlog_pipeline.S5BrandVlogPipeline, "run", fake_run)
+    monkeypatch.setattr(
+        scenario,
+        "get_auth_context",
+        lambda: _deps.AuthContext(
+            tenant_id="tenant-a",
+            permissions=frozenset({"provider:submit"}),
+            key_type=_deps.ApiKeyType.TENANT,
+            key_id="s5-route-test",
+        ),
+    )
 
     result = await scenario.run_s5_brand_vlog(
         S5BrandVlogRequest(
@@ -323,37 +344,54 @@ async def test_scenario_s5_route_passes_enable_media_synthesis_false(monkeypatch
             selected_models=SELECTED_MODELS_FIXTURE,
             story_description="Test story",
             video_duration=15,
+            enable_media_synthesis=False,
         ),
-        request=FakeRequest(),
     )
 
-    assert result["success"] is True
+    assert result["status"] == "completed_bounded"
+    assert result["completion_kind"] == "no_media"
+    assert result["request_succeeded"] is True
+    assert result["success"] is False
+    assert result["full_media_success"] is False
+    assert result["publish_allowed"] is False
+    assert result["delivery_accepted"] is False
     assert captured["enable_media_synthesis"] is False
 
 
 @pytest.mark.asyncio
-async def test_scenario_s5_route_passes_bounded_media_controls(monkeypatch):
+async def test_scenario_s5_route_passes_bounded_media_controls(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_provider_cost_db: Any,
+) -> None:
+    del isolated_provider_cost_db
     from src.pipeline import s5_brand_vlog_pipeline
-    from src.routers import scenario
+    from src.routers import _deps, scenario
 
     captured: dict[str, Any] = {}
 
     async def fake_run(self: S5BrandVlogPipeline, **kwargs: Any) -> dict[str, Any]:
         captured.update(kwargs)
-        return {"success": True, "scenario": "brand_vlog"}
-
-    class FakeRequest:
-        async def json(self) -> dict[str, Any]:
-            return {
-                "enable_media_synthesis": True,
-                "scene_id": "living-room",
-            }
+        return {
+            "success": True,
+            "_execution_completed": True,
+            "scenario": "brand_vlog",
+        }
 
     assert "output_label" in S5BrandVlogRequest.model_fields
     assert "artifact_disposition" in S5BrandVlogRequest.model_fields
     assert "provider_max_retries" in S5BrandVlogRequest.model_fields
 
     monkeypatch.setattr(s5_brand_vlog_pipeline.S5BrandVlogPipeline, "run", fake_run)
+    monkeypatch.setattr(
+        scenario,
+        "get_auth_context",
+        lambda: _deps.AuthContext(
+            tenant_id="tenant-a",
+            permissions=frozenset({"provider:submit"}),
+            key_type=_deps.ApiKeyType.TENANT,
+            key_id="s5-bounded-route-test",
+        ),
+    )
 
     result = await scenario.run_s5_brand_vlog(
         S5BrandVlogRequest(
@@ -364,13 +402,19 @@ async def test_scenario_s5_route_passes_bounded_media_controls(monkeypatch):
             story_description="Test story",
             video_duration=15,
             output_label="s5_bounded_contract",
+            enable_media_synthesis=True,
             artifact_disposition="pending_review",
-            provider_max_retries=3,
+            provider_max_retries=0,
         ),
-        request=FakeRequest(),
     )
 
-    assert result["success"] is True
+    assert result["status"] == "completed_bounded"
+    assert result["completion_kind"] == "bounded_media"
+    assert result["request_succeeded"] is True
+    assert result["success"] is False
+    assert result["full_media_success"] is False
+    assert result["publish_allowed"] is False
+    assert result["delivery_accepted"] is False
     assert captured["output_label"] == "s5_bounded_contract"
     assert captured["artifact_disposition"] == "pending_review"
     assert captured["provider_max_retries"] == 0
@@ -446,6 +490,11 @@ async def test_s5_bounded_media_stops_after_seedance_and_clears_publishable_outp
                 "errors": [],
                 "media_synthesis_errors": [],
                 "pipeline_degraded": False,
+                "lifecycle_status": (
+                    "completed_bounded"
+                    if step_name == "seedance_clips"
+                    else None
+                ),
             }
 
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
@@ -460,7 +509,7 @@ async def test_s5_bounded_media_stops_after_seedance_and_clears_publishable_outp
         output_label="s5_bounded_fixture",
         enable_media_synthesis=True,
         artifact_disposition="pending_review",
-        provider_max_retries=5,
+        provider_max_retries=0,
     )
 
     assert executed_steps == s5_brand_vlog_pipeline.S5_BOUNDED_MEDIA_STEP_ORDER

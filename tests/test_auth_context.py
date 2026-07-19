@@ -211,6 +211,140 @@ async def test_verify_api_key_accepts_db_key_with_aware_future_expires_at(monkey
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw_permissions",
+    [
+        None,
+        "",
+        "not-json",
+        {},
+        0,
+        True,
+        [],
+        ["unknown:permission"],
+        ["all", ""],
+        ["provider:submit", " "],
+    ],
+)
+async def test_verify_api_key_denies_malformed_or_unrecognized_db_permissions(
+    monkeypatch,
+    raw_permissions,
+):
+    from src.routers import _deps
+    from src.storage import db
+
+    conn = _FakeAuthConn(
+        {
+            "id": "key-id",
+            "tenant_id": "momcozy-marketing",
+            "permissions": raw_permissions,
+            "revoked_at": None,
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        }
+    )
+
+    async def fake_get_pool():
+        return _FakePool(conn)
+
+    monkeypatch.setattr(db, "is_pg_available", lambda: True)
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    monkeypatch.setattr(_deps, "API_KEY", "")
+    monkeypatch.setattr(_deps, "TEST_BUNDLE_KEY", "")
+    monkeypatch.setattr(_deps, "ENVIRONMENT", "production")
+
+    ctx = await _deps.verify_api_key(None, "db-key")
+
+    assert ctx.key_type == _deps.ApiKeyType.TENANT
+    assert ctx.permissions == frozenset()
+    assert ctx.has_permission("provider:submit") is False
+
+
+@pytest.mark.asyncio
+async def test_verify_api_key_keeps_explicit_db_provider_submit_permission(monkeypatch):
+    from src.routers import _deps
+    from src.storage import db
+
+    conn = _FakeAuthConn(
+        {
+            "id": "key-id",
+            "tenant_id": "momcozy-marketing",
+            "permissions": ["provider:submit"],
+            "revoked_at": None,
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        }
+    )
+
+    async def fake_get_pool():
+        return _FakePool(conn)
+
+    monkeypatch.setattr(db, "is_pg_available", lambda: True)
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    monkeypatch.setattr(_deps, "API_KEY", "")
+    monkeypatch.setattr(_deps, "TEST_BUNDLE_KEY", "")
+    monkeypatch.setattr(_deps, "ENVIRONMENT", "production")
+
+    ctx = await _deps.verify_api_key(None, "db-key")
+
+    assert ctx.permissions == frozenset({"provider:submit"})
+    assert ctx.has_permission("provider:submit") is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw_permissions",
+    [
+        ["artifact:accept"],
+        ["artifact:accept", "artifact:accept"],
+        '["artifact:accept", "artifact:accept"]',
+    ],
+)
+async def test_verify_api_key_keeps_explicit_db_artifact_accept_permission(
+    monkeypatch,
+    raw_permissions,
+):
+    from src.routers import _deps
+    from src.storage import db
+
+    conn = _FakeAuthConn(
+        {
+            "id": "acceptance-reviewer-key-id",
+            "tenant_id": "momcozy-marketing",
+            "permissions": raw_permissions,
+            "revoked_at": None,
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        }
+    )
+
+    async def fake_get_pool():
+        return _FakePool(conn)
+
+    monkeypatch.setattr(db, "is_pg_available", lambda: True)
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    monkeypatch.setattr(_deps, "API_KEY", "")
+    monkeypatch.setattr(_deps, "TEST_BUNDLE_KEY", "")
+    monkeypatch.setattr(_deps, "ENVIRONMENT", "production")
+
+    ctx = await _deps.verify_api_key(None, "db-acceptance-key")
+
+    assert ctx.permissions == frozenset({"artifact:accept"})
+    assert ctx.has_permission("artifact:accept") is True
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        ["artifact:publish"],
+        ["artifact:publish", "artifact:publish"],
+        '["artifact:publish"]',
+    ],
+)
+def test_publish_permission_is_recognized(raw: object) -> None:
+    from src.routers._deps import _normalize_permissions
+
+    assert _normalize_permissions(raw) == frozenset({"artifact:publish"})
+
+
+@pytest.mark.asyncio
 async def test_step_runner_persists_auth_tenant_id(isolated_state_dir):
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_runner import StepRunner

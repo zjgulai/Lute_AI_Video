@@ -4,18 +4,41 @@ import base64
 import hashlib
 import hmac
 import os
-import re
+import secrets
 import time
 from pathlib import Path
-from urllib.parse import quote, unquote
+from typing import Literal
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from src.config import OUTPUT_DIR
-from src.routers._deps import API_KEY, verify_api_key
+from src.routers._deps import AuthContext, verify_api_key
+from src.services.artifact_identity import (
+    PUBLIC_OUTPUT_ROOTS,
+    ArtifactIdentityError,
+    ArtifactNotFoundError,
+    canonicalize_output_artifact_path,
+    classify_output_scope,
+    validate_output_reference,
+)
 
-_MEDIA_TOKEN_SECRET = os.environ.get("MEDIA_SIGN_SECRET") or API_KEY
+
+def _load_media_token_secret() -> str:
+    """Load an independent server-only signing secret, failing closed in production."""
+    production = os.environ.get("ENVIRONMENT", "development").lower() == "production"
+    configured = os.environ.get("MEDIA_SIGN_SECRET")
+    if configured:
+        if production and len(configured.encode("utf-8")) < 32:
+            raise RuntimeError("MEDIA_SIGN_SECRET must be at least 32 UTF-8 bytes")
+        return configured
+    if production:
+        raise RuntimeError("MEDIA_SIGN_SECRET is required in production")
+    return secrets.token_urlsafe(32)
+
+
+_MEDIA_TOKEN_SECRET = _load_media_token_secret()
 _MEDIA_TOKEN_TTL = 900  # 15 minutes
 _ALLOWED_MEDIA_EXTS = {
     ".mp4": "video/mp4",
@@ -29,12 +52,18 @@ _ALLOWED_MEDIA_EXTS = {
     ".webm": "video/webm",
     ".pdf": "application/pdf",
 }
-_MEDIA_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+PUBLIC_MEDIA_ROOTS = PUBLIC_OUTPUT_ROOTS
+MediaPurpose = Literal["view", "download"]
 
 
-def _sign_media_token(media_path: str, expires_at: int) -> str:
+def _sign_media_token(
+    canonical_path: str,
+    tenant_id: str,
+    purpose: str,
+    expires_at: int,
+) -> str:
     """Generate a short-lived signed token for media access."""
-    payload = f"{media_path}:{expires_at}"
+    payload = "\x00".join((canonical_path, tenant_id, purpose, str(expires_at)))
     sig = hmac.new(
         _MEDIA_TOKEN_SECRET.encode(),
         payload.encode(),
@@ -43,103 +72,111 @@ def _sign_media_token(media_path: str, expires_at: int) -> str:
     return base64.urlsafe_b64encode(sig).decode().rstrip("=")
 
 
-def _verify_media_token(media_path: str, token: str, expires_at: int) -> bool:
+def _verify_media_token(
+    canonical_path: str,
+    tenant_id: str,
+    purpose: str,
+    token: str,
+    expires_at: int,
+) -> bool:
     """Verify a media access token."""
     if time.time() > expires_at:
         return False
-    expected = _sign_media_token(media_path, expires_at)
+    expected = _sign_media_token(canonical_path, tenant_id, purpose, expires_at)
     return hmac.compare_digest(expected, token)
 
 
 def _validated_media_request_path(media_path: str) -> str:
-    normalized = media_path.replace("\\", "/")
-    decoded = normalized
-    for _ in range(3):
-        next_decoded = unquote(decoded)
-        if next_decoded == decoded:
-            break
-        decoded = next_decoded
-    candidates = {normalized, decoded}
-
-    for candidate in candidates:
-        if not candidate or "\x00" in candidate or "?" in candidate or "#" in candidate:
-            raise HTTPException(status_code=400, detail="Invalid path")
-        if candidate.startswith("/") or candidate.startswith("//") or _MEDIA_SCHEME_RE.match(candidate):
-            raise HTTPException(status_code=400, detail="Invalid path")
-        if any(part in {"", ".", ".."} for part in candidate.split("/")):
-            raise HTTPException(status_code=400, detail="Invalid path")
-
-    return decoded
+    try:
+        return validate_output_reference(media_path)
+    except ArtifactIdentityError as exc:
+        raise HTTPException(status_code=400, detail="Invalid path") from exc
 
 
-def sign_media_url(media_path: str, expires_in_sec: int = _MEDIA_TOKEN_TTL) -> str:
-    """Generate a signed media URL with query token."""
+def classify_media_scope(canonical_path: str) -> str | None:
+    """Return the owning tenant, or ``None`` for an explicit public root."""
+    try:
+        return classify_output_scope(canonical_path)
+    except ArtifactIdentityError as exc:
+        raise HTTPException(status_code=400, detail="Invalid path") from exc
+
+
+def authorize_media_path(canonical_path: str, tenant_id: str) -> None:
+    """Fail closed when ``tenant_id`` does not own a protected media path."""
+    owner = classify_media_scope(canonical_path)
+    if owner is not None and owner != tenant_id:
+        raise HTTPException(status_code=404, detail="File not found")
+
+
+def sign_media_url(
+    media_path: str,
+    *,
+    tenant_id: str,
+    purpose: MediaPurpose = "view",
+    expires_in_sec: int = _MEDIA_TOKEN_TTL,
+) -> str:
+    """Generate a tenant-bound signed media URL for an exact media path."""
+    if purpose not in {"view", "download"}:
+        raise HTTPException(status_code=400, detail="Invalid purpose")
     canonical_path, _ = _resolve_media_path(media_path)
+    authorize_media_path(canonical_path, tenant_id)
     expires_at = int(time.time()) + expires_in_sec
-    token = _sign_media_token(canonical_path, expires_at)
+    token = _sign_media_token(canonical_path, tenant_id, purpose, expires_at)
     quoted = "/".join(quote(p, safe="") for p in canonical_path.split("/"))
-    return f"/api/media/{quoted}?token={token}&expires={expires_at}"
+    query = urlencode(
+        {
+            "token": token,
+            "expires": expires_at,
+            "tenant": tenant_id,
+            "purpose": purpose,
+        }
+    )
+    return f"/api/media/{quoted}?{query}"
 
 
 def _resolve_media_path(media_path: str) -> tuple[str, Path]:
     """Validate and resolve a requested media path under OUTPUT_DIR."""
-    root = OUTPUT_DIR.resolve()
-    media_path = _validated_media_request_path(media_path)
-
-    rel = Path(media_path)
-    if rel.is_absolute() or any(part in {"", ".", ".."} for part in rel.parts):
-        raise HTTPException(status_code=400, detail="Invalid path")
-
-    candidate = (root / rel).resolve()
+    reference = _validated_media_request_path(media_path)
+    owner = classify_media_scope(reference)
+    required_prefix = reference.split("/", maxsplit=1)[0]
     try:
-        canonical = candidate.relative_to(root)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
-
-    if not candidate.is_file():
-        safe_name = rel.name
-        search_roots = [
-            OUTPUT_DIR,
-            OUTPUT_DIR / "seedance",
-            OUTPUT_DIR / "audio",
-            OUTPUT_DIR / "gpt_images",
-            OUTPUT_DIR / "renders",
-            OUTPUT_DIR / "demo",
-            OUTPUT_DIR / "uploads",
-            OUTPUT_DIR / "fast_mode",
-            OUTPUT_DIR / "fast_mode" / "audio",
-        ]
-        found: tuple[str, Path] | None = None
-        for sr in search_roots:
-            cand2 = (sr / safe_name).resolve()
-            try:
-                canonical2 = cand2.relative_to(root)
-            except ValueError:
-                continue
-            if cand2.is_file():
-                found = (canonical2.as_posix(), cand2)
-                break
-        if found is None:
-            raise HTTPException(status_code=404, detail="File not found")
-        return found
-
-    return canonical.as_posix(), candidate
+        canonical = canonicalize_output_artifact_path(
+            media_path,
+            output_dir=OUTPUT_DIR,
+            tenant_id=owner,
+            required_prefix=required_prefix,
+            allowed_suffixes={Path(reference).suffix.lower()},
+            allow_absolute_under_root=False,
+        )
+    except ArtifactNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
+    except ArtifactIdentityError as exc:
+        raise HTTPException(status_code=400, detail="Invalid path") from exc
+    return canonical.canonical_path, canonical.absolute_path
 
 
 router = APIRouter()
 
 
-@router.get("/api/media/sign", dependencies=[Depends(verify_api_key)])
-async def get_signed_media_url(request: Request):
+@router.get("/api/media/sign")
+async def get_signed_media_url(
+    request: Request,
+    ctx: AuthContext = Depends(verify_api_key),
+):
     """Generate a short-lived signed URL for a media file.
 
-    P1-8: Returns a signed URL with token + expires query params.
-    The token is valid for 15 minutes and binds to the specific path.
+    Returns a 15-minute signed URL bound to path, tenant, purpose, and expiry.
+    Tenant identity comes only from the verified API-key context.
     """
     media_path = request.query_params.get("path", "")
     if not media_path:
         raise HTTPException(status_code=400, detail="path is required")
-    signed_url = sign_media_url(media_path)
+    purpose = request.query_params.get("purpose", "view")
+    signed_url = sign_media_url(
+        media_path,
+        tenant_id=ctx.tenant_id,
+        purpose=purpose,
+    )
     return {"url": signed_url, "expires_in": _MEDIA_TOKEN_TTL}
 
 
@@ -147,23 +184,40 @@ async def get_signed_media_url(request: Request):
 async def serve_media(request: Request, media_path: str):
     """Serve files from OUTPUT_DIR; media_path is relative to OUTPUT_DIR (posix subpaths allowed).
 
-    P1-8: Supports optional signed-token access. Anonymous access is allowed,
-    but signed URLs with ?token=&expires= provide path-level integrity.
+    Explicit public roots are anonymous. Every protected path requires a valid
+    tenant-bound signature.
     """
 
     canonical_path, candidate = _resolve_media_path(media_path)
 
-    # P1-8: Validate signed token if present
-    token = request.query_params.get("token")
-    expires = request.query_params.get("expires")
-    if token is not None and expires is not None:
+    owner = classify_media_scope(canonical_path)
+    if owner is None:
+        cache_control = "public, max-age=86400"
+    else:
+        required_params = {"token", "expires", "tenant", "purpose"}
+        if set(request.query_params) != required_params or any(
+            len(request.query_params.getlist(name)) != 1 for name in required_params
+        ):
+            raise HTTPException(status_code=403, detail="Invalid token")
+
+        token = request.query_params["token"]
+        expires = request.query_params["expires"]
+        tenant_id = request.query_params["tenant"]
+        purpose = request.query_params["purpose"]
         try:
             expires_at = int(expires)
         except ValueError:
             raise HTTPException(status_code=403, detail="Invalid token")
-        if not _verify_media_token(canonical_path, token, expires_at):
+        if purpose not in {"view", "download"} or not _verify_media_token(
+            canonical_path,
+            tenant_id,
+            purpose,
+            token,
+            expires_at,
+        ):
             raise HTTPException(status_code=403, detail="Invalid or expired token")
-    # If no token: allow anonymous access (threat model documented in P1-8)
+        authorize_media_path(canonical_path, tenant_id)
+        cache_control = "private, no-store"
 
     ext = candidate.suffix.lower()
     content_type = _ALLOWED_MEDIA_EXTS.get(ext)
@@ -173,4 +227,5 @@ async def serve_media(request: Request, media_path: str):
         str(candidate),
         media_type=content_type,
         filename=candidate.name,
+        headers={"Cache-Control": cache_control},
     )

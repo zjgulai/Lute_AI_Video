@@ -11,6 +11,7 @@ from typing import Any
 
 import structlog
 
+from src.models.provider_cost import ProviderCostContractError
 from src.tools.llm_client import llm
 
 logger = structlog.get_logger()
@@ -225,7 +226,16 @@ async def _score_script_candidate(script: dict[str, Any], params: dict[str, Any]
 
     # Try LLM-based scoring
     try:
-        return await _llm_score_script(script, usps, brand_guidelines, product_catalog, scenario)
+        return await _llm_score_script(
+            script,
+            usps,
+            brand_guidelines,
+            product_catalog,
+            scenario,
+            operation_instance=params.get("operation_instance", "primary"),
+        )
+    except ProviderCostContractError:
+        raise
     except Exception as exc:
         logger.warning(
             "candidate_scorer: LLM scoring failed, using heuristics",
@@ -241,6 +251,7 @@ async def _llm_score_script(
     brand_guidelines: str,
     product_catalog: dict[str, Any] | None = None,
     scenario: str | None = None,
+    operation_instance: str = "primary",
 ) -> dict[str, Any]:
     """Score a script candidate using the LLM."""
     script_text = _extract_script_text(script)
@@ -265,7 +276,12 @@ async def _llm_score_script(
         "Return JSON only."
     )
 
-    result = await llm.invoke_json(system_prompt, user_message)
+    result = await llm.invoke_json(
+        system_prompt,
+        user_message,
+        operation_key="pipeline.candidate_scorer",
+        operation_instance=operation_instance,
+    )
 
     breakdown = {
         "text_quality": float(result.get("text_quality", 0.0)),
@@ -405,134 +421,26 @@ async def _llm_score_keyframe_image(
     image_path: str,
     prompt: str,
 ) -> dict[str, Any] | None:
-    """Score a keyframe by sending the actual generated PNG to gpt-4o vision.
+    """Reject the retired, unmetered direct-OpenAI vision path.
 
-    Sprint 2 P2-4: replaces the prompt-keyword heuristic with vision-grounded
-    evaluation. Closes diagnostic R-GATE-SCORE / CQ-5 — Gate was scoring the
-    prompt instead of the rendered image.
-
-    Returns None on any failure (missing OPENAI_API_KEY, file gone, LLM
-    error). Caller should fall back to the heuristic path.
-
-    Decision D scope clarification (2026-05-13):
-        Decision D constrains MODEL SELECTION FOR GENERATION (image / video
-        production) to the poyo.ai catalog. This function is an EVALUATION
-        tool — it analyzes an already-generated keyframe to score its
-        quality, producing no user-visible content. As of 2026-05-15 poyo
-        does not offer a vision API (`gpt-4o-image` is text→image only,
-        their /v1/chat/completions schema accepts text-only `content`),
-        so OpenAI direct is the only path that satisfies the diagnostic's
-        CQ-5 requirement (replace prompt-keyword heuristic with
-        vision-grounded scoring). The Decision D supplier-lockin risk
-        (R-VENDOR-LOCK) does not apply here because (1) cost per call is
-        negligible (~$0.0002 for 1024² low-detail vs. $0.05–$0.45/s for
-        Seedance generation), (2) failure gracefully degrades to the
-        heuristic path, (3) no user-facing content is produced. Switch
-        to a poyo-hosted vision model the moment poyo ships one.
+    Keyframe scoring has no approved catalog operation or durable attempt
+    contract.  Keep this tombstone before any path read, SDK import, or client
+    construction so an internal caller cannot turn a quality check into an
+    untracked paid request or an arbitrary local-file upload.
     """
-    from pathlib import Path
-
-    p = Path(image_path)
-    if not p.exists() or p.stat().st_size < 100:
-        return None
-
-    try:
-        import base64
-        import os
-
-        from openai import AsyncOpenAI
-
-        from src.config import OPENAI_API_KEY
-
-        api_key = os.environ.get("OPENAI_API_KEY") or OPENAI_API_KEY
-        if not api_key:
-            return None
-
-        with open(p, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("ascii")
-
-        suffix = p.suffix.lower().lstrip(".") or "png"
-        mime = "image/jpeg" if suffix in ("jpg", "jpeg") else f"image/{suffix}"
-        data_url = f"data:{mime};base64,{b64}"
-
-        client = AsyncOpenAI(api_key=api_key, timeout=60.0)
-        response = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert visual quality evaluator for marketing "
-                        "video keyframes. Score the image on four dimensions from "
-                        "0.0 to 1.0. Return ONLY valid JSON with keys: "
-                        "composition, lighting, product_visibility, "
-                        "style_consistency, overall, explanation."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                f"Evaluate this keyframe.\n\n"
-                                f"Intended prompt: {prompt[:500]}\n\n"
-                                "Score dimensions:\n"
-                                "- composition (30%): framing, rule-of-thirds, balance\n"
-                                "- lighting (20%): exposure, mood, light direction\n"
-                                "- product_visibility (25%): subject clarity, hero placement\n"
-                                "- style_consistency (25%): aligns with prompt intent\n\n"
-                                "Return JSON only."
-                            ),
-                        },
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                },
-            ],
-            max_tokens=400,
-            response_format={"type": "json_object"},
-        )
-        import json as _json
-
-        raw = response.choices[0].message.content or "{}"
-        result = _json.loads(raw)
-
-        breakdown = {
-            "composition": float(result.get("composition", 0.0)),
-            "lighting": float(result.get("lighting", 0.0)),
-            "product_visibility": float(result.get("product_visibility", 0.0)),
-            "style_consistency": float(result.get("style_consistency", 0.0)),
-        }
-        overall = float(
-            result.get(
-                "overall",
-                breakdown["composition"] * 0.30
-                + breakdown["lighting"] * 0.20
-                + breakdown["product_visibility"] * 0.25
-                + breakdown["style_consistency"] * 0.25,
-            )
-        )
-
-        return {
-            "overall": round(overall, 4),
-            "breakdown": {k: round(v, 4) for k, v in breakdown.items()},
-            "explanation": result.get("explanation", "gpt-4o vision evaluation"),
-            "heuristic": False,
-        }
-    except Exception as exc:
-        logger.warning(
-            "candidate_scorer: vision scoring failed, will fall back to heuristic",
-            error=str(exc)[:200],
-        )
-        return None
+    del image_path, prompt
+    raise ProviderCostContractError(
+        "provider_cost_legacy_path_blocked",
+        "direct OpenAI vision scoring requires an approved provider-cost operation",
+    )
 
 
 async def _score_keyframe_candidate(data: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a keyframe image candidate.
 
-    Sprint 2 P2-4: when an actual image file is available (data.image_path),
-    delegates to gpt-4o vision for grounded scoring; falls back to the
-    prompt-keyword heuristic when no image / no API key / LLM error.
+    Image-file vision scoring is currently blocked until it has an approved
+    provider-cost operation; prompt-only heuristic scoring remains available
+    when no image path is supplied.
     """
     image_path = data.get("image_path") or data.get("keyframe_image_path") or ""
     prompt = str(data.get("prompt", ""))

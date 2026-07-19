@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { getMediaUrl } from "./api";
 import InlineTooltip from "./InlineTooltip";
+import RuntimeMediaLink from "./RuntimeMediaLink";
+import RuntimeMediaVideo from "./RuntimeMediaVideo";
 import {
   extractContinuityDiagnosticsFromAuditReport,
   getContinuityDiagnosticsSummary,
@@ -25,7 +26,6 @@ export interface Version {
 interface Props {
   versions: Version[];
   onSelect: (versionLabel: string) => void;
-  onDownload: (versionLabel: string) => void;
   onNewCreation: () => void;
   onBack: () => void;
   onPublish: (versionLabel: string) => void;
@@ -97,7 +97,6 @@ function truncateContinuityVerdict(text: string, maxLength = 110): string {
 export default function CompareView({
   versions,
   onSelect,
-  onDownload,
   onNewCreation,
   onBack,
   onPublish,
@@ -229,13 +228,13 @@ export default function CompareView({
               <div className="relative bg-black">
                 {isExpanded ? (
                   <>
-                    <video
-                      src={getMediaUrl(v.videoPath)}
+                    <RuntimeMediaVideo
+                      src={v.videoPath}
                       controls
                       className="w-full"
                       style={{ maxHeight: 400, colorScheme: 'dark' }}
                       preload="metadata"
-                      poster={v.thumbnailPath ? getMediaUrl(v.thumbnailPath) : undefined}
+                      poster={v.thumbnailPath || undefined}
                       autoPlay
                     />
                     <button
@@ -347,8 +346,9 @@ export default function CompareView({
               <div className="p-3 space-y-2">
                 {isSelected ? (
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onDownload(v.label)}
+                    <RuntimeMediaLink
+                      href={v.videoPath}
+                      download
                       className="flex-1 apple-btn apple-btn-primary text-xs py-2 px-3 cursor-pointer"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -357,7 +357,7 @@ export default function CompareView({
                         <line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
                       {t("compare.download")}
-                    </button>
+                    </RuntimeMediaLink>
                     <button
                       onClick={async () => {
                         setPublishingVersion(v.label);
@@ -613,9 +613,10 @@ export default function CompareView({
           </div>
         )}
         <div className="flex items-center gap-2">
-          {selectedVersion && (
-            <button
-              onClick={() => onDownload(selectedVersion)}
+          {selectedVersionData && (
+            <RuntimeMediaLink
+              href={selectedVersionData.videoPath}
+              download
               className="apple-btn apple-btn-primary text-xs px-5 py-2 cursor-pointer"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -624,7 +625,7 @@ export default function CompareView({
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               {t("compare.downloadSelected")}
-            </button>
+            </RuntimeMediaLink>
           )}
           <button
             onClick={onNewCreation}

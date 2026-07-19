@@ -36,6 +36,9 @@ docs/runbooks/pipeline-stuck.md
 docs/runbooks/poyo-model-matrix-stale-warning.md
 docs/runbooks/poyo-rejection.md
 docs/runbooks/production-e2e-token-smoke.md
+docs/runbooks/publish-connector-truth.md
+docs/runbooks/publish-receipt-protocol-calibration.md
+docs/runbooks/provider-cost-ledger-per-job-budget.md
 docs/runbooks/regenerate-downstream-invalidation.md
 docs/runbooks/release-smoke-token-opt-in.md
 docs/runbooks/remotion-no-provider-key.md
@@ -44,6 +47,7 @@ docs/runbooks/s4-footage-filtering.md
 docs/runbooks/s1-s5-hermetic-regression.md
 docs/runbooks/scripts-governance.md
 docs/runbooks/scenario-state-persistence-schema.md
+docs/runbooks/submission-idempotency-recovery.md
 docs/runbooks/thumbnail-missing.md
 docs/runbooks/ui-visual-baseline-sop.md
 docs/runbooks/workflow-trigger-path-audit.md

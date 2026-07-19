@@ -3,9 +3,8 @@
 Verifies:
 1. Client initialization (with and without API key)
 2. Stub mode returns correct format on no API key
-3. Parameter construction (API payload format)
-4. Retry logic behavior
-5. Edge cases: empty params, timeouts (mocked)
+3. Unsupported native paid paths fail closed before network construction
+4. Edge cases: empty params, timeouts (mocked)
 
 All tests use stub/mock mode — no real API calls.
 """
@@ -14,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.models.provider_cost import ProviderCostContractError
 from src.tools.gpt_image_client import GPTImageClient
 from src.tools.seedance_client import SeedanceClient
 
@@ -33,15 +33,16 @@ class TestSeedanceClientInit:
         assert client.output_dir.name == "seedance"
 
     def test_init_with_api_key(self):
-        """Should create client with API key for real mode."""
-        client = SeedanceClient(api_key="sk-test-key-123")
-        assert client.api_key == "sk-test-key-123"
-        assert client.base_url == "https://api.seedance.ai"
+        """Native Seedance is blocked because it has no frozen cost rule."""
+        with pytest.raises(ProviderCostContractError) as exc_info:
+            SeedanceClient(api_key="sk-test-key-123")
+        assert exc_info.value.code == "provider_cost_legacy_path_blocked"
 
     def test_init_custom_base_url(self):
-        """Should accept custom base URL."""
-        client = SeedanceClient(api_key="test", base_url="https://custom.api.com")
-        assert client.base_url == "https://custom.api.com"
+        """Custom native endpoints are blocked before any HTTP client exists."""
+        with pytest.raises(ProviderCostContractError) as exc_info:
+            SeedanceClient(api_key="test", base_url="https://custom.api.com")
+        assert exc_info.value.code == "provider_cost_legacy_path_blocked"
 
 
 class TestSeedanceClientStubMode:
@@ -86,22 +87,22 @@ class TestSeedanceClientParameterValidation:
     """Parameter construction validation (no real API call)."""
 
     def test_text_to_video_with_image_refs(self):
-        """Should accept image references."""
-        client = SeedanceClient(api_key="sk-test")
-        # Can't validate payload without mocking, but should not crash
-        result = client._stub_result(prompt="test", mode="text_to_video")
-        assert result is not None
+        """Native image-reference mutation is blocked before HTTP construction."""
+        with pytest.raises(ProviderCostContractError) as exc_info:
+            SeedanceClient(api_key="sk-test")
+        assert exc_info.value.code == "provider_cost_legacy_path_blocked"
 
     def test_image_to_video_style_preserve_default(self):
-        """style_preserve should default to True."""
-        client = SeedanceClient(api_key="sk-test")
-        result = client._stub_result(prompt="test", mode="image_to_video")
-        assert result is not None
+        """Native image-to-video mutation is blocked before HTTP construction."""
+        with pytest.raises(ProviderCostContractError) as exc_info:
+            SeedanceClient(api_key="sk-test")
+        assert exc_info.value.code == "provider_cost_legacy_path_blocked"
 
     def test_stub_result_accepts_reference_mode(self):
-        client = SeedanceClient(api_key="sk-test")
-        result = client._stub_result(prompt="test", mode="reference_video")
-        assert result is not None
+        """Reference-video mode is not a cataloged paid operation."""
+        with pytest.raises(ProviderCostContractError) as exc_info:
+            SeedanceClient(api_key="sk-test")
+        assert exc_info.value.code == "provider_cost_legacy_path_blocked"
 
 
 class TestSeedanceClientEdgeCases:
@@ -129,18 +130,10 @@ class TestSeedanceClientEdgeCases:
         assert client.output_dir.name == "seedance"
 
     def test_retry_logic_exhaustion(self):
-        """_execute_with_retry should return stub after all retries fail."""
-        client = SeedanceClient(api_key="sk-test")
-
-        async def failing_fn():
-            raise ConnectionError("Network error")
-
-        import asyncio
-        result = asyncio.run(
-            client._execute_with_retry(failing_fn, "test_mode", "test prompt")
-        )
-        assert result["video_url"].startswith("[SEEDANCE_STUB")
-        assert result["_stub_mode"] == "test_mode"
+        """Whole submit/poll retry behavior is removed from native paid paths."""
+        with pytest.raises(ProviderCostContractError) as exc_info:
+            SeedanceClient(api_key="sk-test")
+        assert exc_info.value.code == "provider_cost_legacy_path_blocked"
 
     @pytest.mark.asyncio
     async def test_close_method_exists(self, client):

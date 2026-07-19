@@ -21,6 +21,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "supabase>=2.0",
     "asyncpg>=0.29",
+    "alembic>=1.18.5",
     "bcrypt>=4.2",
     "Pillow>=10.0",
 ]
@@ -85,17 +86,9 @@ reportPossiblyUnboundVariable = true
 # 的代码库中噪音远大于价值，暂不全局启用。核心收益已在 A+B 中捕获。
 # 2026-05-07 评估: 启用后 1258 错误(631 unknownVariable + 627 unknownMember),
 # 其中 60%+ 来自 dict/list[Any] 推断限制，非真实缺陷。修复 ROI 为负。
-# 2026-06-09: 对已收敛的模块（step_utils.py, config.py）启用严格检查防止回退。
-[tool.pyright.executionEnvironments]
-  [tool.pyright.executionEnvironments.strict_modules]
-  root = "."
-  extraPaths = ["."]
-  reportUnknownMemberType = true
-  reportUnknownVariableType = true
-  include = [
-    "src/pipeline/step_utils.py",
-    "src/config.py",
-  ]
+# 2026-06-09: step_utils.py/config.py are checked by their focused pyright
+# command; this project-wide config intentionally keeps Unknown diagnostics
+# disabled to avoid turning dynamic pipeline payloads into false failures.
 
 [tool.coverage.run]
 source = ["src"]

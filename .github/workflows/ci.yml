@@ -87,9 +87,10 @@ jobs:
           SEEDANCE_API_KEY: ""
           SILICONFLOW_API_KEY: ""
           TIKTOK_ACCESS_TOKEN: ""
-          TIKTOK_OPEN_ID: ""
+          TIKTOK_PUBLISH_ENABLED: "false"
           SHOPIFY_STORE_URL: ""
-          SHOPIFY_ADMIN_TOKEN: ""
+          SHOPIFY_ACCESS_TOKEN: ""
+          SHOPIFY_PUBLISH_ENABLED: "false"
           SUPABASE_URL: ""
           SUPABASE_SERVICE_KEY: ""
           ELEVENLABS_API_KEY: ""
@@ -151,6 +152,9 @@ jobs:
             docs/runbooks/poyo-model-matrix-stale-warning.md
             docs/runbooks/poyo-rejection.md
             docs/runbooks/production-e2e-token-smoke.md
+            docs/runbooks/publish-connector-truth.md
+            docs/runbooks/publish-receipt-protocol-calibration.md
+            docs/runbooks/provider-cost-ledger-per-job-budget.md
             docs/runbooks/regenerate-downstream-invalidation.md
             docs/runbooks/release-smoke-token-opt-in.md
             docs/runbooks/remotion-no-provider-key.md
@@ -159,6 +163,7 @@ jobs:
             docs/runbooks/s1-s5-hermetic-regression.md
             docs/runbooks/scripts-governance.md
             docs/runbooks/scenario-state-persistence-schema.md
+            docs/runbooks/submission-idempotency-recovery.md
             docs/runbooks/thumbnail-missing.md
             docs/runbooks/ui-visual-baseline-sop.md
             docs/runbooks/workflow-trigger-path-audit.md
@@ -238,9 +243,11 @@ jobs:
       - name: Docker compose config validation (no start)
         run: |
           : > .env
-          : > deploy/lighthouse/.env.prod
           docker compose -f docker-compose.yml config --quiet
-          docker compose -f deploy/lighthouse/docker-compose.prod.yml config --quiet
+          AI_VIDEO_SHARED_ROOT=/tmp/ai-video-shared AI_VIDEO_ENV_FILE=/dev/null \
+            PORTAL_AUTH_ENV_FILE=/dev/null RELEASE_SOURCE_SHA=${{ github.sha }} \
+            RELEASE_IMAGE_TAG=${{ github.sha }} \
+            docker compose -f deploy/lighthouse/docker-compose.release.yml config --quiet
 
       - name: Build backend image (validate, no push)
         uses: docker/build-push-action@v7

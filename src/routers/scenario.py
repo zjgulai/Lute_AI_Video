@@ -1,11 +1,15 @@
 """scenario router — extracted from api.py (P1-11)."""
 
 import asyncio
+import json
+import secrets
 import time
+from contextlib import suppress
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 logger = structlog.get_logger()
 
@@ -14,10 +18,17 @@ try:
 except ImportError:
     HAS_STORAGE = False
 
-from typing import Any
+from typing import Any, cast
 
-from src.config import DEFAULT_LANGUAGES
+from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
 from src.models.commercial_contracts import PromptCompileInput, QualityContract
+from src.pipeline.generation_policy import (
+    EffectiveGenerationPolicy,
+    GenerationScenario,
+    bind_effective_generation_policy,
+    project_bounded_generation_result,
+    resolve_generation_policy,
+)
 from src.pipeline.prompt_preview_audit_workflow import build_prompt_preview_audit_workflow
 from src.pipeline.runtime_injection_executor import RuntimeInjectionResult
 from src.pipeline.scenario_config import get_scenario_step_order
@@ -27,11 +38,13 @@ from src.pipeline.scenario_injection_plan import (
     project_state_injection_visibility,
     with_optional_injection_config,
 )
+from src.pipeline.state_manager import persist_background_failure
 from src.routers._deps import (
     _classified_error,
     _inject_api_keys,
     _safe_error,
     get_auth_context,
+    require_permission,
     verify_api_key,
 )
 from src.routers._state import (
@@ -49,8 +62,332 @@ from src.routers._state import (
     _validate_scenario,
     coerce_video_duration,
 )
+from src.services.acceptance_source import project_scenario_acceptance_source
+from src.services.provider_execution import (
+    initialize_and_bind_provider_execution_context,
+    new_compatibility_job_id,
+    project_provider_execution_context,
+)
 
 router = APIRouter()
+
+_IDEMPOTENCY_OPENAPI_EXTRA = {
+    "parameters": [
+        {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": True,
+            "schema": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$",
+            },
+        }
+    ]
+}
+
+_FAST_SUBMIT_OPENAPI_EXTRA = {
+    **_IDEMPOTENCY_OPENAPI_EXTRA,
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/FastModeRequest"},
+            }
+        },
+    },
+}
+
+_SCENARIO_SUBMIT_OPENAPI_EXTRA = {
+    **_IDEMPOTENCY_OPENAPI_EXTRA,
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            }
+        },
+    },
+}
+
+_FAST_RESULT_SNAPSHOT_KEYS = frozenset(
+    {
+        "status",
+        "lifecycle_status",
+        "completion_kind",
+        "request_succeeded",
+        "success",
+        "full_media_success",
+        "pipeline_complete",
+        "publish_allowed",
+        "delivery_accepted",
+        "video_path",
+        "video_url",
+        "poster_path",
+        "poster_url",
+        "thumbnail_path",
+        "thumbnail_url",
+        "filename",
+        "duration_seconds",
+        "file_size_bytes",
+        "generation_time_ms",
+        "timing",
+        "model_info",
+        "is_stub",
+        "tts_path",
+        "tts_is_fallback",
+        "artifact_disposition",
+        "artifact_review_status",
+        "artifact_storage_scope",
+    }
+)
+
+_SCENARIO_RESULT_SNAPSHOT_KEYS = frozenset(
+    {
+        "status",
+        "lifecycle_status",
+        "completion_kind",
+        "request_succeeded",
+        "success",
+        "full_media_success",
+        "pipeline_complete",
+        "publish_allowed",
+        "delivery_accepted",
+        "current_step",
+        "pipeline_degraded",
+        "trace_id",
+        "final_artifact_path",
+        "artifact_disposition",
+        "artifact_kind",
+    }
+)
+
+
+def _safe_result_snapshot(
+    value: Any,
+    *,
+    allowed_keys: frozenset[str],
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: value[key] for key in allowed_keys if key in value}
+
+
+def _submission_http_error(exc: Exception, *, claim_exists: bool = False) -> HTTPException:
+    from src.services.submission_idempotency import (
+        IdempotencyStoreUnavailable,
+        SubmissionIdempotencyError,
+    )
+
+    if isinstance(exc, HTTPException):
+        return exc
+    if claim_exists and isinstance(exc, IdempotencyStoreUnavailable):
+        return HTTPException(
+            status_code=503,
+            detail={"code": "submission_state_uncertain"},
+        )
+    if isinstance(exc, SubmissionIdempotencyError):
+        return HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return HTTPException(status_code=500, detail={"code": "submission_initialization_failed"})
+
+
+def _require_submit_idempotency_key(request: Request) -> str:
+    """Resolve the submit header before FastAPI validates the request body."""
+
+    from src.services.submission_idempotency import extract_idempotency_key
+
+    try:
+        return extract_idempotency_key(request)
+    except Exception as exc:
+        raise _submission_http_error(exc) from None
+
+
+def _sanitized_validation_detail(exc: ValidationError) -> list[dict[str, Any]]:
+    """Project Pydantic failures without echoing request input or exception context."""
+
+    details: list[dict[str, Any]] = []
+    for error in exc.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    ):
+        location = list(error.get("loc") or ())
+        details.append(
+            {
+                "type": str(error.get("type") or "value_error"),
+                "loc": ["body", *location],
+                "msg": str(error.get("msg") or "Invalid request body"),
+            }
+        )
+    return details
+
+
+async def _parse_submit_json_object(request: Request) -> dict[str, Any]:
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "type": "json_invalid",
+                    "loc": ["body"],
+                    "msg": "Invalid JSON body",
+                }
+            ],
+        ) from None
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "type": "dict_type",
+                    "loc": ["body"],
+                    "msg": "Input should be a valid object",
+                }
+            ],
+        )
+    return body
+
+
+async def _validate_fast_submit_request(request: Request) -> FastModeRequest:
+    body = await _parse_submit_json_object(request)
+    try:
+        return FastModeRequest.model_validate(body)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=_sanitized_validation_detail(exc),
+        ) from None
+
+
+def _replay_submit_response(record: dict[str, Any]) -> dict[str, Any]:
+    body = record.get("response_body")
+    response = dict(body) if isinstance(body, dict) else {}
+    response["idempotent_replay"] = True
+    return response
+
+
+async def _replay_current_submit_response(
+    idempotency: Any,
+    *,
+    tenant_id: str,
+    raw_key: str,
+) -> dict[str, Any]:
+    """Read the durable current projection after an owner CAS miss."""
+
+    try:
+        current = await idempotency.readback(
+            tenant_id=tenant_id,
+            raw_key=raw_key,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "submission_state_uncertain"},
+        ) from None
+    submit_response = current.get("submit_response")
+    if not isinstance(submit_response, dict):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "submission_state_uncertain"},
+        )
+    response = dict(submit_response)
+    current_status = current.get("status")
+    if isinstance(current_status, str) and current_status:
+        response["status"] = current_status
+    response["idempotent_replay"] = True
+    return response
+
+
+async def _persist_fast_submission_stage(
+    idempotency: Any,
+    *,
+    tenant_id: str,
+    record_id: str,
+    stage: str,
+    on_owner_lost: Any,
+) -> bool:
+    """Persist a Fast stage or immediately stop work after a stale owner CAS."""
+
+    try:
+        persisted = await idempotency.transition(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            expected_statuses=("running",),
+            new_status="running",
+            stage=stage,
+        )
+    except Exception:
+        await on_owner_lost()
+        return False
+    if persisted is None:
+        await on_owner_lost()
+        return False
+    return True
+
+
+def _elapsed_seconds(created_at: Any) -> float:
+    if isinstance(created_at, datetime):
+        timestamp = created_at.timestamp()
+    elif isinstance(created_at, str):
+        try:
+            parsed = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            timestamp = parsed.timestamp()
+        except ValueError:
+            return 0.0
+    else:
+        return 0.0
+    return round(max(0.0, time.time() - timestamp), 1)
+
+
+def _durable_scenario_status_response(
+    *,
+    scenario: str,
+    label: str,
+    durable: dict[str, Any],
+) -> dict[str, Any]:
+    result = durable.get("result_snapshot")
+    result_snapshot = result if isinstance(result, dict) else {}
+    submit_response = durable.get("submit_response")
+    submit_snapshot = submit_response if isinstance(submit_response, dict) else {}
+    record_status = str(durable.get("status") or "running")
+    if record_status == "failed":
+        status = "error"
+    elif record_status == "completed":
+        status = str(result_snapshot.get("status") or submit_snapshot.get("status") or "completed")
+    else:
+        status = record_status
+    safe_error = durable.get("safe_error_code")
+    return {
+        "label": label,
+        "scenario": scenario,
+        "status": status,
+        "lifecycle_status": result_snapshot.get("lifecycle_status") or result_snapshot.get("status"),
+        "completion_kind": result_snapshot.get("completion_kind"),
+        "request_succeeded": result_snapshot.get("request_succeeded") is True,
+        "success": result_snapshot.get("success") is True,
+        "full_media_success": result_snapshot.get("full_media_success") is True,
+        "pipeline_complete": result_snapshot.get("pipeline_complete") is True,
+        "publish_allowed": result_snapshot.get("publish_allowed") is True,
+        "delivery_accepted": result_snapshot.get("delivery_accepted") is True,
+        "current_step": result_snapshot.get("current_step") or durable.get("stage"),
+        CURRENT_STEP_INJECTION_KEY: None,
+        "progress": 1.0 if record_status == "completed" else 0.0,
+        "pipeline_degraded": record_status == "failed",
+        "soft_degraded_reasons": [],
+        "continuity_diagnostics": {},
+        "gate_status": None,
+        "errors": [str(safe_error)] if safe_error else [],
+        "result": result_snapshot or None,
+        "steps": {},
+    }
 
 
 class PromptPreviewAuditRequest(BaseModel):
@@ -58,6 +395,43 @@ class PromptPreviewAuditRequest(BaseModel):
     compile_input: PromptCompileInput
     runtime_injection: RuntimeInjectionResult
     planned_injection: dict[str, Any] | None = None
+
+
+def _resolve_request_generation_policy(
+    body: BaseModel | dict[str, Any],
+    *,
+    scenario: GenerationScenario,
+) -> EffectiveGenerationPolicy:
+    auth = get_auth_context()
+    if auth is None:
+        raise HTTPException(status_code=401, detail="Missing authenticated request context")
+    policy = resolve_generation_policy(body, auth=auth, scenario=scenario)
+    bind_effective_generation_policy(policy)
+    return policy
+
+
+def _effective_policy_config(policy: EffectiveGenerationPolicy) -> dict[str, Any]:
+    return policy.model_dump(mode="json")
+
+
+def _validate_unified_request(
+    scenario: str,
+    body: dict[str, Any],
+) -> S1StartRequest | S2BrandCampaignRequest | S3InfluencerRemixRequest | S4LiveShootRequest | S5BrandVlogRequest:
+    request_models = {
+        "s1": S1StartRequest,
+        "s2": S2BrandCampaignRequest,
+        "s3": S3InfluencerRemixRequest,
+        "s4": S4LiveShootRequest,
+        "s5": S5BrandVlogRequest,
+    }
+    try:
+        return request_models[scenario].model_validate(body)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=_sanitized_validation_detail(exc),
+        ) from None
 
 
 def _validate_s5_scene_id(scene_id: Any) -> str:
@@ -95,6 +469,37 @@ def _assert_state_access(state: dict[str, Any] | None) -> None:
         raise HTTPException(status_code=404, detail="State not found")
     if state_tenant != ctx.tenant_id:
         raise HTTPException(status_code=404, detail="State not found")
+
+
+def _assert_state_scenario(state: dict[str, Any], expected_scenario: str) -> None:
+    """Reject URL/state scenario aliases before selecting deps or mutating state."""
+
+    if state.get("scenario") != expected_scenario:
+        raise HTTPException(status_code=404, detail="State not found")
+
+
+def _validate_s1_public_state_update(
+    body: dict[str, Any],
+    state: dict[str, Any],
+) -> None:
+    """Allow only user-authored edited output; authority/cursors stay immutable."""
+
+    if set(body) != {"steps"} or not isinstance(body.get("steps"), dict):
+        raise HTTPException(
+            status_code=422,
+            detail="Public state update only supports steps.<name>.edited/edited_output",
+        )
+    existing_steps = state.get("steps", {})
+    for step_name, step_update in body["steps"].items():
+        if step_name not in existing_steps or not isinstance(step_update, dict):
+            raise HTTPException(status_code=422, detail=f"Invalid editable step: {step_name}")
+        if not set(step_update).issubset({"edited", "edited_output"}):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Server-owned step fields cannot be edited: {step_name}",
+            )
+        if "edited" in step_update and not isinstance(step_update["edited"], bool):
+            raise HTTPException(status_code=422, detail="steps.<name>.edited must be boolean")
 
 
 def _with_commercial_injection_config(
@@ -196,13 +601,12 @@ def _assert_prompt_preview_scenario_match(
     if mismatches:
         raise HTTPException(
             status_code=422,
-            detail=f"prompt preview audit scenario mismatch: expected {scenario}; "
-            + ", ".join(mismatches),
+            detail=f"prompt preview audit scenario mismatch: expected {scenario}; " + ", ".join(mismatches),
         )
 
 
 @router.post("/scenario/s1", dependencies=[Depends(verify_api_key)])
-async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
+async def run_s1_product_direct(body: S1StartRequest):
     """Run S1 Product Direct pipeline (auto mode via StepRunner for progress visibility).
 
     Uses StepRunner.init_state() + StepRunner.resume() directly so that
@@ -214,9 +618,16 @@ async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
     Original Chinese values are stored in ``_original_zh`` within
     the product_catalog so the frontend can display them.
     """
-    raw_body_data = body if isinstance(body, dict) else body.model_dump()
-    if isinstance(body, dict):
-        body = S1StartRequest(**body)
+    policy = _resolve_request_generation_policy(body, scenario="s1")
+    compat_job_id = new_compatibility_job_id()
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=compat_job_id,
+        scenario_or_resource_type="s1",
+        generation_policy_version=policy.version,
+    )
+    raw_body_data = body.model_dump()
 
     # P1-C: 把用户填的多供应商 key 注入 contextvars,LLM/POYO/CosyVoice 客户端
     # 优先读 contextvars,实现按租户隔离,不污染 process-wide os.environ。
@@ -237,11 +648,11 @@ async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
         mode="auto",
     )
     product_catalog = await translate_catalog_to_english(product_catalog)
-    bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
+    bounded_media_pilot = policy.enable_media_synthesis and policy.artifact_disposition in {
         "pending_review",
         "quarantine",
     }
-    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+    effective_provider_max_retries = policy.provider_max_retries
     label = body.output_label
 
     config = {
@@ -252,21 +663,24 @@ async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
         "week": body.week,
         "video_duration": coerce_video_duration(body_data),
         "brand_mode": body.brand_mode,
-        "enable_media_synthesis": body.enable_media_synthesis,
+        "enable_media_synthesis": policy.enable_media_synthesis,
         "output_label": label,
         "continuity_mode": body.continuity_mode,
         "continuity_generation_mode": body.continuity_generation_mode,
         "storyboard_grid": raw_body_data.get("storyboard_grid", body.storyboard_grid),
         "clip_group_size": body.clip_group_size,
         "transition_style": body.transition_style,
-        "artifact_disposition": body.artifact_disposition,
+        "artifact_disposition": policy.artifact_disposition,
         "provider_max_retries": effective_provider_max_retries,
+        "effective_generation_policy": _effective_policy_config(policy),
     }
     if bounded_media_pilot:
-        config.update({
-            "provider_job_caps": {"image": 1, "video": 1},
-            "seedance_quality_gate_enabled": False,
-        })
+        config.update(
+            {
+                "provider_job_caps": {"image": 1, "video": 1},
+                "seedance_quality_gate_enabled": False,
+            }
+        )
     config = _with_commercial_injection_config(
         config,
         body.commercial_injection_plan,
@@ -278,53 +692,27 @@ async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
 
     # Initialize state (saved immediately so polling can see it) and run to completion
     label = await step_runner.init_state(config=config, mode="auto", label=label)
-    from src.tools.cost_tracker import set_thread_id
-    set_thread_id(label)
-    try:
-        if config["enable_media_synthesis"]:
-            if bounded_media_pilot:
-                final_state = await _resume_s1_bounded_media_pilot(
-                    step_runner,
-                    label,
-                    body.artifact_disposition,
-                    effective_provider_max_retries,
-                )
-            else:
-                final_state = await step_runner.resume(label)
+    if config["enable_media_synthesis"]:
+        if bounded_media_pilot:
+            final_state = await _resume_s1_bounded_media_pilot(
+                step_runner,
+                label,
+                policy.artifact_disposition,
+                effective_provider_max_retries,
+            )
         else:
-            final_state = await _resume_s1_without_media_synthesis(step_runner, label)
-    except TypeError as te:
-        # structlog kwarg compatibility — fall back to legacy pipeline
-        import logging as _log
-        _log.warning("auto pipeline: StepRunner resume failed (structlog), falling back to S1ProductDirectPipeline: %s", te)
-        from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
-        p = S1ProductDirectPipeline()
-        final_state = await p.run(
-            product_catalog=product_catalog,
-            brand_guidelines=body.brand_guidelines,
-            target_platforms=body.target_platforms or ["tiktok", "shopify"],
-            target_languages=DEFAULT_LANGUAGES,
-            week=body.week,
-            brand_mode=body.brand_mode,
-            enable_media_synthesis=body.enable_media_synthesis,
-            output_label=body.output_label,
-            video_duration=coerce_video_duration(body_data),
-            continuity_mode=body.continuity_mode,
-            continuity_generation_mode=body.continuity_generation_mode,
-            storyboard_grid=raw_body_data.get("storyboard_grid", body.storyboard_grid),
-            clip_group_size=body.clip_group_size,
-            transition_style=body.transition_style,
-            commercial_injection_plan=body.commercial_injection_plan,
-            artifact_disposition=body.artifact_disposition,
-            provider_max_retries=body.provider_max_retries,
-        )
-        # S1ProductDirectPipeline returns a dict differently — extract steps from the state
-        return final_state
+            final_state = await step_runner.resume(label)
+    else:
+        final_state = await _resume_s1_without_media_synthesis(step_runner, label)
 
     # Convert back to the result dict format expected by frontend
     seedance_raw = _get_step_output(final_state, "seedance_clips") or {}
     seedance_output = seedance_raw if isinstance(seedance_raw, dict) else {}
-    clip_paths = seedance_output.get("clip_paths", []) if isinstance(seedance_raw, dict) else (seedance_raw if isinstance(seedance_raw, list) else [])
+    clip_paths = (
+        seedance_output.get("clip_paths", [])
+        if isinstance(seedance_raw, dict)
+        else (seedance_raw if isinstance(seedance_raw, list) else [])
+    )
 
     tts_raw = _get_step_output(final_state, "tts_audio") or {}
     if isinstance(tts_raw, dict):
@@ -339,8 +727,8 @@ async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
         "label": label,
         "scenario": final_state.get("scenario", "product_direct"),
         "video_duration": config["video_duration"],
-        "artifact_disposition": body.artifact_disposition,
-        "artifact_storage_scope": _artifact_storage_scope(body.artifact_disposition),
+        "artifact_disposition": policy.artifact_disposition,
+        "artifact_storage_scope": _artifact_storage_scope(policy.artifact_disposition),
         "provider_max_retries": effective_provider_max_retries,
         "provider_job_caps": dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS) if bounded_media_pilot else None,
         "bounded_media_pilot": bounded_media_pilot,
@@ -387,12 +775,27 @@ async def run_s1_product_direct(body: S1StartRequest | dict[str, Any]):
         result["approved_brand_token_write"] = False
         result["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
         result["steps_completed"] = S1_BOUNDED_MEDIA_STEP_ORDER.index(S1_BOUNDED_MEDIA_STOP_STEP) + 1
-    return result
+    return project_bounded_generation_result(
+        result,
+        policy=policy,
+        execution_completed=(
+            final_state.get("lifecycle_status") == "completed_bounded" and not final_state.get("pipeline_degraded")
+        ),
+    )
 
 
 @router.post("/scenario/s2", dependencies=[Depends(verify_api_key)])
 async def run_s2_brand_campaign(body: S2BrandCampaignRequest):
     """Run S2 Brand Campaign pipeline."""
+    policy = _resolve_request_generation_policy(body, scenario="s2")
+    compat_job_id = new_compatibility_job_id()
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=compat_job_id,
+        scenario_or_resource_type="s2",
+        generation_policy_version=policy.version,
+    )
     _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     body_data = body.model_dump()
     commercial_injection_plan = _with_commercial_injection_config(
@@ -411,26 +814,37 @@ async def run_s2_brand_campaign(body: S2BrandCampaignRequest):
     )
 
     from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
+
     p = S2BrandCampaignPipeline()
-    r = await p.run(
-        brand_package=body.brand_package,
-        target_platforms=body.target_platforms,
-        target_languages=body.target_languages,
-        week=body.week,
-        video_duration=coerce_video_duration(body_data, default=60),
-        enable_media_synthesis=body.enable_media_synthesis,
-        artifact_disposition=body.artifact_disposition,
-        provider_max_retries=body.provider_max_retries,
-        output_label=body.output_label,
-        media_stop_step=body.media_stop_step,
-        media_refs=body.media_refs,
-        commercial_injection_plan=commercial_injection_plan,
+    try:
+        r = await p.run(
+            brand_package=body.brand_package,
+            target_platforms=body.target_platforms,
+            target_languages=body.target_languages,
+            week=body.week,
+            video_duration=coerce_video_duration(body_data, default=60),
+            enable_media_synthesis=policy.enable_media_synthesis,
+            artifact_disposition=policy.artifact_disposition,
+            provider_max_retries=policy.provider_max_retries,
+            output_label=body.output_label,
+            media_stop_step=body.media_stop_step,
+            media_refs=body.media_refs,
+            commercial_injection_plan=commercial_injection_plan,
+        )
+    except ValueError as exc:
+        if body.media_stop_step in {"assemble_final", "audit"}:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise
+    execution_completed = r.pop("_execution_completed", False) is True
+    return project_bounded_generation_result(
+        r,
+        policy=policy,
+        execution_completed=execution_completed,
     )
-    return r
 
 
 @router.post("/scenario/s3", dependencies=[Depends(verify_api_key)])
-async def run_s3_influencer_remix(body: S3InfluencerRemixRequest | dict[str, Any]):
+async def run_s3_influencer_remix(body: S3InfluencerRemixRequest):
     """Run S3 Influencer Remix pipeline.
 
     Phase 2+3: Translates Chinese product inputs to English before
@@ -445,9 +859,16 @@ async def run_s3_influencer_remix(body: S3InfluencerRemixRequest | dict[str, Any
         brief_id: str (optional)
         video_duration: int (optional, default 30, valid: 15/30/45/60/90)
     """
-    body_data = body if isinstance(body, dict) else body.model_dump()
-    if isinstance(body, dict):
-        body = S3InfluencerRemixRequest(**body)
+    policy = _resolve_request_generation_policy(body, scenario="s3")
+    compat_job_id = new_compatibility_job_id()
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=compat_job_id,
+        scenario_or_resource_type="s3",
+        generation_policy_version=policy.version,
+    )
+    body_data = body.model_dump()
 
     _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s3_remix_pipeline import S3InfluencerRemixPipeline
@@ -465,11 +886,7 @@ async def run_s3_influencer_remix(body: S3InfluencerRemixRequest | dict[str, Any
         video_url=body.video_url[:50],
     )
 
-    bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
-        "pending_review",
-        "quarantine",
-    }
-    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+    effective_provider_max_retries = policy.provider_max_retries
     commercial_injection_plan = _with_commercial_injection_config(
         {},
         body.commercial_injection_plan,
@@ -484,24 +901,38 @@ async def run_s3_influencer_remix(body: S3InfluencerRemixRequest | dict[str, Any
         brief_id=body.brief_id,
         target_platforms=body.target_platforms,
         video_duration=coerce_video_duration(body_data),
-        enable_media_synthesis=body.enable_media_synthesis,
+        enable_media_synthesis=policy.enable_media_synthesis,
         output_label=body.output_label,
-        artifact_disposition=body.artifact_disposition,
+        artifact_disposition=policy.artifact_disposition,
         provider_max_retries=effective_provider_max_retries,
         commercial_injection_plan=commercial_injection_plan,
     )
-    return r.to_dict()
+    result = r.to_dict()
+    execution_completed = result.pop("_execution_completed", False) is True
+    return project_bounded_generation_result(
+        result,
+        policy=policy,
+        execution_completed=execution_completed,
+    )
 
 
 @router.post("/scenario/s4", dependencies=[Depends(verify_api_key)])
-async def run_s4_live_shoot(body: S4LiveShootRequest | dict[str, Any]):
+async def run_s4_live_shoot(body: S4LiveShootRequest):
     """Run S4 Live Shoot to Video pipeline."""
-    body_data = body if isinstance(body, dict) else body.model_dump()
-    if isinstance(body, dict):
-        body = S4LiveShootRequest(**body)
+    policy = _resolve_request_generation_policy(body, scenario="s4")
+    compat_job_id = new_compatibility_job_id()
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=compat_job_id,
+        scenario_or_resource_type="s4",
+        generation_policy_version=policy.version,
+    )
+    body_data = body.model_dump()
 
     _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.s4_live_shoot_pipeline import S4LiveShootPipeline
+
     product_info = body.product_info
     # P3-4: Bind pipeline context
     structlog.contextvars.bind_contextvars(
@@ -510,11 +941,7 @@ async def run_s4_live_shoot(body: S4LiveShootRequest | dict[str, Any]):
         scenario="s4",
         topic=body.topic[:50],
     )
-    bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
-        "pending_review",
-        "quarantine",
-    }
-    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+    effective_provider_max_retries = policy.provider_max_retries
     commercial_injection_plan = _with_commercial_injection_config(
         {},
         body.commercial_injection_plan,
@@ -528,17 +955,22 @@ async def run_s4_live_shoot(body: S4LiveShootRequest | dict[str, Any]):
         target_platforms=body.target_platforms,
         brand_guidelines=body.brand_guidelines,
         video_duration=coerce_video_duration(body_data),
-        enable_media_synthesis=body.enable_media_synthesis,
+        enable_media_synthesis=policy.enable_media_synthesis,
         output_label=body.output_label,
-        artifact_disposition=body.artifact_disposition,
+        artifact_disposition=policy.artifact_disposition,
         provider_max_retries=effective_provider_max_retries,
         commercial_injection_plan=commercial_injection_plan,
     )
-    return r
+    execution_completed = r.pop("_execution_completed", False) is True
+    return project_bounded_generation_result(
+        r,
+        policy=policy,
+        execution_completed=execution_completed,
+    )
 
 
 @router.post("/scenario/s5", dependencies=[Depends(verify_api_key)])
-async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
+async def run_s5_brand_vlog(body: S5BrandVlogRequest):
     """Run S5 Brand VLOG pipeline.
 
     Request body:
@@ -549,17 +981,18 @@ async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
         story_description: str — user's story direction (max 300 chars)
         video_duration: int — target video seconds (15/30/45/60/90)
     """
+    policy = _resolve_request_generation_policy(body, scenario="s5")
+    compat_job_id = new_compatibility_job_id()
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=compat_job_id,
+        scenario_or_resource_type="s5",
+        generation_policy_version=policy.version,
+    )
     _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     body_data = body.model_dump()
-    raw_body = await request.json() if request is not None else {}
-    enable_media_synthesis = True
-    if isinstance(raw_body, dict):
-        enable_media_synthesis = raw_body.get("enable_media_synthesis", True) is not False
-    bounded_media_pilot = enable_media_synthesis and body.artifact_disposition in {
-        "pending_review",
-        "quarantine",
-    }
-    effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+    effective_provider_max_retries = policy.provider_max_retries
     commercial_injection_plan = _with_commercial_injection_config(
         {},
         body.commercial_injection_plan,
@@ -575,6 +1008,7 @@ async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
         scene_id=scene_id,
     )
     from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
+
     p = S5BrandVlogPipeline()
     r = await p.run(
         brand_id=body.brand_id,
@@ -584,12 +1018,17 @@ async def run_s5_brand_vlog(body: S5BrandVlogRequest, request: Request = None):
         story_description=body.story_description,
         video_duration=coerce_video_duration(body_data),
         commercial_injection_plan=commercial_injection_plan,
-        enable_media_synthesis=enable_media_synthesis,
+        enable_media_synthesis=policy.enable_media_synthesis,
         output_label=body.output_label,
-        artifact_disposition=body.artifact_disposition,
+        artifact_disposition=policy.artifact_disposition,
         provider_max_retries=effective_provider_max_retries,
     )
-    return r
+    execution_completed = r.pop("_execution_completed", False) is True
+    return project_bounded_generation_result(
+        r,
+        policy=policy,
+        execution_completed=execution_completed,
+    )
 
 
 @router.post("/fast/generate", dependencies=[Depends(verify_api_key)])
@@ -621,21 +1060,30 @@ async def fast_generate(req: FastModeRequest):
             tts_path: str | null,
         }
     """
+    policy = _resolve_request_generation_policy(req, scenario="fast")
+    compat_job_id = new_compatibility_job_id()
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=compat_job_id,
+        scenario_or_resource_type="fast",
+        generation_policy_version=policy.version,
+    )
     _inject_api_keys(req.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.services.fast_mode import get_fast_mode_service
 
     service = get_fast_mode_service()
-    ctx = get_auth_context()
-    tenant_id = ctx.tenant_id if ctx is not None else "default"
     try:
         result = await service.generate(
             user_prompt=req.user_prompt,
             duration=max(10, min(15, req.duration)),
             enable_tts=req.enable_tts,
-            artifact_disposition=req.artifact_disposition,
-            tenant_id=tenant_id,
-            artifact_run_id=f"fast_generate_{int(time.time())}",
-            provider_max_retries=req.provider_max_retries,
+            artifact_disposition=policy.artifact_disposition,
+            tenant_id=policy.tenant_id,
+            artifact_run_id=(f"fast_generate_{int(time.time())}_{secrets.token_hex(6)}"),
+            provider_max_retries=policy.provider_max_retries,
+            enable_media_synthesis=policy.enable_media_synthesis,
+            effective_generation_policy=_effective_policy_config(policy),
         )
         return result
     except Exception as e:
@@ -643,8 +1091,15 @@ async def fast_generate(req: FastModeRequest):
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
-@router.post("/fast/submit", dependencies=[Depends(verify_api_key)])
-async def fast_submit(req: FastModeRequest):
+@router.post(
+    "/fast/submit",
+    dependencies=[Depends(verify_api_key)],
+    openapi_extra=_FAST_SUBMIT_OPENAPI_EXTRA,
+)
+async def fast_submit(
+    request: Request,
+    raw_key: str = Depends(_require_submit_idempotency_key),
+):
     """Fast Mode async submit — returns task_id immediately, status polled separately.
 
     Companion to /fast/generate (sync, blocks 5-10 min). This endpoint kicks off
@@ -654,51 +1109,293 @@ async def fast_submit(req: FastModeRequest):
     Returns:
         { task_id, status: "queued", started_at_unix }
     """
-    _inject_api_keys(req.api_keys)
-    from src.services.fast_mode import get_fast_mode_service
+    req = await _validate_fast_submit_request(request)
+    return await _fast_submit_validated(req, raw_key)
+
+
+async def _fast_submit_validated(
+    req: FastModeRequest,
+    raw_key: str,
+) -> dict[str, Any]:
+    """Run the Fast owner/replay path after secret-safe HTTP validation."""
+
+    from src.services.submission_idempotency import (
+        get_submission_idempotency_service,
+        preallocate_resource_id,
+    )
     from src.tasks.fast_task_registry import (
         register_fast_task,
         update_fast_task_stage,
     )
 
-    service = get_fast_mode_service()
-    ctx = get_auth_context()
-    tenant_id = ctx.tenant_id if ctx is not None else "default"
+    policy = _resolve_request_generation_policy(req, scenario="fast")
+    tenant_id = policy.tenant_id
+    idempotency = get_submission_idempotency_service()
+    started_at_unix = int(time.time())
+    task_id = preallocate_resource_id(resource_type="fast", scenario="fast")
+    reserved_response = {
+        "task_id": task_id,
+        "status": "reserved",
+        "started_at_unix": started_at_unix,
+        "idempotent_replay": False,
+    }
+    try:
+        claim = await idempotency.claim_submission(
+            tenant_id=tenant_id,
+            raw_key=raw_key,
+            validated_request=req,
+            effective_policy=policy,
+            operation="fast.submit",
+            scenario="fast",
+            resource_type="fast",
+            resource_id=task_id,
+            response_body=reserved_response,
+        )
+    except Exception as exc:
+        raise _submission_http_error(exc) from None
+
+    if not claim.is_owner:
+        return _replay_submit_response(claim.record)
+
+    record_id = str(claim.record["id"])
+    owner_lost = asyncio.Event()
+    owner_task: dict[str, asyncio.Task[Any] | None] = {
+        "task": asyncio.current_task(),
+    }
+
+    async def _on_owner_lost() -> None:
+        owner_lost.set()
+        task = owner_task.get("task")
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+
+    initializing_response = {
+        **reserved_response,
+        "status": "initializing",
+    }
+    try:
+        initialized = await idempotency.transition(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            expected_statuses=("reserved",),
+            new_status="initializing",
+            stage="initializing",
+            response_body=initializing_response,
+        )
+        if initialized is None:
+            return await _replay_current_submit_response(
+                idempotency,
+                tenant_id=tenant_id,
+                raw_key=raw_key,
+            )
+        idempotency.start_heartbeat(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            on_failure=_on_owner_lost,
+        )
+        execution_context = await initialize_and_bind_provider_execution_context(
+            tenant_id=tenant_id,
+            budget_job_kind="canonical",
+            budget_job_id=task_id,
+            scenario_or_resource_type="fast",
+            generation_policy_version=policy.version,
+        )
+        _inject_api_keys(req.api_keys)
+        from src.services.fast_mode import get_fast_mode_service
+
+        generation_service = get_fast_mode_service()
+    except asyncio.CancelledError:
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="recovery_required",
+                stage="recovery_required",
+                response_body={**reserved_response, "status": "recovery_required"},
+                safe_error_code="submission_owner_lost",
+            )
+        raise
+    except Exception as exc:
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="failed",
+                stage="failed",
+                response_body={**reserved_response, "status": "failed"},
+                result_snapshot={
+                    "status": "error",
+                    "request_succeeded": False,
+                    "success": False,
+                    "full_media_success": False,
+                    "pipeline_complete": False,
+                    "publish_allowed": False,
+                    "delivery_accepted": False,
+                },
+                safe_error_code="fast_initialization_failed",
+            )
+        raise _submission_http_error(exc, claim_exists=True) from None
+
     duration = max(10, min(15, req.duration))
     enable_tts = req.enable_tts
     user_prompt = req.user_prompt
-    artifact_disposition = req.artifact_disposition
-    provider_max_retries = req.provider_max_retries
+    artifact_disposition = policy.artifact_disposition
+    provider_max_retries = policy.provider_max_retries
+    enable_media_synthesis = policy.enable_media_synthesis
+    effective_generation_policy = _effective_policy_config(policy)
 
-    task_id_holder: dict[str, str] = {}
+    start_gate = asyncio.Event()
+    stage_queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def _persist_stages() -> None:
+        while True:
+            stage = await stage_queue.get()
+            if stage is None:
+                return
+            if not await _persist_fast_submission_stage(
+                idempotency,
+                tenant_id=tenant_id,
+                record_id=record_id,
+                stage=stage,
+                on_owner_lost=_on_owner_lost,
+            ):
+                return
 
     async def _run() -> dict[str, Any]:
-        tid = task_id_holder.get("id", "")
+        await start_gate.wait()
+        stage_worker: asyncio.Task[None] | None = None
 
         def _on_stage(stage: str) -> None:
-            if tid:
-                update_fast_task_stage(tid, stage)
+            update_fast_task_stage(task_id, stage, tenant_id=tenant_id)
+            stage_queue.put_nowait(stage)
 
-        return await service.generate(
-            user_prompt=user_prompt,
-            duration=duration,
-            enable_tts=enable_tts,
-            on_stage=_on_stage,
-            artifact_disposition=artifact_disposition,
-            tenant_id=tenant_id,
-            artifact_run_id=tid or None,
-            provider_max_retries=provider_max_retries,
-        )
+        try:
+            running = await idempotency.transition(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                expected_statuses=("queued",),
+                new_status="running",
+                stage="queued",
+                response_body={**reserved_response, "status": "running"},
+            )
+            if running is None:
+                raise RuntimeError("fast_submission_owner_lost")
+
+            stage_worker = asyncio.create_task(_persist_stages())
+            result = await generation_service.generate(
+                user_prompt=user_prompt,
+                duration=duration,
+                enable_tts=enable_tts,
+                on_stage=_on_stage,
+                artifact_disposition=artifact_disposition,
+                tenant_id=tenant_id,
+                artifact_run_id=task_id,
+                provider_max_retries=provider_max_retries,
+                enable_media_synthesis=enable_media_synthesis,
+                effective_generation_policy=effective_generation_policy,
+            )
+            result_snapshot = _safe_result_snapshot(
+                result,
+                allowed_keys=_FAST_RESULT_SNAPSHOT_KEYS,
+            )
+            result_status = str(result_snapshot.get("status") or "")
+            failed = result_status == "error" or result_snapshot.get("request_succeeded") is False
+            terminal_status = "failed" if failed else "completed"
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status=terminal_status,
+                stage="failed" if failed else "completed",
+                response_body={
+                    **reserved_response,
+                    "status": "failed" if failed else "done",
+                },
+                result_snapshot=result_snapshot,
+                safe_error_code="fast_generation_failed" if failed else None,
+            )
+            return result
+        except asyncio.CancelledError:
+            with suppress(Exception):
+                await idempotency.mark_terminal(
+                    tenant_id=tenant_id,
+                    record_id=record_id,
+                    status="recovery_required",
+                    stage="recovery_required",
+                    response_body={**reserved_response, "status": "recovery_required"},
+                    safe_error_code="submission_owner_lost",
+                )
+            raise
+        except Exception:
+            with suppress(Exception):
+                await idempotency.mark_terminal(
+                    tenant_id=tenant_id,
+                    record_id=record_id,
+                    status="failed",
+                    stage="failed",
+                    response_body={**reserved_response, "status": "failed"},
+                    result_snapshot={
+                        "status": "error",
+                        "request_succeeded": False,
+                        "success": False,
+                        "full_media_success": False,
+                        "pipeline_complete": False,
+                        "publish_allowed": False,
+                        "delivery_accepted": False,
+                    },
+                    safe_error_code="fast_generation_failed",
+                )
+            raise RuntimeError("fast_generation_failed") from None
+        finally:
+            if stage_worker is not None:
+                stage_queue.put_nowait(None)
+                with suppress(asyncio.CancelledError):
+                    await stage_worker
+            with suppress(Exception):
+                await idempotency.stop_heartbeat(
+                    tenant_id=tenant_id,
+                    record_id=record_id,
+                )
 
     task = asyncio.create_task(_run())
-    task_id = register_fast_task(task)
-    task_id_holder["id"] = task_id
+    owner_task["task"] = task
+    try:
+        register_fast_task(
+            task,
+            task_id=task_id,
+            tenant_id=tenant_id,
+            effective_policy_version=policy.version,
+            provider_execution_projection=(project_provider_execution_context(execution_context)),
+        )
+        _register_background_task(task, task_id)
+        queued_response = {**reserved_response, "status": "queued"}
+        queued = await idempotency.transition(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            expected_statuses=("initializing",),
+            new_status="queued",
+            stage="queued",
+            response_body=queued_response,
+        )
+        if queued is None:
+            raise RuntimeError("fast_submission_owner_lost")
+    except Exception as exc:
+        task.cancel()
+        start_gate.set()
+        with suppress(asyncio.CancelledError, Exception):
+            await task
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="recovery_required",
+                stage="recovery_required",
+                response_body={**reserved_response, "status": "recovery_required"},
+                safe_error_code="fast_queue_failed",
+            )
+        raise _submission_http_error(exc, claim_exists=True) from None
 
-    return {
-        "task_id": task_id,
-        "status": "queued",
-        "started_at_unix": int(time.time()),
-    }
+    start_gate.set()
+    return queued_response
 
 
 @router.get("/fast/status/{task_id}", dependencies=[Depends(verify_api_key)])
@@ -714,12 +1411,53 @@ async def fast_status(task_id: str):
         200 OK — task exists; check status field
         404 Not Found — task_id unknown or expired (>10min after completion)
     """
+    from src.services.submission_idempotency import (
+        SubmissionIdempotencyError,
+        get_submission_idempotency_service,
+    )
     from src.tasks.fast_task_registry import get_fast_task
 
-    snapshot = get_fast_task(task_id)
-    if snapshot is None:
-        raise HTTPException(status_code=404, detail=f"Unknown or expired task_id: {task_id}")
-    return snapshot
+    auth = get_auth_context()
+    if auth is None:
+        raise HTTPException(status_code=401, detail="Missing authenticated request context")
+    try:
+        durable = await get_submission_idempotency_service().readback_by_resource(
+            tenant_id=auth.tenant_id,
+            resource_type="fast",
+            resource_id=task_id,
+        )
+    except SubmissionIdempotencyError as exc:
+        if exc.status_code == 404:
+            raise HTTPException(status_code=404, detail="Fast task not found") from None
+        raise _submission_http_error(exc) from None
+
+    live = get_fast_task(task_id, tenant_id=auth.tenant_id)
+    record_status = str(durable.get("status") or "running")
+    result = durable.get("result_snapshot")
+    result_snapshot = result if isinstance(result, dict) else None
+    status = {
+        "completed": "done",
+        "failed": "failed",
+    }.get(record_status, record_status)
+    stage = str((live or {}).get("stage") or durable.get("stage") or record_status)
+    error = None
+    if record_status == "failed":
+        error = str(durable.get("safe_error_code") or "fast_generation_failed")
+    return {
+        "task_id": task_id,
+        "status": status,
+        "stage": stage,
+        "elapsed_sec": (
+            (live or {}).get("elapsed_sec") if live is not None else _elapsed_seconds(durable.get("created_at"))
+        ),
+        "effective_policy_version": (
+            (live or {}).get("effective_policy_version") or durable.get("effective_policy_version")
+        ),
+        "lifecycle_status": (result_snapshot.get("status") if result_snapshot is not None else record_status),
+        "result_status": (result_snapshot.get("status") if result_snapshot is not None else record_status),
+        "result": result_snapshot if record_status == "completed" else None,
+        "error": error,
+    }
 
 
 @router.post("/scenario/s1/start", dependencies=[Depends(verify_api_key)])
@@ -740,6 +1478,15 @@ async def start_s1_pipeline(body: S1StartRequest):
         Initialized state dict with label, mode, status, and current_step.
         If mode is "auto", runs to completion and returns final state.
     """
+    policy = _resolve_request_generation_policy(body, scenario="s1")
+    compat_job_id = new_compatibility_job_id()
+    await initialize_and_bind_provider_execution_context(
+        tenant_id=policy.tenant_id,
+        budget_job_kind="compatibility",
+        budget_job_id=compat_job_id,
+        scenario_or_resource_type="s1",
+        generation_policy_version=policy.version,
+    )
     _inject_api_keys(body.api_keys)  # P1-C: 用户 key 注入 contextvars
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_runner import StepRunner
@@ -761,26 +1508,36 @@ async def start_s1_pipeline(body: S1StartRequest):
             body.commercial_injection_plan,
             expected_scenario="s1",
         )
-        bounded_media_pilot = body.enable_media_synthesis and body.artifact_disposition in {
+        config.update(
+            {
+                "enable_media_synthesis": policy.enable_media_synthesis,
+                "artifact_disposition": policy.artifact_disposition,
+                "provider_max_retries": policy.provider_max_retries,
+                "effective_generation_policy": _effective_policy_config(policy),
+            }
+        )
+        bounded_media_pilot = policy.enable_media_synthesis and policy.artifact_disposition in {
             "pending_review",
             "quarantine",
         }
-        effective_provider_max_retries = 0 if bounded_media_pilot else body.provider_max_retries
+        effective_provider_max_retries = policy.provider_max_retries
         config["provider_max_retries"] = effective_provider_max_retries
         if bounded_media_pilot:
-            config.update({
-                "provider_job_caps": {"image": 1, "video": 1},
-                "seedance_quality_gate_enabled": False,
-            })
+            config.update(
+                {
+                    "provider_job_caps": {"image": 1, "video": 1},
+                    "seedance_quality_gate_enabled": False,
+                }
+            )
         label = await step_runner.init_state(config=config, mode=body.mode, label=body.output_label)
 
         if body.mode == "auto":
-            if body.enable_media_synthesis:
+            if policy.enable_media_synthesis:
                 if bounded_media_pilot:
                     return await _resume_s1_bounded_media_pilot(
                         step_runner,
                         label,
-                        body.artifact_disposition,
+                        policy.artifact_disposition,
                         effective_provider_max_retries,
                     )
                 return await step_runner.resume(label)
@@ -799,7 +1556,10 @@ async def start_s1_pipeline(body: S1StartRequest):
         raise HTTPException(status_code=500, detail=_classified_error(e))
 
 
-@router.post("/scenario/s1/step/{step_name}", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/s1/step/{step_name}",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def run_s1_step(step_name: str, body: dict[str, Any]):
     """Execute a single step of the S1 pipeline.
 
@@ -819,6 +1579,7 @@ async def run_s1_step(step_name: str, body: dict[str, Any]):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {body['label']}")
         _assert_state_access(state)
+        _assert_state_scenario(state, "s1")
 
         step_runner = StepRunner(state_manager)
         result = await step_runner.run_step(body["label"], step_name)
@@ -827,11 +1588,15 @@ async def run_s1_step(step_name: str, body: dict[str, Any]):
         raise
     except Exception as e:
         import logging
+
         logging.error("s1 step failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
-@router.post("/scenario/s1/regenerate", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/s1/regenerate",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def regenerate_s1_step(body: dict[str, Any]):
     """Force re-execution of a specific step and invalidate all downstream.
 
@@ -856,7 +1621,11 @@ async def regenerate_s1_step(body: dict[str, Any]):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {body['label']}")
         _assert_state_access(state)
+        _assert_state_scenario(state, "s1")
 
+        from src.pipeline.generation_policy import assert_generation_step_allowed
+
+        assert_generation_step_allowed(state, body["step"], force=True)
         await invalidate_downstream(body["label"], body["step"], state_manager)
         step_runner = StepRunner(state_manager)
         result = await step_runner.regenerate_step(body["label"], body["step"])
@@ -867,7 +1636,10 @@ async def regenerate_s1_step(body: dict[str, Any]):
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
-@router.post("/scenario/s1/resume", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/s1/resume",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def resume_s1_pipeline(body: dict[str, Any]):
     """Resume execution from current_step to completion.
 
@@ -886,6 +1658,7 @@ async def resume_s1_pipeline(body: dict[str, Any]):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {body['label']}")
         _assert_state_access(state)
+        _assert_state_scenario(state, "s1")
 
         step_runner = StepRunner(state_manager)
         result = await step_runner.resume(body["label"])
@@ -894,6 +1667,7 @@ async def resume_s1_pipeline(body: dict[str, Any]):
         raise
     except Exception as e:
         import logging
+
         logging.error("s1 regenerate failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
@@ -913,6 +1687,7 @@ async def get_s1_state(label: str):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, "s1")
         result = project_state_injection_visibility(state)
         result["meta"] = {
             "step_order": _SCENARIO_STEP_ORDER.get("s1", []),
@@ -923,6 +1698,7 @@ async def get_s1_state(label: str):
         raise
     except Exception as e:
         import logging
+
         logging.error("s1 resume failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
@@ -957,7 +1733,9 @@ async def update_s1_state(label: str, body: dict[str, Any]):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, "s1")
 
+        _validate_s1_public_state_update(body, state)
         updated_state = deep_merge(state, body)
         await state_manager.save(label, updated_state)
         return updated_state
@@ -965,6 +1743,7 @@ async def update_s1_state(label: str, body: dict[str, Any]):
         raise
     except Exception as e:
         import logging
+
         logging.error("s1 state update failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
@@ -989,6 +1768,7 @@ async def list_steps(scenario: str, label: str):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
 
         projected_state = project_state_injection_visibility(state)
         steps_data = projected_state.get("steps", {})
@@ -1046,11 +1826,15 @@ async def list_steps(scenario: str, label: str):
         raise
     except Exception as e:
         import logging
+
         logging.error("list_steps failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
-@router.post("/scenario/{scenario}/step/{step_name}", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/{scenario}/step/{step_name}",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
     """Execute a SINGLE step of the pipeline.
 
@@ -1077,6 +1861,11 @@ async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
+
+        from src.pipeline.generation_policy import assert_generation_step_allowed
+
+        assert_generation_step_allowed(state, step_name)
 
         steps_data = state.get("steps", {})
         deps = _get_step_deps(scenario, step_name)
@@ -1121,6 +1910,7 @@ async def execute_step(scenario: str, step_name: str, body: dict[str, Any]):
         raise
     except Exception as e:
         import logging
+
         logging.error("execute_step failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
@@ -1176,6 +1966,7 @@ async def edit_step_output(scenario: str, label: str, body: dict[str, Any]):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
 
         result = await update_step_output(label, step_name, updates)
         return {
@@ -1187,11 +1978,15 @@ async def edit_step_output(scenario: str, label: str, body: dict[str, Any]):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         import logging
+
         logging.error("edit_step_output failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
-@router.post("/scenario/{scenario}/regenerate/{label}/{step_name}", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/{scenario}/regenerate/{label}/{step_name}",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def regenerate_step(scenario: str, label: str, step_name: str):
     """Re-run a specific step (e.g., after user edited its input).
 
@@ -1212,6 +2007,7 @@ async def regenerate_step(scenario: str, label: str, step_name: str):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
 
         order = _SCENARIO_STEP_ORDER[scenario]
         try:
@@ -1219,8 +2015,11 @@ async def regenerate_step(scenario: str, label: str, step_name: str):
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Unknown step: {step_name}")
 
-        downstream = order[step_idx + 1:]
+        downstream = order[step_idx + 1 :]
 
+        from src.pipeline.generation_policy import assert_generation_step_allowed
+
+        assert_generation_step_allowed(state, step_name, force=True)
         step_runner = StepRunner(state_manager)
         # invalidate_downstream marks steps as pending
         await invalidate_downstream(label, step_name, state_manager)
@@ -1237,6 +2036,7 @@ async def regenerate_step(scenario: str, label: str, step_name: str):
         raise
     except Exception as e:
         import logging
+
         logging.error("regenerate_step failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
@@ -1261,6 +2061,7 @@ async def get_gate(scenario: str, label: str, gate_id: str):
     if state is None:
         raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
     _assert_state_access(state)
+    _assert_state_scenario(state, scenario)
 
     result = await _get_gate_state(label, gate_id)
     if "error" in result:
@@ -1268,7 +2069,10 @@ async def get_gate(scenario: str, label: str, gate_id: str):
     return result
 
 
-@router.post("/scenario/{scenario}/gate/{label}/{gate_id}/generate", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/{scenario}/gate/{label}/{gate_id}/generate",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def generate_gate_candidates(scenario: str, label: str, gate_id: str):
     """Generate 3 candidates (standard/creative/conservative) for a gate.
 
@@ -1292,6 +2096,7 @@ async def generate_gate_candidates(scenario: str, label: str, gate_id: str):
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
 
         result = await _generate_candidates(label, gate_id)
         if "error" in result:
@@ -1301,11 +2106,15 @@ async def generate_gate_candidates(scenario: str, label: str, gate_id: str):
         raise
     except Exception as e:
         import logging
+
         logging.error("generate_gate_candidates failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
-@router.post("/scenario/{scenario}/gate/{label}/{gate_id}/approve", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/{scenario}/gate/{label}/{gate_id}/approve",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: dict[str, Any]):
     """Approve a gate with selected candidate IDs.
 
@@ -1337,6 +2146,7 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
 
         result = await _approve_gate(label, gate_id, selected_ids)
         if "error" in result:
@@ -1368,6 +2178,12 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
                     gate_id=gate_id,
                 )
             except Exception as resume_err:
+                await persist_background_failure(
+                    state_manager,
+                    label=label,
+                    reason="background_resume_failed",
+                    error=resume_err,
+                )
                 log.warning(
                     "background_resume_failed",
                     label=label,
@@ -1387,11 +2203,15 @@ async def approve_gate_decision(scenario: str, label: str, gate_id: str, body: d
         raise
     except Exception as e:
         import logging
+
         logging.error("approve_gate_decision failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
 
-@router.post("/scenario/{scenario}/gate/{label}/{gate_id}/regenerate/{candidate_id}", dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/scenario/{scenario}/gate/{label}/{gate_id}/regenerate/{candidate_id}",
+    dependencies=[Depends(require_permission("provider:submit"))],
+)
 async def regenerate_gate_candidate(scenario: str, label: str, gate_id: str, candidate_id: str):
     """Regenerate a single candidate for a gate.
 
@@ -1416,6 +2236,7 @@ async def regenerate_gate_candidate(scenario: str, label: str, gate_id: str, can
         if state is None:
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
 
         result = await _regenerate_candidate(label, gate_id, candidate_id)
         if "error" in result:
@@ -1425,6 +2246,7 @@ async def regenerate_gate_candidate(scenario: str, label: str, gate_id: str, can
         raise
     except Exception as e:
         import logging
+
         logging.error("regenerate_gate_candidate failed: %s", e)
         raise HTTPException(status_code=500, detail=_safe_error(e))
 
@@ -1432,8 +2254,125 @@ async def regenerate_gate_candidate(scenario: str, label: str, gate_id: str, can
 # ── Unified Async Execution (Phase 1A) ──
 
 
-@router.post("/scenario/{scenario}/submit", dependencies=[Depends(verify_api_key)])
-async def submit_scenario(scenario: str, body: dict[str, Any]):
+def _build_unified_scenario_config(
+    scenario: str,
+    body: dict[str, Any],
+    policy: EffectiveGenerationPolicy,
+) -> dict[str, Any]:
+    """Build and semantically validate config without provider-capable awaits."""
+
+    if scenario == "s1":
+        config = {
+            "product_catalog": body.get("product_catalog", {}),
+            "brand_guidelines": body.get("brand_guidelines"),
+            "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
+            "target_languages": DEFAULT_LANGUAGES,
+            "week": body.get("week", ""),
+            "video_duration": coerce_video_duration(body),
+            "brand_mode": body.get("brand_mode", False),
+            "continuity_mode": body.get("continuity_mode", True),
+            "continuity_generation_mode": body.get(
+                "continuity_generation_mode",
+                "standard",
+            ),
+            "storyboard_grid": body.get("storyboard_grid", 12),
+            "clip_group_size": body.get("clip_group_size", 3),
+            "transition_style": body.get("transition_style", "match_cut"),
+        }
+    elif scenario == "s2":
+        brand_package = body.get("brand_package", {})
+        brand_name = brand_package.get("brand_name", "Brand")
+        config = {
+            "product_catalog": {
+                "product_name": brand_name,
+                "name": brand_name,
+                "brand_name": brand_name,
+                "category": "brand_campaign",
+                "usps": brand_package.get("product_lines", ["quality"]),
+            },
+            "brand_guidelines": brand_package,
+            "brand_mode": True,
+            "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
+            "target_languages": body.get("target_languages", DEFAULT_LANGUAGES),
+            "week": body.get("week", ""),
+            "video_duration": coerce_video_duration(body, default=60),
+            "media_stop_step": body.get("media_stop_step"),
+            "media_refs": body.get("media_refs"),
+        }
+        if config["media_stop_step"] in {"assemble_final", "audit"}:
+            from src.pipeline.s2_brand_pipeline_v2 import (
+                _normalize_assemble_media_refs,
+                _normalize_audit_media_refs,
+            )
+
+            normalizer = (
+                _normalize_assemble_media_refs
+                if config["media_stop_step"] == "assemble_final"
+                else _normalize_audit_media_refs
+            )
+            try:
+                config["media_refs"] = normalizer(
+                    config["media_refs"],
+                    tenant_id=policy.tenant_id,
+                    disposition=policy.artifact_disposition,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+    elif scenario == "s3":
+        config = {
+            "video_url": body.get("video_url", ""),
+            "product": body.get("product", {}),
+            "influencer_name": body.get("influencer_name", "Influencer"),
+            "brief_id": body.get("brief_id", ""),
+            "video_duration": coerce_video_duration(body),
+        }
+    elif scenario == "s4":
+        config = {
+            "footage_assets": body.get("footage_assets", []),
+            "product_info": body.get("product_info", {}),
+            "topic": body.get("topic", ""),
+            "target_platforms": body.get("target_platforms", ["tiktok"]),
+            "brand_guidelines": body.get("brand_guidelines", {}),
+            "video_duration": coerce_video_duration(body),
+        }
+    elif scenario == "s5":
+        config = {
+            "brand_id": body.get("brand_id", "momcozy"),
+            "product_sku": body.get("product_sku", {}),
+            "scene_id": _validate_s5_scene_id(body.get("scene_id")),
+            "selected_models": body.get("selected_models", []),
+            "story_description": body.get("story_description", ""),
+            "video_duration": coerce_video_duration(body),
+        }
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
+
+    config = _with_commercial_injection_config(
+        config,
+        body.get("commercial_injection_plan"),
+        expected_scenario=scenario,
+    )
+    config.update(
+        {
+            "enable_media_synthesis": policy.enable_media_synthesis,
+            "artifact_disposition": policy.artifact_disposition,
+            "provider_max_retries": policy.provider_max_retries,
+            "effective_generation_policy": _effective_policy_config(policy),
+        }
+    )
+    return config
+
+
+@router.post(
+    "/scenario/{scenario}/submit",
+    dependencies=[Depends(verify_api_key)],
+    openapi_extra=_SCENARIO_SUBMIT_OPENAPI_EXTRA,
+)
+async def submit_scenario(
+    scenario: str,
+    request: Request,
+    raw_key: str = Depends(_require_submit_idempotency_key),
+):
     """Submit a scenario for async execution.
 
     Initializes pipeline state and immediately returns a label.
@@ -1446,123 +2385,357 @@ async def submit_scenario(scenario: str, body: dict[str, Any]):
     Returns:
         { label, status: "queued", trace_id }
     """
+    body = await _parse_submit_json_object(request)
+    return await _submit_scenario_validated(scenario, body, raw_key)
+
+
+async def _submit_scenario_validated(
+    scenario: str,
+    body: dict[str, Any],
+    raw_key: str,
+) -> dict[str, Any]:
+    """Run the Scenario owner/replay path after secret-safe HTTP validation."""
+
     _validate_scenario(scenario)
-    _inject_api_keys(body.get("api_keys", {}))
+    from src.services.submission_idempotency import (
+        get_submission_idempotency_service,
+        preallocate_resource_id,
+    )
+
+    canonical_scenario = cast(GenerationScenario, scenario)
+    policy = _resolve_request_generation_policy(body, scenario=canonical_scenario)
+    validated_request = _validate_unified_request(scenario, body)
+    body = validated_request.model_dump(mode="python")
+    config = _build_unified_scenario_config(scenario, body, policy)
+    tenant_id = policy.tenant_id
+    idempotency = get_submission_idempotency_service()
+    label = preallocate_resource_id(
+        resource_type="scenario",
+        scenario=canonical_scenario,
+    )
+    trace_id = label.split("_")[-1] if "_" in label else ""
+    reserved_response = {
+        "label": label,
+        "status": "reserved",
+        "trace_id": trace_id,
+        "idempotent_replay": False,
+    }
+    try:
+        claim = await idempotency.claim_submission(
+            tenant_id=tenant_id,
+            raw_key=raw_key,
+            validated_request=validated_request,
+            effective_policy=policy,
+            operation="scenario.submit",
+            scenario=scenario,
+            resource_type="scenario",
+            resource_id=label,
+            response_body=reserved_response,
+        )
+    except Exception as exc:
+        raise _submission_http_error(exc) from None
+
+    if not claim.is_owner:
+        return _replay_submit_response(claim.record)
+
+    record_id = str(claim.record["id"])
+    owner_lost = asyncio.Event()
+    owner_task: dict[str, asyncio.Task[Any] | None] = {
+        "task": asyncio.current_task(),
+    }
+
+    async def _on_owner_lost() -> None:
+        owner_lost.set()
+        task = owner_task.get("task")
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+
+    try:
+        initialized = await idempotency.transition(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            expected_statuses=("reserved",),
+            new_status="initializing",
+            stage="initializing",
+            response_body={**reserved_response, "status": "initializing"},
+        )
+        if initialized is None:
+            return await _replay_current_submit_response(
+                idempotency,
+                tenant_id=tenant_id,
+                raw_key=raw_key,
+            )
+        idempotency.start_heartbeat(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            on_failure=_on_owner_lost,
+        )
+        await initialize_and_bind_provider_execution_context(
+            tenant_id=tenant_id,
+            budget_job_kind="canonical",
+            budget_job_id=label,
+            scenario_or_resource_type=scenario,
+            generation_policy_version=policy.version,
+        )
+        _inject_api_keys(body.get("api_keys", {}))
+
+        if scenario == "s1":
+            from src.tools.translate import translate_catalog_to_english
+
+            config["product_catalog"] = await translate_catalog_to_english(config.get("product_catalog", {}))
+        elif scenario == "s3" and isinstance(config.get("product"), dict):
+            from src.tools.translate import translate_catalog_to_english
+
+            config["product"] = await translate_catalog_to_english(config["product"])
+    except asyncio.CancelledError:
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="recovery_required",
+                stage="recovery_required",
+                response_body={**reserved_response, "status": "recovery_required"},
+                safe_error_code="submission_owner_lost",
+            )
+        raise
+    except Exception as exc:
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="failed",
+                stage="failed",
+                response_body={**reserved_response, "status": "failed"},
+                result_snapshot={
+                    "status": "error",
+                    "request_succeeded": False,
+                    "success": False,
+                    "pipeline_degraded": True,
+                },
+                safe_error_code="scenario_initialization_failed",
+            )
+        raise _submission_http_error(exc, claim_exists=True) from None
 
     from src.pipeline.state_manager import PipelineStateManager
     from src.pipeline.step_runner import StepRunner
-    from src.tools.cost_tracker import set_thread_id
 
-    step_runner = StepRunner(PipelineStateManager())
+    state_manager = PipelineStateManager()
+    step_runner = StepRunner(state_manager)
+    try:
+        label = await step_runner.init_state(
+            config=config,
+            mode="auto",
+            scenario=scenario,
+            label=label,
+        )
+    except Exception as exc:
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="failed",
+                stage="failed",
+                response_body={**reserved_response, "status": "failed"},
+                result_snapshot={
+                    "status": "error",
+                    "request_succeeded": False,
+                    "success": False,
+                    "pipeline_degraded": True,
+                },
+                safe_error_code="scenario_state_initialization_failed",
+            )
+        raise _submission_http_error(exc, claim_exists=True) from None
 
-    # Build config per-scenario (same logic as blocking endpoints)
-    if scenario == "s1":
-        from src.tools.translate import translate_catalog_to_english
-        product_catalog = body.get("product_catalog", {})
-        product_catalog = await translate_catalog_to_english(product_catalog)
-        config = {
-            "product_catalog": product_catalog,
-            "brand_guidelines": body.get("brand_guidelines"),
-            "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
-            "target_languages": DEFAULT_LANGUAGES,
-            "week": body.get("week", ""),
-            "video_duration": coerce_video_duration(body),
-            "brand_mode": body.get("brand_mode", False),
-            "enable_media_synthesis": body.get("enable_media_synthesis", True),
-            "continuity_mode": body.get("continuity_mode", True),
-            "continuity_generation_mode": body.get("continuity_generation_mode", "standard"),
-            "storyboard_grid": body.get("storyboard_grid", 12),
-            "clip_group_size": body.get("clip_group_size", 3),
-            "transition_style": body.get("transition_style", "match_cut"),
-        }
-        config = _with_commercial_injection_config(
-            config,
-            body.get("commercial_injection_plan"),
-            expected_scenario="s1",
-        )
-    elif scenario == "s2":
-        brand_package = body.get("brand_package", {})
-        brand_name = brand_package.get("brand_name", "Brand")
-        # S2 is an S1 wrapper in brand_mode — construct a minimal product_catalog
-        # so S1's _step_strategy can run without KeyError.
-        product_catalog = {
-            "product_name": brand_name,
-            "name": brand_name,
-            "brand_name": brand_name,
-            "category": "brand_campaign",
-            "usps": brand_package.get("product_lines", ["quality"]),
-        }
-        config = {
-            "product_catalog": product_catalog,
-            "brand_guidelines": brand_package,
-            "brand_mode": True,
-            "target_platforms": body.get("target_platforms", ["tiktok", "shopify"]),
-            "target_languages": body.get("target_languages", DEFAULT_LANGUAGES),
-            "week": body.get("week", ""),
-            "enable_media_synthesis": True,
-        }
-        config = _with_commercial_injection_config(
-            config,
-            body.get("commercial_injection_plan"),
-            expected_scenario="s2",
-        )
-    elif scenario == "s3":
-        from src.tools.translate import translate_catalog_to_english
-        product = body.get("product", {})
-        if isinstance(product, dict):
-            product = await translate_catalog_to_english(product)
-        config = {
-            "video_url": body.get("video_url", ""),
-            "product": product,
-            "influencer_name": body.get("influencer_name", "Influencer"),
-            "brief_id": body.get("brief_id", ""),
-            "video_duration": coerce_video_duration(body),
-        }
-    elif scenario == "s4":
-        config = {
-            "footage_assets": body.get("footage_assets", []),
-            "product_info": body.get("product_info", {}),
-            "topic": body.get("topic", ""),
-            "target_platforms": body.get("target_platforms", ["tiktok"]),
-        }
-    elif scenario == "s5":
-        config = {
-            "brand_id": body.get("brand_id", "momcozy"),
-            "product_sku": body.get("product_sku", {}),
-            "scene_id": _validate_s5_scene_id(body.get("scene_id")),
-            "selected_models": body.get("selected_models", []),
-            "story_description": body.get("story_description", ""),
-            "video_duration": coerce_video_duration(body),
-        }
-        config = _with_commercial_injection_config(
-            config,
-            body.get("commercial_injection_plan"),
-            expected_scenario="s5",
-        )
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
+    s2_refs_pipeline = None
+    s2_refs_stop_step = config.get("media_stop_step") if scenario == "s2" else None
+    try:
+        if scenario == "s2" and s2_refs_stop_step in {"assemble_final", "audit"}:
+            from src.pipeline.s2_brand_pipeline_v2 import S2BrandCampaignPipeline
 
-    label = await step_runner.init_state(config=config, mode="auto", scenario=scenario)
-    set_thread_id(label)
+            s2_refs_pipeline = S2BrandCampaignPipeline()
+            if s2_refs_stop_step == "assemble_final":
+                await s2_refs_pipeline._seed_refs_only_assemble_inputs(
+                    runner=step_runner,
+                    label=label,
+                    artifact_disposition=policy.artifact_disposition,
+                    provider_max_retries=policy.provider_max_retries,
+                    media_refs=config.get("media_refs"),
+                )
+            else:
+                await s2_refs_pipeline._seed_refs_only_audit_inputs(
+                    runner=step_runner,
+                    label=label,
+                    artifact_disposition=policy.artifact_disposition,
+                    provider_max_retries=policy.provider_max_retries,
+                    media_refs=config.get("media_refs"),
+                )
+    except asyncio.CancelledError:
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="recovery_required",
+                stage="recovery_required",
+                response_body={**reserved_response, "status": "recovery_required"},
+                safe_error_code="submission_owner_lost",
+            )
+        raise
+    except Exception as exc:
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="failed",
+                stage="failed",
+                response_body={**reserved_response, "status": "failed"},
+                result_snapshot={
+                    "status": "error",
+                    "request_succeeded": False,
+                    "success": False,
+                    "pipeline_degraded": True,
+                },
+                safe_error_code="scenario_refs_initialization_failed",
+            )
+        raise _submission_http_error(exc, claim_exists=True) from None
 
     # Start pipeline in background so HTTP returns immediately
+    start_gate = asyncio.Event()
+
     async def _background_run() -> None:
         try:
+            await start_gate.wait()
+            running = await idempotency.transition(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                expected_statuses=("queued",),
+                new_status="running",
+                stage="running",
+                response_body={**reserved_response, "status": "running"},
+            )
+            if running is None:
+                raise RuntimeError("scenario_submission_owner_lost")
+
             if scenario == "s1" and config.get("enable_media_synthesis") is False:
-                await _resume_s1_without_media_synthesis(step_runner, label)
+                final_state = await _resume_s1_without_media_synthesis(step_runner, label)
             else:
-                await step_runner.resume(label)
+                final_state = await step_runner.resume(label)
+                if s2_refs_pipeline is not None and s2_refs_stop_step == "assemble_final":
+                    final_state = s2_refs_pipeline._scope_refs_only_assemble_output(
+                        final_state=final_state,
+                        label=label,
+                        artifact_disposition=policy.artifact_disposition,
+                    )
+                    await state_manager.save(label, final_state)
+
+            source_projection = project_scenario_acceptance_source(
+                final_state,
+                tenant_id=tenant_id,
+                label=label,
+                artifact_disposition=policy.artifact_disposition,
+                output_dir=OUTPUT_DIR,
+            )
+            snapshot_input = {**final_state, **source_projection}
+            result_snapshot = _safe_result_snapshot(
+                snapshot_input,
+                allowed_keys=_SCENARIO_RESULT_SNAPSHOT_KEYS,
+            )
+            lifecycle_status = str(result_snapshot.get("lifecycle_status") or result_snapshot.get("status") or "")
+            failed = bool(result_snapshot.get("pipeline_degraded")) or lifecycle_status in {
+                "error",
+                "failed",
+                "policy_blocked",
+            }
+            reported_status = lifecycle_status or ("error" if failed else "completed")
+            result_snapshot["status"] = reported_status
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="failed" if failed else "completed",
+                stage="failed" if failed else "completed",
+                response_body={**reserved_response, "status": reported_status},
+                result_snapshot=result_snapshot,
+                safe_error_code="scenario_execution_failed" if failed else None,
+            )
+        except asyncio.CancelledError:
+            with suppress(Exception):
+                await idempotency.mark_terminal(
+                    tenant_id=tenant_id,
+                    record_id=record_id,
+                    status="recovery_required",
+                    stage="recovery_required",
+                    response_body={**reserved_response, "status": "recovery_required"},
+                    safe_error_code="submission_owner_lost",
+                )
+            raise
         except Exception as e:
-            logger.error("background_run_failed", label=label, scenario=scenario, error=str(e)[:200])
+            with suppress(Exception):
+                await persist_background_failure(
+                    state_manager,
+                    label=label,
+                    reason="background_run_failed",
+                    error=e,
+                )
+            with suppress(Exception):
+                await idempotency.mark_terminal(
+                    tenant_id=tenant_id,
+                    record_id=record_id,
+                    status="failed",
+                    stage="failed",
+                    response_body={**reserved_response, "status": "error"},
+                    result_snapshot={
+                        "status": "error",
+                        "request_succeeded": False,
+                        "success": False,
+                        "pipeline_degraded": True,
+                    },
+                    safe_error_code="scenario_background_failed",
+                )
+            logger.error(
+                "background_run_failed",
+                label=label,
+                scenario=scenario,
+                error_type=type(e).__name__,
+            )
+        finally:
+            with suppress(Exception):
+                await idempotency.stop_heartbeat(
+                    tenant_id=tenant_id,
+                    record_id=record_id,
+                )
 
     task = asyncio.create_task(_background_run())
-    _register_background_task(task, label)
+    owner_task["task"] = task
+    try:
+        _register_background_task(task, label)
+        queued_response = {**reserved_response, "status": "queued"}
+        queued = await idempotency.transition(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            expected_statuses=("initializing",),
+            new_status="queued",
+            stage="queued",
+            response_body=queued_response,
+        )
+        if queued is None:
+            raise RuntimeError("scenario_submission_owner_lost")
+    except Exception as exc:
+        task.cancel()
+        start_gate.set()
+        with suppress(asyncio.CancelledError, Exception):
+            await task
+        with suppress(Exception):
+            await idempotency.mark_terminal(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                status="recovery_required",
+                stage="recovery_required",
+                response_body={**reserved_response, "status": "recovery_required"},
+                safe_error_code="scenario_queue_failed",
+            )
+        raise _submission_http_error(exc, claim_exists=True) from None
 
-    return {
-        "label": label,
-        "status": "queued",
-        "trace_id": label.split("_")[-1] if "_" in label else "",
-    }
+    start_gate.set()
+    return queued_response
 
 
 @router.get("/scenario/{scenario}/status/{label}", dependencies=[Depends(verify_api_key)])
@@ -1586,9 +2759,45 @@ async def get_scenario_status(scenario: str, label: str):
     try:
         state_manager = PipelineStateManager()
         state = await state_manager.load(label)
+        durable: dict[str, Any] | None = None
+        auth = get_auth_context()
+        if auth is not None:
+            from src.services.submission_idempotency import (
+                SubmissionIdempotencyError,
+                get_submission_idempotency_service,
+            )
+
+            try:
+                durable = await get_submission_idempotency_service().readback_by_resource(
+                    tenant_id=auth.tenant_id,
+                    resource_type="scenario",
+                    resource_id=label,
+                )
+            except SubmissionIdempotencyError as exc:
+                if exc.status_code != 404:
+                    raise _submission_http_error(exc) from None
+
+        if durable is not None and durable.get("scenario") != scenario:
+            raise HTTPException(status_code=404, detail="State not found")
+        if durable is not None and durable.get("status") in {
+            "failed",
+            "recovery_required",
+        }:
+            return _durable_scenario_status_response(
+                scenario=scenario,
+                label=label,
+                durable=durable,
+            )
         if state is None:
+            if durable is not None:
+                return _durable_scenario_status_response(
+                    scenario=scenario,
+                    label=label,
+                    durable=durable,
+                )
             raise HTTPException(status_code=404, detail=f"State not found for label: {label}")
         _assert_state_access(state)
+        _assert_state_scenario(state, scenario)
 
         projected_state = project_state_injection_visibility(state)
         step_order = _SCENARIO_STEP_ORDER.get(scenario, [])
@@ -1602,10 +2811,16 @@ async def get_scenario_status(scenario: str, label: str):
         progress = round(done_count / total, 2) if total > 0 else 0.0
 
         # Determine overall status
-        if state.get("pipeline_degraded"):
+        lifecycle_status = projected_state.get("lifecycle_status")
+        if lifecycle_status == "completed_bounded" and not state.get("pipeline_degraded"):
+            status = "completed_bounded"
+            progress = 1.0
+        elif lifecycle_status == "policy_blocked":
+            status = "policy_blocked"
+        elif state.get("pipeline_degraded"):
             status = "error"
         elif current_step is None or current_step == "":
-            status = "completed"
+            status = "invalid_state"
         elif steps.get(current_step, {}).get("status") == "error":
             status = "error"
         else:
@@ -1619,6 +2834,14 @@ async def get_scenario_status(scenario: str, label: str):
             "label": label,
             "scenario": scenario,
             "status": status,
+            "lifecycle_status": lifecycle_status,
+            "completion_kind": projected_state.get("completion_kind"),
+            "request_succeeded": projected_state.get("request_succeeded") is True,
+            "success": projected_state.get("success") is True,
+            "full_media_success": projected_state.get("full_media_success") is True,
+            "pipeline_complete": projected_state.get("pipeline_complete") is True,
+            "publish_allowed": projected_state.get("publish_allowed") is True,
+            "delivery_accepted": projected_state.get("delivery_accepted") is True,
             "current_step": current_step,
             CURRENT_STEP_INJECTION_KEY: projected_state.get(CURRENT_STEP_INJECTION_KEY),
             "progress": progress,

@@ -74,8 +74,29 @@ class SkillRegistry:
                 error=f"Skill '{name}' not found. Registered: {list(self._skills.keys())}",
             )
 
+        # A bound operation scope is server-owned execution authority.  Copy
+        # caller params and overwrite the scope marker so client/state labels
+        # cannot widen the logical operation namespace.  The marker is
+        # internal metadata consumed by provider-capable skills and is never a
+        # public request field.
+        effective_params = dict(params)
+        from src.services.provider_execution import (
+            get_provider_operation_scope,
+            validate_bound_operation_instance,
+        )
+
+        bound_scope = get_provider_operation_scope()
+        if bound_scope is not None:
+            if effective_params.get("operation_instance") is not None:
+                validate_bound_operation_instance(
+                    bound_scope,
+                    effective_params["operation_instance"],
+                )
+            effective_params["operation_scope"] = bound_scope.scope_id
+            effective_params["provider_operation_scope"] = bound_scope.scope_id
+
         logger.info("skill_registry: executing", name=name)
-        return await skill.safe_execute(params)
+        return await skill.safe_execute(effective_params)
 
     def get_skill(self, name: str) -> SkillCallable | None:
         """Get a registered skill by name."""

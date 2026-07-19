@@ -43,10 +43,12 @@ from src.pipeline.s2_brand_pipeline_v2 import (
 from src.routers._state import S1StartRequest, S2BrandCampaignRequest
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
+from tests.generation_policy_test_utils import bound_generation_policy
 
 
 @pytest.fixture(autouse=True)
-def _clear_registry():
+def _clear_registry(isolated_provider_cost_db: Any):
+    del isolated_provider_cost_db
     original_global_skills = dict(SkillRegistry._global_skills)
     SkillRegistry.clear_global()
     for module in (
@@ -73,10 +75,25 @@ BRAND_PACKAGE_FIXTURE: dict[str, Any] = {
 }
 
 
+async def _run_s2_with_bound_policy(**kwargs: Any) -> dict[str, Any]:
+    """Exercise the direct pipeline only with explicit server-owned authority."""
+
+    tenant_id = "momcozy-marketing"
+    media_enabled = kwargs.get("enable_media_synthesis", True)
+    kwargs.setdefault("artifact_disposition", "pending_review")
+    kwargs.setdefault("provider_max_retries", 0)
+    async with bound_generation_policy(
+        "s2",
+        media=media_enabled,
+        tenant_id=tenant_id,
+    ):
+        return await S2BrandCampaignPipeline().run(**kwargs)
+
+
 class TestS2RunContract:
     @pytest.mark.asyncio
     async def test_run_returns_brand_campaign_scenario(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             video_duration=30,
             enable_media_synthesis=False,
@@ -89,7 +106,7 @@ class TestS2RunContract:
         """Diagnostic R-S2-ARCH: brand_mode compliance path must be observable
         in the result. Even when empty, the key must exist so consumers don't
         need to do .get() with a default."""
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             enable_media_synthesis=False,
         )
@@ -100,7 +117,7 @@ class TestS2RunContract:
     async def test_run_routes_to_kling_3_0_pro(self):
         """S2 must route to its preferred model (kling-3-0/pro) per
         ModelRouter Sprint 1 contract — NOT seedance-2 (S1's preferred)."""
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             enable_media_synthesis=False,
         )
@@ -108,7 +125,7 @@ class TestS2RunContract:
 
     @pytest.mark.asyncio
     async def test_run_brand_package_threaded_through(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             enable_media_synthesis=False,
         )
@@ -239,7 +256,7 @@ class TestS2RunResultShape:
 
     @pytest.mark.asyncio
     async def test_run_uses_explicit_output_label(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             enable_media_synthesis=False,
             output_label="s2_explicit_label_fixture",
@@ -249,13 +266,17 @@ class TestS2RunResultShape:
 
     @pytest.mark.asyncio
     async def test_skip_media_returns_briefs_only(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             enable_media_synthesis=False,
         )
         for key in [
-            "briefs", "scripts", "storyboards", "compliance_reports",
-            "errors", "media_synthesis_errors",
+            "briefs",
+            "scripts",
+            "storyboards",
+            "compliance_reports",
+            "errors",
+            "media_synthesis_errors",
         ]:
             assert key in result, f"missing top-level key: {key}"
         assert "final_video_path" not in result
@@ -285,7 +306,7 @@ class TestS2RunResultShape:
 
         monkeypatch.setattr(s2_brand_pipeline_v2, "StepRunner", FakeStepRunner)
 
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             enable_media_synthesis=False,
         )
@@ -344,12 +365,12 @@ class TestS2RunResultShape:
 
         monkeypatch.setattr(s2_brand_pipeline_v2, "StepRunner", FakeStepRunner)
 
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             video_duration=15,
             enable_media_synthesis=True,
             artifact_disposition="pending_review",
-            provider_max_retries=3,
+            provider_max_retries=0,
         )
 
         assert executed_steps == [
@@ -416,19 +437,33 @@ class TestS2RunResultShape:
                 "clip_groups": [],
             },
             "keyframe_images": [
-                {"shots": [{"keyframe_image_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/keyframes/s2-keyframe.png"}]}
+                {
+                    "shots": [
+                        {
+                            "keyframe_image_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/keyframes/s2-keyframe.png"
+                        }
+                    ]
+                }
             ],
             "video_prompts": [{"prompt": "safe brand campaign clip"}],
             "seedance_clips": {
-                "clip_paths": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"],
+                "clip_paths": [
+                    "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"
+                ],
                 "clip_details": [{"duration_seconds": 4, "is_stub": False}],
             },
             "tts_audio": {
-                "audio_paths": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"],
-                "lyrics_paths": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.txt"],
+                "audio_paths": [
+                    "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"
+                ],
+                "lyrics_paths": [
+                    "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.txt"
+                ],
             },
             "thumbnail_prompts": [{"variants": [{"prompt": "thumbnail prompt"}]}],
-            "thumbnail_images": ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"],
+            "thumbnail_images": [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"
+            ],
             "assemble_final": {
                 "video_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4",
                 "render_json_path": "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-render.json",
@@ -470,8 +505,7 @@ class TestS2RunResultShape:
                     "tenant_id": "momcozy-marketing",
                     "config": config,
                     "steps": {
-                        step: {"output": None, "status": "pending"}
-                        for step in S2_SEGMENTED_MEDIA_STEP_ORDERS["audit"]
+                        step: {"output": None, "status": "pending"} for step in S2_SEGMENTED_MEDIA_STEP_ORDERS["audit"]
                     },
                     "current_step": "strategy",
                     "errors": [],
@@ -517,12 +551,12 @@ class TestS2RunResultShape:
                 "continuity_storyboard_grid": outputs["continuity_storyboard_grid"],
             }
 
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             video_duration=15,
             enable_media_synthesis=True,
             artifact_disposition="pending_review",
-            provider_max_retries=3,
+            provider_max_retries=0,
             media_stop_step=stop_step,  # type: ignore[arg-type]
             media_refs=media_refs,
         )
@@ -544,13 +578,17 @@ class TestS2RunResultShape:
         assert result["steps_completed"] == len(expected_steps)
 
         if stop_step == "seedance_clips":
-            assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"]
+            assert result["clip_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"
+            ]
             assert result["audio_paths"] == []
             assert result["thumbnail_image_paths"] == []
             assert result["audit_report"] == {}
         elif stop_step == "tts_audio":
             assert result["clip_paths"] == []
-            assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"]
+            assert result["audio_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"
+            ]
             assert result["thumbnail_image_paths"] == []
             assert result["audit_report"] == {}
         elif stop_step == "thumbnail_prompts":
@@ -562,20 +600,40 @@ class TestS2RunResultShape:
         elif stop_step == "thumbnail_images":
             assert result["clip_paths"] == []
             assert result["audio_paths"] == []
-            assert result["thumbnail_image_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"]
+            assert result["thumbnail_image_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"
+            ]
             assert result["audit_report"] == {}
         elif stop_step == "assemble_final":
-            assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"]
-            assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"]
-            assert result["thumbnail_image_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"]
-            assert result["intermediate_video_path"] == "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4"
+            assert result["clip_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"
+            ]
+            assert result["audio_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"
+            ]
+            assert result["thumbnail_image_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"
+            ]
+            assert (
+                result["intermediate_video_path"]
+                == "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4"
+            )
             assert result["refs_only_media_assembly"] is True
             assert result["audit_report"] == {}
         elif stop_step == "audit":
-            assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"]
-            assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"]
-            assert result["thumbnail_image_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"]
-            assert result["intermediate_video_path"] == "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4"
+            assert result["clip_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/clips/s2-clip.mp4"
+            ]
+            assert result["audio_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/audio/s2-audio.mp3"
+            ]
+            assert result["thumbnail_image_paths"] == [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/thumbnails/s2-thumbnail.png"
+            ]
+            assert (
+                result["intermediate_video_path"]
+                == "/tmp/tenants/momcozy-marketing/pending_review/s2_segmented_media_fixture/assemble/s2-intermediate.mp4"
+            )
             assert result["refs_only_media_audit"] is True
             assert result["audit_report"] == {"overall_status": "pass", "score": 0.91}
 
@@ -604,7 +662,7 @@ class TestS2RunResultShape:
     @pytest.mark.asyncio
     async def test_assemble_segment_requires_refs_only_media_refs(self):
         with pytest.raises(ValueError, match="requires media_refs"):
-            await S2BrandCampaignPipeline().run(
+            await _run_s2_with_bound_policy(
                 brand_package=BRAND_PACKAGE_FIXTURE,
                 video_duration=15,
                 enable_media_synthesis=True,
@@ -615,8 +673,8 @@ class TestS2RunResultShape:
 
     @pytest.mark.asyncio
     async def test_assemble_segment_rejects_non_review_scoped_refs(self):
-        with pytest.raises(ValueError, match="forbidden artifact path"):
-            await S2BrandCampaignPipeline().run(
+        with pytest.raises(ValueError, match="must be tenant-scoped pending_review"):
+            await _run_s2_with_bound_policy(
                 brand_package=BRAND_PACKAGE_FIXTURE,
                 video_duration=15,
                 enable_media_synthesis=True,
@@ -625,19 +683,15 @@ class TestS2RunResultShape:
                 media_stop_step="assemble_final",
                 media_refs={
                     "clip_paths": ["/app/output/tenants/momcozy-marketing/final_work/clip.mp4"],
-                    "audio_paths": [
-                        "/app/output/tenants/momcozy-marketing/pending_review/ref/audio.mp3"
-                    ],
-                    "thumbnail_image_paths": [
-                        "/app/output/tenants/momcozy-marketing/pending_review/ref/thumb.png"
-                    ],
+                    "audio_paths": ["/app/output/tenants/momcozy-marketing/pending_review/ref/audio.mp3"],
+                    "thumbnail_image_paths": ["/app/output/tenants/momcozy-marketing/pending_review/ref/thumb.png"],
                 },
             )
 
     @pytest.mark.asyncio
     async def test_audit_segment_requires_refs_only_media_refs(self):
         with pytest.raises(ValueError, match="requires media_refs"):
-            await S2BrandCampaignPipeline().run(
+            await _run_s2_with_bound_policy(
                 brand_package=BRAND_PACKAGE_FIXTURE,
                 video_duration=15,
                 enable_media_synthesis=True,
@@ -648,8 +702,8 @@ class TestS2RunResultShape:
 
     @pytest.mark.asyncio
     async def test_audit_segment_rejects_non_review_scoped_refs(self):
-        with pytest.raises(ValueError, match="forbidden artifact path"):
-            await S2BrandCampaignPipeline().run(
+        with pytest.raises(ValueError, match="must be tenant-scoped pending_review"):
+            await _run_s2_with_bound_policy(
                 brand_package=BRAND_PACKAGE_FIXTURE,
                 video_duration=15,
                 enable_media_synthesis=True,
@@ -657,15 +711,9 @@ class TestS2RunResultShape:
                 provider_max_retries=0,
                 media_stop_step="audit",
                 media_refs={
-                    "clip_paths": [
-                        "/app/output/tenants/momcozy-marketing/pending_review/ref/clip.mp4"
-                    ],
-                    "audio_paths": [
-                        "/app/output/tenants/momcozy-marketing/pending_review/ref/audio.mp3"
-                    ],
-                    "thumbnail_image_paths": [
-                        "/app/output/tenants/momcozy-marketing/pending_review/ref/thumb.png"
-                    ],
+                    "clip_paths": ["/app/output/tenants/momcozy-marketing/pending_review/ref/clip.mp4"],
+                    "audio_paths": ["/app/output/tenants/momcozy-marketing/pending_review/ref/audio.mp3"],
+                    "thumbnail_image_paths": ["/app/output/tenants/momcozy-marketing/pending_review/ref/thumb.png"],
                     "video_path": "/app/output/tenants/momcozy-marketing/final_work/ref/final.mp4",
                 },
             )
@@ -777,9 +825,7 @@ class TestS2RunResultShape:
             quality_gate_enabled=False,
         )
 
-        assert result["clip_paths"] == [
-            "/tmp/tenants/momcozy-marketing/pending_review/s2_run/clips/clip.mp4"
-        ]
+        assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_run/clips/clip.mp4"]
         assert len(seen_params) == 1
         assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/clips")
         assert seen_params[0]["provider_max_retries"] == 0
@@ -814,9 +860,7 @@ class TestS2RunResultShape:
             tts_job_cap=1,
         )
 
-        assert result["audio_paths"] == [
-            "/tmp/tenants/momcozy-marketing/pending_review/s2_run/audio/audio.mp3"
-        ]
+        assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_run/audio/audio.mp3"]
         assert len(seen_params) == 1
         assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/audio")
         assert seen_params[0]["provider_max_retries"] == 0
@@ -849,23 +893,25 @@ class TestS2RunResultShape:
             thumbnail_job_cap=1,
         )
 
-        assert result == [
-            "/tmp/tenants/momcozy-marketing/pending_review/s2_run/thumbnails/thumb.png"
-        ]
+        assert result == ["/tmp/tenants/momcozy-marketing/pending_review/s2_run/thumbnails/thumb.png"]
         assert len(seen_params) == 1
         assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/thumbnails")
         assert seen_params[0]["provider_max_retries"] == 0
 
     @pytest.mark.asyncio
     async def test_full_pipeline_returns_media_keys(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             video_duration=15,
             enable_media_synthesis=True,
         )
         for key in [
-            "clip_paths", "audio_paths", "lyrics_paths",
-            "thumbnail_image_paths", "final_video_path", "audit_report",
+            "clip_paths",
+            "audio_paths",
+            "lyrics_paths",
+            "thumbnail_image_paths",
+            "final_video_path",
+            "audit_report",
         ]:
             assert key in result, f"missing media key: {key}"
 
@@ -895,7 +941,7 @@ class TestS2RunResultShape:
 class TestS2ExtremeInputs:
     @pytest.mark.asyncio
     async def test_empty_brand_package_uses_default_brand_name(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package={},
             enable_media_synthesis=False,
         )
@@ -904,7 +950,7 @@ class TestS2ExtremeInputs:
 
     @pytest.mark.asyncio
     async def test_invalid_video_duration_falls_back_to_60(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             video_duration=999,
             enable_media_synthesis=False,
@@ -914,7 +960,7 @@ class TestS2ExtremeInputs:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("duration", [15, 30, 45, 60, 90])
     async def test_valid_durations_preserved(self, duration):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package=BRAND_PACKAGE_FIXTURE,
             video_duration=duration,
             enable_media_synthesis=False,
@@ -923,7 +969,7 @@ class TestS2ExtremeInputs:
 
     @pytest.mark.asyncio
     async def test_brand_name_missing_does_not_crash(self):
-        result = await S2BrandCampaignPipeline().run(
+        result = await _run_s2_with_bound_policy(
             brand_package={"values": ["x"], "voice_guidelines": ""},
             enable_media_synthesis=False,
         )
@@ -942,9 +988,7 @@ class TestS2DeprecationShim:
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             importlib.import_module("src.pipeline.s2_brand_pipeline")
-            deprecation_warnings = [
-                w for w in captured if issubclass(w.category, DeprecationWarning)
-            ]
+            deprecation_warnings = [w for w in captured if issubclass(w.category, DeprecationWarning)]
             assert deprecation_warnings, "shim must emit DeprecationWarning"
             assert "s2_brand_pipeline_v2" in str(deprecation_warnings[0].message)
 
@@ -961,4 +1005,5 @@ class TestS2DeprecationShim:
         from src.pipeline.s2_brand_pipeline_v2 import (
             S2BrandCampaignPipeline as V2,
         )
+
         assert Old is V2

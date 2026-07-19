@@ -104,6 +104,7 @@ describe("Zustand persistence migrations", () => {
       "old-9",
       "old-10",
     ]);
+    expect(migrated.pendingSubmission).toBeNull();
   });
 
   it("recovers invalid pipeline payloads to safe defaults", () => {
@@ -118,7 +119,53 @@ describe("Zustand persistence migrations", () => {
     expect(migrated).toEqual({
       activePipeline: null,
       dismissedPipelineLabels: [],
+      pendingSubmission: null,
     });
+  });
+
+  it("persists only the minimal pending-submission recovery record", () => {
+    const migrated = migratePipelineStorePersistence(
+      {
+        activePipeline: null,
+        dismissedPipelineLabels: [],
+        pendingSubmission: {
+          kind: "scenario",
+          scenario: "s5",
+          idempotencyKey: "123e4567-e89b-42d3-a456-426614174000",
+          createdAt: 1_700_000_000_000,
+          phase: "recovering",
+          resourceId: "s5_original",
+          payload: { user_prompt: "must not persist" },
+          api_keys: { poyo: "must not persist" },
+          authentication: "must not persist",
+        },
+      },
+      1,
+    );
+
+    expect(migrated.pendingSubmission).toEqual({
+      kind: "scenario",
+      scenario: "s5",
+      idempotencyKey: "123e4567-e89b-42d3-a456-426614174000",
+      createdAt: 1_700_000_000_000,
+      phase: "recovering",
+      resourceId: "s5_original",
+    });
+    expect(JSON.stringify(migrated)).not.toContain("user_prompt");
+    expect(JSON.stringify(migrated)).not.toContain("api_keys");
+    expect(JSON.stringify(migrated)).not.toContain("authentication");
+  });
+
+  it("drops malformed or incomplete pending submissions during hydration", () => {
+    for (const pendingSubmission of [
+      { kind: "scenario", scenario: "s9", idempotencyKey: "short", createdAt: 1, phase: "unknown" },
+      { kind: "scenario", scenario: "s1", idempotencyKey: "123e4567-e89b-42d3-a456-426614174000", createdAt: 1 },
+      { kind: "fast", idempotencyKey: "contains whitespace invalid", createdAt: 1, phase: "bound" },
+    ]) {
+      expect(
+        migratePipelineStorePersistence({ pendingSubmission }, 1).pendingSubmission,
+      ).toBeNull();
+    }
   });
 
   it("clears corrupted JSON from localStorage instead of throwing during hydration", () => {
@@ -134,7 +181,7 @@ describe("Zustand persistence migrations", () => {
     const pipelineStore = readStoreFile("usePipelineStore.ts");
 
     expect(APP_STORE_PERSIST_VERSION).toBe(1);
-    expect(PIPELINE_STORE_PERSIST_VERSION).toBe(1);
+    expect(PIPELINE_STORE_PERSIST_VERSION).toBe(2);
     expect(appStore).toContain("version: APP_STORE_PERSIST_VERSION");
     expect(appStore).toContain("migrate: migrateAppStorePersistence");
     expect(appStore).toContain("storage: createSafeJSONStorage");

@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+
+TENANT_ID = "tenant-fast-tests"
+POLICY_VERSION = "generation-safety.v1"
 
 
 @pytest.fixture
@@ -23,6 +27,67 @@ def auth():
 
 
 class TestFastTaskRegistry:
+    @pytest.mark.asyncio
+    async def test_task_lookup_is_tenant_bound_and_persists_policy_status(self):
+        from src.tasks.fast_task_registry import (
+            get_fast_task,
+            register_fast_task,
+        )
+
+        async def _bounded() -> dict:
+            return {
+                "status": "completed_bounded",
+                "success": False,
+                "full_media_success": False,
+            }
+
+        task = asyncio.create_task(_bounded())
+        tid = register_fast_task(
+            task,
+            tenant_id="tenant-a",
+            effective_policy_version="generation-safety.v1",
+        )
+
+        assert get_fast_task(tid, tenant_id="tenant-b") is None
+        running = get_fast_task(tid, tenant_id="tenant-a")
+        assert running is not None
+        assert running["effective_policy_version"] == "generation-safety.v1"
+        assert running["result_status"] == "pending"
+
+        await task
+        await asyncio.sleep(0)
+
+        done = get_fast_task(tid, tenant_id="tenant-a")
+        assert done is not None
+        assert done["result_status"] == "completed_bounded"
+
+    @pytest.mark.asyncio
+    async def test_expired_task_remains_indistinguishable_from_unknown(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from src.tasks import fast_task_registry
+
+        async def _done() -> dict:
+            return {"status": "completed_full", "success": True}
+
+        task = asyncio.create_task(_done())
+        tid = fast_task_registry.register_fast_task(
+            task,
+            tenant_id="tenant-a",
+            effective_policy_version="generation-safety.v1",
+        )
+        await task
+        await asyncio.sleep(0)
+        done_at = fast_task_registry._fast_tasks[tid]["done_at"]
+        monkeypatch.setattr(
+            fast_task_registry.time,
+            "time",
+            lambda: done_at + fast_task_registry._RETENTION_SEC + 1,
+        )
+
+        assert fast_task_registry.get_fast_task(tid, tenant_id="tenant-a") is None
+        assert fast_task_registry.get_fast_task("unknown", tenant_id="tenant-a") is None
 
     @pytest.mark.asyncio
     async def test_register_returns_unique_task_ids(self):
@@ -33,12 +98,57 @@ class TestFastTaskRegistry:
 
         t1 = asyncio.create_task(_noop())
         t2 = asyncio.create_task(_noop())
-        id1 = register_fast_task(t1)
-        id2 = register_fast_task(t2)
+        id1 = register_fast_task(
+            t1,
+            tenant_id=TENANT_ID,
+            effective_policy_version=POLICY_VERSION,
+        )
+        id2 = register_fast_task(
+            t2,
+            tenant_id=TENANT_ID,
+            effective_policy_version=POLICY_VERSION,
+        )
         assert id1 != id2
         assert id1.startswith("fast_")
         await t1
         await t2
+
+    @pytest.mark.asyncio
+    async def test_register_accepts_preallocated_task_id_and_refuses_overwrite(self):
+        from src.tasks.fast_task_registry import register_fast_task
+
+        release = asyncio.Event()
+
+        async def _wait() -> dict:
+            await release.wait()
+            return {"ok": True}
+
+        first = asyncio.create_task(_wait())
+        second = asyncio.create_task(_wait())
+        task_id = "fast_preallocated_fixture"
+
+        assert (
+            register_fast_task(
+                first,
+                task_id=task_id,
+                tenant_id=TENANT_ID,
+                effective_policy_version=POLICY_VERSION,
+            )
+            == task_id
+        )
+        with pytest.raises(ValueError, match="already registered"):
+            register_fast_task(
+                second,
+                task_id=task_id,
+                tenant_id=TENANT_ID,
+                effective_policy_version=POLICY_VERSION,
+            )
+
+        second.cancel()
+        release.set()
+        await first
+        with pytest.raises(asyncio.CancelledError):
+            await second
 
     @pytest.mark.asyncio
     async def test_running_to_done_lifecycle(self):
@@ -52,9 +162,13 @@ class TestFastTaskRegistry:
             return {"video_url": "/media/foo.mp4"}
 
         task = asyncio.create_task(_slow())
-        tid = register_fast_task(task)
+        tid = register_fast_task(
+            task,
+            tenant_id=TENANT_ID,
+            effective_policy_version=POLICY_VERSION,
+        )
 
-        snapshot = get_fast_task(tid)
+        snapshot = get_fast_task(tid, tenant_id=TENANT_ID)
         assert snapshot is not None
         assert snapshot["status"] == "running"
         assert snapshot["result"] is None
@@ -62,7 +176,7 @@ class TestFastTaskRegistry:
         await task
         await asyncio.sleep(0)
 
-        snapshot = get_fast_task(tid)
+        snapshot = get_fast_task(tid, tenant_id=TENANT_ID)
         assert snapshot["status"] == "done"
         assert snapshot["result"] == {"video_url": "/media/foo.mp4"}
         assert snapshot["error"] is None
@@ -78,12 +192,16 @@ class TestFastTaskRegistry:
             raise RuntimeError("seedance rejected")
 
         task = asyncio.create_task(_crash())
-        tid = register_fast_task(task)
+        tid = register_fast_task(
+            task,
+            tenant_id=TENANT_ID,
+            effective_policy_version=POLICY_VERSION,
+        )
         with pytest.raises(RuntimeError):
             await task
         await asyncio.sleep(0)
 
-        snapshot = get_fast_task(tid)
+        snapshot = get_fast_task(tid, tenant_id=TENANT_ID)
         assert snapshot["status"] == "failed"
         assert "seedance rejected" in snapshot["error"]
         assert snapshot["result"] is None
@@ -91,7 +209,7 @@ class TestFastTaskRegistry:
     def test_get_unknown_task_returns_none(self):
         from src.tasks.fast_task_registry import get_fast_task
 
-        assert get_fast_task("nope_does_not_exist") is None
+        assert get_fast_task("nope_does_not_exist", tenant_id=TENANT_ID) is None
 
     @pytest.mark.asyncio
     async def test_update_stage_visible_in_snapshot(self):
@@ -106,19 +224,65 @@ class TestFastTaskRegistry:
             return {}
 
         task = asyncio.create_task(_wait())
-        tid = register_fast_task(task)
-        update_fast_task_stage(tid, "video")
+        tid = register_fast_task(
+            task,
+            tenant_id=TENANT_ID,
+            effective_policy_version=POLICY_VERSION,
+        )
+        update_fast_task_stage(tid, "video", tenant_id=TENANT_ID)
 
-        snapshot = get_fast_task(tid)
+        snapshot = get_fast_task(tid, tenant_id=TENANT_ID)
         assert snapshot["stage"] == "video"
         await task
 
 
 class TestFastSubmitEndpoint:
+    @pytest.mark.asyncio
+    async def test_status_hides_cross_tenant_task_as_not_found(self):
+        from fastapi import HTTPException
+
+        from src.routers import _deps, scenario
+        from src.routers._deps import ApiKeyType, AuthContext
+        from src.tasks.fast_task_registry import register_fast_task
+
+        async def _wait() -> dict:
+            await asyncio.sleep(0.05)
+            return {"status": "completed_bounded", "success": False}
+
+        task = asyncio.create_task(_wait())
+        tid = register_fast_task(
+            task,
+            tenant_id="tenant-a",
+            effective_policy_version="generation-safety.v1",
+        )
+        token = _deps._auth_context_var.set(
+            AuthContext(
+                tenant_id="tenant-b",
+                permissions=frozenset({"provider:submit"}),
+                key_type=ApiKeyType.TENANT,
+                key_id="tenant-b-key",
+            )
+        )
+        try:
+            with pytest.raises(HTTPException) as cross_tenant:
+                await scenario.fast_status(tid)
+            with pytest.raises(HTTPException) as unknown:
+                await scenario.fast_status("unknown-task")
+
+            assert cross_tenant.value.status_code == 404
+            assert unknown.value.status_code == 404
+            assert cross_tenant.value.detail == unknown.value.detail
+        finally:
+            _deps._auth_context_var.reset(token)
+            await task
 
     @pytest.mark.asyncio
     async def test_submit_requires_api_key(self, client):
-        r = await client.post("/fast/submit", json={"user_prompt": "test"})
+        r = await client.post(
+            "/fast/submit",
+            headers={"Idempotency-Key": "fast-auth-contract-0001"},
+            json={"user_prompt": "test"},
+        )
         assert r.status_code == 401
 
     @pytest.mark.asyncio
@@ -139,7 +303,10 @@ class TestFastSubmitEndpoint:
         with patch("src.services.fast_mode.FastModeService.generate", new=AsyncMock(side_effect=_fake_generate)):
             r = await client.post(
                 "/fast/submit",
-                headers=auth,
+                headers={
+                    **auth,
+                    "Idempotency-Key": f"fast-submit-contract-{uuid.uuid4()}",
+                },
                 json={"user_prompt": "a red apple", "duration": 10, "enable_tts": False},
             )
 
@@ -171,14 +338,18 @@ class TestFastSubmitEndpoint:
 
         async def _drive() -> str:
             task = asyncio.create_task(_fake())
-            tid = register_fast_task(task)
-            assert get_fast_task(tid)["status"] == "running"
+            tid = register_fast_task(
+                task,
+                tenant_id=TENANT_ID,
+                effective_policy_version=POLICY_VERSION,
+            )
+            assert get_fast_task(tid, tenant_id=TENANT_ID)["status"] == "running"
             await task
             await asyncio.sleep(0)
             return tid
 
         tid = asyncio.run(_drive())
-        snapshot = get_fast_task(tid)
+        snapshot = get_fast_task(tid, tenant_id=TENANT_ID)
         assert snapshot["status"] == "done", f"got: {snapshot}"
         assert snapshot["result"] == {"success": True, "video_path": "/tmp/x.mp4"}
 
@@ -199,7 +370,11 @@ class TestFastSubmitEndpoint:
 
         async def _drive() -> str:
             task = asyncio.create_task(_crash())
-            tid = register_fast_task(task)
+            tid = register_fast_task(
+                task,
+                tenant_id=TENANT_ID,
+                effective_policy_version=POLICY_VERSION,
+            )
             try:
                 await task
             except RuntimeError:
@@ -208,6 +383,6 @@ class TestFastSubmitEndpoint:
             return tid
 
         tid = asyncio.run(_drive())
-        snapshot = get_fast_task(tid)
+        snapshot = get_fast_task(tid, tenant_id=TENANT_ID)
         assert snapshot["status"] == "failed", f"got: {snapshot}"
         assert "seedance API timeout" in snapshot["error"]

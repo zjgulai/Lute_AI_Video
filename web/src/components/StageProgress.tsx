@@ -21,12 +21,26 @@ interface Props {
   onComplete: (result: PipelineResult) => void;
   onGatePause?: (gateId: string | null) => void;
   onError?: (errors: string[]) => void;
+  onRecoveryRequired?: () => void;
 }
 
 const POLL_FAILURE_THRESHOLD = 10;
 const POLL_BASE_INTERVAL_MS = 2000;
 const POLL_PAUSED_INTERVAL_MS = 10000;
 const POLL_MAX_INTERVAL_MS = 30000;
+const TERMINAL_SCENARIO_STATUSES = new Set(["completed", "completed_bounded", "completed_full"]);
+const FAILED_SCENARIO_STATUSES = new Set(["error", "failed", "recovery_required"]);
+const LIFECYCLE_RESULT_KEYS = [
+  "status",
+  "lifecycle_status",
+  "completion_kind",
+  "request_succeeded",
+  "success",
+  "full_media_success",
+  "pipeline_complete",
+  "publish_allowed",
+  "delivery_accepted",
+] as const;
 
 // Per-scenario stage definitions (steps grouped into 3 narrative stages)
 const SCENARIO_STAGES: Record<string, Array<{ id: string; label: string; narrative: string; steps: string[]; estimatedSeconds: number }>> = {
@@ -243,7 +257,14 @@ function getStageStatus(
   return "";
 }
 
-export default function StageProgress({ label, scenario, onComplete, onGatePause, onError }: Props) {
+export default function StageProgress({
+  label,
+  scenario,
+  onComplete,
+  onGatePause,
+  onError,
+  onRecoveryRequired,
+}: Props) {
   const { t } = useI18n();
   const stageDefs = getStages(scenario);
 
@@ -267,6 +288,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failureCountRef = useRef(0);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [pollRetryNonce, setPollRetryNonce] = useState(0);
 
   const prevCompleteRef = useRef<boolean[]>([false, false, false]);
   const [celebrations, setCelebrations] = useState<boolean[]>([false, false, false]);
@@ -357,14 +379,34 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
 
       const newSteps = normalizePipelineSteps(data.steps);
       setSteps(newSteps);
-      setStatus(data.status);
+      const lifecycleFailure = typeof data.lifecycle_status === "string"
+        && FAILED_SCENARIO_STATUSES.has(data.lifecycle_status)
+        ? data.lifecycle_status
+        : null;
+      setStatus(lifecycleFailure ?? data.status);
       setGateStatus(data.gate_status);
       setCurrentStepInjection(normalizeCommercialInjection(data.current_step_injection));
       const currentErrors = data.errors || [];
-      const isServerError = data.status === "error" || Boolean(data.pipeline_degraded);
-      setErrors(currentErrors);
+      const isServerError = FAILED_SCENARIO_STATUSES.has(data.status)
+        || lifecycleFailure !== null
+        || Boolean(data.pipeline_degraded);
+      const isRecoveryRequired = data.status === "recovery_required"
+        || data.lifecycle_status === "recovery_required";
+      const effectiveErrors = currentErrors.length > 0
+        ? currentErrors
+        : isServerError && !isRecoveryRequired
+          ? ["scenario_execution_failed"]
+          : [];
+      setErrors(effectiveErrors);
       setSoftDegradedReasons(data.soft_degraded_reasons || []);
       setContinuityDiagnostics(data.continuity_diagnostics || null);
+
+      if (isRecoveryRequired) {
+        clearPollTimeout();
+        stopElapsedTimer();
+        onRecoveryRequired?.();
+        return;
+      }
 
       const gatePauseSignature =
         data.status === "paused" && data.gate_status === "awaiting_approval"
@@ -385,11 +427,11 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       }
 
       // Notify parent of error
-      if (isServerError && onError && currentErrors.length > 0) {
-        const errorSignature = currentErrors.join("\n");
+      if (isServerError && onError && effectiveErrors.length > 0) {
+        const errorSignature = effectiveErrors.join("\n");
         if (notifiedErrorSignatureRef.current !== errorSignature) {
           notifiedErrorSignatureRef.current = errorSignature;
-          onError(currentErrors);
+          onError(effectiveErrors);
         }
       } else if (!isServerError) {
         notifiedErrorSignatureRef.current = null;
@@ -399,12 +441,23 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
       const allDone = getStages(scenario).every((stage) =>
         stage.steps.every((stepName) => newSteps[stepName]?.status === "done")
       );
-      if ((allDone || data.status === "completed") && !completedRef.current) {
+      const isTerminalStatus = TERMINAL_SCENARIO_STATUSES.has(data.status)
+        || (typeof data.lifecycle_status === "string"
+          && TERMINAL_SCENARIO_STATUSES.has(data.lifecycle_status));
+      if ((allDone || isTerminalStatus) && !completedRef.current) {
         completedRef.current = true;
         clearPollTimeout();
         stopElapsedTimer();
         completionTimeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) onComplete(normalizePipelineResult(data.result || newSteps));
+          if (!mountedRef.current) return;
+          const result = normalizePipelineResult(data.result || newSteps);
+          if (isTerminalStatus) {
+            for (const key of LIFECYCLE_RESULT_KEYS) {
+              const value = data[key];
+              if (value !== undefined) result[key] = value;
+            }
+          }
+          onComplete(result);
         }, 1500);
         return;
       }
@@ -430,7 +483,18 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
 
     if (!mountedRef.current) return;
     timeoutRef.current = setTimeout(() => pollRef.current(), nextPollIntervalMs);
-  }, [clearPollTimeout, label, onComplete, onError, onGatePause, pollError, scenario, stopElapsedTimer, t]);
+  }, [
+    clearPollTimeout,
+    label,
+    onComplete,
+    onError,
+    onGatePause,
+    onRecoveryRequired,
+    pollError,
+    scenario,
+    stopElapsedTimer,
+    t,
+  ]);
 
   // Keep ref synced with latest poll callback.
   useEffect(() => {
@@ -442,6 +506,13 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
     return () => {
       clearPollTimeout();
     };
+  }, [clearPollTimeout, pollRetryNonce]);
+
+  const continuePolling = useCallback(() => {
+    clearPollTimeout();
+    failureCountRef.current = 0;
+    setPollError(null);
+    setPollRetryNonce((value) => value + 1);
   }, [clearPollTimeout]);
 
   const formatTime = (seconds: number): string => {
@@ -454,7 +525,7 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
 
   const { totalSteps, totalDone, totalProgress } = deriveTotalProgress(stageDefs, steps);
 
-  const isError = status === "error" || errors.length > 0;
+  const isError = FAILED_SCENARIO_STATUSES.has(status) || errors.length > 0;
   const isPaused = status === "paused";
   const softDegradedSummary = softDegradedReasons[0];
   const softDegradedDisplay = getSoftDegradedSummary(softDegradedSummary, t);
@@ -773,6 +844,13 @@ export default function StageProgress({ label, scenario, onComplete, onGatePause
             </svg>
             {pollError}
           </p>
+          <button
+            type="button"
+            onClick={continuePolling}
+            className="mt-2 text-[11px] font-medium text-red-700 underline"
+          >
+            {t("submission.continueChecking")}
+          </button>
         </div>
       )}
 

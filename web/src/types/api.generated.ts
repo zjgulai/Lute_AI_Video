@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/acceptance-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Acceptance Record */
+        post: operations["create_acceptance_record_acceptance_records_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acceptance-records/{acceptance_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Acceptance Record */
+        get: operations["read_acceptance_record_acceptance_records__acceptance_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acceptance-records/{acceptance_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Acceptance Record */
+        post: operations["revoke_acceptance_record_acceptance_records__acceptance_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/auth/login": {
         parameters: {
             query?: never;
@@ -550,8 +601,8 @@ export interface paths {
          * Get Signed Media Url
          * @description Generate a short-lived signed URL for a media file.
          *
-         *     P1-8: Returns a signed URL with token + expires query params.
-         *     The token is valid for 15 minutes and binds to the specific path.
+         *     Returns a 15-minute signed URL bound to path, tenant, purpose, and expiry.
+         *     Tenant identity comes only from the verified API-key context.
          */
         get: operations["get_signed_media_url_api_media_sign_get"];
         put?: never;
@@ -573,8 +624,8 @@ export interface paths {
          * Serve Media
          * @description Serve files from OUTPUT_DIR; media_path is relative to OUTPUT_DIR (posix subpaths allowed).
          *
-         *     P1-8: Supports optional signed-token access. Anonymous access is allowed,
-         *     but signed URLs with ?token=&expires= provide path-level integrity.
+         *     Explicit public roots are anonymous. Every protected path requires a valid
+         *     tenant-bound signature.
          */
         get: operations["serve_media_api_media__media_path__get"];
         put?: never;
@@ -664,16 +715,29 @@ export interface paths {
         put?: never;
         /**
          * Distribution Publish
-         * @description Publish content to a platform (TikTok or Shopify).
-         *
-         *     Request body:
-         *         platform: "tiktok" | "shopify"
-         *         content: dict with platform-specific fields
-         *
-         *     Returns:
-         *         Publish result dict from the connector.
+         * @description Execute one canonical acceptance-backed publish attempt.
          */
         post: operations["distribution_publish_distribution_publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/distribution/publish-attempts/{attempt_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Distribution Publish Attempt
+         * @description Return one safe tenant-bound durable publish-attempt projection.
+         */
+        get: operations["distribution_publish_attempt_distribution_publish_attempts__attempt_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -689,10 +753,8 @@ export interface paths {
         };
         /**
          * Distribution Status
-         * @description Get publish status for a post on a platform.
-         *
-         *     Returns:
-         *         Status dict from the connector.
+         * @deprecated
+         * @description Read one trusted persisted TikTok receipt without a provider call.
          */
         get: operations["distribution_status_distribution_status__platform___post_id__get"];
         put?: never;
@@ -1069,14 +1131,8 @@ export interface paths {
         put?: never;
         /**
          * Publish Video
-         * @description Publish a video to selected platforms.
-         *
-         *     Request body:
-         *         platforms: ["tiktok", "shopify"]
-         *         metadata: { hook, hashtags, product_name, ... }
-         *
-         *     Returns:
-         *         [{ platform, success, post_id, post_url, error }]
+         * @deprecated
+         * @description Execute one publish attempt through the deprecated path adapter.
          */
         post: operations["publish_video_publish__video_id__post"];
         delete?: never;
@@ -1683,6 +1739,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/submissions/idempotency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Submission By Idempotency Key
+         * @description Read one existing submission in the authenticated tenant namespace.
+         */
+        get: operations["get_submission_by_idempotency_key_submissions_idempotency_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/telemetry/errors": {
         parameters: {
             query?: never;
@@ -1934,6 +2010,75 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptanceArtifactProjection */
+        AcceptanceArtifactProjection: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "image" | "audio" | "video";
+            /** Path */
+            path: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** AcceptanceRecordResponse */
+        AcceptanceRecordResponse: {
+            /** Acceptance Id */
+            acceptance_id: string;
+            artifact: components["schemas"]["AcceptanceArtifactProjection"];
+            /** Consumed At */
+            consumed_at: string | null;
+            /** Created At */
+            created_at: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
+            /** Expires At */
+            expires_at: string;
+            /** Idempotent Replay */
+            idempotent_replay: boolean;
+            /** Review Notes */
+            review_notes: string;
+            reviewer: components["schemas"]["AcceptanceReviewerProjection"];
+            /** Revoked At */
+            revoked_at: string | null;
+            /**
+             * Scenario
+             * @enum {string}
+             */
+            scenario: "fast" | "s1" | "s2" | "s3" | "s4" | "s5";
+            /** Source Resource Id */
+            source_resource_id: string;
+            /**
+             * Source Resource Type
+             * @enum {string}
+             */
+            source_resource_type: "fast" | "scenario";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "rejected" | "consumed" | "expired" | "revoked";
+            /** Tenant Id */
+            tenant_id: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** AcceptanceReviewerProjection */
+        AcceptanceReviewerProjection: {
+            /** Key Id */
+            key_id: string;
+            /**
+             * Key Type
+             * @enum {string}
+             */
+            key_type: "tenant" | "test_bundle" | "env_fallback";
+        };
         /**
          * AllowedUse
          * @enum {string}
@@ -2203,6 +2348,38 @@ export interface components {
              */
             max_prompt_chars: number;
         };
+        /** DurableTikTokStatusResponse */
+        DurableTikTokStatusResponse: {
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Platform
+             * @constant
+             */
+            platform: "tiktok";
+            /** Post Id */
+            post_id: string;
+            /** Post Url */
+            post_url?: string | null;
+            /**
+             * Simulated
+             * @constant
+             */
+            simulated: false;
+            /**
+             * Status
+             * @constant
+             */
+            status: "PUBLISH_COMPLETE";
+            /**
+             * Verified By
+             * @enum {string}
+             */
+            verified_by: "status_fetch" | "video_query";
+        };
         /**
          * EvidenceLevel
          * @enum {string}
@@ -2218,15 +2395,31 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Artifact Disposition
+             * @default pending_review
+             * @enum {string}
+             */
+            artifact_disposition: "pending_review" | "quarantine";
+            /**
              * Duration
              * @default 5
              */
             duration: number;
             /**
+             * Enable Media Synthesis
+             * @default false
+             */
+            enable_media_synthesis: boolean;
+            /**
              * Enable Tts
              * @default true
              */
             enable_tts: boolean;
+            /**
+             * Provider Max Retries
+             * @default 0
+             */
+            provider_max_retries: number;
             /** User Prompt */
             user_prompt: string;
         };
@@ -2437,6 +2630,12 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Artifact Disposition
+             * @default pending_review
+             * @enum {string}
+             */
+            artifact_disposition: "pending_review" | "quarantine";
+            /**
              * Brand Guidelines
              * @default {}
              */
@@ -2450,9 +2649,14 @@ export interface components {
             content_calendar_week: string;
             /**
              * Content Scenario
-             * @default influencer_remix
+             * @default product_direct
              */
             content_scenario: string;
+            /**
+             * Enable Media Synthesis
+             * @default false
+             */
+            enable_media_synthesis: boolean;
             /**
              * Product Catalog
              * @default {}
@@ -2460,6 +2664,11 @@ export interface components {
             product_catalog: {
                 [key: string]: unknown;
             };
+            /**
+             * Provider Max Retries
+             * @default 0
+             */
+            provider_max_retries: number;
             /**
              * Target Languages
              * @default [
@@ -2637,6 +2846,114 @@ export interface components {
             /** @default unknown */
             supports_seed: components["schemas"]["CapabilityValue"];
         };
+        /** PublishAttemptErrorDetail */
+        PublishAttemptErrorDetail: {
+            /** Acceptance Consumed */
+            acceptance_consumed: boolean | null;
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "publish_connector_not_ready" | "publish_connector_not_ready_after_consume" | "publish_connector_simulated" | "publish_attempt_store_unavailable" | "acceptance_not_found" | "acceptance_expired" | "acceptance_not_available" | "acceptance_artifact_integrity_mismatch" | "acceptance_store_unavailable" | "publish_artifact_unavailable_after_consume" | "publish_attempt_state_unknown" | "publish_connector_failed" | "publish_outcome_ambiguous" | "publish_preflight_rejected" | "publish_preflight_unavailable";
+            /** Publish Attempt Id */
+            publish_attempt_id?: string | null;
+            /** Retry Allowed */
+            retry_allowed: boolean;
+        };
+        /** PublishAttemptErrorResponse */
+        PublishAttemptErrorResponse: {
+            detail: components["schemas"]["PublishAttemptErrorDetail"];
+        };
+        /** PublishAttemptReadbackResponse */
+        PublishAttemptReadbackResponse: {
+            /** Acceptance Consumed */
+            acceptance_consumed: boolean | null;
+            /** Acceptance Id */
+            acceptance_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code: ("publish_connector_not_ready" | "publish_connector_not_ready_after_consume" | "publish_connector_simulated" | "publish_attempt_store_unavailable" | "acceptance_not_found" | "acceptance_expired" | "acceptance_not_available" | "acceptance_artifact_integrity_mismatch" | "acceptance_store_unavailable" | "publish_artifact_unavailable_after_consume" | "publish_attempt_state_unknown" | "publish_connector_failed" | "publish_outcome_ambiguous" | "publish_preflight_rejected" | "publish_preflight_unavailable") | null;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "tiktok" | "shopify";
+            /** Post Id */
+            post_id?: string | null;
+            /** Post Url */
+            post_url?: string | null;
+            /** Publish Attempt Id */
+            publish_attempt_id: string;
+            receipt: components["schemas"]["PublishReceiptV1"] | null;
+            /** Retry Allowed */
+            retry_allowed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "prepared" | "authorization_failed" | "preflight_failed" | "acceptance_consumed" | "published" | "failed" | "ambiguous";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** PublishAttemptResponse */
+        PublishAttemptResponse: {
+            /**
+             * Acceptance Consumed
+             * @constant
+             */
+            acceptance_consumed: true;
+            /** Acceptance Id */
+            acceptance_id: string;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "tiktok" | "shopify";
+            /** Post Id */
+            post_id?: string | null;
+            /** Post Url */
+            post_url?: string | null;
+            /** Publish Attempt Id */
+            publish_attempt_id: string;
+            receipt: components["schemas"]["PublishReceiptV1"];
+            /**
+             * Retry Allowed
+             * @constant
+             */
+            retry_allowed: false;
+            /**
+             * Status
+             * @constant
+             */
+            status: "published";
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** PublishMetadata */
+        PublishMetadata: {
+            /** Description */
+            description?: string;
+            /** Hashtags */
+            hashtags?: string[];
+            /** Hook */
+            hook?: string;
+            /** Product Name */
+            product_name?: string;
+            /** Tags */
+            tags?: string[];
+            /** Title */
+            title?: string;
+        };
         /** PublishPolicy */
         PublishPolicy: {
             /**
@@ -2649,6 +2966,55 @@ export interface components {
              * @default true
              */
             requires_human_review: boolean;
+        };
+        /** PublishReceiptV1 */
+        PublishReceiptV1: {
+            /**
+             * Completion Scope
+             * @enum {string}
+             */
+            completion_scope: "tiktok_direct_post" | "shopify_product_media";
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "tiktok" | "shopify";
+            /** Post Id */
+            post_id: string | null;
+            /** Post Url */
+            post_url: string | null;
+            /**
+             * Protocol Version
+             * @enum {string}
+             */
+            protocol_version: "tiktok-content-posting-v2" | "shopify-admin-2026-07";
+            /** Provider Operation Id */
+            provider_operation_id: string | null;
+            /** Provider Resource Id */
+            provider_resource_id: string | null;
+            /** Provider Status */
+            provider_status: ("PROCESSING_UPLOAD" | "PUBLISH_COMPLETE" | "FAILED" | "UPLOADED" | "PROCESSING" | "READY") | null;
+            /** Public Visibility Verified */
+            public_visibility_verified: boolean;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "publish-receipt.v1";
+            /**
+             * Simulated
+             * @constant
+             */
+            simulated: false;
+            /** Target Id */
+            target_id: string | null;
+            /** Verified By */
+            verified_by: ("status_fetch" | "video_query" | "file_query_and_product_readback") | null;
         };
         /** QualityContract */
         QualityContract: {
@@ -2745,6 +3111,12 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Artifact Disposition
+             * @default pending_review
+             * @enum {string}
+             */
+            artifact_disposition: "pending_review" | "quarantine";
+            /**
              * Brand Guidelines
              * @default {}
              */
@@ -2777,7 +3149,7 @@ export interface components {
             continuity_mode: boolean | string;
             /**
              * Enable Media Synthesis
-             * @default true
+             * @default false
              */
             enable_media_synthesis: boolean;
             /**
@@ -2785,10 +3157,17 @@ export interface components {
              * @default auto
              */
             mode: string;
+            /** Output Label */
+            output_label?: string | null;
             /** Product Catalog */
             product_catalog: {
                 [key: string]: unknown;
             };
+            /**
+             * Provider Max Retries
+             * @default 0
+             */
+            provider_max_retries: number;
             /**
              * Storyboard Grid
              * @default 12
@@ -2832,6 +3211,12 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Artifact Disposition
+             * @default pending_review
+             * @enum {string}
+             */
+            artifact_disposition: "pending_review" | "quarantine";
+            /**
              * Brand Package
              * @default {}
              */
@@ -2844,9 +3229,22 @@ export interface components {
             } | null;
             /**
              * Enable Media Synthesis
-             * @default true
+             * @default false
              */
             enable_media_synthesis: boolean;
+            /** Media Refs */
+            media_refs?: {
+                [key: string]: unknown;
+            } | null;
+            /** Media Stop Step */
+            media_stop_step?: ("seedance_clips" | "tts_audio" | "thumbnail_prompts" | "thumbnail_images" | "assemble_final" | "audit") | null;
+            /** Output Label */
+            output_label?: string | null;
+            /**
+             * Provider Max Retries
+             * @default 0
+             */
+            provider_max_retries: number;
             /**
              * Target Languages
              * @default [
@@ -2873,6 +3271,149 @@ export interface components {
              */
             week: string;
         };
+        /** S3InfluencerRemixRequest */
+        S3InfluencerRemixRequest: {
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
+            /**
+             * Artifact Disposition
+             * @default pending_review
+             * @enum {string}
+             */
+            artifact_disposition: "pending_review" | "quarantine";
+            /**
+             * Brief Id
+             * @default
+             */
+            brief_id: string;
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Enable Media Synthesis
+             * @default false
+             */
+            enable_media_synthesis: boolean;
+            /**
+             * Influencer Name
+             * @default Influencer
+             */
+            influencer_name: string;
+            /** Output Label */
+            output_label?: string | null;
+            /**
+             * Product
+             * @default {}
+             */
+            product: {
+                [key: string]: unknown;
+            };
+            /**
+             * Provider Max Retries
+             * @default 0
+             */
+            provider_max_retries: number;
+            /**
+             * Target Languages
+             * @default [
+             *       "en"
+             *     ]
+             */
+            target_languages: string[];
+            /**
+             * Target Platforms
+             * @default [
+             *       "tiktok"
+             *     ]
+             */
+            target_platforms: string[];
+            /**
+             * Video Duration
+             * @default 30
+             */
+            video_duration: number;
+            /**
+             * Video Url
+             * @default
+             */
+            video_url: string;
+        };
+        /** S4LiveShootRequest */
+        S4LiveShootRequest: {
+            /**
+             * Api Keys
+             * @default {}
+             */
+            api_keys: {
+                [key: string]: string;
+            };
+            /**
+             * Artifact Disposition
+             * @default pending_review
+             * @enum {string}
+             */
+            artifact_disposition: "pending_review" | "quarantine";
+            /**
+             * Brand Guidelines
+             * @default {}
+             */
+            brand_guidelines: {
+                [key: string]: unknown;
+            };
+            /** Commercial Injection Plan */
+            commercial_injection_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Enable Media Synthesis
+             * @default false
+             */
+            enable_media_synthesis: boolean;
+            /**
+             * Footage Assets
+             * @default []
+             */
+            footage_assets: {
+                [key: string]: unknown;
+            }[];
+            /** Output Label */
+            output_label?: string | null;
+            /**
+             * Product Info
+             * @default {}
+             */
+            product_info: {
+                [key: string]: unknown;
+            };
+            /**
+             * Provider Max Retries
+             * @default 0
+             */
+            provider_max_retries: number;
+            /**
+             * Target Platforms
+             * @default [
+             *       "tiktok"
+             *     ]
+             */
+            target_platforms: string[];
+            /**
+             * Topic
+             * @default
+             */
+            topic: string;
+            /**
+             * Video Duration
+             * @default 30
+             */
+            video_duration: number;
+        };
         /** S5BrandVlogRequest */
         S5BrandVlogRequest: {
             /**
@@ -2883,6 +3424,12 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Artifact Disposition
+             * @default pending_review
+             * @enum {string}
+             */
+            artifact_disposition: "pending_review" | "quarantine";
+            /**
              * Brand Id
              * @default momcozy
              */
@@ -2892,12 +3439,24 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /**
+             * Enable Media Synthesis
+             * @default false
+             */
+            enable_media_synthesis: boolean;
+            /** Output Label */
+            output_label?: string | null;
+            /**
              * Product Sku
              * @default {}
              */
             product_sku: {
                 [key: string]: unknown;
             };
+            /**
+             * Provider Max Retries
+             * @default 0
+             */
+            provider_max_retries: number;
             /** Scene Id */
             scene_id?: string | null;
             /**
@@ -2917,6 +3476,16 @@ export interface components {
              * @default 30
              */
             video_duration: number;
+        };
+        /** ShopifyPublishOptions */
+        ShopifyPublishOptions: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            platform: "shopify";
+            /** Product Id */
+            product_id: string;
         };
         /** StoryboardShotSchema */
         StoryboardShotSchema: {
@@ -3015,6 +3584,29 @@ export interface components {
             total_errors: number;
             /** Total Runs */
             total_runs: number;
+        };
+        /** TikTokPublishOptions */
+        TikTokPublishOptions: {
+            /** Brand Content Toggle */
+            brand_content_toggle: boolean;
+            /** Brand Organic Toggle */
+            brand_organic_toggle: boolean;
+            /** Disable Comment */
+            disable_comment: boolean;
+            /** Disable Duet */
+            disable_duet: boolean;
+            /** Disable Stitch */
+            disable_stitch: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            platform: "tiktok";
+            /**
+             * Privacy Level
+             * @enum {string}
+             */
+            privacy_level: "PUBLIC_TO_EVERYONE" | "MUTUAL_FOLLOW_FRIENDS" | "FOLLOWER_OF_CREATOR" | "SELF_ONLY";
         };
         /** TokenProvenance */
         TokenProvenance: {
@@ -3234,6 +3826,139 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    create_acceptance_record_acceptance_records_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-api-key"?: string | null;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Artifact Path */
+                    artifact_path: string;
+                    /**
+                     * Decision
+                     * @enum {string}
+                     */
+                    decision: "accepted" | "rejected";
+                    /**
+                     * Expires In Seconds
+                     * @default 3600
+                     */
+                    expires_in_seconds?: number;
+                    /** Review Notes */
+                    review_notes: string;
+                    /** Source Resource Id */
+                    source_resource_id: string;
+                    /**
+                     * Source Resource Type
+                     * @enum {string}
+                     */
+                    source_resource_type: "fast" | "scenario";
+                };
+            };
+        };
+        responses: {
+            /** @description Idempotent replay of the original acceptance record. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceRecordResponse"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_acceptance_record_acceptance_records__acceptance_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                acceptance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_acceptance_record_acceptance_records__acceptance_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                acceptance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_login_api_admin_auth_login_post: {
         parameters: {
             query?: never;
@@ -4429,7 +5154,16 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    [key: string]: unknown;
+                    /** Acceptance Id */
+                    acceptance_id: string;
+                    metadata: components["schemas"]["PublishMetadata"];
+                    /**
+                     * Platform
+                     * @enum {string}
+                     */
+                    platform: "tiktok" | "shopify";
+                    /** Platform Options */
+                    platform_options: components["schemas"]["TikTokPublishOptions"] | components["schemas"]["ShopifyPublishOptions"];
                 };
             };
         };
@@ -4440,8 +5174,119 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PublishAttemptResponse"];
                 };
+            };
+            /** @description Invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Insufficient permission */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Safe validation projection */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+        };
+    };
+    distribution_publish_attempt_distribution_publish_attempts__attempt_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptReadbackResponse"];
+                };
+            };
+            /** @description Invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Insufficient permission */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Publish attempt not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4451,6 +5296,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Publish attempt store unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4474,7 +5326,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DurableTikTokStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4559,8 +5411,9 @@ export interface operations {
     fast_submit_fast_submit_post: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 "x-api-key"?: string | null;
+                "Idempotency-Key": string;
             };
             path?: never;
             cookie?: never;
@@ -4967,7 +5820,16 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    [key: string]: unknown;
+                    /** Acceptance Id */
+                    acceptance_id: string;
+                    metadata: components["schemas"]["PublishMetadata"];
+                    /**
+                     * Platform
+                     * @enum {string}
+                     */
+                    platform: "tiktok" | "shopify";
+                    /** Platform Options */
+                    platform_options: components["schemas"]["TikTokPublishOptions"] | components["schemas"]["ShopifyPublishOptions"];
                 };
             };
         };
@@ -4978,16 +5840,73 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PublishAttemptResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Invalid API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Insufficient permission */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Safe validation projection */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAttemptErrorResponse"];
                 };
             };
         };
@@ -5003,9 +5922,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["S1StartRequest"];
             };
         };
         responses: {
@@ -5295,9 +6212,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["S3InfluencerRemixRequest"];
             };
         };
         responses: {
@@ -5332,9 +6247,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["S4LiveShootRequest"];
             };
         };
         responses: {
@@ -5763,8 +6676,9 @@ export interface operations {
     submit_scenario_scenario__scenario__submit_post: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 "x-api-key"?: string | null;
+                "Idempotency-Key": string;
             };
             path: {
                 scenario: string;
@@ -5786,6 +6700,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_submission_by_idempotency_key_submissions_idempotency_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-api-key"?: string | null;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

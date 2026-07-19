@@ -84,26 +84,27 @@ def _curl_calls_to_token_endpoints(text: str) -> list[str]:
     return calls
 
 
-def test_lighthouse_smoke_scripts_use_explicit_token_smoke_gate():
-    for script_path in (DEPLOY_SCRIPT, SMOKE_SCRIPT):
-        text = script_path.read_text()
+def test_canonical_deploy_has_no_token_smoke_and_standalone_smoke_keeps_opt_in_gate():
+    deploy_text = DEPLOY_SCRIPT.read_text()
+    assert "RUN_TOKEN_SMOKE=1" not in deploy_text
+    assert "/api/fast/generate" not in deploy_text
 
-        assert "${RUN_TOKEN_SMOKE:-0}" in text
-        assert 'RUN_TOKEN_SMOKE=1' in text
-        assert _token_guard_spans(text), f"{script_path} must keep an explicit token smoke gate"
+    smoke_text = SMOKE_SCRIPT.read_text()
+    assert "${RUN_TOKEN_SMOKE:-0}" in smoke_text
+    assert "RUN_TOKEN_SMOKE=1" in smoke_text
+    assert _token_guard_spans(smoke_text)
 
 
-def test_token_consuming_curl_calls_are_only_inside_token_smoke_gate():
-    for script_path in (DEPLOY_SCRIPT, SMOKE_SCRIPT):
-        text = script_path.read_text()
-        spans = _token_guard_spans(text)
-        guarded_text = "\n".join(text[start:end] for start, end in spans)
-        unguarded_text = _remove_spans(text, spans)
+def test_token_consuming_curl_calls_exist_only_in_standalone_smoke_opt_in_gate():
+    assert _curl_calls_to_token_endpoints(DEPLOY_SCRIPT.read_text()) == []
 
-        assert _curl_calls_to_token_endpoints(guarded_text), (
-            f"{script_path} should keep real generation smoke inside RUN_TOKEN_SMOKE=1"
-        )
-        assert _curl_calls_to_token_endpoints(unguarded_text) == []
+    text = SMOKE_SCRIPT.read_text()
+    spans = _token_guard_spans(text)
+    guarded_text = "\n".join(text[start:end] for start, end in spans)
+    unguarded_text = _remove_spans(text, spans)
+
+    assert _curl_calls_to_token_endpoints(guarded_text)
+    assert _curl_calls_to_token_endpoints(unguarded_text) == []
 
 
 def test_lighthouse_smoke_checks_toolbox_read_only_endpoints():
@@ -126,12 +127,8 @@ def test_lighthouse_smoke_checks_toolbox_read_only_endpoints():
     assert mutating_toolbox_calls == []
 
 
-def test_lighthouse_deploy_keeps_api_key_reading_smoke_behind_its_own_opt_in():
+def test_lighthouse_deploy_never_reads_api_key_or_invokes_smoke_script():
     text = DEPLOY_SCRIPT.read_text()
-    phase_five = text.split("# -- Phase 5: Authenticated smoke (explicit opt-in) --", 1)[1]
 
-    assert phase_five.count("bash smoke.sh") == 1
-    assert 'if [ "$RUN_DEPLOY_SMOKE" = "1" ] && [ -f smoke.sh ]; then' in phase_five
-    assert phase_five.index('if [ "$RUN_DEPLOY_SMOKE" = "1" ] && [ -f smoke.sh ]; then') < phase_five.index(
-        "bash smoke.sh"
-    )
+    assert "API_KEY" not in text
+    assert "bash smoke.sh" not in text

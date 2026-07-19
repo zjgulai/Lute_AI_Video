@@ -109,7 +109,7 @@ export const MODEL_ROUTE_GROUPS: ModelRouteGroup[] = [
         baseEnv: "DEEPSEEK_API_BASE",
         modelEnv: "DEEPSEEK_MODEL",
         currentDefault: "deepseek-v4-pro",
-        candidateModels: ["deepseek-v4-pro", "deepseek-chat"],
+        candidateModels: ["deepseek-v4-pro", "deepseek-v4-flash"],
       },
       {
         provider: "OpenAI",

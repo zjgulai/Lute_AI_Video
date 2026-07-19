@@ -98,7 +98,7 @@ Open http://localhost:3000.
 
 ### Pick a task
 
-- Look in `.kiro/plan/MASTER-PLAN-2026-05-16.md` for the active TODO list
+- Look in `docs/claude/known-gaps-stable.md` and `docs/workflows/enterprise-ai-content-all-scenarios-roadmap-20260711.md` for the active TODO lists
 - "Phase α" items are 5-30 min trivial fixes — good first issues
 - Check open GitHub issues
 
@@ -154,7 +154,7 @@ web/src/            Next.js 16 frontend (TypeScript)
 tests/              30+ pytest files (1127 tests)
 rendering/          Standalone Remotion 4 video renderer
 docs/               Architecture, runbooks, workflows
-.kiro/plan/         Active execution plans (UNIFIED + MASTER + audit reports)
+docs/workflows/     Tracked execution roadmaps and deployment workflows
 deploy/             Lighthouse + alternative deploy artifacts
 migrations/         Alembic SQL migrations
 ```
@@ -166,7 +166,7 @@ migrations/         Alembic SQL migrations
 - **Architecture**: read `docs/architecture/adr/` index first
 - **Operations**: `docs/runbooks/` covers known incident patterns
 - **Code patterns**: search `AGENTS.md` for "## Key Patterns and Conventions"
-- **Project status**: `.kiro/plan/MASTER-PLAN-2026-05-16.md` (current sprint)
+- **Project status**: `docs/workflows/enterprise-ai-content-all-scenarios-roadmap-20260711.md` (current closure program)
 - **Stuck**: open a GitHub issue with `question:` prefix
 
 ---

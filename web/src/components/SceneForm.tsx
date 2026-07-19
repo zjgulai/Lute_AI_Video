@@ -9,6 +9,7 @@ import VlogSixView from "./VlogSixView";
 import VlogModelSelector from "./VlogModelSelector";
 import { VLOG_BRANDS, VLOG_MODELS, VLOG_SCENES, VLOG_DURATION_OPTIONS } from "@/demo-data";
 import GuidedForm from "./GuidedForm";
+import { withExplicitMediaGenerationIntent } from "@/lib/scenarioPayload";
 
 const USE_GUIDED_FORM = process.env.NEXT_PUBLIC_USE_GUIDED_FORM !== "false";
 
@@ -191,7 +192,7 @@ export default function SceneForm({ scene, onSubmit, loading, fieldErrors }: Pro
       config.continuity_mode = continuityMode === "high_quality" ? "high_quality" : "standard";
     }
 
-    onSubmit(config);
+    onSubmit(withExplicitMediaGenerationIntent(config));
   };
 
   const togglePlatform = (id: string) => {

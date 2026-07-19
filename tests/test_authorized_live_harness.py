@@ -24,6 +24,11 @@ from src.pipeline.token_smoke_preflight import (
     RUN_TOKEN_SMOKE_ENV,
     SAMPLE_PLAN_REF,
 )
+from src.services.provider_cost import ValidatedProviderBudgetAuthorization
+from src.services.provider_execution import (
+    ProviderExecutionContext,
+    get_provider_execution_context,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "authorized_live_token_smoke_harness.py"
@@ -83,7 +88,9 @@ def test_dry_run_passes_after_preflight_without_provider_call(tmp_path: Path):
     assert len(report.artifact_manifest.artifacts) == 4
     assert report.job_spec.reference_asset_ids == report.artifact_manifest.video_reference_asset_refs
     assert len(report.artifact_manifest.video_reference_asset_refs) == 3
-    assert all(ref.startswith("artifact://authorized-live/") for ref in report.artifact_manifest.video_reference_asset_refs)
+    assert all(
+        ref.startswith("artifact://authorized-live/") for ref in report.artifact_manifest.video_reference_asset_refs
+    )
     assert len(report.job_records) == 4
     assert all(record.status == "prepared" for record in report.job_records)
     assert all(record.delivery_accepted is False for record in report.job_records)
@@ -160,6 +167,7 @@ def test_execute_mode_does_not_build_submitter_factory_when_preflight_blocks(tmp
         mode="execute",
         env=env,
         submitter_factory=lambda: calls.append("built") or None,
+        execution_context_initializer=_execution_context_initializer,
     )
 
     assert report.status == "blocked"
@@ -177,6 +185,7 @@ def test_execute_mode_blocks_when_submitter_factory_returns_none(tmp_path: Path)
         mode="execute",
         env=env,
         submitter_factory=lambda: calls.append("built") or None,
+        execution_context_initializer=_execution_context_initializer,
     )
 
     assert report.status == "blocked"
@@ -193,19 +202,27 @@ def test_execute_mode_uses_submitter_factory_after_preflight_and_execute_gate(tm
     submitter_calls: list[str] = []
 
     def submitter(spec: Any) -> dict[str, str]:
+        assert get_provider_execution_context() is not None
         submitter_calls.append(spec.job_id)
         return _provider_response(spec)
+
+    def factory() -> Any:
+        assert get_provider_execution_context() is not None
+        factory_calls.append("built")
+        return submitter
 
     report = run_authorized_live_harness(
         mode="execute",
         env=env,
-        submitter_factory=lambda: factory_calls.append("built") or submitter,
+        submitter_factory=factory,
+        execution_context_initializer=_execution_context_initializer,
     )
 
     assert report.status == "submitted"
     assert report.provider_call_executed is True
     assert factory_calls == ["built"]
     assert len(submitter_calls) == 4
+    assert get_provider_execution_context() is None
 
 
 def test_execute_mode_with_submitter_runs_asset_pack_once_in_order_without_retry(tmp_path: Path):
@@ -213,16 +230,27 @@ def test_execute_mode_with_submitter_runs_asset_pack_once_in_order_without_retry
     env = _ready_env(approval_record)
     env[EXECUTE_ENV] = "1"
     calls: list[Any] = []
+    account_ids: list[str] = []
 
     def submitter(spec: Any) -> dict[str, str]:
+        context = get_provider_execution_context()
+        assert context is not None
+        account_ids.append(context.account_id)
         calls.append(spec)
         return _provider_response(spec)
 
-    report = run_authorized_live_harness(mode="execute", env=env, submitter=submitter)
+    report = run_authorized_live_harness(
+        mode="execute",
+        env=env,
+        submitter=submitter,
+        execution_context_initializer=_execution_context_initializer,
+    )
 
     assert report.status == "submitted"
     assert report.provider_call_executed is True
     assert len(calls) == 4
+    assert account_ids == ["account-authorized-live-fixture"] * 4
+    assert get_provider_execution_context() is None
     assert len({spec.job_id for spec in calls}) == 4
     assert [spec.model for spec in calls[:3]] == ["gpt-image-2", "gpt-image-2", "gpt-image-2"]
     assert calls[-1].model == "seedance-2"
@@ -248,11 +276,59 @@ def test_execute_mode_requires_provider_media_url_for_artifact_manifest(tmp_path
         return {"provider_job_id": f"provider:{spec.job_id}"}
 
     try:
-        run_authorized_live_harness(mode="execute", env=env, submitter=submitter)
+        run_authorized_live_harness(
+            mode="execute",
+            env=env,
+            submitter=submitter,
+            execution_context_initializer=_execution_context_initializer,
+        )
     except ValueError as exc:
         assert "missing media_url" in str(exc)
     else:
         raise AssertionError("execute mode must fail when provider media_url is missing")
+
+
+def test_execute_mode_rejects_noncanonical_budget_token_before_context_or_factory(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path)
+    approval_record.write_text(
+        approval_record.read_text().replace('"budget_limit_usd": 3.0', '"budget_limit_usd": 3e0')
+    )
+    env = _ready_env(approval_record)
+    env[EXECUTE_ENV] = "1"
+    calls: list[str] = []
+
+    report = run_authorized_live_harness(
+        mode="execute",
+        env=env,
+        submitter_factory=lambda: calls.append("factory") or None,
+        execution_context_initializer=lambda specs, authorization: (
+            calls.append("context") or _execution_context_initializer(specs, authorization)
+        ),
+    )
+
+    assert report.status == "blocked"
+    assert report.blocked_reasons == ["provider budget authorization is invalid"]
+    assert calls == []
+
+
+def test_execute_mode_rejects_expired_authority_before_context_or_factory(tmp_path: Path):
+    approval_record = _write_approval_record(tmp_path, expires_at="2026-06-04T01:00:00Z")
+    env = _ready_env(approval_record)
+    env[EXECUTE_ENV] = "1"
+    calls: list[str] = []
+
+    report = run_authorized_live_harness(
+        mode="execute",
+        env=env,
+        submitter_factory=lambda: calls.append("factory") or None,
+        execution_context_initializer=lambda specs, authorization: (
+            calls.append("context") or _execution_context_initializer(specs, authorization)
+        ),
+    )
+
+    assert report.status == "blocked"
+    assert report.blocked_reasons == ["provider budget authorization is invalid"]
+    assert calls == []
 
 
 def test_cli_default_is_disabled_and_json_parseable():
@@ -301,6 +377,26 @@ def _provider_response(spec: Any) -> dict[str, str]:
     }
 
 
+def _execution_context_initializer(
+    job_specs: list[Any],
+    authorization: ValidatedProviderBudgetAuthorization,
+) -> ProviderExecutionContext:
+    assert len(job_specs) == 4
+    return ProviderExecutionContext(
+        tenant_id="authorized-live-harness",
+        budget_job_kind="compatibility",
+        budget_job_id="compat_authorized_live_fixture",
+        account_id="account-authorized-live-fixture",
+        scenario_or_resource_type="toolbox",
+        effective_cap_usd_nanos=authorization.per_job_cost_ceiling_usd_nanos,
+        budget_source_kind="validated_authorization",
+        trusted_authorization_ref=authorization.authorization_ref,
+        budget_policy_version="provider-budget.v1",
+        generation_policy_version="authorized-live.v1",
+        provider_max_retries=0,
+    )
+
+
 def _artifact_ref_for_job_id(job_id: str) -> str:
     return {
         "momcozy_sterilizer_main_45_image_authorized_live_fixture": (
@@ -332,6 +428,7 @@ def _write_approval_record(tmp_path: Path, **overrides: Any) -> Path:
         "provider_calls_allowed": True,
         "approved_by": "user",
         "approved_at": "2026-06-04T00:00:00Z",
+        "expires_at": "2099-06-04T04:00:00Z",
         "provider": provider,
         "model": model,
         "provider_model_scope": provider_model_scope,

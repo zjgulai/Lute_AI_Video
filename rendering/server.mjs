@@ -61,8 +61,9 @@ app.get("/health", async (_req, res) => {
     await runCmd("chromium-browser", ["--version"]);
     chromiumOk = true;
   } catch {}
-  res.json({
-    status: "ok",
+  const ready = Boolean(remotionVersion) && ffmpegOk && chromiumOk;
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ok" : "unready",
     node: process.version,
     remotion: remotionVersion,
     ffmpeg: ffmpegOk,

@@ -10,6 +10,7 @@ from typing import Any
 
 import structlog
 
+from src.models.provider_cost import ProviderCostContractError
 from src.tools.llm_client import llm
 
 logger = structlog.get_logger()
@@ -28,7 +29,7 @@ def has_chinese(text: str) -> bool:
     return bool(_CHINESE_PATTERN.search(text))
 
 
-async def translate_to_english(text: str) -> str:
+async def translate_to_english(text: str, *, operation_instance: str = "primary") -> str:
     """Translate Chinese text to English via the configured LLM.
 
     If no Chinese characters are detected, returns the original text unchanged.
@@ -61,12 +62,19 @@ async def translate_to_english(text: str) -> str:
     user_message = f"Translate the following Chinese text to English. Return ONLY the English translation, no explanation.\n\n{text}"
 
     try:
-        result = await llm.invoke(system_prompt=system_prompt, user_message=user_message)
+        result = await llm.invoke(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            operation_key="tool.translate",
+            operation_instance=operation_instance,
+        )
         translated = result.strip()
         logger.info("translate: success", original_len=len(text), translated_len=len(translated))
         return translated
+    except ProviderCostContractError:
+        raise
     except Exception:
-        logger.warning("translate: LLM call failed, returning original text", text_preview=text[:80])
+        logger.warning("translate: local LLM fallback selected", text_length=len(text))
         return text
 
 
@@ -91,16 +99,18 @@ async def translate_catalog_to_english(catalog: dict[str, Any]) -> dict[str, Any
     name = catalog.get("name", "")
     if name and has_chinese(name):
         original_zh["name"] = name
-        result["name"] = await translate_to_english(name)
+        result["name"] = await translate_to_english(name, operation_instance="catalog.name")
 
     usps = catalog.get("usps", [])
     if isinstance(usps, list):
         translated_usps: list[str] = []
-        for usp in usps:
+        for usp_index, usp in enumerate(usps):
             if isinstance(usp, str) and has_chinese(usp):
                 original_zh.setdefault("usps", "")
                 original_zh["usps"].append(usp)  # type: ignore[union-attr]
-                translated_usps.append(await translate_to_english(usp))
+                translated_usps.append(
+                    await translate_to_english(usp, operation_instance=f"catalog.usp.{usp_index}")
+                )
             else:
                 translated_usps.append(usp)
         result["usps"] = translated_usps
@@ -118,15 +128,22 @@ async def translate_catalog_to_english(catalog: dict[str, Any]) -> dict[str, Any
         for field in ["name", "usage_scenario", "target_audience"]:
             val = p.get(field, "")
             if has_chinese(val):
-                p[field] = await translate_to_english(val)
+                p[field] = await translate_to_english(val, operation_instance=f"catalog.product.{field}")
 
         # List-of-strings fields
         for field in ["pain_points", "competitor_context"]:
             vals = p.get(field, [])
             if isinstance(vals, list):
                 p[field] = [
-                    await translate_to_english(v) if has_chinese(str(v)) else v
-                    for v in vals
+                    (
+                        await translate_to_english(
+                            v,
+                            operation_instance=f"catalog.product.{field}.{index}",
+                        )
+                        if has_chinese(str(v))
+                        else v
+                    )
+                    for index, v in enumerate(vals)
                 ]
 
         result["products"][0] = p

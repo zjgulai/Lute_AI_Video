@@ -1,333 +1,402 @@
 #!/usr/bin/env bash
-# AI Video — Fast deploy script (host build + Docker run)
-#
-# Usage (run on the server):
-#   cd /opt/ai-video/deploy/lighthouse
-#   ./deploy.sh
-#
-# What it does:
-#   1. Sync code from local machine (run rsync on your laptop first, see below)
-#   2. Build frontend on host (reuses node_modules, ~30s incremental)
-#   3. Recreate backend container (picks up new Python code + env_file)
-#   4. Restart frontend container (picks up new .next/standalone via volume)
-#   5. Health checks
-#
-# --- First time setup (run on server) ---
-#   cd /opt/ai-video/web && npm ci
-#
-# --- Sync from laptop (run on your local machine) ---
-#   rsync -avz --delete --chmod=F644,D755 \
-#     -e "ssh -i ~/Downloads/ai_video.pem" \
-#     --exclude-from='deploy/lighthouse/rsync-excludes.txt' \
-#     ./ ubuntu@101.34.52.232:/opt/ai-video/
-#   Or use the canonical wrapper:
-#     SSH_KEY=~/Downloads/ai_video.pem DRY_RUN=1 deploy/lighthouse/build-and-deploy.sh
-#     SSH_KEY=~/Downloads/ai_video.pem deploy/lighthouse/build-and-deploy.sh
-#
-# IMPORTANT: --chmod=F644 forces world-readable perms on rsync. Without it,
-# any local file with mode 0600 (e.g. src/routers/admin.py historically) gets
-# faithfully copied as 0600 to the server, where the backend container runs
-# as `appuser` and cannot read it. Symptom: PermissionError: [Errno 13]
-# /app/src/routers/admin.py at startup → 502 on /api/health.
+# Provider-off immutable release deployment for Tencent Lighthouse.
 
-set -euo pipefail
+set -Eeuo pipefail
 
 cd "$(dirname "$0")"
-COMPOSE="sudo docker compose -f docker-compose.prod.yml"
-REBUILD_BACKEND="${REBUILD_BACKEND:-0}"
-REBUILD_RENDERING="${REBUILD_RENDERING:-0}"
-# The renderer image needs Chromium/ffmpeg packages. This default is tested on
-# the Lighthouse host and remains build-time only; operators may override it.
-RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-https://mirrors.cloud.tencent.com/alpine}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.release.yml}"
+RELEASE_SOURCE_SHA="${RELEASE_SOURCE_SHA:-}"
+AI_VIDEO_SHARED_ROOT="${AI_VIDEO_SHARED_ROOT:-/opt/ai-video}"
+RELEASE_ROOT="$(cd ../.. && pwd)"
+ROLLBACK_COMPOSE="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/docker-compose.prod.yml"
+AI_VIDEO_ENV_FILE="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/.env.prod"
+PORTAL_AUTH_ENV_FILE="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/.portal-auth.env"
+SHARED_AI_VIDEO_LOCATIONS="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/ai_video_locations.conf"
+RELEASE_AI_VIDEO_LOCATIONS="$RELEASE_ROOT/deploy/lighthouse/ai_video_locations.conf"
+NGINX_CONFIG_BACKUP="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/.ai_video_locations.rollback-$RELEASE_SOURCE_SHA"
+BACKUP_ROOT="${BACKUP_ROOT:-/opt/ai-video-backups}"
+ALLOW_MAINTENANCE_WINDOW="${ALLOW_MAINTENANCE_WINDOW:-0}"
 CLEANUP_AFTER_DEPLOY="${CLEANUP_AFTER_DEPLOY:-0}"
 CLEANUP_TIMEOUT_SECONDS="${CLEANUP_TIMEOUT_SECONDS:-180}"
+RUN_TOKEN_SMOKE="${RUN_TOKEN_SMOKE:-0}"
 RUN_DEPLOY_SMOKE="${RUN_DEPLOY_SMOKE:-0}"
-REQ_SHA_PY='import hashlib, pathlib, re, sys
-lines = []
-for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
-    normalized = re.sub(r"\s+#.*$", "", line).strip()
-    if normalized and not normalized.startswith("#"):
-        lines.append(normalized)
-print(hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest())'
+RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-https://mirrors.cloud.tencent.com/alpine}"
+RELEASE_IMAGE_ARCHIVE="${RELEASE_IMAGE_ARCHIVE:-}"
+RELEASE_IMAGE_ARCHIVE_SHA256="${RELEASE_IMAGE_ARCHIVE_SHA256:-${RELEASE_IMAGE_ARCHIVE}.sha256}"
 
-# Deployment root (was hardcoded /opt/ai-video; now configurable)
-DEPLOY_ROOT="${DEPLOY_ROOT:-/opt/ai-video}"
+COMPOSE=(sudo docker compose -f "$COMPOSE_FILE")
+ACTIVE_COMMAND=()
+ACTIVE_RELEASE_KIND=""
+PREVIOUS_RELEASE_ROOT=""
+PREVIOUS_RELEASE_SHA=""
+DEPLOY_COMPLETE="0"
+MAINTENANCE_BEGUN="0"
+OLD_BACKEND_STOPPED="0"
+APP_SWITCH_STARTED="0"
+ROLLBACK_FAILED="0"
+RESTORE_CONTAINER_ID=""
+BACKUP_HELPER_ID=""
+NGINX_CONFIG_CHANGED="0"
 
-echo "========================================"
-echo "  AI Video Fast Deploy"
-echo "========================================"
-echo ""
+fail() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
 
-# -- Phase 0: requirements.txt rebuild check (2026-05-05 incident 教训) --
-# requirements.txt 改了但 image 没 rebuild → backend 启动 ImportError → restart loop。
-# 用去注释后的 semantic sha256 比较本地 requirements.txt 与 image 中记录的 hash，
-# 既能捕获真实依赖变化，也避免注释/空行变更触发生产镜像重建。
-echo "[0/5] requirements.txt rebuild check..."
-cd ../..
-LOCAL_REQ_SHA=$(python3 -c "$REQ_SHA_PY" requirements.txt 2>/dev/null || true)
-IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest sh -c \
-  'if [ -f /app/.requirements_semantic_sha256 ]; then cat /app/.requirements_semantic_sha256; else python -c "$0" /app/requirements.txt; fi' \
-  "$REQ_SHA_PY" 2>/dev/null | awk '{print $1}')
-cd deploy/lighthouse
-if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
-  echo "  ⚠ requirements.txt 依赖内容与当前 backend image 不一致"
-  echo "  ⚠ 本地 semantic hash: ${LOCAL_REQ_SHA:-(无法计算)}"
-  echo "  ⚠ 镜像 semantic hash: ${IMG_REQ_SHA:-(首次部署或镜像不存在)}"
-  if [ "$REBUILD_BACKEND" = "1" ]; then
-    echo "  REBUILD_BACKEND=1 set; rebuilding backend image..."
-    $COMPOSE build backend
-    IMG_REQ_SHA=$(sudo docker run --rm lighthouse-backend:latest sh -c \
-      'if [ -f /app/.requirements_semantic_sha256 ]; then cat /app/.requirements_semantic_sha256; else python -c "$0" /app/requirements.txt; fi' \
-      "$REQ_SHA_PY" 2>/dev/null | awk '{print $1}')
-    if [ "$LOCAL_REQ_SHA" != "$IMG_REQ_SHA" ]; then
-      echo "  ❌ backend rebuild finished but requirements semantic hash still differs"
-      echo "  ❌ 镜像 semantic hash: ${IMG_REQ_SHA:-(无法计算)}"
-      exit 1
-    fi
-    echo "  ✓ backend image rebuilt and requirements semantic hash matched"
-  else
-    echo "  ❌ Aborted before container restart."
-    echo "  ❌ Re-run with REBUILD_BACKEND=1 to rebuild backend image automatically."
-    exit 1
+require_zero_or_one() {
+  local name="$1" value="$2"
+  if [ "$value" != "0" ] && [ "$value" != "1" ]; then
+    fail "$name must be 0 or 1"
   fi
-else
-  echo "  ✓ requirements.txt 依赖内容与 backend image 一致"
+}
+
+if ! [[ "$RELEASE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  fail "RELEASE_SOURCE_SHA must be the reviewed 40-character Git SHA"
 fi
-echo ""
-
-echo "[0.1/5] Rendering image rebuild check..."
-if [ "$REBUILD_RENDERING" = "1" ]; then
-  echo "  REBUILD_RENDERING=1 set; rebuilding rendering image with $RENDERING_ALPINE_MIRROR..."
-  $COMPOSE build --build-arg "ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR" rendering
-  echo "  ✓ rendering image rebuilt"
-else
-  echo "  ✓ rendering rebuild skipped (set REBUILD_RENDERING=1 after rendering/ changes)"
+require_zero_or_one ALLOW_MAINTENANCE_WINDOW "$ALLOW_MAINTENANCE_WINDOW"
+require_zero_or_one CLEANUP_AFTER_DEPLOY "$CLEANUP_AFTER_DEPLOY"
+if [ "$ALLOW_MAINTENANCE_WINDOW" != "1" ]; then
+  fail "provider-off rollout requires explicit ALLOW_MAINTENANCE_WINDOW=1"
 fi
-echo ""
-
-# -- Phase 0.5: defensive chmod for backend src/ --
-# rsync without --chmod can copy 0600 files (PermissionError 502 — see header).
-# Belt-and-suspenders: normalize perms before backend restart so even a forgetful
-# rsync survives. Cost: ~50ms. Benefit: never see /app/src/routers/admin.py 502 again.
-echo "[0.5/5] Normalizing src/ file permissions..."
-sudo find "$DEPLOY_ROOT/src" -type f -name '*.py' ! -perm 644 -exec chmod 644 {} \; 2>/dev/null || true
-echo "  ✓ src/**.py normalized to 0644"
-echo ""
-
-# -- Phase 0.6: remove stale module files after package split --
-# 2026-05-20: src/routers/admin.py was split into src/routers/admin/.
-# If an incremental rsync left the old file on the server, Python may import
-# the stale module instead of the package. Delete this one known legacy file.
-echo "[0.6/5] Removing stale split-module files..."
-sudo rm -f "$DEPLOY_ROOT/src/routers/admin.py"
-echo "  ✓ stale src/routers/admin.py removed if present"
-echo ""
-
-# -- Phase 1: Build frontend on host --
-echo "[1/5] Building frontend on host..."
-cd ../../web
-if [ ! -d "node_modules" ]; then
-  echo "  ERROR: node_modules not found. Run 'npm ci' first."
-  exit 1
+if [ "$RUN_TOKEN_SMOKE" != "0" ] || [ "$RUN_DEPLOY_SMOKE" != "0" ]; then
+  fail "canonical deployment forbids token and authenticated smoke execution"
+fi
+if [ "$CLEANUP_AFTER_DEPLOY" != "0" ]; then
+  fail "canonical deployment preserves rollback images; CLEANUP_AFTER_DEPLOY must be 0"
+fi
+if ! [[ "$CLEANUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  fail "CLEANUP_TIMEOUT_SECONDS must be a positive integer"
 fi
 
-# Clean old build outputs to prevent stale chunk references.
-# Turbopack content-hash filenames change on every build; leftover
-# files from previous builds can confuse the deploy and lead to
-# ChunkLoadError if an old HTML cached in a browser references them.
-echo "  Cleaning old build artifacts..."
-sudo rm -rf .next/standalone/ .next/static/ .next/server/ .next/*.json
-# .next.old/ accumulates from previous deploys (next.js renames the prev
-# .next to .next.old during build). Without explicit cleanup, eslint runs
-# from CI pick up thousands of .next.old/ files. Disk + speed cost both.
-sudo rm -rf .next.old/
+export RELEASE_SOURCE_SHA
+export RELEASE_IMAGE_TAG="$RELEASE_SOURCE_SHA"
+export AI_VIDEO_SHARED_ROOT AI_VIDEO_ENV_FILE PORTAL_AUTH_ENV_FILE
+export RENDERING_ALPINE_MIRROR
 
-export NEXT_PUBLIC_API_BASE_URL=/api
-# P0-F: Lighthouse 是 canonical 非 demo 生产部署 — 必须设 false,
-# 否则 web/src/app/page.tsx 会跳过真实 API 调用进 DEMO_RESULT_*,
-# 与已验证的 5 场景非 demo 端到端结果冲突。
-# GitHub Pages demo 部署单独构建脚本里设 true。
-export NEXT_PUBLIC_IS_DEMO=false
-unset NEXT_PUBLIC_API_KEY
-npm run build 2>&1 | tail -5
+configure_active_release() {
+  local current_link="$AI_VIDEO_SHARED_ROOT/current" previous_compose image
+  if [ -L "$current_link" ]; then
+    PREVIOUS_RELEASE_ROOT="$(readlink -f "$current_link")"
+    PREVIOUS_RELEASE_SHA="${PREVIOUS_RELEASE_ROOT##*/releases-}"
+    if ! [[ "$PREVIOUS_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+      || [ "$PREVIOUS_RELEASE_ROOT" != "$AI_VIDEO_SHARED_ROOT/releases-$PREVIOUS_RELEASE_SHA" ]; then
+      fail "current release pointer is not a valid immutable release directory"
+    fi
+    previous_compose="$PREVIOUS_RELEASE_ROOT/deploy/lighthouse/docker-compose.release.yml"
+    [ -f "$previous_compose" ] || fail "previous release compose is unavailable"
+    for image in \
+      "lighthouse-backend:$PREVIOUS_RELEASE_SHA" \
+      "lighthouse-frontend:$PREVIOUS_RELEASE_SHA" \
+      "lighthouse-rendering:$PREVIOUS_RELEASE_SHA"
+    do
+      sudo docker image inspect "$image" >/dev/null 2>&1 \
+        || fail "previous rollback image is unavailable: $image"
+    done
+    ACTIVE_COMMAND=(
+      sudo env
+      "RELEASE_SOURCE_SHA=$PREVIOUS_RELEASE_SHA"
+      "RELEASE_IMAGE_TAG=$PREVIOUS_RELEASE_SHA"
+      "AI_VIDEO_SHARED_ROOT=$AI_VIDEO_SHARED_ROOT"
+      "AI_VIDEO_ENV_FILE=$AI_VIDEO_ENV_FILE"
+      "PORTAL_AUTH_ENV_FILE=$PORTAL_AUTH_ENV_FILE"
+      "RENDERING_ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR"
+      docker compose -f "$previous_compose"
+    )
+    ACTIVE_RELEASE_KIND="immutable"
+  elif [ -e "$current_link" ]; then
+    fail "current release pointer exists but is not a symlink"
+  else
+    ACTIVE_COMMAND=(sudo docker compose -f "$ROLLBACK_COMPOSE")
+    ACTIVE_RELEASE_KIND="legacy-first-release"
+  fi
+}
 
-# Verify build succeeded — critical files must exist
-if [ ! -f ".next/standalone/server.js" ]; then
-  echo "  ERROR: Build failed — .next/standalone/server.js not found"
-  exit 1
-fi
-if [ ! -d ".next/static/chunks" ]; then
-  echo "  ERROR: Build failed — .next/static/chunks/ not found"
-  exit 1
-fi
-CHUNK_COUNT=$(ls .next/static/chunks/*.js 2>/dev/null | wc -l)
-echo "  Build OK: $CHUNK_COUNT JS chunks generated"
-echo "  Frontend build complete"
-echo ""
+configure_active_release
 
-# -- Phase 2: Restart containers --
-echo "[2/5] Restarting containers..."
-cd ../deploy/lighthouse
-$COMPOSE up -d --force-recreate rendering 2>&1 | tail -3
-$COMPOSE up -d --force-recreate backend 2>&1 | tail -3
-$COMPOSE up -d --force-recreate frontend 2>&1 | tail -3
-# Recreate nginx to pick up nginx.conf changes AND volume mount changes.
-# nginx locks inode at startup, so a file edit alone is not enough.
-# --force-recreate is required when new volumes (e.g. proxy_params.conf)
-# are added to docker-compose.prod.yml.
-$COMPOSE up -d --force-recreate nginx 2>&1 | tail -3
-echo "  Containers restarted"
-echo ""
+cleanup_restore_container() {
+  if [ -n "$RESTORE_CONTAINER_ID" ]; then
+    sudo docker rm -f "$RESTORE_CONTAINER_ID" >/dev/null 2>&1 || true
+    RESTORE_CONTAINER_ID=""
+  fi
+}
 
-# -- Phase 2.1: Wait for nginx readiness before service smoke --
-# Recreating nginx can momentarily expose missing mounts or startup races.
-# Gate Phase 3 on both config validity and HTTPS frontend reachability so
-# smoke.sh does not race a container that is still converging.
-echo "[2.1/5] Waiting for nginx readiness..."
-NGINX_READY="0"
-NGINX_STATUS="000"
-for attempt in $(seq 1 24); do
-  if sudo docker exec ai_video_nginx nginx -t >/dev/null 2>&1; then
-    NGINX_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/ 2>/dev/null || true)
-    if [ "$NGINX_STATUS" = "200" ]; then
-      NGINX_READY="1"
-      echo "  Nginx ready: config ok, frontend /: 200 (attempt $attempt/24)"
+cleanup_backup_helper() {
+  if [ -n "$BACKUP_HELPER_ID" ]; then
+    sudo docker rm -f "$BACKUP_HELPER_ID" >/dev/null 2>&1 || true
+    BACKUP_HELPER_ID=""
+  fi
+}
+
+verify_backend_health() {
+  sudo docker exec ai_video_backend python3 -c '
+import json
+import urllib.request
+payload = json.load(urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=10))
+persistence = payload.get("persistence") or {}
+if payload.get("status") != "ok":
+    raise SystemExit("backend status is not ok")
+if persistence.get("backend") != "postgresql":
+    raise SystemExit("persistence backend is not postgresql")
+if persistence.get("status") != "healthy":
+    raise SystemExit("persistence status is not healthy")
+if persistence.get("tables_verified") is not True:
+    raise SystemExit("required PostgreSQL tables are not verified")
+' >/dev/null
+}
+
+verify_release_health() {
+  local attempt
+  for attempt in $(seq 1 24); do
+    if verify_backend_health \
+      && sudo docker exec ai_video_frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 \
+      && sudo docker exec ai_video_rendering wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1; then
+      echo "  Application containers healthy with verified PostgreSQL schema (attempt $attempt/24)"
+      return 0
+    fi
+    [ "$attempt" = "24" ] || sleep 5
+  done
+  return 1
+}
+
+verify_public_health() {
+  local attempt payload
+  for attempt in $(seq 1 24); do
+    if sudo docker exec ai_video_nginx nginx -t >/dev/null 2>&1; then
+      payload="$(curl -fsS --max-time 10 \
+        --resolve video.lute-tlz-dddd.top:443:127.0.0.1 \
+        https://video.lute-tlz-dddd.top/api/health 2>/dev/null || true)"
+      if printf '%s' "$payload" | python3 -c '
+import json, sys
+payload = json.load(sys.stdin)
+persistence = payload.get("persistence") or {}
+assert payload.get("status") == "ok"
+assert persistence.get("backend") == "postgresql"
+assert persistence.get("status") == "healthy"
+assert persistence.get("tables_verified") is True
+' >/dev/null 2>&1; then
+        echo "  Public HTTPS health passed with verified PostgreSQL schema (attempt $attempt/24)"
+        return 0
+      fi
+    fi
+    [ "$attempt" = "24" ] || sleep 5
+  done
+  return 1
+}
+
+restore_shared_nginx_config() {
+  if [ "$NGINX_CONFIG_CHANGED" = "1" ] && [ -f "$NGINX_CONFIG_BACKUP" ]; then
+    sudo cp "$NGINX_CONFIG_BACKUP" "$SHARED_AI_VIDEO_LOCATIONS"
+    sudo docker exec ai_video_nginx nginx -t >/dev/null 2>&1 \
+      && sudo docker exec ai_video_nginx nginx -s reload >/dev/null 2>&1
+  fi
+}
+
+rollback_release() {
+  set +e
+  cleanup_restore_container
+  cleanup_backup_helper
+  echo "  Release failed after maintenance began; restoring preserved production compose..." >&2
+  "${ACTIVE_COMMAND[@]}" up -d --no-deps --force-recreate rendering backend frontend >/dev/null 2>&1
+  app_rc="$?"
+  restore_shared_nginx_config
+  nginx_rc="$?"
+  if [ "$app_rc" -ne 0 ] || [ "$nginx_rc" -ne 0 ] \
+    || ! verify_release_health || ! verify_public_health; then
+    ROLLBACK_FAILED="1"
+    echo "  ROLLBACK_FAILED: preserved production compose did not pass health verification." >&2
+  else
+    echo "  Rollback completed and passed application/public health verification." >&2
+  fi
+  set -e
+}
+
+restore_preswitch_services() {
+  set +e
+  cleanup_restore_container
+  cleanup_backup_helper
+  if [ "$OLD_BACKEND_STOPPED" = "1" ]; then
+    "${ACTIVE_COMMAND[@]}" start rendering backend >/dev/null 2>&1
+  fi
+  if ! verify_release_health || ! verify_public_health; then
+    ROLLBACK_FAILED="1"
+    echo "  ROLLBACK_FAILED: unchanged production services did not recover." >&2
+  else
+    echo "  Pre-switch failure recovered without recreating application containers." >&2
+  fi
+  set -e
+}
+
+release_exit_handler() {
+  local exit_status="$?"
+  trap - EXIT
+  cleanup_restore_container
+  cleanup_backup_helper
+  if [ "$exit_status" -ne 0 ] && [ "$DEPLOY_COMPLETE" != "1" ]; then
+    if [ "$APP_SWITCH_STARTED" = "1" ]; then
+      rollback_release
+    elif [ "$MAINTENANCE_BEGUN" = "1" ]; then
+      restore_preswitch_services
+    fi
+  fi
+  if [ "$ROLLBACK_FAILED" = "1" ]; then
+    echo "ERROR: release failed and rollback verification also failed." >&2
+  fi
+  exit "$exit_status"
+}
+
+trap release_exit_handler EXIT
+trap 'exit 130' HUP INT TERM
+
+echo "[0/8] Validating release inputs and compose..."
+[ -f "$COMPOSE_FILE" ] || fail "release compose not found: $COMPOSE_FILE"
+[ -f "$ROLLBACK_COMPOSE" ] || fail "preserved rollback compose not found"
+[ -f "$AI_VIDEO_ENV_FILE" ] || fail "production backend env file not found"
+[ -f "$SHARED_AI_VIDEO_LOCATIONS" ] || fail "shared AI Video nginx config not found"
+[ -f "$RELEASE_AI_VIDEO_LOCATIONS" ] || fail "release AI Video nginx config not found"
+python3 - "$AI_VIDEO_ENV_FILE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+matches = []
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    match = re.fullmatch(
+        r"\s*(?:export\s+)?MEDIA_SIGN_SECRET\s*=\s*(.*?)\s*",
+        line,
+    )
+    if match:
+        value = match.group(1)
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        matches.append(value)
+if len(matches) != 1:
+    raise SystemExit("MEDIA_SIGN_SECRET must appear exactly once in production env")
+if len(matches[0].encode("utf-8")) < 32:
+    raise SystemExit("MEDIA_SIGN_SECRET must be at least 32 UTF-8 bytes")
+PY
+[ -f "$RELEASE_IMAGE_ARCHIVE" ] || fail "reviewed release image archive not found"
+[ -f "$RELEASE_IMAGE_ARCHIVE_SHA256" ] || fail "release image archive checksum not found"
+"${COMPOSE[@]}" config --quiet
+echo "  Rollback source: $ACTIVE_RELEASE_KIND${PREVIOUS_RELEASE_SHA:+ ($PREVIOUS_RELEASE_SHA)}"
+
+echo "[1/8] Loading the exact CI-reviewed backend/frontend/rendering images..."
+for image in \
+  "lighthouse-backend:$RELEASE_IMAGE_TAG" \
+  "lighthouse-frontend:$RELEASE_IMAGE_TAG" \
+  "lighthouse-rendering:$RELEASE_IMAGE_TAG"
+do
+  if sudo docker image inspect "$image" >/dev/null 2>&1; then
+    fail "immutable release image tag already exists: $image"
+  fi
+done
+(cd "$(dirname "$RELEASE_IMAGE_ARCHIVE")" && sha256sum -c "$(basename "$RELEASE_IMAGE_ARCHIVE_SHA256")")
+sudo docker load -i "$RELEASE_IMAGE_ARCHIVE" >/dev/null
+for image in \
+  "lighthouse-backend:$RELEASE_IMAGE_TAG" \
+  "lighthouse-frontend:$RELEASE_IMAGE_TAG" \
+  "lighthouse-rendering:$RELEASE_IMAGE_TAG"
+do
+  image_revision="$(sudo docker image inspect --format='{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
+  [ "$image_revision" = "$RELEASE_SOURCE_SHA" ] || fail "image revision mismatch for $image"
+done
+sudo docker run --rm --network none --entrypoint python3 \
+  "lighthouse-backend:$RELEASE_IMAGE_TAG" -c \
+  'from pathlib import Path; from src.services.provider_price_catalog import ProviderPriceCatalog; assert Path("/app/configs/provider-cost-catalog.v1.json").is_file(); ProviderPriceCatalog.load_default()'
+
+echo "[2/8] Entering AI Video maintenance while preserving shared ingress..."
+MAINTENANCE_BEGUN="1"
+"${ACTIVE_COMMAND[@]}" stop rendering backend
+OLD_BACKEND_STOPPED="1"
+
+run_verified_backup() {
+  local before latest manifest_status helper_name restore_name restore_password restore_url pg_image
+  helper_name="ai_video_backup_${RELEASE_SOURCE_SHA:0:12}"
+  BACKUP_HELPER_ID="$(sudo docker run -d --name "$helper_name" \
+    --env-file "$AI_VIDEO_ENV_FILE" \
+    --network lighthouse_ai_video_net \
+    -v lighthouse_backend_output:/app/output \
+    --entrypoint sh "lighthouse-backend:$RELEASE_IMAGE_TAG" \
+    -eu -c 'exec sleep 3600')"
+  [ -n "$BACKUP_HELPER_ID" ] || fail "failed to start reviewed backup helper"
+  before="$(sudo find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??????' -print 2>/dev/null | sort | tail -1)"
+  sudo RETENTION_DAYS=15 BACKUP_ROOT="$BACKUP_ROOT" \
+    PROJECT_ROOT="$RELEASE_ROOT" \
+    DUMP_SCRIPT="$RELEASE_ROOT/scripts/pg_dump_logical.py" \
+    CONTAINER_NAME="$BACKUP_HELPER_ID" \
+    /bin/bash "$RELEASE_ROOT/scripts/backup_production.sh"
+  latest="$(sudo find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??????' -print | sort | tail -1)"
+  [ -n "$latest" ] && [ "$latest" != "$before" ] || fail "fresh production backup was not created"
+  manifest_status="$(sudo awk -F': ' '$1 == "status" {print $2}' "$latest/manifest.txt")"
+  [ "$manifest_status" = "complete" ] || fail "fresh production backup is incomplete"
+
+  restore_name="l4_restore_${RELEASE_SOURCE_SHA:0:12}"
+  restore_password="$(openssl rand -hex 32)"
+  pg_image="$(sudo awk -F': ' '$1 == "pg_client_image" {print $2}' "$latest/manifest.txt")"
+  [[ "$pg_image" =~ ^postgres@sha256:[0-9a-f]{64}$ ]] || fail "backup PostgreSQL image is not digest pinned"
+  RESTORE_CONTAINER_ID="$(sudo docker run -d --name "$restore_name" --network lighthouse_ai_video_net \
+    -e POSTGRES_USER=restore -e POSTGRES_PASSWORD="$restore_password" \
+    -e POSTGRES_DB=ai_video_restore "$pg_image")"
+  [ -n "$RESTORE_CONTAINER_ID" ] || fail "failed to start isolated restore database"
+  for attempt in $(seq 1 30); do
+    if sudo docker exec "$restore_name" pg_isready -U restore -d ai_video_restore >/dev/null 2>&1; then
       break
     fi
-  else
-    NGINX_STATUS="nginx-test-failed"
-  fi
-  if [ "$attempt" != "24" ]; then
-    sleep 5
-  fi
-done
-if [ "$NGINX_READY" != "1" ]; then
-  echo "  ❌ Nginx readiness did not pass: $NGINX_STATUS"
-  echo "  --- 最近 30 行 nginx logs ---"
-  sudo docker logs --tail 30 ai_video_nginx 2>&1 | tail -30
-  exit 1
-fi
-echo ""
+    [ "$attempt" = "30" ] && fail "isolated restore PostgreSQL did not become ready"
+    sleep 2
+  done
+  restore_url="postgresql://restore:${restore_password}@${restore_name}:5432/ai_video_restore"
+  printf '%s\n' "$restore_url" | sudo env \
+    EXPECTED_RESTORE_HOST="$restore_name" \
+    RESTORE_SCOPE=isolated \
+    RESTORE_CONFIRMATION=RESTORE_EMPTY_DATABASE \
+    NETWORK_NAME=lighthouse_ai_video_net \
+    BACKEND_CONTAINER="$BACKUP_HELPER_ID" \
+    RESTORE_SCRIPT="$RELEASE_ROOT/scripts/pg_restore_logical.py" \
+    VERIFY_SCRIPT="$RELEASE_ROOT/scripts/verify_restored_database.py" \
+    /bin/bash "$RELEASE_ROOT/scripts/restore_backup_database.sh" "$latest" >/dev/null
+  sudo test -s "$latest/restore_verified.json" || fail "fresh backup lacks restore verification evidence"
+  cleanup_restore_container
+  cleanup_backup_helper
+  echo "  Fresh complete backup passed isolated restore verification."
+}
 
-# -- Phase 3: Health checks --
-echo "[3/5] Health checks..."
+echo "[3/8] Creating and isolated-restoring a fresh production backup..."
+run_verified_backup
 
-# Check backend
-BACKEND_STATUS="000"
-for attempt in $(seq 1 24); do
-  BACKEND_STATUS=$(curl -s -k -o /dev/null -w "%{http_code}" https://localhost/api/health 2>/dev/null || true)
-  if [ "$BACKEND_STATUS" = "200" ]; then
-    echo "  Backend /api/health: 200 (attempt $attempt/24)"
-    break
-  fi
-  if [ "$attempt" != "24" ]; then
-    sleep 5
-  fi
-done
-if [ "$BACKEND_STATUS" != "200" ]; then
-  echo "  ❌ Backend /api/health: $BACKEND_STATUS"
-  echo "  --- 最近 30 行 backend logs (定位启动失败原因) ---"
-  sudo docker logs --tail 30 ai_video_backend 2>&1 | tail -30
-  echo "  ----"
-  echo "  ⚠ 如果是 ImportError → 跑 'docker compose build backend' 重 build"
-  echo "  ⚠ 如果是 RuntimeError: PostgreSQL → 检查 .env.prod DATABASE_URL"
-  exit 1
-fi
+echo "[4/8] Applying explicit schema-first migration gate..."
+"${COMPOSE[@]}" run --rm --no-deps \
+  -e DEPLOY_MIGRATION_AUTH=APPLY_REVIEWED_RELEASE \
+  backend /bin/bash /app/scripts/deploy_alembic_gate.sh --apply
 
-# Check frontend
-FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k https://localhost/ || echo "000")
-if [ "$FRONTEND_STATUS" = "200" ]; then
-  echo "  Frontend /: 200"
-else
-  echo "  ❌ Frontend /: $FRONTEND_STATUS"
-fi
+echo "[5/8] Switching AI Video application containers behind preserved ingress..."
+APP_SWITCH_STARTED="1"
+"${COMPOSE[@]}" up -d --no-deps --force-recreate rendering backend frontend
+verify_release_health || fail "release application health did not pass"
+"${COMPOSE[@]}" run --rm --no-deps backend /bin/bash /app/scripts/deploy_alembic_gate.sh --check
 
-# Check rendering service directly inside the container because it is only
-# exposed on the Docker network.
-RENDERING_STATUS="000"
-for attempt in $(seq 1 12); do
-  if sudo docker exec ai_video_rendering wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1; then
-    RENDERING_STATUS="200"
-    echo "  Rendering /health: 200 (attempt $attempt/12)"
-    break
-  fi
-  if [ "$attempt" != "12" ]; then
-    sleep 5
-  fi
-done
-if [ "$RENDERING_STATUS" != "200" ]; then
-  echo "  ❌ Rendering /health: $RENDERING_STATUS"
-  echo "  --- 最近 30 行 rendering logs ---"
-  sudo docker logs --tail 30 ai_video_rendering 2>&1 | tail -30
-fi
+echo "[6/8] Reloading only the reviewed AI Video config in preserved shared nginx..."
+sudo test ! -e "$NGINX_CONFIG_BACKUP" \
+  || fail "nginx rollback config already exists for this release"
+sudo cp -p "$SHARED_AI_VIDEO_LOCATIONS" "$NGINX_CONFIG_BACKUP"
+NGINX_CONFIG_CHANGED="1"
+sudo cp "$RELEASE_AI_VIDEO_LOCATIONS" "$SHARED_AI_VIDEO_LOCATIONS"
+sudo docker exec ai_video_nginx nginx -t >/dev/null
+sudo docker exec ai_video_nginx nginx -s reload >/dev/null
+verify_public_health || fail "release public health did not pass"
 
-# Check Fast Mode API only when explicitly requested.
-# The generate endpoint can consume external provider credits, so deployment
-# defaults to non-token health checks.
-if [ "${RUN_TOKEN_SMOKE:-0}" = "1" ]; then
-  DEPLOY_API_KEY="${API_KEY:-}"
-  if [ -z "$DEPLOY_API_KEY" ] && [ -f ".env.prod" ]; then
-    DEPLOY_API_KEY="$(grep -E '^API_KEY=' .env.prod | head -1 | cut -d= -f2- || true)"
-  fi
-  if [ -z "$DEPLOY_API_KEY" ]; then
-    echo "  ❌ Fast Mode API token smoke requested but API_KEY is missing"
-    FAST_STATUS="000"
-  else
-    FAST_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k -X POST \
-      -H "Content-Type: application/json" \
-      -H "X-API-Key: $DEPLOY_API_KEY" \
-      -d '{"user_prompt":"test","duration":10}' \
-      https://localhost/api/fast/generate || echo "000")
-  fi
-  if [ "$FAST_STATUS" = "200" ]; then
-    echo "  Fast Mode API: 200"
-  else
-    echo "  ⚠ Fast Mode API: $FAST_STATUS (200/500 都可,500 = LLM 不可用但路径通)"
-  fi
-else
-  echo "  Fast Mode API: skipped (set RUN_TOKEN_SMOKE=1 to run token smoke)"
-fi
-echo ""
+echo "[7/8] Recording the successful release pointer..."
+CURRENT_LINK="$AI_VIDEO_SHARED_ROOT/current"
+NEXT_LINK="$AI_VIDEO_SHARED_ROOT/.current-$RELEASE_SOURCE_SHA"
+ln -sfn "$RELEASE_ROOT" "$NEXT_LINK"
+python3 - "$NEXT_LINK" "$CURRENT_LINK" <<'PY'
+import os
+import sys
 
-# -- Phase 4: Docker cleanup (explicit opt-in) --
-# Cleanup does not affect a healthy application deployment, so it must not
-# hold the deploy control path open by default.
-echo "[4/5] Docker cleanup..."
-if [ "$CLEANUP_AFTER_DEPLOY" = "1" ]; then
-  if ! [[ "$CLEANUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
-    echo "  ❌ CLEANUP_TIMEOUT_SECONDS must be a positive integer"
-    exit 2
-  fi
-  if command -v timeout >/dev/null 2>&1; then
-    if sudo -n timeout --signal=TERM --kill-after=15 "$CLEANUP_TIMEOUT_SECONDS" docker system prune -f; then
-      echo "  ✓ docker system prune completed"
-    else
-      echo "  ⚠ docker system prune did not complete; application deployment remains healthy"
-    fi
-    if sudo -n timeout --signal=TERM --kill-after=15 "$CLEANUP_TIMEOUT_SECONDS" docker builder prune -f; then
-      echo "  ✓ docker builder prune completed"
-    else
-      echo "  ⚠ docker builder prune did not complete; application deployment remains healthy"
-    fi
-  else
-    echo "  ⚠ timeout command unavailable; cleanup skipped"
-  fi
-else
-  echo "  Skipped (set CLEANUP_AFTER_DEPLOY=1 for bounded cleanup)"
-fi
-echo ""
+os.replace(sys.argv[1], sys.argv[2])
+PY
+DEPLOY_COMPLETE="1"
 
-# -- Phase 5: Authenticated smoke (explicit opt-in) --
-echo "[5/5] Authenticated smoke..."
-if [ "$RUN_DEPLOY_SMOKE" = "1" ] && [ -f smoke.sh ]; then
-  bash smoke.sh
-elif [ "$RUN_DEPLOY_SMOKE" = "1" ]; then
-  echo "  ⚠ smoke.sh not found, skipped"
-else
-  echo "  Skipped (set RUN_DEPLOY_SMOKE=1 to allow API-key-reading smoke.sh)"
-fi
-echo ""
+echo "[8/8] Preserving current and previous release images for offline rollback..."
+echo "  Cleanup skipped."
 
-echo "========================================"
-echo "  Deploy complete!"
-echo "========================================"
+echo "Deploy complete: provider-off release $RELEASE_SOURCE_SHA"

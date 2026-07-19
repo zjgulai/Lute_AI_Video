@@ -12,6 +12,7 @@ from typing import Any
 import structlog
 
 from src.models import AuditCriterionStatus, AuditReport, Brief, Language, Script, ScriptSegment
+from src.models.provider_cost import ProviderCostContractError
 from src.tools.llm_client import llm
 
 logger = structlog.get_logger()
@@ -100,7 +101,13 @@ class ScriptWriterAgent:
         )
 
         try:
-            raw_data = await llm.invoke_json(SCRIPT_WRITER_SYSTEM_PROMPT_EN, user_message, model="deepseek-chat")
+            raw_data = await llm.invoke_json(
+                SCRIPT_WRITER_SYSTEM_PROMPT_EN,
+                user_message,
+                model="deepseek-v4-flash",
+                operation_key="agent.script_writer",
+                operation_instance=f"language.{lang_code.lower().replace('-', '_')}",
+            )
             scripts: list[Script] = []
             if isinstance(raw_data, list):
                 for raw_script in raw_data:
@@ -112,6 +119,8 @@ class ScriptWriterAgent:
                         except Exception:
                             logger.warning("script_writer: failed to parse script", raw=raw_script)
             return scripts
+        except ProviderCostContractError:
+            raise
         except Exception as e:
             logger.error("script_writer: LLM call failed", error=str(e), lang=lang_code)
             from src.config import ALLOW_MOCK_MODE

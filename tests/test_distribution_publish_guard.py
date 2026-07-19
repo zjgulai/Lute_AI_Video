@@ -1,183 +1,101 @@
+"""Strict W1-23 regressions for the distribution mutation authority boundary."""
+
 from __future__ import annotations
 
-from types import SimpleNamespace
+from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import HTTPException
+from pydantic import ValidationError
 
-import src.routers.distribution as distribution
+from src.models.publish_attempt import PublishAttemptRequest
 
-
-def _human_acceptance(**overrides: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "source": "human",
-        "reviewer": "pray",
-        "delivery_accepted": True,
-        "publish_allowed": True,
-        "approved_brand_token_write": False,
-    }
-    payload.update(overrides)
-    return payload
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ROUTER_SOURCE = (REPO_ROOT / "src" / "routers" / "distribution.py").read_text()
+ACCEPTANCE_ID = "7f947625-2898-4e9e-9e71-dce4309e5f4f"
 
 
-@pytest.mark.asyncio
-async def test_distribution_publish_blocks_without_human_delivery_acceptance(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def fail_if_called(platform: str, content: dict[str, Any]) -> dict[str, Any]:
-        raise AssertionError("connector must not be called before human acceptance")
-
-    monkeypatch.setattr("src.connectors.registry.publish_to_platform", fail_if_called)
-
-    with pytest.raises(HTTPException) as exc:
-        await distribution.distribution_publish({
-            "platform": "tiktok",
-            "content": {"title": "LLM suggested publish"},
-        })
-
-    assert exc.value.status_code == 403
-    assert "Human delivery acceptance" in str(exc.value.detail)
-
-
-@pytest.mark.asyncio
-async def test_distribution_publish_ignores_llm_suggestion_as_authorization(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def fail_if_called(platform: str, content: dict[str, Any]) -> dict[str, Any]:
-        raise AssertionError("connector must not be called for LLM-sourced approval")
-
-    monkeypatch.setattr("src.connectors.registry.publish_to_platform", fail_if_called)
-
-    with pytest.raises(HTTPException) as exc:
-        await distribution.distribution_publish({
-            "platform": "tiktok",
-            "content": {
-                "title": "AI suggested publish",
-                "delivery_acceptance": _human_acceptance(source="llm"),
-            },
-        })
-
-    assert exc.value.status_code == 403
-    assert "human decision source" in str(exc.value.detail)
-
-
-@pytest.mark.asyncio
-async def test_distribution_publish_rejects_approved_brand_token_write_claim(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def fail_if_called(platform: str, content: dict[str, Any]) -> dict[str, Any]:
-        raise AssertionError("connector must not be called for token-write claims")
-
-    monkeypatch.setattr("src.connectors.registry.publish_to_platform", fail_if_called)
-
-    with pytest.raises(HTTPException) as exc:
-        await distribution.distribution_publish({
-            "platform": "tiktok",
-            "content": {
-                "title": "Unsafe publish",
-                "delivery_acceptance": _human_acceptance(approved_brand_token_write=True),
-            },
-        })
-
-    assert exc.value.status_code == 403
-    assert "approved brand token" in str(exc.value.detail)
-
-
-@pytest.mark.asyncio
-async def test_distribution_publish_calls_connector_after_human_acceptance(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[tuple[str, dict[str, Any]]] = []
-
-    async def fake_publish(platform: str, content: dict[str, Any]) -> dict[str, Any]:
-        calls.append((platform, content))
-        return {"success": True, "post_id": "post_fixture", "url": "https://example.test/post"}
-
-    monkeypatch.setattr("src.connectors.registry.publish_to_platform", fake_publish)
-    monkeypatch.setattr(distribution, "HAS_STORAGE", False)
-
-    result = await distribution.distribution_publish({
+def _body(**overrides: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "acceptance_id": ACCEPTANCE_ID,
         "platform": "tiktok",
-        "content": {
-            "title": "Human approved publish",
-            "delivery_acceptance": _human_acceptance(),
-        },
-    })
-
-    assert result["success"] is True
-    assert calls == [("tiktok", {"title": "Human approved publish", "delivery_acceptance": _human_acceptance()})]
+        "metadata": {"title": "Reviewed campaign"},
+    }
+    body.update(overrides)
+    return body
 
 
-@pytest.mark.asyncio
-async def test_publish_video_blocks_before_file_lookup_without_human_acceptance() -> None:
-    with pytest.raises(HTTPException) as exc:
-        await distribution.publish_video(
-            "missing_video",
+def _assert_rejected(body: dict[str, Any], expected_loc: tuple[str, ...]) -> None:
+    with pytest.raises(ValidationError) as exc:
+        PublishAttemptRequest.model_validate(body)
+    assert expected_loc in {tuple(error["loc"]) for error in exc.value.errors()}
+
+
+def test_missing_acceptance_id_fails_at_strict_contract_before_service() -> None:
+    body = _body()
+    body.pop("acceptance_id")
+
+    _assert_rejected(body, ("acceptance_id",))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (
+            "delivery_acceptance",
             {
-                "platforms": ["tiktok"],
-                "metadata": {"video_path": "/tmp/does-not-exist.mp4"},
+                "source": "human",
+                "reviewer": "caller-reviewer",
+                "delivery_accepted": True,
+                "publish_allowed": True,
             },
-        )
+        ),
+        ("content", {"title": "legacy connector content"}),
+        ("source", "human"),
+        ("reviewer", "caller-reviewer"),
+    ],
+)
+def test_legacy_human_assertions_are_unknown_input(field: str, value: object) -> None:
+    _assert_rejected(_body(**{field: value}), (field,))
 
-    assert exc.value.status_code == 403
-    assert "Human delivery acceptance" in str(exc.value.detail)
 
-
-@pytest.mark.asyncio
-async def test_publish_video_calls_engine_after_human_acceptance(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[tuple[str, dict[str, Any], list[str]]] = []
-
-    class FakePublishEngine:
-        async def publish(
-            self,
-            video_path: str,
-            metadata: dict[str, Any],
-            platforms: list[str],
-        ) -> list[SimpleNamespace]:
-            calls.append((video_path, metadata, platforms))
-            return [
-                SimpleNamespace(
-                    platform="tiktok",
-                    success=True,
-                    post_id="post_fixture",
-                    post_url="https://example.test/post",
-                    error="",
-                )
-            ]
-
-    monkeypatch.setattr("src.connectors.publish_engine.PublishEngine", FakePublishEngine)
-    monkeypatch.setattr(distribution, "HAS_STORAGE", False)
-
-    result = await distribution.publish_video(
-        "video_fixture",
-        {
-            "platforms": ["tiktok"],
-            "metadata": {
-                "video_path": "/tmp/video_fixture.mp4",
-                "delivery_acceptance": _human_acceptance(),
-            },
-        },
+def test_approved_brand_token_write_claim_is_unknown_input() -> None:
+    _assert_rejected(
+        _body(approved_brand_token_write=True),
+        ("approved_brand_token_write",),
     )
 
-    assert result == [
-        {
-            "platform": "tiktok",
-            "success": True,
-            "post_id": "post_fixture",
-            "post_url": "https://example.test/post",
-            "error": "",
-        }
-    ]
-    assert calls == [
-        (
-            "/tmp/video_fixture.mp4",
-            {
-                "video_path": "/tmp/video_fixture.mp4",
-                "delivery_acceptance": _human_acceptance(),
-            },
-            ["tiktok"],
-        )
-    ]
+
+def test_client_video_path_is_rejected_and_filesystem_lookup_is_absent() -> None:
+    _assert_rejected(
+        _body(
+            metadata={
+                "title": "Reviewed campaign",
+                "video_path": "/tmp/caller-selected.mp4",
+            }
+        ),
+        ("metadata", "video_path"),
+    )
+    assert "OUTPUT_DIR" not in ROUTER_SOURCE
+    assert ".rglob(" not in ROUTER_SOURCE
+
+
+def test_multi_platform_legacy_array_is_unknown_input() -> None:
+    _assert_rejected(
+        _body(platforms=["tiktok", "shopify"]),
+        ("platforms",),
+    )
+
+
+def test_mutations_use_only_specialized_publish_attempt_service() -> None:
+    for forbidden in (
+        "PublishEngine",
+        "PublishLogRepository",
+        "HAS_STORAGE",
+        "publish_to_platform",
+        "_extract_publish_authorization",
+        "_require_human_publish_authorization",
+    ):
+        assert forbidden not in ROUTER_SOURCE
+    assert "get_publish_attempt_service" in ROUTER_SOURCE
+    assert ROUTER_SOURCE.count("get_publish_attempt_service().execute(") == 2

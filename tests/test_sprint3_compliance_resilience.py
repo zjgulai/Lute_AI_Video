@@ -3,7 +3,7 @@
 Per-Sprint 3:
 - P3-1: C2PA signer (env-gated, graceful degradation)
 - P3-3: partial_artifacts summarizer
-- P3-4: Expert mode hard budget guard
+- P3-4: Expert mode hard budget guard retired in favor of the durable provider ledger
 - P3-5: state schema versioning + load-time mismatch warning
 """
 
@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from src.models.provider_cost import ProviderCostContractError
 from src.models.state import STATE_SCHEMA_VERSION
 from src.pipeline.partial_artifacts import (
     _DELIVERABLE_STEPS,
@@ -23,13 +24,6 @@ from src.pipeline.partial_artifacts import (
 )
 from src.pipeline.state_manager import _check_schema_version
 from src.tools.c2pa_signer import build_manifest, is_enabled, sign_video
-from src.tools.cost_tracker import (
-    HARD_BUDGET_EXPERT_MODE,
-    BudgetExceededError,
-    check_budget,
-    set_thread_id,
-    track,
-)
 
 # ───────── P3-3 partial_artifacts ─────────
 
@@ -144,65 +138,17 @@ class TestSummarizePartialArtifacts:
         assert "seedance_clips" in result["available_artifacts"]
 
 
-# ───────── P3-4 budget guard ─────────
+# ───────── P3-4 durable ledger migration ─────────
 
 
-@pytest.fixture(autouse=True)
-def _isolate_cost_records():
-    """Use a unique thread_id per test so records don't bleed across tests."""
-    from src.tools import cost_tracker as ct
-    ct._records.clear()
-    yield
-    ct._records.clear()
+class TestRetiredCostTracker:
+    def test_process_local_budget_symbols_fail_closed(self):
+        from src.tools import cost_tracker
 
-
-class TestBudgetGuard:
-    def test_auto_mode_never_raises(self):
-        set_thread_id("auto1")
-        track("poyo_video", units=100)  # $30 — way over cap
-        check_budget("auto1", "auto")  # No raise
-
-    def test_expert_mode_under_cap_passes(self):
-        set_thread_id("e1")
-        track("poyo_video", units=10)  # $3.00
-        check_budget("e1", "expert")  # Under $5
-
-    def test_expert_mode_over_cap_raises(self):
-        set_thread_id("e2")
-        track("poyo_video", units=20)  # $6.00 > $5 cap
-        with pytest.raises(BudgetExceededError) as excinfo:
-            check_budget("e2", "expert")
-        assert excinfo.value.thread_id == "e2"
-        assert excinfo.value.cap_usd == HARD_BUDGET_EXPERT_MODE
-        assert excinfo.value.total_usd >= HARD_BUDGET_EXPERT_MODE
-
-    def test_expert_mode_at_exact_cap_raises(self):
-        """Boundary: at exactly the cap, we raise (>= semantics)."""
-        set_thread_id("e3")
-        # Track exactly $5.00 (poyo_video=$0.30/unit, need ~17 units)
-        from src.tools.cost_tracker import HARD_BUDGET_EXPERT_MODE as cap
-        track("poyo_video", units=int(cap / 0.3) + 1)
-        with pytest.raises(BudgetExceededError):
-            check_budget("e3", "expert")
-
-    def test_unknown_mode_no_enforcement(self):
-        """Defensive: only "expert" triggers hard cap. Unknown modes treated
-        as auto."""
-        set_thread_id("u1")
-        track("poyo_video", units=100)
-        check_budget("u1", "smart")  # No raise
-        check_budget("u1", "")  # No raise
-        check_budget("u1", "fast")  # No raise
-
-    def test_budget_exceeded_error_carries_context(self):
-        set_thread_id("e4")
-        track("poyo_video", units=20)
-        with pytest.raises(BudgetExceededError) as excinfo:
-            check_budget("e4", "expert")
-        msg = str(excinfo.value)
-        assert "e4" in msg
-        assert "expert" in msg
-        assert excinfo.value.mode == "expert"
+        for symbol in ("track", "check_budget", "set_thread_id", "BudgetExceededError"):
+            with pytest.raises(ProviderCostContractError) as excinfo:
+                getattr(cost_tracker, symbol)
+            assert excinfo.value.code == "provider_cost_legacy_path_blocked"
 
 
 # ───────── P3-5 schema versioning ─────────

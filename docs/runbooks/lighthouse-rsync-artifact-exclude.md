@@ -45,6 +45,8 @@ source: human+ai
 1. 新增本地产物目录时，先更新 `deploy/lighthouse/rsync-excludes.txt`。
 2. 同步更新 `configs/lighthouse-rsync-artifact-exclude-contract.yaml` 和测试里的分类清单。
 3. 手工部署前先执行 `DRY_RUN=1 SSH_KEY=/path/to/ai_video.pem deploy/lighthouse/build-and-deploy.sh`。
+   Wrapper 只接受 clean、与 `origin/main` 同步的 `main`；默认 dry-run。真实部署必须显式
+   `DRY_RUN=0 RELEASE_SOURCE_SHA="$(git rev-parse HEAD)"`，绑定已复核 source SHA。
    - dry-run 若出现 `deploy/lighthouse/plugin-hub.htpasswd`，先修复 exclude 边界，不允许继续部署。
 4. dry-run 输出如出现 `.env.prod`、证书、`ai_video.pem`、`.next`、`web/playwright-report`、`tmp/screenshots`、`output`、`output_uploaded`、`backups`、`.codegraph`、`deploy/lighthouse/portal-auth`、`deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`deploy/lighthouse/skills.conf`、`deploy/lighthouse/auth_gate.conf`、`deploy/lighthouse/momcozy-platform.conf`、`deploy/lighthouse/*.conf.*backup*`、`deploy/lighthouse/*.candidate`、`drafts`、`archive`、`ref`、`landing/login.html` 等路径，先修 exclude，不允许继续部署。
 5. 如需同步 apex landing sidecar，不要取消默认发布排除项；改用：

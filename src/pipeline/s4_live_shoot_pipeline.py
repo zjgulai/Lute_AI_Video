@@ -679,6 +679,7 @@ class S4LiveShootPipeline:
                     "resolution": "720p",
                     "output_label": f"{label}_seg_{i}",
                     "model": s4_model,
+                    "operation_instance": f"seedance_clips.segment.{i}",
                 }
                 if artifact_output_dir:
                     params["output_dir"] = artifact_output_dir
@@ -734,7 +735,7 @@ class S4LiveShootPipeline:
         audio_paths: list[str] = []
         lyrics_paths: list[str] = []
 
-        for script in scripts[:MAX_SCRIPTS_PER_RUN]:
+        for script_index, script in enumerate(scripts[:MAX_SCRIPTS_PER_RUN]):
             voiceover_parts: list[str] = []
             for seg in script.get("segments", []):
                 text = seg.get("voiceover") or seg.get("description") or ""
@@ -746,6 +747,7 @@ class S4LiveShootPipeline:
             res = await reg.execute("elevenlabs-tts-skill", {
                 "text": merged_text,
                 "language": language,
+                "operation_instance": f"script.{script_index}",
             })
             if res.success and res.data:
                 p = res.data.get("audio_path", "")
@@ -950,7 +952,15 @@ class S4LiveShootPipeline:
         final_video, render_json_path = extract_assemble_paths(assemble_out)
 
         result: dict[str, Any] = {
-            "success": True,
+            "success": (
+                final_state.get("lifecycle_status") == "completed_bounded"
+                and not final_state.get("pipeline_degraded")
+            ),
+            "_execution_completed": (
+                final_state.get("lifecycle_status") == "completed_bounded"
+                and not final_state.get("pipeline_degraded")
+            ),
+            "pipeline_degraded": final_state.get("pipeline_degraded") is True,
             "label": label,
             "scenario": "s4_live_shoot",
             "video_duration": video_duration,

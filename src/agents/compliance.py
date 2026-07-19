@@ -24,6 +24,7 @@ from src.models import (
     Script,
     Severity,
 )
+from src.models.provider_cost import ProviderCostContractError
 from src.tools.llm_client import llm
 
 logger = structlog.get_logger()
@@ -186,8 +187,11 @@ async def llm_compliance_review(scripts: list[Script]) -> list[dict[str, Any]]:
         result = await llm.invoke_json(
             COMPLIANCE_SYSTEM_PROMPT,
             f"Review these scripts for compliance issues:\n{scripts_json}",
+            operation_key="agent.compliance",
         )
         return result if isinstance(result, list) else [result]
+    except ProviderCostContractError:
+        raise
     except Exception as e:
         logger.error("compliance: LLM review failed", error=str(e))
         return []

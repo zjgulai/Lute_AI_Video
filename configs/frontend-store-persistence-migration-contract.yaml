@@ -1,7 +1,7 @@
-version: 1
+version: 2
 owner: frontend
 status: stable
-updated: "2026-06-01"
+updated: "2026-07-12"
 
 entrypoints:
   persistence_module: web/src/stores/persistence.ts
@@ -25,6 +25,26 @@ rules:
   pipeline_store_persists_only:
     - activePipeline
     - dismissedPipelineLabels
+    - pendingSubmission
+  pipeline_store_version: 2
+  pending_submission_persists_only:
+    - kind
+    - scenario
+    - idempotencyKey
+    - createdAt
+    - phase
+    - resourceId
+  pending_submission_forbidden_fields:
+    - payload
+    - requestBody
+    - user_prompt
+    - api_keys
+    - authentication
+    - authorization
+    - provider_credentials
+  raw_idempotency_key_scope: browser_pending_submission_only
+  unknown_pending_reload_action: readback_get_only
+  no_auth_or_provider_credentials: true
   bad_json_recovery: createSafeJSONStorage
   invalid_payload_recovery: migrateAppStorePersistence + migratePipelineStorePersistence
   max_dismissed_pipeline_labels: 10
@@ -34,9 +54,10 @@ rules:
 
 tests:
   persistence_guard: web/src/stores/persistence.test.ts
+  idempotent_submission_guard: web/src/lib/idempotentSubmission.test.ts
 
 commands:
-  focused_test: npm test -- --run src/stores/persistence.test.ts
+  focused_test: npm test -- --run src/stores/persistence.test.ts src/lib/idempotentSubmission.test.ts
   type_check: npx tsc --noEmit -p tsconfig.json
 
 no_token_boundary: true

@@ -57,4 +57,13 @@ describe("RuntimeMediaImage guardrails", () => {
     expect(source).toContain("Runtime media URLs come from backend/user assets");
     expect(source).toContain("not guaranteed to be statically allowlisted for next/image");
   });
+
+  it("keeps protected image src absent until the signed-media hook resolves", () => {
+    const source = readSrcFile(RUNTIME_MEDIA_IMAGE);
+
+    expect(source).toContain("useSignedMediaUrl");
+    expect(source).toContain("if (!url) return null");
+    expect(source).toContain("<img src={url}");
+    expect(source).not.toContain("<img src={src}");
+  });
 });

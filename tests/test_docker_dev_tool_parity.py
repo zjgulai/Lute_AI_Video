@@ -116,11 +116,16 @@ def test_workflow_node_jobs_use_npm_ci_and_package_lock_cache() -> None:
             step
             for job in jobs.values()
             for step in (job.get("steps") or [])
-            if step.get("uses") == "actions/setup-node@v6"
+            if str(step.get("uses", "")).startswith("actions/setup-node@")
         ]
         assert setup_node_steps, f"{workflow_path} must set up Node with npm cache"
 
         for step in setup_node_steps:
+            action_ref = str(step["uses"]).removeprefix("actions/setup-node@")
+            assert action_ref == "v6" or (
+                len(action_ref) == 40
+                and all(character in "0123456789abcdef" for character in action_ref)
+            ), f"{workflow_path} setup-node must use v6 or a pinned v6 commit"
             with_config = step.get("with") or {}
             assert with_config.get("cache") == "npm"
             assert with_config.get("cache-dependency-path") == "web/package-lock.json"
