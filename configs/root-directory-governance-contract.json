@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-09",
+  "updated": "2026-07-20",
   "runbook": "docs/runbooks/root-directory-governance.md",
   "policy": {
     "default_documents": "docs/ or drafts/docs/",
@@ -24,6 +24,11 @@
       "path": ".gitignore",
       "status": "config",
       "reason": "Git ignore policy for local-only and generated artifacts."
+    },
+    {
+      "path": ".grype.yaml",
+      "status": "config",
+      "reason": "Exact version-bound release image vulnerability scan policy."
     },
     {
       "path": "AGENTS.md",

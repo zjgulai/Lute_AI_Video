@@ -40,6 +40,7 @@ from src.config import (
 )
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
+from src.tools.safe_media import ffmpeg_local_input_args, ffprobe_local_input_args
 
 logger = structlog.get_logger()
 
@@ -398,7 +399,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                     "ffprobe", "-v", "error",
                     "-show_entries", "format=duration",
                     "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(path),
+                    *ffprobe_local_input_args(path),
                 ],
                 capture_output=True, text=True, timeout=10,
             )
@@ -423,7 +424,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                     "-select_streams", "v:0",
                     "-show_entries", "stream=width,height",
                     "-of", "csv=s=x:p=0",
-                    str(path),
+                    *ffprobe_local_input_args(path),
                 ],
                 capture_output=True, text=True, timeout=10, check=True,
             )
@@ -473,7 +474,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 cmd = [
                     "ffmpeg", "-y",
                     "-ss", str(ts),
-                    "-i", str(path),
+                    *ffmpeg_local_input_args(path),
                     "-vframes", "1",
                     "-vf", "scale=32:32,format=gray",
                     "-f", "rawvideo", "-pix_fmt", "gray",
@@ -561,7 +562,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             cmd = [
                 "ffmpeg", "-y",
                 "-sseof", "-1",
-                "-i", str(src),
+                *ffmpeg_local_input_args(src),
                 "-vframes", "1",
                 "-q:v", "2",
                 str(frame_path),

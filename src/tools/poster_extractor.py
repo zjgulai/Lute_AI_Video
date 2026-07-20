@@ -27,6 +27,7 @@ import subprocess
 from pathlib import Path
 
 from src.config import OUTPUT_DIR
+from src.tools.safe_media import UnsafeMediaError, ffmpeg_local_input_args
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +91,17 @@ def ensure_poster(video_path: str | Path) -> Path | None:
         return None
 
     try:
+        safe_input = ffmpeg_local_input_args(src)
+    except UnsafeMediaError:
+        return None
+
+    try:
         subprocess.run(
             [
                 "ffmpeg",
                 "-y",
                 "-ss", "00:00:02",
-                "-i", str(src),
+                *safe_input,
                 "-vframes", "1",
                 "-vf", "scale=480:-2",
                 "-q:v", "3",
@@ -113,7 +119,7 @@ def ensure_poster(video_path: str | Path) -> Path | None:
                 [
                     "ffmpeg",
                     "-y",
-                    "-i", str(src),
+                    *safe_input,
                     "-vframes", "1",
                     "-vf", "scale=480:-2",
                     "-q:v", "3",

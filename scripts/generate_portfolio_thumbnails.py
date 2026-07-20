@@ -21,6 +21,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import OUTPUT_DIR
+from src.tools.safe_media import (
+    UnsafeMediaError,
+    ffmpeg_local_input_args,
+    ffprobe_local_input_args,
+)
 
 MEDIA_EXTS = {".mp4", ".mov", ".webm"}
 
@@ -51,7 +56,7 @@ def _ffprobe_valid(path: Path) -> bool:
                 "-select_streams", "v:0",
                 "-show_entries", "stream=width,height",
                 "-of", "csv=s=x:p=0",
-                str(path),
+                *ffprobe_local_input_args(path),
             ],
             capture_output=True,
             text=True,
@@ -64,7 +69,7 @@ def _ffprobe_valid(path: Path) -> bool:
             return False
         w, _, h = dims.partition("x")
         return int(w) > 0 and int(h) > 0
-    except (ValueError, subprocess.TimeoutExpired, OSError):
+    except (ValueError, subprocess.TimeoutExpired, OSError, UnsafeMediaError):
         return False
 
 
@@ -76,7 +81,7 @@ def _extract_poster(source: Path, dest: Path) -> bool:
                 "ffmpeg",
                 "-y",                          # overwrite if needed
                 "-ss", "00:00:02",             # seek to 2 s (keyframe-aware fast)
-                "-i", str(source),
+                *ffmpeg_local_input_args(source),
                 "-vframes", "1",               # single frame
                 "-vf", "scale=480:-2",         # 480 px wide, height auto-even
                 "-q:v", "3",                   # quality (2-5 is good)
@@ -87,7 +92,12 @@ def _extract_poster(source: Path, dest: Path) -> bool:
             check=True,
         )
         return dest.is_file()
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError):
+    except (
+        subprocess.TimeoutExpired,
+        subprocess.CalledProcessError,
+        OSError,
+        UnsafeMediaError,
+    ):
         return False
 
 

@@ -18,6 +18,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.tools.safe_media import UnsafeMediaError, ffmpeg_local_input_args
+
 VIDEO_EXTS = {".mp4", ".mov", ".webm", ".m4v"}
 
 OUTPUT_DIR = Path(os.environ.get("VIDEO_OUTPUT_DIR", "/app/output")).resolve()
@@ -31,24 +36,27 @@ def poster_path_for(video_rel: str) -> Path:
 
 def extract_poster(video: Path, poster: Path, *, seek_seconds: float = 1.0) -> bool:
     poster.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        "ffmpeg",
-        "-loglevel", "error",
-        "-y",
-        "-ss", f"{seek_seconds}",
-        "-i", str(video),
-        "-frames:v", "1",
-        "-q:v", "3",
-        "-vf", "scale='min(1280,iw)':-2",
-        str(poster),
-    ]
     try:
+        cmd = [
+            "ffmpeg",
+            "-loglevel", "error",
+            "-y",
+            "-ss", f"{seek_seconds}",
+            *ffmpeg_local_input_args(video),
+            "-frames:v", "1",
+            "-q:v", "3",
+            "-vf", "scale='min(1280,iw)':-2",
+            str(poster),
+        ]
         subprocess.run(cmd, check=True, timeout=60)
     except subprocess.CalledProcessError as exc:
         print(f"  [skip seek={seek_seconds}s] ffmpeg failed: {exc}", file=sys.stderr)
         return False
     except subprocess.TimeoutExpired:
         print("  [skip] ffmpeg timeout", file=sys.stderr)
+        return False
+    except UnsafeMediaError:
+        print("  [skip] unsafe media container", file=sys.stderr)
         return False
     return poster.is_file() and poster.stat().st_size > 1024
 

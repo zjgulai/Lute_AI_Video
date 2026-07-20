@@ -32,6 +32,7 @@ from src.connectors.base import (
 )
 from src.models.publish_attempt import PublishReceiptV1, ShopifyPublishOptions
 from src.tasks.metrics_poller import PlatformMetricsError, classify_platform_http_status
+from src.tools.safe_media import ffprobe_local_input_args
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ def _default_media_probe(path: Path) -> float:
             "format=duration",
             "-of",
             "default=noprint_wrappers=1:nokey=1",
-            str(path),
+            *ffprobe_local_input_args(path),
         ],
         check=False,
         capture_output=True,

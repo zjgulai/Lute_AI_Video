@@ -10,6 +10,8 @@ import io
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from src.tools.asset_storage import AssetStorage
+
 
 @pytest.fixture
 async def app():
@@ -83,6 +85,28 @@ class TestUploadEndpoint:
         res = await async_client.post("/api/upload", headers=auth_headers, files=files)
         assert res.status_code == 400
         assert "File type not allowed" in res.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_upload_rejects_xml_playlist_disguised_as_mp4(
+        self,
+        async_client,
+        upload_dir,
+        auth_headers,
+    ):
+        files = {
+            "file": (
+                "disguised.mp4",
+                io.BytesIO(b"<?xml version='1.0'?><MPD><BaseURL>https://example.invalid/</BaseURL></MPD>"),
+                "video/mp4",
+            )
+        }
+
+        res = await async_client.post("/api/upload", headers=auth_headers, files=files)
+
+        assert res.status_code == 400
+        assert "media bytes do not match" in res.json()["detail"]
+        uploads_dir = upload_dir / "uploads"
+        assert not uploads_dir.exists() or not list(uploads_dir.iterdir())
 
     @pytest.mark.asyncio
     async def test_upload_rejects_dotdot_filename(self, async_client, upload_dir, auth_headers):
@@ -173,6 +197,31 @@ class TestUploadToMediaAccess:
         # /api/media/ 由 media router 或 nginx 处理
         # 在测试环境中直接验证 path 格式正确
         assert media_path.startswith("/api/media/uploads/")
+
+
+class TestLegacyAssetUploadSafety:
+    @pytest.mark.asyncio
+    async def test_legacy_upload_rejects_playlist_before_asset_storage(
+        self,
+        async_client,
+        tmp_path,
+        monkeypatch,
+        auth_headers,
+    ):
+        storage = AssetStorage(storage_dir=tmp_path / "legacy-assets")
+        monkeypatch.setattr("src.api_assets._asset_storage", storage)
+        files = {
+            "file": (
+                "disguised.mp4",
+                io.BytesIO(b"#EXTM3U\nhttps://example.invalid/segment.ts"),
+                "video/mp4",
+            )
+        }
+
+        res = await async_client.post("/api/assets/upload", headers=auth_headers, files=files)
+
+        assert res.status_code == 400
+        assert storage.list() == []
 
 
 class TestUploadAuth:

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from src.config import OUTPUT_DIR
+from src.tools.safe_media import UnsafeMediaError, ffmpeg_local_input_args
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +41,13 @@ def _poster_path(rel: str) -> Path:
 def _extract_poster(source: Path, dest: Path) -> bool:
     """Use ffmpeg to grab a single frame at 2 s, scale to 480 px wide."""
     try:
+        safe_input = ffmpeg_local_input_args(source)
         subprocess.run(
             [
                 "ffmpeg",
                 "-y",
                 "-ss", "00:00:02",
-                "-i", str(source),
+                *safe_input,
                 "-vframes", "1",
                 "-vf", "scale=480:-2",
                 "-q:v", "3",
@@ -56,7 +58,7 @@ def _extract_poster(source: Path, dest: Path) -> bool:
             check=True,
         )
         return dest.is_file()
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError):
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError, UnsafeMediaError):
         return False
 
 

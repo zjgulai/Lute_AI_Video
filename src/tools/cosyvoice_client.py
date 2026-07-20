@@ -47,6 +47,7 @@ from src.services.provider_execution import (
     get_provider_execution_context,
 )
 from src.services.provider_price_catalog import ProviderPriceCatalog
+from src.tools.safe_media import ffprobe_local_input_args
 
 logger = structlog.get_logger()
 
@@ -69,7 +70,10 @@ VOICE_PRESETS = MappingProxyType(
         "female_en": DEFAULT_VOICE_FEMALE,
     }
 )
-_SUPPORTED_RESPONSE_FORMATS = frozenset({"mp3", "opus", "wav", "pcm"})
+# Raw PCM has no self-describing container and SiliconFlow does not document
+# bit depth/channel layout. Keep it fail-closed until that contract is explicit.
+_SUPPORTED_RESPONSE_FORMATS = frozenset({"mp3", "opus", "wav"})
+_FFPROBE_FORMAT_NAMES = MappingProxyType({"mp3": "mp3", "opus": "ogg", "wav": "wav"})
 _SAFE_OPERATION_INSTANCE_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
 _SAFE_VOICE_RE = re.compile(r"^[^\x00-\x1f\x7f]{1,512}$")
 _SAFE_LANGUAGE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
@@ -556,7 +560,7 @@ class CosyVoiceClient:
                 "format=format_name,duration",
                 "-of",
                 "json",
-                str(path),
+                *ffprobe_local_input_args(path),
             ],
             capture_output=True,
             text=True,
@@ -569,7 +573,8 @@ class CosyVoiceClient:
         duration = format_info.get("duration") if isinstance(format_info, dict) else None
         if not isinstance(format_name, str) or not isinstance(duration, str):
             raise ValueError("ffprobe returned incomplete audio metadata")
-        if response_format != "pcm" and response_format not in format_name.split(","):
+        expected_format = _FFPROBE_FORMAT_NAMES[response_format]
+        if expected_format not in format_name.split(","):
             raise ValueError("audio artifact format does not match request")
         duration_seconds = float(duration)
         if not math.isfinite(duration_seconds) or duration_seconds <= 0:

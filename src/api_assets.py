@@ -11,6 +11,7 @@ Compatibility surface:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -20,6 +21,7 @@ from src.models.brand import BrandAssetPackage
 from src.models.influencer import InfluencerProfile, InfluencerRemixBrief
 from src.storage.asset_stores import BrandPackageStore, InfluencerStore
 from src.tools.asset_storage import AssetStorage
+from src.tools.safe_media import UnsafeMediaError, validate_media_file
 
 logger = structlog.get_logger()
 
@@ -79,6 +81,13 @@ async def upload_asset(
         tmp_path = tmp.name
 
     try:
+        try:
+            validate_media_file(
+                tmp_path,
+                expected_extension=Path(file.filename or "").suffix,
+            )
+        except UnsafeMediaError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         record = _asset_storage.store_from_path(
             file_path=tmp_path,
             original_name=file.filename or "upload.bin",
