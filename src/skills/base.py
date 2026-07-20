@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from src.models.provider_cost import ProviderCostContractError
+from src.tools.safe_media import UnsafeMediaError
 
 
 class SkillResult:
@@ -178,6 +179,16 @@ class SkillCallable(ABC):
                 # They must never be converted into a local fallback or retried
                 # by the generic skill wrapper.
                 raise
+            except UnsafeMediaError:
+                return SkillResult(
+                    success=False,
+                    error="unsafe_media_rejected",
+                    metadata={
+                        "non_retryable": True,
+                        "latency_seconds": time.time() - start_time,
+                        "retries": attempt,
+                    },
+                )
             except Exception as e:
                 last_error = str(e)
                 if attempt < max_attempts - 1:

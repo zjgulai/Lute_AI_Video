@@ -26,6 +26,7 @@ import structlog
 
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
+from src.tools.safe_media import ffmpeg_local_input_args
 
 logger = structlog.get_logger()
 
@@ -65,7 +66,7 @@ async def extract_last_frame(
         "ffmpeg",
         "-y",
         "-sseof", "-1",
-        "-i", str(src),
+        *ffmpeg_local_input_args(src),
         "-update", "1",
         "-frames:v", "1",
         "-q:v", str(quality),

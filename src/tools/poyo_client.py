@@ -47,6 +47,7 @@ from src.services.provider_execution import (
 )
 from src.services.provider_price_catalog import ProviderPriceCatalog
 from src.tools.llm_client import get_request_api_key
+from src.tools.safe_media import UnsafeMediaError, validate_media_file
 
 logger = structlog.get_logger()
 
@@ -416,6 +417,13 @@ class PoyoClient:
                             output_path,
                             max_bytes,
                         )
+                try:
+                    validate_media_file(
+                        temp_path,
+                        expected_extension=output_path.suffix,
+                    )
+                except UnsafeMediaError as exc:
+                    raise RuntimeError("provider artifact media container is invalid") from exc
                 os.replace(temp_path, output_path)
                 temp_path = None
                 last_error = None

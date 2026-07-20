@@ -43,6 +43,7 @@ from src.pipeline.step_runner import StepRunner
 from src.pipeline.step_utils import get_step_output
 from src.skills.base import SkillResult
 from src.skills.registry import SkillRegistry
+from src.tools.safe_media import ffmpeg_local_input_args
 
 logger = structlog.get_logger()
 
@@ -1504,7 +1505,7 @@ class S3InfluencerRemixPipeline:
                 result = await asyncio.create_subprocess_exec(
                     "ffmpeg", "-y",
                     "-ss", str(timestamp),
-                    "-i", str(video_path),
+                    *ffmpeg_local_input_args(video_path),
                     "-vframes", "1",
                     "-q:v", "2",
                     str(out_path),

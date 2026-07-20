@@ -28,6 +28,7 @@ from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 from src.tools.llm_client import get_request_api_key
+from src.tools.safe_media import ffprobe_local_input_args
 
 logger = structlog.get_logger()
 
@@ -232,7 +233,7 @@ class ElevenLabsTTSSkill(SkillCallable):
                     "ffprobe", "-v", "error",
                     "-show_entries", "format=duration",
                     "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(path),
+                    *ffprobe_local_input_args(path),
                 ],
                 capture_output=True, text=True, timeout=10,
             )

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from src.config import OUTPUT_DIR
 from src.routers._deps import get_auth_context, verify_api_key
+from src.tools.safe_media import UnsafeMediaError, validate_media_file
 
 router = APIRouter()
 
@@ -91,6 +92,13 @@ try:
         except HTTPException:
             dest.unlink(missing_ok=True)
             raise
+
+        if dest.suffix.lower() not in {".pdf", ".txt", ".md"}:
+            try:
+                validate_media_file(dest)
+            except UnsafeMediaError as exc:
+                dest.unlink(missing_ok=True)
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         rel_upload = (uploads_dir / unique_name).relative_to(OUTPUT_DIR.resolve())
         media_suffix = "/".join(quote(p, safe="") for p in rel_upload.parts)

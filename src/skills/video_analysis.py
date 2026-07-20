@@ -19,6 +19,7 @@ import structlog
 from src.models.provider_cost import ProviderCostContractError
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
+from src.tools.safe_media import ffmpeg_local_input_args
 from src.tools.video_downloader import VideoDownloader
 
 logger = structlog.get_logger()
@@ -141,7 +142,7 @@ class VideoAnalysisSkill(SkillCallable):
         download = await self._downloader.download(video_url)
 
         logger.info("video-analysis: transcribing", url=video_url)
-        transcription = await self._downloader.transcribe(video_url)
+        transcription = await self._downloader.transcribe(download.local_path)
 
         # NEW: Visual frame analysis (optional, non-blocking)
         visual_context = None
@@ -521,7 +522,7 @@ class VideoAnalysisSkill(SkillCallable):
 
         try:
             subprocess.run([
-                "ffmpeg", "-i", video_path,
+                "ffmpeg", *ffmpeg_local_input_args(video_path),
                 "-vf", "fps=1/6",
                 "-frames:v", str(max_frames),
                 f"{frame_dir}/frame_%03d.jpg",

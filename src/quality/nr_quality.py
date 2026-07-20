@@ -23,6 +23,8 @@ from typing import Any
 
 import structlog
 
+from src.tools.safe_media import ffmpeg_local_input_args, ffprobe_local_input_args
+
 logger = structlog.get_logger()
 
 # Thresholds for OpenCV fallback heuristics
@@ -209,7 +211,7 @@ class NRQualityChecker:
                     "ffprobe", "-v", "error",
                     "-show_entries", "format=duration",
                     "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(path),
+                    *ffprobe_local_input_args(path),
                 ],
                 capture_output=True, text=True, timeout=10,
             )
@@ -236,7 +238,7 @@ class NRQualityChecker:
                 subprocess.run(
                     [
                         "ffmpeg", "-y", "-ss", str(ts),
-                        "-i", str(path), "-vframes", "1",
+                        *ffmpeg_local_input_args(path), "-vframes", "1",
                         "-q:v", "2", str(frame_path),
                     ],
                     capture_output=True, timeout=10, check=True,

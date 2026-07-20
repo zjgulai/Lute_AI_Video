@@ -84,3 +84,17 @@ def test_uv_lock_contains_all_pyproject_dev_dependencies():
     assert not missing, (
         "uv.lock must contain pyproject dev dependencies: " + ", ".join(missing)
     )
+
+
+def test_ytdlp_security_contract_is_exactly_pinned_for_ci_and_production():
+    pyproject = tomllib.loads(PYPROJECT.read_text())
+    dev_dependencies = pyproject["project"]["optional-dependencies"]["dev"]
+    requirement_lines = {
+        line.strip()
+        for line in REQUIREMENTS.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+
+    assert "yt-dlp==2026.7.4" in dev_dependencies
+    assert "yt-dlp==2026.7.4" in requirement_lines
+    assert 'name = "yt-dlp"\nversion = "2026.7.4"' in UV_LOCK.read_text()

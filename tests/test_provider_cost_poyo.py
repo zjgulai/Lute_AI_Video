@@ -26,6 +26,8 @@ from src.storage.provider_cost_repository import ProviderCostRepository
 CHECKED_AT = datetime(2026, 7, 18, 10, 0, 0, tzinfo=UTC)
 POYO_KEY = "fixture-poyo-key-never-sent"
 TENANT = "tenant-poyo-task7"
+_FIXTURE_PNG = b"\x89PNG\r\n\x1a\nfixture-png"
+_FIXTURE_MP4 = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2"
 
 
 class _Response:
@@ -62,7 +64,7 @@ class _Transport:
         if "/api/generate/status/" in path:
             payload = self.statuses.pop(0) if self.statuses else {"code": 200, "data": {"status": "queued"}}
             return _Response(payload)
-        return _Response({}, raw=b"fixture-media-bytes")
+        return _Response({}, raw=_FIXTURE_MP4 if path.endswith(".mp4") else _FIXTURE_PNG)
 
 
 class _FakeAsyncClient:
@@ -892,7 +894,7 @@ async def test_poyo_artifact_download_pins_verified_ip_and_preserves_tls_identit
     class CapturingClient:
         async def get(self, url: str, **kwargs: Any) -> _Response:
             requests.append((url, kwargs))
-            return _Response({}, raw=b"fixture-artifact")
+            return _Response({}, raw=_FIXTURE_PNG)
 
         async def __aenter__(self) -> CapturingClient:
             return self
@@ -910,7 +912,7 @@ async def test_poyo_artifact_download_pins_verified_ip_and_preserves_tls_identit
     )
     await client.close()
 
-    assert output.read_bytes() == b"fixture-artifact"
+    assert output.read_bytes() == _FIXTURE_PNG
     assert resolver_calls == 2
     assert len(requests) == 1
     request_url, request_kwargs = requests[0]

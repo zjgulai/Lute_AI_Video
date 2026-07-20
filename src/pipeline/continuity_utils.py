@@ -23,6 +23,7 @@ from src.models.runtime_contracts import (
     ContinuityAuditSummary,
     TransitionMetadata,
 )
+from src.tools.safe_media import ffmpeg_local_input_args
 
 logger = structlog.get_logger()
 
@@ -114,7 +115,7 @@ def extract_clip_last_frame(video_path: str, output_dir: str) -> str | None:
         cmd = [
             "ffmpeg", "-y",
             "-sseof", "-1",
-            "-i", str(src),
+            *ffmpeg_local_input_args(src),
             "-frames:v", "1",
             "-q:v", "2",
             str(frame_path),

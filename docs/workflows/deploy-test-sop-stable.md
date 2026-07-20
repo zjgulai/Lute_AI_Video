@@ -17,7 +17,7 @@ source: human+ai
 
 - 当前 checkout 是 clean `main`，`git rev-parse HEAD` 精确等于实时 `git ls-remote origin refs/heads/main`。
 - backend `make ci`、S1-S5 hermetic regression、frontend Vitest/ESLint/TypeScript/OpenAPI/build、disposable PostgreSQL migration/recovery gate全部通过。
-- CI 已构建 backend/frontend/rendering，输出并保留：revision label、runtime catalog probe、SBOM、Critical vulnerability scan、image ID、`release-images-<SHA>.tar.gz` 与 `.sha256`。
+- CI 已构建 backend/frontend/rendering，输出并保留：revision label、runtime catalog probe、SBOM、Critical vulnerability scan、image ID、`release-images-<SHA>.tar.gz` 与 `.sha256`。扫描例外必须遵循 `docs/runbooks/vulnerability-scan-exceptions.md` 的精确版本绑定与失效规则。
 - GitHub remote dry-run artifact 已审阅；没有 secret、certificate、remote-only sidecar 或 live-root deletion。
 - `DEPLOY_KNOWN_HOSTS`/`SSH_KNOWN_HOSTS_FILE` 是预先核验的 host identity；禁止部署时 TOFU。
 - 明确接受 AI Video 应用维护窗口。共享 nginx 与其他站点保持在线，但 AI Video backend 在备份、恢复演练、migration 和 app switch 期间不可用；这不是 zero-downtime blue/green。

@@ -6,6 +6,7 @@ import pytest
 
 from src.config import QUALITY_MODE
 from src.skills.remotion_assemble import RemotionAssembleSkill
+from src.tools.safe_media import UnsafeMediaError
 
 
 class TestAVSync:
@@ -22,11 +23,10 @@ class TestAVSync:
         assert result["audio_dur"] > 0.0
         assert result["diff"] < 0.5
 
-    def test_nonexistent_file_returns_no_video(self):
-        """Missing file should return no_video_stream failure."""
-        result = RemotionAssembleSkill._check_av_sync(Path("/dev/null"))
-        assert result["sync_ok"] is False
-        assert "no_video_stream" in result["failure"]
+    def test_non_regular_file_is_rejected_before_probe(self):
+        """A device path must remain a hard media rejection."""
+        with pytest.raises(UnsafeMediaError, match="regular local file"):
+            RemotionAssembleSkill._check_av_sync(Path("/dev/null"))
 
     def test_observation_mode_does_not_block(self, sample_videos):
         """In observe/off mode, all_ok should not depend on av_sync."""

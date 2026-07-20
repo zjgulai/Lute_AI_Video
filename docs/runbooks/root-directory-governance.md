@@ -37,6 +37,7 @@ source: human+ai
 | `.dockerignore` | config |
 | `.env.example` | config |
 | `.gitignore` | config |
+| `.grype.yaml` | config |
 | `AGENTS.md` | entrypoint |
 | `CHANGELOG.md` | entrypoint |
 | `CLAUDE.md` | entrypoint |

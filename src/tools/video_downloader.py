@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -21,11 +22,18 @@ import structlog
 from pydantic import BaseModel
 
 from src.config import OUTPUT_DIR
+from src.tools.safe_media import UnsafeMediaError, validate_media_file
 
 logger = structlog.get_logger()
 
 DOWNLOAD_TIMEOUT_SECONDS = 120.0
 TRANSCRIBE_TIMEOUT_SECONDS = 300.0
+YTDLP_SAFE_FORMAT = (
+    "best[ext=mp4][protocol=http][vcodec!=?none][acodec!=?none]/"
+    "best[ext=mp4][protocol=https][vcodec!=?none][acodec!=?none]/"
+    "best[protocol=http][vcodec!=?none][acodec!=?none]/"
+    "best[protocol=https][vcodec!=?none][acodec!=?none]"
+)
 
 
 class VideoDownloadError(Exception):
@@ -111,6 +119,10 @@ class VideoDownloader:
         Returns:
             List of TranscribeSegment with start, end, and text.
         """
+        if self._is_mock_download_path(video_path):
+            logger.info("video_downloader: mock download, skipping transcription")
+            return self._mock_transcription()
+
         if not self._whisper_available:
             logger.warning("video_downloader: whisper not available, using mock")
             return self._mock_transcription()
@@ -149,15 +161,26 @@ class VideoDownloader:
 
         async def _do_download():
             async with asyncio.timeout(DOWNLOAD_TIMEOUT_SECONDS):
-                result = subprocess.run(
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     [
                         "yt-dlp",
+                        "--ignore-config",
+                        "--no-playlist",
+                        "--concat-playlist", "never",
+                        "--format", YTDLP_SAFE_FORMAT,
+                        "--downloader", "native",
+                        "--fixup", "never",
                         "--output", output_template,
-                        "--print", "filename",
+                        "--no-simulate",
+                        "--print", "after_move:filepath",
                         "--restrict-filenames",
                         url,
                     ],
-                    capture_output=True, text=True, timeout=DOWNLOAD_TIMEOUT_SECONDS,
+                    capture_output=True,
+                    text=True,
+                    timeout=DOWNLOAD_TIMEOUT_SECONDS,
+                    env={**os.environ, "YTDLP_NO_PLUGINS": "1"},
                 )
                 if result.returncode != 0:
                     raise VideoDownloadError(f"yt-dlp failed: {result.stderr[:500]}")
@@ -165,6 +188,11 @@ class VideoDownloader:
                 local_path = result.stdout.strip()
                 if not local_path or not Path(local_path).exists():
                     raise VideoDownloadError(f"yt-dlp returned no output for {url}")
+                try:
+                    validate_media_file(local_path)
+                except UnsafeMediaError as exc:
+                    Path(local_path).unlink(missing_ok=True)
+                    raise VideoDownloadError("yt-dlp returned an unsafe media container") from exc
 
                 logger.info("video_downloader: downloaded", path=local_path)
                 return VideoMetadata(
@@ -182,6 +210,8 @@ class VideoDownloader:
         it as the primary transcription backend. The CLI subprocess path is kept
         as a fallback for environments that installed openai-whisper directly.
         """
+        validate_media_file(video_path)
+
         async def _do_transcribe():
             async with asyncio.timeout(TRANSCRIBE_TIMEOUT_SECONDS):
                 try:
@@ -216,7 +246,8 @@ class VideoDownloader:
     async def _cli_whisper_transcribe(self, video_path: str) -> list[TranscribeSegment]:
         """Fallback: shell out to the `whisper` CLI (openai-whisper package)."""
         async with asyncio.timeout(TRANSCRIBE_TIMEOUT_SECONDS):
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 [
                     "whisper",
                     video_path,

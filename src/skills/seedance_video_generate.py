@@ -40,6 +40,11 @@ from src.config import (
 )
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
+from src.tools.safe_media import (
+    UnsafeMediaError,
+    ffmpeg_local_input_args,
+    ffprobe_local_input_args,
+)
 
 logger = structlog.get_logger()
 
@@ -207,10 +212,25 @@ class SeedanceVideoGenerateSkill(SkillCallable):
         local_path = Path(local_path_str) if local_path_str else None
 
         # === Self-verification ===
-        verification = self._self_verify(
-            local_path=local_path,
-            is_stub=is_stub,
-        )
+        try:
+            verification = self._self_verify(
+                local_path=local_path,
+                is_stub=is_stub,
+            )
+        except UnsafeMediaError:
+            return SkillResult(
+                success=False,
+                error="provider_cost_artifact_failed",
+                metadata={
+                    "verification": {
+                        "all_ok": False,
+                        "failures": ["unsafe_media_rejected"],
+                    },
+                    "video_path": str(local_path) if local_path else "",
+                    "non_retryable": True,
+                    "paid_artifact": not is_stub,
+                },
+            )
 
         # If real-mode (had API key, no stub) but verification failed → return failure to trigger retry
         if not is_stub and not verification["all_ok"]:
@@ -398,12 +418,14 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                     "ffprobe", "-v", "error",
                     "-show_entries", "format=duration",
                     "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(path),
+                    *ffprobe_local_input_args(path),
                 ],
                 capture_output=True, text=True, timeout=10,
             )
             if result.returncode == 0:
                 return float(result.stdout.strip() or "0.0")
+        except UnsafeMediaError:
+            raise
         except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
             logger.debug(
                 "seedance_video_generate: ffprobe duration failed",
@@ -423,12 +445,14 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                     "-select_streams", "v:0",
                     "-show_entries", "stream=width,height",
                     "-of", "csv=s=x:p=0",
-                    str(path),
+                    *ffprobe_local_input_args(path),
                 ],
                 capture_output=True, text=True, timeout=10, check=True,
             )
             w, h = result.stdout.strip().split("x")
             return int(w), int(h)
+        except UnsafeMediaError:
+            raise
         except Exception:
             return None
 
@@ -473,7 +497,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 cmd = [
                     "ffmpeg", "-y",
                     "-ss", str(ts),
-                    "-i", str(path),
+                    *ffmpeg_local_input_args(path),
                     "-vframes", "1",
                     "-vf", "scale=32:32,format=gray",
                     "-f", "rawvideo", "-pix_fmt", "gray",
@@ -487,6 +511,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                     continue
                 pixels = list(struct.unpack(f"{expected}B", raw[:expected]))
                 frames.append(pixels)
+            except UnsafeMediaError:
+                raise
             except Exception:
                 continue
 
@@ -561,7 +587,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             cmd = [
                 "ffmpeg", "-y",
                 "-sseof", "-1",
-                "-i", str(src),
+                *ffmpeg_local_input_args(src),
                 "-vframes", "1",
                 "-q:v", "2",
                 str(frame_path),
@@ -569,6 +595,8 @@ class SeedanceVideoGenerateSkill(SkillCallable):
             subprocess.run(cmd, capture_output=True, timeout=15, check=True)
             if frame_path.exists() and frame_path.stat().st_size > 100:
                 return str(frame_path)
+        except UnsafeMediaError:
+            raise
         except (FileNotFoundError, subprocess.TimeoutExpired,
                 subprocess.CalledProcessError, Exception) as exc:
             logger.debug(

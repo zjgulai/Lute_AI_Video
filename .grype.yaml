@@ -1,0 +1,88 @@
+# Exact, version-bound Debian stable exceptions only. These are not a blanket
+# `only-fixed` bypass: any package version change or new vulnerability falls
+# back into the Critical deployment gate. Review evidence and expiry rules:
+# docs/runbooks/vulnerability-scan-exceptions.md
+ignore:
+  # Perl is not invoked by the backend runtime. Debian classifies the stable
+  # findings as Minor/no-dsa or has not yet published a stable fix.
+  - vulnerability: CVE-2026-12087
+    fix-state: not-fixed
+    package:
+      name: perl-base
+      version: 5.40.1-6
+      type: deb
+  - vulnerability: CVE-2026-13221
+    fix-state: not-fixed
+    package:
+      name: perl-base
+      version: 5.40.1-6
+      type: deb
+  - vulnerability: CVE-2026-42496
+    fix-state: wont-fix
+    package:
+      name: perl-base
+      version: 5.40.1-6
+      type: deb
+  - vulnerability: CVE-2026-57433
+    fix-state: not-fixed
+    package:
+      name: perl-base
+      version: 5.40.1-6
+      type: deb
+  - vulnerability: CVE-2026-8376
+    fix-state: wont-fix
+    package:
+      name: perl-base
+      version: 5.40.1-6
+      type: deb
+
+  # Mbed TLS is present through ffmpeg dependencies. Media is byte-validated,
+  # demuxer-pinned, and restricted to FFmpeg's file/pipe protocols before use.
+  - vulnerability: CVE-2026-34872
+    fix-state: wont-fix
+    package:
+      name: libmbedcrypto16
+      version: 3.6.5-0.1~deb13u1
+      type: deb
+  - vulnerability: CVE-2026-34873
+    fix-state: wont-fix
+    package:
+      name: libmbedcrypto16
+      version: 3.6.5-0.1~deb13u1
+      type: deb
+  - vulnerability: CVE-2026-34875
+    fix-state: wont-fix
+    package:
+      name: libmbedcrypto16
+      version: 3.6.5-0.1~deb13u1
+      type: deb
+
+  # The backend supplies no attacker-controlled scanf format string. Debian
+  # marks this stable glibc issue Minor/no-dsa.
+  - vulnerability: CVE-2026-5450
+    fix-state: wont-fix
+    package:
+      name: libc-bin
+      version: 2.41-12+deb13u3
+      type: deb
+  - vulnerability: CVE-2026-5450
+    fix-state: wont-fix
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+      type: deb
+
+  # Backend media processing does not use GDBus introspection XML. XML/HLS/DASH
+  # masquerades are rejected before demuxer-pinned, file/pipe-only FFmpeg use.
+  - vulnerability: CVE-2026-58016
+    fix-state: wont-fix
+    package:
+      name: libglib2.0-0t64
+      version: 2.84.4-3~deb13u3
+      type: deb
+  - vulnerability: CVE-2026-6653
+    fix-state: wont-fix
+    package:
+      name: libxml2
+      version: 2.12.7+dfsg+really2.9.14-2.1+deb13u3
+      type: deb
