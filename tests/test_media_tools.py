@@ -76,8 +76,13 @@ class TestVideoDownloaderMockMode:
         assert segments[0].text.startswith("Hey everyone")
 
     @pytest.mark.asyncio
-    async def test_mock_download_sentinel_skips_available_whisper(self, dl):
+    async def test_mock_download_sentinel_skips_available_whisper(self, dl, monkeypatch):
         dl._whisper_available = True
+
+        async def fail_if_called(_video_path: str):
+            raise AssertionError("mock download sentinel reached real transcription")
+
+        monkeypatch.setattr(dl, "_real_transcribe", fail_if_called)
 
         segments = await dl.transcribe("[MOCK_DOWNLOAD — fixture]")
 
