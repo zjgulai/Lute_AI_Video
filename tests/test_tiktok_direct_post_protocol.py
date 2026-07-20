@@ -22,6 +22,7 @@ from src.connectors.tiktok_connector import (
     _TIKTOK_VIDEO_QUERY_URL,
     TikTokConnector,
     _build_chunk_plan,
+    _default_media_probe,
 )
 from src.models.publish_attempt import PublishReceiptV1
 
@@ -244,6 +245,17 @@ async def test_media_probe_failure_is_unavailable_before_network(video: Path) ->
     connector._media_probe = broken_probe
 
     with pytest.raises(ConnectorPreflightUnavailable):
+        await connector.preflight(_content(video))
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_unsafe_media_is_rejected_before_network(video: Path) -> None:
+    client = ProtocolClient()
+    connector = _connector(client)
+    connector._media_probe = _default_media_probe
+
+    with pytest.raises(ConnectorPreflightRejected):
         await connector.preflight(_content(video))
     assert client.calls == []
 

@@ -30,7 +30,7 @@ from src.connectors.base import (
 )
 from src.models.publish_attempt import PublishReceiptV1, TikTokPublishOptions
 from src.tasks.metrics_poller import PlatformMetricsError, classify_platform_http_status
-from src.tools.safe_media import ffprobe_local_input_args
+from src.tools.safe_media import UnsafeMediaError, ffprobe_local_input_args
 
 logger = logging.getLogger(__name__)
 
@@ -569,6 +569,8 @@ class TikTokConnector(PlatformConnector):
                 or duration <= 0
             ):
                 raise ValueError("duration is invalid")
+        except UnsafeMediaError as exc:
+            raise ConnectorPreflightRejected from exc
         except Exception:
             raise ConnectorPreflightUnavailable from None
         return (

@@ -46,6 +46,7 @@ from src.config import (
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
 from src.tools.safe_media import (
+    UnsafeMediaError,
     ffmpeg_local_input_args,
     ffprobe_local_input_args,
     validate_media_file,
@@ -165,7 +166,8 @@ class RemotionAssembleSkill(SkillCallable):
                     metadata={
                         "render_mode": remote_result.get("render_mode", "rendering_service"),
                         "rendering_service": rendering_url,
-                        "audio_muxed": bool(audio_paths) and not is_stub_remote,
+                        "audio_muxed": bool(remote_result.get("audio_muxed", False))
+                        and not is_stub_remote,
                         "clip_count": len(clip_paths),
                     },
                 )
@@ -209,6 +211,7 @@ class RemotionAssembleSkill(SkillCallable):
             )
 
         # === PRIORITY 2: ffmpeg clip concat fallback (when Remotion unavailable or failed) ===
+        audio_muxed = False
         if not remotion_done and len(valid_clips) >= 2:
             logger.info(
                 "remotion_assemble: falling back to ffmpeg clip concat",
@@ -289,6 +292,7 @@ class RemotionAssembleSkill(SkillCallable):
             )
             if muxed:
                 output_path = muxed
+                audio_muxed = True
 
         # === Self-verification ===
         verification = self._self_verify(output_path, is_stub=is_stub)
@@ -336,7 +340,7 @@ class RemotionAssembleSkill(SkillCallable):
             },
             metadata={
                 "render_mode": render_mode if not is_stub else "stub",
-                "audio_muxed": bool(audio_paths) and not is_stub,
+                "audio_muxed": audio_muxed,
                 "clip_count": len(valid_clips),
                 "aspect_ratios_rendered": list(video_paths.keys()),
             },
@@ -520,6 +524,8 @@ class RemotionAssembleSkill(SkillCallable):
             )
             w, h = result.stdout.strip().split("x")
             return int(w), int(h)
+        except UnsafeMediaError:
+            raise
         except Exception:
             return None
 
@@ -596,6 +602,8 @@ class RemotionAssembleSkill(SkillCallable):
 
             if output_path.exists() and output_path.stat().st_size > 10000:
                 return output_path
+        except UnsafeMediaError:
+            raise
         except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as e:
             logger.warning("remotion_assemble: ffmpeg concat failed", error=str(e))
         return None
@@ -651,6 +659,8 @@ class RemotionAssembleSkill(SkillCallable):
                     path=str(out_path), lines=len(display_lines),
                 )
                 return out_path
+        except UnsafeMediaError:
+            raise
         except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as e:
             logger.warning("remotion_assemble: ffmpeg lyrics burn failed", error=str(e))
         return None
@@ -708,6 +718,8 @@ class RemotionAssembleSkill(SkillCallable):
             )
             if muxed_path.exists():
                 return muxed_path
+        except UnsafeMediaError:
+            raise
         except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as e:
             logger.warning("remotion_assemble: ffmpeg mux failed (continuing without audio)", error=str(e))
         return None
@@ -798,6 +810,8 @@ class RemotionAssembleSkill(SkillCallable):
             )
             if result.returncode == 0:
                 return float(result.stdout.strip() or "0.0")
+        except UnsafeMediaError:
+            raise
         except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, Exception) as exc:
             logger.debug(
                 "remotion_assemble: ffprobe duration failed",
@@ -841,6 +855,8 @@ class RemotionAssembleSkill(SkillCallable):
                 )
                 if result.returncode == 0:
                     return float(result.stdout.strip() or "0.0")
+            except UnsafeMediaError:
+                raise
             except Exception as exc:
                 logger.debug(
                     "remotion_assemble: stream duration probe failed",

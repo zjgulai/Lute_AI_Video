@@ -119,6 +119,10 @@ class VideoDownloader:
         Returns:
             List of TranscribeSegment with start, end, and text.
         """
+        if self._is_mock_download_path(video_path):
+            logger.info("video_downloader: mock download, skipping transcription")
+            return self._mock_transcription()
+
         if not self._whisper_available:
             logger.warning("video_downloader: whisper not available, using mock")
             return self._mock_transcription()
@@ -157,7 +161,8 @@ class VideoDownloader:
 
         async def _do_download():
             async with asyncio.timeout(DOWNLOAD_TIMEOUT_SECONDS):
-                result = subprocess.run(
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     [
                         "yt-dlp",
                         "--ignore-config",
@@ -241,7 +246,8 @@ class VideoDownloader:
     async def _cli_whisper_transcribe(self, video_path: str) -> list[TranscribeSegment]:
         """Fallback: shell out to the `whisper` CLI (openai-whisper package)."""
         async with asyncio.timeout(TRANSCRIBE_TIMEOUT_SECONDS):
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 [
                     "whisper",
                     video_path,

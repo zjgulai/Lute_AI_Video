@@ -15,7 +15,11 @@ from src.connectors.base import (
     ConnectorPreflightUnavailable,
     ShopifyPreflightSnapshot,
 )
-from src.connectors.shopify_connector import ShopifyConnector, _graphql_url
+from src.connectors.shopify_connector import (
+    ShopifyConnector,
+    _default_media_probe,
+    _graphql_url,
+)
 from src.models.publish_attempt import PublishReceiptV1
 
 NOW = datetime(2026, 7, 14, 8, 0, tzinfo=UTC)
@@ -281,6 +285,17 @@ async def test_media_limit_rejects_more_than_ten_minutes(video: Path) -> None:
 
     with pytest.raises(ConnectorPreflightRejected):
         await _connector(client, duration=600.001).preflight(_content(video))
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_unsafe_media_is_rejected_before_network(video: Path) -> None:
+    client = ProtocolClient()
+    connector = _connector(client)
+    connector._media_probe = _default_media_probe
+
+    with pytest.raises(ConnectorPreflightRejected):
+        await connector.preflight(_content(video))
     assert client.calls == []
 
 

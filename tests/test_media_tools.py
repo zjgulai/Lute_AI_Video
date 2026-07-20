@@ -76,6 +76,14 @@ class TestVideoDownloaderMockMode:
         assert segments[0].text.startswith("Hey everyone")
 
     @pytest.mark.asyncio
+    async def test_mock_download_sentinel_skips_available_whisper(self, dl):
+        dl._whisper_available = True
+
+        segments = await dl.transcribe("[MOCK_DOWNLOAD — fixture]")
+
+        assert len(segments) == 6
+
+    @pytest.mark.asyncio
     async def test_download_and_transcribe_returns_both(self, dl):
         """download_and_transcribe should return metadata + segments."""
         result = await dl.download_and_transcribe("https://www.douyin.com/video/456")

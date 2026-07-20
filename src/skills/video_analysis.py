@@ -142,7 +142,7 @@ class VideoAnalysisSkill(SkillCallable):
         download = await self._downloader.download(video_url)
 
         logger.info("video-analysis: transcribing", url=video_url)
-        transcription = await self._downloader.transcribe(video_url)
+        transcription = await self._downloader.transcribe(download.local_path)
 
         # NEW: Visual frame analysis (optional, non-blocking)
         visual_context = None

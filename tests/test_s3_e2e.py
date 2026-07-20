@@ -98,6 +98,7 @@ def _patch_s3_external_dependencies(monkeypatch, tmp_path):
         )
 
     async def _fake_transcribe(self, video_path: str):
+        assert video_path == str(media_dir / "downloaded.mp4")
         return [
             video_analysis_skill.TranscribeSegment(
                 start=0.0, end=5.0, text="Are you tired of bulky pumps?"

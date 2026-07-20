@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import os
 import subprocess
 import threading
@@ -13,6 +14,9 @@ import yt_dlp
 
 from scripts import generate_portfolio_posters, generate_portfolio_thumbnails
 from src.models.provider_cost import ProviderCostContractError
+from src.skills.base import SkillCallable, SkillResult
+from src.skills.remotion_assemble import RemotionAssembleSkill
+from src.skills.seedance_video_generate import SeedanceVideoGenerateSkill
 from src.tools import poster_extractor
 from src.tools.cosyvoice_client import _validate_response_format
 from src.tools.safe_media import (
@@ -110,6 +114,189 @@ def test_raw_pcm_is_rejected_until_layout_is_explicit(tmp_path: Path) -> None:
         _validate_response_format("pcm")
     with pytest.raises(UnsafeMediaError, match="extension is not approved"):
         validate_media_file(media)
+
+
+def test_core_media_probes_preserve_unsafe_media_rejection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unsafe_video = tmp_path / "unsafe.mp4"
+    unsafe_video.write_bytes(b"<?xml version='1.0'?><MPD>fixture</MPD>" * 100)
+    unsafe_audio = tmp_path / "unsafe.mp3"
+    unsafe_audio.write_bytes(b"#EXTM3U\nhttps://example.invalid/audio\n" * 20)
+    output = tmp_path / "output.mp4"
+    calls = 0
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("unsafe media must not reach subprocess")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    monkeypatch.setattr("src.config.OUTPUT_DIR", tmp_path)
+    (tmp_path / "renders").mkdir()
+    remotion = RemotionAssembleSkill()
+
+    unsafe_calls = (
+        lambda: RemotionAssembleSkill._get_video_dimensions(unsafe_video),
+        lambda: remotion._concat_clips([unsafe_video], output),
+        lambda: remotion._try_burn_lyrics(unsafe_video, "line", 5.0, "unsafe"),
+        lambda: remotion._try_mux_audio(unsafe_video, [str(unsafe_audio)], "unsafe"),
+        lambda: RemotionAssembleSkill._measure_duration(unsafe_video),
+        lambda: RemotionAssembleSkill._check_av_sync(unsafe_video),
+        lambda: SeedanceVideoGenerateSkill._measure_duration(unsafe_video),
+        lambda: SeedanceVideoGenerateSkill._get_video_dimensions(unsafe_video),
+        lambda: SeedanceVideoGenerateSkill._check_frame_variance(unsafe_video),
+        lambda: SeedanceVideoGenerateSkill._extract_last_frame(str(unsafe_video)),
+    )
+    for call in unsafe_calls:
+        with pytest.raises(UnsafeMediaError):
+            call()
+    assert calls == 0
+
+
+def test_symlink_media_is_rejected_by_core_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "target.mp4"
+    target.write_bytes(b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2")
+    symlink = tmp_path / "linked.mp4"
+    symlink.symlink_to(target)
+    calls = 0
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    with pytest.raises(UnsafeMediaError, match="regular local file"):
+        RemotionAssembleSkill._measure_duration(symlink)
+    assert calls == 0
+
+
+class _UnsafeMediaSkill(SkillCallable):
+    name = "unsafe-media-test"
+    description = "fixture"
+    max_retries = 3
+
+    def __init__(self) -> None:
+        self.fallback_called = False
+
+    def validate_params(self, params: dict[str, Any]) -> list[str]:
+        return []
+
+    def validate_output(self, data: Any) -> list[str]:
+        return []
+
+    async def execute(self, params: dict[str, Any]) -> SkillResult:
+        raise UnsafeMediaError("fixture must remain non-retryable")
+
+    def fallback(self, params: dict[str, Any]) -> SkillResult:
+        self.fallback_called = True
+        return SkillResult(success=True, data={"unsafe": True})
+
+
+@pytest.mark.asyncio
+async def test_skill_wrapper_never_retries_or_falls_back_on_unsafe_media() -> None:
+    skill = _UnsafeMediaSkill()
+
+    result = await skill.safe_execute({"provider_max_retries": 2})
+
+    assert result.success is False
+    assert result.error == "unsafe_media_rejected"
+    assert result.metadata["non_retryable"] is True
+    assert result.metadata["retries"] == 0
+    assert skill.fallback_called is False
+
+
+@pytest.mark.asyncio
+async def test_remotion_unsafe_concat_returns_non_retryable_failure_without_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unsafe_clips = []
+    for index in range(2):
+        clip = tmp_path / f"unsafe-{index}.mp4"
+        clip.write_bytes(b"<?xml version='1.0'?><MPD>fixture</MPD>" * 100)
+        unsafe_clips.append(str(clip))
+    calls = 0
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("unsafe media must not reach subprocess")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    monkeypatch.setattr("src.config.OUTPUT_DIR", tmp_path)
+    monkeypatch.delenv("RENDERING_SERVICE_URL", raising=False)
+    monkeypatch.setattr(
+        "src.tools.remotion_renderer.RemotionRenderer.validate_environment",
+        lambda _self: {"available": False, "issues": ["fixture"]},
+    )
+    skill = RemotionAssembleSkill()
+
+    result = await skill.safe_execute(
+        {
+            "shots": [{"start_time": 0, "end_time": 5}],
+            "clip_paths": unsafe_clips,
+            "output_label": "unsafe-concat",
+            "provider_max_retries": 2,
+        }
+    )
+
+    assert result.success is False
+    assert result.error == "unsafe_media_rejected"
+    assert result.metadata["non_retryable"] is True
+    assert result.metadata["retries"] == 0
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_remotion_does_not_claim_audio_mux_when_mux_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.config.OUTPUT_DIR", tmp_path)
+    monkeypatch.delenv("RENDERING_SERVICE_URL", raising=False)
+    monkeypatch.setattr(
+        "src.tools.remotion_renderer.RemotionRenderer.validate_environment",
+        lambda _self: {"available": True, "issues": []},
+    )
+
+    def fake_render(
+        _self: object,
+        input_json: Path,
+        output_filename: str,
+        blocking: bool,
+        **_kwargs: object,
+    ) -> Path:
+        del blocking
+        output = input_json.parent / output_filename
+        output.write_bytes(
+            b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"0" * 110_000
+        )
+        return output
+
+    monkeypatch.setattr("src.tools.remotion_renderer.RemotionRenderer.render", fake_render)
+    monkeypatch.setattr(RemotionAssembleSkill, "_try_mux_audio", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        RemotionAssembleSkill,
+        "_self_verify",
+        lambda *_args, **_kwargs: {"all_ok": True, "failures": []},
+    )
+    monkeypatch.setattr(RemotionAssembleSkill, "_measure_duration", lambda *_args: 5.0)
+
+    result = await RemotionAssembleSkill().execute(
+        {
+            "shots": [{"start_time": 0, "end_time": 5}],
+            "audio_paths": [str(tmp_path / "requested.mp3")],
+            "output_label": "mux-failure",
+        }
+    )
+
+    assert result.success is True
+    assert result.metadata["audio_muxed"] is False
 
 
 def test_every_literal_ffmpeg_file_input_uses_the_central_guard() -> None:
@@ -307,6 +494,50 @@ async def test_ytdlp_command_disables_indirect_ffmpeg_before_validation(
     parsed = yt_dlp.parse_options(command[1:])
     assert parsed.ydl_opts.get("simulate") is False
     assert parsed.ydl_opts.get("forceprint") == {"after_move": ["filepath"]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["download", "whisper"])
+async def test_media_cli_subprocess_does_not_block_event_loop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    started = threading.Event()
+    release = threading.Event()
+    downloaded = tmp_path / "downloaded.mp4"
+
+    def blocking_run(command: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        started.set()
+        assert release.wait(timeout=2)
+        if command[0] == "yt-dlp":
+            downloaded.write_bytes(b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2")
+            stdout = str(downloaded)
+        else:
+            stdout = '{"segments":[{"start":0,"end":1,"text":"fixture"}]}'
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", blocking_run)
+    downloader = object.__new__(VideoDownloader)
+    downloader.output_dir = tmp_path
+    coroutine = (
+        downloader._real_download("https://example.invalid/video")
+        if operation == "download"
+        else downloader._cli_whisper_transcribe(str(downloaded))
+    )
+    task = asyncio.create_task(coroutine)
+    try:
+        for _ in range(1000):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.001)
+        assert started.is_set()
+        await asyncio.sleep(0.01)
+        assert not task.done()
+    finally:
+        release.set()
+
+    await task
 
 
 @pytest.mark.asyncio
