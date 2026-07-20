@@ -42,7 +42,7 @@ faster-whisper>=1.2.1
 # Decision: keep CPU-only to stay under 4GB image budget. GPU users override
 # Dockerfile.backend TORCH_WHEEL_* build args with a CUDA-aware torch wheel.
 transformers>=5.13.0
-torch>=2.12.1
+torch>=2.13.0
 Pillow>=10.0
 
 # Development
