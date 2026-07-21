@@ -28,7 +28,9 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && test ! -e /usr/local/lib/node_modules/npm
 
 COPY src ./src
 COPY server.mjs ./

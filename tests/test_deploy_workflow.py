@@ -453,6 +453,22 @@ class TestDeployWorkflow:
         assert "CMD wget" in runtime
         assert "http://127.0.0.1:3000" in runtime
 
+    def test_node_release_images_remove_the_runtime_npm_toolchain(self):
+        removal = (
+            "rm -rf /usr/local/lib/node_modules/npm "
+            "/usr/local/bin/npm /usr/local/bin/npx"
+        )
+        frontend_runner = (REPO_ROOT / "web/Dockerfile").read_text().split(
+            "FROM node:22-alpine AS runner", 1
+        )[1]
+        rendering = RENDERING_DOCKERFILE.read_text()
+
+        assert removal in frontend_runner
+        assert removal in rendering
+        assert rendering.index("npm ci --omit=dev --no-audit --no-fund") < rendering.index(
+            removal
+        )
+
     def test_no_inline_plaintext_secrets(self, workflow):
         text = DEPLOY_YML.read_text()
         forbidden_patterns = [
