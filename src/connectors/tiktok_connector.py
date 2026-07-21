@@ -23,13 +23,18 @@ from src.connectors.base import (
     ConnectorCredentialState,
     ConnectorOutcomeAmbiguous,
     ConnectorPreflightRejected,
+    ConnectorPreflightSnapshot,
     ConnectorPreflightUnavailable,
     ConnectorStatusUnavailable,
     PlatformConnector,
     TikTokPreflightSnapshot,
 )
 from src.models.publish_attempt import PublishReceiptV1, TikTokPublishOptions
-from src.tasks.metrics_poller import PlatformMetricsError, classify_platform_http_status
+from src.tasks.metrics_poller import (
+    MetricErrorCategory,
+    PlatformMetricsError,
+    classify_platform_http_status,
+)
 from src.tools.safe_media import UnsafeMediaError, ffprobe_local_input_args
 
 logger = logging.getLogger(__name__)
@@ -172,7 +177,7 @@ def _require_access_token() -> str:
     return token
 
 
-def _classify_tiktok_error(code: str, message: str) -> str:
+def _classify_tiktok_error(code: str, message: str) -> MetricErrorCategory:
     value = f"{code} {message}".lower()
     if any(marker in value for marker in ("auth", "token", "scope", "permission")):
         return "auth"
@@ -400,7 +405,7 @@ class TikTokConnector(PlatformConnector):
         self,
         content: dict[str, Any],
         *,
-        preflight: TikTokPreflightSnapshot | None = None,
+        preflight: ConnectorPreflightSnapshot | None = None,
     ) -> dict[str, Any]:
         token = _require_access_token()
         if not isinstance(preflight, TikTokPreflightSnapshot):

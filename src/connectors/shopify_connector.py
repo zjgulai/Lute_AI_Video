@@ -25,13 +25,18 @@ from src.connectors.base import (
     ConnectorCredentialState,
     ConnectorOutcomeAmbiguous,
     ConnectorPreflightRejected,
+    ConnectorPreflightSnapshot,
     ConnectorPreflightUnavailable,
     ConnectorStatusUnavailable,
     PlatformConnector,
     ShopifyPreflightSnapshot,
 )
 from src.models.publish_attempt import PublishReceiptV1, ShopifyPublishOptions
-from src.tasks.metrics_poller import PlatformMetricsError, classify_platform_http_status
+from src.tasks.metrics_poller import (
+    MetricErrorCategory,
+    PlatformMetricsError,
+    classify_platform_http_status,
+)
 from src.tools.safe_media import UnsafeMediaError, ffprobe_local_input_args
 
 logger = logging.getLogger(__name__)
@@ -255,7 +260,7 @@ def _summarize_graphql_errors(errors: Any) -> str:
     return "; ".join(messages)
 
 
-def _classify_shopify_error(errors: Any) -> str:
+def _classify_shopify_error(errors: Any) -> MetricErrorCategory:
     value = _summarize_graphql_errors(errors).lower()
     if any(marker in value for marker in ("access denied", "scope", "permission", "protected customer", "token")):
         return "auth"
@@ -533,7 +538,7 @@ class ShopifyConnector(PlatformConnector):
         self,
         content: dict[str, Any],
         *,
-        preflight: ShopifyPreflightSnapshot | None = None,
+        preflight: ConnectorPreflightSnapshot | None = None,
     ) -> dict[str, Any]:
         token, store = _require_credentials()
         if not isinstance(preflight, ShopifyPreflightSnapshot):
