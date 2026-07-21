@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BeforeValidator, ValidationError
@@ -50,7 +50,7 @@ _PUBLISH_OPENAPI_EXTRA = {
     },
 }
 
-_PUBLISH_RESPONSES = {
+_PUBLISH_RESPONSES: dict[int | str, dict[str, Any]] = {
     401: {"description": "Invalid API key"},
     403: {"description": "Insufficient permission"},
     404: {"model": PublishAttemptErrorResponse},

@@ -5,7 +5,7 @@ module: project
 topic: enterprise-ai-content-all-scenarios-closure
 status: stable
 created: 2026-07-11
-updated: 2026-07-20
+updated: 2026-07-21
 owner: self
 source: human+ai
 ---
@@ -79,14 +79,14 @@ source: human+ai
 - [x] `completed_local` W1-18：workflow 在安装/Playwright 前校验 private plan/approval、finite exact budget、logical refs、submit=1、retry=0、pending_review、Fast media authority、短期 UTC expiry、当前 run/attempt 与 commit SHA；production key 只注入 validator 和 token run 两步。
 - [x] `completed_local` W1-19：一次 workflow 只允许一个固定 allowlist spec，强制 `--workers=1 --retries=0`；token trace/screenshot/test-results 关闭，完整 token suite 不可被全局解锁。
 - [x] `completed_local` W1-20：静态 tests 动态枚举全部 production `@token-smoke` specs，对照 Playwright/validator allowlist，并证明未列入的 mutation spec 在 token mode 不可达。
-- [ ] `blocked_external` W1-21：由 GitHub owner 配置 Environment reviewers、secrets 和固定审批人；仓库内只能验证 workflow 声明，不能证明外部设置已生效。
+- [ ] `blocked_external` W1-21：2026-07-21 GitHub API 只读核验显示 `production-read-only-dry-run` 已存在但无 protection rule、无 Environment secret，`production` Environment 不存在。需要 GitHub owner 配置受限 dry-run 身份、两组 Environment secrets/branch policy，并为 `production` 配置固定审批人；不得复用或上传仓库根目录私钥。
 
 ### 3.5 发布真实性与持久化人工验收
 
-- [x] `completed_local` W1-22：新增 tenant-bound、artifact-bound、single-use acceptance record schema/repository/API；本地 focused/full、disposable PG18、OpenAPI/recovery 与独立复核已通过，生产 migration/deploy 未执行。
-- [x] `completed_local` W1-23：两条发布路由只接受服务端 acceptance id，并以 `artifact:publish|all`、单平台单次 attempt、durable audit、single-use consume、无自动重试/恢复闭环；focused/full、fake connector、disposable PG18、OpenAPI/前端与独立复核已通过。生产 migration/deploy 和真实 publish 未执行。
-- [ ] `implementation_complete_local / independent_review_pending` W1-24：TikTok/Shopify credential、publish/status runtime mock、精确 `simulated` truth、发布 outcome matrix 与 status 503/502/200 已按批准规格实现；focused `600 passed`、本地 PG18 `2 passed`、backend `3415 passed, 9 skipped, 14 deselected`、frontend `67 files/388 tests` 与 build 均通过。`independent_review=false`，未达到 `completed_local`；生产、真实 credential/connector/status、live publish 均未验收。
-- [x] `completed_local` W1-25：发布请求已使用 strict platform options；TikTok Direct Post v2、Shopify Admin GraphQL `2026-07`、consume 前 read-only preflight、strict durable `publish-receipt.v1`、tenant-bound attempt readback、receipt-only legacy status 和 canonical default-off env 已按批准规格实现。Focused `885 passed`、本地 PG18 compat/rollback/re-upgrade/fresh-init 各阶段 `2/2`、backend `3585 passed, 9 skipped, 14 deselected`、frontend `67 files/390 tests` 与 build 均通过。后续独立 Codex 审查完成，两个前端建议经规格核验为有意的 fail-closed/W5 UI deferred 边界，`accepted_actionable_findings=0`。生产、真实 credential/connector/status、live publish/reconciliation 均未验收。
+- [x] `completed_local` W1-22：新增 tenant-bound、artifact-bound、single-use acceptance record schema/repository/API；本地 focused/full、disposable PG18、OpenAPI/recovery 与独立复核已通过。2026-07-21 schema/application 已随 provider-off release 部署，但未执行 acceptance mutation 或 authenticated functional acceptance。
+- [x] `completed_local` W1-23：两条发布路由只接受服务端 acceptance id，并以 `artifact:publish|all`、单平台单次 attempt、durable audit、single-use consume、无自动重试/恢复闭环；focused/full、fake connector、disposable PG18、OpenAPI/前端与独立复核已通过。2026-07-21 schema/application 已 provider-off 部署，真实 publish 未执行。
+- [x] `completed_local / independent_review=true` W1-24：TikTok/Shopify credential、publish/status runtime mock、精确 `simulated` truth、发布 outcome matrix 与 status truth 已按批准规格实现；后续 W1-25 将外部 status lookup 收敛为 durable receipt readback。2026-07-21 独立六维审查发现的五组 source type-contract 问题已由主线程修复且无 suppression；同一审查线程复验 `PASS / APPROVE`、`accepted_actionable_findings=0`，fresh source Pyright `0 errors`、focused `580 passed`、Ruff/docs/diff clean。在该 review checkpoint，既有业务行为已随 production SHA `95c2d0460ccb1566b7a612cee3592cebb3439cef` provider-off 部署，而 follow-up type-contract 修复尚不是 production evidence；其后续发布状态必须按实时 Git/main/runtime 重新核验。真实 credential/connector/status、live publish 均未验收。
+- [x] `completed_local` W1-25：发布请求已使用 strict platform options；TikTok Direct Post v2、Shopify Admin GraphQL `2026-07`、consume 前 read-only preflight、strict durable `publish-receipt.v1`、tenant-bound attempt readback、receipt-only legacy status 和 canonical default-off env 已按批准规格实现。Focused `885 passed`、本地 PG18 compat/rollback/re-upgrade/fresh-init 各阶段 `2/2`、backend `3585 passed, 9 skipped, 14 deselected`、frontend `67 files/390 tests` 与 build 均通过。后续独立 Codex 审查完成，两个前端建议经规格核验为有意的 fail-closed/W5 UI deferred 边界，`accepted_actionable_findings=0`。代码已随 2026-07-21 provider-off release 部署；真实 credential/connector/status、live publish/reconciliation 均未验收。
 - [ ] `blocked_external` W1-26：真实 sandbox/production publish 需要平台凭证、单 post 授权、删除/回滚方案和人工验收记录。
 
 ### 3.6 成本账本与预算
@@ -134,7 +134,7 @@ source: human+ai
 
 - [ ] `pending_local` W3-01：选择并固化生产 Python 版本；CI 在相同版本和完整生产 dependency set 上运行关键测试/import/health。
 - [ ] `pending_local` W3-02：让 Docker/CI 消费 canonical lock；禁止 `requirements.txt >=` 在同 SHA 上产生漂移镜像。
-- [ ] `pending_local` W3-03：修复 Pyright `executionEnvironments` 配置，增加真实 `make typecheck` target 和 CI gate；逐模块消除可信错误。
+- [ ] `pending_local` W3-03：修复 Pyright `executionEnvironments` 配置，增加真实 `make typecheck` target 和 CI gate；逐模块消除可信错误。2026-07-21 W1-24 九个 production source files 已达 `0 errors`，但展开其历史 test files 仍有 141 条既有类型债；未使用 ignore/suppression，测试清债仍由本项承接，不能表述为全 scope Pyright 已闭环。
 - [ ] `pending_local` W3-04：增加 pip/npm/image vulnerability scan；Dependabot security updates 和 alerts 由 owner 开启并记录状态。
 
 ### 5.2 Prometheus、Grafana 与通知
@@ -154,12 +154,12 @@ source: human+ai
 
 ### 5.4 Atomic deploy 与 provenance
 
-- [ ] `implementation_complete_local` W3-14：workflow 已构建/test/scan SHA-tagged backend/frontend/rendering images并输出 digest、SBOM、scan 与 exact archive；本地 workflow/compose 合约通过，真实 GitHub run 与 artifact 尚待 versioned source。
-- [ ] `implementation_complete_local` W3-15：release compose 无 live source/`.next` bind mount，source 进入不可覆盖的 versioned release；应用在维护窗口内切换，共享 nginx/portal-auth 不重建，只备份、校验并 reload AI Video location snippet。尚未 live deploy，不是 zero-downtime。
-- [x] `completed_local` W3-16：canonical wrapper 默认 dry-run，非法 `DRY_RUN` 在 SSH/key 检查前立即退出；dry/live 都强制 clean、同步 `origin/main` 的 `main`，live 还要求 `RELEASE_SOURCE_SHA` 精确匹配 reviewed HEAD。focused deploy contract `39 passed`、bash syntax 与 scoped diff clean；尚未执行 rsync 或 deploy。
-- [ ] `implementation_complete_local` W3-17：tag/workflow dispatch 必须精确等于实时 `origin/main` tip，SSH 只接受 pinned known-hosts；无生产 secret 的 restricted dry-run 与 deletion artifact 位于 live approval 之前。真实 GitHub Environment/secret/run 尚未验证。
+- [x] `complete` W3-14：GitHub run `29793757819` 在 exact `main` SHA `95c2d0460ccb1566b7a612cee3592cebb3439cef` 上完成 provenance、full preflight、backend/frontend/rendering SHA-tagged build/runtime smoke、SBOM、三镜像 scan/Critical enforcement 与 exact release bundle upload；只有后续 restricted remote dry-run 因 Environment secrets 为空而 fail-closed。
+- [x] `complete` W3-15：2026-07-21 授权维护窗口使用已审查 immutable image bundle 完成 live deploy；release compose 无 live source/`.next` bind mount，应用切换时共享 nginx/portal-auth 未重建，AI Video location snippet 经备份、`nginx -t`、reload 与 rollback-ready 检查。该证据是 maintenance-window deploy，不是 zero-downtime 声明。
+- [x] `completed_local` W3-16：canonical wrapper 默认 dry-run，非法 `DRY_RUN` 在 SSH/key 检查前立即退出；dry/live 都强制 clean、同步 `origin/main` 的 `main`，live 还要求 `RELEASE_SOURCE_SHA` 精确匹配 reviewed HEAD。focused deploy contract `39 passed`、bash syntax 与 scoped diff clean；后续已授权 live 执行证据单列在 W3-15/W3-19。
+- [ ] `blocked_external` W3-17：workflow provenance/build contract 已由 run `29793757819` 验证，SSH 仅接受 pinned known-hosts；但 `production-read-only-dry-run` Environment 的五个 `DRY_RUN_*` secrets 均未配置，remote dry-run 在 SSH 构造前 fail-closed，未生成 deletion artifact。修复需要独立受限账号/密钥和 GitHub owner 配置，禁止回退复用 `DEPLOY_*` 或现有生产私钥。
 - [x] `completed_local` W3-18：rendering health 只有 Remotion/ffmpeg/Chromium 全部 ready 才返回 200；provider-backed smoke 只接受 200，500 不再作为业务成功；聚焦合约已包含在 `154 passed`。
-- [ ] `blocked_external` W3-19：下一次 no-token live deploy 验证 wrapper `exit=0` 和独立 L3 acceptance，需精确部署授权。
+- [x] `complete` W3-19：2026-07-21 的精确授权 provider-off live deploy 已验证 canonical wrapper `exit=0`，随后独立 L3 acceptance 通过 HTTPS/pages、PostgreSQL readiness、auth guards、容器/restart、日志与浏览器检查；provider、publish、delivery 与 token smoke 均为零调用。
 
 ## 6. Wave 4 — 透明度、C2PA、文档与体验
 

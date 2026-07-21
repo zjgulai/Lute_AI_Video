@@ -405,6 +405,9 @@ class PublishAttemptService:
             receipt.validate_published()
             if receipt.post_id != post_id:
                 raise ValueError("durable receipt post ID is contradictory")
+            verified_by = receipt.verified_by
+            if verified_by != "status_fetch" and verified_by != "video_query":
+                raise ValueError("durable TikTok receipt verifier is contradictory")
             return DurableTikTokStatusResponse(
                 platform="tiktok",
                 post_id=post_id,
@@ -412,7 +415,7 @@ class PublishAttemptService:
                 post_url=receipt.post_url,
                 simulated=False,
                 observed_at=receipt.observed_at,
-                verified_by=receipt.verified_by,
+                verified_by=verified_by,
             )
         except PublishAttemptStoreUnavailable:
             raise

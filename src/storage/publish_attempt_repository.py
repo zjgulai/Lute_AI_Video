@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, NoReturn
 from urllib.parse import urlsplit
 
 import asyncpg
@@ -343,7 +343,7 @@ class PublishAttemptRepository:
                 platform,
                 content_json,
             )
-            return row
+            return dict(row)
         except PublishAttemptStoreUnavailable:
             raise
         except _STORE_DRIVER_ERRORS as exc:
@@ -518,7 +518,7 @@ class PublishAttemptRepository:
                 sqlite_connection,
                 args,
             )
-            return row
+            return dict(row) if row is not None else None
         except PublishAttemptStoreUnavailable:
             raise
         except _STORE_DRIVER_ERRORS as exc:
@@ -1064,7 +1064,7 @@ class PublishAttemptRepository:
             raise ValueError("route_kind is invalid")
 
     @staticmethod
-    def _raise_store_unavailable(exc: Exception) -> None:
+    def _raise_store_unavailable(exc: Exception) -> NoReturn:
         logger.warning(
             "Publish attempt store operation failed (%s)",
             type(exc).__name__,
