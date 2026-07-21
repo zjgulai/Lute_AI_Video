@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -14,6 +16,9 @@ DEPLOY_SCRIPT = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
 RELEASE_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.release.yml"
 CURRENT_SHA = "a" * 40
 PREVIOUS_SHA = "b" * 40
+RELEASE_COMPOSE_ENV_KEYS = frozenset(
+    re.findall(r"\$\{([A-Z0-9_]+)", RELEASE_COMPOSE.read_text(encoding="utf-8"))
+)
 
 
 FAKE_SUDO = r'''#!/usr/bin/env python3
@@ -27,6 +32,14 @@ args = sys.argv[1:]
 log = pathlib.Path(os.environ["FAKE_DEPLOY_LOG"])
 with log.open("a", encoding="utf-8") as stream:
     stream.write("sudo " + " ".join(args) + "\n")
+
+# Match production sudo env_reset for the interpolation inputs derived from the
+# release compose contract. The deploy script must pass each through `sudo env`.
+compose_env_keys = tuple(
+    key for key in os.environ["FAKE_REQUIRED_COMPOSE_ENV_KEYS"].split(",") if key
+)
+for key in compose_env_keys:
+    os.environ.pop(key, None)
 
 while args and args[0] == "env":
     args.pop(0)
@@ -64,7 +77,7 @@ if args[0] != "docker":
 docker = args[1:]
 loaded = pathlib.Path(os.environ["FAKE_LOADED"])
 stack = pathlib.Path(os.environ["FAKE_STACK"])
-current_sha = os.environ["RELEASE_SOURCE_SHA"]
+current_sha = os.environ.get("RELEASE_SOURCE_SHA", os.environ["FAKE_CURRENT_SHA"])
 previous_sha = os.environ.get("FAKE_PREVIOUS_SHA", "")
 
 if docker[:2] == ["image", "inspect"]:
@@ -96,6 +109,10 @@ if docker[:1] == ["exec"]:
     raise SystemExit(0)
 if docker[:1] == ["compose"]:
     compose_path = docker[docker.index("-f") + 1]
+    if compose_path == os.environ["COMPOSE_FILE"] and any(
+        not os.environ.get(key) for key in compose_env_keys
+    ):
+        raise SystemExit(15)
     command = next((item for item in ("config", "stop", "start", "up", "run") if item in docker), "")
     if command == "run" and "--apply" in docker and os.environ.get("FAIL_STAGE") == "migration":
         raise SystemExit(43)
@@ -183,6 +200,10 @@ def _run_deploy(
         "RUN_DEPLOY_SMOKE": "0",
         "CLEANUP_AFTER_DEPLOY": cleanup,
         "FAKE_DEPLOY_LOG": str(log),
+        "FAKE_CURRENT_SHA": CURRENT_SHA,
+        "FAKE_REQUIRED_COMPOSE_ENV_KEYS": ",".join(
+            sorted(RELEASE_COMPOSE_ENV_KEYS)
+        ),
         "FAKE_LOADED": str(loaded),
         "FAKE_STACK": str(stack),
         "FAKE_PREVIOUS_SHA": PREVIOUS_SHA if previous_release else "",
@@ -276,6 +297,18 @@ def test_success_uses_reviewed_backup_helper_migrates_then_restores_ingress(
     result, log = _run_deploy(tmp_path)
 
     assert result.returncode == 0, result.stderr
+    release_compose_command = next(
+        line
+        for line in log.splitlines()
+        if f"docker compose -f {RELEASE_COMPOSE} config" in line
+    )
+    tokens = shlex.split(release_compose_command)
+    env_start = tokens.index("env") + 1
+    docker_start = tokens.index("docker")
+    passed_env_keys = {
+        token.split("=", 1)[0] for token in tokens[env_start:docker_start]
+    }
+    assert passed_env_keys == RELEASE_COMPOSE_ENV_KEYS
     assert f"PROJECT_ROOT={REPO_ROOT}" in log
     assert f"DUMP_SCRIPT={REPO_ROOT}/scripts/pg_dump_logical.py" in log
     assert "stop nginx" not in log
