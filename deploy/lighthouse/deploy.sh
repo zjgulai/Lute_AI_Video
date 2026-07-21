@@ -24,7 +24,6 @@ RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-https://mirrors.cloud.tencen
 RELEASE_IMAGE_ARCHIVE="${RELEASE_IMAGE_ARCHIVE:-}"
 RELEASE_IMAGE_ARCHIVE_SHA256="${RELEASE_IMAGE_ARCHIVE_SHA256:-${RELEASE_IMAGE_ARCHIVE}.sha256}"
 
-COMPOSE=(sudo docker compose -f "$COMPOSE_FILE")
 ACTIVE_COMMAND=()
 ACTIVE_RELEASE_KIND=""
 PREVIOUS_RELEASE_ROOT=""
@@ -72,6 +71,17 @@ export RELEASE_SOURCE_SHA
 export RELEASE_IMAGE_TAG="$RELEASE_SOURCE_SHA"
 export AI_VIDEO_SHARED_ROOT AI_VIDEO_ENV_FILE PORTAL_AUTH_ENV_FILE
 export RENDERING_ALPINE_MIRROR
+
+# Production sudo uses env_reset, so compose interpolation inputs must cross the
+# privilege boundary explicitly. Do not rely on shell exports surviving sudo.
+COMPOSE=(
+  sudo env
+  "RELEASE_SOURCE_SHA=$RELEASE_SOURCE_SHA"
+  "RELEASE_IMAGE_TAG=$RELEASE_IMAGE_TAG"
+  "AI_VIDEO_ENV_FILE=$AI_VIDEO_ENV_FILE"
+  "RENDERING_ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR"
+  docker compose -f "$COMPOSE_FILE"
+)
 
 configure_active_release() {
   local current_link="$AI_VIDEO_SHARED_ROOT/current" previous_compose image
