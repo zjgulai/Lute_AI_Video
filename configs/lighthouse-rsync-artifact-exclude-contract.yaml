@@ -1,7 +1,7 @@
 version: 1
 owner: deploy
 status: stable
-updated: "2026-07-10"
+updated: "2026-07-21"
 
 entrypoints:
   exclude_file: deploy/lighthouse/rsync-excludes.txt
@@ -35,6 +35,7 @@ exclude_categories:
     - web/dist
     - web/tsconfig.tsbuildinfo
   test_reports_and_traces:
+    - .playwright-cli
     - web/playwright-report
     - web/test-results
     - web/blob-report

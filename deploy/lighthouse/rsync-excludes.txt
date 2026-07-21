@@ -29,6 +29,7 @@ rendering/node_modules
 .ruff_cache
 .mypy_cache
 .playwright-mcp
+.playwright-cli
 .omc
 .sisyphus
 coverage

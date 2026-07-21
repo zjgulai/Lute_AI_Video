@@ -40,6 +40,7 @@ REQUIRED_EXCLUDES_BY_CATEGORY = {
         "web/tsconfig.tsbuildinfo",
     },
     "test_reports_and_traces": {
+        ".playwright-cli",
         "web/playwright-report",
         "web/test-results",
         "web/blob-report",
@@ -145,6 +146,7 @@ def test_lighthouse_rsync_artifact_contract_and_runbook_are_documented():
     for token in [
         "pytest tests/test_lighthouse_rsync_artifact_guard.py",
         "deploy/lighthouse/rsync-excludes.txt",
+        ".playwright-cli",
         "web/playwright-report",
         "tmp/screenshots",
         "output_uploaded",
