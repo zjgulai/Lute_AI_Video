@@ -40,6 +40,11 @@ ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV NEXT_PUBLIC_IS_DEMO=${NEXT_PUBLIC_IS_DEMO}
 ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
 
+# The standalone server needs Node.js only. Remove the bundled package manager
+# so its build-time dependency tree is not retained in the runtime image.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && test ! -e /usr/local/lib/node_modules/npm
+
 # Copy only the production artifacts
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
