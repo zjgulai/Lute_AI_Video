@@ -1,3 +1,15 @@
+---
+title: "W5 Fast Activation Readiness Implementation Plan"
+doc_type: workflow
+module: acceptance
+topic: fast-activation-readiness
+status: stable
+created: 2026-07-23
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W5 Fast Activation Readiness Implementation Plan
 
 > **For Codex:** Execute this plan in strict RED -> GREEN -> focused

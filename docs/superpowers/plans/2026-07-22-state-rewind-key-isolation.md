@@ -1,3 +1,15 @@
+---
+title: "W2-10-W2-13 State Parity, Quality Rewind, and Key Isolation Plan"
+doc_type: workflow
+module: pipeline
+topic: state-rewind-key-isolation
+status: stable
+created: 2026-07-22
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W2-10–W2-13 State Parity, Quality Rewind, and Key Isolation Plan
 
 **Scope:** Local/disposable-only closure for canonical scenario state projection, filesystem/

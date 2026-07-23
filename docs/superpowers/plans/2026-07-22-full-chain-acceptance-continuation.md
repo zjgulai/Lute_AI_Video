@@ -1,3 +1,15 @@
+---
+title: "Full-Chain Acceptance Continuation Implementation Plan"
+doc_type: workflow
+module: acceptance
+topic: enterprise-full-chain
+status: stable
+created: 2026-07-22
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # Full-Chain Acceptance Continuation Implementation Plan
 
 > **For Codex:** Execute this plan in strict RED -> GREEN -> focused regression -> independent six-dimension review cycles. Do not push GitHub, call a provider, publish, deliver, or deploy an unproven local SHA.

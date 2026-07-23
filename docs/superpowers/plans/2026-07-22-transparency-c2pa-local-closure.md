@@ -1,3 +1,15 @@
+---
+title: "W4 Transparency and C2PA Local Closure Plan"
+doc_type: workflow
+module: transparency
+topic: c2pa-local-closure
+status: stable
+created: 2026-07-22
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W4 Transparency and C2PA Local Closure Plan
 
 **Scope:** Local-only closure for W4-01–W4-05. W4-06 owner/legal scope, W4-07

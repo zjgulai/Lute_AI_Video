@@ -1,3 +1,15 @@
+---
+title: "W2-05-W2-09 PostgreSQL Readiness and Bootstrap Plan"
+doc_type: workflow
+module: storage
+topic: postgresql-readiness
+status: stable
+created: 2026-07-22
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W2-05-W2-09 PostgreSQL Readiness and Bootstrap Plan
 
 **Scope:** Local/disposable-only closure for production database fail-fast, explicit SQLite

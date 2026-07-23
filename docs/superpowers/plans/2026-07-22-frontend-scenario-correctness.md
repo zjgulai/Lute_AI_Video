@@ -1,3 +1,15 @@
+---
+title: "W2-14-W2-17 Frontend Scenario Correctness Plan"
+doc_type: workflow
+module: frontend
+topic: scenario-correctness
+status: stable
+created: 2026-07-22
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W2-14–W2-17 Frontend Scenario Correctness Plan
 
 **Scope:** Local-only closure for canonical scenario completion, fail-closed Gate polling,

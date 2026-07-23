@@ -1,3 +1,15 @@
+---
+title: "W3 Reproducibility, Observability, and Disaster-Recovery Closure Plan"
+doc_type: workflow
+module: operations
+topic: reproducibility-observability-dr
+status: stable
+created: 2026-07-22
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W3 Reproducibility, Observability, and Disaster-Recovery Closure Plan
 
 **Scope:** Local-only closure for W3-01–W3-07 and W3-09–W3-11. W3-08, W3-12,

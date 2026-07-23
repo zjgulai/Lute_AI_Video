@@ -1,3 +1,15 @@
+---
+title: "W5 No-Provider Acceptance Harness Implementation Plan"
+doc_type: workflow
+module: acceptance
+topic: no-provider-acceptance-harness
+status: stable
+created: 2026-07-23
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W5 No-Provider Acceptance Harness Implementation Plan
 
 > **For Codex:** Execute this plan in strict RED -> GREEN -> focused regression -> full local gate -> independent six-dimension review cycles. This batch is local L2 evidence only.

@@ -1,3 +1,15 @@
+---
+title: "W5 Fast Runtime Binding Design"
+doc_type: architecture
+module: acceptance
+topic: fast-runtime-binding
+status: stable
+created: 2026-07-23
+updated: 2026-07-23
+owner: self
+source: human+ai
+---
+
 # W5 Fast Runtime Binding Design
 
 ## Status
