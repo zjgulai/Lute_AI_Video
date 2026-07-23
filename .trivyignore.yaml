@@ -424,3 +424,278 @@ vulnerabilities:
   - pkg:generic/python@3.12.13
   expired_at: *id001
   statement: owner=self; reason=Application does not reuse BZ2Decompressor after errors and Python 3.12 has no newer security release
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64830
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64831
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64832
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64833
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64834
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-64835
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2018-6553
+  purls:
+  - pkg:apk/alpine/cups-libs@2.4.19-r0
+  expired_at: 2026-08-21
+  statement: owner=self; reason=CVE applies to obsolete Ubuntu AppArmor dnssd hard-link confinement, not Alpine cups-libs
