@@ -48,13 +48,10 @@ LANDING_SIDECARS = {
     "lute-auth.js",
 }
 
-REMOTE_ONLY_EXCLUDES = {
-    "deploy/lighthouse/landing/login.html",
-    "deploy/lighthouse/landing/register.html",
-    "deploy/lighthouse/landing/systems.html",
-    "deploy/lighthouse/landing/lute-*.html",
-    "deploy/lighthouse/landing/lute-auth.*",
+TRACKED_RELEASE_SIDECARS = {
+    f"deploy/lighthouse/landing/{filename}" for filename in LANDING_SIDECARS
 }
+REMOTE_ONLY_EXCLUDES = {"deploy/lighthouse/landing/lute-*.html"}
 
 
 def _attribute_urls(text: str) -> list[str]:
@@ -159,7 +156,7 @@ def test_lighthouse_auth_script_uses_publishable_supabase_key_only():
         assert forbidden not in lower
 
 
-def test_lighthouse_landing_sidecars_remain_remote_only_for_default_deploy():
+def test_lighthouse_landing_sidecar_release_and_shared_root_boundaries():
     excludes = {
         line.strip()
         for line in RSYNC_EXCLUDES.read_text().splitlines()
@@ -168,6 +165,7 @@ def test_lighthouse_landing_sidecars_remain_remote_only_for_default_deploy():
 
     missing = sorted(REMOTE_ONLY_EXCLUDES - excludes)
     assert not missing, f"remote-only landing sidecar excludes missing: {missing}"
+    assert not (TRACKED_RELEASE_SIDECARS & excludes)
 
 
 def test_lighthouse_landing_sidecar_sync_is_manual_dry_run_by_default():

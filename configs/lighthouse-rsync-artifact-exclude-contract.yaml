@@ -15,7 +15,12 @@ entrypoints:
 exclude_categories:
   production_secrets_and_certificates:
     - .env
+    - .env.local
+    - .env.production
+    - .env.prod
     - "*.pem"
+    - "*.key"
+    - "*.crt"
     - deploy/lighthouse/.env.prod
     - deploy/lighthouse/.portal-auth.env
     - deploy/lighthouse/server.crt
@@ -59,11 +64,7 @@ exclude_categories:
     - archive
     - ref
   remote_only_landing_sidecars:
-    - deploy/lighthouse/landing/login.html
-    - deploy/lighthouse/landing/register.html
-    - deploy/lighthouse/landing/systems.html
     - deploy/lighthouse/landing/lute-*.html
-    - deploy/lighthouse/landing/lute-auth.*
     - deploy/lighthouse/landing/voc-zh_messages.json
     - deploy/lighthouse/landing/.portal.htpasswd
     - deploy/lighthouse/landing/brand-placeholder.html
@@ -71,8 +72,6 @@ exclude_categories:
     - backups
     - deploy/lighthouse/backups
     - deploy/lighthouse/portal-auth
-    - deploy/lighthouse/docker-compose.prod.yml
-    - deploy/lighthouse/nginx.conf
     - deploy/lighthouse/skills.conf
     - deploy/lighthouse/auth_gate.conf
     - deploy/lighthouse/momcozy-platform.conf
@@ -88,6 +87,11 @@ rules:
   landing_sidecar_sync_defaults_to_dry_run: true
   landing_sidecar_sync_must_not_delete_remote_files: true
   dry_run_before_manual_deploy: true
+  immutable_release_contains_all_tracked_sources: true
+  immutable_release_uses_nul_safe_exact_file_list: true
+  shared_exclude_file_is_converted_to_nul_for_from0: true
+  ignored_or_untracked_files_never_enter_release: true
+  tracked_sidecar_copies_never_overwrite_shared_root: true
   no_runtime_smoke_or_provider_calls: true
 
 tests:

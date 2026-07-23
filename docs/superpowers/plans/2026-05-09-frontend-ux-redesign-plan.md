@@ -1,6 +1,13 @@
 ---
-name: frontend-ux-redesign-plan
-description: Phased UX/IA redesign plan for Short Video Factory frontend. Preserves existing color palette (Fortune Red, cream, ink, pale-gold, jade). Authored from a senior product designer's lens — structure first, then language, then visual rhythm. Use when executing the post-review optimization roadmap.
+title: Short Video Factory frontend UX redesign plan
+doc_type: workflow
+module: frontend
+topic: frontend-ux-redesign
+status: archived
+created: 2026-05-09
+updated: 2026-05-09
+owner: self
+source: human+ai
 ---
 
 # Short Video Factory · 前端体验重构计划
