@@ -59,16 +59,34 @@ test.describe("TODO-P1-3-prep S4 bounded media pilot readiness", () => {
     expect(s4BoundedMediaPilotPayload.enable_media_synthesis).toBe(true);
     expect(s4BoundedMediaPilotPayload.video_duration).toBe(15);
 
-    const requestModelSource = extractSourceBlock(readRepoFile("src/routers/_state.py"), "class S4LiveShootRequest");
-    expect(requestModelSource).toContain("artifact_disposition: Literal[\"default\", \"pending_review\", \"quarantine\"]");
-    expect(requestModelSource).toContain("provider_max_retries");
+    const stateModelSource = readRepoFile("src/routers/_state.py");
+    const safetyModelSource = extractSourceBlock(
+      stateModelSource,
+      "class GenerationSafetyRequest",
+    );
+    const requestModelSource = extractSourceBlock(stateModelSource, "class S4LiveShootRequest");
+    expect(requestModelSource).toContain("class S4LiveShootRequest(GenerationSafetyRequest)");
+    expect(safetyModelSource).toContain(
+      'artifact_disposition: ArtifactDisposition = "pending_review"',
+    );
+    expect(safetyModelSource).toContain(
+      "provider_max_retries: Annotated[int, Field(strict=True, ge=0, le=0)] = 0",
+    );
     expect(requestModelSource).toContain("output_label: str | None = None");
+    expect(readRepoFile("src/pipeline/generation_policy.py")).toContain(
+      'ArtifactDisposition = Literal["pending_review", "quarantine"]',
+    );
 
     const routerSource = readRepoFile("src/routers/scenario.py");
     const directSubmitBlock = extractSourceBlock(routerSource, "async def run_s4_live_shoot");
     expect(directSubmitBlock).toContain("body: S4LiveShootRequest");
-    expect(directSubmitBlock).toContain("body.artifact_disposition");
-    expect(directSubmitBlock).toContain("body.provider_max_retries");
+    expect(directSubmitBlock).toContain(
+      '_resolve_request_generation_policy(body, scenario="s4")',
+    );
+    expect(directSubmitBlock).toContain("artifact_disposition=policy.artifact_disposition");
+    expect(directSubmitBlock).toContain(
+      "effective_provider_max_retries = policy.provider_max_retries",
+    );
     expect(directSubmitBlock).toContain("output_label=body.output_label");
     expect(directSubmitBlock).toContain("provider_max_retries=effective_provider_max_retries");
 

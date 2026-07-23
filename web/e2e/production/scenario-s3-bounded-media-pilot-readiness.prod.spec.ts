@@ -54,16 +54,39 @@ test.describe("TODO-P1-2-prep S3 bounded media pilot readiness", () => {
     expect(s3BoundedMediaPilotPayload.enable_media_synthesis).toBe(true);
     expect(s3BoundedMediaPilotPayload.video_duration).toBe(15);
 
-    const requestModelSource = extractSourceBlock(readRepoFile("src/routers/_state.py"), "class S3InfluencerRemixRequest");
-    expect(requestModelSource).toContain("artifact_disposition: Literal[\"default\", \"pending_review\", \"quarantine\"]");
-    expect(requestModelSource).toContain("provider_max_retries");
+    const stateModelSource = readRepoFile("src/routers/_state.py");
+    const safetyModelSource = extractSourceBlock(
+      stateModelSource,
+      "class GenerationSafetyRequest",
+    );
+    const requestModelSource = extractSourceBlock(
+      stateModelSource,
+      "class S3InfluencerRemixRequest",
+    );
+    expect(requestModelSource).toContain(
+      "class S3InfluencerRemixRequest(GenerationSafetyRequest)",
+    );
+    expect(safetyModelSource).toContain(
+      'artifact_disposition: ArtifactDisposition = "pending_review"',
+    );
+    expect(safetyModelSource).toContain(
+      "provider_max_retries: Annotated[int, Field(strict=True, ge=0, le=0)] = 0",
+    );
     expect(requestModelSource).toContain("output_label: str | None = None");
+    expect(readRepoFile("src/pipeline/generation_policy.py")).toContain(
+      'ArtifactDisposition = Literal["pending_review", "quarantine"]',
+    );
 
     const routerSource = readRepoFile("src/routers/scenario.py");
     const directSubmitBlock = extractSourceBlock(routerSource, "async def run_s3_influencer_remix");
     expect(directSubmitBlock).toContain("body: S3InfluencerRemixRequest");
-    expect(directSubmitBlock).toContain("body.artifact_disposition");
-    expect(directSubmitBlock).toContain("body.provider_max_retries");
+    expect(directSubmitBlock).toContain(
+      '_resolve_request_generation_policy(body, scenario="s3")',
+    );
+    expect(directSubmitBlock).toContain("artifact_disposition=policy.artifact_disposition");
+    expect(directSubmitBlock).toContain(
+      "effective_provider_max_retries = policy.provider_max_retries",
+    );
     expect(directSubmitBlock).toContain("output_label=body.output_label");
     expect(directSubmitBlock).toContain("provider_max_retries=effective_provider_max_retries");
 

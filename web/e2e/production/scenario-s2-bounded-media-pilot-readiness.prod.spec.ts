@@ -28,6 +28,18 @@ function readRepoFile(path: string): string {
   return readFileSync(join(process.cwd(), "..", path), "utf8");
 }
 
+function extractSourceBlock(source: string, marker: string): string {
+  const start = source.indexOf(marker);
+  expect(start, `${marker} must exist`).toBeGreaterThanOrEqual(0);
+
+  const tail = source.slice(start);
+  const nextBlock = tail.slice(marker.length).search(/\n(?:class|async def|def) /);
+  if (nextBlock === -1) {
+    return tail;
+  }
+  return tail.slice(0, marker.length + nextBlock);
+}
+
 test.describe("L4D-5-fix-prep S2 bounded media pilot readiness", () => {
   test("dry-run readiness keeps S2 media pilot blocked before live submit", async ({ request }) => {
     expect(tokenSmokeEnabled).toBe(false);
@@ -41,13 +53,39 @@ test.describe("L4D-5-fix-prep S2 bounded media pilot readiness", () => {
     expect(s2BoundedMediaPilotPayload.artifact_disposition).toBe("pending_review");
     expect(s2BoundedMediaPilotPayload).not.toHaveProperty("api_keys");
 
-    const requestModelSource = readRepoFile("src/routers/_state.py");
-    expect(requestModelSource).toContain("artifact_disposition: Literal[\"default\", \"pending_review\", \"quarantine\"]");
+    const stateModelSource = readRepoFile("src/routers/_state.py");
+    const safetyModelSource = extractSourceBlock(
+      stateModelSource,
+      "class GenerationSafetyRequest",
+    );
+    const requestModelSource = extractSourceBlock(
+      stateModelSource,
+      "class S2BrandCampaignRequest",
+    );
+    expect(requestModelSource).toContain(
+      "class S2BrandCampaignRequest(GenerationSafetyRequest)",
+    );
+    expect(safetyModelSource).toContain(
+      'artifact_disposition: ArtifactDisposition = "pending_review"',
+    );
+    expect(safetyModelSource).toContain(
+      "provider_max_retries: Annotated[int, Field(strict=True, ge=0, le=0)] = 0",
+    );
     expect(requestModelSource).toContain("output_label: str | None = None");
+    expect(readRepoFile("src/pipeline/generation_policy.py")).toContain(
+      'ArtifactDisposition = Literal["pending_review", "quarantine"]',
+    );
 
-    const routerSource = readRepoFile("src/routers/scenario.py");
-    expect(routerSource).toContain("artifact_disposition=body.artifact_disposition");
-    expect(routerSource).toContain("output_label=body.output_label");
+    const s2SubmitSource = extractSourceBlock(
+      readRepoFile("src/routers/scenario.py"),
+      "async def run_s2_brand_campaign",
+    );
+    expect(s2SubmitSource).toContain(
+      '_resolve_request_generation_policy(body, scenario="s2")',
+    );
+    expect(s2SubmitSource).toContain("artifact_disposition=policy.artifact_disposition");
+    expect(s2SubmitSource).toContain("provider_max_retries=policy.provider_max_retries");
+    expect(s2SubmitSource).toContain("output_label=body.output_label");
 
     const s2PipelineSource = readRepoFile("src/pipeline/s2_brand_pipeline_v2.py");
     expect(s2PipelineSource).toContain("S2_BOUNDED_MEDIA_STOP_STEP = \"seedance_clips\"");
