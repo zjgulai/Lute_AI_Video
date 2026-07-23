@@ -320,11 +320,12 @@ jobs:
 
       - name: Scan backend image
         uses: aquasecurity/trivy-action@v0.33.1
+        env:
+          TRIVY_IGNOREFILE: .trivyignore.yaml
         with:
           version: v0.69.3
           image-ref: ai-video-backend:ci-${{ github.sha }}
           scanners: vuln
-          trivyignores: .trivyignore.yaml
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: 1

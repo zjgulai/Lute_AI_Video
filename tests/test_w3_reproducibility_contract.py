@@ -173,7 +173,8 @@ def test_ci_has_blocking_python_node_and_image_vulnerability_gates() -> None:
         assert with_config.get("ignore-unfixed") is False
         assert with_config.get("exit-code") == 1
         assert with_config.get("scanners") == "vuln"
-        assert with_config.get("trivyignores") == ".trivyignore.yaml"
+        assert "trivyignores" not in with_config
+        assert (step.get("env") or {}).get("TRIVY_IGNOREFILE") == ".trivyignore.yaml"
         assert with_config.get("severity") == "HIGH,CRITICAL"
 
 
