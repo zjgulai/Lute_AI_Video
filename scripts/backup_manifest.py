@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -119,6 +120,60 @@ def _file_entry(root: Path, relative: str, label: str) -> dict[str, object]:
     }
 
 
+def _source_file_entry(
+    root: Path,
+    relative: str,
+) -> tuple[dict[str, object], str | None]:
+    if root.is_symlink() or not root.is_dir():
+        raise BackupManifestError("source file is missing or unsafe")
+    path = root / relative
+    current = root
+    parts = PurePosixPath(relative).parts
+    for index, part in enumerate(parts):
+        current = current / part
+        if not current.is_symlink():
+            continue
+        if index != len(parts) - 1:
+            raise BackupManifestError("source file is missing or unsafe")
+        try:
+            raw_target = os.readlink(current)
+            target_bytes = raw_target.encode("utf-8")
+        except (OSError, UnicodeEncodeError) as exc:
+            raise BackupManifestError("source file is missing or unsafe") from exc
+        target = PurePosixPath(raw_target)
+        if (
+            target.is_absolute()
+            or ".." in target.parts
+            or target.as_posix() != raw_target
+            or any(component in {"", "."} for component in target.parts)
+        ):
+            raise BackupManifestError("source file is missing or unsafe")
+        parent = PurePosixPath(relative).parent
+        target_relative = (
+            target.as_posix()
+            if parent == PurePosixPath(".")
+            else (parent / target).as_posix()
+        )
+        target_path = root
+        for component in PurePosixPath(target_relative).parts:
+            target_path = target_path / component
+            if target_path.is_symlink():
+                raise BackupManifestError("source file is missing or unsafe")
+        if not target_path.is_file():
+            raise BackupManifestError("source file is missing or unsafe")
+        return (
+            {
+                "path": relative,
+                "size_bytes": len(target_bytes),
+                "sha256": hashlib.sha256(b"symlink\0" + target_bytes).hexdigest(),
+            },
+            target_relative,
+        )
+    if not path.is_file():
+        raise BackupManifestError("source file is missing or unsafe")
+    return _file_entry(root, relative, "source file"), None
+
+
 def _resolved_source_root(root: Path) -> Path:
     try:
         resolved = root.resolve(strict=True)
@@ -140,9 +195,16 @@ def build_source_manifest(
     if not normalized or len(normalized) != len(set(normalized)):
         raise BackupManifestError("source manifest file set is empty or duplicated")
     source_root = _resolved_source_root(root)
-    entries = [
-        _file_entry(source_root, item, "source file") for item in sorted(normalized)
+    entries_with_targets = [
+        _source_file_entry(source_root, item) for item in sorted(normalized)
     ]
+    tracked = set(normalized)
+    if any(
+        target is not None and target not in tracked
+        for _, target in entries_with_targets
+    ):
+        raise BackupManifestError("source symlink target is not tracked")
+    entries = [entry for entry, _ in entries_with_targets]
     return {
         "schema_version": SOURCE_SCHEMA,
         "git_sha": git_sha,
@@ -170,6 +232,7 @@ def validate_source_manifest(
 
     source_root = _resolved_source_root(root) if root is not None else None
     paths: list[str] = []
+    symlink_targets: list[str] = []
     validated_entries: list[dict[str, object]] = []
     for raw_entry in raw_entries:
         entry = _require_exact_keys(
@@ -185,15 +248,19 @@ def validate_source_manifest(
         if not isinstance(digest, str) or not SHA256_RE.fullmatch(digest):
             raise BackupManifestError("source file checksum is invalid")
         if source_root is not None:
-            actual = _file_entry(source_root, relative, "source file")
+            actual, symlink_target = _source_file_entry(source_root, relative)
             if actual["size_bytes"] != size or actual["sha256"] != digest:
                 raise BackupManifestError("source file checksum or size mismatch")
+            if symlink_target is not None:
+                symlink_targets.append(symlink_target)
         paths.append(relative)
         validated_entries.append(
             {"path": relative, "size_bytes": size, "sha256": digest}
         )
     if paths != sorted(paths) or len(paths) != len(set(paths)):
         raise BackupManifestError("source manifest file order or uniqueness is invalid")
+    if any(target not in set(paths) for target in symlink_targets):
+        raise BackupManifestError("source symlink target is not tracked")
     return {
         "schema_version": SOURCE_SCHEMA,
         "git_sha": git_sha,
