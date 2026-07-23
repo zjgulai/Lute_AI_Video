@@ -353,6 +353,15 @@ jobs:
             --root . \
             --git-sha ${{ github.sha }} \
             --output source-manifest.v1.json
+          git ls-files -z > "$RUNNER_TEMP/release-files.zlist"
+          printf '%s\0' "source-manifest.v1.json" >> "$RUNNER_TEMP/release-files.zlist"
+          while IFS= read -r pattern || [ -n "$pattern" ]; do
+            case "$pattern" in
+              ""|\#*) continue ;;
+            esac
+            printf '%s\0' "$pattern"
+          done < deploy/lighthouse/rsync-excludes.txt > "$RUNNER_TEMP/release-excludes.zlist"
+          chmod 600 "$RUNNER_TEMP/release-files.zlist" "$RUNNER_TEMP/release-excludes.zlist"
 
       - name: Setup pinned SSH identity
         run: |
@@ -376,7 +385,9 @@ jobs:
         run: |
           rsync -avz --delete --dry-run --itemize-changes \
             --chmod=F644,D755 \
-            --exclude-from='deploy/lighthouse/rsync-excludes.txt' \
+            --from0 \
+            --files-from="$RUNNER_TEMP/release-files.zlist" \
+            --exclude-from="$RUNNER_TEMP/release-excludes.zlist" \
             -e "ssh -i ~/.ssh/dry_run_key -o StrictHostKeyChecking=yes" \
             ./ "${{ secrets.DRY_RUN_USER }}@${{ secrets.DRY_RUN_HOST }}:${{ secrets.DRY_RUN_TARGET_DIR }}/releases-${{ github.sha }}/" \
             > rsync-dry-run-${{ github.sha }}.txt
@@ -405,6 +416,15 @@ jobs:
             --root . \
             --git-sha ${{ github.sha }} \
             --output source-manifest.v1.json
+          git ls-files -z > "$RUNNER_TEMP/release-files.zlist"
+          printf '%s\0' "source-manifest.v1.json" >> "$RUNNER_TEMP/release-files.zlist"
+          while IFS= read -r pattern || [ -n "$pattern" ]; do
+            case "$pattern" in
+              ""|\#*) continue ;;
+            esac
+            printf '%s\0' "$pattern"
+          done < deploy/lighthouse/rsync-excludes.txt > "$RUNNER_TEMP/release-excludes.zlist"
+          chmod 600 "$RUNNER_TEMP/release-files.zlist" "$RUNNER_TEMP/release-excludes.zlist"
 
       - name: Download exact reviewed release bundle
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -454,7 +474,9 @@ jobs:
         run: |
           rsync -avz --delete \
             --chmod=F644,D755 \
-            --exclude-from='deploy/lighthouse/rsync-excludes.txt' \
+            --from0 \
+            --files-from="$RUNNER_TEMP/release-files.zlist" \
+            --exclude-from="$RUNNER_TEMP/release-excludes.zlist" \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_TARGET_DIR }}/releases-${{ github.sha }}/"
 

@@ -60,7 +60,6 @@ source: human+ai
 
 | path | status |
 | --- | --- |
-| `.codegraph` | config |
 | `.github` | config |
 | `configs` | config |
 | `deploy` | deployment_directory |
@@ -78,13 +77,12 @@ source: human+ai
 
 ### legacy_tracked_root_directories
 
-| path | status |
-| --- | --- |
-| `.sisyphus` | legacy_tracked_metadata |
+当前为空。历史 `.sisyphus` 计划已迁移到正式 `docs/superpowers/plans/`；
+`.sisyphus/` 现在只允许作为 gitignored 本地 agent 工作态。
 
 ## 4. 本地-only 根目录项
 
-`local_only_root_artifacts` 必须保持 gitignored。典型项包括 `.env`、`.DS_Store`、`.venv/`、`node_modules/`、`.pytest_cache/`、`.ruff_cache/`、`output/`、`tmp/`、`drafts/`、`archive/`、`worktrees/`、`.claude/`、`.kiro/`、`.hermes/`、`.playwright-mcp/`、`.omc/`、`.next/`、`coverage/`、`htmlcov/`、`web/blob-report/`、`web/playwright-report/`、`web/test-results/`、`web/tmp/`、`rendering/output/`。
+`local_only_root_artifacts` 必须保持 gitignored。典型项包括 `.env`、`.DS_Store`、`.venv/`、`node_modules/`、`.pytest_cache/`、`.ruff_cache/`、`output/`、`tmp/`、`drafts/`、`archive/`、`worktrees/`、`.claude/`、`.codegraph/`、`.sisyphus/`、`.kiro/`、`.hermes/`、`.playwright-mcp/`、`.omc/`、`.next/`、`coverage/`、`htmlcov/`、`web/blob-report/`、`web/playwright-report/`、`web/test-results/`、`web/tmp/`、`rendering/output/`。
 
 这些目录和文件可以在本地存在，但不得成为 tracked 项。若必须提升为正式资产，先迁移到正确目录并更新契约。
 

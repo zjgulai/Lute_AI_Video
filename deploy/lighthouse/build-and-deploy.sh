@@ -207,7 +207,6 @@ RSYNC_ARGS=(
   --delete
   --chmod=F644,D755
   -e "$RSYNC_SSH_COMMAND"
-  --exclude-from="$EXCLUDE_FILE"
 )
 
 if [ "$DRY_RUN" = "1" ]; then
@@ -234,18 +233,42 @@ echo ""
 cd "$REPO_ROOT"
 
 SOURCE_MANIFEST_PATH="$REPO_ROOT/source-manifest.v1.json"
+RSYNC_FILE_LIST=""
+RSYNC_EXCLUDE_LIST=""
 if [ -e "$SOURCE_MANIFEST_PATH" ]; then
   echo "ERROR: source manifest output path already exists." >&2
   exit 1
 fi
-cleanup_source_manifest() {
+cleanup_release_sync_inputs() {
   rm -f -- "$SOURCE_MANIFEST_PATH"
+  if [ -n "$RSYNC_FILE_LIST" ]; then
+    rm -f -- "$RSYNC_FILE_LIST"
+  fi
+  if [ -n "$RSYNC_EXCLUDE_LIST" ]; then
+    rm -f -- "$RSYNC_EXCLUDE_LIST"
+  fi
 }
-trap cleanup_source_manifest EXIT
+trap cleanup_release_sync_inputs EXIT
 python3 scripts/backup_manifest.py source-create \
   --root . \
   --git-sha "$SOURCE_SHA" \
   --output "$SOURCE_MANIFEST_PATH" >/dev/null
+RSYNC_FILE_LIST="$(mktemp "${TMPDIR:-/tmp}/ai-video-release-files.XXXXXX")"
+RSYNC_EXCLUDE_LIST="$(mktemp "${TMPDIR:-/tmp}/ai-video-release-excludes.XXXXXX")"
+chmod 600 "$RSYNC_FILE_LIST" "$RSYNC_EXCLUDE_LIST"
+git ls-files -z > "$RSYNC_FILE_LIST"
+printf '%s\0' "source-manifest.v1.json" >> "$RSYNC_FILE_LIST"
+while IFS= read -r pattern || [ -n "$pattern" ]; do
+  case "$pattern" in
+    ""|\#*) continue ;;
+  esac
+  printf '%s\0' "$pattern"
+done < "$EXCLUDE_FILE" > "$RSYNC_EXCLUDE_LIST"
+RSYNC_ARGS+=(
+  --from0
+  --files-from="$RSYNC_FILE_LIST"
+  --exclude-from="$RSYNC_EXCLUDE_LIST"
+)
 
 echo "[1/2] Syncing repository to Lighthouse..."
 if ! ssh "${SSH_OPTIONS[@]}" "$SSH_USER@$SERVER_IP" "test ! -e '$REMOTE_RELEASE_DIR'"; then

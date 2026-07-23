@@ -247,8 +247,8 @@ class TestDeployWorkflow:
         rsync_step = _step_by_name(steps, "Rsync reviewed release to server")
 
         run = rsync_step.get("run") or ""
-        assert "--exclude-from='deploy/lighthouse/rsync-excludes.txt'" in run, (
-            "GitHub deploy must reuse the Lighthouse rsync exclude SSOT"
+        assert '--exclude-from="$RUNNER_TEMP/release-excludes.zlist"' in run, (
+            "GitHub deploy must use the NUL-converted Lighthouse rsync exclude SSOT"
         )
         assert "--exclude='.next'" not in run
         assert "--exclude='output'" not in run

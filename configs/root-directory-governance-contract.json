@@ -118,11 +118,6 @@
   ],
   "allowed_root_directories": [
     {
-      "path": ".codegraph",
-      "status": "config",
-      "reason": "CodeGraph project metadata and ignore policy; generated index databases, cache, and logs remain local-only."
-    },
-    {
       "path": ".github",
       "status": "config",
       "reason": "GitHub issue templates and workflow configuration."
@@ -193,13 +188,7 @@
       "reason": "Next.js frontend source package."
     }
   ],
-  "legacy_tracked_root_directories": [
-    {
-      "path": ".sisyphus",
-      "status": "legacy_tracked_metadata",
-      "reason": "Tracked historical planning metadata; do not add new root metadata directories without a contract update."
-    }
-  ],
+  "legacy_tracked_root_directories": [],
   "local_only_root_artifacts": [
     {
       "path": ".DS_Store",
@@ -275,6 +264,16 @@
       "path": ".claude/",
       "status": "gitignored_local_only",
       "reason": "Local Claude/Codex artifacts."
+    },
+    {
+      "path": ".codegraph/",
+      "status": "gitignored_local_only",
+      "reason": "Local CodeGraph index, cache, daemon, socket, and logs."
+    },
+    {
+      "path": ".sisyphus/",
+      "status": "gitignored_local_only",
+      "reason": "Local agent planning metadata; retained plans belong under tracked docs."
     },
     {
       "path": ".kiro/",
