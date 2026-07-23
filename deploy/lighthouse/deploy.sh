@@ -363,6 +363,7 @@ run_verified_backup() {
     BACKEND_CONTAINER="$BACKUP_HELPER_ID" \
     RESTORE_SCRIPT="$RELEASE_ROOT/scripts/pg_restore_logical.py" \
     VERIFY_SCRIPT="$RELEASE_ROOT/scripts/verify_restored_database.py" \
+    BACKUP_MANIFEST_SCRIPT="$RELEASE_ROOT/scripts/backup_manifest.py" \
     /bin/bash "$RELEASE_ROOT/scripts/restore_backup_database.sh" "$latest" >/dev/null
   sudo test -s "$latest/restore_verified.json" || fail "fresh backup lacks restore verification evidence"
   cleanup_restore_container

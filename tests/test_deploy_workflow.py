@@ -419,6 +419,10 @@ class TestDeployWorkflow:
         assert 'PROJECT_ROOT="$RELEASE_ROOT"' in text
         assert 'DUMP_SCRIPT="$RELEASE_ROOT/scripts/pg_dump_logical.py"' in text
         assert 'CONTAINER_NAME="$BACKUP_HELPER_ID"' in text
+        assert (
+            'BACKUP_MANIFEST_SCRIPT="$RELEASE_ROOT/scripts/backup_manifest.py"'
+            in text
+        )
         assert "restore_verified.json" in text
         assert "deploy_alembic_gate.sh --apply" in text
         assert "ALLOW_MAINTENANCE_WINDOW" in text
