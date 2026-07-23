@@ -311,6 +311,7 @@ def test_success_uses_reviewed_backup_helper_migrates_then_restores_ingress(
     assert passed_env_keys == RELEASE_COMPOSE_ENV_KEYS
     assert f"PROJECT_ROOT={REPO_ROOT}" in log
     assert f"DUMP_SCRIPT={REPO_ROOT}/scripts/pg_dump_logical.py" in log
+    assert f"BACKUP_MANIFEST_SCRIPT={REPO_ROOT}/scripts/backup_manifest.py" in log
     assert "stop nginx" not in log
     assert "stop rendering backend" in log
     assert "deploy_alembic_gate.sh --apply" in log
