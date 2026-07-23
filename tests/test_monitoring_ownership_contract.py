@@ -84,6 +84,34 @@ def test_promtool_digest_gate_is_in_make_and_ci() -> None:
     assert "make monitoring-check" in CI.read_text()
 
 
+def test_docker_validation_prepares_locked_python_before_monitoring_tests() -> None:
+    workflow = _yaml(CI)
+    steps = workflow["jobs"]["docker-build"]["steps"]
+    monitoring_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("run") == "make monitoring-check"
+    )
+    setup_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses") == "actions/setup-python@v6"
+    )
+    install_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("run") == "python -m pip install uv==0.11.11"
+    )
+    sync_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("run") == "uv sync --locked --extra dev"
+    )
+
+    assert steps[setup_index]["with"]["python-version"] == "3.12.13"
+    assert setup_index < install_index < sync_index < monitoring_index
+
+
 def test_active_runbooks_do_not_restore_removed_fake_metric_families() -> None:
     runbooks = "\n".join(path.read_text() for path in ACTIVE_MONITORING_RUNBOOKS)
     for unsupported in (
