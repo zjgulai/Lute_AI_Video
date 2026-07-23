@@ -46,15 +46,23 @@ test.describe("TODO-P1-5E S2 segmented media quality audit refs-only readiness",
     expect(routerSource).toContain("media_refs=body.media_refs");
 
     const pipelineSource = readRepoFile("src/pipeline/s2_brand_pipeline_v2.py");
-    expect(pipelineSource).toContain('"audit": [\n        "audit",\n    ]');
-    expect(pipelineSource).toContain('"audit": {}');
+    const policySource = readRepoFile("src/pipeline/generation_policy.py");
+    expect(policySource).toContain('"audit": ("audit",)');
+    expect(policySource).toContain('"audit": MappingProxyType({})');
+    expect(pipelineSource).toContain(
+      "S2_SEGMENTED_MEDIA_STEP_PROFILES as POLICY_S2_STEP_PROFILES",
+    );
+    expect(pipelineSource).toContain(
+      "S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS as POLICY_S2_PROVIDER_JOB_CAPS",
+    );
     expect(pipelineSource).toContain("_normalize_audit_media_refs");
     expect(pipelineSource).toContain("refs_only_media_audit");
     expect(pipelineSource).toContain("_seed_refs_only_audit_inputs");
     expect(pipelineSource).toContain("S2 audit stop point requires media_refs");
-    for (const forbidden of ["/final_work/", "/renders/", "/fast_mode/", "/gpt_images/"]) {
-      expect(pipelineSource).toContain(forbidden);
+    for (const forbidden of ["final_work", "renders", "fast_mode", "gpt_images"]) {
+      expect(policySource).toContain(`"${forbidden}"`);
     }
+    expect(policySource).toContain("review-scoped media path uses a forbidden artifact root");
 
     const testsSource = readRepoFile("tests/test_s2_e2e.py");
     expect(testsSource).toContain("test_audit_segment_requires_refs_only_media_refs");

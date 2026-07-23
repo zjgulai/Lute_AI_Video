@@ -42,11 +42,26 @@ test.describe("L4D-5-fix-prep S2 bounded media pilot readiness", () => {
     expect(s2BoundedMediaPilotPayload).not.toHaveProperty("api_keys");
 
     const requestModelSource = readRepoFile("src/routers/_state.py");
-    expect(requestModelSource).toContain("artifact_disposition: Literal[\"default\", \"pending_review\", \"quarantine\"]");
+    expect(requestModelSource).toContain(
+      "class S2BrandCampaignRequest(GenerationSafetyRequest)",
+    );
+    expect(requestModelSource).toContain(
+      'artifact_disposition: ArtifactDisposition = "pending_review"',
+    );
+    expect(requestModelSource).toContain(
+      "provider_max_retries: Annotated[int, Field(strict=True, ge=0, le=0)] = 0",
+    );
     expect(requestModelSource).toContain("output_label: str | None = None");
+    expect(readRepoFile("src/pipeline/generation_policy.py")).toContain(
+      'ArtifactDisposition = Literal["pending_review", "quarantine"]',
+    );
 
     const routerSource = readRepoFile("src/routers/scenario.py");
-    expect(routerSource).toContain("artifact_disposition=body.artifact_disposition");
+    expect(routerSource).toContain(
+      '_resolve_request_generation_policy(body, scenario="s2")',
+    );
+    expect(routerSource).toContain("artifact_disposition=policy.artifact_disposition");
+    expect(routerSource).toContain("provider_max_retries=policy.provider_max_retries");
     expect(routerSource).toContain("output_label=body.output_label");
 
     const s2PipelineSource = readRepoFile("src/pipeline/s2_brand_pipeline_v2.py");

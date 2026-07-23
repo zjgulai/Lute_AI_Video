@@ -54,17 +54,36 @@ test.describe("TODO-P1-1-prep S1 bounded media pilot readiness", () => {
     expect(s1BoundedMediaPilotPayload.enable_media_synthesis).toBe(true);
     expect(s1BoundedMediaPilotPayload.video_duration).toBe(15);
 
-    const requestModelSource = extractSourceBlock(readRepoFile("src/routers/_state.py"), "class S1StartRequest");
-    expect(requestModelSource).toContain("artifact_disposition: Literal[\"default\", \"pending_review\", \"quarantine\"]");
-    expect(requestModelSource).toContain("provider_max_retries");
+    const stateModelSource = readRepoFile("src/routers/_state.py");
+    const safetyModelSource = extractSourceBlock(
+      stateModelSource,
+      "class GenerationSafetyRequest",
+    );
+    const requestModelSource = extractSourceBlock(stateModelSource, "class S1StartRequest");
+    expect(requestModelSource).toContain("class S1StartRequest(GenerationSafetyRequest)");
+    expect(safetyModelSource).toContain(
+      'artifact_disposition: ArtifactDisposition = "pending_review"',
+    );
+    expect(safetyModelSource).toContain(
+      "provider_max_retries: Annotated[int, Field(strict=True, ge=0, le=0)] = 0",
+    );
     expect(requestModelSource).toContain("output_label: str | None = None");
+    expect(readRepoFile("src/pipeline/generation_policy.py")).toContain(
+      'ArtifactDisposition = Literal["pending_review", "quarantine"]',
+    );
 
     const routerSource = readRepoFile("src/routers/scenario.py");
     const directSubmitBlock = extractSourceBlock(routerSource, "async def run_s1_product_direct");
     expect(directSubmitBlock).toContain("body: S1StartRequest");
-    expect(directSubmitBlock).toContain("body.artifact_disposition");
-    expect(directSubmitBlock).toContain("body.provider_max_retries");
-    expect(directSubmitBlock).toContain("label=body.output_label");
+    expect(directSubmitBlock).toContain(
+      '_resolve_request_generation_policy(body, scenario="s1")',
+    );
+    expect(directSubmitBlock).toContain('"artifact_disposition": policy.artifact_disposition');
+    expect(directSubmitBlock).toContain(
+      "effective_provider_max_retries = policy.provider_max_retries",
+    );
+    expect(directSubmitBlock).toContain("label = body.output_label");
+    expect(directSubmitBlock).toContain("label=label");
     expect(directSubmitBlock).toContain("_resume_s1_bounded_media_pilot");
     expect(routerSource).toContain("S1_BOUNDED_MEDIA_STOP_STEP = \"seedance_clips\"");
     expect(routerSource).toContain("S1_BOUNDED_MEDIA_STEP_ORDER");

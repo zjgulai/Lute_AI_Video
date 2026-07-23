@@ -34,8 +34,17 @@ test.describe("TODO-P1-5 S2 full-media segmented readiness", () => {
       readRepoFile("src/routers/_state.py"),
       "class S2BrandCampaignRequest",
     );
-    expect(requestModel).toContain("artifact_disposition");
-    expect(requestModel).toContain("provider_max_retries");
+    const safetyModel = extractSourceBlock(
+      readRepoFile("src/routers/_state.py"),
+      "class GenerationSafetyRequest",
+    );
+    expect(requestModel).toContain("class S2BrandCampaignRequest(GenerationSafetyRequest)");
+    expect(safetyModel).toContain(
+      'artifact_disposition: ArtifactDisposition = "pending_review"',
+    );
+    expect(safetyModel).toContain(
+      "provider_max_retries: Annotated[int, Field(strict=True, ge=0, le=0)] = 0",
+    );
     expect(requestModel).toContain("output_label");
     expect(requestModel).toContain("media_stop_step");
     for (const stopStep of [
@@ -63,8 +72,9 @@ test.describe("TODO-P1-5 S2 full-media segmented readiness", () => {
     expect(pipelineSource).toContain("S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS");
     expect(pipelineSource).toContain("_resolve_media_stop_step");
     expect(pipelineSource).toContain("bounded_media_stop_step");
-    expect(pipelineSource).toContain("\"tts\": 1");
-    expect(pipelineSource).toContain("\"thumbnail\": 1");
+    const policySource = readRepoFile("src/pipeline/generation_policy.py");
+    expect(policySource).toContain('"tts_audio": MappingProxyType({"tts": 1})');
+    expect(policySource).toContain('"thumbnail_images": MappingProxyType({"thumbnail": 1})');
 
     const scenarioOrder = readRepoFile("src/pipeline/scenario_config.py");
     for (const step of [
