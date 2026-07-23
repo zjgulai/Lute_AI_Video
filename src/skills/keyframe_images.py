@@ -98,7 +98,9 @@ class KeyframeImagesSkill(SkillCallable):
 
         import asyncio
 
-        async def _gen_one(i: int, shot: dict[str, Any]) -> tuple[int, str, str]:
+        async def _gen_one(
+            i: int, shot: dict[str, Any]
+        ) -> tuple[int, str, str, bool | None]:
             comp_prompt = self._build_composition_prompt(
                 visual=shot.get("visual", ""),
                 camera=shot.get("camera", ""),
@@ -120,27 +122,39 @@ class KeyframeImagesSkill(SkillCallable):
             if result.success and result.data:
                 image_path = result.data.get("image_path", "")
                 logger.info("keyframe: generated", shot=i, image_path=image_path)
-                return i, image_path, comp_prompt
+                simulated = result.data.get("simulated")
+                return (
+                    i,
+                    image_path,
+                    comp_prompt,
+                    simulated if type(simulated) is bool else None,
+                )
             # Fallback
             fallback_path = self._write_placeholder_frame(shot, image_id, params)
             logger.warning("keyframe: fallback for shot", shot=i, error=result.error)
-            return i, fallback_path, comp_prompt
+            return i, fallback_path, comp_prompt, True
 
         tasks = [_gen_one(i, shot) for i, shot in enumerate(capped_shots)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        simulation_truth: list[bool | None] = []
         for raw in results:
             if isinstance(raw, Exception):
                 logger.error("keyframe: generation exception", error=str(raw))
                 continue
             if not isinstance(raw, tuple):
                 continue
-            i, image_path, comp_prompt = raw
+            i, image_path, comp_prompt, simulated = raw
             capped_shots[i]["keyframe_image_path"] = image_path
             capped_shots[i]["keyframe_prompt"] = comp_prompt
+            if simulated is not None:
+                capped_shots[i]["simulated"] = simulated
+            simulation_truth.append(simulated)
 
         storyboard["shots"] = capped_shots
         storyboard["keyframes_generated"] = len(capped_shots)
+        if simulation_truth and all(value is not None for value in simulation_truth):
+            storyboard["simulated"] = any(value is True for value in simulation_truth)
         if params.get("_quality_warning"):
             storyboard["_quality_warning"] = params["_quality_warning"]
         return SkillResult(success=True, data=storyboard)
@@ -289,9 +303,11 @@ class KeyframeImagesSkill(SkillCallable):
             )
             shot["keyframe_image_path"] = str(path)
             shot["keyframe_prompt"] = shot.get("visual", "")
+            shot["simulated"] = True
 
         storyboard["shots"] = capped_shots
         storyboard["keyframes_generated"] = len(capped_shots)
+        storyboard["simulated"] = True
         return SkillResult(
             success=True,
             data=storyboard,

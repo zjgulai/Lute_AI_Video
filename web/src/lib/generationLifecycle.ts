@@ -22,6 +22,14 @@ export function classifyGenerationResult(
     ? result.completion_kind
     : "";
 
+  const hasLifecycleEnvelope = [
+    result.status,
+    result.lifecycle_status,
+    result.completion_kind,
+    result.request_succeeded,
+    result.full_media_success,
+  ].some((field) => field !== undefined);
+
   if (
     status === "error"
     || lifecycleStatus === "error"
@@ -31,30 +39,30 @@ export function classifyGenerationResult(
     return "error";
   }
 
-  if (
-    status === "completed_bounded"
-    || lifecycleStatus === "completed_bounded"
-    || completionKind === "no_media"
-    || completionKind === "bounded_media"
-    || (
-      result.request_succeeded === true
+  if (hasLifecycleEnvelope) {
+    const isBounded = (
+      status === "completed_bounded"
+      && lifecycleStatus === "completed_bounded"
+      && (completionKind === "no_media" || completionKind === "bounded_media")
+      && result.request_succeeded === true
+      && result.success === false
       && result.full_media_success === false
-    )
-  ) {
-    return "bounded";
+    );
+    if (isBounded) return "bounded";
+
+    const isFull = (
+      status === "completed_full"
+      && lifecycleStatus === "completed_full"
+      && completionKind === "full_media"
+      && result.request_succeeded === true
+      && result.success === true
+      && result.full_media_success === true
+    );
+    if (isFull) return "full";
+
+    return "error";
   }
 
-  if (
-    status === "completed_full"
-    || lifecycleStatus === "completed_full"
-    || completionKind === "full_media"
-    || result.full_media_success === true
-  ) {
-    return result.success === false ? "error" : "full";
-  }
-
-  if (result.success === false) return "error";
-
-  // Legacy successful results predate lifecycle fields.
-  return "full";
+  // Legacy results predate lifecycle fields and must opt in explicitly.
+  return result.success === true ? "full" : "error";
 }

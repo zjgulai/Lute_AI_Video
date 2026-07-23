@@ -84,8 +84,11 @@ def test_ci_and_deploy_docker_builds_are_secret_free():
     )
     build_with = build_step.get("with") or {}
     assert build_with.get("push") is False
-    assert build_with.get("load") is False
-    assert set(_build_args_map(build_step)) == {"APT_MIRROR", "PIP_INDEX_URL"}
+    assert build_with.get("load") is True
+    assert set(_build_args_map(build_step)) == {"APT_MIRROR", "RELEASE_SOURCE_SHA"}
+    assert _build_args_map(build_step)["RELEASE_SOURCE_SHA"] == "${{ github.sha }}"
+    scan_step = _step_by_name(ci_job.get("steps") or [], "Scan backend image")
+    assert scan_step.get("with", {}).get("image-ref") == "ai-video-backend:ci-${{ github.sha }}"
 
     deploy_job = _load_workflow(DEPLOY_YML)["jobs"]["build-images"]
     for step_name in ("Build backend image", "Build frontend image", "Build rendering image"):

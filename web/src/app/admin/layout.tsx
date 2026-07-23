@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { adminFetchJson } from "@/components/api";
 import { SignOut } from "@phosphor-icons/react";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface AdminUser {
   admin_id: string;
@@ -13,6 +14,7 @@ interface AdminUser {
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -57,7 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="min-h-screen bg-[var(--bg-page)] flex items-center justify-center">
         <div
           role="status"
-          aria-label="Loading admin session"
+          aria-label={t("admin.session.loading")}
           className="w-5 h-5 border-2 border-[var(--fortune-red)] border-t-transparent rounded-full animate-spin"
         />
       </div>
@@ -81,11 +83,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           <button
             onClick={handleLogout}
-            aria-label="Logout admin session"
+            aria-label={t("admin.session.logout")}
             className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
           >
             <SignOut size={14} weight="fill" />
-            Logout
+            {t("admin.session.logoutAction")}
           </button>
         </header>
 

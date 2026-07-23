@@ -20,8 +20,14 @@ except ImportError:
 
 from typing import Any, cast
 
-from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
+from src.config import (
+    DEFAULT_LANGUAGES,
+    DEFAULT_LLM_PROVIDER,
+    OUTPUT_DIR,
+    POYO_VIDEO_MODEL,
+)
 from src.models.commercial_contracts import PromptCompileInput, QualityContract
+from src.models.runtime_contracts import FastModeResult
 from src.pipeline.generation_policy import (
     EffectiveGenerationPolicy,
     GenerationScenario,
@@ -39,6 +45,11 @@ from src.pipeline.scenario_injection_plan import (
     with_optional_injection_config,
 )
 from src.pipeline.state_manager import persist_background_failure
+from src.pipeline.w5_fast_runtime_loader import (
+    W5FastRuntimeLoadError,
+    configured_w5_fast_runtime_paths,
+    load_w5_fast_runtime_authority,
+)
 from src.routers._deps import (
     _classified_error,
     _inject_api_keys,
@@ -68,6 +79,7 @@ from src.services.provider_execution import (
     new_compatibility_job_id,
     project_provider_execution_context,
 )
+from src.services.submission_idempotency import SubmissionNotFound
 
 router = APIRouter()
 
@@ -143,6 +155,7 @@ _FAST_RESULT_SNAPSHOT_KEYS = frozenset(
         "artifact_disposition",
         "artifact_review_status",
         "artifact_storage_scope",
+        "transparency",
     }
 )
 
@@ -163,8 +176,21 @@ _SCENARIO_RESULT_SNAPSHOT_KEYS = frozenset(
         "final_artifact_path",
         "artifact_disposition",
         "artifact_kind",
+        "regenerate_chain",
+        "soft_degraded_reasons",
+        "transparency",
     }
 )
+
+_SCENARIO_STATE_AUDIT_ARRAY_KEYS = frozenset(
+    {"regenerate_chain", "soft_degraded_reasons"}
+)
+
+
+def _scenario_state_audit_array(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError("invalid scenario state audit array")
+    return [dict(item) for item in value]
 
 
 def _safe_result_snapshot(
@@ -174,7 +200,10 @@ def _safe_result_snapshot(
 ) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
-    return {key: value[key] for key in allowed_keys if key in value}
+    snapshot = {key: value[key] for key in allowed_keys if key in value}
+    for key in _SCENARIO_STATE_AUDIT_ARRAY_KEYS & snapshot.keys():
+        snapshot[key] = _scenario_state_audit_array(snapshot[key])
+    return snapshot
 
 
 def _submission_http_error(exc: Exception, *, claim_exists: bool = False) -> HTTPException:
@@ -355,37 +384,56 @@ def _durable_scenario_status_response(
 ) -> dict[str, Any]:
     result = durable.get("result_snapshot")
     result_snapshot = result if isinstance(result, dict) else {}
+    from src.pipeline.completion_truth import read_coherent_scenario_lifecycle
+
+    lifecycle = read_coherent_scenario_lifecycle(result_snapshot)
     submit_response = durable.get("submit_response")
     submit_snapshot = submit_response if isinstance(submit_response, dict) else {}
     record_status = str(durable.get("status") or "running")
-    if record_status == "failed":
+    if record_status == "failed" or (record_status == "completed" and lifecycle is None):
         status = "error"
     elif record_status == "completed":
-        status = str(result_snapshot.get("status") or submit_snapshot.get("status") or "completed")
+        assert lifecycle is not None
+        status = lifecycle["status"]
     else:
         status = record_status
     safe_error = durable.get("safe_error_code")
     return {
         "label": label,
         "scenario": scenario,
+        "step_order": list(get_scenario_step_order(scenario)),
+        "gates": {},
         "status": status,
-        "lifecycle_status": result_snapshot.get("lifecycle_status") or result_snapshot.get("status"),
-        "completion_kind": result_snapshot.get("completion_kind"),
-        "request_succeeded": result_snapshot.get("request_succeeded") is True,
-        "success": result_snapshot.get("success") is True,
-        "full_media_success": result_snapshot.get("full_media_success") is True,
-        "pipeline_complete": result_snapshot.get("pipeline_complete") is True,
-        "publish_allowed": result_snapshot.get("publish_allowed") is True,
-        "delivery_accepted": result_snapshot.get("delivery_accepted") is True,
+        "lifecycle_status": lifecycle["lifecycle_status"] if lifecycle else "error",
+        "completion_kind": lifecycle["completion_kind"] if lifecycle else "execution_failed",
+        "request_succeeded": lifecycle["request_succeeded"] if lifecycle else False,
+        "success": lifecycle["success"] if lifecycle else False,
+        "full_media_success": lifecycle["full_media_success"] if lifecycle else False,
+        "pipeline_complete": lifecycle["pipeline_complete"] if lifecycle else False,
+        "publish_allowed": lifecycle["publish_allowed"] if lifecycle else False,
+        "delivery_accepted": lifecycle["delivery_accepted"] if lifecycle else False,
         "current_step": result_snapshot.get("current_step") or durable.get("stage"),
         CURRENT_STEP_INJECTION_KEY: None,
-        "progress": 1.0 if record_status == "completed" else 0.0,
-        "pipeline_degraded": record_status == "failed",
-        "soft_degraded_reasons": [],
+        "progress": 1.0 if record_status == "completed" and lifecycle is not None else 0.0,
+        "pipeline_degraded": record_status == "failed" or (
+            record_status == "completed" and lifecycle is None
+        ),
+        "soft_degraded_reasons": _scenario_state_audit_array(
+            result_snapshot.get("soft_degraded_reasons", [])
+        ),
+        "regenerate_chain": _scenario_state_audit_array(
+            result_snapshot.get("regenerate_chain", [])
+        ),
         "continuity_diagnostics": {},
         "gate_status": None,
-        "errors": [str(safe_error)] if safe_error else [],
-        "result": result_snapshot or None,
+        "errors": (
+            [str(safe_error)]
+            if safe_error
+            else ["invalid_lifecycle_snapshot"]
+            if record_status == "completed" and lifecycle is None
+            else []
+        ),
+        "result": result_snapshot if lifecycle is not None else None,
         "steps": {},
     }
 
@@ -529,9 +577,7 @@ async def _resume_s1_without_media_synthesis(step_runner: Any, label: str) -> di
             break
     if final_state and not final_state.get("pipeline_degraded"):
         final_state["current_step"] = None
-        save = getattr(step_runner.state_manager, "save", None)
-        if callable(save):
-            await save(label, final_state)
+        await step_runner.state_manager.save(label, final_state)
     return final_state
 
 
@@ -580,9 +626,7 @@ async def _resume_s1_bounded_media_pilot(
             final_state["config"]["provider_max_retries"] = provider_max_retries
             final_state["config"]["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
             final_state["config"]["seedance_quality_gate_enabled"] = False
-            save = getattr(step_runner.state_manager, "save", None)
-            if callable(save):
-                await save(label, final_state)
+            await step_runner.state_manager.save(label, final_state)
             break
     return final_state
 
@@ -691,6 +735,7 @@ async def run_s1_product_direct(body: S1StartRequest):
     step_runner = StepRunner(state_manager)
 
     # Initialize state (saved immediately so polling can see it) and run to completion
+    pipeline_started = time.perf_counter()
     label = await step_runner.init_state(config=config, mode="auto", label=label)
     if config["enable_media_synthesis"]:
         if bounded_media_pilot:
@@ -704,6 +749,10 @@ async def run_s1_product_direct(body: S1StartRequest):
             final_state = await step_runner.resume(label)
     else:
         final_state = await _resume_s1_without_media_synthesis(step_runner, label)
+    await step_runner.finalize_pipeline_completion(
+        final_state,
+        started_at=pipeline_started,
+    )
 
     # Convert back to the result dict format expected by frontend
     seedance_raw = _get_step_output(final_state, "seedance_clips") or {}
@@ -1131,6 +1180,65 @@ async def _fast_submit_validated(
     policy = _resolve_request_generation_policy(req, scenario="fast")
     tenant_id = policy.tenant_id
     idempotency = get_submission_idempotency_service()
+    w5_runtime_authority: Any | None = None
+    replay = None
+    try:
+        replay = await idempotency.replay_submission(
+            tenant_id=tenant_id,
+            raw_key=raw_key,
+            validated_request=req,
+            effective_policy=policy,
+            operation="fast.submit",
+            scenario="fast",
+        )
+    except SubmissionNotFound:
+        replay = None
+    except Exception as exc:
+        raise _submission_http_error(exc) from None
+    if replay is not None:
+        return _replay_submit_response(replay.record)
+
+    try:
+        w5_paths = configured_w5_fast_runtime_paths()
+        if w5_paths is not None:
+            w5_runtime_authority = load_w5_fast_runtime_authority(
+                paths=w5_paths,
+                validated_request=req,
+                effective_policy=policy,
+                raw_idempotency_key=raw_key,
+                require_active=True,
+            )
+            actual_llm_model = (
+                "deepseek-v4-flash"
+                if DEFAULT_LLM_PROVIDER == "deepseek"
+                else DEFAULT_LLM_PROVIDER
+            )
+            binding = w5_runtime_authority.binding
+            if (
+                DEFAULT_LLM_PROVIDER != binding.expected_llm_provider
+                or actual_llm_model != binding.expected_llm_model
+                or binding.expected_video_provider != "poyo"
+                or POYO_VIDEO_MODEL != binding.expected_video_model
+                or binding.expected_video_resolution != "720p"
+            ):
+                raise W5FastRuntimeLoadError(
+                    "w5_fast_binding_mismatch"
+                )
+    except W5FastRuntimeLoadError as exc:
+        status_code = (
+            409
+            if exc.code
+            in {
+                "w5_fast_activation_expired",
+                "w5_fast_binding_mismatch",
+            }
+            else 503
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": exc.code},
+        ) from None
+
     started_at_unix = int(time.time())
     task_id = preallocate_resource_id(resource_type="fast", scenario="fast")
     reserved_response = {
@@ -1150,6 +1258,11 @@ async def _fast_submit_validated(
             resource_type="fast",
             resource_id=task_id,
             response_body=reserved_response,
+            trusted_authorization_ref=(
+                w5_runtime_authority.activation.activation_id
+                if w5_runtime_authority is not None
+                else None
+            ),
         )
     except Exception as exc:
         raise _submission_http_error(exc) from None
@@ -1199,6 +1312,11 @@ async def _fast_submit_validated(
             budget_job_id=task_id,
             scenario_or_resource_type="fast",
             generation_policy_version=policy.version,
+            authorization=(
+                w5_runtime_authority.budget_authorization
+                if w5_runtime_authority is not None
+                else None
+            ),
         )
         _inject_api_keys(req.api_keys)
         from src.services.fast_mode import get_fast_mode_service
@@ -1261,7 +1379,7 @@ async def _fast_submit_validated(
             ):
                 return
 
-    async def _run() -> dict[str, Any]:
+    async def _run() -> FastModeResult:
         await start_gate.wait()
         stage_worker: asyncio.Task[None] | None = None
 
@@ -1529,19 +1647,27 @@ async def start_s1_pipeline(body: S1StartRequest):
                     "seedance_quality_gate_enabled": False,
                 }
             )
+        pipeline_started = time.perf_counter()
         label = await step_runner.init_state(config=config, mode=body.mode, label=body.output_label)
 
         if body.mode == "auto":
             if policy.enable_media_synthesis:
                 if bounded_media_pilot:
-                    return await _resume_s1_bounded_media_pilot(
+                    final_state = await _resume_s1_bounded_media_pilot(
                         step_runner,
                         label,
                         policy.artifact_disposition,
                         effective_provider_max_retries,
                     )
-                return await step_runner.resume(label)
-            return await _resume_s1_without_media_synthesis(step_runner, label)
+                else:
+                    final_state = await step_runner.resume(label)
+            else:
+                final_state = await _resume_s1_without_media_synthesis(step_runner, label)
+            await step_runner.finalize_pipeline_completion(
+                final_state,
+                started_at=pipeline_started,
+            )
+            return final_state
 
         return {
             "label": label,
@@ -1737,6 +1863,21 @@ async def update_s1_state(label: str, body: dict[str, Any]):
 
         _validate_s1_public_state_update(body, state)
         updated_state = deep_merge(state, body)
+        from src.config import OUTPUT_DIR
+        from src.services.transparency_provenance import record_step_provenance
+
+        for step_name, step_update in body["steps"].items():
+            if "edited_output" not in step_update:
+                continue
+            _, transparency = record_step_provenance(
+                state=updated_state,
+                step_name=step_name,
+                output=step_update["edited_output"],
+                output_dir=OUTPUT_DIR,
+                origin_kind="human_edit",
+                human_edit=step_update["edited_output"],
+            )
+            updated_state["transparency"] = transparency
         await state_manager.save(label, updated_state)
         return updated_state
     except HTTPException:
@@ -2604,6 +2745,7 @@ async def _submit_scenario_validated(
     async def _background_run() -> None:
         try:
             await start_gate.wait()
+            pipeline_started = time.perf_counter()
             running = await idempotency.transition(
                 tenant_id=tenant_id,
                 record_id=record_id,
@@ -2626,6 +2768,11 @@ async def _submit_scenario_validated(
                         artifact_disposition=policy.artifact_disposition,
                     )
                     await state_manager.save(label, final_state)
+
+            await step_runner.finalize_pipeline_completion(
+                final_state,
+                started_at=pipeline_started,
+            )
 
             source_projection = project_scenario_acceptance_source(
                 final_state,
@@ -2812,12 +2959,35 @@ async def get_scenario_status(scenario: str, label: str):
 
         # Determine overall status
         lifecycle_status = projected_state.get("lifecycle_status")
-        if lifecycle_status == "completed_bounded" and not state.get("pipeline_degraded"):
-            status = "completed_bounded"
+        from src.pipeline.completion_truth import read_coherent_scenario_lifecycle
+
+        lifecycle = read_coherent_scenario_lifecycle(projected_state)
+        has_lifecycle_claim = any(
+            key in projected_state
+            for key in (
+                "status",
+                "lifecycle_status",
+                "completion_kind",
+                "request_succeeded",
+                "success",
+                "full_media_success",
+                "pipeline_complete",
+                "publish_allowed",
+                "delivery_accepted",
+            )
+        )
+        if (
+            lifecycle is not None
+            and lifecycle["status"] in {"completed_bounded", "completed_full"}
+            and not state.get("pipeline_degraded")
+        ):
+            status = lifecycle["status"]
             progress = 1.0
         elif lifecycle_status == "policy_blocked":
             status = "policy_blocked"
         elif state.get("pipeline_degraded"):
+            status = "error"
+        elif has_lifecycle_claim and lifecycle is None:
             status = "error"
         elif current_step is None or current_step == "":
             status = "invalid_state"
@@ -2833,20 +3003,35 @@ async def get_scenario_status(scenario: str, label: str):
         return {
             "label": label,
             "scenario": scenario,
+            "step_order": list(get_scenario_step_order(scenario)),
+            "gates": {
+                str(gate_id): {"status": str(gate.get("status") or "")}
+                for gate_id, gate in projected_state.get("gates", {}).items()
+                if isinstance(gate_id, str) and isinstance(gate, dict)
+            },
             "status": status,
-            "lifecycle_status": lifecycle_status,
-            "completion_kind": projected_state.get("completion_kind"),
-            "request_succeeded": projected_state.get("request_succeeded") is True,
-            "success": projected_state.get("success") is True,
-            "full_media_success": projected_state.get("full_media_success") is True,
-            "pipeline_complete": projected_state.get("pipeline_complete") is True,
-            "publish_allowed": projected_state.get("publish_allowed") is True,
-            "delivery_accepted": projected_state.get("delivery_accepted") is True,
+            "lifecycle_status": (
+                lifecycle["lifecycle_status"] if lifecycle is not None else lifecycle_status
+            ),
+            "completion_kind": (
+                lifecycle["completion_kind"] if lifecycle is not None else projected_state.get("completion_kind")
+            ),
+            "request_succeeded": lifecycle["request_succeeded"] if lifecycle else False,
+            "success": lifecycle["success"] if lifecycle else False,
+            "full_media_success": lifecycle["full_media_success"] if lifecycle else False,
+            "pipeline_complete": lifecycle["pipeline_complete"] if lifecycle else False,
+            "publish_allowed": lifecycle["publish_allowed"] if lifecycle else False,
+            "delivery_accepted": lifecycle["delivery_accepted"] if lifecycle else False,
             "current_step": current_step,
             CURRENT_STEP_INJECTION_KEY: projected_state.get(CURRENT_STEP_INJECTION_KEY),
             "progress": progress,
             "pipeline_degraded": projected_state.get("pipeline_degraded", False),
-            "soft_degraded_reasons": projected_state.get("soft_degraded_reasons", []),
+            "soft_degraded_reasons": _scenario_state_audit_array(
+                projected_state.get("soft_degraded_reasons", [])
+            ),
+            "regenerate_chain": _scenario_state_audit_array(
+                projected_state.get("regenerate_chain", [])
+            ),
             "continuity_diagnostics": extract_continuity_diagnostics(audit_report),
             "gate_status": projected_state.get("gate_status"),
             "errors": projected_state.get("errors", []),

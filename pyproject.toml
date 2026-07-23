@@ -2,12 +2,12 @@
 name = "short-video-agent"
 version = "2.0.0"
 description = "Multi-agent short video creation system for cross-border e-commerce — wearable breast pump & feeding appliances"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "langgraph>=0.2.0",
-    "langchain>=0.3.0",
+    "langchain>=1.3.9",
     "langchain-openai>=0.2.0",
-    "langchain-anthropic>=0.3.0",
+    "langchain-anthropic>=1.4.6",
     "pydantic>=2.0",
     "python-dotenv>=1.0",
     "httpx>=0.27",
@@ -18,12 +18,17 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.0",
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.31",
     "supabase>=2.0",
     "asyncpg>=0.29",
     "alembic>=1.18.5",
     "bcrypt>=4.2",
-    "Pillow>=10.0",
+    "Pillow>=12.3.0",
+    "yt-dlp==2026.7.4",
+    "faster-whisper>=1.2.1",
+    "transformers>=5.13.0",
+    "torch>=2.12.1",
+    "c2pa-python==0.36.0",
 ]
 
 [project.optional-dependencies]
@@ -34,12 +39,31 @@ dev = [
     "pytest-timeout>=2.3",
     "pytest-cov>=4.1",
     "ruff>=0.3",
-    "yt-dlp==2026.7.4",
+    "pyright>=1.1.407",
+    "pip-audit>=2.9.0",
 ]
+
+[tool.uv]
+package = false
+constraint-dependencies = [
+    "cryptography>=48.0.1",
+    "langgraph-checkpoint>=4.1.1",
+    "langgraph-sdk>=0.3.15",
+    "langsmith>=0.8.18",
+    "starlette>=1.3.1",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [
@@ -69,10 +93,14 @@ markers = [
 ]
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 pythonPlatform = "All"
 include = ["src", "tests"]
 extraPaths = ["."]
+executionEnvironments = [
+    { root = "src", extraPaths = ["."] },
+    { root = "tests", extraPaths = ["."] },
+]
 exclude = [
     "**/node_modules",
     "**/migrations",

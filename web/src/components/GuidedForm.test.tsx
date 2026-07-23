@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/i18n/I18nProvider";
 import GuidedForm from "./GuidedForm";
+import { apiFetch } from "./api";
 
 vi.mock("./api", () => ({
   apiFetch: vi.fn(),
@@ -119,6 +120,64 @@ describe("GuidedForm release-critical scene contracts", () => {
       expect(container.textContent).toContain("Brand Image Film");
       expect(container.textContent).toContain("Convey brand tone and values");
       expect(container.textContent).not.toContain("传递品牌调性和价值观");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("requires exactly six S5 product views and submits six stable view entries", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (_path, options) => {
+      const file = (options?.body as FormData).get("file") as File;
+      return {
+        ok: true,
+        json: async () => ({ path: `/uploads/${file.name}` }),
+      } as Response;
+    });
+    const onSubmit = vi.fn();
+    const { container, cleanup } = renderGuidedForm({
+      scene: "brand_vlog",
+      onSubmit,
+      loading: false,
+    });
+
+    try {
+      changeInput(container, "select[name='scene_id']", "office");
+      const modelGroup = container.querySelector('[role="group"][aria-label]') as HTMLElement;
+      const modelButton = Array.from(modelGroup.querySelectorAll("button")).find(
+        (button) => button.textContent?.includes("model-mom"),
+      ) as HTMLButtonElement;
+      act(() => modelButton.click());
+
+      const input = container.querySelector("input[name='product_views']") as HTMLInputElement;
+      const firstFive = Array.from({ length: 5 }, (_, index) => (
+        new File([`view-${index + 1}`], `view-${index + 1}.png`, { type: "image/png" })
+      ));
+      Object.defineProperty(input, "files", { configurable: true, value: firstFive });
+      await act(async () => {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      const submitButton = container.querySelector("[data-sticky-action-bar] button") as HTMLButtonElement;
+      expect(submitButton.disabled).toBe(true);
+
+      Object.defineProperty(input, "files", {
+        configurable: true,
+        value: [new File(["view-6"], "view-6.png", { type: "image/png" })],
+      });
+      await act(async () => {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(submitButton.disabled).toBe(false);
+
+      act(() => submitButton.click());
+      const payload = onSubmit.mock.calls[0][0] as {
+        product_views: string[];
+        product_sku: { views: Array<{ path: string }> };
+      };
+      expect(payload.product_views).toEqual(
+        Array.from({ length: 6 }, (_, index) => `/uploads/view-${index + 1}.png`),
+      );
+      expect(payload.product_sku.views.map((view) => view.path)).toEqual(payload.product_views);
     } finally {
       cleanup();
     }

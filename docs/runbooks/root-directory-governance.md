@@ -5,7 +5,7 @@ module: project
 topic: root-directory-governance
 status: stable
 created: 2026-06-01
-updated: 2026-07-09
+updated: 2026-07-22
 owner: self
 source: human+ai
 ---
@@ -38,6 +38,8 @@ source: human+ai
 | `.env.example` | config |
 | `.gitignore` | config |
 | `.grype.yaml` | config |
+| `.python-version` | config |
+| `.trivyignore.yaml` | config |
 | `AGENTS.md` | entrypoint |
 | `CHANGELOG.md` | entrypoint |
 | `CLAUDE.md` | entrypoint |

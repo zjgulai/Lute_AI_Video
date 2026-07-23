@@ -11,19 +11,20 @@ by a client.
 from __future__ import annotations
 
 import contextvars
+import os
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from types import MappingProxyType
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError
 
+from src.pipeline.generation_policy_constants import GENERATION_POLICY_VERSION
 from src.routers._deps import AuthContext
 
-GENERATION_POLICY_VERSION = "generation-safety.v1"
 GENERATION_EXECUTION_PROFILE_VERSION = "generation-execution.v1"
 GENERATION_SAFETY_FIELDS = frozenset(
     {
@@ -57,6 +58,7 @@ DEFERRED_GENERATION_CONTROL_KEYS = frozenset(
         "transparency_policy",
         "transparency_sidecar",
         "transparency_sidecars",
+        "c2pa_signing_mode",
         "human_approval",
         "human_approved",
         "approval",
@@ -115,13 +117,14 @@ class EffectiveGenerationPolicy(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    version: Literal["generation-safety.v1"] = GENERATION_POLICY_VERSION
+    version: Literal["generation-safety.v2"] = GENERATION_POLICY_VERSION
     tenant_id: str
     scenario: GenerationScenario
     provider_submit_allowed: Literal[True] = True
     enable_media_synthesis: StrictBool
     artifact_disposition: ArtifactDisposition
     provider_max_retries: ZeroMutationRetry
+    c2pa_signing_mode: Literal["local_draft", "required"] = "local_draft"
 
 
 _effective_generation_policy_var: contextvars.ContextVar[EffectiveGenerationPolicy | None] = contextvars.ContextVar(
@@ -169,7 +172,7 @@ class GenerationExecutionProfile:
     scenario: str
     allowed_steps: tuple[str, ...]
     provider_job_caps: Mapping[str, int]
-    completion_kind: Literal["no_media", "bounded_media"]
+    completion_kind: Literal["no_media", "bounded_media", "full_media"]
     refs_only: bool = False
 
     def model_dump(self) -> dict[str, Any]:
@@ -336,6 +339,7 @@ def _load_persisted_policy(state: Mapping[str, Any]) -> EffectiveGenerationPolic
         "enable_media_synthesis": policy.enable_media_synthesis,
         "artifact_disposition": policy.artifact_disposition,
         "provider_max_retries": policy.provider_max_retries,
+        "c2pa_signing_mode": policy.c2pa_signing_mode,
     }
     for key, expected in exact_config.items():
         if key not in config or config[key] != expected or type(config[key]) is not type(expected):
@@ -635,10 +639,24 @@ def resolve_generation_policy(
     if not auth.has_permission("provider:submit"):
         raise HTTPException(status_code=403, detail="Insufficient provider submit permission")
 
+    c2pa_signing_mode = os.environ.get(
+        "AI_VIDEO_C2PA_SIGNING_MODE",
+        "local_draft",
+    )
+    if c2pa_signing_mode not in {"local_draft", "required"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Server C2PA signing mode is invalid",
+        )
+
     return EffectiveGenerationPolicy(
         tenant_id=auth.tenant_id,
         scenario=scenario,
         enable_media_synthesis=intent.enable_media_synthesis,
         artifact_disposition=intent.artifact_disposition,
         provider_max_retries=intent.provider_max_retries,
+        c2pa_signing_mode=cast(
+            Literal["local_draft", "required"],
+            c2pa_signing_mode,
+        ),
     )

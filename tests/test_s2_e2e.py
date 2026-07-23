@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import importlib
 import warnings
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -155,6 +155,7 @@ class TestS1BoundedMediaContract:
 
         executed_steps: list[str] = []
         saved_states: list[dict[str, Any]] = []
+        completion_calls: list[dict[str, Any]] = []
 
         class FakeStateManager:
             async def save(self, label: str, state: dict[str, Any]) -> None:
@@ -173,6 +174,10 @@ class TestS1BoundedMediaContract:
 
             async def resume(self, label):
                 raise AssertionError("pending_review S1 media pilot must not resume through assemble_final")
+
+            async def finalize_pipeline_completion(self, state, *, started_at):
+                completion_calls.append(state)
+                return True
 
             async def run_step(self, label, step_name):
                 executed_steps.append(step_name)
@@ -234,6 +239,7 @@ class TestS1BoundedMediaContract:
         assert saved_states[-1]["state"]["bounded_media_pilot"] is True
         assert saved_states[-1]["state"]["provider_max_retries"] == 0
         assert saved_states[-1]["state"]["provider_job_caps"] == {"image": 1, "video": 1}
+        assert len(completion_calls) == 1
 
 
 class TestS2RunResultShape:
@@ -284,6 +290,7 @@ class TestS2RunResultShape:
     @pytest.mark.asyncio
     async def test_skip_media_stops_before_provider_backed_steps(self, monkeypatch: pytest.MonkeyPatch):
         executed_steps: list[str] = []
+        completion_calls: list[dict[str, Any]] = []
 
         class FakeStepRunner:
             def __init__(self, state_manager: object) -> None:
@@ -294,6 +301,10 @@ class TestS2RunResultShape:
 
             async def resume(self, label):
                 raise AssertionError("no-media S2 must not resume the full media pipeline")
+
+            async def finalize_pipeline_completion(self, state, *, started_at):
+                completion_calls.append(state)
+                return True
 
             async def run_step(self, label, step_name):
                 executed_steps.append(step_name)
@@ -321,6 +332,7 @@ class TestS2RunResultShape:
         assert "keyframe_images" not in executed_steps
         assert result["keyframe_images"] == []
         assert "final_video_path" not in result
+        assert len(completion_calls) == 1
 
     @pytest.mark.asyncio
     async def test_pending_review_media_pilot_stops_before_tts_and_assemble(
@@ -329,6 +341,7 @@ class TestS2RunResultShape:
     ):
         executed_steps: list[str] = []
         saved_states: list[dict[str, Any]] = []
+        completion_calls: list[dict[str, Any]] = []
 
         class FakeStateManager:
             async def save(self, label: str, state: dict[str, Any]) -> None:
@@ -347,6 +360,10 @@ class TestS2RunResultShape:
 
             async def resume(self, label):
                 raise AssertionError("pending_review S2 media pilot must not resume through assemble_final")
+
+            async def finalize_pipeline_completion(self, state, *, started_at):
+                completion_calls.append(state)
+                return True
 
             async def run_step(self, label, step_name):
                 executed_steps.append(step_name)
@@ -402,6 +419,7 @@ class TestS2RunResultShape:
         assert saved_states[-1]["state"]["bounded_media_pilot"] is True
         assert saved_states[-1]["state"]["provider_max_retries"] == 0
         assert saved_states[-1]["state"]["provider_job_caps"] == {"image": 1, "video": 1}
+        assert len(completion_calls) == 1
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("stop_step", list(S2_SEGMENTED_MEDIA_STEP_ORDERS))
@@ -412,6 +430,7 @@ class TestS2RunResultShape:
     ):
         executed_steps: list[str] = []
         saved_states: list[dict[str, Any]] = []
+        completion_calls: list[dict[str, Any]] = []
         expected_steps = S2_SEGMENTED_MEDIA_STEP_ORDERS[stop_step]  # type: ignore[index]
         expected_caps = S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[stop_step]  # type: ignore[index]
 
@@ -517,6 +536,10 @@ class TestS2RunResultShape:
             async def resume(self, label):
                 raise AssertionError("segmented S2 media pilot must not resume unrestricted pipeline")
 
+            async def finalize_pipeline_completion(self, state, *, started_at):
+                completion_calls.append(state)
+                return True
+
             async def run_step(self, label, step_name):
                 executed_steps.append(step_name)
                 state = await self.state_manager.load(label)
@@ -562,6 +585,7 @@ class TestS2RunResultShape:
         )
 
         assert executed_steps == expected_steps
+        assert len(completion_calls) == 1
         for step_name in set(S2_SEGMENTED_MEDIA_STEP_ORDERS["audit"]) - set(expected_steps):
             assert step_name not in executed_steps
         assert result["artifact_disposition"] == "pending_review"
@@ -652,9 +676,11 @@ class TestS2RunResultShape:
             assert saved_states[-1]["state"]["config"]["provider_job_caps"] == {}
             steps = saved_states[-1]["state"]["steps"]
             assert executed_steps == ["audit"]
-            assert steps["continuity_storyboard_grid"]["status"] == "done"
+            assert steps["continuity_storyboard_grid"]["status"] == "pending"
+            assert steps["continuity_storyboard_grid"]["source_ref"] is True
             assert steps["continuity_storyboard_grid"]["output"]["status"] == "refs_only"
-            assert steps["assemble_final"]["status"] == "done"
+            assert steps["assemble_final"]["status"] == "pending"
+            assert steps["assemble_final"]["source_ref"] is True
             assert steps["assemble_final"]["output"]["refs_only"] is True
             assert steps.get("keyframe_images", {}).get("status", "pending") == "pending"
             assert steps.get("video_prompts", {}).get("status", "pending") == "pending"
@@ -769,7 +795,7 @@ class TestS2RunResultShape:
                 )
 
         result = await S1ProductDirectPipeline()._step_keyframe_images(
-            reg=FakeRegistry(),  # type: ignore[arg-type]
+            reg=cast(Any, FakeRegistry()),
             storyboards=[
                 {"shots": [{"visual": "safe product frame"}, {"visual": "second frame"}]},
                 {"shots": [{"visual": "third frame"}]},
@@ -804,12 +830,13 @@ class TestS2RunResultShape:
                         "duration_seconds": 15,
                         "file_size_bytes": 2_000_000,
                         "is_stub": False,
+                        "simulated": False,
                         "verification": {"all_ok": True},
                     },
                 )
 
         result = await S1ProductDirectPipeline()._step_seedance_clips(
-            reg=FakeRegistry(),  # type: ignore[arg-type]
+            reg=cast(Any, FakeRegistry()),
             video_prompts=[
                 {"prompt": "safe product demo", "duration_seconds": 4},
                 {"prompt": "second product demo", "duration_seconds": 4},
@@ -826,6 +853,7 @@ class TestS2RunResultShape:
         )
 
         assert result["clip_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_run/clips/clip.mp4"]
+        assert result["simulated"] is False
         assert len(seen_params) == 1
         assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/clips")
         assert seen_params[0]["provider_max_retries"] == 0
@@ -844,11 +872,12 @@ class TestS2RunResultShape:
                         "audio_path": f"{params['output_dir']}/audio.mp3",
                         "lyrics_path": f"{params['output_dir']}/audio.txt",
                         "verification": {"all_ok": True},
+                        "simulated": False,
                     },
                 )
 
         result = await S1ProductDirectPipeline()._step_tts_audio(
-            reg=FakeRegistry(),  # type: ignore[arg-type]
+            reg=cast(Any, FakeRegistry()),
             scripts=[
                 {"id": "script-1", "segments": [{"voiceover": "first voiceover"}]},
                 {"id": "script-2", "segments": [{"voiceover": "second voiceover"}]},
@@ -861,6 +890,7 @@ class TestS2RunResultShape:
         )
 
         assert result["audio_paths"] == ["/tmp/tenants/momcozy-marketing/pending_review/s2_run/audio/audio.mp3"]
+        assert result["simulated"] is False
         assert len(seen_params) == 1
         assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/audio")
         assert seen_params[0]["provider_max_retries"] == 0
@@ -878,11 +908,12 @@ class TestS2RunResultShape:
                     data={
                         "image_path": f"{params['output_dir']}/thumb.png",
                         "verification": {"all_ok": True},
+                        "simulated": False,
                     },
                 )
 
         result = await S1ProductDirectPipeline()._step_thumbnail_images(
-            reg=FakeRegistry(),  # type: ignore[arg-type]
+            reg=cast(Any, FakeRegistry()),
             thumbnail_sets=[
                 {"variants": [{"prompt": "first thumbnail"}, {"prompt": "second thumbnail"}]},
             ],
@@ -893,7 +924,12 @@ class TestS2RunResultShape:
             thumbnail_job_cap=1,
         )
 
-        assert result == ["/tmp/tenants/momcozy-marketing/pending_review/s2_run/thumbnails/thumb.png"]
+        assert result == {
+            "image_paths": [
+                "/tmp/tenants/momcozy-marketing/pending_review/s2_run/thumbnails/thumb.png"
+            ],
+            "simulated": False,
+        }
         assert len(seen_params) == 1
         assert seen_params[0]["output_dir"].endswith("/pending_review/s2_run/thumbnails")
         assert seen_params[0]["provider_max_retries"] == 0
@@ -973,7 +1009,10 @@ class TestS2ExtremeInputs:
             brand_package={"values": ["x"], "voice_guidelines": ""},
             enable_media_synthesis=False,
         )
-        assert result["success"] is True
+        assert result["status"] == "completed_bounded"
+        assert result["completion_kind"] == "no_media"
+        assert result["request_succeeded"] is True
+        assert result["success"] is False
 
 
 class TestS2DeprecationShim:

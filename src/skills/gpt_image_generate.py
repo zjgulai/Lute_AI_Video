@@ -128,6 +128,7 @@ class GPTImageGenerateSkill(SkillCallable):
                 "image_id": image_id,
                 "file_size_bytes": file_size,
                 "is_stub": is_stub,
+                "simulated": is_stub,
                 "verification": verification,
             },
             metadata={"image_id": image_id, "size": size},
@@ -245,6 +246,7 @@ class GPTImageGenerateSkill(SkillCallable):
                 "image_id": image_id,
                 "file_size_bytes": path.stat().st_size,
                 "is_stub": True,
+                "simulated": True,
                 "verification": {
                     "file_exists": True, "size_ok": True, "header_ok": True,
                     "all_ok": True, "failures": [], "mode": "fallback",

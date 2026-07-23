@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from typing import Any, cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -10,12 +11,12 @@ from src.pipeline.state_manager import PipelineStateManager
 from tests.generation_policy_test_utils import attach_execution_policy
 
 
-def _execution_policy_config(scenario: str, *, media: bool) -> dict:
-    from src.pipeline.generation_policy import EffectiveGenerationPolicy
+def _execution_policy_config(scenario: str, *, media: bool) -> dict[str, Any]:
+    from src.pipeline.generation_policy import EffectiveGenerationPolicy, GenerationScenario
 
     policy = EffectiveGenerationPolicy(
         tenant_id="default",
-        scenario=scenario,  # type: ignore[arg-type]
+        scenario=cast(GenerationScenario, scenario),
         enable_media_synthesis=media,
         artifact_disposition="pending_review",
         provider_max_retries=0,
@@ -24,11 +25,12 @@ def _execution_policy_config(scenario: str, *, media: bool) -> dict:
         "enable_media_synthesis": media,
         "artifact_disposition": "pending_review",
         "provider_max_retries": 0,
+        "c2pa_signing_mode": policy.c2pa_signing_mode,
         "effective_generation_policy": policy.model_dump(mode="json"),
     }
 
 
-async def _save_state(label: str, state: dict) -> None:
+async def _save_state(label: str, state: dict[str, Any]) -> None:
     await PipelineStateManager().save(label, state)
 
 
@@ -54,7 +56,7 @@ async def _save_state(label: str, state: dict) -> None:
 @pytest.mark.asyncio
 async def test_continuation_routes_require_current_provider_submit_permission(
     path: str,
-    body: dict | None,
+    body: dict[str, Any] | None,
 ) -> None:
     """Persisted authority must not be reusable by a lower-privilege API key."""
     from src.api import app
@@ -155,7 +157,9 @@ async def test_execute_step_supports_s2(monkeypatch: pytest.MonkeyPatch, isolate
         state,
     )
 
-    async def fake_run_step(self: StepRunner, run_label: str, step_name: str) -> dict:
+    async def fake_run_step(
+        self: StepRunner, run_label: str, step_name: str
+    ) -> dict[str, Any]:
         assert run_label == label
         assert step_name == "strategy"
         state = await self.state_manager.load(run_label)
@@ -245,7 +249,9 @@ async def test_regenerate_step_s4_provider_attempt_is_blocked_before_invalidatio
     invalidations = 0
     runner_calls = 0
 
-    async def fake_regenerate_step(self: StepRunner, run_label: str, step_name: str) -> dict:
+    async def fake_regenerate_step(
+        self: StepRunner, run_label: str, step_name: str
+    ) -> dict[str, Any]:
         nonlocal runner_calls
         del self, run_label, step_name
         runner_calls += 1
@@ -329,7 +335,9 @@ async def test_regenerate_step_supports_s5(monkeypatch: pytest.MonkeyPatch, isol
     state["config"]["provider_job_caps"] = dict(profile.provider_job_caps)
     await _save_state(label, state)
 
-    async def fake_regenerate_step(self: StepRunner, run_label: str, step_name: str) -> dict:
+    async def fake_regenerate_step(
+        self: StepRunner, run_label: str, step_name: str
+    ) -> dict[str, Any]:
         assert run_label == label
         assert step_name == "video_prompts"
         state = await self.state_manager.load(run_label)
@@ -404,6 +412,13 @@ async def test_status_exposes_soft_degraded_reasons(isolated_state_dir, auth_hea
                     "detail": "mock fallback used",
                 }
             ],
+            "regenerate_chain": [
+                {
+                    "consumer": "keyframe_images",
+                    "upstream_step": "storyboards",
+                    "attempt": 1,
+                }
+            ],
             "errors": [],
             "media_synthesis_errors": [],
         },
@@ -420,6 +435,13 @@ async def test_status_exposes_soft_degraded_reasons(isolated_state_dir, auth_hea
     payload = response.json()
     assert payload["soft_degraded_reasons"][0]["step"] == "continuity_storyboard_grid"
     assert payload["soft_degraded_reasons"][0]["reason"] == "continuity_skill_fallback"
+    assert payload["regenerate_chain"] == [
+        {
+            "consumer": "keyframe_images",
+            "upstream_step": "storyboards",
+            "attempt": 1,
+        }
+    ]
     assert payload["continuity_diagnostics"]["continuity_score"] == 0.8
     assert payload["continuity_diagnostics"]["director_intent_metadata"] is True
     assert payload["continuity_diagnostics"]["clip_directions"][0]["scene_beat"] == "context_setup"
@@ -449,6 +471,13 @@ async def test_status_preserves_completed_bounded_lifecycle_truth(
             "compliance": {"status": "done"},
             "storyboards": {"status": "done"},
             "continuity_storyboard_grid": {"status": "done"},
+        },
+        "gates": {
+            "gate_1_script": {
+                "status": "approved",
+                "candidates": [{"id": "must-not-leak"}],
+                "selected_ids": ["must-not-leak"],
+            }
         },
         "errors": ["optional fallback retained for audit"],
         "pipeline_degraded": False,
@@ -508,6 +537,154 @@ async def test_status_preserves_completed_bounded_lifecycle_truth(
     assert payload["publish_allowed"] is False
     assert payload["delivery_accepted"] is False
     assert payload["errors"] == ["optional fallback retained for audit"]
+    from src.pipeline.scenario_config import get_scenario_step_order
+
+    assert payload["step_order"] == list(get_scenario_step_order("s1"))
+    assert payload["gates"] == {"gate_1_script": {"status": "approved"}}
+
+
+@pytest.mark.asyncio
+async def test_status_preserves_completed_full_lifecycle_truth(
+    isolated_state_dir,
+    auth_headers,
+) -> None:
+    del isolated_state_dir
+    from src.api import app
+    from src.pipeline.scenario_config import get_scenario_step_order
+
+    label = "s1-completed-full-status"
+    profile_id = "generation-execution.v1:s1:full-media"
+    provider_caps = {"image": 2, "video": 4, "tts": 1, "thumbnail": 1}
+    lifecycle = {
+        "status": "completed_full",
+        "lifecycle_status": "completed_full",
+        "completion_kind": "full_media",
+        "request_succeeded": True,
+        "success": True,
+        "full_media_success": True,
+        "pipeline_complete": True,
+        "publish_allowed": False,
+        "delivery_accepted": False,
+        "execution_profile_id": profile_id,
+        "provider_job_caps": provider_caps,
+    }
+    await _save_state(
+        label,
+        {
+            "schema_version": 1,
+            "label": label,
+            "tenant_id": "default",
+            "scenario": "s1",
+            "current_step": None,
+            "config": {
+                "effective_generation_execution_profile": {
+                    "version": "generation-execution.v1",
+                    "profile_id": profile_id,
+                    "scenario": "s1",
+                    "allowed_steps": list(get_scenario_step_order("s1")),
+                    "provider_job_caps": provider_caps,
+                    "completion_kind": "full_media",
+                    "refs_only": False,
+                },
+                "provider_job_caps": provider_caps,
+                "execution_lifecycle": lifecycle,
+            },
+            "steps": {
+                step: {"status": "done"}
+                for step in get_scenario_step_order("s1")
+            },
+            "errors": [],
+            "media_synthesis_errors": [],
+            "pipeline_degraded": False,
+            "soft_degraded_reasons": [],
+            **lifecycle,
+        },
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            f"/scenario/s1/status/{label}",
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "completed_full"
+    assert payload["lifecycle_status"] == "completed_full"
+    assert payload["completion_kind"] == "full_media"
+    assert payload["progress"] == 1.0
+    assert payload["request_succeeded"] is True
+    assert payload["success"] is True
+    assert payload["full_media_success"] is True
+    assert payload["pipeline_complete"] is True
+    assert payload["publish_allowed"] is False
+    assert payload["delivery_accepted"] is False
+
+
+def test_durable_status_rejects_contradictory_completed_snapshot() -> None:
+    from src.routers.scenario import _durable_scenario_status_response
+
+    payload = _durable_scenario_status_response(
+        scenario="s1",
+        label="s1-contradictory-durable",
+        durable={
+            "status": "completed",
+            "stage": "completed",
+            "result_snapshot": {
+                "status": "completed_full",
+                "lifecycle_status": "completed_full",
+                "completion_kind": "bounded_media",
+                "request_succeeded": True,
+                "success": True,
+                "full_media_success": True,
+                "pipeline_complete": True,
+                "publish_allowed": False,
+                "delivery_accepted": False,
+            },
+        },
+    )
+
+    assert payload["status"] == "error"
+    assert payload["progress"] == 0.0
+    assert payload["request_succeeded"] is False
+    assert payload["success"] is False
+    assert payload["full_media_success"] is False
+    assert payload["pipeline_complete"] is False
+    assert payload["publish_allowed"] is False
+    assert payload["delivery_accepted"] is False
+
+
+def test_durable_status_preserves_regeneration_and_soft_degradation_audit() -> None:
+    from src.pipeline.scenario_config import get_scenario_step_order
+    from src.routers.scenario import _durable_scenario_status_response
+
+    regenerate_chain = [
+        {
+            "consumer": "keyframe_images",
+            "upstream_step": "storyboards",
+            "attempt": 1,
+        }
+    ]
+    soft_degraded_reasons = [
+        {"step": "continuity_storyboard_grid", "reason": "fixture"}
+    ]
+    payload = _durable_scenario_status_response(
+        scenario="s1",
+        label="s1-durable-audit",
+        durable={
+            "status": "running",
+            "stage": "storyboards",
+            "result_snapshot": {
+                "regenerate_chain": regenerate_chain,
+                "soft_degraded_reasons": soft_degraded_reasons,
+            },
+        },
+    )
+
+    assert payload["regenerate_chain"] == regenerate_chain
+    assert payload["soft_degraded_reasons"] == soft_degraded_reasons
+    assert payload["step_order"] == list(get_scenario_step_order("s1"))
 
 
 @pytest.mark.asyncio
@@ -718,7 +895,7 @@ async def test_repeated_regenerate_route_preserves_consumed_provider_attempt(
 )
 @pytest.mark.asyncio
 async def test_s1_state_edit_rejects_server_owned_fields_by_presence(
-    protected_update: dict,
+    protected_update: dict[str, Any],
     isolated_state_dir,
     auth_headers,
 ) -> None:
@@ -835,7 +1012,7 @@ async def test_s1_state_edit_allows_only_edited_output_fields(
 async def test_generic_routes_reject_url_state_scenario_mismatch_before_side_effects(
     method: str,
     path_template: str,
-    body: dict | None,
+    body: dict[str, Any] | None,
     monkeypatch: pytest.MonkeyPatch,
     isolated_state_dir,
     auth_headers,
@@ -923,7 +1100,7 @@ async def test_generic_routes_reject_url_state_scenario_mismatch_before_side_eff
 async def test_s1_specific_routes_reject_non_s1_state_before_mutation(
     method: str,
     path_template: str,
-    body: dict | None,
+    body: dict[str, Any] | None,
     monkeypatch: pytest.MonkeyPatch,
     isolated_state_dir,
     auth_headers,
@@ -997,7 +1174,7 @@ async def test_unified_s2_refs_only_submit_seeds_validated_inputs_before_backgro
     from src.api import app
     from src.routers import scenario as scenario_router
 
-    refs = {
+    refs: dict[str, Any] = {
         "clip_paths": ["/tmp/tenants/default/pending_review/ref/clip.mp4"],
         "audio_paths": ["/tmp/tenants/default/pending_review/ref/audio.mp3"],
         "thumbnail_image_paths": ["/tmp/tenants/default/pending_review/ref/thumb.png"],
@@ -1048,11 +1225,17 @@ async def test_unified_s2_refs_only_submit_seeds_validated_inputs_before_backgro
     assert state["current_step"] == stop_step
     assert state["config"]["effective_generation_execution_profile"]["refs_only"] is True
     assert state["config"]["provider_job_caps"] == {}
-    assert state["steps"]["seedance_clips"]["status"] == "done"
+    assert state["steps"]["seedance_clips"]["status"] == "pending"
     assert state["steps"]["seedance_clips"]["output"]["refs_only"] is True
+    assert state["steps"]["seedance_clips"]["source_ref"] is True
     if stop_step == "audit":
-        assert state["steps"]["assemble_final"]["status"] == "done"
+        assert state["steps"]["assemble_final"]["status"] == "pending"
         assert state["steps"]["assemble_final"]["output"]["refs_only"] is True
+        assert state["steps"]["assemble_final"]["source_ref"] is True
+    for step_name, step in state["steps"].items():
+        if step.get("source_ref") is True:
+            assert step["status"] == "pending", step_name
+            assert not step.get("completed_at")
     assert scheduled == 1
 
     from src.services.submission_idempotency import (

@@ -213,6 +213,41 @@ def test_publish_metadata_rejects_unsafe_or_unbounded_values(
         )
 
 
+def test_tiktok_request_rejects_description_that_overflows_after_disclosure() -> None:
+    from src.models.publish_attempt import (
+        AI_GENERATED_DISCLOSURE_TEXT,
+        PublishAttemptRequest,
+    )
+
+    maximum_body = "x" * (2200 - len(AI_GENERATED_DISCLOSURE_TEXT) - 1)
+    accepted = PublishAttemptRequest.model_validate(
+        {**_valid_request(), "metadata": {"description": maximum_body}}
+    )
+    assert accepted.metadata.description == maximum_body
+
+    with pytest.raises(ValidationError, match="after AI disclosure"):
+        PublishAttemptRequest.model_validate(
+            {**_valid_request(), "metadata": {"description": maximum_body + "x"}}
+        )
+
+
+def test_shopify_request_rejects_title_that_overflows_after_disclosure() -> None:
+    from src.models.publish_attempt import PublishAttemptRequest
+
+    request = {
+        **_valid_request(),
+        "platform": "shopify",
+        "platform_options": {
+            "platform": "shopify",
+            "product_id": "gid://shopify/Product/123456789",
+        },
+        "metadata": {"title": "x" * 300},
+    }
+
+    with pytest.raises(ValidationError, match="after AI disclosure"):
+        PublishAttemptRequest.model_validate(request)
+
+
 def test_publish_metadata_trims_text_and_tag_items() -> None:
     from src.models.publish_attempt import PublishAttemptRequest
 
@@ -277,15 +312,13 @@ def test_publish_metadata_tag_items_are_strict_and_bounded(values: object) -> No
 
 
 def test_publish_metadata_accepts_exact_tag_count_and_length_boundaries() -> None:
-    from src.models.publish_attempt import PublishAttemptRequest
+    from src.models.publish_attempt import PublishMetadata
 
     boundary_tags = [f"{index:02d}" + "x" * 98 for index in range(30)]
-    parsed = PublishAttemptRequest.model_validate(
-        {**_valid_request(), "metadata": {"tags": boundary_tags}}
-    )
+    parsed = PublishMetadata.model_validate({"tags": boundary_tags})
 
-    assert parsed.metadata.tags == boundary_tags
-    assert all(len(value) == 100 for value in parsed.metadata.tags)
+    assert parsed.tags == boundary_tags
+    assert all(len(value) == 100 for value in parsed.tags)
 
 
 def test_publish_metadata_counts_unicode_code_points_and_rejects_surrogates() -> None:
@@ -302,6 +335,8 @@ def test_publish_metadata_counts_unicode_code_points_and_rejects_surrogates() ->
             "tags": [emoji * 100],
         }
     )
+    assert parsed.title is not None
+    assert parsed.product_name is not None
     assert len(parsed.title) == 300
     assert len(parsed.product_name) == 300
     assert len(parsed.tags[0]) == 100
@@ -331,6 +366,7 @@ def test_publish_metadata_compact_utf8_matches_escaped_astral_boundary() -> None
     oversized_payload = {**exact_payload, "hook": "x" * 997}
 
     exact = PublishMetadata.model_validate(exact_payload)
+    assert exact.title is not None
     exact_bytes = len(
         json.dumps(
             exact.model_dump(mode="json"),
@@ -713,9 +749,9 @@ def test_all_publish_models_share_the_strict_configuration() -> None:
         PublishAttemptErrorDetail,
         PublishAttemptErrorResponse,
     ):
-        assert model.model_config["extra"] == "forbid"
-        assert model.model_config["strict"] is True
-        assert model.model_config["str_strip_whitespace"] is True
+        assert model.model_config.get("extra") == "forbid"
+        assert model.model_config.get("strict") is True
+        assert model.model_config.get("str_strip_whitespace") is True
 
 
 def test_publish_request_validation_schema_locks_authority_boundary() -> None:

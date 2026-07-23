@@ -85,6 +85,25 @@ function getStages(scenario: string) {
   return SCENARIO_STAGES[scenario] || SCENARIO_STAGES.s1;
 }
 
+export function deriveCanonicalStageDefinitions(
+  stageDefs: ReturnType<typeof getStages>,
+  stepOrder: string[],
+): ReturnType<typeof getStages> {
+  if (stepOrder.length === 0) return stageDefs;
+
+  const stageByStep = new Map<string, number>();
+  stageDefs.forEach((stage, stageIndex) => {
+    stage.steps.forEach((step) => stageByStep.set(step, stageIndex));
+  });
+  const nextSteps = stageDefs.map(() => [] as string[]);
+  const fallbackStageIndex = Math.max(0, stageDefs.length - 1);
+  for (const step of stepOrder) {
+    const stageIndex = stageByStep.get(step) ?? fallbackStageIndex;
+    nextSteps[stageIndex]?.push(step);
+  }
+  return stageDefs.map((stage, index) => ({ ...stage, steps: nextSteps[index] || [] }));
+}
+
 function getAverageDurationForStepType(
   stepName: string,
   steps: Record<string, Record<string, unknown>>,
@@ -266,7 +285,8 @@ export default function StageProgress({
   onRecoveryRequired,
 }: Props) {
   const { t } = useI18n();
-  const stageDefs = getStages(scenario);
+  const [canonicalStepOrder, setCanonicalStepOrder] = useState<string[]>([]);
+  const stageDefs = deriveCanonicalStageDefinitions(getStages(scenario), canonicalStepOrder);
 
   const [steps, setSteps] = useState<Record<string, Record<string, unknown>>>({});
   const [status, setStatus] = useState<string>("running");
@@ -379,6 +399,11 @@ export default function StageProgress({
 
       const newSteps = normalizePipelineSteps(data.steps);
       setSteps(newSteps);
+      setCanonicalStepOrder(
+        Array.isArray(data.step_order)
+          ? Array.from(new Set(data.step_order.filter((step): step is string => typeof step === "string" && step.length > 0)))
+          : [],
+      );
       const lifecycleFailure = typeof data.lifecycle_status === "string"
         && FAILED_SCENARIO_STATUSES.has(data.lifecycle_status)
         ? data.lifecycle_status
@@ -438,13 +463,10 @@ export default function StageProgress({
       }
 
       // Check completion
-      const allDone = getStages(scenario).every((stage) =>
-        stage.steps.every((stepName) => newSteps[stepName]?.status === "done")
-      );
       const isTerminalStatus = TERMINAL_SCENARIO_STATUSES.has(data.status)
         || (typeof data.lifecycle_status === "string"
           && TERMINAL_SCENARIO_STATUSES.has(data.lifecycle_status));
-      if ((allDone || isTerminalStatus) && !completedRef.current) {
+      if (isTerminalStatus && !completedRef.current) {
         completedRef.current = true;
         clearPollTimeout();
         stopElapsedTimer();
@@ -456,6 +478,8 @@ export default function StageProgress({
               const value = data[key];
               if (value !== undefined) result[key] = value;
             }
+            result.resource_type = "scenario";
+            result.resource_id = label;
           }
           onComplete(result);
         }, 1500);

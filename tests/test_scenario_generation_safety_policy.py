@@ -31,7 +31,7 @@ from src.routers._state import (
     S5BrandVlogRequest,
 )
 
-POLICY_VERSION = "generation-safety.v1"
+POLICY_VERSION = "generation-safety.v2"
 SAFE_MEDIA_INTENT = {
     "enable_media_synthesis": True,
     "artifact_disposition": "pending_review",
@@ -75,6 +75,7 @@ def _expected_policy(scenario: str, *, media: bool = True) -> dict[str, Any]:
         "enable_media_synthesis": media,
         "artifact_disposition": "pending_review",
         "provider_max_retries": 0,
+        "c2pa_signing_mode": "local_draft",
     }
 
 
@@ -163,6 +164,37 @@ def test_resolver_uses_authenticated_tenant_and_explicit_provider_permission():
     assert effective.model_dump(mode="json") == _expected_policy("s1", media=False)
 
 
+def test_resolver_projects_server_owned_required_signing_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = _policy_module()
+    monkeypatch.setenv("AI_VIDEO_C2PA_SIGNING_MODE", "required")
+
+    effective = policy.resolve_generation_policy(
+        {},
+        auth=_auth(frozenset({"provider:submit"})),
+        scenario="s1",
+    )
+
+    assert effective.c2pa_signing_mode == "required"
+
+
+def test_resolver_rejects_invalid_server_signing_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = _policy_module()
+    monkeypatch.setenv("AI_VIDEO_C2PA_SIGNING_MODE", "disabled")
+
+    with pytest.raises(HTTPException) as exc:
+        policy.resolve_generation_policy(
+            {},
+            auth=_auth(frozenset({"provider:submit"})),
+            scenario="s1",
+        )
+
+    assert exc.value.status_code == 422
+
+
 @pytest.mark.parametrize(
     "forbidden_key",
     [
@@ -177,6 +209,7 @@ def test_resolver_uses_authenticated_tenant_and_explicit_provider_permission():
         "client_spend",
         "transparency_policy",
         "transparency_sidecar",
+        "c2pa_signing_mode",
         "human_approved",
         "approval_id",
         "approval_record_ref",
@@ -431,7 +464,7 @@ def fake_submit_boundaries(
                 "lifecycle_status": "completed_bounded",
                 "pipeline_degraded": False,
             }
-
+        async def finalize_pipeline_completion(self, state: dict[str, Any], *, started_at: float) -> bool: return True
     class FakeFastService:
         async def generate(self, **kwargs: Any) -> dict[str, Any]:
             captures.append(

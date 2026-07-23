@@ -288,6 +288,7 @@ async def test_c6_s1_run_passes_read_only_injection_plan_to_step_runner(monkeypa
     from src.pipeline import s1_product_pipeline
 
     captured: dict[str, object] = {}
+    completion_calls: list[dict[str, object]] = []
 
     class FakeStepRunner:
         def __init__(self, state_manager: object) -> None:
@@ -304,6 +305,12 @@ async def test_c6_s1_run_passes_read_only_injection_plan_to_step_runner(monkeypa
         async def resume(self, label):
             return {"scenario": "s1", "steps": {}, "errors": [], "media_synthesis_errors": []}
 
+        async def finalize_pipeline_completion(
+            self, state: dict[str, object], *, started_at: float
+        ) -> bool:
+            completion_calls.append(state)
+            return True
+
     monkeypatch.setattr(s1_product_pipeline, "StepRunner", FakeStepRunner)
 
     await s1_product_pipeline.S1ProductDirectPipeline().run(
@@ -315,6 +322,7 @@ async def test_c6_s1_run_passes_read_only_injection_plan_to_step_runner(monkeypa
     config = captured["config"]
     assert config[SCENARIO_INJECTION_MODE_KEY] == "read_only_blueprint"
     assert get_step_injection_from_state({"scenario": "s1", "config": config}, "strategy") is not None
+    assert len(completion_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -322,6 +330,7 @@ async def test_c6_s2_run_passes_read_only_injection_plan_to_step_runner(monkeypa
     from src.pipeline import s2_brand_pipeline_v2
 
     captured: dict[str, object] = {}
+    completion_calls: list[dict[str, object]] = []
 
     class FakeStepRunner:
         def __init__(self, state_manager: object) -> None:
@@ -338,6 +347,12 @@ async def test_c6_s2_run_passes_read_only_injection_plan_to_step_runner(monkeypa
         async def resume(self, label):
             return {"scenario": "s2", "steps": {}, "errors": [], "media_synthesis_errors": []}
 
+        async def finalize_pipeline_completion(
+            self, state: dict[str, object], *, started_at: float
+        ) -> bool:
+            completion_calls.append(state)
+            return True
+
     monkeypatch.setattr(s2_brand_pipeline_v2, "StepRunner", FakeStepRunner)
 
     await s2_brand_pipeline_v2.S2BrandCampaignPipeline().run(
@@ -349,6 +364,7 @@ async def test_c6_s2_run_passes_read_only_injection_plan_to_step_runner(monkeypa
     config = captured["config"]
     assert captured["scenario"] == "s2"
     assert get_step_injection_from_state({"scenario": "s2", "config": config}, "audit") is not None
+    assert len(completion_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -356,6 +372,7 @@ async def test_c6_s5_run_passes_read_only_injection_plan_to_step_runner(monkeypa
     from src.pipeline.s5_brand_vlog_pipeline import S5BrandVlogPipeline
 
     captured: dict[str, object] = {}
+    completion_calls: list[dict[str, object]] = []
 
     class FakeStepRunner:
         def __init__(self, state_manager: object) -> None:
@@ -379,6 +396,12 @@ async def test_c6_s5_run_passes_read_only_injection_plan_to_step_runner(monkeypa
                 "errors": [],
             }
 
+        async def finalize_pipeline_completion(
+            self, state: dict[str, object], *, started_at: float
+        ) -> bool:
+            completion_calls.append(state)
+            return True
+
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
 
     await S5BrandVlogPipeline().run(
@@ -391,6 +414,7 @@ async def test_c6_s5_run_passes_read_only_injection_plan_to_step_runner(monkeypa
     config = captured["config"]
     assert captured["scenario"] == "s5"
     assert get_step_injection_from_state({"scenario": "s5", "config": config}, "vlog_strategy") is not None
+    assert len(completion_calls) == 1
 
 
 @pytest.mark.asyncio

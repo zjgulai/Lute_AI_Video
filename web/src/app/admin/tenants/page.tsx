@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { adminFetchJson } from "@/components/api";
 import { Plus, MagnifyingGlass, Circle, X } from "@phosphor-icons/react";
 import { TableRowSkeleton } from "@/components/Skeleton";
 
 import { errorMessage } from "@/lib/errors";
+import { useI18n } from "@/i18n/I18nProvider";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 interface Tenant {
   id: string;
   tenant_id: string;
@@ -19,23 +21,32 @@ interface Tenant {
 }
 
 export default function AdminTenantsPage() {
+  const { t } = useI18n();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newTenantId, setNewTenantId] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  const createCloseRef = useRef<HTMLButtonElement>(null);
+
+  const closeCreate = useCallback(() => setShowCreate(false), []);
+  useModalBehavior({
+    open: showCreate,
+    onClose: closeCreate,
+    initialFocusRef: createCloseRef,
+  });
 
   const load = useCallback(async (pageOverride = page) => {
     setLoading(true);
-    setError("");
+    setError(false);
     try {
       const params = new URLSearchParams();
       params.set("page", String(pageOverride));
@@ -48,7 +59,7 @@ export default function AdminTenantsPage() {
       setTenants(data.items);
       setTotal(data.total);
     } catch {
-      setError("Failed to load tenants");
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -79,7 +90,7 @@ export default function AdminTenantsPage() {
       setNewContactEmail("");
       void load();
     } catch (err: unknown) {
-      setCreateError(errorMessage(err, "Failed to create tenant"));
+      setCreateError(errorMessage(err, t("admin.tenants.createFailed")));
     } finally {
       setCreating(false);
     }
@@ -88,13 +99,13 @@ export default function AdminTenantsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-[var(--text-h1)]">Tenants</h1>
+        <h1 className="text-lg font-semibold text-[var(--text-h1)]">{t("admin.nav.tenants")}</h1>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 apple-btn apple-btn-primary text-xs py-1.5 px-3"
         >
           <Plus size={14} weight="fill" />
-          New Tenant
+          {t("admin.tenants.new")}
         </button>
       </div>
 
@@ -108,7 +119,7 @@ export default function AdminTenantsPage() {
           />
           <input
             type="text"
-            aria-label="Search tenants"
+            aria-label={t("admin.tenants.search")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
@@ -117,7 +128,7 @@ export default function AdminTenantsPage() {
                 setAppliedQ(q);
               }
             }}
-            placeholder="Search tenants..."
+            placeholder={t("admin.tenants.searchPlaceholder")}
             className="apple-input text-xs pl-7 w-full"
           />
         </div>
@@ -125,13 +136,13 @@ export default function AdminTenantsPage() {
           onClick={() => { setPage(1); setAppliedQ(q); }}
           className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
         >
-          Search
+          {t("admin.tenants.search")}
         </button>
       </div>
 
       {/* Create modal */}
       {showCreate && (
-        <div className="apple-modal-overlay" onClick={() => setShowCreate(false)}>
+        <div className="apple-modal-overlay" onClick={closeCreate}>
           <div
             role="dialog"
             aria-modal="true"
@@ -141,51 +152,52 @@ export default function AdminTenantsPage() {
           >
             <div className="flex items-center justify-between mb-3">
               <h2 id="admin-new-tenant-title" className="text-sm font-semibold text-[var(--text-h1)]">
-                New Tenant
+                {t("admin.tenants.new")}
               </h2>
               <button
-                onClick={() => setShowCreate(false)}
+                ref={createCloseRef}
+                onClick={closeCreate}
                 className="cursor-pointer"
-                aria-label="Close new tenant dialog"
+                aria-label={t("admin.tenants.closeCreate")}
               >
                 <X size={16} weight="fill" className="text-[var(--text-muted)]" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="space-y-3">
               <label htmlFor="admin-new-tenant-id" className="sr-only">
-                Tenant ID
+                {t("admin.tenants.tenantId")}
               </label>
               <input
                 id="admin-new-tenant-id"
                 type="text"
                 value={newTenantId}
                 onChange={(e) => setNewTenantId(e.target.value)}
-                placeholder="tenant-id (lowercase, 3-32 chars)"
+                placeholder={t("admin.tenants.idPlaceholder")}
                 required
                 pattern="^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$"
                 className="apple-input text-xs w-full"
               />
               <label htmlFor="admin-new-display-name" className="sr-only">
-                Display name
+                {t("admin.tenants.displayName")}
               </label>
               <input
                 id="admin-new-display-name"
                 type="text"
                 value={newDisplayName}
                 onChange={(e) => setNewDisplayName(e.target.value)}
-                placeholder="Display name"
+                placeholder={t("admin.tenants.displayName")}
                 required
                 className="apple-input text-xs w-full"
               />
               <label htmlFor="admin-new-contact-email" className="sr-only">
-                Contact email
+                {t("admin.tenants.contactEmail")}
               </label>
               <input
                 id="admin-new-contact-email"
                 type="email"
                 value={newContactEmail}
                 onChange={(e) => setNewContactEmail(e.target.value)}
-                placeholder="Contact email (optional)"
+                placeholder={t("admin.tenants.contactEmail")}
                 className="apple-input text-xs w-full"
               />
               {createError && (
@@ -196,7 +208,7 @@ export default function AdminTenantsPage() {
                 disabled={creating}
                 className="apple-btn apple-btn-primary text-xs w-full py-2 disabled:opacity-50"
               >
-                {creating ? "Creating..." : "Create Tenant"}
+                {creating ? t("admin.tenants.creating") : t("admin.tenants.create")}
               </button>
             </form>
           </div>
@@ -206,9 +218,9 @@ export default function AdminTenantsPage() {
       {/* Error state */}
       {error && (
         <div className="text-center py-8">
-          <p className="text-xs text-[var(--text-muted)] mb-2">{error}</p>
+          <p className="text-xs text-[var(--text-muted)] mb-2">{t("admin.tenants.loadFailed")}</p>
           <button onClick={() => void load()} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
-            Retry
+            {t("admin.common.retry")}
           </button>
         </div>
       )}
@@ -219,10 +231,10 @@ export default function AdminTenantsPage() {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[var(--divider-light)]">
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Tenant</th>
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Status</th>
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Keys</th>
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Created</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.tenants.tenant")}</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.common.status")}</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.tenants.keys")}</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.common.created")}</th>
               </tr>
             </thead>
             <tbody>
@@ -240,7 +252,7 @@ export default function AdminTenantsPage() {
           {tenants.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-xs text-[var(--text-muted)]">
-                {q ? "No tenants match your search" : "No tenants yet"}
+                {appliedQ ? t("admin.tenants.noMatch") : t("admin.tenants.empty")}
               </p>
             </div>
           ) : (
@@ -248,45 +260,45 @@ export default function AdminTenantsPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-[var(--divider-light)]">
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Tenant</th>
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Status</th>
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Keys</th>
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Created</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.tenants.tenant")}</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.common.status")}</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.tenants.keys")}</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.common.created")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tenants.map((t) => (
+                  {tenants.map((tenant) => (
                     <tr
-                      key={t.id}
+                      key={tenant.id}
                       className="border-b border-[var(--divider-light)] last:border-0 hover:bg-[var(--bg-panel)] transition-colors"
                     >
                       <td className="p-3">
                         <Link
-                          href={`/admin/tenants/${t.tenant_id}`}
+                          href={`/admin/tenants/${tenant.tenant_id}`}
                           className="no-underline"
                         >
                           <p className="font-medium text-[var(--text-h1)]">
-                            {t.display_name}
+                            {tenant.display_name}
                           </p>
-                          <p className="text-[var(--text-muted)]">{t.tenant_id}</p>
+                          <p className="text-[var(--text-muted)]">{tenant.tenant_id}</p>
                         </Link>
                       </td>
                       <td className="p-3">
                         <span
                           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] ${
-                            t.status === "active"
+                            tenant.status === "active"
                               ? "bg-[rgba(120,175,140,0.12)] text-[var(--jade-accent)]"
                               : "bg-[rgba(208,78,90,0.1)] text-[var(--crimson-mist)]"
                           }`}
                         >
                           <Circle size={6} weight="fill" />
-                          {t.status}
+                          {t(tenant.status === "active" ? "admin.common.active" : "admin.common.disabled")}
                         </span>
                       </td>
-                      <td className="p-3 text-[var(--text-body)]">{t.key_count}</td>
+                      <td className="p-3 text-[var(--text-body)]">{tenant.key_count}</td>
                       <td className="p-3 text-[var(--text-muted)]">
-                        {t.created_at
-                          ? new Date(t.created_at).toLocaleDateString()
+                        {tenant.created_at
+                          ? new Date(tenant.created_at).toLocaleDateString()
                           : ""}
                       </td>
                     </tr>
@@ -300,7 +312,7 @@ export default function AdminTenantsPage() {
           {total > 20 && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-[var(--text-muted)]">
-                {total} tenants total
+                {t("admin.tenants.total").replace("{count}", String(total))}
               </span>
               <div className="flex gap-1">
                 <button
@@ -308,14 +320,14 @@ export default function AdminTenantsPage() {
                   onClick={() => setPage(page - 1)}
                   className="apple-btn text-xs py-1 px-2 border border-[var(--border-default)] disabled:opacity-30"
                 >
-                  Prev
+                  {t("admin.common.previous")}
                 </button>
                 <button
                   disabled={page * 20 >= total}
                   onClick={() => setPage(page + 1)}
                   className="apple-btn text-xs py-1 px-2 border border-[var(--border-default)] disabled:opacity-30"
                 >
-                  Next
+                  {t("admin.common.next")}
                 </button>
               </div>
             </div>

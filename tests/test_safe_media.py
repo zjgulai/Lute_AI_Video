@@ -77,6 +77,78 @@ def test_playlist_or_xml_disguised_as_mp4_is_rejected_before_ffmpeg(
     assert calls == 0
 
 
+def test_wav_ima_adpcm_is_rejected_before_ffmpeg(tmp_path: Path) -> None:
+    media = tmp_path / "crafted.wav"
+    fmt_chunk = (
+        b"fmt "
+        + (20).to_bytes(4, "little")
+        + (0x0011).to_bytes(2, "little")
+        + b"\x01\x00\x40\x1f\x00\x00\x00\x00\x00\x00\x00\x01\x04\x00\x02\x00\x00\x00"
+    )
+    media.write_bytes(b"RIFF" + (len(fmt_chunk) + 4).to_bytes(4, "little") + b"WAVE" + fmt_chunk)
+
+    with pytest.raises(UnsafeMediaError, match="WAV codec is not approved"):
+        ffmpeg_local_input_args(media)
+
+
+def _wave_extensible_fmt_chunk(format_tag: int) -> bytes:
+    subformat_guid = (
+        format_tag.to_bytes(4, "little")
+        + bytes.fromhex("00001000800000aa00389b71")
+    )
+    payload = (
+        (0xFFFE).to_bytes(2, "little")
+        + (1).to_bytes(2, "little")
+        + (8000).to_bytes(4, "little")
+        + (16000).to_bytes(4, "little")
+        + (2).to_bytes(2, "little")
+        + (16).to_bytes(2, "little")
+        + (22).to_bytes(2, "little")
+        + (16).to_bytes(2, "little")
+        + (1).to_bytes(4, "little")
+        + subformat_guid
+    )
+    return b"fmt " + len(payload).to_bytes(4, "little") + payload
+
+
+def test_wav_extensible_ima_adpcm_is_rejected_before_ffmpeg(tmp_path: Path) -> None:
+    media = tmp_path / "crafted-extensible.wav"
+    fmt_chunk = _wave_extensible_fmt_chunk(0x0011)
+    media.write_bytes(
+        b"RIFF" + (len(fmt_chunk) + 4).to_bytes(4, "little") + b"WAVE" + fmt_chunk
+    )
+
+    with pytest.raises(UnsafeMediaError, match="WAV codec is not approved"):
+        ffmpeg_local_input_args(media)
+
+
+def test_wav_pcm_and_extensible_pcm_remain_approved(tmp_path: Path) -> None:
+    direct = tmp_path / "direct-pcm.wav"
+    direct_fmt = b"fmt " + (16).to_bytes(4, "little") + (
+        (1).to_bytes(2, "little")
+        + (1).to_bytes(2, "little")
+        + (8000).to_bytes(4, "little")
+        + (16000).to_bytes(4, "little")
+        + (2).to_bytes(2, "little")
+        + (16).to_bytes(2, "little")
+    )
+    direct.write_bytes(
+        b"RIFF" + (len(direct_fmt) + 4).to_bytes(4, "little") + b"WAVE" + direct_fmt
+    )
+
+    extensible = tmp_path / "extensible-pcm.wav"
+    extensible_fmt = _wave_extensible_fmt_chunk(0x0001)
+    extensible.write_bytes(
+        b"RIFF"
+        + (len(extensible_fmt) + 4).to_bytes(4, "little")
+        + b"WAVE"
+        + extensible_fmt
+    )
+
+    assert validate_media_file(direct).ffmpeg_demuxer == "wav"
+    assert validate_media_file(extensible).ffmpeg_demuxer == "wav"
+
+
 def test_extension_and_container_must_agree(tmp_path: Path) -> None:
     media = tmp_path / "clip.webm"
     media.write_bytes(b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2")
@@ -90,7 +162,11 @@ def test_extension_and_container_must_agree(tmp_path: Path) -> None:
     [
         (".mp3", b"ID3\x03\x00\x00\x00\x00\x00\x00", "mp3"),
         (".opus", b"OggS\x00\x02fixture-opus", "ogg"),
-        (".wav", b"RIFF\x10\x00\x00\x00WAVEfmt ", "wav"),
+        (
+            ".wav",
+            b"RIFF\x10\x00\x00\x00WAVEfmt \x04\x00\x00\x00\x01\x00\x01\x00",
+            "wav",
+        ),
     ],
 )
 def test_cosyvoice_container_formats_are_explicitly_supported(
@@ -555,6 +631,8 @@ async def test_ytdlp_hermetic_download_never_invokes_ffmpeg_before_validation(
         stub.chmod(0o755)
     monkeypatch.setenv("FFMPEG_MARKER", str(invoked))
     monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
+    monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
 
     class MediaHandler(BaseHTTPRequestHandler):
         def do_HEAD(self) -> None:  # noqa: N802 - stdlib callback name
@@ -617,6 +695,8 @@ segment.ts
         stub.chmod(0o755)
     monkeypatch.setenv("FFMPEG_MARKER", str(invoked))
     monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
+    monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
 
     class HlsHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib callback name

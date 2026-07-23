@@ -20,6 +20,7 @@ class SeedanceVideoResult(TypedDict, total=False):
     _stub_mode: str
     _poyo_state: Literal["submitted", "settled", "released"]
     task_id: str
+    simulated: bool
 
 
 class FastModeTiming(TypedDict):
@@ -59,6 +60,7 @@ class FastModeResult(TypedDict):
     timing: FastModeTiming
     model_info: FastModeModelInfo
     is_stub: bool
+    simulated: bool
     tts_path: str | None
     tts_is_fallback: bool
     tts_fallback_reason: str | None
@@ -68,6 +70,21 @@ class FastModeResult(TypedDict):
     artifact_storage_scope: NotRequired[str]
     artifact_run_id: NotRequired[str | None]
     effective_policy_version: NotRequired[str]
+    transparency: NotRequired[dict[str, Any]]
+
+
+class ScenarioLifecycleResult(TypedDict):
+    status: Literal["completed_bounded", "completed_full", "error"]
+    lifecycle_status: Literal["completed_bounded", "completed_full", "error"]
+    completion_kind: Literal[
+        "no_media", "bounded_media", "full_media", "execution_failed"
+    ]
+    request_succeeded: bool
+    success: bool
+    full_media_success: bool
+    pipeline_complete: bool
+    publish_allowed: bool
+    delivery_accepted: bool
 
 
 class ClipDetail(TypedDict, total=False):

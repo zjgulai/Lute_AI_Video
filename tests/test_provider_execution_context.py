@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from src.models.provider_cost import ProviderCostContractError
 from src.services.provider_cost import (
     TrustedRegenerationEpoch,
+    ValidatedPlanBudgetAuthorization,
     validate_provider_budget_authorization_json,
 )
 from src.storage import db as db_module
@@ -29,7 +30,7 @@ from src.storage.provider_cost_repository import ProviderCostRepository
 TENANT_ID = "tenant-provider-execution"
 OTHER_TENANT_ID = "tenant-provider-execution-other"
 CANONICAL_JOB_ID = "fast_20260717_context_001"
-GENERATION_POLICY_VERSION = "generation-safety.v1"
+GENERATION_POLICY_VERSION = "generation-safety.v2"
 CHECKED_AT = datetime(2026, 7, 17, 8, 0, 0, tzinfo=UTC)
 
 
@@ -360,6 +361,7 @@ async def test_repository_job_identity_lookup_is_tenant_bound_and_strict(
         is None
     )
 
+    invalid_kind: Any
     for invalid_kind in ("", "admin", 1, True):
         with pytest.raises(ProviderCostContractError):
             await repository.get_account_by_job_identity(
@@ -633,3 +635,27 @@ def test_source_contains_no_provider_client_http_retry_or_public_report_contract
         "asyncio.sleep",
     ):
         assert forbidden not in source
+
+
+@pytest.mark.asyncio
+async def test_w5_plan_authorization_is_provider_neutral_and_only_lowers_cap(
+    sqlite_execution_db: sqlite3.Connection,
+) -> None:
+    authorization = ValidatedPlanBudgetAuthorization(
+        authorization_ref="w5fastact:fixture-001",
+        authorization_scope="w5-fast",
+        approved_at=datetime(2026, 7, 17, 7, 0, tzinfo=UTC),
+        expires_at=datetime(2026, 7, 17, 9, 0, tzinfo=UTC),
+        budget_limit_usd_nanos=3_150_000_000,
+        max_total_cost_usd_nanos=3_150_000_000,
+        per_job_cost_ceiling_usd_nanos=3_150_000_000,
+        provider_job_caps=(("llm", 1), ("video", 1)),
+    )
+    context = await _canonical_context(
+        _service(server_cap_usd_nanos=3_200_000_000),
+        authorization=authorization,
+    )
+
+    assert context.effective_cap_usd_nanos == 3_150_000_000
+    assert context.budget_source_kind == "validated_authorization"
+    assert context.trusted_authorization_ref == "w5fastact:fixture-001"

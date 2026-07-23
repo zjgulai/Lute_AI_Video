@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException
@@ -169,6 +169,7 @@ def _state(
         "enable_media_synthesis": media,
         "artifact_disposition": "pending_review",
         "provider_max_retries": 0,
+        "c2pa_signing_mode": "local_draft",
         "effective_generation_policy": _effective_policy(scenario, media=media),
     }
     if media_stop_step is not None:
@@ -234,7 +235,7 @@ async def test_no_media_resume_stops_before_pipeline_import_and_persists_bounded
     for step_name in NO_MEDIA_ALLOWED[scenario]:
         state["steps"][step_name]["status"] = "done"
     manager = MemoryStateManager(state)
-    runner = StepRunner(manager)  # type: ignore[arg-type]
+    runner = StepRunner(cast(Any, manager))
 
     original = _SCENARIO_CONFIGS[scenario]
     monkeypatch.setitem(
@@ -264,7 +265,7 @@ async def test_empty_cursor_with_all_exact_steps_done_keeps_bounded_truth_with_n
     state["errors"] = ["optional fallback was used"]
     manager = MemoryStateManager(state)
 
-    result = await StepRunner(manager).resume(state["label"])  # type: ignore[arg-type]
+    result = await StepRunner(cast(Any, manager)).resume(state["label"])
 
     assert result["status"] == "completed_bounded"
     assert result["success"] is False
@@ -283,7 +284,7 @@ async def test_forbidden_canonical_cursor_never_upgrades_degraded_state_to_bound
     manager = MemoryStateManager(state)
 
     with pytest.raises(HTTPException) as exc_info:
-        await StepRunner(manager).resume(state["label"])  # type: ignore[arg-type]
+        await StepRunner(cast(Any, manager)).resume(state["label"])
 
     assert exc_info.value.status_code == 422
     assert manager.saves == []
@@ -307,7 +308,7 @@ async def test_direct_forbidden_step_fails_before_pipeline_import(
 ) -> None:
     state = _state(scenario, media=False, current_step=forbidden_step)
     manager = MemoryStateManager(state)
-    runner = StepRunner(manager)  # type: ignore[arg-type]
+    runner = StepRunner(cast(Any, manager))
     original = _SCENARIO_CONFIGS[scenario]
     monkeypatch.setitem(
         _SCENARIO_CONFIGS,
@@ -397,7 +398,7 @@ async def test_missing_or_invalid_persisted_policy_never_imports_pipeline(
     state = _state("s1", media=False, current_step="strategy")
     policy_mutation(state)
     manager = MemoryStateManager(state)
-    runner = StepRunner(manager)  # type: ignore[arg-type]
+    runner = StepRunner(cast(Any, manager))
     original = _SCENARIO_CONFIGS["s1"]
     monkeypatch.setitem(
         _SCENARIO_CONFIGS,
@@ -476,7 +477,7 @@ async def test_persisted_execution_profile_or_caps_tamper_fails_before_import(
     state = _state("s1", media=True, current_step="strategy")
     profile_mutation(state)
     manager = MemoryStateManager(state)
-    runner = StepRunner(manager)  # type: ignore[arg-type]
+    runner = StepRunner(cast(Any, manager))
     original = _SCENARIO_CONFIGS["s1"]
     monkeypatch.setitem(
         _SCENARIO_CONFIGS,
@@ -498,7 +499,7 @@ async def test_resume_none_cursor_with_pending_allowed_step_fails_closed() -> No
     manager = MemoryStateManager(state)
 
     with pytest.raises(HTTPException) as exc_info:
-        await StepRunner(manager).resume(state["label"])  # type: ignore[arg-type]
+        await StepRunner(cast(Any, manager)).resume(state["label"])
 
     assert exc_info.value.status_code == 422
     assert manager.saves == []
@@ -511,7 +512,7 @@ async def test_legacy_resume_without_policy_is_blocked_not_reported_success(
     state = _state("s1", media=False, current_step="strategy")
     state["config"].pop("effective_generation_policy")
     manager = MemoryStateManager(state)
-    runner = StepRunner(manager)  # type: ignore[arg-type]
+    runner = StepRunner(cast(Any, manager))
     original = _SCENARIO_CONFIGS["s1"]
     monkeypatch.setitem(
         _SCENARIO_CONFIGS,
@@ -560,7 +561,7 @@ async def test_force_never_reexecutes_completed_provider_or_media_step() -> None
     state["steps"]["scripts"]["status"] = "done"
     state["steps"]["seedance_clips"]["status"] = "done"
     manager = MemoryStateManager(state)
-    runner = StepRunner(manager)  # type: ignore[arg-type]
+    runner = StepRunner(cast(Any, manager))
 
     with pytest.raises(HTTPException):
         await runner.regenerate_step(state["label"], "scripts")
@@ -596,7 +597,9 @@ async def test_force_never_reexecutes_provider_step_with_attempt_evidence(
     manager = MemoryStateManager(state)
 
     with pytest.raises(HTTPException) as exc_info:
-        await StepRunner(manager).regenerate_step(state["label"], "strategy")  # type: ignore[arg-type]
+        await StepRunner(cast(Any, manager)).regenerate_step(
+            state["label"], "strategy"
+        )
 
     assert exc_info.value.status_code == 422
     assert manager.saves == []
@@ -634,7 +637,7 @@ async def test_assemble_force_is_blocked_before_local_or_remote_renderer_constru
 
     for _ in range(2):
         with pytest.raises(HTTPException) as exc_info:
-            await StepRunner(manager).regenerate_step(  # type: ignore[arg-type]
+            await StepRunner(cast(Any, manager)).regenerate_step(
                 state["label"],
                 "assemble_final",
             )
@@ -659,7 +662,7 @@ async def test_assemble_normal_reentry_after_started_or_error_is_blocked() -> No
 
     for _ in range(2):
         with pytest.raises(HTTPException) as exc_info:
-            await StepRunner(manager).run_step(  # type: ignore[arg-type]
+            await StepRunner(cast(Any, manager)).run_step(
                 state["label"],
                 "assemble_final",
             )
@@ -699,7 +702,7 @@ async def test_first_assemble_persists_started_marker_before_renderer_call(
 
     monkeypatch.setattr(S1ProductDirectPipeline, "run_step", fake_run_step)
 
-    result = await StepRunner(manager).run_step(  # type: ignore[arg-type]
+    result = await StepRunner(cast(Any, manager)).run_step(
         state["label"],
         "assemble_final",
     )
@@ -726,7 +729,7 @@ async def test_provider_step_reentry_after_started_or_error_is_blocked(
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await StepRunner(manager).run_step(state["label"], "strategy")  # type: ignore[arg-type]
+        await StepRunner(cast(Any, manager)).run_step(state["label"], "strategy")
 
     assert exc_info.value.status_code == 422
     assert manager.saves == []
@@ -757,7 +760,9 @@ async def test_auto_provider_step_persists_started_marker_before_call(
 
     monkeypatch.setattr(S1ProductDirectPipeline, "run_step", fake_run_step)
 
-    result = await StepRunner(manager).run_step(state["label"], "strategy")  # type: ignore[arg-type]
+    result = await StepRunner(cast(Any, manager)).run_step(
+        state["label"], "strategy"
+    )
 
     assert result["steps"]["strategy"]["status"] == "done"
     assert len(manager.saves) >= 2
@@ -768,6 +773,7 @@ async def test_run_step_marks_exact_profile_terminal_as_completed_bounded(
     monkeypatch: pytest.MonkeyPatch,
     isolated_provider_cost_db: Any,
 ) -> None:
+    from src.pipeline import completion_truth
     from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 
     state = _state(
@@ -779,6 +785,25 @@ async def test_run_step_marks_exact_profile_terminal_as_completed_bounded(
     for step_name in NO_MEDIA_ALLOWED["s1"][:-1]:
         state["steps"][step_name]["status"] = "done"
     manager = MemoryStateManager(state)
+    completion_calls: list[str] = []
+    original_derive = completion_truth.derive_scenario_completion
+
+    def recording_derive(
+        run_state: dict[str, Any],
+        *,
+        expected_completion_kind: Any,
+    ) -> Any:
+        completion_calls.append(expected_completion_kind)
+        return original_derive(
+            run_state,
+            expected_completion_kind=expected_completion_kind,
+        )
+
+    monkeypatch.setattr(
+        completion_truth,
+        "derive_scenario_completion",
+        recording_derive,
+    )
 
     async def fake_run_step(
         self: Any,
@@ -791,7 +816,7 @@ async def test_run_step_marks_exact_profile_terminal_as_completed_bounded(
 
     monkeypatch.setattr(S1ProductDirectPipeline, "run_step", fake_run_step)
 
-    result = await StepRunner(manager).run_step(  # type: ignore[arg-type]
+    result = await StepRunner(cast(Any, manager)).run_step(
         state["label"], "continuity_storyboard_grid"
     )
 
@@ -802,6 +827,7 @@ async def test_run_step_marks_exact_profile_terminal_as_completed_bounded(
     assert result["publish_allowed"] is False
     assert result["delivery_accepted"] is False
     assert result["current_step"] is None
+    assert completion_calls == ["no_media"]
 
 
 @pytest.mark.asyncio
@@ -1012,7 +1038,7 @@ async def test_media_gate_generate_and_regenerate_are_blocked_before_skill_or_sa
 async def test_gate_approval_uses_exact_profile_next_cursor_before_save(
     isolated_state_dir: Any,
 ) -> None:
-    del isolated_state_dir
+    from src.models.transparency import validate_transparency_sidecar
     from src.pipeline.gate_manager import approve_gate
     from src.pipeline.state_manager import PipelineStateManager
 
@@ -1031,6 +1057,15 @@ async def test_gate_approval_uses_exact_profile_next_cursor_before_save(
             }
         ],
     }
+    from src.services.transparency_provenance import record_step_provenance
+
+    _, initial_projection = record_step_provenance(
+        state=state,
+        step_name="scripts",
+        output=state["steps"]["scripts"]["output"],
+        output_dir=isolated_state_dir,
+    )
+    state["transparency"] = initial_projection
     await PipelineStateManager().save(state["label"], state)
 
     result = await approve_gate(state["label"], "gate_1_script", ["script-candidate"])
@@ -1039,6 +1074,17 @@ async def test_gate_approval_uses_exact_profile_next_cursor_before_save(
     assert result["next_step"] == "storyboards"
     assert persisted is not None
     assert persisted["current_step"] == "storyboards"
+    projection = persisted["transparency"]
+    sidecar = validate_transparency_sidecar(
+        isolated_state_dir / projection["sidecar_path"],
+        expected_sha256=projection["sidecar_sha256"],
+        artifact_root=isolated_state_dir,
+    )
+    selection = sidecar.records[-1]
+    assert selection.producer_step == "scripts"
+    assert selection.origin_kind == "human_edit"
+    assert len(selection.human_edit_ids) == 1
+    assert selection.parent_record_ids == (sidecar.records[0].record_id,)
 
 
 @pytest.mark.parametrize(
@@ -1205,3 +1251,74 @@ async def test_state_assembled_text_gates_preserve_schema_with_zero_provider_cal
         "unscored": True,
         "explanation": "not provider-scored; human review required",
     }
+
+
+@pytest.mark.asyncio
+async def test_last_step_degradation_is_never_recorded_as_pipeline_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from typing import cast
+
+    state = _state(
+        "s5",
+        media=False,
+        current_step="continuity_storyboard_grid",
+    )
+    state["steps"]["vlog_strategy"]["status"] = "done"
+    manager = MemoryStateManager(state)
+    runner = StepRunner(cast(Any, manager))
+    recorded: list[dict[str, Any]] = []
+
+    async def degrade_last_step(
+        current_state: dict[str, Any],
+        _step_name: str,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        del force
+        current_state["pipeline_degraded"] = True
+        current_state["degraded_reason"] = "fixture_terminal_failure"
+        current_state["current_step"] = None
+        current_state["errors"].append("fixture_terminal_failure")
+        await manager.save(current_state["label"], current_state)
+        return current_state
+
+    monkeypatch.setattr(runner, "_execute_step", degrade_last_step)
+    monkeypatch.setattr(
+        "src.pipeline.step_runner.pipeline_metrics.record_pipeline",
+        lambda **kwargs: recorded.append(kwargs),
+    )
+
+    result = await runner.resume(state["label"])
+
+    assert result["pipeline_degraded"] is True
+    assert recorded[-1]["success"] is False
+    assert recorded[-1]["error_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_repeated_degraded_resume_emits_one_persisted_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from typing import cast
+
+    state = _state("s5", media=False, current_step="vlog_strategy")
+    state["pipeline_degraded"] = True
+    state["degraded_reason"] = "fixture_terminal_failure"
+    state["errors"].append("fixture_terminal_failure")
+    manager = MemoryStateManager(state)
+    runner = StepRunner(cast(Any, manager))
+    recorded: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "src.pipeline.step_runner.pipeline_metrics.record_pipeline",
+        lambda **kwargs: recorded.append(kwargs),
+    )
+
+    first = await runner.resume(state["label"])
+    second = await runner.resume(state["label"])
+
+    assert first["config"]["pipeline_completion_metric_v1"]["outcome"] == "failure"
+    assert second["config"]["pipeline_completion_metric_v1"] == first["config"][
+        "pipeline_completion_metric_v1"
+    ]
+    assert len(recorded) == 1
+    assert recorded[0]["success"] is False

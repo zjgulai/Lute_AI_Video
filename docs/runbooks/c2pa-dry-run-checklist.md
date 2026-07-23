@@ -1,104 +1,91 @@
 ---
-title: C2PA Dry-Run Checklist
+title: C2PA local verification checklist
 doc_type: workflow
 module: compliance
 topic: c2pa-pipeline
 status: stable
 created: 2026-06-07
-updated: 2026-06-07
+updated: 2026-07-23
 owner: self
 source: human+ai
-description: C2PA 签名链路在不申请真实 CA 证书下的 dry-run 复核步骤。验证签名开关、manifest 形态与生产前置条件，避免直接上生产。
+description: 验证 local_draft、required fail-closed、fixture signing 与本地 Reader 回读；不宣称受信、独立验证或法律合规。
 related:
   - file: ../architecture/adr/006-c2pa-content-credentials.md
     relation: implements-decision-of
-  - file: ./c2pa-cert-application.md
-    relation: prerequisite
+  - file: ./transparency-delivery.md
+    relation: related
 ---
 
-# C2PA Dry-Run Checklist（不申请真实证书）
+# C2PA local verification checklist
 
-## 触发场景
+## 安全与证据边界
 
-- 有计划推进或复用 C2PA 签名能力，但当前仍无 CA 生产证书可用时。
-- 需要验证签名开关、manifest 骨架和生产可回滚路径是否健康。
+- 不访问外部 CA、timestamp service、validator 或目标平台。
+- 不读取/打印 private key，不把 certificate/key 写入仓库。
+- `local_draft` 的唯一成功状态是 `unsigned_pending_review`。
+- `required` 缺少 dependency/certificate/key、签名失败或 Reader 回读失败时必须抛出
+  stable `C2PASigningError`；禁止返回原路径伪装成功。
+- fixture certificate 成功只能记录 `signed_local_readback`。它不证明 signer 受信、
+  独立 validation、平台 retention 或法律合规。
 
-## 安全边界
-
-- 不访问外部签名 CA。
-- 不做真实视频发布。
-- 不把证书私钥写入仓库。
-- dry-run 中签名失败保持非阻塞（`sign_video` 返回输入路径），用于不中断既有流程；真实生产验证仍依赖后续 CA 签发。
-
-## 1. 预检（Dry-Run）
+## 1. Locked dependency 与静态契约
 
 ```bash
-.venv/bin/python -m pytest tests/test_sprint3_compliance_resilience.py -k c2pa
+.venv/bin/pytest -q \
+  tests/test_c2pa_signer_contract.py \
+  tests/test_transparency_sidecar.py \
+  tests/test_transparency_producer_coverage.py
+.venv/bin/ruff check src/tools/c2pa_signer.py src/models/transparency.py
 ```
 
-要求通过：
+要求：
 
-- `C2PA_ENABLED` 默认关闭时为 no-op。
-- `sign_video` 在缺少 `C2PA_CERT_PATH`/`C2PA_KEY_PATH` 时不抛异常。
-- `c2pa` 库缺失时不抛异常。
-- `build_manifest("X")` 包含 `format=video/mp4`、`claim_generator_info` 与 `digitalSourceType=aiGeneratedContent`。
+- `c2pa-python==0.36.0` 同时存在于 `pyproject.toml` 和 `uv.lock`；
+- manifest 使用 `c2pa.created` 与 AI-generated digital source type；
+- required policy 不允许 dependency/config/sign/readback graceful degradation；
+- local draft 不调用 Signer/Reader，并保持 package/publish authority 受限。
 
-## 2. 本地自签名文件准备（仅用于流程验证）
+## 2. Fixture signing/readback
+
+项目测试 fixture 创建临时有效 media、certificate/key，并通过 injected/local
+`c2pa-python` Signer/Builder/Reader 验证：
+
+- 输出写入新路径，不覆盖 unsigned input；
+- Reader 返回 active manifest，包含 AI-generated action；
+- `claimSignature.validated` 与 `assertion.dataHash.match` 存在；
+- 除 fixture credential untrusted 外，不接受 validation failure；
+- changed bytes、错误 cert/key、错误 manifest 或异常 Reader 全部 fail closed。
+
+不要用任意字节伪装 MP4 做手工签名 smoke；那只能测试错误路径，不能证明媒体签名成功。
+
+## 3. Producer/acceptance/publish 回归
 
 ```bash
-openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout /tmp/c2pa-local.key \
-  -out /tmp/c2pa-local.crt \
-  -days 30 -subj "/CN=video.lute-tlz-dddd.local"
+.venv/bin/pytest -q \
+  tests/test_transparency_producer_coverage.py \
+  tests/test_artifact_acceptance_service.py \
+  tests/test_transparency_disclosure.py \
+  tests/test_publish_attempt_service.py
 ```
 
-该证书仅用于本地链路验证，不可用于对外发布。
+required signed artifact 必须由 Reader 再验证后才能进入 accepted authority；sidecar、artifact
+或 Reader truth 改变会阻断 consume/package/publish。真实 publish 不属于本检查清单。
 
-## 3. Dry-Run 签名回归
+## 4. Production 前置 gate
 
-```bash
-python - << 'PY'
-import os
-from pathlib import Path
-from src.tools.c2pa_signer import sign_video
+上线 required signing 前仍需：
 
-workdir = Path("/tmp/c2pa-dry-run")
-workdir.mkdir(parents=True, exist_ok=True)
-video = workdir / "sample.mp4"
-video.write_bytes(b"fake-mp4-bytes")
+1. W4-06 owner/legal scope；
+2. W4-07 production credential trust chain、KMS/HSM/secret mount、rotation/revocation；
+3. W4-08 independent validator + target-platform preservation；
+4. 单独批准的 backup/migration/deploy 和 provider-off acceptance。
 
-os.environ["C2PA_ENABLED"] = "1"
-os.environ["C2PA_CERT_PATH"] = "/tmp/c2pa-local.crt"
-os.environ["C2PA_KEY_PATH"] = "/tmp/c2pa-local.key"
-
-out = sign_video(str(video), title="AI Video 2.0 dry-run")
-print("output:", out)
-print("signature_attempted:", out != str(video))
-PY
-```
-
-解释：
-
-- `signature_attempted=True`：说明签名执行链路被尝试（前提是环境已有 `c2pa-python`）。
-- `signature_attempted=False`：说明环境未配置/缺依赖，属于预期退化，不作为生产失败。
-
-## 4. 与既有证书申请流程衔接
-
-- 按 `docs/runbooks/c2pa-cert-application.md` 完成 CA 生产证书申请后，再切到真实签名验证流程。
-- 真实验收前更新 `.env.prod` / 服务参数：
-  - `C2PA_ENABLED=1`
-  - `C2PA_CERT_PATH=/opt/ai-video/secrets/c2pa-cert.pem`
-  - `C2PA_KEY_PATH=/opt/ai-video/secrets/c2pa-key.pem`
-
-## 5. 失败处理（不进入发布）
-
-1. 遇到 `sign_video` 报错：先回滚 `C2PA_ENABLED=0`，确认生产 fallback 不受影响。
-2. 遇到 manifest 字段缺失：修复 `build_manifest` 后再复测 dry-run。
-3. 遇到链路不可用（依赖缺失）：补装 `c2pa-python` 后重测，不影响 `C2PA_ENABLED=0` 的自动化闭环。
-4. 未拿到 CA 证书前，不进入 EU 市场发布链路，仅允许标记 `_unsigned_pending_c2pa=true`（如已有）。
+任一缺失时保持 production signing/publish gate 关闭，不允许用 `C2PA_ENABLED=0` 的无签名
+fallback 继续走 accepted delivery。
 
 ## 相关代码
 
 - `src/tools/c2pa_signer.py`
-- `tests/test_sprint3_compliance_resilience.py`
-- `src/tools/c2pa_signer.py`（`is_enabled` / `build_manifest` / `sign_video`）
+- `src/models/transparency.py`
+- `src/services/transparency_provenance.py`
+- [Transparency delivery](./transparency-delivery.md)

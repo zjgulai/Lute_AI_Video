@@ -1,29 +1,26 @@
-"""Tests for new Prometheus metrics added in MASTER-PLAN TODO-C3-C7.
+"""Canonical Prometheus metric call-site contracts."""
 
-Existing 6 metrics (pipeline_runs / pipeline_duration / pipeline_errors /
-step_duration / step_failures / active_pipelines) are not in scope here \u2014
-they were added earlier and tested elsewhere. This file only pins the
-5 new metrics so they don't regress on a refactor.
-"""
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 
-prom = pytest.importorskip("prometheus_client")  # noqa: F841
+import pytest
+from prometheus_client import REGISTRY
 
 from src.telemetry_prometheus import (
-    admin_login_attempts_total,
-    db_pool_available_connections,
-    db_pool_size,
-    llm_api_duration_seconds,
-    llm_api_errors_total,
+    active_background_tasks,
+    api_request_duration_seconds,
+    api_requests_total,
     prometheus_content,
-    record_admin_login,
-    record_llm_call,
-    tenant_active_count,
-    update_db_pool_stats,
-    update_tenant_active_count,
+    record_http_request,
+    update_active_background_tasks,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _sample(name: str, labels: dict[str, str] | None = None) -> float:
+    return REGISTRY.get_sample_value(name, labels or {}) or 0.0
 
 
 def _scrape() -> str:
@@ -31,73 +28,62 @@ def _scrape() -> str:
     return body.decode()
 
 
-class TestLlmApiMetrics:
-    def test_record_llm_success_increments_duration_only(self):
-        record_llm_call(provider="deepseek", duration_sec=2.5, success=True)
-        text = _scrape()
-        assert "llm_api_duration_seconds_count" in text
-        assert 'provider="deepseek"' in text
+def test_http_metric_uses_route_template_and_status_class() -> None:
+    labels = {"method": "GET", "route": "/media/{path:path}", "status_class": "4xx"}
+    before = _sample("api_requests_total", labels)
 
-    def test_record_llm_failure_increments_errors(self):
-        record_llm_call(provider="poyo", duration_sec=10.0, success=False, error_kind="timeout")
-        text = _scrape()
-        assert 'llm_api_errors_total{error_kind="timeout",provider="poyo"}' in text
+    record_http_request("get", "/media/{path:path}", 404, 0.125)
 
-    def test_unknown_error_kind_defaults_to_unknown(self):
-        record_llm_call(provider="siliconflow", duration_sec=1.0, success=False)
-        text = _scrape()
-        assert 'error_kind="unknown"' in text
+    assert _sample("api_requests_total", labels) == before + 1
+    assert _sample(
+        "api_request_duration_seconds_count",
+        {"method": "GET", "route": "/media/{path:path}"},
+    ) >= 1
 
 
-class TestAdminLoginMetric:
-    def test_outcome_label_recorded(self):
-        record_admin_login("success")
-        record_admin_login("invalid_creds")
-        record_admin_login("rate_limited")
-        text = _scrape()
-        for outcome in ("success", "invalid_creds", "rate_limited"):
-            assert f'admin_login_attempts_total{{outcome="{outcome}"}}' in text
+def test_http_metric_collapses_unknown_methods_to_bounded_enum() -> None:
+    labels = {
+        "method": "OTHER",
+        "route": "__unmatched__",
+        "status_class": "4xx",
+    }
+    before = _sample("api_requests_total", labels)
+
+    record_http_request("BREW-UNBOUNDED", "__unmatched__", 418, 0.001)
+
+    assert _sample("api_requests_total", labels) == before + 1
+    assert 'method="BREW-UNBOUNDED"' not in _scrape()
 
 
-class TestDbPoolGauges:
-    def test_update_db_pool_stats_sets_both_gauges(self):
-        update_db_pool_stats(available=3, size=10)
-        text = _scrape()
-        assert "db_pool_available_connections 3.0" in text
-        assert "db_pool_size 10.0" in text
-
-    def test_update_to_zero_indicates_saturation(self):
-        update_db_pool_stats(available=0, size=10)
-        text = _scrape()
-        assert "db_pool_available_connections 0.0" in text
+def test_background_task_gauge_rejects_negative_counts() -> None:
+    update_active_background_tasks(3)
+    assert _sample("active_background_tasks") == 3
+    with pytest.raises(ValueError, match="cannot be negative"):
+        update_active_background_tasks(-1)
 
 
-class TestTenantActiveGauge:
-    def test_update_tenant_count(self):
-        update_tenant_active_count(42)
-        text = _scrape()
-        assert "tenant_active_count 42.0" in text
-
-    def test_zero_tenants_recorded(self):
-        update_tenant_active_count(0)
-        text = _scrape()
-        assert "tenant_active_count 0.0" in text
+@pytest.mark.parametrize(
+    "metric",
+    [api_requests_total, api_request_duration_seconds, active_background_tasks],
+)
+def test_metric_is_registered(metric: object) -> None:
+    assert hasattr(metric, "_name")
 
 
-class TestMetricsExist:
-    """Metric registration smoke-tests \u2014 ensures the public exporter names
-    don't disappear from refactors."""
+def test_unwired_zero_value_metric_families_are_not_exported() -> None:
+    text = _scrape()
+    for unsupported in (
+        "active_pipelines",
+        "llm_api_errors_total",
+        "llm_api_duration_seconds",
+        "db_pool_available_connections",
+        "db_pool_size",
+        "admin_login_attempts_total",
+        "tenant_active_count",
+    ):
+        assert unsupported not in text
 
-    @pytest.mark.parametrize(
-        "metric",
-        [
-            llm_api_errors_total,
-            llm_api_duration_seconds,
-            db_pool_available_connections,
-            db_pool_size,
-            admin_login_attempts_total,
-            tenant_active_count,
-        ],
-    )
-    def test_metric_is_collector(self, metric):
-        assert hasattr(metric, "_name")
+
+def test_s5_wrapper_does_not_emit_a_second_pipeline_completion() -> None:
+    source = (REPO_ROOT / "src" / "pipeline" / "s5_brand_vlog_pipeline.py").read_text()
+    assert "pipeline_metrics.record_pipeline" not in source

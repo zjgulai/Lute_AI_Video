@@ -9,10 +9,12 @@ groups:
       - alert: PipelineErrorRateHigh
         expr: |
           (
-            sum(rate(pipeline_runs_total{status="error"}[5m]))
+            sum(rate(pipeline_runs_total{status="failure"}[5m]))
             /
             sum(rate(pipeline_runs_total[5m]))
           ) > 0.05
+          and
+          sum(rate(pipeline_runs_total[5m])) > 0
         for: 2m
         labels:
           severity: warning
@@ -24,23 +26,25 @@ groups:
       - alert: StepDurationP99High
         expr: |
           histogram_quantile(0.99,
-            sum(rate(step_duration_seconds_bucket[10m])) by (le, step_name)
+            sum(rate(step_duration_seconds_bucket[10m])) by (le, step)
           ) > 300
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Step {{ $labels.step_name }} p99 duration > 300s"
-          description: "p99 step duration for {{ $labels.step_name }} is {{ $value }}s over the last 10 minutes."
+          summary: "Step {{ $labels.step }} p99 duration > 300s"
+          description: "p99 step duration for {{ $labels.step }} is {{ $value }}s over the last 10 minutes."
 
       # ── API 5xx rate ──
       - alert: API5xxRateHigh
         expr: |
           (
-            sum(rate(api_requests_total{status=~"5.."}[5m]))
+            sum(rate(api_requests_total{status_class="5xx"}[5m]))
             /
             sum(rate(api_requests_total[5m]))
           ) > 0.01
+          and
+          sum(rate(api_requests_total[5m])) > 0
         for: 2m
         labels:
           severity: critical
@@ -52,14 +56,14 @@ groups:
       - alert: APILatencyP95High
         expr: |
           histogram_quantile(0.95,
-            sum(rate(api_request_duration_seconds_bucket[5m])) by (le, endpoint)
+            sum(rate(api_request_duration_seconds_bucket[5m])) by (le, route)
           ) > 5
         for: 3m
         labels:
           severity: warning
         annotations:
-          summary: "API endpoint {{ $labels.endpoint }} p95 latency > 5s"
-          description: "p95 API latency for {{ $labels.endpoint }} is {{ $value }}s."
+          summary: "API route {{ $labels.route }} p95 latency > 5s"
+          description: "p95 API latency for {{ $labels.route }} is {{ $value }}s."
 
       # ── Active background tasks spike ──
       - alert: BackgroundTasksSpike
@@ -70,16 +74,3 @@ groups:
         annotations:
           summary: "Background tasks spike detected"
           description: "{{ $value }} background tasks active for more than 5 minutes."
-
-      # ── Pipeline completely stalled ──
-      - alert: PipelineStalled
-        expr: |
-          sum(rate(pipeline_runs_total[10m])) == 0
-          and
-          sum(active_background_tasks) > 0
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Pipeline appears stalled"
-          description: "No pipeline runs in 10 minutes but background tasks are still active."

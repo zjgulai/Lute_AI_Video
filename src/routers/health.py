@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from src._version import APP_VERSION
 
@@ -19,6 +20,38 @@ except ImportError:
 
 
 router = APIRouter()
+
+
+@router.get("/health/live")
+async def liveness() -> dict[str, Any]:
+    """Process-only liveness; never probes dependencies."""
+
+    return {"status": "alive", "version": APP_VERSION}
+
+
+@router.get("/health/ready")
+async def readiness() -> JSONResponse:
+    """Side-effect-free persistence readiness with fail-closed HTTP status."""
+
+    if not HAS_STORAGE:
+        database = {
+            "ready": False,
+            "backend": "unavailable",
+            "status": "storage_module_unavailable",
+        }
+    else:
+        from src.storage.db import check_database_readiness
+
+        database = await check_database_readiness()
+    ready = database.get("ready") is True
+    payload = _sanitize_health_payload(
+        {
+            "status": "ready" if ready else "not_ready",
+            "version": APP_VERSION,
+            "persistence": database,
+        }
+    )
+    return JSONResponse(status_code=200 if ready else 503, content=payload)
 
 
 _SENSITIVE_ENV_NAME_PARTS = (

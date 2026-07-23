@@ -17,6 +17,7 @@ def _reset_database_globals(monkeypatch):
 @pytest.mark.asyncio
 async def test_production_get_pool_rejects_missing_database_url_without_sqlite(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SQLITE_FALLBACK_ENABLED", "1")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     sqlite_called = False
 
@@ -68,8 +69,14 @@ class _AcquireContext:
 
 
 class _FakePool:
+    def __init__(self):
+        self.closed = False
+
     def acquire(self):
         return _AcquireContext()
+
+    async def close(self):
+        self.closed = True
 
 
 class _FakeConnection:
@@ -97,9 +104,68 @@ async def test_production_init_db_never_runs_migrations_and_rejects_incomplete_s
 
 
 @pytest.mark.asyncio
+async def test_production_init_db_rejects_schema_behind_head_without_migration(
+    monkeypatch,
+):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setattr(db, "get_pool", lambda: _async_value(_FakePool()))
+    monkeypatch.setattr(db, "_verify_pg_tables", lambda _conn: _async_value(True))
+    monkeypatch.setattr(
+        db,
+        "_inspect_alembic_head",
+        lambda _conn: _async_value(
+            {
+                "ready": False,
+                "status": "behind_head",
+                "current_revision": "prior_fixture",
+                "head_revision": "head_fixture",
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="required PostgreSQL migration is not ready"):
+        await db.init_db()
+
+    assert db.is_pg_available() is False
+    assert not hasattr(db, "_run_alembic_migrations")
+
+
+@pytest.mark.asyncio
+async def test_production_verification_failure_closes_and_discards_pool(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    pool = _FakePool()
+    monkeypatch.setattr(db, "_pool", pool)
+    monkeypatch.setattr(db, "get_pool", lambda: _async_value(pool))
+    monkeypatch.setattr(db, "_verify_pg_tables", lambda _conn: _async_value(False))
+
+    with pytest.raises(RuntimeError, match="required PostgreSQL schema is not ready"):
+        await db.init_db()
+
+    assert pool.closed is True
+    assert db._pool is None
+    assert db.is_pg_available() is False
+
+
+@pytest.mark.asyncio
+async def test_development_without_explicit_sqlite_fallback_stays_filesystem_only(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SQLITE_FALLBACK_ENABLED", raising=False)
+
+    monkeypatch.setattr(
+        db,
+        "_init_sqlite",
+        lambda: pytest.fail("SQLite fallback requires explicit opt-in"),
+    )
+
+    assert await db.get_pool() is None
+
+
+@pytest.mark.asyncio
 async def test_development_keeps_explicit_sqlite_fallback(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("SQLITE_FALLBACK_ENABLED", "1")
     sqlite_called = False
 
     def fake_init_sqlite() -> None:
@@ -110,6 +176,21 @@ async def test_development_keeps_explicit_sqlite_fallback(monkeypatch):
 
     assert await db.get_pool() is None
     assert sqlite_called is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["true", "yes", "2", "on", ""])
+async def test_sqlite_fallback_flag_accepts_only_exact_one(monkeypatch, value: str):
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("SQLITE_FALLBACK_ENABLED", value)
+    monkeypatch.setattr(
+        db,
+        "_init_sqlite",
+        lambda: pytest.fail("non-canonical flag must not enable SQLite"),
+    )
+
+    assert await db.get_pool() is None
 
 
 async def _async_value(value):

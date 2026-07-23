@@ -34,17 +34,15 @@ class TestPrometheusEndpoint:
         assert "# TYPE" in body
 
     async def test_known_metrics_present_in_output(self, client):
+        await client.get("/health")
         r = await client.get("/metrics")
         body = r.text
         expected = [
             "pipeline_runs_total",
             "step_duration_seconds",
-            "active_pipelines",
-            "llm_api_errors_total",
-            "llm_api_duration_seconds",
-            "db_pool_available_connections",
-            "admin_login_attempts_total",
-            "tenant_active_count",
+            "api_requests_total",
+            "api_request_duration_seconds",
+            "active_background_tasks",
         ]
         for metric in expected:
             assert metric in body, f"missing metric in /metrics output: {metric}"
@@ -60,7 +58,7 @@ class TestPrometheusEndpoint:
         try:
             r1 = await client.get("/metrics")
             assert r1.status_code == 200
-            assert "active_pipelines" in r1.text
+            assert "active_background_tasks" in r1.text
 
             r2 = await client.get("/metrics/abc-video-id")
             assert r2.status_code in (200, 503)
@@ -69,3 +67,11 @@ class TestPrometheusEndpoint:
                 assert "video_id" in body or "metrics" in body
         finally:
             app.dependency_overrides.clear()
+
+    async def test_http_metrics_use_route_template_not_raw_identifier(self, client):
+        await client.get("/metrics/raw-video-identifier")
+        body = (await client.get("/metrics")).text
+
+        assert 'route="/metrics/{video_id}"' in body
+        assert 'route="/metrics/raw-video-identifier"' not in body
+        assert 'status_class="4xx"' in body or 'status_class="5xx"' in body

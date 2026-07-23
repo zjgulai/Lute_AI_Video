@@ -12,11 +12,18 @@ import asyncio
 
 import pytest
 
+from src.models.provider_cost import ProviderCostContractError
+from src.tools.cosyvoice_client import CosyVoiceClient
+from src.tools.elevenlabs_client import ElevenLabsClient
+from src.tools.gpt_image_client import GPTImageClient
 from src.tools.llm_client import (
+    LLMClient,
     _request_api_keys,
     get_request_api_key,
     set_request_api_keys,
 )
+from src.tools.poyo_client import PoyoClient
+from src.tools.seedance_client import SeedanceClient
 
 
 @pytest.fixture(autouse=True)
@@ -148,6 +155,69 @@ class TestMultiProviderIsolation:
         assert results["user2"]["a"] == "user2_a"
         assert results["user2"]["b"] is None
         assert results["user2"]["c"] == "user2_c"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_provider_adapters_keep_request_keys_isolated(
+        self,
+        tmp_path,
+    ):
+        """Active adapters capture only their task's keys without opening transports."""
+        results: dict[str, dict[str, object]] = {}
+
+        async def construct(label: str) -> None:
+            keys = {
+                "DEEPSEEK_API_KEY": f"deepseek-{label}",
+                "ELEVENLABS_API_KEY": f"elevenlabs-{label}",
+                "OPENAI_API_KEY": f"openai-{label}",
+                "POYO_API_KEY": f"poyo-{label}",
+                "SEEDANCE_API_KEY": f"seedance-{label}",
+                "SILICONFLOW_API_KEY": f"siliconflow-{label}",
+            }
+            set_request_api_keys(keys)
+            await asyncio.sleep(0)
+
+            llm = LLMClient(provider="deepseek")
+            image = GPTImageClient(output_dir=tmp_path / label / "images")
+            poyo = PoyoClient()
+            seedance = SeedanceClient(output_dir=tmp_path / label / "video")
+            cosyvoice = CosyVoiceClient(output_dir=tmp_path / label / "audio")
+
+            with pytest.raises(
+                ProviderCostContractError,
+                match="legacy TTS provider has no exact provider-cost rule",
+            ):
+                ElevenLabsClient(output_dir=tmp_path / label / "legacy-audio")
+
+            results[label] = {
+                "deepseek": llm._resolve_api_key("DEEPSEEK_API_KEY"),
+                "image": image.api_key,
+                "poyo": poyo.api_key,
+                "seedance": seedance.api_key,
+                "siliconflow": cosyvoice.api_key,
+                "llm_clients": dict(llm._clients),
+                "image_client": image._client,
+                "image_poyo": image._poyo,
+                "poyo_client": poyo._client,
+                "seedance_poyo": seedance._poyo,
+                "cosyvoice_client": cosyvoice._client,
+            }
+
+        await asyncio.gather(construct("tenant-a"), construct("tenant-b"))
+
+        for label in ("tenant-a", "tenant-b"):
+            assert results[label] == {
+                "deepseek": f"deepseek-{label}",
+                "image": f"poyo-{label}",
+                "poyo": f"poyo-{label}",
+                "seedance": f"poyo-{label}",
+                "siliconflow": f"siliconflow-{label}",
+                "llm_clients": {},
+                "image_client": None,
+                "image_poyo": None,
+                "poyo_client": None,
+                "seedance_poyo": None,
+                "cosyvoice_client": None,
+            }
 
 
 class TestTenantIdIsolation:

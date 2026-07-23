@@ -11,11 +11,11 @@ Built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-t
 
 ## Prerequisites
 
-- **Python 3.12+**
+- **CPython 3.12.13** (the version pinned by `.python-version`)
 - **Node.js 22+** with npm (for WebUI + Remotion rendering)
 
 ```bash
-python3 --version  # >= 3.12
+python3 --version  # 3.12.13
 node --version     # >= 22
 npm --version
 ```
@@ -30,10 +30,8 @@ npm --version
 git clone <repo>
 cd AI_vedio
 
-# Python backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# Python backend (pyproject.toml + uv.lock are authoritative)
+uv sync --locked --extra dev
 
 # Frontend
 cd web
@@ -52,8 +50,7 @@ cp .env.example .env
 
 ```bash
 # Terminal 1: Backend
-source .venv/bin/activate
-uvicorn src.api:app --reload --port 8001
+uv run --locked uvicorn src.api:app --reload --port 8001
 
 # Terminal 2: Frontend
 cd web

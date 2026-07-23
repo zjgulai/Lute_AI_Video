@@ -32,7 +32,7 @@
         "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
         "targets": [
           {
-            "expr": "sum(rate(pipeline_runs_total{status=\"error\"}[5m])) / sum(rate(pipeline_runs_total[5m]))",
+          "expr": "sum(rate(pipeline_runs_total{status=\"failure\"}[5m])) / sum(rate(pipeline_runs_total[5m]))",
             "legendFormat": "error rate"
           }
         ],
@@ -51,16 +51,16 @@
         "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
         "targets": [
           {
-            "expr": "histogram_quantile(0.50, sum(rate(step_duration_seconds_bucket[5m])) by (le, step_name))",
-            "legendFormat": "p50 {{step_name}}"
+          "expr": "histogram_quantile(0.50, sum(rate(step_duration_seconds_bucket[5m])) by (le, step))",
+            "legendFormat": "p50 {{step}}"
           },
           {
-            "expr": "histogram_quantile(0.95, sum(rate(step_duration_seconds_bucket[5m])) by (le, step_name))",
-            "legendFormat": "p95 {{step_name}}"
+          "expr": "histogram_quantile(0.95, sum(rate(step_duration_seconds_bucket[5m])) by (le, step))",
+            "legendFormat": "p95 {{step}}"
           },
           {
-            "expr": "histogram_quantile(0.99, sum(rate(step_duration_seconds_bucket[5m])) by (le, step_name))",
-            "legendFormat": "p99 {{step_name}}"
+          "expr": "histogram_quantile(0.99, sum(rate(step_duration_seconds_bucket[5m])) by (le, step))",
+            "legendFormat": "p99 {{step}}"
           }
         ],
         "fieldConfig": {
@@ -77,12 +77,12 @@
         "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
         "targets": [
           {
-            "expr": "sum(rate(api_requests_total[1m])) by (endpoint)",
-            "legendFormat": "rate {{endpoint}}"
+          "expr": "sum(rate(api_requests_total[1m])) by (route)",
+            "legendFormat": "rate {{route}}"
           },
           {
-            "expr": "histogram_quantile(0.95, sum(rate(api_request_duration_seconds_bucket[5m])) by (le, endpoint))",
-            "legendFormat": "p95 {{endpoint}}"
+          "expr": "histogram_quantile(0.95, sum(rate(api_request_duration_seconds_bucket[5m])) by (le, route))",
+            "legendFormat": "p95 {{route}}"
           }
         ],
         "fieldConfig": {
@@ -157,7 +157,7 @@
         "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
         "targets": [
           {
-            "expr": "sum(increase(api_requests_total{status=~\"5..\"}[1h]))",
+          "expr": "sum(increase(api_requests_total{status_class=\"5xx\"}[1h]))",
             "legendFormat": "5xx"
           }
         ],

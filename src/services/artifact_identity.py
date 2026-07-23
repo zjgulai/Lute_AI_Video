@@ -58,7 +58,8 @@ def classify_output_scope(canonical_path: str) -> str | None:
     parts = Path(canonical_path).parts
     if not parts:
         raise ArtifactIdentityError("invalid artifact path")
-    if parts[0] in PUBLIC_OUTPUT_ROOTS:
+    root = parts[0]
+    if root in PUBLIC_OUTPUT_ROOTS:
         return None
     if (
         len(parts) == 3
@@ -66,14 +67,15 @@ def classify_output_scope(canonical_path: str) -> str | None:
         and parts[2].lower().endswith(".jpg")
     ):
         source_parts = Path(parts[2]).stem.split("__")
-        if source_parts[0] in PUBLIC_OUTPUT_ROOTS:
+        source_root = source_parts[0] if source_parts else ""
+        if source_root in PUBLIC_OUTPUT_ROOTS:
             return None
-        if source_parts[0] in {"tenants", "uploads"} and len(source_parts) >= 3:
+        if source_root in {"tenants", "uploads"} and len(source_parts) >= 3:
             return source_parts[1]
         return "default"
-    if parts[0] == "tenants" and len(parts) >= 3:
+    if root == "tenants" and len(parts) >= 3:
         return parts[1]
-    if parts[0] == "uploads" and len(parts) >= 3:
+    if root == "uploads" and len(parts) >= 3:
         return parts[1]
     return "default"
 
@@ -89,7 +91,7 @@ def canonicalize_output_artifact_path(
     value: str,
     *,
     output_dir: Path,
-    tenant_id: str,
+    tenant_id: str | None,
     required_prefix: str,
     allowed_suffixes: set[str],
     allow_absolute_under_root: bool = False,

@@ -15,13 +15,14 @@ def _fast_policy(
     disposition: str = "pending_review",
 ) -> dict[str, Any]:
     return {
-        "version": "generation-safety.v1",
+        "version": "generation-safety.v2",
         "tenant_id": tenant_id,
         "scenario": "fast",
         "provider_submit_allowed": True,
         "enable_media_synthesis": enable_media_synthesis,
         "artifact_disposition": disposition,
         "provider_max_retries": 0,
+        "c2pa_signing_mode": "local_draft",
     }
 
 
@@ -98,6 +99,7 @@ async def test_fast_mode_no_media_does_not_construct_media_clients() -> None:
 
     assert factory_calls == {"seedance": 0, "cosyvoice": 0}
     assert result["status"] == "completed_bounded"
+    assert result["simulated"] is False
 
 
 @pytest.mark.asyncio
@@ -139,6 +141,7 @@ async def test_fast_mode_no_media_stops_before_seedance_and_tts() -> None:
     assert result["video_path"] == ""
     assert result["video_url"] == ""
     assert result["tts_path"] is None
+    assert result["simulated"] is False
 
 
 @pytest.mark.asyncio
@@ -294,6 +297,7 @@ async def test_fast_mode_media_and_tts_paths_are_tenant_run_scoped(
     assert (tmp_path / result["tts_path"]).resolve().is_relative_to(expected_root.resolve())
     assert result["status"] == "completed_full"
     assert result["full_media_success"] is True
+    assert result["simulated"] is False
 
 
 @pytest.mark.asyncio
@@ -333,7 +337,7 @@ async def test_fast_mode_cosyvoice_fallback_audio_stays_in_tenant_scope(
             path.write_bytes(b"fallback-audio")
             return path
 
-        client._build_silent_mp3 = fake_silent_mp3  # type: ignore[method-assign]
+        setattr(client, "_build_silent_mp3", fake_silent_mp3)
         return client
 
     service = fast_mode.FastModeService(
@@ -370,6 +374,7 @@ async def test_fast_mode_cosyvoice_fallback_audio_stays_in_tenant_scope(
     assert result["success"] is False
     assert result["full_media_success"] is False
     assert result["pipeline_complete"] is False
+    assert result["simulated"] is False
 
 
 @pytest.mark.asyncio
@@ -494,7 +499,10 @@ async def test_fast_mode_submit_passes_l4c1r_artifact_and_retry_controls(
     from src.routers import _deps, scenario
     from src.routers._deps import ApiKeyType, AuthContext
     from src.services import submission_idempotency
-    from src.services.submission_idempotency import SubmissionClaim
+    from src.services.submission_idempotency import (
+        SubmissionClaim,
+        SubmissionNotFound,
+    )
 
     token = _deps._auth_context_var.set(
         AuthContext(
@@ -538,6 +546,9 @@ async def test_fast_mode_submit_passes_l4c1r_artifact_and_retry_controls(
                 return await async_generate(**kwargs)
 
         class FakeSubmissionIdempotency:
+            async def replay_submission(self, **_kwargs: Any) -> None:
+                raise SubmissionNotFound()
+
             async def claim_submission(self, **_kwargs: Any) -> SubmissionClaim:
                 return SubmissionClaim(outcome="owner", record={"id": "submission-fixture"})
 
@@ -574,6 +585,7 @@ async def test_fast_mode_submit_passes_l4c1r_artifact_and_retry_controls(
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         assert async_generate.await_count == 1
+        assert async_generate.await_args is not None
         kwargs = async_generate.await_args.kwargs
         assert kwargs["artifact_disposition"] == "pending_review"
         assert kwargs["tenant_id"] == "momcozy-marketing"

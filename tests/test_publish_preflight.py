@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import pytest
 
 from src.connectors.base import (
     ConnectorPreflightRejected,
+    ConnectorPreflightSnapshot,
     ConnectorPreflightUnavailable,
+    PlatformConnector,
     TikTokPreflightSnapshot,
 )
 from src.connectors.registry import PublishConnectorReadiness
@@ -76,6 +77,18 @@ def _acceptance(*, status: str, path: str) -> AcceptanceRecordResponse:
             "decision": "accepted",
             "status": status,
             "reviewer": {"key_id": "reviewer", "key_type": "tenant"},
+            "transparency": {
+                "schema_version": "acceptance-transparency.v1",
+                "ai_generated": True,
+                "label": "AI-generated",
+                "sidecar_path": (
+                    f"tenants/{TENANT_ID}/pending_review/s2_preflight_fixture/"
+                    f"transparency/transparency-sidecar.v1.{'a' * 64}.json"
+                ),
+                "sidecar_sha256": "a" * 64,
+                "final_artifact_c2pa_status": "signed_local_readback",
+                "independently_validated": False,
+            },
             "review_notes": "must not leave acceptance service",
             "expires_at": "2030-01-01T00:00:00+00:00",
             "consumed_at": (
@@ -165,7 +178,7 @@ class FakeAcceptanceService:
         return "unknown"
 
 
-class FakeConnector:
+class FakeConnector(PlatformConnector):
     def __init__(
         self,
         calls: list[str],
@@ -200,8 +213,8 @@ class FakeConnector:
         self,
         content: dict[str, Any],
         *,
-        preflight: object,
-    ) -> Mapping[str, Any]:
+        preflight: ConnectorPreflightSnapshot | None = None,
+    ) -> dict[str, Any]:
         self.calls.append("connector:publish")
         self.publish_contents.append(content)
         self.publish_snapshots.append(preflight)
@@ -234,6 +247,9 @@ class FakeConnector:
             },
         }
 
+    async def get_status(self, post_id: str) -> dict[str, Any]:
+        pytest.fail(f"unexpected status readback for {post_id}")
+
 
 def _harness(
     tmp_path: Path,
@@ -260,18 +276,30 @@ def _harness(
         inspect_error=inspect_error,
     )
     connector = FakeConnector(calls, preflight_error=preflight_error)
-    service = PublishAttemptService(
-        attempt_repository=repository,
-        acceptance_service=acceptance,
-        output_dir=output_dir,
-        readiness_inspector=lambda platform: PublishConnectorReadiness(
-            platform=platform,
+
+    def readiness(platform: str) -> PublishConnectorReadiness:
+        if platform not in {"tiktok", "shopify"}:
+            pytest.fail(f"unexpected platform {platform}")
+        return PublishConnectorReadiness(
+            platform=cast(Literal["tiktok", "shopify"], platform),
             ready=True,
             reason=None,
-        ),
-        connector_factory=lambda platform: (
-            connector if platform == "tiktok" else pytest.fail(platform)
-        ),
+        )
+
+    def connector_factory(platform: str) -> PlatformConnector:
+        if platform != "tiktok":
+            pytest.fail(f"unexpected platform {platform}")
+        return connector
+
+    from src.services.artifact_acceptance import ArtifactAcceptanceService
+    from src.storage.publish_attempt_repository import PublishAttemptRepository
+
+    service = PublishAttemptService(
+        attempt_repository=cast(PublishAttemptRepository, repository),
+        acceptance_service=cast(ArtifactAcceptanceService, acceptance),
+        output_dir=output_dir,
+        readiness_inspector=readiness,
+        connector_factory=connector_factory,
     )
     return service, calls, repository, acceptance, connector
 

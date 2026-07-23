@@ -106,6 +106,7 @@ async def test_s4_no_media_stops_before_provider_backed_steps(monkeypatch: pytes
     executed_steps: list[str] = []
     saved_states: list[dict[str, Any]] = []
     captured: dict[str, Any] = {}
+    completion_calls: list[dict[str, Any]] = []
 
     class FakeStateManager:
         async def save(self, label: str, state: dict[str, Any]) -> None:
@@ -122,6 +123,10 @@ async def test_s4_no_media_stops_before_provider_backed_steps(monkeypatch: pytes
 
         async def resume(self, label):
             raise AssertionError("no-media S4 must not resume the full media pipeline")
+
+        async def finalize_pipeline_completion(self, state, *, started_at):
+            completion_calls.append(state)
+            return True
 
         async def run_step(self, label, step_name):
             executed_steps.append(step_name)
@@ -159,6 +164,7 @@ async def test_s4_no_media_stops_before_provider_backed_steps(monkeypatch: pytes
     assert captured["config"]["enable_media_synthesis"] is False
     assert captured["config"]["video_duration"] == 15
     assert executed_steps == ["scripts", "continuity_storyboard_grid"]
+    assert len(completion_calls) == 1
     assert "video_prompts" not in executed_steps
     assert result["success"] is True
     assert result["video_prompts"] == []
@@ -239,6 +245,7 @@ async def test_s4_bounded_media_stops_after_seedance_and_clears_publishable_outp
     executed_steps: list[str] = []
     saved_states: list[dict[str, object]] = []
     captured_config: dict[str, object] = {}
+    completion_calls: list[dict[str, Any]] = []
 
     class FakeStateManager:
         async def save(self, label: str, state: dict[str, object]) -> None:
@@ -260,6 +267,10 @@ async def test_s4_bounded_media_stops_after_seedance_and_clears_publishable_outp
 
         async def resume(self, label):
             raise AssertionError("bounded S4 must not resume the full media pipeline")
+
+        async def finalize_pipeline_completion(self, state, *, started_at):
+            completion_calls.append(state)
+            return True
 
         async def run_step(self, label, step_name):
             executed_steps.append(step_name)
@@ -325,6 +336,7 @@ async def test_s4_bounded_media_stops_after_seedance_and_clears_publishable_outp
     )
 
     assert executed_steps == s4_live_shoot_pipeline.S4_BOUNDED_MEDIA_STEP_ORDER
+    assert len(completion_calls) == 1
     assert captured_config["provider_max_retries"] == 0
     assert captured_config["provider_job_caps"] == {"image": 1, "video": 1}
     assert captured_config["seedance_quality_gate_enabled"] is False
@@ -515,6 +527,7 @@ async def test_s4_seedance_clips_use_prompt_durations():
                 data={
                     "video_path": f"/tmp/s4-clip-{index}.mp4",
                     "duration_seconds": params["duration"],
+                    "simulated": False,
                     "verification": {"all_ok": True},
                 },
             )
@@ -551,6 +564,7 @@ async def test_s4_seedance_clips_use_prompt_durations():
 
     assert captured_durations == [4, 7, 9]
     assert result["total_duration"] == 20
+    assert result["simulated"] is False
     assert result["clip_details"][0]["scene_beat"] == "setup_context"
     assert result["clip_details"][1]["beat_summary"] == "capture product use in motion"
     assert result["clip_details"][2]["transition_intent"] == "resolve into a grounded finish"

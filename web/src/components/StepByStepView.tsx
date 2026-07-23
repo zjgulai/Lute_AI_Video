@@ -27,6 +27,7 @@ import ScenarioInjectionDiffPanel, {
   buildScenarioInjectionDiff,
   shouldShowScenarioInjectionDiff,
 } from "./ScenarioInjectionDiffPanel";
+import TransparencyStatus from "./TransparencyStatus";
 
 interface Props {
   label: string;
@@ -322,6 +323,11 @@ export default function StepByStepView({ label, state, onStepComplete, onResume,
             </span>
           </div>
         </div>
+        {allDone && (
+          <div className="mt-3">
+            <TransparencyStatus resourceType="scenario" resourceId={label} />
+          </div>
+        )}
 
         {softDegradedReasons.length > 0 && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">

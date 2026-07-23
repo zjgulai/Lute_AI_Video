@@ -209,6 +209,7 @@ class _FakeRepository:
             "id": "record-1",
             "tenant_id": kwargs["tenant_id"],
             "key_hash": kwargs["key_hash"],
+            "fingerprint_version": kwargs["fingerprint_version"],
             "request_hash": kwargs["request_hash"],
             "operation": kwargs["operation"],
             "scenario": kwargs["scenario"],
@@ -221,6 +222,9 @@ class _FakeRepository:
             "created_at": "2026-07-12T00:00:00Z",
             "updated_at": "2026-07-12T00:00:00Z",
             "owner_instance_id": kwargs["owner_instance_id"],
+            "trusted_authorization_ref": kwargs.get(
+                "trusted_authorization_ref"
+            ),
         }
         self.records[(kwargs["tenant_id"], kwargs["key_hash"])] = record
         return _ClaimResult(self.claim_outcome, record)
@@ -570,7 +574,7 @@ async def test_terminal_transition_precedes_independent_heartbeat_stop() -> None
         order.append("heartbeat:stop")
         await original_stop()
 
-    heartbeat.stop = ordered_stop  # type: ignore[method-assign]
+    setattr(heartbeat, "stop", ordered_stop)
     result = await service.mark_terminal(
         tenant_id="tenant-a",
         record_id="record-1",
@@ -632,7 +636,7 @@ async def test_shutdown_stops_every_heartbeat_after_store_failure() -> None:
         async def stop(*, current: str = record_id) -> None:
             stopped.append(current)
 
-        heartbeat.stop = stop  # type: ignore[method-assign]
+        setattr(heartbeat, "stop", stop)
         service._heartbeats[("tenant-a", record_id)] = heartbeat
 
     with pytest.raises(IdempotencyStoreUnavailable) as caught:
@@ -755,3 +759,64 @@ async def test_readback_http_errors_are_stable_and_do_not_echo_key(
     assert response.status_code == status_code
     assert response.json()["detail"] == {"code": code}
     assert VALID_KEY not in response.text
+
+
+@pytest.mark.asyncio
+async def test_replay_only_path_never_creates_a_new_owner() -> None:
+    from src.services.submission_idempotency import (
+        IdempotencyPayloadConflict,
+        SubmissionIdempotencyService,
+        SubmissionNotFound,
+    )
+
+    repo = _FakeRepository()
+    service = SubmissionIdempotencyService(repo, instance_id="instance-a")
+    request = _FixtureRequest(prompt="fixture")
+    authority_ref = "w5fastact:fixture-001"
+    claimed = await service.claim_submission(
+        tenant_id="tenant-a",
+        raw_key=VALID_KEY,
+        validated_request=request,
+        effective_policy=_policy(),
+        operation="fast.submit",
+        scenario="fast",
+        resource_type="fast",
+        resource_id="fast-fixture",
+        response_body={"task_id": "fast-fixture", "status": "reserved"},
+        trusted_authorization_ref=authority_ref,
+    )
+    assert claimed.is_owner is True
+    repo.claim_kwargs = {}
+
+    replay = await service.replay_submission(
+        tenant_id="tenant-a",
+        raw_key=VALID_KEY,
+        validated_request=request,
+        effective_policy=_policy(),
+        operation="fast.submit",
+        scenario="fast",
+        trusted_authorization_ref=authority_ref,
+    )
+    assert replay.outcome == "replay"
+    assert repo.claim_kwargs == {}
+
+    with pytest.raises(IdempotencyPayloadConflict):
+        await service.replay_submission(
+            tenant_id="tenant-a",
+            raw_key=VALID_KEY,
+            validated_request=_FixtureRequest(prompt="changed"),
+            effective_policy=_policy(),
+            operation="fast.submit",
+            scenario="fast",
+            trusted_authorization_ref=authority_ref,
+        )
+    with pytest.raises(SubmissionNotFound):
+        await service.replay_submission(
+            tenant_id="tenant-a",
+            raw_key="unknown-replay-key-0001",
+            validated_request=request,
+            effective_policy=_policy(),
+            operation="fast.submit",
+            scenario="fast",
+            trusted_authorization_ref=authority_ref,
+        )

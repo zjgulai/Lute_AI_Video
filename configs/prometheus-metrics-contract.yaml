@@ -1,0 +1,37 @@
+schema_version: prometheus-metrics-contract.v1
+owner: self
+cardinality_policy:
+  raw_url_path_allowed: false
+  tenant_or_job_labels_allowed: false
+metrics:
+  pipeline_runs_total:
+    type: counter
+    labels: [scenario, status]
+    enums:
+      status: [success, failure]
+  pipeline_duration_seconds:
+    type: histogram
+    labels: [scenario]
+  pipeline_errors_total:
+    type: counter
+    labels: [scenario]
+  step_duration_seconds:
+    type: histogram
+    labels: [scenario, step]
+  step_failures_total:
+    type: counter
+    labels: [scenario, step]
+  api_requests_total:
+    type: counter
+    labels: [method, route, status_class]
+    enums:
+      method: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, TRACE, CONNECT, OTHER]
+      status_class: [1xx, 2xx, 3xx, 4xx, 5xx, unknown]
+  api_request_duration_seconds:
+    type: histogram
+    labels: [method, route]
+    enums:
+      method: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, TRACE, CONNECT, OTHER]
+  active_background_tasks:
+    type: gauge
+    labels: []

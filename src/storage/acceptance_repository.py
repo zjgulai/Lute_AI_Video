@@ -10,7 +10,7 @@ import sqlite3
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 from asyncpg.exceptions import UniqueViolationError
 
@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 _ALLOWED_ARTIFACT_KINDS = frozenset({"text", "image", "audio", "video"})
 _ALLOWED_DECISIONS = frozenset({"accepted", "rejected"})
 _ALLOWED_REVIEWER_KEY_TYPES = frozenset({"tenant", "test_bundle", "env_fallback"})
+_ALLOWED_C2PA_STATUSES = frozenset(
+    {"unsigned_pending_review", "signed_local_readback"}
+)
 _ALLOWED_SCENARIOS = frozenset({"fast", "s1", "s2", "s3", "s4", "s5"})
 _ALLOWED_SOURCE_RESOURCE_TYPES = frozenset({"fast", "scenario"})
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -121,6 +124,9 @@ class AcceptanceRecordRepository:
         artifact_sha256: str,
         artifact_size_bytes: int,
         artifact_kind: str,
+        transparency_sidecar_path: str,
+        transparency_sidecar_sha256: str,
+        final_artifact_c2pa_status: str,
         decision: str,
         reviewer_key_id: str,
         reviewer_key_type: str,
@@ -141,6 +147,9 @@ class AcceptanceRecordRepository:
             "artifact_sha256": artifact_sha256,
             "artifact_size_bytes": artifact_size_bytes,
             "artifact_kind": artifact_kind,
+            "transparency_sidecar_path": transparency_sidecar_path,
+            "transparency_sidecar_sha256": transparency_sidecar_sha256,
+            "final_artifact_c2pa_status": final_artifact_c2pa_status,
             "decision": decision,
             "reviewer_key_id": reviewer_key_id,
             "reviewer_key_type": reviewer_key_type,
@@ -311,6 +320,10 @@ class AcceptanceRecordRepository:
         acceptance_id: str,
         artifact_path: str,
         artifact_sha256: str,
+        artifact_size_bytes: int,
+        transparency_sidecar_path: str,
+        transparency_sidecar_sha256: str,
+        final_artifact_c2pa_status: str,
         consumer_operation: str,
         consumer_resource_id: str,
     ) -> dict[str, Any]:
@@ -320,11 +333,18 @@ class AcceptanceRecordRepository:
             ("tenant_id", tenant_id),
             ("acceptance_id", acceptance_id),
             ("artifact_path", artifact_path),
+            ("transparency_sidecar_path", transparency_sidecar_path),
+            ("final_artifact_c2pa_status", final_artifact_c2pa_status),
             ("consumer_operation", consumer_operation),
             ("consumer_resource_id", consumer_resource_id),
         ):
             self._require_text(name, value)
         self._require_digest("artifact_sha256", artifact_sha256)
+        self._require_positive_integer("artifact_size_bytes", artifact_size_bytes)
+        self._require_digest(
+            "transparency_sidecar_sha256",
+            transparency_sidecar_sha256,
+        )
 
         pool, sqlite_connection = await self._backend()
         if pool is not None:
@@ -335,8 +355,8 @@ class AcceptanceRecordRepository:
                         UPDATE acceptance_records
                         SET record_status = 'consumed',
                             consumed_at = NOW(),
-                            consumed_by_operation = $5,
-                            consumed_by_resource_id = $6,
+                            consumed_by_operation = $9,
+                            consumed_by_resource_id = $10,
                             updated_at = NOW()
                         WHERE tenant_id = $1 AND id = $2
                           AND decision = 'accepted'
@@ -344,12 +364,20 @@ class AcceptanceRecordRepository:
                           AND expires_at > NOW()
                           AND artifact_path = $3
                           AND artifact_sha256 = $4
+                          AND artifact_size_bytes = $5
+                          AND transparency_sidecar_path = $6
+                          AND transparency_sidecar_sha256 = $7
+                          AND final_artifact_c2pa_status = $8
                         RETURNING *
                         """,
                         tenant_id,
                         acceptance_id,
                         artifact_path,
                         artifact_sha256,
+                        artifact_size_bytes,
+                        transparency_sidecar_path,
+                        transparency_sidecar_sha256,
+                        final_artifact_c2pa_status,
                         consumer_operation,
                         consumer_resource_id,
                     )
@@ -378,6 +406,10 @@ class AcceptanceRecordRepository:
                 acceptance_id,
                 artifact_path,
                 artifact_sha256,
+                artifact_size_bytes,
+                transparency_sidecar_path,
+                transparency_sidecar_sha256,
+                final_artifact_c2pa_status,
                 consumer_operation,
                 consumer_resource_id,
             )
@@ -474,16 +506,18 @@ class AcceptanceRecordRepository:
                             fingerprint_version, request_hash,
                             source_resource_type, source_resource_id, scenario,
                             artifact_path, artifact_sha256, artifact_size_bytes,
-                            artifact_kind, decision, record_status,
+                            artifact_kind, transparency_sidecar_path,
+                            transparency_sidecar_sha256,
+                            final_artifact_c2pa_status, decision, record_status,
                             reviewer_key_id, reviewer_key_type, review_notes,
                             expires_at
                         ) VALUES (
                             $1, $2, $3, $4, $5, $6, $7, $8, $9,
-                            $10, $11, $12, $13::varchar,
-                            CASE WHEN $13::varchar = 'accepted'
+                            $10, $11, $12, $13, $14, $15, $16::varchar,
+                            CASE WHEN $16::varchar = 'accepted'
                                 THEN 'available' ELSE 'rejected' END,
-                            $14, $15, $16,
-                            NOW() + make_interval(secs => $17::double precision)
+                            $17, $18, $19,
+                            NOW() + make_interval(secs => $20::double precision)
                         )
                         RETURNING *
                         """,
@@ -499,6 +533,9 @@ class AcceptanceRecordRepository:
                         values["artifact_sha256"],
                         values["artifact_size_bytes"],
                         values["artifact_kind"],
+                        values["transparency_sidecar_path"],
+                        values["transparency_sidecar_sha256"],
+                        values["final_artifact_c2pa_status"],
                         values["decision"],
                         values["reviewer_key_id"],
                         values["reviewer_key_type"],
@@ -637,11 +674,13 @@ class AcceptanceRecordRepository:
                         id, tenant_id, creation_key_hash, fingerprint_version,
                         request_hash, source_resource_type, source_resource_id,
                         scenario, artifact_path, artifact_sha256,
-                        artifact_size_bytes, artifact_kind, decision,
+                        artifact_size_bytes, artifact_kind,
+                        transparency_sidecar_path, transparency_sidecar_sha256,
+                        final_artifact_c2pa_status, decision,
                         record_status, reviewer_key_id, reviewer_key_type,
                         review_notes, expires_at
                     ) VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         datetime('now', ?)
                     )
                     """,
@@ -658,6 +697,9 @@ class AcceptanceRecordRepository:
                         values["artifact_sha256"],
                         values["artifact_size_bytes"],
                         values["artifact_kind"],
+                        values["transparency_sidecar_path"],
+                        values["transparency_sidecar_sha256"],
+                        values["final_artifact_c2pa_status"],
                         values["decision"],
                         record_status,
                         values["reviewer_key_id"],
@@ -767,6 +809,10 @@ class AcceptanceRecordRepository:
         acceptance_id: str,
         artifact_path: str,
         artifact_sha256: str,
+        artifact_size_bytes: int,
+        transparency_sidecar_path: str,
+        transparency_sidecar_sha256: str,
+        final_artifact_c2pa_status: str,
         consumer_operation: str,
         consumer_resource_id: str,
     ) -> dict[str, Any]:
@@ -787,6 +833,10 @@ class AcceptanceRecordRepository:
                       AND expires_at > CURRENT_TIMESTAMP
                       AND artifact_path = ?
                       AND artifact_sha256 = ?
+                      AND artifact_size_bytes = ?
+                      AND transparency_sidecar_path = ?
+                      AND transparency_sidecar_sha256 = ?
+                      AND final_artifact_c2pa_status = ?
                     """,
                     (
                         consumer_operation,
@@ -795,6 +845,10 @@ class AcceptanceRecordRepository:
                         acceptance_id,
                         artifact_path,
                         artifact_sha256,
+                        artifact_size_bytes,
+                        transparency_sidecar_path,
+                        transparency_sidecar_sha256,
+                        final_artifact_c2pa_status,
                     ),
                 )
                 row = connection.execute(
@@ -836,12 +890,18 @@ class AcceptanceRecordRepository:
             "fingerprint_version",
             "source_resource_id",
             "artifact_path",
+            "transparency_sidecar_path",
+            "final_artifact_c2pa_status",
             "reviewer_key_id",
         ):
             cls._require_text(name, values[name])
         cls._require_digest("creation_key_hash", values["creation_key_hash"])
         cls._require_digest("request_hash", values["request_hash"])
         cls._require_digest("artifact_sha256", values["artifact_sha256"])
+        cls._require_digest(
+            "transparency_sidecar_sha256",
+            values["transparency_sidecar_sha256"],
+        )
         if values["source_resource_type"] not in _ALLOWED_SOURCE_RESOURCE_TYPES:
             raise ValueError("source_resource_type is invalid")
         if values["scenario"] not in _ALLOWED_SCENARIOS:
@@ -850,6 +910,13 @@ class AcceptanceRecordRepository:
             raise ValueError("artifact_kind is invalid")
         if values["decision"] not in _ALLOWED_DECISIONS:
             raise ValueError("decision is invalid")
+        if values["final_artifact_c2pa_status"] not in _ALLOWED_C2PA_STATUSES:
+            raise ValueError("final_artifact_c2pa_status is invalid")
+        if (
+            values["decision"] == "accepted"
+            and values["final_artifact_c2pa_status"] != "signed_local_readback"
+        ):
+            raise ValueError("accepted artifact requires signed C2PA readback")
         if values["reviewer_key_type"] not in _ALLOWED_REVIEWER_KEY_TYPES:
             raise ValueError("reviewer_key_type is invalid")
         if not isinstance(values["review_notes"], str):
@@ -879,7 +946,7 @@ class AcceptanceRecordRepository:
             raise ValueError(f"{name} must be a positive integer")
 
     @staticmethod
-    def _raise_store_unavailable(exc: Exception) -> None:
+    def _raise_store_unavailable(exc: Exception) -> NoReturn:
         logger.warning(
             "Acceptance record store operation failed (%s)",
             type(exc).__name__,

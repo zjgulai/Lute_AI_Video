@@ -1,11 +1,11 @@
 {
-  "updated": "2026-07-10",
+  "updated": "2026-07-23",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
     "scratch_or_one_off_location": "tmp/ or drafts/scripts/",
     "archive_location": "archive/scripts/",
-    "notes": "Top-level git-tracked scripts must be reusable, named for stable purpose, and classified here before they are committed. Gitignored local probes such as scripts/test_*.py are intentionally excluded from this contract."
+    "notes": "Top-level tracked or non-ignored pending scripts must be reusable, named for stable purpose, and classified here before they are committed. Gitignored local probes such as scripts/test_*.py are intentionally excluded from this contract."
   },
   "active_reusable_scripts": [
     {
@@ -17,6 +17,16 @@
       "path": "scripts/check_step_order_consistency.py",
       "status": "active_reusable",
       "reason": "Step ordering consistency check."
+    },
+    {
+      "path": "scripts/check_pyright_ratchet.py",
+      "status": "active_reusable",
+      "reason": "Blocking Pyright diagnostic, suppression, and configuration ratchet checker."
+    },
+    {
+      "path": "scripts/backup_manifest.py",
+      "status": "active_reusable",
+      "reason": "Canonical source and backup manifest builder and validator."
     },
     {
       "path": "scripts/brand_review_audit.py",
@@ -57,6 +67,21 @@
       "path": "scripts/build_provider_account_readiness_record.py",
       "status": "active_reusable",
       "reason": "No-token private provider account readiness record builder."
+    },
+    {
+      "path": "scripts/build_w5_acceptance_plan.py",
+      "status": "active_reusable",
+      "reason": "Provider-off W5 pending-human-review plan draft builder with no execute or approve transition."
+    },
+    {
+      "path": "scripts/build_w5_fast_runtime_binding.py",
+      "status": "active_reusable",
+      "reason": "Provider-off hash-only W5 Fast request and idempotency binding builder with no credential or execute surface."
+    },
+    {
+      "path": "scripts/check_w5_fast_readiness.py",
+      "status": "active_reusable",
+      "reason": "Read-only private W5 Fast activation readiness validator with provider execution disabled."
     },
     {
       "path": "scripts/build_w1_31_billing_approval.py",
@@ -102,6 +127,11 @@
       "path": "scripts/no_token_commercial_benchmark.py",
       "status": "active_reusable",
       "reason": "No-token commercial AI video 2.0 benchmark report."
+    },
+    {
+      "path": "scripts/monitoring_fixture_receiver.py",
+      "status": "active_reusable",
+      "reason": "Local-only bounded Alertmanager receiver for the provider-off monitoring profile."
     },
     {
       "path": "scripts/p2_recharge_smoke_checklist.py",
@@ -181,6 +211,11 @@
   ],
   "manual_deploy_scripts": [
     {
+      "path": "scripts/bootstrap_postgres.py",
+      "status": "manual_deploy_only",
+      "reason": "Guarded empty-PostgreSQL bootstrap mutation requiring exact operator intent."
+    },
+    {
       "path": "scripts/backup_production.sh",
       "status": "manual_deploy_only",
       "reason": "Production backup operation; requires explicit operator intent."
@@ -189,6 +224,11 @@
       "path": "scripts/install_backup_cron.sh",
       "status": "manual_deploy_only",
       "reason": "Production root-crontab mutation; requires explicit operator intent."
+    },
+    {
+      "path": "scripts/offhost_backup.py",
+      "status": "manual_deploy_only",
+      "reason": "Create-only off-host backup protocol; remote object mutations require explicit operator intent."
     },
     {
       "path": "scripts/pg_dump_logical.py",

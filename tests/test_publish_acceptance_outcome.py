@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,12 @@ from typing import Any, get_args
 
 import pytest
 
+from src.models.transparency import (
+    build_file_transparency_record,
+    build_transparency_sidecar,
+    transparency_sidecar_sha256,
+    write_transparency_sidecar,
+)
 from src.services import artifact_acceptance as service_module
 from src.services.artifact_acceptance import (
     AcceptanceStoreUnavailable,
@@ -56,20 +63,50 @@ class OutcomeHarness:
         target = self.output_dir / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(VIDEO_BYTES)
+        transparency_record = build_file_transparency_record(
+            tenant_id=TENANT_ID,
+            scenario="s2",
+            resource_id="s2_outcome_fixture",
+            producer_step="assemble_final",
+            content_kind="video",
+            artifact_path=path,
+            artifact_root=self.output_dir,
+            origin_kind="local",
+            provider=None,
+            model=None,
+            generated_at="2026-07-22T00:00:00Z",
+            parent_record_ids=(),
+            simulated=False,
+            c2pa_status="signed_local_readback",
+        )
+        sidecar = build_transparency_sidecar([transparency_record])
+        sidecar_digest = transparency_sidecar_sha256(sidecar)
+        sidecar_path = (
+            "tenants/tenant-alpha/pending_review/s2_outcome_fixture/"
+            f"transparency/transparency-sidecar.v1.{sidecar_digest}.json"
+        )
+        write_transparency_sidecar(
+            self.output_dir / sidecar_path,
+            sidecar,
+            output_root=self.output_dir,
+        )
         self.connection.execute(
             """
             INSERT INTO acceptance_records (
                 id, tenant_id, creation_key_hash, fingerprint_version,
                 request_hash, source_resource_type, source_resource_id,
                 scenario, artifact_path, artifact_sha256,
-                artifact_size_bytes, artifact_kind, decision, record_status,
+                artifact_size_bytes, artifact_kind,
+                transparency_sidecar_path, transparency_sidecar_sha256,
+                final_artifact_c2pa_status, decision, record_status,
                 reviewer_key_id, reviewer_key_type, review_notes,
                 expires_at, consumed_at, consumed_by_operation,
                 consumed_by_resource_id, revoked_at, revoked_by_key_id,
                 created_at, updated_at
             ) VALUES (
-                ?, ?, ?, 'acceptance-create.v1', ?, 'scenario',
+                ?, ?, ?, 'acceptance-create.v2', ?, 'scenario',
                 's2_outcome_fixture', 's2', ?, ?, ?, 'video', ?, ?,
+                'signed_local_readback', ?, ?,
                 'reviewer-a', 'tenant', 'Reviewed exact bytes.',
                 datetime('now', ?), ?, ?, ?, ?, ?,
                 datetime('now', '-2 hours'), CURRENT_TIMESTAMP
@@ -83,6 +120,8 @@ class OutcomeHarness:
                 path,
                 hashlib.sha256(VIDEO_BYTES).hexdigest(),
                 len(VIDEO_BYTES),
+                sidecar_path,
+                sidecar_digest,
                 decision,
                 status,
                 expires_modifier,
@@ -124,7 +163,7 @@ class OutcomeHarness:
 def outcome_harness(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> OutcomeHarness:
+) -> Iterator[OutcomeHarness]:
     connection = sqlite3.connect(
         str(tmp_path / "publish-outcome.db"),
         check_same_thread=False,
@@ -146,6 +185,7 @@ def outcome_harness(
         repository,
         SubmissionIdempotencyRepository(require_postgres=False),
         output_dir=output_dir,
+        c2pa_reader_verifier=lambda _: "f" * 64,
     )
     yield OutcomeHarness(connection, output_dir, repository, service)
     connection.close()

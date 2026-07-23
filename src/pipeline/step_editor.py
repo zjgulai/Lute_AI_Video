@@ -205,6 +205,19 @@ async def update_step_output(
     step_data["edited"] = True
     step_data["completed_at"] = datetime.now().isoformat()
 
+    from src.config import OUTPUT_DIR
+    from src.services.transparency_provenance import record_step_provenance
+
+    _, transparency = record_step_provenance(
+        state=state,
+        step_name=step_name,
+        output=merged,
+        output_dir=OUTPUT_DIR,
+        origin_kind="human_edit",
+        human_edit=updates,
+    )
+    state["transparency"] = transparency
+
     steps[step_name] = step_data
     state["steps"] = steps
     await state_manager.save(label, state)

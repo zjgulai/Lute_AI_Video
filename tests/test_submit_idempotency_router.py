@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,337 @@ async def _wait_for_submission_status(
             return snapshot
         await asyncio.sleep(0.01)
     raise AssertionError(f"submission did not reach {sorted(expected)}")
+
+
+@pytest.mark.asyncio
+async def test_fast_submit_w5_private_binding_consumes_activation_and_injects_plan_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    isolated_submission_service: Any,
+    tmp_path: Path,
+) -> None:
+    from src.api import app
+    from src.pipeline.generation_policy import EffectiveGenerationPolicy
+    from src.pipeline.w5_acceptance_harness import build_w5_plan_draft
+    from src.pipeline.w5_fast_activation import (
+        W5_FAST_AUTHORIZATION_STATEMENT,
+        W5FastActivationRecordV1,
+    )
+    from src.pipeline.w5_fast_runtime import build_w5_fast_runtime_binding
+    from src.routers._state import FastModeRequest
+    from src.services import fast_mode
+    from src.services.submission_idempotency import hash_idempotency_key
+    from src.storage import db as db_module
+
+    now = datetime.now(UTC)
+    raw_key = f"w5-fast-runtime-{uuid.uuid4()}"
+    payload = {
+        "user_prompt": "Create a claim-safe Momcozy sterilizer product video.",
+        "duration": 15,
+        "enable_tts": False,
+        "api_keys": {},
+        "enable_media_synthesis": True,
+        "artifact_disposition": "pending_review",
+        "provider_max_retries": 0,
+    }
+    request = FastModeRequest.model_validate(payload)
+    policy = EffectiveGenerationPolicy(
+        tenant_id="default",
+        scenario="fast",
+        enable_media_synthesis=True,
+        artifact_disposition="pending_review",
+        provider_max_retries=0,
+        c2pa_signing_mode="local_draft",
+    )
+    plan = build_w5_plan_draft(
+        scenario="fast",
+        tenant_id="default",
+        sample_ref="sample:fast:momcozy-sterilizer-001",
+        budget_limit_usd_nanos=3_150_000_000,
+        provider_job_caps={"llm": 1, "video": 1},
+        selected_optional_media=(),
+        created_at=now - timedelta(minutes=5),
+        expires_at=now + timedelta(hours=2),
+    )
+    activation = W5FastActivationRecordV1(
+        activation_id="w5fastact:http-fixture-001",
+        plan_id=plan.plan_id,
+        tenant_id=plan.tenant_id,
+        sample_ref=plan.sample_ref,
+        approved_by="reviewer:ll",
+        approved_at=now - timedelta(minutes=1),
+        expires_at=now + timedelta(hours=1),
+        authorization_statement=W5_FAST_AUTHORIZATION_STATEMENT,
+        budget_limit_usd_nanos=plan.budget_limit_usd_nanos,
+        provider_job_caps=plan.provider_job_caps,
+    )
+    binding = build_w5_fast_runtime_binding(
+        plan=plan,
+        activation=activation,
+        validated_request=request,
+        effective_policy=policy,
+        idempotency_key_sha256=hash_idempotency_key(raw_key),
+        now=now,
+    )
+    plan_path = tmp_path / "w5-plan.json"
+    activation_path = tmp_path / "w5-activation.json"
+    binding_path = tmp_path / "w5-binding.json"
+    plan_path.write_text(plan.model_dump_json())
+    activation_path.write_text(activation.model_dump_json())
+    binding_path.write_text(binding.model_dump_json())
+    monkeypatch.setenv("W5_FAST_PLAN_PATH", str(plan_path))
+    monkeypatch.setenv("W5_FAST_ACTIVATION_PATH", str(activation_path))
+    monkeypatch.setenv("W5_FAST_RUNTIME_BINDING_PATH", str(binding_path))
+    monkeypatch.setenv("POYO_VIDEO_MODEL", "seedance-2")
+
+    class FakeFastService:
+        async def generate(self, **_kwargs: Any) -> dict[str, Any]:
+            return {
+                "status": "completed_bounded",
+                "request_succeeded": True,
+                "success": False,
+                "full_media_success": False,
+                "pipeline_complete": False,
+                "publish_allowed": False,
+                "delivery_accepted": False,
+            }
+
+    monkeypatch.setattr(
+        fast_mode,
+        "get_fast_mode_service",
+        lambda: FakeFastService(),
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/fast/submit",
+            headers={**auth_headers, "Idempotency-Key": raw_key},
+            json=payload,
+        )
+
+    assert response.status_code == 200, response.text
+    task_id = response.json()["task_id"]
+    await _wait_for_submission_status(
+        isolated_submission_service,
+        tenant_id="default",
+        resource_type="fast",
+        resource_id=task_id,
+        expected={"completed"},
+    )
+    connection = db_module.get_sqlite_conn()
+    assert connection is not None
+    submission = connection.execute(
+        "SELECT trusted_authorization_ref FROM idempotency_records "
+        "WHERE tenant_id = ? AND key_hash = ?",
+        ("default", hash_idempotency_key(raw_key)),
+    ).fetchone()
+    account = connection.execute(
+        "SELECT cap_usd_nanos, budget_source_kind, budget_source_ref "
+        "FROM job_budget_accounts WHERE tenant_id = ? AND job_id = ?",
+        ("default", task_id),
+    ).fetchone()
+    assert submission["trusted_authorization_ref"] == activation.activation_id
+    assert tuple(account) == (
+        3_150_000_000,
+        "validated_authorization",
+        activation.activation_id,
+    )
+
+    for name in (
+        "W5_FAST_PLAN_PATH",
+        "W5_FAST_ACTIVATION_PATH",
+        "W5_FAST_RUNTIME_BINDING_PATH",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        replay_without_packet = await client.post(
+            "/fast/submit",
+            headers={**auth_headers, "Idempotency-Key": raw_key},
+            json=payload,
+        )
+    assert replay_without_packet.status_code == 200
+    assert replay_without_packet.json()["task_id"] == task_id
+    assert replay_without_packet.json()["idempotent_replay"] is True
+
+    for name, path in (
+        ("W5_FAST_PLAN_PATH", plan_path),
+        ("W5_FAST_ACTIVATION_PATH", activation_path),
+        ("W5_FAST_RUNTIME_BINDING_PATH", binding_path),
+    ):
+        monkeypatch.setenv(name, str(path))
+    activation_path.write_text("{}")
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        replay_after_rotation = await client.post(
+            "/fast/submit",
+            headers={**auth_headers, "Idempotency-Key": raw_key},
+            json=payload,
+        )
+    assert replay_after_rotation.status_code == 200
+    assert replay_after_rotation.json()["task_id"] == task_id
+    assert replay_after_rotation.json()["idempotent_replay"] is True
+
+
+@pytest.mark.asyncio
+async def test_fast_submit_w5_llm_runtime_drift_fails_before_claim(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    from types import SimpleNamespace
+
+    from src.api import app
+    from src.routers import scenario
+    from src.services import fast_mode, submission_idempotency
+    from src.services.submission_idempotency import SubmissionNotFound
+
+    class FakeIdempotency:
+        claim_calls = 0
+
+        async def replay_submission(self, **_kwargs: Any) -> Any:
+            raise SubmissionNotFound()
+
+        async def claim_submission(self, **_kwargs: Any) -> Any:
+            self.claim_calls += 1
+            raise AssertionError("runtime drift must fail before claim")
+
+    fake_idempotency = FakeIdempotency()
+    fake_authority = SimpleNamespace(
+        plan=SimpleNamespace(),
+        activation=SimpleNamespace(activation_id="w5fastact:drift-fixture"),
+        binding=SimpleNamespace(
+            expected_llm_provider="deepseek",
+            expected_llm_model="deepseek-v4-flash",
+            expected_video_provider="poyo",
+            expected_video_model="seedance-2",
+            expected_video_resolution="720p",
+        ),
+        budget_authorization=SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        submission_idempotency,
+        "get_submission_idempotency_service",
+        lambda: fake_idempotency,
+    )
+    monkeypatch.setattr(
+        scenario,
+        "configured_w5_fast_runtime_paths",
+        lambda: (Path("plan"), Path("activation"), Path("binding")),
+    )
+    monkeypatch.setattr(
+        scenario,
+        "load_w5_fast_runtime_authority",
+        lambda **_kwargs: fake_authority,
+    )
+    monkeypatch.setattr(
+        scenario,
+        "DEFAULT_LLM_PROVIDER",
+        "openai",
+        raising=False,
+    )
+    service_lookups = 0
+
+    def forbidden_service_lookup() -> object:
+        nonlocal service_lookups
+        service_lookups += 1
+        raise AssertionError("generation service must not be resolved")
+
+    monkeypatch.setattr(
+        fast_mode,
+        "get_fast_mode_service",
+        forbidden_service_lookup,
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/fast/submit",
+            headers={
+                **auth_headers,
+                "Idempotency-Key": f"w5-drift-{uuid.uuid4()}",
+            },
+            json={
+                "user_prompt": "fixture",
+                "duration": 15,
+                "enable_tts": False,
+                "enable_media_synthesis": True,
+                "artifact_disposition": "pending_review",
+                "provider_max_retries": 0,
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "w5_fast_binding_mismatch"
+    }
+    assert fake_idempotency.claim_calls == 0
+    assert service_lookups == 0
+
+
+@pytest.mark.asyncio
+async def test_fast_submit_partial_w5_private_configuration_fails_before_claim(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    isolated_submission_service: Any,
+    tmp_path: Path,
+) -> None:
+    from src.api import app
+    from src.services import fast_mode
+    from src.storage import db as db_module
+
+    del isolated_submission_service
+    service_lookups = 0
+
+    def forbidden_service_lookup() -> object:
+        nonlocal service_lookups
+        service_lookups += 1
+        raise AssertionError("generation service must not be resolved")
+
+    monkeypatch.setattr(
+        fast_mode,
+        "get_fast_mode_service",
+        forbidden_service_lookup,
+    )
+    monkeypatch.setenv("W5_FAST_PLAN_PATH", str(tmp_path / "plan.json"))
+    monkeypatch.delenv("W5_FAST_ACTIVATION_PATH", raising=False)
+    monkeypatch.delenv("W5_FAST_RUNTIME_BINDING_PATH", raising=False)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/fast/submit",
+            headers={
+                **auth_headers,
+                "Idempotency-Key": f"w5-partial-{uuid.uuid4()}",
+            },
+            json={
+                "user_prompt": "fixture",
+                "duration": 15,
+                "enable_tts": False,
+                "enable_media_synthesis": True,
+            },
+        )
+
+    assert response.status_code == 503, response.text
+    assert response.json()["detail"] == {
+        "code": "w5_fast_binding_unavailable"
+    }
+    assert service_lookups == 0
+    connection = db_module.get_sqlite_conn()
+    assert connection is not None
+    assert (
+        connection.execute("SELECT COUNT(*) FROM idempotency_records")
+        .fetchone()[0]
+        == 0
+    )
 
 
 @pytest.mark.asyncio
@@ -235,6 +567,11 @@ async def test_initial_owner_cas_miss_replays_current_recovery_state_without_wor
     service_lookups = 0
 
     class LostInitialOwnerService:
+        async def replay_submission(self, **_kwargs: Any) -> None:
+            from src.services.submission_idempotency import SubmissionNotFound
+
+            raise SubmissionNotFound()
+
         async def claim_submission(self, **kwargs: Any) -> SubmissionClaim:
             records[kwargs["raw_key"]] = {
                 "resource_type": kwargs["resource_type"],
@@ -486,9 +823,10 @@ async def test_fast_submit_replays_one_durable_job_and_conflicts_changed_payload
 
         from src.storage import db as db_module
 
+        connection = db_module.get_sqlite_conn()
+        assert connection is not None
         account_rows = (
-            db_module.get_sqlite_conn()
-            .execute(
+            connection.execute(
                 "SELECT tenant_id, job_kind, job_id FROM job_budget_accounts "
                 "WHERE tenant_id = ? AND job_kind = ? AND job_id = ?",
                 ("default", "canonical", first_body["task_id"]),
@@ -594,6 +932,9 @@ async def test_fast_submit_store_unavailable_fails_before_service_lookup(
     service_lookups = 0
 
     class UnavailableIdempotencyService:
+        async def replay_submission(self, **_kwargs: Any) -> None:
+            raise IdempotencyStoreUnavailable()
+
         async def claim_submission(self, **_kwargs: Any) -> None:
             raise IdempotencyStoreUnavailable()
 
@@ -910,7 +1251,7 @@ async def test_s1_concurrent_replay_claims_before_translation_and_schedules_once
                 "current_step": None,
                 "trace_id": "trace-fixture",
             }
-
+        async def finalize_pipeline_completion(self, state: dict[str, Any], *, started_at: float) -> bool: return True
     original_register = scenario_router._register_background_task
 
     def counted_register(task: asyncio.Task[Any], label: str) -> str:
@@ -960,9 +1301,10 @@ async def test_s1_concurrent_replay_claims_before_translation_and_schedules_once
 
     from src.storage import db as db_module
 
+    connection = db_module.get_sqlite_conn()
+    assert connection is not None
     account_rows = (
-        db_module.get_sqlite_conn()
-        .execute(
+        connection.execute(
             "SELECT tenant_id, job_kind, job_id FROM job_budget_accounts "
             "WHERE tenant_id = ? AND job_kind = ? AND job_id = ?",
             ("default", "canonical", first.json()["label"]),
@@ -1080,7 +1422,7 @@ async def test_s2_s5_concurrent_replay_and_changed_payload_conflict(
                 "delivery_accepted": False,
                 "pipeline_degraded": False,
             }
-
+        async def finalize_pipeline_completion(self, state: dict[str, Any], *, started_at: float) -> bool: return True
     original_register = scenario_router._register_background_task
 
     def counted_register(task: asyncio.Task[Any], label: str) -> str:
@@ -1198,7 +1540,7 @@ async def test_s1_submit_requires_idempotency_header_before_translation_or_state
 
         async def resume(self, _label: str) -> dict[str, Any]:
             return {}
-
+        async def finalize_pipeline_completion(self, state: dict[str, Any], *, started_at: float) -> bool: return True
     class DummyTask:
         pass
 

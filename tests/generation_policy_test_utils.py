@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 from src.pipeline.generation_policy import (
     EffectiveGenerationPolicy,
+    GenerationScenario,
     bind_effective_generation_policy,
     reset_effective_generation_policy,
     resolve_generation_execution_profile,
@@ -42,7 +43,7 @@ def attach_execution_policy(
     config = dict(state.get("config") or {})
     policy = EffectiveGenerationPolicy(
         tenant_id=resolved_tenant,
-        scenario=resolved_scenario,
+        scenario=cast(GenerationScenario, resolved_scenario),
         enable_media_synthesis=media,
         artifact_disposition="pending_review",
         provider_max_retries=0,
@@ -52,6 +53,7 @@ def attach_execution_policy(
             "enable_media_synthesis": media,
             "artifact_disposition": "pending_review",
             "provider_max_retries": 0,
+            "c2pa_signing_mode": policy.c2pa_signing_mode,
             "effective_generation_policy": policy.model_dump(mode="json"),
         }
     )
@@ -110,7 +112,7 @@ async def bound_generation_policy(
 
     policy = EffectiveGenerationPolicy(
         tenant_id=tenant_id,
-        scenario=scenario,
+        scenario=cast(GenerationScenario, scenario),
         enable_media_synthesis=media,
         artifact_disposition="pending_review",
         provider_max_retries=0,

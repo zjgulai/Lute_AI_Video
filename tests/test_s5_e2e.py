@@ -279,6 +279,10 @@ async def test_s5_no_media_run_stops_before_video_prompts(monkeypatch):
             captured["resume_called"] = True
             return {"steps": {}, "errors": []}
 
+        async def finalize_pipeline_completion(self, state, *, started_at):
+            captured["completion_calls"] = captured.get("completion_calls", 0) + 1
+            return True
+
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeRunner)
 
     result = await S5BrandVlogPipeline().run(
@@ -295,6 +299,7 @@ async def test_s5_no_media_run_stops_before_video_prompts(monkeypatch):
     assert captured["scenario"] == "s5"
     assert captured["steps"] == ["vlog_strategy", "continuity_storyboard_grid"]
     assert captured["resume_called"] is False
+    assert captured["completion_calls"] == 1
     assert result["success"] is True
     assert result["steps_completed"] == 2
     assert result["video_prompts"] == []
@@ -427,6 +432,7 @@ async def test_s5_bounded_media_stops_after_seedance_and_clears_publishable_outp
     executed_steps: list[str] = []
     saved_states: list[dict[str, object]] = []
     captured_config: dict[str, object] = {}
+    completion_calls: list[dict[str, Any]] = []
 
     class FakeStateManager:
         async def save(self, label: str, state: dict[str, object]) -> None:
@@ -448,6 +454,10 @@ async def test_s5_bounded_media_stops_after_seedance_and_clears_publishable_outp
 
         async def resume(self, label):
             raise AssertionError("bounded S5 must not resume the full media pipeline")
+
+        async def finalize_pipeline_completion(self, state, *, started_at):
+            completion_calls.append(state)
+            return True
 
         async def run_step(self, label, step_name):
             executed_steps.append(step_name)
@@ -513,6 +523,7 @@ async def test_s5_bounded_media_stops_after_seedance_and_clears_publishable_outp
     )
 
     assert executed_steps == s5_brand_vlog_pipeline.S5_BOUNDED_MEDIA_STEP_ORDER
+    assert len(completion_calls) == 1
     assert captured_config["provider_max_retries"] == 0
     assert captured_config["provider_job_caps"] == {"image": 1, "video": 1}
     assert captured_config["seedance_quality_gate_enabled"] is False
@@ -662,6 +673,9 @@ async def test_s5_run_preserves_persisted_assemble_list_paths(monkeypatch):
                 "errors": [],
             }
 
+        async def finalize_pipeline_completion(self, state, *, started_at):
+            return True
+
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeRunner)
 
     result = await S5BrandVlogPipeline().run(
@@ -692,6 +706,7 @@ async def test_s5_seedance_clips_preserve_director_intent_metadata():
                         "file_size_bytes": 2048,
                         "verification": {"all_ok": True},
                         "is_stub": False,
+                        "simulated": False,
                     },
                 )
             assert name == "video-continuity-manager-skill"
@@ -732,6 +747,7 @@ async def test_s5_seedance_clips_preserve_director_intent_metadata():
     assert result["clip_details"][1]["scene_beat"] == "lived_in_demo"
     assert result["clip_details"][1]["beat_summary"] == "hands-on usage with Sarah"
     assert result["clip_details"][1]["transition_intent"] == "carry the story toward practical proof"
+    assert result["simulated"] is False
 
 
 @pytest.mark.asyncio

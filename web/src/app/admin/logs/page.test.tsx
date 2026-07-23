@@ -4,6 +4,7 @@ import { act } from "react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import AdminLogsPage from "./page";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 const adminFetchJson = vi.fn();
 vi.mock("@/components/api", async () => {
@@ -42,7 +43,7 @@ function render() {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<AdminLogsPage />);
+    root.render(<I18nProvider><AdminLogsPage /></I18nProvider>);
   });
   return {
     container,
@@ -55,6 +56,7 @@ function render() {
 
 describe("AdminLogsPage", () => {
   beforeEach(() => {
+    localStorage.setItem("app-locale", "en");
     adminFetchJson.mockReset();
   });
 
@@ -135,6 +137,26 @@ describe("AdminLogsPage", () => {
 
     expect(adminFetchJson).toHaveBeenLastCalledWith("/api/admin/logs/log-1");
     expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeTruthy();
+    cleanup();
+  });
+
+  it("localizes table, row action, and detail dialog semantics in Chinese", async () => {
+    localStorage.setItem("app-locale", "zh");
+    adminFetchJson.mockResolvedValueOnce(SAMPLE).mockResolvedValueOnce(DETAIL);
+    const { container, cleanup } = render();
+    await flushEffects();
+
+    expect(container.textContent).toContain("时间");
+    expect(container.textContent).toContain("错误代码");
+    const row = container.querySelector(
+      'tr[role="button"][aria-label="打开 TIMEOUT 的日志详情"]',
+    ) as HTMLTableRowElement;
+    await act(async () => row.click());
+    await flushEffects();
+
+    expect(container.textContent).toContain("错误详情");
+    expect(container.querySelector('button[aria-label="关闭日志详情"]')).toBeTruthy();
+    expect(container.textContent).toContain("调用栈");
     cleanup();
   });
 

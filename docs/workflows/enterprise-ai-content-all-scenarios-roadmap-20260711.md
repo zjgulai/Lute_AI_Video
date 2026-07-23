@@ -101,54 +101,54 @@ source: human+ai
 
 ### 4.1 生命周期与错误语义
 
-- [ ] `in_progress` W2-01：当前 no-media/bounded 与 Fast full-media 已按 required artifact/error 真值投影；S1–S5 unrestricted full-media 的全步骤/全 artifact 成功推导仍未统一，不能标完成。
-- [ ] `in_progress` W2-02：bounded/no-media 已统一为 `completed_bounded` 且不冒充 full success；全仓 fixture 的 `simulated=true` 语义尚未闭合。
-- [ ] `in_progress` W2-03：S1 broad replay、当前 exact profiles、Fast fallback/provider-attempt 错误语义已有统一回归；所有 unrestricted full-media provider step 的付费后异常仍待覆盖。
-- [ ] `in_progress` W2-04：StageProgress、Fast 和 OneShot 已支持 full/bounded/error 三态，bounded media 可见且明确不可发布/交付；其余 degraded/pending-review 恢复动作仍待全 UI 统一。
+- [x] `completed_local / independent_review=true` W2-01：S1–S5 统一由 canonical completion truth 按 scenario step order、必需 artifact、audit、error/degraded 和 exact lifecycle envelope 推导 `completed_full|completed_bounded|error`；StepRunner、持久化/水合、在线/持久 readback 和 wrapper 均消费同一真值。当前 request-derived profile 仍只授权 no-media/bounded，未开放 full-media provider authority。
+- [x] `completed_local / independent_review=true` W2-02：Seedance/GPT Image/CosyVoice/Remotion/Fast 及 S1–S5 keyframe/clip/audio/thumbnail/final assemble 聚合均保留 exact boolean `simulated`；final assemble 还要求 `is_stub=false`，missing/non-boolean/true 一律不能进入 `completed_full`。最终 backend `4035 passed`、hermetic `282 passed`、core Pyright `0 errors`。
+- [x] `completed_local / independent_review=true` W2-03：DeepSeek、GPT Image、Seedance、CosyVoice 已覆盖 explicit rejection、ambiguous submit/poll、artifact failure、accounting failure、restart readback 与单 mutation/no fallback；focused `160 passed`，未发现需要修改 provider adapter 的新缺陷。
+- [x] `completed_local / independent_review=true / browser_fixture_blocked_environment` W2-04：PipelineStatusBar 复用 canonical classifier，矛盾 terminal envelope fail-closed，并区分 pending_review、bounded、recovery_required、degraded、error、paused；OneShot full pending-review 明示人工验收且 `publish_allowed!==true` 时无 publish panel；Fast/page recovery 保留同一 idempotency key且只读检查，不自动重提。前端 `68 files/400 tests`、lint、TypeScript、OpenAPI、32-route build 均通过；独立复验 `PASS / APPROVE`、`accepted_actionable_findings=0`。本机 Playwright bundled Chromium 缺失，system Chrome 在 navigation 前启动挂起，browser fixture 未形成应用断言证据。
 
 ### 4.2 PostgreSQL、migration 与 readiness
 
-- [ ] `pending_local` W2-05：production 配置 DATABASE_URL 后连接或初始化异常必须 fail-fast；SQLite fallback 仅 development/test 显式开启。
-- [ ] `pending_local` W2-06：拆分 liveness/readiness；PG/migration/required tables 异常使 readiness 非 2xx，Docker health 使用 readiness。
-- [ ] `pending_local` W2-07：修复被吞掉的 Alembic exception/logging，保留脱敏根因。
-- [ ] `pending_local` W2-08：定义 PostgreSQL 18 canonical bootstrap，空库和历史库均可达到同一 migration head。
-- [ ] `pending_local` W2-09：CI/disposable PG18 验证 fresh bootstrap、upgrade 和 required schema，不访问生产数据库。
+- [x] `completed_local / independent_review=true` W2-05：production 配置 DATABASE_URL 后连接或初始化异常 fail-fast，verification 失败关闭并丢弃 pool；SQLite fallback 仅 development/test 通过精确 `SQLITE_FALLBACK_ENABLED=1` 显式开启。
+- [x] `completed_local / independent_review=true` W2-06：已拆分 process-only liveness 与 sanitized database readiness；PG/migration/current-schema required schema 异常使 readiness 非 2xx，legacy health 不会重新打开不可信 pool，release Docker health 使用 readiness。
+- [x] `completed_local / independent_review=true` W2-07：应用 startup/readiness 不执行 migration；Alembic/code-head/database failure 保留稳定脱敏状态，deploy gate 的 heads/current/upgrade 失败只输出固定安全码。
+- [x] `completed_local / independent_review=true` W2-08：PostgreSQL 18 canonical bootstrap 已分流；空库 baseline+atomic head stamp、旧 lineage 拒绝保留、历史库 Alembic upgrade 均达到或保持同一唯一 head。
+- [ ] `local_disposable_complete / independent_review=true / remote_ci_blocked_external` W2-09：guarded disposable PG18 已验证 fresh bootstrap、non-empty/old-lineage refusal、historical upgrade、idempotent re-upgrade、required schema 与 HTTP readiness；用户禁止 GitHub 更新期间 remote CI 仍未执行，不能标为完整 W2-09。
 
 ### 4.3 State、quality 与 provider keys
 
-- [ ] `in_progress` W2-10：`regenerate_chain`、`soft_degraded_reasons` 等字段已进入 init SQL、repository、filesystem/fake-PG save/load 与场景 status projection；generic API contract 和 W2-11 的 SQLite/disposable PG18 parity 仍未完成。
-- [ ] `pending_local` W2-11：filesystem、SQLite、fake PG row、disposable PG18 round-trip 完全一致。
-- [ ] `pending_local` W2-12：把 quality-score rewind 改为有界状态机；真实执行序列重新运行 upstream 后才能进入 consumer。
-- [ ] `pending_local` W2-13：GPTImageClient、ElevenLabsClient 等全部使用 request-scoped provider key；双租户 fake transport 验证无串扰。
+- [x] `completed_local / independent_review=true` W2-10：机器契约、初始 state、filesystem/repository projection、live status 和 durable async snapshot/readback 均保留 `regenerate_chain`、`soft_degraded_reasons`；共享 validator 使 FS/PG 错误类型稳定 fail-closed，同线程独立复验 `PASS / APPROVE`。
+- [x] `completed_local / independent_review=true` W2-11：filesystem、真实 SQLite、fake PG row 与 guarded disposable PostgreSQL 18 均完成数据库回读；测试先删除 filesystem cache，并原样保留 cursor、tenant、审计数组与 pending `quality_rewind`，PG18 `5 passed`。
+- [x] `completed_local / independent_review=true` W2-12：quality-score rewind 使用持久化有界 envelope；首次 durable save 同时包含 epoch+完整 rewind，durable `_quality_attempt` 是 SSOT，resume/direct run/regenerate、crash、stale/exhausted attempt 和畸形 upstream 均 fail-closed；成功后按 upstream→consumer 精确清理。
+- [x] `completed_local / independent_review=true` W2-13：DeepSeek、GPT Image、PoYo、Seedance、CosyVoice 在双并发 tenant fake-key 上保持 request scope；构造期 transport 全部 lazy，retained ElevenLabs paid path 在构造前阻塞。Batch C 最终 backend `4103 passed`、hermetic `283 passed`、独立复验 `accepted_actionable_findings=0`。
 
 ### 4.4 前端场景正确性
 
-- [ ] `pending_local` W2-14：StageProgress 从后端 canonical `step_order`/status 判断完成，S4 thumbnails 后不得提前完成。
-- [ ] `pending_local` W2-15：Gate polling 静止、timeout 和 polling exception 均 fail-closed，显示可重试状态，不自动推进 Gate。
-- [ ] `pending_local` W2-16：S5 GuidedCard 支持六文件/六素材选择、真实 drag/drop、键盘操作和可见错误。
-- [ ] `pending_local` W2-17：Review/Completion 移动布局、focus-visible、reduced-motion 和关键 admin i18n 建立 UI-only gate。
+- [x] `completed_local / independent_review=true` W2-14：live/durable status 暴露 canonical `step_order` 与最小 gate status；StageProgress 仅从服务端 coherent terminal truth 完成，候选与选择不出现在轮询响应。
+- [x] `completed_local / independent_review=true` W2-15：Gate polling 按 S1-S5 场景调用 canonical status；exception、三次静止、360 次 timeout、degraded/recovery/invalid/null cursor 及完整九字段 terminal contradiction 均 fail-closed。next gate、final step 或精确 bounded/full lifecycle 才推进；重试只读且不重复 approval POST。
+- [x] `completed_local / independent_review=true` W2-16：S5 GuidedCard 支持恰好六文件/六素材、drop、Enter/Space、部分失败保留与可见错误；AssetPicker 跨筛选保留已选项并严格返回用户点击顺序，提交双六项数组。
+- [x] `completed_local / independent_review=true` W2-17：Review/Completion 响应式布局、全局 focus-visible/reduced-motion 和 admin 双语表头/空态/详情/状态/分页/ARIA 已闭环；登录 401/422 使用当前 locale 稳定错误。三轮同线程只读审查最终 `PASS / APPROVE`、`accepted_actionable_findings=0`；fresh frontend `69 files/433 tests`、backend `4103 passed`、UI-only Playwright `2 passed`、静态/构建/文档 gate 全绿。
 
 ## 5. Wave 3 — 可复现构建、可观测性、灾备与部署
 
 ### 5.1 依赖、解释器与类型门
 
-- [ ] `pending_local` W3-01：选择并固化生产 Python 版本；CI 在相同版本和完整生产 dependency set 上运行关键测试/import/health。
-- [ ] `pending_local` W3-02：让 Docker/CI 消费 canonical lock；禁止 `requirements.txt >=` 在同 SHA 上产生漂移镜像。
-- [ ] `pending_local` W3-03：修复 Pyright `executionEnvironments` 配置，增加真实 `make typecheck` target 和 CI gate；逐模块消除可信错误。2026-07-21 W1-24 九个 production source files 已达 `0 errors`，但展开其历史 test files 仍有 141 条既有类型债；未使用 ignore/suppression，测试清债仍由本项承接，不能表述为全 scope Pyright 已闭环。
-- [ ] `pending_local` W3-04：增加 pip/npm/image vulnerability scan；Dependabot security updates 和 alerts 由 owner 开启并记录状态。
+- [x] `completed_local` W3-01：生产、CI、Ruff、Pyright 与锁文件统一为 CPython `3.12.13`；最终 locked backend image 的离线 import、non-root 与缺 key fail-closed 已实测。
+- [x] `completed_local` W3-02：Docker/Compose/Render/CI 统一消费 `pyproject.toml + uv.lock`；`requirements.txt` 仅为受漂移检查约束的 generated compatibility export。
+- [x] `completed_local` W3-03：生产 `src` Pyright 为 `0 errors`；历史 test diagnostics 与 `src/tests/scripts` suppression/config 均由不可在普通门禁刷新、只允许减少的 exact ratchet 约束。
+- [x] `completed_local / blocked_external_github` W3-04：pip/npm 与 Trivy/Grype High+Critical 门禁、精确 30 天风险记录和最终镜像证据已闭环；Dependabot security updates/alerts 仍需 GitHub owner 配置与外部证据。
 
 ### 5.2 Prometheus、Grafana 与通知
 
-- [ ] `pending_local` W3-05：使 alert/dashboard 查询与 exporter 指标名、label 和 status 枚举一致。
-- [ ] `pending_local` W3-06：用 `promtool` 和查询合同覆盖所有 rule；不存在指标必须使测试红。
-- [ ] `pending_local` W3-07：仓库管理 Prometheus/Alertmanager，或记录外部 scrape/notification 的可验证配置合同。
+- [x] `completed_local / independent_review=true` W3-05：alert/dashboard 查询与 exporter 指标名、label、status 枚举和 durable completion truth 已对齐；同一独立审查线程四轮修复复验后 `PASS / APPROVE`。
+- [x] `completed_local / independent_review=true` W3-06：固定 digest 的 `promtool`/`amtool`、全部 rule firing/resolved fixture 与 exporter/query/dashboard 合同已进入 blocking gate；不存在的指标、label 或枚举会使测试红。
+- [x] `completed_local / independent_review=true` W3-07：仓库管理 provider-off Prometheus/Alertmanager/Grafana 配置、内部 scrape 边界、fixture receiver 和 ownership runbook；真实 receiver/通知仍由 W3-08 单独授权。
 - [ ] `blocked_external` W3-08：合成 5xx/provider failure 触发真实通知并验证恢复通知，需要通知渠道授权。
 
 ### 5.3 Off-host DR
 
-- [x] `completed_local` W3-09：逻辑备份/恢复动态发现 public base tables，安全处理标识符与 FK 拓扑；未知边、重复表、环和 dump 中不存在的目标表 fail-closed。focused contract `154 passed`，并在 disposable PostgreSQL 18 的旧三表 schema 上完成实际 dump/restore/parity（3 tables / 3 rows，Alembic revision 一致）。
-- [ ] `pending_local` W3-10：manifest 记录 Git SHA、migration head、source hash、image digest、row/file counts 和 checksums。
-- [ ] `pending_local` W3-11：实现加密 off-host adapter、dry-run 和 mock object-store tests；本地日志不输出凭证。
+- [x] `completed_local / independent_review=true` W3-09：恢复 API/CLI 强制 exact stats，逻辑备份/恢复动态发现 public base tables，并在任何写入前要求 target/stats/JSONL 精确同集；未知边、重复表、环、畸形行数和省略 stats 均 fail-closed。final recovery contract `71 passed`，disposable PostgreSQL 18 动态 dump/restore/parity `1 passed`，同一独立审查线程最终 `PASS / APPROVE`。
+- [x] `completed_local / independent_review=true` W3-10：strict `source-manifest.v1` 与 `backup-manifest.v1`/detached SHA 绑定 Git/OCI/image、Alembic/PG、动态逐表行数、媒体精确集和所有恢复 artifact；create no-clobber，中途失败清理本次输出且允许修正重试，backup publish 与 restore 均先验证 canonical SSOT。
+- [x] `completed_local / independent_review=true` W3-11：实现 provider-neutral create-only object-store protocol、zero-client dry-run 与 fake-store tests；仅验证 version/checksum/encryption receipt metadata，不选择 provider、不实现自定义加密、不接凭证或真实 bucket，post-put 不确定结果不重试。
 - [ ] `blocked_external` W3-12：配置 versioned/immutable bucket、KMS 和 retention，需要基础设施 owner 授权。
 - [ ] `blocked_external` W3-13：模拟 Lighthouse 主机不可用，从 off-host 副本恢复 PG18 与媒体并核对 parity。
 
@@ -165,11 +165,11 @@ source: human+ai
 
 ### 6.1 透明度与 C2PA
 
-- [ ] `pending_local` W4-01：定义所有 AI 文本、图片、音频、视频的 transparency sidecar schema 和 provenance chain。
-- [ ] `pending_local` W4-02：UI、下载包、publish metadata 显示 AI-generated label，保留人工编辑与来源记录。
-- [ ] `pending_local` W4-03：选择并 pin 当前 c2pa-python，按官方 `Signer`/`Builder.sign_file` API 实现，不使用已漂移接口。
-- [ ] `pending_local` W4-04：Fast/S1–S5 所有 image/video producer 进入同一 signing/verification boundary。
-- [ ] `pending_local` W4-05：策略要求签名时缺 SDK/证书/签名/独立验证一律禁止 publish/delivery；非 EU/local draft 可按明确策略保留 unsigned pending-review。
+- [x] `completed_local` W4-01：已定义 strict `transparency-record.v1` / `transparency-sidecar.v1`，覆盖文本、图片、音频、视频的 hash-only facts、relative artifact identity、ordered parent/source chain、canonical detached digest 与 scoped no-clobber write/readback；独立审查首轮 3 个 Medium 已用 RED/GREEN 修复，同线程复验 `PASS / APPROVE`。
+- [x] `completed_local / independent_review=true` W4-02：Fast 与 S1–S5 UI 始终显示 AI-generated label；tenant-bound read-only projection 与 ZIP 绑定 exact sidecar/detached digest，缺失或冲突 fail-closed；acceptance 与 server-owned TikTok/Shopify metadata 保留人工编辑和来源事实。独立审查发现并复验关闭 1 个 High package TOCTOU，最终 `PASS / APPROVE`、`accepted_actionable_findings=0`；本地 Reader 不代表法律合规或独立验证。
+- [x] `completed_local` W4-03：已通过 uv pin `c2pa-python==0.36.0`，使用当前 `C2paSignerInfo` / `Signer.from_info` / `Builder.sign` / `Reader`，required 模式在 SDK、证书、签名、active manifest、AI action、claim signature 或 data hash 缺失时 fail-closed；本地测试证书仅声明 `signed_local_readback`，不冒充受信或独立验证。
+- [x] `completed_local / independent_review=true` W4-04：Fast 与 S1–S5 的 canonical text/image/audio/video producer 已进入有限映射的 append-only provenance boundary；regeneration/human edit/Gate approval 延伸 parent/source chain，skip/simulated media 只记录显式 simulated facts，S2 external refs 保持 pending source truth，所有真实 image/video 先进入 immutable snapshot 再经过 server-owned C2PA policy boundary。FS/SQLite/PG 严格持久化同一 transparency projection；同一审查线程完成修复复验并返回 `PASS / APPROVE`。
+- [x] `completed_local / independent_review=true` W4-05：`acceptance-create.v2` 已绑定 exact sidecar path/digest、最终 C2PA status 与 artifact bytes；required 只允许实际 Reader 复验的 `signed_local_readback`，publish inspect/consume 重新校验 sidecar、bytes 和 Reader truth，旧 v1 仅保留 read/revoke/replay 而不能授权 publish。同一审查线程返回 `accepted_actionable_findings=0`；W4-08 外部 validator 仍未完成。
 - [ ] `blocked_external` W4-06：owner/legal 确认 provider/deployer/EU 范围及是否签署 Code of Practice；未确认前 EU delivery blocked。
 - [ ] `blocked_external` W4-07：申请符合信任策略的证书并接入 HSM/KMS/secret mount；不得把凭证写入仓库。
 - [ ] `blocked_external` W4-08：用独立 C2PA validator 验证真实样本和目标平台保留行为。
@@ -186,12 +186,16 @@ source: human+ai
 
 ### 7.1 共用 harness
 
-- [ ] `pending_local` W5-01：为 Fast/S1–S5 建立参数化 no-provider contract：tenant、safety policy、step order、artifact disposition、audit、transparency。
-- [ ] `pending_local` W5-02：建立 single-submit L4 plan generator，逐场景绑定预算、sample、retry=0、job cap、pending-review-only 和停止条件。
-- [ ] `pending_local` W5-03：建立 HU-03 人工 rubric record 和 brand/source/rights review record。
+- [x] `completed_local` W5-01：Fast/S1–S5 参数化 no-provider contract 已绑定 tenant、`generation-safety.v2`、canonical step order、pending-review disposition、audit、transparency 和场景人工门禁；`independent_review=true`。
+- [x] `completed_local` W5-02：single-submit L4 draft-plan generator 已逐场景绑定精确 USD-nanos 预算、sample、retry=0、有限 job cap、pending-review-only、停止条件和确定性 digest；它不绑定 runtime profile，也不创建执行/provider authority；`independent_review=true`。
+- [x] `completed_local` W5-03：HU-03 四项人工 rubric 与 Fast/S1–S5 brand/source/rights/ownership/model-product review records 已使用严格 tenant/scenario/sample/半开时间窗校验；所有 promotion/provider/publish/delivery 标志恒为 false；`independent_review=true`。
+
+本批仅有 L2 local/fixture/static 证据。独立审查首轮发现 1 High、2 Medium、1 Low，主线程以 RED/GREEN 修复后，同一审查线程复验 `PASS / APPROVE`、`accepted_actionable_findings=0`。主线程最终 `make ci` 为 `4334 passed, 9 skipped, 22 deselected`、Ruff/Pyright/ratchet 全绿；未调用 provider、生产、publish、delivery 或 GitHub，W5-04 及后续场景切片不因本地 harness 完成而解锁。
 
 ### 7.2 场景切片
 
+- [x] `completed_local / independent_review=true` W5-04 readiness：只读 CLI 已将一个私有 Fast activation record 严格绑定到 canonical W5 draft 的 tenant、sample、plan、预算、job cap、optional media 和半开 UTC 时间窗；重复键、浮点/非有限值、UTF-8 超限、深嵌套、坏路径、symlink、非普通文件和读取竞态均 fail-closed。readiness 永远保持 `provider_call_allowed=false`、`execution_authorized=false`、publish/delivery=false，不创建 runtime profile、provider-cost account 或 one-shot consume truth。同一独立线程三轮审查后返回 `PASS / APPROVE`、`accepted_actionable_findings=0`；最终主线程 `make ci` 为 `4376 passed, 9 skipped, 22 deselected`。
+- [x] `completed_local / independent_review=true` W5-04 runtime binding：私有 binding 已绑定完整 canonical activation digest、exact Fast request/key digest、固定 DeepSeek/PoYo envelope、pending-review/retry-zero、预算与 job caps；新 owner 在同一 durable idempotency insert 中单次消费 activation，existing exact replay 先于当前私有 packet 加载并保持只读。独立审查首轮 1 High、2 Medium、1 Low 全部 RED/GREEN 修复，同一线程复验 `PASS / APPROVE`、`accepted_actionable_findings=0`；最终主线程 `make ci` 为 `4400 passed, 9 skipped, 23 deselected`，disposable PG18 bootstrap `6 passed, 1 deselected` 与 concurrency `1 passed`。证据仍是 local/provider-off，尚未迁移或部署到生产，也未执行真实 Fast/provider submit。
 - [ ] `blocked_external` W5-04：Fast 单提交真实视频、pending-review、成本、透明度和人工验收。
 - [ ] `blocked_external` W5-05：S1 strategy→assemble→audit→Gate→acceptance 全链单样本。
 - [ ] `blocked_external` W5-06：S2 brand strategy→media→brand/HU-03→acceptance 全链单样本。

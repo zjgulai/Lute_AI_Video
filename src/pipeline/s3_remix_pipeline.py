@@ -36,6 +36,7 @@ from src.pipeline.continuity_utils import (
     build_transitions_from_clip_details,
     extract_clip_last_frame,
 )
+from src.pipeline.media_truth import aggregate_simulated, media_paths
 from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
@@ -171,6 +172,7 @@ class S3Result:
         self.approved_brand_token_write: bool | None = None
         self.steps_completed: int | None = None
         self._execution_completed: bool = False
+        self.lifecycle_projection: dict[str, Any] = {}
 
     # Back-compat alias used by some tests
     @property
@@ -182,7 +184,7 @@ class S3Result:
         if self.remix_script and "segments" in self.remix_script:
             segments = self.remix_script["segments"]
 
-        return {
+        payload = {
             "success": self.success,
             "label": self.label,
             "scenario": self.scenario,
@@ -215,6 +217,8 @@ class S3Result:
             "steps_completed": self.steps_completed,
             "_execution_completed": self._execution_completed,
         }
+        payload.update(self.lifecycle_projection)
+        return payload
 
 
 class S3InfluencerRemixPipeline:
@@ -359,6 +363,7 @@ class S3InfluencerRemixPipeline:
                 remix_script=script,
                 language=config.get("target_language", "en"),
                 errors=media_errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "audio"),
             )
 
         if step_name == "thumbnail_images":
@@ -367,12 +372,13 @@ class S3InfluencerRemixPipeline:
                 thumbnail_prompts=thumbnails,
                 label=config.get("output_label", "s3"),
                 errors=media_errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "thumbnails"),
             )
 
         if step_name == "assemble_final":
             script = self._get_step_output(steps, "remix_script") or {}
             audio = self._get_step_output(steps, "tts_audio") or []
-            audio_paths = audio if isinstance(audio, list) else []
+            audio_paths = media_paths(audio, "audio_paths")
             clips = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
             clip_details = clips.get("clip_details", []) if isinstance(clips, dict) else []
@@ -383,6 +389,7 @@ class S3InfluencerRemixPipeline:
                 clip_paths=clip_paths,
                 clip_details=clip_details,
                 label=config.get("output_label", "s3"),
+                artifact_output_dir=_artifact_media_output_dir(state, config, "assemble"),
             )
             if res.success and res.data:
                 return res.data
@@ -394,9 +401,9 @@ class S3InfluencerRemixPipeline:
             assemble = self._get_step_output(steps, "assemble_final") or {}
             video_path, _ = extract_assemble_paths(assemble)
             audio = self._get_step_output(steps, "tts_audio") or []
-            audio_paths = audio if isinstance(audio, list) else []
+            audio_paths = media_paths(audio, "audio_paths")
             thumbnails = self._get_step_output(steps, "thumbnail_images") or []
-            thumb_paths = thumbnails if isinstance(thumbnails, list) else []
+            thumb_paths = media_paths(thumbnails, "image_paths")
             clips = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
             clip_details = clips.get("clip_details", []) if isinstance(clips, dict) else []
@@ -487,6 +494,7 @@ class S3InfluencerRemixPipeline:
             expected_scenario="s3",
         )
 
+        pipeline_started = time.perf_counter()
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s3")
@@ -504,6 +512,10 @@ class S3InfluencerRemixPipeline:
                     final_state = await runner.resume(label)
             else:
                 final_state = await self._resume_without_media_synthesis(runner, label)
+            await runner.finalize_pipeline_completion(
+                final_state,
+                started_at=pipeline_started,
+            )
         except Exception as e:
             logger.error("s3: pipeline failed", error=str(e))
             result = S3Result()
@@ -534,9 +546,9 @@ class S3InfluencerRemixPipeline:
             clips = self._get_step_output(steps, "seedance_clips") or {}
             result.clip_paths = clips.get("clip_paths", []) if isinstance(clips, dict) else []
             audio = self._get_step_output(steps, "tts_audio") or []
-            result.audio_paths = audio if isinstance(audio, list) else []
+            result.audio_paths = media_paths(audio, "audio_paths")
             thumbs = self._get_step_output(steps, "thumbnail_images") or []
-            result.thumbnail_image_paths = thumbs if isinstance(thumbs, list) else []
+            result.thumbnail_image_paths = media_paths(thumbs, "image_paths")
             assemble = self._get_step_output(steps, "assemble_final") or {}
             result.final_video_path, result.render_json_path = extract_assemble_paths(assemble)
             result.audit_report = self._get_step_output(steps, "audit")
@@ -555,11 +567,31 @@ class S3InfluencerRemixPipeline:
                 result.steps_completed = S3_BOUNDED_MEDIA_STEP_ORDER.index(S3_BOUNDED_MEDIA_STOP_STEP) + 1
 
         result.errors = errors
-        result._execution_completed = (
-            final_state.get("lifecycle_status") == "completed_bounded"
+        from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+        result.success = (
+            len(errors) == 0
+            and final_state.get("lifecycle_status") == "completed_bounded"
             and not final_state.get("pipeline_degraded")
         )
-        result.success = len(errors) == 0 and result._execution_completed
+        projected = project_scenario_wrapper_result(result.to_dict(), final_state)
+        result.success = projected["success"] is True
+        result._execution_completed = projected["_execution_completed"] is True
+        result.lifecycle_projection = {
+            key: projected[key]
+            for key in (
+                "status",
+                "lifecycle_status",
+                "completion_kind",
+                "request_succeeded",
+                "full_media_success",
+                "pipeline_complete",
+                "publish_allowed",
+                "delivery_accepted",
+                "pipeline_degraded",
+            )
+            if key in projected
+        }
         logger.info("s3: pipeline complete",
                     success=result.success,
                     prompts=len(result.video_prompts),
@@ -596,9 +628,7 @@ class S3InfluencerRemixPipeline:
                 final_state["config"]["provider_max_retries"] = provider_max_retries
                 final_state["config"]["provider_job_caps"] = dict(S3_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
                 final_state["config"]["seedance_quality_gate_enabled"] = False
-                save = getattr(runner.state_manager, "save", None)
-                if callable(save):
-                    await save(label, final_state)
+                await runner.state_manager.save(label, final_state)
                 break
         return final_state
 
@@ -613,9 +643,7 @@ class S3InfluencerRemixPipeline:
                 break
         if final_state and not final_state.get("pipeline_degraded"):
             final_state["current_step"] = None
-            save = getattr(runner.state_manager, "save", None)
-            if callable(save):
-                await save(label, final_state)
+            await runner.state_manager.save(label, final_state)
         return final_state
 
     # ═══ Step 1-4: existing data-producing steps ═══
@@ -1148,6 +1176,7 @@ class S3InfluencerRemixPipeline:
                         "path": path,
                         "duration": res.data.get("duration_seconds", fallback_clip_duration),
                         "is_stub": res.data.get("is_stub", False),
+                        "simulated": res.data.get("simulated"),
                         "verification": res.data.get("verification", {}),
                         "prompt_used": res.data.get("prompt_used", ""),
                         "segment_type": video_prompts[i].get("segment_type", "body"),
@@ -1170,21 +1199,31 @@ class S3InfluencerRemixPipeline:
 
         total_duration = sum(d.get("duration", fallback_clip_duration) for d in clip_details)
         logger.info("s3: step 8 done", produced=len(clip_paths), capped_to=MAX_CLIPS_PER_DEMO)
-        return {"clip_paths": clip_paths, "clip_details": clip_details, "total_duration": total_duration}
+        output = {
+            "clip_paths": clip_paths,
+            "clip_details": clip_details,
+            "total_duration": total_duration,
+        }
+        simulated = aggregate_simulated(clip_details)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_tts_audio(
         self,
         remix_script: dict[str, Any],
         language: str,
         errors: list[str],
-    ) -> list[str]:
+        artifact_output_dir: str | None = None,
+    ) -> dict[str, Any]:
         """Step 6: invoke elevenlabs-tts-skill per script segment."""
         logger.info("s3: step 6 — tts audio")
         segments = remix_script.get("segments", [])
         if not segments:
-            return []
+            return {"audio_paths": []}
 
         audio_paths: list[str] = []
+        audio_results: list[dict[str, Any]] = []
         for i, seg in enumerate(segments):
             text = (
                 seg.get("voiceover")
@@ -1195,12 +1234,16 @@ class S3InfluencerRemixPipeline:
             if not text or len(text) < 2:
                 continue
 
-            res = await self._registry.execute("elevenlabs-tts-skill", {
+            tts_params: dict[str, Any] = {
                 "text": text,
                 "language": language,
                 "operation_instance": f"segment.{i}",
-            })
+            }
+            if artifact_output_dir:
+                tts_params["output_dir"] = artifact_output_dir
+            res = await self._registry.execute("elevenlabs-tts-skill", tts_params)
             if res.success and res.data:
+                audio_results.append(res.data)
                 path = res.data.get("audio_path", "")
                 if path:
                     audio_paths.append(path)
@@ -1210,41 +1253,50 @@ class S3InfluencerRemixPipeline:
                 errors.append(f"tts_{i}_failed: {res.error}")
 
         logger.info("s3: step 6 done", segments=len(audio_paths))
-        return audio_paths
+        output: dict[str, Any] = {"audio_paths": audio_paths}
+        simulated = aggregate_simulated(audio_results)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_thumbnail_images(
         self,
         thumbnail_prompts: list[dict[str, Any]],
         label: str,
         errors: list[str],
-    ) -> list[str]:
+        artifact_output_dir: str | None = None,
+    ) -> dict[str, Any]:
         """Step 7: invoke gpt-image-generate-skill for each thumbnail prompt."""
         logger.info("s3: step 7 — thumbnail images", count=len(thumbnail_prompts))
         if not thumbnail_prompts:
-            return []
+            return {"image_paths": []}
 
         thumbnail_paths: list[str] = []
         capped = thumbnail_prompts[:MAX_THUMBNAILS_PER_DEMO]
         valid = [(i, tp.get("prompt", "")) for i, tp in enumerate(capped) if tp.get("prompt") and len(tp.get("prompt", "")) >= 5]
         if not valid:
             logger.info("s3: step 7 done", thumbnails=0)
-            return thumbnail_paths
+            return {"image_paths": thumbnail_paths}
 
         thumb_sem = asyncio.Semaphore(2)
 
         async def _gen_one(i: int, prompt: str) -> tuple[int, Any]:
             async with thumb_sem:
-                res = await self._registry.execute("gpt-image-generate-skill", {
+                image_params: dict[str, Any] = {
                     "prompt": prompt,
                     "size": "1024x1792",
                     "quality": "high",
                     "image_id": f"{label}_thumb_{i}",
-                })
+                }
+                if artifact_output_dir:
+                    image_params["output_dir"] = artifact_output_dir
+                res = await self._registry.execute("gpt-image-generate-skill", image_params)
                 return i, res
 
         tasks = [_gen_one(i, prompt) for i, prompt in valid]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        thumbnail_results: list[dict[str, Any]] = []
         for raw in raw_results:
             if isinstance(raw, Exception):
                 errors.append(f"thumb_failed_with_exception: {raw}")
@@ -1253,6 +1305,7 @@ class S3InfluencerRemixPipeline:
                 continue
             i, res = raw
             if res.success and res.data:
+                thumbnail_results.append(res.data)
                 path = res.data.get("image_path", "")
                 if path:
                     thumbnail_paths.append(path)
@@ -1262,7 +1315,11 @@ class S3InfluencerRemixPipeline:
                 errors.append(f"thumb_{i}_failed: {res.error}")
 
         logger.info("s3: step 7 done", thumbnails=len(thumbnail_paths))
-        return thumbnail_paths
+        output: dict[str, Any] = {"image_paths": thumbnail_paths}
+        simulated = aggregate_simulated(thumbnail_results)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_assemble_final(
         self,
@@ -1272,12 +1329,13 @@ class S3InfluencerRemixPipeline:
         clip_paths: list[str],
         label: str,
         clip_details: list[dict[str, Any]] | None = None,
+        artifact_output_dir: str | None = None,
     ) -> SkillResult:
         """Step 8: invoke remotion-assemble-skill to produce final mp4."""
         logger.info("s3: step 8 — assemble final video")
         shots = self._extract_shots(remix_script)
         transitions = build_transitions_from_clip_details(clip_details or [])
-        return await self._registry.execute("remotion-assemble-skill", {
+        assemble_params: dict[str, Any] = {
             "shots": shots,
             "captions": captions,
             "audio_paths": audio_paths,
@@ -1286,7 +1344,10 @@ class S3InfluencerRemixPipeline:
             "output_label": label,
             "total_duration": self._compute_total_duration(shots),
             "transitions": transitions,
-        })
+        }
+        if artifact_output_dir:
+            assemble_params["output_dir"] = artifact_output_dir
+        return await self._registry.execute("remotion-assemble-skill", assemble_params)
 
     async def _step_audit(
         self,

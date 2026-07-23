@@ -80,6 +80,8 @@ _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 _TIKTOK_POST_ID_RE = re.compile(r"^[1-9][0-9]*$")
 _SHOPIFY_VIDEO_GID_RE = re.compile(r"^gid://shopify/Video/[1-9][0-9]*$")
 _SHOPIFY_PRODUCT_GID_RE = re.compile(r"^gid://shopify/Product/[1-9][0-9]*$")
+AI_GENERATED_DISCLOSURE_TEXT = "AI-generated content."
+AI_GENERATED_TITLE_PREFIX = "[AI-generated] "
 
 
 def _validate_tiktok_post_url(
@@ -189,6 +191,50 @@ class PublishMetadata(_StrictModel):
         return self
 
 
+class PublishDisclosureV1(_StrictModel):
+    schema_version: Literal["publish-disclosure.v1"] = "publish-disclosure.v1"
+    label: Literal["AI-generated"] = "AI-generated"
+    visible_text: Literal["AI-generated content."] = AI_GENERATED_DISCLOSURE_TEXT
+    sidecar_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    final_artifact_c2pa_status: Literal["signed_local_readback"]
+    verification_scope: Literal["local_reader_only"] = "local_reader_only"
+    independently_validated: Literal[False] = False
+
+
+def effective_tiktok_metadata(
+    metadata: PublishMetadata,
+) -> tuple[str, str, list[str]]:
+    title = metadata.title or metadata.hook or "AI-generated video"
+    description = metadata.description or metadata.hook or title
+    tags = list(metadata.hashtags or metadata.tags)
+    if tags:
+        description = description + "\n" + " ".join(f"#{tag}" for tag in tags)
+    lines = [
+        line
+        for line in description.splitlines()
+        if line.strip() != AI_GENERATED_DISCLOSURE_TEXT
+    ]
+    body = "\n".join(lines).strip()
+    effective = (
+        f"{body}\n{AI_GENERATED_DISCLOSURE_TEXT}"
+        if body
+        else AI_GENERATED_DISCLOSURE_TEXT
+    )
+    if len(effective) > 2200:
+        raise ValueError("TikTok metadata exceeds limit after AI disclosure")
+    return title, effective, tags
+
+
+def effective_shopify_title(metadata: PublishMetadata) -> str:
+    title = metadata.title or metadata.hook or "AI-generated video"
+    while title.startswith(AI_GENERATED_TITLE_PREFIX):
+        title = title[len(AI_GENERATED_TITLE_PREFIX) :].lstrip()
+    effective = f"{AI_GENERATED_TITLE_PREFIX}{title}"
+    if len(effective) > 300:
+        raise ValueError("Shopify metadata exceeds limit after AI disclosure")
+    return effective
+
+
 class TikTokPublishOptions(_StrictModel):
     platform: Literal["tiktok"]
     privacy_level: TikTokPrivacyLevel
@@ -248,6 +294,10 @@ class PublishAttemptRequest(_StrictModel):
     def validate_platform_options_match(self) -> PublishAttemptRequest:
         if self.platform_options.platform != self.platform:
             raise ValueError("platform_options must match platform")
+        if self.platform == "tiktok":
+            effective_tiktok_metadata(self.metadata)
+        else:
+            effective_shopify_title(self.metadata)
         return self
 
 

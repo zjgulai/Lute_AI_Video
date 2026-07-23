@@ -2,6 +2,7 @@ import asyncio
 import threading
 
 import pytest
+from prometheus_client import REGISTRY
 
 from src.tasks import bg_registry
 
@@ -29,11 +30,13 @@ async def test_cancel_background_tasks_cancels_registered_task() -> None:
 
     task_id = bg_registry.register_background_task(task, "test_sleeper")
     assert task_id in bg_registry.get_background_task_snapshot()
+    assert REGISTRY.get_sample_value("active_background_tasks") == 1
 
     await bg_registry.cancel_background_tasks(timeout=1.0)
 
     assert task.cancelled()
     assert bg_registry.get_background_task_snapshot() == {}
+    assert REGISTRY.get_sample_value("active_background_tasks") == 0
 
 
 @pytest.mark.asyncio

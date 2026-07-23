@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -72,10 +72,10 @@ _PUBLISH_ID_RE = re.compile(r"^[A-Za-z0-9._~-]{1,64}$")
 _POST_ID_RE = re.compile(r"^[1-9][0-9]*$")
 _UNSAFE_TITLE_RE = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
 
-MediaProbe: TypeAlias = Callable[[Path], float | Awaitable[float]]
-Sleep: TypeAlias = Callable[[float], Awaitable[None]]
-Clock: TypeAlias = Callable[[], float]
-Now: TypeAlias = Callable[[], datetime]
+type MediaProbe = Callable[[Path], float | Awaitable[float]]
+type Sleep = Callable[[float], Awaitable[None]]
+type Clock = Callable[[], float]
+type Now = Callable[[], datetime]
 
 
 class _TikTokDeterministicFailure(RuntimeError):

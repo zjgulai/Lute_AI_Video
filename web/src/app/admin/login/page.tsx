@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminFetch, parseApiError } from "@/components/api";
 import { Key, WarningCircle } from "@phosphor-icons/react";
+import { useI18n } from "@/i18n/I18nProvider";
 
 export default function AdminLoginPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,11 +38,11 @@ export default function AdminLoginPage() {
         const info = await parseApiError(res);
         if (info.status === 429 && info.retryAfterSec) {
           setRetryAfter(info.retryAfterSec);
-          setError(`Too many attempts. Try again in ${info.retryAfterSec}s.`);
+          setError(t("admin.login.rateLimited").replace("{seconds}", String(info.retryAfterSec)));
         } else if (info.status === 422) {
-          setError(info.message || "Invalid request");
+          setError(t("admin.login.invalidRequest"));
         } else {
-          setError(info.message || "Invalid credentials");
+          setError(t("admin.login.invalidCredentials"));
         }
         setLoading(false);
         return;
@@ -48,7 +50,7 @@ export default function AdminLoginPage() {
 
       router.push("/admin/dashboard");
     } catch {
-      setError("Network error — backend unreachable");
+      setError(t("admin.login.networkError"));
       setLoading(false);
     }
   };
@@ -65,7 +67,7 @@ export default function AdminLoginPage() {
             AI Video Admin
           </h1>
           <p className="text-xs text-[var(--text-muted)] mt-1">
-            Platform management panel
+            {t("admin.login.subtitle")}
           </p>
         </div>
 
@@ -73,7 +75,7 @@ export default function AdminLoginPage() {
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label htmlFor="admin-email" className="sr-only">
-              Admin email
+              {t("admin.login.email")}
             </label>
             <input
               id="admin-email"
@@ -89,14 +91,14 @@ export default function AdminLoginPage() {
 
           <div>
             <label htmlFor="admin-password" className="sr-only">
-              Admin password
+              {t("admin.login.password")}
             </label>
             <input
               id="admin-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
+              placeholder={t("admin.login.passwordPlaceholder")}
               required
               className="apple-input text-sm w-full"
             />
@@ -111,7 +113,7 @@ export default function AdminLoginPage() {
               <WarningCircle size={14} weight="fill" className="shrink-0" />
               <span>
                 {retryAfter > 0
-                  ? `Too many attempts. Try again in ${retryAfter}s.`
+                  ? t("admin.login.rateLimited").replace("{seconds}", String(retryAfter))
                   : error}
               </span>
             </div>
@@ -126,10 +128,10 @@ export default function AdminLoginPage() {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Signing in...
+                {t("admin.login.signingIn")}
               </span>
             ) : (
-              "Sign In"
+              t("admin.login.signIn")
             )}
           </button>
         </form>

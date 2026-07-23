@@ -5,6 +5,7 @@ import { adminFetchJson } from "@/components/api";
 import { X } from "@phosphor-icons/react";
 import { TableRowSkeleton } from "@/components/Skeleton";
 import { useModalBehavior } from "@/hooks/useModalBehavior";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface LogEntry {
   id: string;
@@ -27,11 +28,8 @@ const TIME_RANGES = [
   { label: "7d", value: "7d" },
 ];
 
-function getLogRowLabel(log: LogEntry): string {
-  return `Open log detail for ${log.error_code || log.id}`;
-}
-
 export default function AdminLogsPage() {
+  const { t } = useI18n();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -75,7 +73,7 @@ export default function AdminLogsPage() {
       setLogs(data.items);
       setTotal(data.total);
     } catch {
-      setError("Failed to load logs");
+      setError("load_failed");
     } finally {
       setLoading(false);
     }
@@ -91,7 +89,7 @@ export default function AdminLogsPage() {
       const data = await adminFetchJson<LogDetail>(`/api/admin/logs/${logId}`);
       setDetail(data);
     } catch {
-      setError("Failed to load log detail");
+      setError("detail_failed");
     }
   };
   const closeDetail = () => setDetail(null);
@@ -104,26 +102,26 @@ export default function AdminLogsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold text-[var(--text-h1)]">System Logs</h1>
+      <h1 className="text-lg font-semibold text-[var(--text-h1)]">{t("admin.logs.title")}</h1>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <select
-          aria-label="Filter logs by scenario"
+          aria-label={t("admin.logs.filterScenario")}
           value={scenario}
           onChange={(e) => { setScenario(e.target.value); setPage(1); }}
           className="apple-input text-xs py-1.5"
         >
           {SCENARIOS.map((s) => (
-            <option key={s} value={s}>{s || "All scenarios"}</option>
+            <option key={s} value={s}>{s || t("admin.logs.allScenarios")}</option>
           ))}
         </select>
         <input
           type="text"
-          aria-label="Filter logs by tenant ID"
+          aria-label={t("admin.logs.filterTenant")}
           value={tenantFilter}
           onChange={(e) => setTenantFilter(e.target.value)}
-          placeholder="Tenant ID"
+          placeholder={t("admin.logs.tenantPlaceholder")}
           className="apple-input text-xs py-1.5 w-32"
         />
         <div className="flex rounded-lg border border-[var(--border-default)] overflow-hidden">
@@ -150,16 +148,18 @@ export default function AdminLogsPage() {
           }}
           className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
         >
-          Apply Filters
+          {t("admin.logs.applyFilters")}
         </button>
       </div>
 
       {/* Error */}
       {error && (
         <div className="text-center py-8">
-          <p className="text-xs text-[var(--text-muted)] mb-2">{error}</p>
+          <p className="text-xs text-[var(--text-muted)] mb-2">
+            {t(error === "detail_failed" ? "admin.logs.detailFailed" : "admin.logs.loadFailed")}
+          </p>
           <button onClick={() => void load()} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">
-            Retry
+            {t("admin.common.retry")}
           </button>
         </div>
       )}
@@ -170,10 +170,10 @@ export default function AdminLogsPage() {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[var(--divider-light)]">
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Time</th>
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Code</th>
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Tenant</th>
-                <th className="text-left p-3 text-[var(--text-muted)] font-medium">Message</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.common.time")}</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.logs.code")}</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.logs.tenant")}</th>
+                <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.logs.message")}</th>
               </tr>
             </thead>
             <tbody>
@@ -190,17 +190,17 @@ export default function AdminLogsPage() {
         <>
           {logs.length === 0 ? (
             <p className="text-xs text-[var(--text-muted)] text-center py-16">
-              No errors found
+              {t("admin.logs.empty")}
             </p>
           ) : (
             <div className="apple-card overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-[var(--divider-light)]">
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Time</th>
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Code</th>
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Tenant</th>
-                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">Message</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.common.time")}</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.logs.code")}</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.logs.tenant")}</th>
+                    <th className="text-left p-3 text-[var(--text-muted)] font-medium">{t("admin.logs.message")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -208,7 +208,7 @@ export default function AdminLogsPage() {
                     <tr
                       key={log.id}
                       role="button"
-                      aria-label={getLogRowLabel(log)}
+                      aria-label={t("admin.logs.openDetail").replace("{code}", log.error_code || log.id)}
                       onClick={() => void openDetail(log.id)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
@@ -245,21 +245,23 @@ export default function AdminLogsPage() {
           {/* Pagination */}
           {total > 50 && (
             <div className="flex items-center justify-between text-xs">
-              <span className="text-[var(--text-muted)]">{total} entries</span>
+              <span className="text-[var(--text-muted)]">
+                {t("admin.logs.total").replace("{count}", String(total))}
+              </span>
               <div className="flex gap-1">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                   className="apple-btn text-xs py-1 px-2 border border-[var(--border-default)] disabled:opacity-30"
                 >
-                  Prev
+                  {t("admin.common.previous")}
                 </button>
                 <button
                   disabled={page * 50 >= total}
                   onClick={() => setPage(page + 1)}
                   className="apple-btn text-xs py-1 px-2 border border-[var(--border-default)] disabled:opacity-30"
                 >
-                  Next
+                  {t("admin.common.next")}
                 </button>
               </div>
             </div>
@@ -283,49 +285,51 @@ export default function AdminLogsPage() {
           >
             <div className="flex items-center justify-between mb-3">
               <h2 id="admin-log-detail-title" className="text-sm font-semibold text-[var(--text-h1)]">
-                Error Detail
+                {t("admin.logs.detailTitle")}
               </h2>
               <button
                 type="button"
                 ref={detailCloseRef}
                 onClick={closeDetail}
                 className="cursor-pointer"
-                aria-label="Close log detail"
+                aria-label={t("admin.logs.closeDetail")}
               >
                 <X size={16} weight="fill" className="text-[var(--text-muted)]" />
               </button>
             </div>
             <div className="space-y-2 text-xs">
               <div>
-                <span className="text-[var(--text-muted)]">Code: </span>
+                <span className="text-[var(--text-muted)]">{t("admin.logs.code")}: </span>
                 <span className="font-mono">{detail.error_code}</span>
               </div>
               <div>
-                <span className="text-[var(--text-muted)]">Tenant: </span>
+                <span className="text-[var(--text-muted)]">{t("admin.logs.tenant")}: </span>
                 {detail.tenant_id || "—"}
               </div>
               <div>
-                <span className="text-[var(--text-muted)]">Time: </span>
+                <span className="text-[var(--text-muted)]">{t("admin.common.time")}: </span>
                 {detail.created_at
                   ? new Date(detail.created_at).toLocaleString()
                   : ""}
               </div>
               <div>
-                <span className="text-[var(--text-muted)]">Message: </span>
+                <span className="text-[var(--text-muted)]">{t("admin.logs.message")}: </span>
                 <p className="mt-1 text-[var(--text-body)] break-words">
                   {detail.message}
                 </p>
               </div>
               {detail.traceback && (
                 <div>
-                  <span className="text-[var(--text-muted)]">Traceback: </span>
+                  <span className="text-[var(--text-muted)]">{t("admin.logs.traceback")}: </span>
                   <pre className="mt-1 p-2 rounded bg-[var(--bg-layer3)] text-[11px] text-[var(--text-body)] overflow-x-auto max-h-60 whitespace-pre-wrap break-all font-mono">
                     {detail.traceback}
                   </pre>
                 </div>
               )}
               <p id="admin-log-detail-description" className="sr-only">
-                Log detail for {detail.error_code}: {detail.message}
+                {t("admin.logs.detailDescription")
+                  .replace("{code}", detail.error_code)
+                  .replace("{message}", detail.message)}
               </p>
             </div>
           </div>

@@ -28,7 +28,12 @@ case "${DATABASE_URL:-}" in
     ;;
 esac
 
-cd /app/migrations
+if [ -d /app/migrations ]; then
+  cd /app/migrations
+else
+  SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+  cd "$SCRIPT_DIR/../migrations"
+fi
 
 extract_current() {
   awk '
@@ -42,7 +47,10 @@ extract_heads() {
   awk '$1 ~ /^[A-Za-z0-9][A-Za-z0-9_.-]*$/ && $0 ~ /\(head\)/ { print $1 }'
 }
 
-HEAD_OUTPUT="$(python3 -m alembic heads)"
+if ! HEAD_OUTPUT="$(python3 -m alembic heads 2>/dev/null)"; then
+  echo "ERROR: alembic_heads_failed" >&2
+  exit 1
+fi
 HEAD_REVISIONS="$(printf '%s\n' "$HEAD_OUTPUT" | extract_heads)"
 HEAD_COUNT="$(printf '%s\n' "$HEAD_REVISIONS" | awk 'NF { count += 1 } END { print count + 0 }')"
 if [ "$HEAD_COUNT" != "1" ]; then
@@ -53,7 +61,10 @@ HEAD_REVISION="$(printf '%s\n' "$HEAD_REVISIONS" | head -1)"
 
 read_current_revision() {
   local output revisions count
-  output="$(python3 -m alembic current)"
+  if ! output="$(python3 -m alembic current 2>/dev/null)"; then
+    echo "ERROR: alembic_current_failed" >&2
+    return 1
+  fi
   revisions="$(printf '%s\n' "$output" | extract_current)"
   count="$(printf '%s\n' "$revisions" | awk 'NF { count += 1 } END { print count + 0 }')"
   if [ "$count" -gt 1 ]; then
@@ -76,7 +87,10 @@ if [ "$MODE" = "--apply" ] && [ "$CURRENT_REVISION" != "$HEAD_REVISION" ]; then
     echo "ERROR: DEPLOY_MIGRATION_AUTH is required for schema mutation." >&2
     exit 1
   fi
-  python3 -m alembic upgrade head
+  if ! python3 -m alembic upgrade head >/dev/null 2>&1; then
+    echo "ERROR: alembic_upgrade_failed" >&2
+    exit 1
+  fi
 fi
 
 POST_REVISION="$(read_current_revision)"

@@ -63,6 +63,54 @@ DEFAULT_RESOLUTION = (1080, 1920)
 MP4_FTYP_BRANDS = [b"isom", b"iso2", b"avc1", b"mp41", b"mp42", b"M4V ", b"M4A "]
 
 
+def _resolve_render_output_dir(params: dict[str, Any]) -> Path:
+    from src.config import OUTPUT_DIR
+    from src.pipeline.generation_policy import get_effective_generation_policy
+
+    raw = params.get("output_dir")
+    policy = get_effective_generation_policy()
+    expected_root = OUTPUT_DIR
+    if raw is None:
+        if policy is not None and policy.artifact_disposition in {
+            "pending_review",
+            "quarantine",
+        }:
+            raise ValueError("tenant-scoped assemble output_dir is required")
+        renders_dir = OUTPUT_DIR / "renders"
+    else:
+        if not isinstance(raw, (str, Path)) or not str(raw):
+            raise ValueError("assemble output_dir is invalid")
+        renders_dir = Path(raw)
+        if not renders_dir.is_absolute() or ".." in renders_dir.parts:
+            raise ValueError("assemble output_dir is unsafe")
+        if policy is not None:
+            expected_root = (
+                OUTPUT_DIR
+                / "tenants"
+                / policy.tenant_id
+                / policy.artifact_disposition
+            )
+        try:
+            renders_dir.absolute().relative_to(expected_root.absolute())
+        except ValueError as exc:
+            raise ValueError("assemble output_dir is outside tenant scope") from exc
+
+    probe = renders_dir
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    if probe.is_symlink() or (probe.exists() and not probe.is_dir()):
+        raise ValueError("assemble output_dir is unsafe")
+    renders_dir.mkdir(parents=True, exist_ok=True)
+    current = renders_dir
+    while current != current.parent:
+        if current.is_symlink():
+            raise ValueError("assemble output_dir is unsafe")
+        if current == OUTPUT_DIR or current == expected_root:
+            break
+        current = current.parent
+    return renders_dir
+
+
 class RemotionAssembleSkill(SkillCallable):
     """Renders the final mp4 via Remotion (Node.js) and verifies it."""
 
@@ -71,7 +119,6 @@ class RemotionAssembleSkill(SkillCallable):
     max_retries = 2
 
     async def execute(self, params: dict[str, Any]) -> SkillResult:
-        from src.config import OUTPUT_DIR
         from src.tools.remotion_renderer import RemotionRenderer
 
         # === Inputs ===
@@ -115,8 +162,7 @@ class RemotionAssembleSkill(SkillCallable):
         )
 
         # Write JSON to disk (for debugging / future Remotion use)
-        renders_dir = OUTPUT_DIR / "renders"
-        renders_dir.mkdir(parents=True, exist_ok=True)
+        renders_dir = _resolve_render_output_dir(params)
         render_json_path = renders_dir / f"{output_label}_input.json"
         with open(render_json_path, "w") as f:
             json.dump(render_payload, f, indent=2, default=str)
@@ -161,6 +207,7 @@ class RemotionAssembleSkill(SkillCallable):
                         "fps": DEFAULT_FPS,
                         "shot_count": len(shots),
                         "is_stub": is_stub_remote,
+                        "simulated": is_stub_remote,
                         "verification": verification,
                     },
                     metadata={
@@ -184,7 +231,7 @@ class RemotionAssembleSkill(SkillCallable):
         remotion_done = False
 
         # === PRIORITY 1: Remotion unified render (embeds clips via <Video> component) ===
-        renderer = RemotionRenderer()
+        renderer = RemotionRenderer(output_dir=renders_dir)
         env = renderer.validate_environment()
         is_remotion_available = env.get("available", False)
 
@@ -336,6 +383,7 @@ class RemotionAssembleSkill(SkillCallable):
                 "fps": DEFAULT_FPS,
                 "shot_count": len(shots),
                 "is_stub": is_stub,
+                "simulated": is_stub,
                 "verification": verification,
             },
             metadata={
@@ -978,10 +1026,8 @@ class RemotionAssembleSkill(SkillCallable):
         return errors
 
     def fallback(self, params: dict[str, Any]) -> SkillResult:
-        from src.config import OUTPUT_DIR
-
         label = params.get("output_label", f"fallback_{int(time.time())}")
-        path = OUTPUT_DIR / "renders" / f"{label}.mp4"
+        path = _resolve_render_output_dir(params) / f"{label}.mp4"
         self._write_stub_mp4(path, label)
 
         return SkillResult(
@@ -995,6 +1041,7 @@ class RemotionAssembleSkill(SkillCallable):
                 "fps": DEFAULT_FPS,
                 "shot_count": len(params.get("shots") or []),
                 "is_stub": True,
+                "simulated": True,
                 "verification": {
                     "file_exists": True, "size_ok": True, "header_ok": True,
                     "duration_ok": True, "all_ok": True, "failures": [],

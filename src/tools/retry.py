@@ -15,11 +15,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
 
 import structlog
-
-T = TypeVar("T")
 
 logger = structlog.get_logger()
 
@@ -118,7 +115,7 @@ def is_retryable(exception: Exception) -> bool:
     return False
 
 
-async def retry_with_backoff(
+async def retry_with_backoff[T](
     fn: Callable[..., Awaitable[T]],
     *args,
     max_retries: int = DEFAULT_MAX_RETRIES,

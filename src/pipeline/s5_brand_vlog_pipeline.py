@@ -22,11 +22,12 @@ from src.pipeline.continuity_utils import (
     build_continuity_audit_summary,
     build_transitions_from_clip_details,
 )
+from src.pipeline.media_truth import aggregate_simulated, media_paths
 from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.step_utils import get_step_output
 from src.skills.registry import SkillRegistry
-from src.telemetry import generate_trace_id, pipeline_metrics
+from src.telemetry import generate_trace_id
 
 logger = structlog.get_logger()
 
@@ -153,7 +154,7 @@ class S5BrandVlogPipeline:
             return self._vlog_shots_to_clip_groups(
                 shots,
                 product_name,
-                scene_name=scene_info.get("name", scene_id),
+                scene_name=str(scene_info.get("name") or scene_id),
                 scene_desc=scene_info.get("desc", ""),
                 story_description=config.get("story_description", ""),
                 selected_models=config.get("selected_models", []),
@@ -183,22 +184,28 @@ class S5BrandVlogPipeline:
         if step_name == "tts_audio":
             strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
             scripts = strategy_out.get("scripts", [])
-            return await self._step_tts_audio(reg, scripts, errors)
+            return await self._step_tts_audio(
+                reg,
+                scripts,
+                errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "audio"),
+            )
 
         if step_name == "assemble_final":
             strategy_out = self._get_step_output(steps, "vlog_strategy") or {}
             scripts = strategy_out.get("scripts", [])
             tts_out = self._get_step_output(steps, "tts_audio") or []
-            audio_paths = tts_out if isinstance(tts_out, list) else []
+            audio_paths = media_paths(tts_out, "audio_paths")
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
             clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
             if not clip_paths or all_clips_are_stubs(clip_paths, clip_details):
                 errors.append("all_seedance_clips_are_stubs; skipping assembly")
-                return "", ""
+                return {}
             return await self._step_assemble_final(
                 reg, [], scripts, audio_paths, [], clip_paths, clip_details, {},
                 config.get("output_label", "vlog"), errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "assemble"),
             )
 
         if step_name == "audit":
@@ -206,7 +213,7 @@ class S5BrandVlogPipeline:
             final_video, _ = extract_assemble_paths(assemble_out)
 
             tts_out = self._get_step_output(steps, "tts_audio") or []
-            audio_paths = tts_out if isinstance(tts_out, list) else []
+            audio_paths = media_paths(tts_out, "audio_paths")
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
             clip_details = seedance_out.get("clip_details", []) if isinstance(seedance_out, dict) else []
@@ -306,11 +313,11 @@ class S5BrandVlogPipeline:
         from src.pipeline.state_manager import PipelineStateManager
         from src.pipeline.step_runner import StepRunner
 
+        pipeline_started = time.perf_counter()
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s5")
 
-        start = time.perf_counter()
         try:
             if enable_media_synthesis:
                 if bounded_media_pilot:
@@ -324,11 +331,14 @@ class S5BrandVlogPipeline:
                     final_state = await runner.resume(label)
             else:
                 final_state = await self._resume_without_media_synthesis(runner, label)
+            await runner.finalize_pipeline_completion(
+                final_state,
+                started_at=pipeline_started,
+            )
         except Exception as e:
             logger.error("s5_vlog: pipeline failed", error=str(e), trace_id=trace_id)
             return {"success": False, "errors": [str(e)], "scripts": []}
 
-        duration_ms = (time.perf_counter() - start) * 1000
         steps = final_state.get("steps", {})
         errors = final_state.get("errors", [])
 
@@ -337,7 +347,8 @@ class S5BrandVlogPipeline:
         video_prompts = self._get_step_output(steps, "video_prompts") or []
         seedance_out = self._get_step_output(steps, "seedance_clips") or {}
         clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else []
-        audio_paths = self._get_step_output(steps, "tts_audio") or []
+        tts_output = self._get_step_output(steps, "tts_audio") or []
+        audio_paths = media_paths(tts_output, "audio_paths")
         assemble_out = self._get_step_output(steps, "assemble_final")
         final_video, render_json_path = extract_assemble_paths(assemble_out)
         audit_report = self._get_step_output(steps, "audit") or {}
@@ -345,12 +356,6 @@ class S5BrandVlogPipeline:
             success = len(errors) == 0 and bool(clip_paths)
         else:
             success = len(errors) == 0 and (bool(final_video) if enable_media_synthesis else bool(scripts))
-
-        pipeline_metrics.record_pipeline(
-            label=label, scenario="brand_vlog",
-            total_duration_ms=duration_ms, success=success,
-            error_count=len(errors),
-        )
 
         result: dict[str, Any] = {
             "success": (
@@ -380,7 +385,7 @@ class S5BrandVlogPipeline:
             "seedance_output": seedance_out,
             "seedance_clips": clip_paths,
             "clip_paths": clip_paths,
-            "audio_paths": audio_paths if isinstance(audio_paths, list) else [],
+            "audio_paths": audio_paths,
             "final_video_path": final_video,
             "render_json_path": render_json_path,
             "thumbnail_sets": [],
@@ -410,7 +415,9 @@ class S5BrandVlogPipeline:
                 "approved_brand_token_write": False,
                 "provider_job_caps": provider_job_caps or final_state.get("provider_job_caps"),
             })
-        return result
+        from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+        return project_scenario_wrapper_result(result, final_state)
 
     async def _resume_bounded_media_pilot(
         self,
@@ -437,9 +444,7 @@ class S5BrandVlogPipeline:
                 final_state["config"]["provider_max_retries"] = provider_max_retries
                 final_state["config"]["provider_job_caps"] = dict(S5_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
                 final_state["config"]["seedance_quality_gate_enabled"] = False
-                save = getattr(runner.state_manager, "save", None)
-                if callable(save):
-                    await save(label, final_state)
+                await runner.state_manager.save(label, final_state)
                 break
         return final_state
 
@@ -454,9 +459,7 @@ class S5BrandVlogPipeline:
                 break
         if final_state and not final_state.get("pipeline_degraded"):
             final_state["current_step"] = None
-            save = getattr(runner.state_manager, "save", None)
-            if callable(save):
-                await save(label, final_state)
+            await runner.state_manager.save(label, final_state)
         return final_state
 
     # ═══ Step ①: VLOG Strategy (LLM) ═══
@@ -874,6 +877,8 @@ class S5BrandVlogPipeline:
                 if isinstance(raw, Exception):
                     errors.append(f"clip_failed_with_exception: {raw}")
                     continue
+                if not isinstance(raw, tuple):
+                    continue
                 i, res = raw
                 if res.success and res.data:
                     path = res.data.get("video_path", "")
@@ -886,6 +891,7 @@ class S5BrandVlogPipeline:
                             "path": path,
                             "duration": res.data.get("duration_seconds", 0),
                             "is_stub": res.data.get("is_stub", False),
+                            "simulated": res.data.get("simulated"),
                             "file_size": res.data.get("file_size_bytes", 0),
                             "verification": res.data.get("verification", {}),
                             "segment_type": vp.get("segment_type", "body"),
@@ -948,6 +954,7 @@ class S5BrandVlogPipeline:
                             "path": path,
                             "duration": res.data.get("duration_seconds", 0),
                             "is_stub": res.data.get("is_stub", False),
+                            "simulated": res.data.get("simulated"),
                             "file_size": res.data.get("file_size_bytes", 0),
                             "verification": res.data.get("verification", {}),
                             "segment_type": vp.get("segment_type", "body"),
@@ -979,15 +986,25 @@ class S5BrandVlogPipeline:
                     last_frame = None
 
         all_stubs = bool(clip_paths) and all_clips_are_stubs(clip_paths, clip_details)
-        return {
+        output = {
             "clip_paths": clip_paths,
             "clip_details": clip_details,
             "total_duration": sum(d.get("duration", 0) for d in clip_details),
             "model": s5_model,
             "_all_stubs": all_stubs,
         }
+        simulated = aggregate_simulated(clip_details)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
-    async def _step_tts_audio(self, reg, scripts, errors):
+    async def _step_tts_audio(
+        self,
+        reg,
+        scripts,
+        errors,
+        artifact_output_dir: str | None = None,
+    ):
         """Generate TTS audio via CosyVoice (REUSE)."""
         voiceover_texts = []
         for script in scripts:
@@ -996,27 +1013,50 @@ class S5BrandVlogPipeline:
                 if text.strip():
                     voiceover_texts.append(text.strip())
         if not voiceover_texts:
-            return []
+            return {"audio_paths": []}
 
         full_text = "。".join(voiceover_texts)
-        res = await reg.execute("elevenlabs-tts-skill", {
+        tts_params: dict[str, Any] = {
             "text": full_text,
             "language": "zh",
             "output_label": "vlog_tts",
             "operation_instance": "vlog.primary",
-        })
+        }
+        if artifact_output_dir:
+            tts_params["output_dir"] = artifact_output_dir
+        res = await reg.execute("elevenlabs-tts-skill", tts_params)
         if res.success and res.data:
             single_path = res.data.get("audio_path")
+            output: dict[str, Any] = {}
+            simulated = res.data.get("simulated")
+            if type(simulated) is bool:
+                output["simulated"] = simulated
             if isinstance(single_path, str) and single_path:
-                return [single_path]
+                output["audio_paths"] = [single_path]
+                return output
             paths = res.data.get("audio_paths", [])
             if isinstance(paths, list):
-                return paths
-            return [paths] if paths else []
+                output["audio_paths"] = paths
+                return output
+            output["audio_paths"] = [paths] if paths else []
+            return output
         errors.append(f"tts_failed: {res.error}")
-        return []
+        return {"audio_paths": []}
 
-    async def _step_assemble_final(self, reg, storyboards, scripts, audio_paths, lyrics_paths, clip_paths, clip_details, brand_guidelines, label, errors):
+    async def _step_assemble_final(
+        self,
+        reg,
+        storyboards,
+        scripts,
+        audio_paths,
+        lyrics_paths,
+        clip_paths,
+        clip_details,
+        brand_guidelines,
+        label,
+        errors,
+        artifact_output_dir: str | None = None,
+    ):
         """Assemble final video via Remotion (REUSE)."""
         shots = []
         for script in scripts:
@@ -1044,17 +1084,20 @@ class S5BrandVlogPipeline:
 
         transitions = build_transitions_from_clip_details(clip_details or [])
 
-        res = await reg.execute("remotion-assemble-skill", {
+        assemble_params: dict[str, Any] = {
             "shots": shots, "captions": captions,
             "audio_paths": audio_paths, "lyrics_paths": lyrics_paths,
             "clip_paths": clip_paths, "brand_guidelines": brand_guidelines,
             "output_label": label, "total_duration": total_dur,
             "transitions": transitions,
-        })
+        }
+        if artifact_output_dir:
+            assemble_params["output_dir"] = artifact_output_dir
+        res = await reg.execute("remotion-assemble-skill", assemble_params)
         if res.success and res.data:
-            return res.data.get("video_path", ""), res.data.get("render_json_path", "")
+            return dict(res.data)
         errors.append(f"assemble_failed: {res.error}")
-        return "", ""
+        return {}
 
     async def _step_audit(
         self, reg, video_path, audio_paths, thumbnail_paths, clip_paths,

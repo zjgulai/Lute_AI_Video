@@ -9,9 +9,10 @@
 --   3. Run alembic upgrade head to apply
 --   4. THEN mirror the final DDL here (with IF NOT EXISTS guards)
 --
--- The backend entrypoint also runs `alembic upgrade head` on startup when PG
--- is available (see src/storage/db.py), making the inlined DDL a belt-and-
--- suspenders safety net rather than the primary schema pathway.
+-- Application startup is read-only and never applies migrations. For a truly
+-- empty PostgreSQL 18 database, scripts/bootstrap_postgres.py applies this
+-- baseline and stamps the single reviewed Alembic head in one transaction.
+-- Historical databases must use the explicit deployment Alembic gate.
 --
 -- Ref: debt-audit-report-2026-06-09.md item E22, Phase2.3 remediation
 
@@ -108,6 +109,7 @@ ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS structured_errors JSONB DEF
 ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64);
 ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS regenerate_chain JSONB DEFAULT '[]';
 ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS soft_degraded_reasons JSONB DEFAULT '[]';
+ALTER TABLE pipeline_states ADD COLUMN IF NOT EXISTS transparency JSONB;
 
 -- brand_packages
 CREATE TABLE IF NOT EXISTS brand_packages (
@@ -210,6 +212,7 @@ CREATE TABLE IF NOT EXISTS idempotency_records (
     id VARCHAR(36) PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     key_hash VARCHAR(64) NOT NULL,
+    trusted_authorization_ref VARCHAR(128),
     fingerprint_version VARCHAR(64) NOT NULL,
     request_hash VARCHAR(64) NOT NULL,
     operation VARCHAR(64) NOT NULL,
@@ -247,6 +250,9 @@ CREATE INDEX IF NOT EXISTS idx_idempotency_records_status
 CREATE INDEX IF NOT EXISTS idx_idempotency_records_lease
     ON idempotency_records(lease_expires_at)
     WHERE lease_expires_at IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_idempotency_records_tenant_authorization
+    ON idempotency_records(tenant_id, trusted_authorization_ref)
+    WHERE trusted_authorization_ref IS NOT NULL;
 
 -- acceptance_records: single-use human acceptance authority, mirrors Alembic
 -- e8f1a2b3c4d5. Creation keys are stored only as SHA-256 hashes.
@@ -266,6 +272,9 @@ CREATE TABLE IF NOT EXISTS acceptance_records (
     artifact_size_bytes BIGINT NOT NULL CHECK (artifact_size_bytes > 0),
     artifact_kind VARCHAR(16) NOT NULL
         CHECK (artifact_kind IN ('text', 'image', 'audio', 'video')),
+    transparency_sidecar_path TEXT,
+    transparency_sidecar_sha256 VARCHAR(64),
+    final_artifact_c2pa_status VARCHAR(32),
     decision VARCHAR(16) NOT NULL
         CHECK (decision IN ('accepted', 'rejected')),
     record_status VARCHAR(16) NOT NULL
@@ -306,6 +315,23 @@ CREATE TABLE IF NOT EXISTS acceptance_records (
             AND revoked_by_key_id IS NOT NULL)
         OR (record_status <> 'revoked' AND revoked_at IS NULL
             AND revoked_by_key_id IS NULL AND revoked_by_record_id IS NULL)
+    ),
+    CONSTRAINT ck_acceptance_records_transparency_v2 CHECK (
+        fingerprint_version <> 'acceptance-create.v2' OR (
+            transparency_sidecar_path IS NOT NULL
+            AND transparency_sidecar_sha256 IS NOT NULL
+            AND final_artifact_c2pa_status IS NOT NULL
+        )
+    ),
+    CONSTRAINT ck_acceptance_records_c2pa_status CHECK (
+        final_artifact_c2pa_status IS NULL OR
+        final_artifact_c2pa_status IN (
+            'unsigned_pending_review', 'signed_local_readback'
+        )
+    ),
+    CONSTRAINT ck_acceptance_records_accepted_c2pa CHECK (
+        decision <> 'accepted' OR final_artifact_c2pa_status IS NULL OR
+        final_artifact_c2pa_status = 'signed_local_readback'
     ),
     CONSTRAINT ck_acceptance_records_expiry CHECK (expires_at > created_at)
 );

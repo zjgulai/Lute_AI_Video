@@ -18,6 +18,12 @@ from typing import Any
 _background_tasks: dict[str, dict[str, Any]] = {}
 
 
+def _project_active_task_count() -> None:
+    from src.telemetry_prometheus import update_active_background_tasks
+
+    update_active_background_tasks(len(_background_tasks))
+
+
 def get_background_task_snapshot() -> dict[str, dict[str, Any]]:
     """Return a read-only snapshot of registered task metadata."""
     snapshot: dict[str, dict[str, Any]] = {}
@@ -48,6 +54,7 @@ def register_background_task(task: asyncio.Task[Any], label: str) -> str:
     task_id = f"{label}_{id(task)}"
     started_at = time.time()
     _background_tasks[task_id] = {"task": task, "label": label, "started_at": started_at}
+    _project_active_task_count()
 
     def _on_done(t: asyncio.Task[Any]) -> None:
         duration_sec = time.time() - started_at
@@ -80,6 +87,7 @@ def register_background_task(task: asyncio.Task[Any], label: str) -> str:
             )
         finally:
             _background_tasks.pop(task_id, None)
+            _project_active_task_count()
 
     task.add_done_callback(_on_done)
     return task_id
@@ -88,6 +96,7 @@ def register_background_task(task: asyncio.Task[Any], label: str) -> str:
 async def cancel_background_tasks(timeout: float = 5.0) -> None:
     """Cancel registered background tasks during application shutdown."""
     if not _background_tasks:
+        _project_active_task_count()
         return
 
     log = logging.getLogger("tasks.bg_registry")
@@ -122,3 +131,4 @@ async def cancel_background_tasks(timeout: float = 5.0) -> None:
         task = record.get("task")
         if not isinstance(task, asyncio.Task) or task.done():
             _background_tasks.pop(task_id, None)
+    _project_active_task_count()

@@ -10,6 +10,7 @@ import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 from uuid import UUID
 
 sys.path.insert(0, "/app")
@@ -24,8 +25,8 @@ def _quote_identifier(identifier: str) -> str:
     return f'"{identifier}"'
 
 
-def _load_rows(in_path: Path) -> dict[str, list[dict]]:
-    by_table: dict[str, list[dict]] = {}
+def _load_rows(in_path: Path) -> dict[str, list[dict[str, object]]]:
+    by_table: dict[str, list[dict[str, object]]] = {}
     with in_path.open("r", encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, start=1):
             record = json.loads(line)
@@ -40,8 +41,10 @@ def _load_rows(in_path: Path) -> dict[str, list[dict]]:
             if not isinstance(data, dict) or not data:
                 raise ValueError(f"invalid row payload at line {line_number}")
             for column in data:
+                if not isinstance(column, str):
+                    raise ValueError(f"invalid backup column at line {line_number}")
                 _quote_identifier(column)
-            by_table.setdefault(table, []).append(data)
+            by_table.setdefault(table, []).append(cast(dict[str, object], data))
     return by_table
 
 
@@ -83,7 +86,7 @@ def _validated_table_order(
     return ordered
 
 
-async def _discover_tables(conn: object) -> list[str]:
+async def _discover_tables(conn: Any) -> list[str]:
     table_rows = await conn.fetch(
         """
         SELECT table_name
@@ -124,12 +127,53 @@ async def _discover_tables(conn: object) -> list[str]:
     )
 
 
-def _load_alembic_revision(stats_path: Path) -> str:
+def _load_restore_contract(
+    stats_path: Path,
+    by_table: dict[str, list[dict[str, object]]],
+) -> tuple[list[str], str]:
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    expected_tables = stats.get("expected_tables")
+    if (
+        not isinstance(expected_tables, list)
+        or not expected_tables
+        or len(expected_tables) != len(set(expected_tables))
+        or any(
+            not isinstance(table, str) or not IDENTIFIER_RE.fullmatch(table)
+            for table in expected_tables
+        )
+    ):
+        raise ValueError("backup stats expected table set is invalid")
+    table_stats = stats.get("tables")
+    if not isinstance(table_stats, dict) or set(table_stats) != set(expected_tables):
+        raise ValueError("backup stats table set does not match restore contract")
+
+    expected_counts: dict[str, int] = {}
+    for table in expected_tables:
+        result = table_stats.get(table)
+        if not isinstance(result, dict):
+            raise ValueError("backup stats contain invalid table results")
+        count = result.get("rows")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise ValueError("backup stats contain an invalid row count")
+        expected_counts[table] = count
+
+    if set(by_table) - set(expected_tables):
+        raise ValueError("backup dump contains a table outside backup stats")
+    actual_counts = {table: len(by_table.get(table, [])) for table in expected_tables}
+    if actual_counts != expected_counts:
+        raise ValueError("backup dump row counts do not match backup stats")
+    total_rows = stats.get("total_rows")
+    if (
+        isinstance(total_rows, bool)
+        or not isinstance(total_rows, int)
+        or total_rows != sum(expected_counts.values())
+    ):
+        raise ValueError("backup stats total row count is invalid")
+
     revision = stats.get("alembic_revision")
     if not isinstance(revision, str) or not ALEMBIC_REVISION_RE.fullmatch(revision):
         raise ValueError("backup stats contain an invalid Alembic revision")
-    return revision
+    return expected_tables, revision
 
 
 def _coerce_value(value: object, data_type: str) -> object:
@@ -153,7 +197,7 @@ def _coerce_value(value: object, data_type: str) -> object:
     return parsed.astimezone(UTC)
 
 
-async def _column_types(conn: object, table: str) -> dict[str, str]:
+async def _column_types(conn: Any, table: str) -> dict[str, str]:
     rows = await conn.fetch(
         """
         SELECT column_name, data_type
@@ -167,32 +211,32 @@ async def _column_types(conn: object, table: str) -> dict[str, str]:
 
 async def restore(
     in_path: Path,
+    stats_path: Path,
     truncate: bool = False,
-    stats_path: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     from src.storage.db import get_pool
 
     by_table = _load_rows(in_path)
-    alembic_revision = _load_alembic_revision(stats_path) if stats_path else None
+    restore_tables, alembic_revision = _load_restore_contract(stats_path, by_table)
     pool = await get_pool()
-    stats: dict = {"tables": {}}
+    if pool is None:
+        raise RuntimeError("PostgreSQL pool is unavailable")
+    stats: dict[str, Any] = {"tables": {}}
 
     async with pool.acquire() as conn:
         async with conn.transaction():
             tables = await _discover_tables(conn)
-            missing_tables = set(by_table) - set(tables)
-            if missing_tables:
-                raise ValueError("backup table is absent from restored schema")
-            if alembic_revision is not None:
-                current_revisions = await conn.fetch(
-                    "SELECT version_num FROM alembic_version"
-                )
-                if current_revisions:
-                    raise ValueError("restore target Alembic revision is not empty")
-                await conn.execute(
-                    "INSERT INTO alembic_version (version_num) VALUES ($1)",
-                    alembic_revision,
-                )
+            if set(tables) != set(restore_tables):
+                raise ValueError("restore target table set does not match backup stats")
+            current_revisions = await conn.fetch(
+                "SELECT version_num FROM alembic_version"
+            )
+            if current_revisions:
+                raise ValueError("restore target Alembic revision is not empty")
+            await conn.execute(
+                "INSERT INTO alembic_version (version_num) VALUES ($1)",
+                alembic_revision,
+            )
             if truncate:
                 table_list = ", ".join(
                     _quote_identifier(table) for table in reversed(tables)
@@ -234,18 +278,20 @@ async def restore(
 async def main() -> int:
     args = sys.argv[1:]
     truncate = "--truncate-first" in args
-    stats_path: Path | None = None
-    if "--stats" in args:
-        stats_index = args.index("--stats")
-        if stats_index + 1 >= len(args):
-            print("ERROR: --stats requires a path", file=sys.stderr)
-            return 1
-        stats_path = Path(args[stats_index + 1])
-        del args[stats_index : stats_index + 2]
+    if "--stats" not in args:
+        print("ERROR: --stats is required", file=sys.stderr)
+        return 1
+    stats_index = args.index("--stats")
+    if stats_index + 1 >= len(args):
+        print("ERROR: --stats requires a path", file=sys.stderr)
+        return 1
+    stats_path = Path(args[stats_index + 1])
+    del args[stats_index : stats_index + 2]
     positional = [arg for arg in args if not arg.startswith("--")]
     if not positional:
         print(
-            "Usage: pg_restore_logical.py <dump.jsonl> [--truncate-first]",
+            "Usage: pg_restore_logical.py <dump.jsonl> --stats <stats.json> "
+            "[--truncate-first]",
             file=sys.stderr,
         )
         return 1

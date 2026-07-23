@@ -636,6 +636,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/transparency/{resource_type}/{resource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Transparency Disclosure */
+        get: operations["get_transparency_disclosure_api_transparency__resource_type___resource_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transparency/{resource_type}/{resource_id}/package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Transparency Package */
+        get: operations["get_transparency_package_api_transparency__resource_type___resource_id__package_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/upload": {
         parameters: {
             query?: never;
@@ -878,6 +912,46 @@ export interface paths {
          * @description Health check with persistence and Remotion status.
          */
         get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liveness
+         * @description Process-only liveness; never probes dependencies.
+         */
+        get: operations["liveness_health_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness
+         * @description Side-effect-free persistence readiness with fail-closed HTTP status.
+         */
+        get: operations["readiness_health_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2066,6 +2140,7 @@ export interface components {
             status: "available" | "rejected" | "consumed" | "expired" | "revoked";
             /** Tenant Id */
             tenant_id: string;
+            transparency?: components["schemas"]["AcceptanceTransparencyProjection"] | null;
             /** Updated At */
             updated_at: string;
         };
@@ -2078,6 +2153,42 @@ export interface components {
              * @enum {string}
              */
             key_type: "tenant" | "test_bundle" | "env_fallback";
+        };
+        /** AcceptanceTransparencyProjection */
+        AcceptanceTransparencyProjection: {
+            /**
+             * Ai Generated
+             * @default true
+             * @constant
+             */
+            ai_generated: true;
+            /**
+             * Final Artifact C2Pa Status
+             * @enum {string}
+             */
+            final_artifact_c2pa_status: "unsigned_pending_review" | "signed_local_readback";
+            /**
+             * Independently Validated
+             * @default false
+             * @constant
+             */
+            independently_validated: false;
+            /**
+             * Label
+             * @default AI-generated
+             * @constant
+             */
+            label: "AI-generated";
+            /**
+             * Schema Version
+             * @default acceptance-transparency.v1
+             * @constant
+             */
+            schema_version: "acceptance-transparency.v1";
+            /** Sidecar Path */
+            sidecar_path: string;
+            /** Sidecar Sha256 */
+            sidecar_sha256: string;
         };
         /**
          * AllowedUse
@@ -3804,6 +3915,64 @@ export interface components {
          * @enum {string}
          */
         ToolboxToolId: "product-image" | "six-view" | "ecommerce-visual" | "digital-human" | "storyboard";
+        /**
+         * TransparencyDisclosureV1
+         * @description Content-free UI/download truth derived from one validated sidecar.
+         */
+        TransparencyDisclosureV1: {
+            /**
+             * Ai Generated
+             * @default true
+             * @constant
+             */
+            ai_generated: true;
+            /**
+             * C2Pa Signing Mode
+             * @enum {string}
+             */
+            c2pa_signing_mode: "local_draft" | "required";
+            /** Final Artifact C2Pa Status */
+            final_artifact_c2pa_status: ("not_applicable" | "unsigned_pending_review" | "signed_local_readback") | null;
+            /** Human Edit Record Count */
+            human_edit_record_count: number;
+            /**
+             * Independently Validated
+             * @default false
+             * @constant
+             */
+            independently_validated: false;
+            /**
+             * Label
+             * @default AI-generated
+             * @constant
+             */
+            label: "AI-generated";
+            /**
+             * Package Available
+             * @default true
+             * @constant
+             */
+            package_available: true;
+            /** Record Count */
+            record_count: number;
+            /**
+             * Schema Version
+             * @default transparency-disclosure.v1
+             * @constant
+             */
+            schema_version: "transparency-disclosure.v1";
+            /** Sidecar Path */
+            sidecar_path: string;
+            /** Sidecar Sha256 */
+            sidecar_sha256: string;
+            /** Source Reference Count */
+            source_reference_count: number;
+            /**
+             * Verification Scope
+             * @enum {string}
+             */
+            verification_scope: "provenance_only" | "unsigned_pending_review" | "local_reader_only";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -5041,6 +5210,74 @@ export interface operations {
             };
         };
     };
+    get_transparency_disclosure_api_transparency__resource_type___resource_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                resource_type: "fast" | "scenario";
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransparencyDisclosureV1"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transparency_package_api_transparency__resource_type___resource_id__package_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                resource_type: "fast" | "scenario";
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_file_api_upload_post: {
         parameters: {
             query?: never;
@@ -5445,6 +5682,48 @@ export interface operations {
         };
     };
     health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    liveness_health_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    readiness_health_ready_get: {
         parameters: {
             query?: never;
             header?: never;

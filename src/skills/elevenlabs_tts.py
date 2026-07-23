@@ -158,6 +158,7 @@ class ElevenLabsTTSSkill(SkillCallable):
                 "voice_id": resolved_voice,
                 "text_used": text,
                 "is_stub": is_stub,
+                "simulated": is_stub,
                 "verification": verification,
                 "lyrics_path": str(lyrics_path) if has_lyrics else "",
             },
@@ -310,6 +311,7 @@ class ElevenLabsTTSSkill(SkillCallable):
                 "voice_id": params.get("voice_id", "fallback"),
                 "text_used": text,
                 "is_stub": True,
+                "simulated": True,
                 "verification": {
                     "file_exists": True, "size_ok": True, "header_ok": True,
                     "duration_ok": True, "all_ok": True, "failures": [],

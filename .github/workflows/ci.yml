@@ -2,7 +2,7 @@
 #
 # Runs on every push/PR to main:
 # 1. Lint — ruff check
-# 2. Test — pytest on Python 3.11 + 3.12 with coverage
+# 2. Test — pytest on the production Python 3.12.13 lock with coverage
 # 3. Frontend — eslint, TypeScript, Vitest, Next build
 # 4. Coverage — uploads xml report (non-blocking)
 
@@ -30,31 +30,36 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12.13"
           cache: "pip"
 
-      - name: Install linting tools
-        run: pip install ruff
+      - name: Install uv
+        run: python -m pip install uv==0.11.11
+
+      - name: Sync locked dependencies
+        run: uv sync --locked --extra dev
 
       - name: Check code style
-        run: ruff check src tests scripts --output-format=github
+        run: uv run --locked --extra dev ruff check src tests scripts --output-format=github
+
+      - name: Type check
+        run: make typecheck
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Test (Python 3.12.13)
     needs: lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
-      fail-fast: false
 
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12.13"
           cache: "pip"
+
+      - name: Install uv
+        run: python -m pip install uv==0.11.11
 
       - name: Set up Node.js for OpenAPI type drift guard
         uses: actions/setup-node@v6
@@ -72,12 +77,10 @@ jobs:
         run: cd web && npm ci
 
       - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: uv sync --locked --extra dev
 
       - name: Run tests with coverage
-        run: python -m pytest tests/ --tb=short -v --cov=src --cov-report=xml
+        run: uv run --locked --extra dev python -m pytest tests/ --tb=short -v --cov=src --cov-report=xml
         env:
           API_KEY: "test-api-key-for-pytest"
           OPENAI_API_KEY: "sk-test"
@@ -102,6 +105,41 @@ jobs:
           disable_search: true
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  vulnerability-scan:
+    name: Dependency vulnerability scan
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.13"
+          cache: "pip"
+
+      - name: Install uv
+        run: python -m pip install uv==0.11.11
+
+      - name: Sync locked dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Audit locked Python environment
+        run: uv run --locked --extra dev pip-audit
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            web/package-lock.json
+            rendering/package-lock.json
+
+      - name: Audit frontend production dependencies
+        run: cd web && npm audit --omit=dev --audit-level=high
+
+      - name: Audit rendering production dependencies
+        run: cd rendering && npm audit --omit=dev --audit-level=high
 
   docs-link-check:
     name: Docs link check (lychee)
@@ -146,14 +184,17 @@ jobs:
             docs/runbooks/lighthouse-rsync-artifact-exclude.md
             docs/runbooks/markdown-frontmatter-compliance.md
             docs/runbooks/media-url-sanitizer.md
+            docs/runbooks/monitoring-ownership.md
             docs/runbooks/p2-recharge-smoke-checklist.md
             docs/runbooks/phase1-signoff-checklist.md
             docs/runbooks/pipeline-stuck.md
             docs/runbooks/poyo-model-matrix-stale-warning.md
             docs/runbooks/poyo-rejection.md
+            docs/runbooks/postgresql-readiness-bootstrap.md
             docs/runbooks/production-e2e-token-smoke.md
             docs/runbooks/publish-connector-truth.md
             docs/runbooks/publish-receipt-protocol-calibration.md
+            docs/runbooks/transparency-delivery.md
             docs/runbooks/provider-cost-ledger-per-job-budget.md
             docs/runbooks/regenerate-downstream-invalidation.md
             docs/runbooks/release-smoke-token-opt-in.md
@@ -249,16 +290,30 @@ jobs:
             RELEASE_IMAGE_TAG=${{ github.sha }} \
             docker compose -f deploy/lighthouse/docker-compose.release.yml config --quiet
 
+      - name: Validate Prometheus rules and monitoring ownership
+        run: make monitoring-check
+
       - name: Build backend image (validate, no push)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.backend
           push: false
-          load: false
+          load: true
           tags: ai-video-backend:ci-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
             APT_MIRROR=deb.debian.org
-            PIP_INDEX_URL=https://pypi.org/simple/
+            RELEASE_SOURCE_SHA=${{ github.sha }}
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          version: v0.69.3
+          image-ref: ai-video-backend:ci-${{ github.sha }}
+          scanners: vuln
+          trivyignores: .trivyignore.yaml
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1

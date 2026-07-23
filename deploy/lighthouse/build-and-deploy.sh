@@ -233,6 +233,20 @@ echo ""
 
 cd "$REPO_ROOT"
 
+SOURCE_MANIFEST_PATH="$REPO_ROOT/source-manifest.v1.json"
+if [ -e "$SOURCE_MANIFEST_PATH" ]; then
+  echo "ERROR: source manifest output path already exists." >&2
+  exit 1
+fi
+cleanup_source_manifest() {
+  rm -f -- "$SOURCE_MANIFEST_PATH"
+}
+trap cleanup_source_manifest EXIT
+python3 scripts/backup_manifest.py source-create \
+  --root . \
+  --git-sha "$SOURCE_SHA" \
+  --output "$SOURCE_MANIFEST_PATH" >/dev/null
+
 echo "[1/2] Syncing repository to Lighthouse..."
 if ! ssh "${SSH_OPTIONS[@]}" "$SSH_USER@$SERVER_IP" "test ! -e '$REMOTE_RELEASE_DIR'"; then
   echo "ERROR: immutable release directory already exists: $REMOTE_RELEASE_DIR" >&2

@@ -12,6 +12,9 @@ specialized authentication entry:
 
 - `GET /health` is unauthenticated for load-balancer and deployment health
   checks.
+- `GET /health/live` is an unauthenticated process-only liveness probe.
+- `GET /health/ready` is an unauthenticated, sanitized PostgreSQL schema and
+  Alembic-head readiness probe used by the backend container healthcheck.
 - `GET /metrics` is the Prometheus scrape endpoint; production exposure is
   controlled by the nginx/network layer.
 - `GET /api/media/{media_path:path}` allows unsigned access only below the
@@ -59,6 +62,19 @@ only and does not prove production migration or invoice reconciliation.
 ---
 
 ## 1. Health & Diagnostics
+
+### GET /health/live
+
+No authentication required. Returns HTTP 200 when the API process can serve
+requests. It does not claim database or provider readiness.
+
+### GET /health/ready
+
+No authentication required. Returns HTTP 200 only when the configured
+persistence backend is ready. Production PostgreSQL readiness requires the
+required tables/columns and one current Alembic revision equal to the single
+code head; otherwise it returns sanitized HTTP 503 without applying a
+migration.
 
 ### GET /health
 
@@ -1857,7 +1873,7 @@ revoked record returns the same revoked record and original timestamp with
 
 ### Consume and release boundary
 
-There is **no HTTP consume** endpoint and **no UI** added by W1-22. The
+There is **no HTTP consume** endpoint and no acceptance create/revoke UI. The
 `consume_for_publish(...)` service call is internal and single-use: it checks
 database-time expiry, re-hashes the exact file, verifies path/digest/size
 integrity, and atomically lets only one consumer change `available` to
@@ -1871,7 +1887,8 @@ and deprecated publish adapters. The acceptance row records
 truth is uncertain, one internal read-only inspection returns only
 available/this-attempt/other-attempt/not-available/unknown truth; it does not
 consume again, restore authority, or call a connector. There remains no HTTP
-consume endpoint and no W1-23 review UI.
+consume endpoint. The later transparency status UI is read-only and does not create, revoke or
+consume acceptance authority.
 
 Current evidence is `W1-23 completed_local` only: `production unchanged`,
 `provider_call=false`, `live_publish=false`. It does not claim production
@@ -1882,6 +1899,31 @@ for operator recovery, expiry, integrity, rejection, and the ordered recovery
 table contract (including the provider-cost ledger tables).
 See [Publish acceptance consumption](../runbooks/publish-acceptance-consumption.md)
 for no-automatic-retry/no-restore rules and attempt correlation.
+
+---
+
+## Transparency readback and package
+
+### GET /api/transparency/{resource_type}/{resource_id}
+
+Authenticated, tenant-bound read-only projection for canonical async Fast (`resource_type=fast`)
+or S1-S5 (`resource_type=scenario`) terminal submissions. The service revalidates the durable
+projection, exact sidecar/detached digest, artifact identities and required local Reader truth.
+
+**Headers:** `X-API-Key`
+
+`verification_scope` is one of `provenance_only`, `unsigned_pending_review`, or
+`local_reader_only`. Every response fixes `ai_generated=true` and
+`independently_validated=false`; local Reader truth is not legal or independent validation.
+
+Errors are `404 transparency_not_found`, `409 transparency_integrity_error`, or
+`503 transparency_store_unavailable`.
+
+### GET /api/transparency/{resource_type}/{resource_id}/package
+
+Runs the same strict read-only validation and returns a private, no-store ZIP containing the exact
+immutable `transparency-sidecar.v1` JSON and its detached `.sha256` file. It never reconstructs a
+client-provided sidecar and never falls back to a weaker store.
 
 ---
 
@@ -1941,5 +1983,7 @@ for no-automatic-retry/no-restore rules and attempt correlation.
 | 50 | POST | `/acceptance-records` | Artifact Acceptance Records |
 | 51 | GET | `/acceptance-records/{acceptance_id}` | Artifact Acceptance Records |
 | 52 | POST | `/acceptance-records/{acceptance_id}/revoke` | Artifact Acceptance Records |
+| 53 | GET | `/api/transparency/{resource_type}/{resource_id}` | Transparency Readback |
+| 54 | GET | `/api/transparency/{resource_type}/{resource_id}/package` | Transparency Readback |
 
-**Documented here: 52 endpoints**
+**Documented here: 54 endpoints**

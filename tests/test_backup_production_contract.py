@@ -9,6 +9,13 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from typing import Any, cast
+
+from scripts.backup_manifest import (
+    build_source_manifest,
+    create_backup_manifest,
+    validate_backup_manifest,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKUP_SCRIPT = REPO_ROOT / "scripts" / "backup_production.sh"
@@ -20,6 +27,9 @@ VERIFY_RESTORE_SCRIPT = REPO_ROOT / "scripts" / "verify_restored_database.py"
 INIT_SQL = REPO_ROOT / "src" / "storage" / "migrations" / "001_init.sql"
 DR_RUNBOOK = REPO_ROOT / "docs" / "disaster_recovery_runbook.md"
 BRAND_ASSETS_RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "brand-assets-refresh.md"
+BACKUP_MANIFEST_SCRIPT = REPO_ROOT / "scripts" / "backup_manifest.py"
+GIT_SHA = "a" * 40
+BACKEND_IMAGE_ID = "sha256:" + ("2" * 64)
 
 EXPECTED_RECOVERY_TABLES = [
     "tenants",
@@ -118,7 +128,11 @@ case "$command_name" in
     ;;
   image)
     [ "$1" = "inspect" ]
-    if [[ "$*" == *"--format="* ]]; then
+    if [[ "$*" == *"org.opencontainers.image.revision"* ]]; then
+      printf '%s\n' '{GIT_SHA}'
+    elif [[ "$*" == *".RepoDigests"* && "$*" == *"sha256:{'2' * 64}"* ]]; then
+      printf '\n'
+    elif [[ "$*" == *"--format="* ]]; then
       printf '%s\n' '{postgres_digest}'
     fi
     ;;
@@ -141,7 +155,13 @@ case "$command_name" in
     fi
     ;;
   inspect)
-    printf '%s\n' 'ai-video-backend:test'
+    if [[ "$*" == *"{{.Config.Image}}"* ]]; then
+      printf '%s\n' 'ai-video-backend:{GIT_SHA}'
+    elif [[ "$*" == *"{{.Image}}"* ]]; then
+      printf '%s\n' '{BACKEND_IMAGE_ID}'
+    else
+      exit 65
+    fi
     ;;
   *)
     printf 'unexpected fake docker command: %s\n' "$command_name" >&2
@@ -164,6 +184,14 @@ def _backup_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
     dump_script = project_root / "scripts" / "pg_dump_logical.py"
     dump_script.parent.mkdir(parents=True)
     dump_script.write_text("# fixture\n")
+    source_manifest = build_source_manifest(
+        project_root,
+        GIT_SHA,
+        ["scripts/pg_dump_logical.py"],
+    )
+    (project_root / "source-manifest.v1.json").write_text(
+        json.dumps(source_manifest, sort_keys=True, separators=(",", ":")) + "\n"
+    )
 
     env = os.environ.copy()
     docker_log = tmp_path / "docker.log"
@@ -174,6 +202,7 @@ def _backup_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
             "PROJECT_ROOT": str(project_root),
             "DOCKER_BIN": str(docker),
             "FLOCK_BIN": str(flock),
+            "BACKUP_MANIFEST_SCRIPT": str(BACKUP_MANIFEST_SCRIPT),
             "BACKUP_TIMESTAMP": "2026-07-10_120000",
             "RETENTION_DAYS": "15",
             "FAKE_DOCKER_LOG": str(docker_log),
@@ -250,6 +279,12 @@ def test_backup_publishes_only_validated_snapshot_then_applies_15_day_retention(
     assert media_manifest["file_count"] == 1
     assert media_manifest["files"][0]["path"] == "brand_assets/fixture.bin"
     assert re.fullmatch(r"[0-9a-f]{64}", media_manifest["files"][0]["sha256"])
+    canonical_manifest = validate_backup_manifest(completed)
+    canonical_typed = cast(dict[str, Any], canonical_manifest)
+    assert canonical_manifest["schema_version"] == "backup-manifest.v1"
+    assert canonical_manifest["git_sha"] == GIT_SHA
+    assert canonical_typed["backend_image"]["image_id"] == BACKEND_IMAGE_ID
+    assert (completed / "backup-manifest.v1.json.sha256").is_file()
     manifest = (completed / "manifest.txt").read_text()
     assert "status: complete" in manifest
     assert "retention_days: 15" in manifest
@@ -463,6 +498,11 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
     backup_script.write_text("#!/usr/bin/env bash\n")
     dump_script = tmp_path / "pg_dump_logical.py"
     dump_script.write_text("# fixture\n")
+    manifest_script = tmp_path / "backup_manifest.py"
+    manifest_script.write_text("# fixture\n")
+    current_release = tmp_path / "current"
+    current_release.mkdir()
+    (current_release / "source-manifest.v1.json").write_text("{}\n")
     runtime_dir = tmp_path / "runtime"
     log_file = tmp_path / "hermes-backup.log"
     store.write_text(
@@ -486,6 +526,8 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
             "FAKE_CRONTAB_FILE": str(store),
             "BACKUP_SCRIPT": str(backup_script),
             "DUMP_SCRIPT_SOURCE": str(dump_script),
+            "MANIFEST_SCRIPT_SOURCE": str(manifest_script),
+            "CURRENT_RELEASE_ROOT": str(current_release),
             "RUNTIME_DIR": str(runtime_dir),
             "CRON_LOCK_FILE": str(tmp_path / "cron.lock"),
             "BACKUP_LOG_FILE": str(log_file),
@@ -510,8 +552,12 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
     assert installed.count(str(backup_script)) == 0
     assert f"/bin/bash {runtime_dir}/backup_production.sh" in installed
     assert f"DUMP_SCRIPT={runtime_dir}/pg_dump_logical.py" in installed
+    assert f"BACKUP_MANIFEST_SCRIPT={runtime_dir}/backup_manifest.py" in installed
+    assert f"PROJECT_ROOT={current_release}" in installed
+    assert f"SOURCE_MANIFEST_PATH={current_release}/source-manifest.v1.json" in installed
     assert (runtime_dir / "backup_production.sh").is_file()
     assert (runtime_dir / "pg_dump_logical.py").is_file()
+    assert (runtime_dir / "backup_manifest.py").is_file()
     assert log_file.is_file()
     assert log_file.stat().st_mode & 0o777 == 0o600
 
@@ -522,6 +568,11 @@ def test_cron_installer_requires_explicit_legacy_migration(tmp_path: Path) -> No
     backup_script.write_text("#!/usr/bin/env bash\n")
     dump_script = tmp_path / "pg_dump_logical.py"
     dump_script.write_text("# fixture\n")
+    manifest_script = tmp_path / "backup_manifest.py"
+    manifest_script.write_text("# fixture\n")
+    current_release = tmp_path / "current"
+    current_release.mkdir()
+    (current_release / "source-manifest.v1.json").write_text("{}\n")
     original = f"0 3 * * * {backup_script} >> /tmp/legacy.log 2>&1\n"
     store.write_text(original)
     fake_flock = _write_executable(tmp_path / "flock", "#!/usr/bin/env bash\nexit 0\n")
@@ -538,6 +589,8 @@ def test_cron_installer_requires_explicit_legacy_migration(tmp_path: Path) -> No
             "FAKE_CRONTAB_FILE": str(store),
             "BACKUP_SCRIPT": str(backup_script),
             "DUMP_SCRIPT_SOURCE": str(dump_script),
+            "MANIFEST_SCRIPT_SOURCE": str(manifest_script),
+            "CURRENT_RELEASE_ROOT": str(current_release),
             "RUNTIME_DIR": str(tmp_path / "runtime"),
             "CRON_LOCK_FILE": str(tmp_path / "cron.lock"),
             "BACKUP_LOG_FILE": str(tmp_path / "backup.log"),
@@ -602,7 +655,8 @@ def test_publish_log_recovery_schema_preserves_w123_attempt_columns() -> None:
 def test_restore_whitelists_tables_and_runs_as_one_transaction() -> None:
     source = PG_RESTORE_SCRIPT.read_text()
     assert "information_schema.tables" in source
-    assert "absent from restored schema" in source
+    assert "restore target table set does not match backup stats" in source
+    assert 'if "--stats" not in args' in source
     assert "invalid database identifier in backup" in source
     assert "async with conn.transaction()" in source
     assert "TRUNCATE TABLE" in source
@@ -621,7 +675,10 @@ def _write_restore_backup_fixture(tmp_path: Path) -> tuple[Path, str]:
     stats.write_text(
         json.dumps(
             {
+                "server_version_num": "180004",
+                "server_major": 18,
                 "total_rows": 1,
+                "file_size": dump.stat().st_size,
                 "expected_tables": ["tenants"],
                 "tables": {"tenants": {"rows": 1}},
                 "schema_signature": "a" * 64,
@@ -660,6 +717,53 @@ def _write_restore_backup_fixture(tmp_path: Path) -> tuple[Path, str]:
     }
     (backup_dir / "manifest.txt").write_text(
         "".join(f"{key}: {value}\n" for key, value in manifest.items())
+    )
+    output_dir = backup_dir / "output"
+    output_dir.mkdir()
+    media = output_dir / "fixture.bin"
+    media.write_bytes(b"media")
+    (backup_dir / "media_manifest.json").write_text(
+        json.dumps(
+            {
+                "file_count": 1,
+                "total_size_bytes": 5,
+                "files": [
+                    {
+                        "path": "fixture.bin",
+                        "size_bytes": 5,
+                        "sha256": hashlib.sha256(b"media").hexdigest(),
+                    }
+                ],
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    source_root = tmp_path / "restore-source"
+    source_root.mkdir()
+    source_file = source_root / "app.py"
+    source_file.write_text("# fixture\n")
+    source_manifest = source_root / "source-manifest.v1.json"
+    source_manifest.write_text(
+        json.dumps(
+            build_source_manifest(source_root, GIT_SHA, ["app.py"]),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
+    create_backup_manifest(
+        backup_dir=backup_dir,
+        source_root=source_root,
+        source_manifest_path=source_manifest,
+        backend_image_reference=f"lighthouse-backend:{GIT_SHA}",
+        backend_image_id=BACKEND_IMAGE_ID,
+        backend_repo_digest=None,
+        oci_revision=GIT_SHA,
+        pg_client_source_tag="postgres:18",
+        pg_client_image=digest,
+        completed_at="2026-07-22T12:00:00Z",
+        backup_timestamp="2026-07-10_120000",
     )
     return backup_dir, digest
 
@@ -730,6 +834,7 @@ esac
             "NETWORK_NAME": "lighthouse_ai_video_net",
             "RESTORE_SCRIPT": str(restore_tool),
             "VERIFY_SCRIPT": str(verify_tool),
+            "BACKUP_MANIFEST_SCRIPT": str(BACKUP_MANIFEST_SCRIPT),
             "EXPECTED_RESTORE_HOST": "l4_restore_test",
             "RESTORE_SCOPE": "isolated",
             "RESTORE_CONFIRMATION": "RESTORE_EMPTY_DATABASE",
@@ -751,7 +856,7 @@ esac
     assert marker["status"] == "passed"
     assert marker["alembic_revision"] == "c8d9e0f1a2b3"
     assert marker["manifest_sha256"] == hashlib.sha256(
-        (backup_dir / "manifest.txt").read_bytes()
+        (backup_dir / "backup-manifest.v1.json").read_bytes()
     ).hexdigest()
     log = docker_log.read_text()
     assert "postgresql://" not in log
@@ -859,9 +964,12 @@ def test_disaster_recovery_commands_fail_closed_and_keep_ingress_stopped() -> No
     assert 'media manifest file set mismatch' in runbook
     assert 'media snapshot contains a symlink' in runbook
     assert "pg_restore --schema-only" in runbook
-    assert "pg_schema_sha256" in runbook
-    assert "pg_schema_list_sha256" in runbook
-    assert "schema archive is missing required tables" in runbook
+    assert "backup-manifest.v1.json.sha256" in runbook
+    assert 'database["client_image"]' in runbook
+    assert "schema archive table set does not match backup stats" in runbook
+    assert "backup_manifest.py validate" in runbook
+    assert "逐表核对 12 表" not in runbook
+    assert '"tenants", "admin_accounts"' not in runbook
     assert "set -Eeuo pipefail" in restore_wrapper
     assert "--single-transaction" in restore_wrapper
     assert "--truncate-first" not in restore_wrapper
@@ -869,6 +977,26 @@ def test_disaster_recovery_commands_fail_closed_and_keep_ingress_stopped() -> No
     assert '--dbname="$PGDATABASE"' in restore_wrapper
     assert "PGPASSFILE" in restore_wrapper
     assert "docker compose" not in restore_wrapper
+
+
+def test_restore_wrapper_rejects_symlinked_backup_root_before_docker(
+    tmp_path: Path,
+) -> None:
+    real_backup = tmp_path / "real-backup"
+    real_backup.mkdir()
+    linked_backup = tmp_path / "2026-07-22_210000"
+    linked_backup.symlink_to(real_backup, target_is_directory=True)
+
+    result = subprocess.run(
+        ["bash", str(RESTORE_DATABASE_SCRIPT), str(linked_backup)],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "backup directory must not be a symlink" in result.stderr
 
 
 def test_brand_asset_restore_reads_root_owned_backup_with_sudo() -> None:

@@ -57,6 +57,7 @@ function mockJsonResponse(body: unknown, init: ResponseInit = {}) {
 
 function renderPicker(options: {
   acceptKind?: "image" | "video" | "audio" | "all";
+  multiple?: boolean;
   onPick?: (urls: string[]) => void;
   onClose?: () => void;
 } = {}) {
@@ -71,6 +72,7 @@ function renderPicker(options: {
       <I18nProvider>
         <AssetPickerModal
           acceptKind={options.acceptKind ?? "image"}
+          multiple={options.multiple}
           onPick={onPick}
           onClose={onClose}
         />
@@ -153,6 +155,54 @@ describe("AssetPickerModal request boundary", () => {
     expect(apiMocks.apiFetch).toHaveBeenCalledTimes(1);
     expect(onPick).toHaveBeenCalledWith(["/media/portfolio/images/hero.png"]);
     expect(onClose).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it("preserves click order and hidden selections when a multiple selection is filtered", async () => {
+    const files = Array.from({ length: 6 }, (_, index) => ({
+      id: `image-${index + 1}`,
+      filename: `view-${index + 1}.png`,
+      path: `portfolio/images/view-${index + 1}.png`,
+      label: `View ${index + 1}`,
+      scenario: "s5",
+      produced_at: "2026-07-22T00:00:00Z",
+      size_bytes: 2048,
+      mime_type: "image/png",
+      thumbnail_path: null,
+    }));
+    apiMocks.apiFetch.mockResolvedValueOnce(mockJsonResponse({ files }));
+    const onPick = vi.fn();
+    const { container, cleanup } = renderPicker({ multiple: true, onPick });
+    await flushEffects();
+
+    const clickOrder = [...files].reverse();
+    for (const file of clickOrder) {
+      const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+        candidate.textContent?.includes(file.label),
+      ) as HTMLButtonElement;
+      await act(async () => button.click());
+    }
+
+    const search = container.querySelector('input[type="search"]') as HTMLInputElement;
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(search, "View 1");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      search.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).not.toContain("View 6");
+
+    const confirmButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      /add selected|确认添加/i.test(button.textContent || ""),
+    ) as HTMLButtonElement;
+    await act(async () => confirmButton.click());
+
+    expect(onPick).toHaveBeenCalledWith(
+      clickOrder.map((file) => `/media/${file.path}`),
+    );
     cleanup();
   });
 

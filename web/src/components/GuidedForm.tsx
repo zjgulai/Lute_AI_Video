@@ -95,6 +95,11 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
   }, []);
 
   const handleSubmit = useCallback(() => {
+    const exactProductViews = (values.product_views || "")
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (effectiveScene === "brand_vlog" && exactProductViews.length !== 6) return;
     const config: Record<string, unknown> = {
       content_scenario: effectiveScene,
       content_scenario_subtype: selectedVideoType,
@@ -215,8 +220,15 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
     const requiredFields = cards
       .filter((c) => c.priority === "required")
       .map((c) => c.fieldKey);
-    return cards.length > 0 && requiredFields.every((f) => values[f]?.trim()?.length > 0);
-  }, [cards, values]);
+    const requiredComplete = requiredFields.every((f) => values[f]?.trim()?.length > 0);
+    const productViewCount = (values.product_views || "")
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean).length;
+    return cards.length > 0
+      && requiredComplete
+      && (effectiveScene !== "brand_vlog" || productViewCount === 6);
+  }, [cards, effectiveScene, values]);
 
   const filledCount = cards.filter(
     (c) => values[c.fieldKey]?.trim()?.length > 0
@@ -225,9 +237,14 @@ export default function GuidedForm({ scene, onSubmit, loading, fieldErrors }: Pr
 
   const missingFieldLabels = useMemo(() => {
     return cards
-      .filter((c) => c.priority === "required" && !values[c.fieldKey]?.trim()?.length)
+      .filter((c) => c.priority === "required" && (
+        !values[c.fieldKey]?.trim()?.length
+        || (effectiveScene === "brand_vlog"
+          && c.fieldKey === "product_views"
+          && values.product_views.split(/[\n,]/).map((item) => item.trim()).filter(Boolean).length !== 6)
+      ))
       .map((c) => c.stepName);
-  }, [cards, values]);
+  }, [cards, effectiveScene, values]);
 
   const cardErrors = useMemo(() => {
     const out: Record<string, string> = {};

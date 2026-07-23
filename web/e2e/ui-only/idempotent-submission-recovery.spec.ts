@@ -66,6 +66,7 @@ test.describe("idempotent submission UI recovery", () => {
     let submitCount = 0;
     let readbackCount = 0;
     let statusCount = 0;
+    let transparencyCount = 0;
     await seedBrowserState(page, true);
     await page.route("**/api/**", async (route) => {
       const request = route.request();
@@ -98,15 +99,42 @@ test.describe("idempotent submission UI recovery", () => {
           error: null,
         });
       }
+      if (
+        request.method() === "GET"
+        && url.pathname.endsWith(`/api/transparency/fast/${FAST_TASK_ID}`)
+      ) {
+        transparencyCount += 1;
+        return json(route, 200, {
+          schema_version: "transparency-disclosure.v1",
+          ai_generated: true,
+          label: "AI-generated",
+          verification_scope: "unsigned_pending_review",
+          independently_validated: false,
+          sidecar_path: "tenants/ui/pending_review/fast_mode/task/transparency/sidecar.json",
+          sidecar_sha256: "a".repeat(64),
+          record_count: 1,
+          human_edit_record_count: 0,
+          source_reference_count: 0,
+          c2pa_signing_mode: "local_draft",
+          final_artifact_c2pa_status: "unsigned_pending_review",
+          package_available: true,
+        });
+      }
       return json(route, 200, {});
     });
 
     await page.goto("/fast");
     await expect(page.getByText("Bounded completion (pending review)")).toBeVisible();
+    await expect(page.getByText("AI-generated content")).toBeVisible();
+    await expect(page.getByText("Unsigned, pending human review")).toBeVisible();
+    await expect(page.getByRole("button", {
+      name: "Download transparency evidence package",
+    })).toBeVisible();
 
     expect(submitCount).toBe(0);
     expect(readbackCount).toBeGreaterThanOrEqual(1);
     expect(statusCount).toBeGreaterThanOrEqual(1);
+    expect(transparencyCount).toBe(1);
   });
 
   test("ambiguous submit sends one POST then recovers with GET", async ({ page }) => {

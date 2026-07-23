@@ -93,7 +93,7 @@ async def _paid_tts_scope(
         budget_job_kind="canonical",
         budget_job_id="tts-job-1",
         scenario_or_resource_type="fast",
-        generation_policy_version="generation-safety.v1",
+        generation_policy_version="generation-safety.v2",
     )
 
     _FakeAsyncClient.instances.clear()
@@ -169,6 +169,7 @@ async def test_tts_skill_uses_request_scoped_siliconflow_key_and_operation_slot(
     )
 
     assert result.success is True
+    assert result.data["simulated"] is False
     assert captured["api_key"] == "request-siliconflow-key"
     assert captured["synthesize"]["operation_instance"] == "script.2"
     assert captured["closed"] is True
@@ -294,6 +295,7 @@ async def test_tts_skill_success_survives_client_close_failure(
 
     assert result.success is True
     assert result.data["audio_path"] == str(tmp_path / "success.mp3")
+    assert result.data["simulated"] is False
 
 
 def test_s1_s3_s4_tts_callers_use_server_owned_operation_slots() -> None:
@@ -333,7 +335,10 @@ async def test_s5_tts_consumes_skill_singular_audio_path(
             captured["params"] = params
             return SimpleNamespace(
                 success=True,
-                data={"audio_path": str(tmp_path / "vlog.mp3")},
+                data={
+                    "audio_path": str(tmp_path / "vlog.mp3"),
+                    "simulated": False,
+                },
                 error=None,
             )
 
@@ -344,7 +349,10 @@ async def test_s5_tts_consumes_skill_singular_audio_path(
         errors,
     )
 
-    assert result == [str(tmp_path / "vlog.mp3")]
+    assert result == {
+        "audio_paths": [str(tmp_path / "vlog.mp3")],
+        "simulated": False,
+    }
     assert captured["params"]["operation_instance"] == "vlog.primary"
     assert errors == []
 
@@ -522,6 +530,37 @@ async def test_timeout_is_ambiguous_and_never_silent_fallback(
                 await client.synthesize_with_metadata("provider timeout")
             with pytest.raises(ProviderCostContractError) as replay_exc:
                 await client.synthesize_with_metadata("provider timeout")
+    finally:
+        _FakeAsyncClient.next_error = None
+
+    assert exc_info.value.code == "provider_cost_outcome_ambiguous"
+    assert replay_exc.value.code == "provider_cost_outcome_ambiguous"
+    assert _attempt_rows(isolated_provider_cost_db)[0]["state"] == "ambiguous"
+    assert len(_FakeAsyncClient.instances[0].posts) == 1
+    assert not list(tmp_path.glob("*fallback*"))
+
+
+@pytest.mark.asyncio
+async def test_provider_rejection_after_post_is_ambiguous_and_single_attempt(
+    isolated_provider_cost_db: sqlite3.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    request = httpx.Request("POST", f"{COSYVOICE_GLOBAL_ENDPOINT}/audio/speech")
+    response = httpx.Response(400, request=request)
+    _FakeAsyncClient.next_error = httpx.HTTPStatusError(
+        "fixture provider rejection",
+        request=request,
+        response=response,
+    )
+    try:
+        async with _paid_tts_scope(
+            monkeypatch, tmp_path, isolated_provider_cost_db
+        ) as (client, *_):
+            with pytest.raises(ProviderCostContractError) as exc_info:
+                await client.synthesize_with_metadata("provider rejection")
+            with pytest.raises(ProviderCostContractError) as replay_exc:
+                await client.synthesize_with_metadata("provider rejection")
     finally:
         _FakeAsyncClient.next_error = None
 

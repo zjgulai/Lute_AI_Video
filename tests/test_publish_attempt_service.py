@@ -105,7 +105,7 @@ def _shopify_success_result() -> dict[str, object]:
     }
 
 
-def _service_symbols() -> tuple[type[Any], type[Exception]]:
+def _service_symbols() -> tuple[type[Any], type[Any]]:
     from src.services.publish_attempt import PublishAttemptError, PublishAttemptService
 
     return PublishAttemptService, PublishAttemptError
@@ -209,6 +209,21 @@ def _consumed_record(
             "decision": "accepted",
             "status": "consumed",
             "reviewer": {"key_id": "reviewer-a", "key_type": "tenant"},
+            "transparency": {
+                "schema_version": "acceptance-transparency.v1",
+                "ai_generated": True,
+                "label": "AI-generated",
+                "sidecar_path": (
+                    f"tenants/{TENANT_ID}/pending_review/{resource_id}/transparency/"
+                    f"transparency-sidecar.v1.{'a' * 64}.json"
+                    if resource_type == "scenario"
+                    else f"tenants/{TENANT_ID}/pending_review/fast_mode/{resource_id}/"
+                    f"transparency/transparency-sidecar.v1.{'a' * 64}.json"
+                ),
+                "sidecar_sha256": "a" * 64,
+                "final_artifact_c2pa_status": "signed_local_readback",
+                "independently_validated": False,
+            },
             "review_notes": "Never forward reviewer notes.",
             "expires_at": "2030-01-01T00:00:00+00:00",
             "consumed_at": "2026-07-13T00:00:00+00:00",
@@ -361,6 +376,7 @@ class FakeAcceptanceService:
     ) -> None:
         self.calls = calls
         self.consumed = consumed
+        self.inspected: AcceptanceRecordResponse | None = None
         self.consume_error = consume_error
         self.inspect_outcome = inspect_outcome
         self.inspect_error = inspect_error
@@ -374,7 +390,7 @@ class FakeAcceptanceService:
     async def inspect_for_publish(self, **kwargs: Any) -> AcceptanceRecordResponse:
         assert kwargs["tenant_id"] == TENANT_ID
         assert kwargs["acceptance_id"] == ACCEPTANCE_ID
-        return self.consumed.model_copy(
+        return (self.inspected or self.consumed).model_copy(
             update={"status": "available", "consumed_at": None}
         )
 
@@ -557,7 +573,7 @@ def test_readiness_reports_missing_credentials_without_exposing_values(
     assert readiness.platform == "tiktok"
     assert "token" not in repr(readiness).lower()
     with pytest.raises((AttributeError, TypeError)):
-        readiness.ready = True
+        setattr(readiness, "ready", True)
 
 
 @pytest.mark.parametrize("platform", ["tiktok", "shopify"])
@@ -618,8 +634,19 @@ async def test_tiktok_exact_order_payload_and_safe_audit_content(
         {
             "video_path": str(harness.artifact_absolute.resolve()),
             "title": "Reviewed campaign",
-            "description": "Approved caption\n#momlife #wearablepump",
+            "description": (
+                "Approved caption\n#momlife #wearablepump\nAI-generated content."
+            ),
             "tags": ["momlife", "wearablepump"],
+            "disclosure": {
+                "schema_version": "publish-disclosure.v1",
+                "label": "AI-generated",
+                "visible_text": "AI-generated content.",
+                "sidecar_sha256": "a" * 64,
+                "final_artifact_c2pa_status": "signed_local_readback",
+                "verification_scope": "local_reader_only",
+                "independently_validated": False,
+            },
             "platform_options": {
                 "platform": "tiktok",
                 "privacy_level": "SELF_ONLY",
@@ -648,6 +675,14 @@ async def test_tiktok_exact_order_payload_and_safe_audit_content(
         "size_bytes": len(VIDEO_BYTES),
         "kind": "video",
     }
+    assert row["content"]["effective_metadata"] == {
+        "title": "Reviewed campaign",
+        "description": (
+            "Approved caption\n#momlife #wearablepump\nAI-generated content."
+        ),
+        "tags": ["momlife", "wearablepump"],
+    }
+    assert row["content"]["disclosure"]["label"] == "AI-generated"
     assert str(harness.artifact_absolute.resolve()) not in repr(
         harness.repository.records
     )
@@ -732,8 +767,17 @@ async def test_shopify_exact_payload_and_fast_source_prefix(tmp_path: Path) -> N
     assert harness.publisher.contents == [
         {
             "video_path": str(harness.artifact_absolute.resolve()),
-            "title": "Reviewed campaign",
+            "title": "[AI-generated] Reviewed campaign",
             "product_name": "Wearable Breast Pump",
+            "disclosure": {
+                "schema_version": "publish-disclosure.v1",
+                "label": "AI-generated",
+                "visible_text": "AI-generated content.",
+                "sidecar_sha256": "a" * 64,
+                "final_artifact_c2pa_status": "signed_local_readback",
+                "verification_scope": "local_reader_only",
+                "independently_validated": False,
+            },
             "platform_options": {
                 "platform": "shopify",
                 "product_id": "gid://shopify/Product/123456789",
@@ -750,6 +794,11 @@ async def test_shopify_exact_payload_and_fast_source_prefix(tmp_path: Path) -> N
         resource_type="fast",
         resource_id="fast_publish_fixture",
     )
+    assert row["content"]["effective_metadata"] == {
+        "title": "[AI-generated] Reviewed campaign",
+        "product_name": "Wearable Breast Pump",
+    }
+    assert row["content"]["disclosure"]["label"] == "AI-generated"
     assert "ignored-remote-message" not in repr(row)
     assert "must-not-persist" not in repr(row)
     assert response.post_id is None
@@ -765,7 +814,7 @@ async def test_shopify_exact_payload_and_fast_source_prefix(tmp_path: Path) -> N
             {"hook": "Hook fallback", "tags": ["one", "two"]},
             {
                 "title": "Hook fallback",
-                "description": "Hook fallback\n#one #two",
+                "description": "Hook fallback\n#one #two\nAI-generated content.",
                 "tags": ["one", "two"],
             },
         ),
@@ -773,7 +822,7 @@ async def test_shopify_exact_payload_and_fast_source_prefix(tmp_path: Path) -> N
             {},
             {
                 "title": "AI-generated video",
-                "description": "AI-generated video",
+                "description": "AI-generated video\nAI-generated content.",
                 "tags": [],
             },
         ),
@@ -795,7 +844,67 @@ async def test_tiktok_metadata_fallbacks_are_deterministic(
     content = dict(harness.publisher.contents[0])
     content.pop("video_path")
     content.pop("platform_options")
+    disclosure = content.pop("disclosure")
     assert content == expected
+    assert disclosure == {
+        "schema_version": "publish-disclosure.v1",
+        "label": "AI-generated",
+        "visible_text": "AI-generated content.",
+        "sidecar_sha256": "a" * 64,
+        "final_artifact_c2pa_status": "signed_local_readback",
+        "verification_scope": "local_reader_only",
+        "independently_validated": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_client_cannot_remove_or_duplicate_server_disclosure(tmp_path: Path) -> None:
+    harness = _build_harness(tmp_path)
+
+    await harness.service.execute(
+        auth=_auth(),
+        request=_request(
+            metadata={
+                "description": "AI-generated content.",
+                "title": "Campaign",
+            }
+        ),
+        route_kind="canonical",
+    )
+
+    description = harness.publisher.contents[0]["description"]
+    assert description == "AI-generated content."
+    assert description.count("AI-generated content.") == 1
+
+
+@pytest.mark.asyncio
+async def test_changed_transparency_between_inspect_and_consume_fails_closed(
+    tmp_path: Path,
+) -> None:
+    _, PublishAttemptError = _service_symbols()
+    harness = _build_harness(tmp_path)
+    inspected = harness.acceptance.consumed
+    changed = inspected.model_dump(mode="json")
+    changed_transparency = changed["transparency"]
+    assert isinstance(changed_transparency, dict)
+    changed_transparency["sidecar_sha256"] = "b" * 64
+    harness.acceptance.inspected = inspected
+    harness.acceptance.consumed = AcceptanceRecordResponse.model_validate(changed)
+
+    with pytest.raises(PublishAttemptError) as error:
+        await harness.service.execute(
+            auth=_auth(),
+            request=_request(),
+            route_kind="canonical",
+        )
+
+    assert error.value.status_code == 500
+    assert error.value.code == "publish_attempt_state_unknown"
+    assert error.value.detail.acceptance_consumed is True
+    assert error.value.detail.retry_allowed is False
+    assert harness.acceptance.consume_winners == 1
+    assert harness.publisher.call_count == 0
+    assert _only_record(harness.repository)["status"] == "prepared"
 
 
 @pytest.mark.asyncio
@@ -1588,7 +1697,7 @@ async def test_twenty_concurrent_attempts_have_one_consume_and_connector_winner(
     assert harness.acceptance.consume_calls == 20
     assert sum(
         isinstance(result, PublishAttemptError)
-        and result.code == "acceptance_not_available"
+        and getattr(result, "code", None) == "acceptance_not_available"
         for result in results
     ) == 19
     assert sum(not isinstance(result, Exception) for result in results) == 1

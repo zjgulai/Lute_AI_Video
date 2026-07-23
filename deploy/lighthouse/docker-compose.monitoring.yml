@@ -1,0 +1,49 @@
+services:
+  backend:
+    image: ai-video-backend:${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+    environment:
+      TEST_BUNDLE_KEY: ${TEST_BUNDLE_KEY:?TEST_BUNDLE_KEY is required}
+    networks: [monitoring_internal]
+    profiles: [monitoring]
+
+  prometheus:
+    image: prom/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893
+    command: [--config.file=/etc/prometheus/prometheus.yml]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-alerts.yml:/etc/prometheus/prometheus-alerts.yml:ro
+    networks: [monitoring_internal]
+    profiles: [monitoring]
+
+  alertmanager:
+    image: prom/alertmanager:v0.32.1@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286
+    command: [--config.file=/etc/alertmanager/alertmanager.yml]
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks: [monitoring_internal]
+    profiles: [monitoring]
+
+  alert-receiver:
+    image: ai-video-backend:${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+    command: ["/app/.venv/bin/python", "/app/scripts/monitoring_fixture_receiver.py"]
+    networks: [monitoring_internal]
+    profiles: [monitoring]
+
+  grafana:
+    image: grafana/grafana:12.0.0@sha256:263cbefd5d9b179893c47c415daab4da5c1f3d6770154741eca4f45c81119884
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+    secrets: [grafana_admin_password]
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana-dashboard.json:/var/lib/grafana/dashboards/ai-video.json:ro
+    networks: [monitoring_internal]
+    profiles: [monitoring]
+
+networks:
+  monitoring_internal:
+    internal: true
+
+secrets:
+  grafana_admin_password:
+    file: ${GRAFANA_ADMIN_PASSWORD_FILE:?GRAFANA_ADMIN_PASSWORD_FILE is required}

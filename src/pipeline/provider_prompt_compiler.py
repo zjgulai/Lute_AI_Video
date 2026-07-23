@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from src.models.commercial_contracts import (
     CapabilityValue,
     PromptCompileInput,
@@ -122,7 +124,7 @@ def _shot_mentions_claim_like_content(text: str) -> bool:
     return any(marker in lowered for marker in claim_markers)
 
 
-def _token_summaries(tokens: list[object]) -> list[str]:
+def _token_summaries(tokens: Sequence[object]) -> list[str]:
     summaries: list[str] = []
     for token in tokens:
         payload_summary = getattr(token, "payload_summary", [])
@@ -135,7 +137,7 @@ def _token_summaries(tokens: list[object]) -> list[str]:
     return summaries
 
 
-def _negative_constraints_from_tokens(tokens: list[object]) -> list[str]:
+def _negative_constraints_from_tokens(tokens: Sequence[object]) -> list[str]:
     constraints: list[str] = []
     for token in tokens:
         payload = getattr(token, "payload", {})

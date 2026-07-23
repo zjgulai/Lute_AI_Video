@@ -58,6 +58,7 @@ def _gate_1_state(label: str = "gate-approve-idempotency") -> dict[str, Any]:
             "enable_media_synthesis": False,
             "artifact_disposition": "pending_review",
             "provider_max_retries": 0,
+            "c2pa_signing_mode": policy.c2pa_signing_mode,
             "effective_generation_policy": policy.model_dump(mode="json"),
         },
         "steps": {

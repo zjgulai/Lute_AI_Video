@@ -23,7 +23,7 @@ from src.pipeline.partial_artifacts import (
     summarize_partial_artifacts,
 )
 from src.pipeline.state_manager import _check_schema_version
-from src.tools.c2pa_signer import build_manifest, is_enabled, sign_video
+from src.tools.c2pa_signer import C2PASigningError, build_manifest, is_enabled, sign_video
 
 # ───────── P3-3 partial_artifacts ─────────
 
@@ -229,23 +229,22 @@ class TestC2PASignVideo:
         result = sign_video(fake_mp4)
         assert result == str(fake_mp4)
 
-    def test_enabled_without_cert_returns_input_unchanged(self, fake_mp4: Path, monkeypatch):
-        """Graceful degradation: missing cert/key env → no-op, no raise."""
+    def test_enabled_without_cert_fails_closed(self, fake_mp4: Path, monkeypatch):
         monkeypatch.setenv("C2PA_ENABLED", "1")
         monkeypatch.delenv("C2PA_CERT_PATH", raising=False)
         monkeypatch.delenv("C2PA_KEY_PATH", raising=False)
-        result = sign_video(fake_mp4)
-        assert result == str(fake_mp4)
+        with pytest.raises(C2PASigningError, match="c2pa_credentials_missing"):
+            sign_video(fake_mp4)
 
-    def test_missing_input_file_returns_input_path(self, tmp_path: Path, monkeypatch):
+    def test_missing_input_file_fails_closed(self, tmp_path: Path, monkeypatch):
         monkeypatch.setenv("C2PA_ENABLED", "1")
         nonexistent = tmp_path / "missing.mp4"
-        result = sign_video(nonexistent)
-        assert result == str(nonexistent)
+        with pytest.raises(C2PASigningError, match="c2pa_input_invalid"):
+            sign_video(nonexistent)
 
-    def test_empty_input_file_returns_input_path(self, tmp_path: Path, monkeypatch):
+    def test_empty_input_file_fails_closed(self, tmp_path: Path, monkeypatch):
         monkeypatch.setenv("C2PA_ENABLED", "1")
         empty = tmp_path / "empty.mp4"
         empty.touch()
-        result = sign_video(empty)
-        assert result == str(empty)
+        with pytest.raises(C2PASigningError, match="c2pa_input_invalid"):
+            sign_video(empty)

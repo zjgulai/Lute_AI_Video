@@ -57,6 +57,7 @@ def _mock_gpt_image_result(image_path: str = "/tmp/mock_keyframe.png"):
             "image_id": "keyframe_000",
             "file_size_bytes": 4096,
             "is_stub": False,
+            "simulated": False,
             "verification": {
                 "file_exists": True, "size_ok": True, "header_ok": True,
                 "all_ok": True, "failures": [],
@@ -91,6 +92,8 @@ def test_keyframe_images_adds_path_to_shots():
         assert "keyframe_prompt" in shot, f"shot[{i}] missing keyframe_prompt"
 
     assert result.data.get("keyframes_generated") == 3
+    assert result.data["simulated"] is False
+    assert all(shot["simulated"] is False for shot in result.data["shots"])
 
 
 def test_keyframe_images_respects_max_shots_without_fallback():
@@ -115,6 +118,7 @@ def test_keyframe_images_respects_max_shots_without_fallback():
     assert len(result.data["shots"]) == 1
     assert result.data["shots"][0]["keyframe_image_path"] == "/tmp/real_keyframe.png"
     assert result.data["shots"][0]["keyframe_prompt"]
+    assert result.data["simulated"] is False
     assert mock_exec.await_count == 1
 
 
@@ -132,6 +136,7 @@ def test_keyframe_images_fallback_respects_max_shots(tmp_path):
     assert result.data["keyframes_generated"] == 1
     assert len(result.data["shots"]) == 1
     assert result.data["shots"][0]["keyframe_image_path"].startswith(str(tmp_path))
+    assert result.data["simulated"] is True
 
 
 def test_keyframe_images_fallback_on_failure():

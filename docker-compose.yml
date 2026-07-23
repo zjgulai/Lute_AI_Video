@@ -23,7 +23,12 @@ services:
       - ai_video_net
 
   backend:
-    image: python:3.12-slim
+    image: ai-video-backend:local
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:-local-dev-dirty}
     container_name: ai_video_backend
     restart: unless-stopped
     ports:
@@ -39,13 +44,8 @@ services:
       - ./output:/app/output
       - ./scripts:/app/scripts
       - ./rendering:/app/rendering
-      - ./requirements.txt:/app/requirements.txt
-      - ./.env:/app/.env
-      - ./pyproject.toml:/app/pyproject.toml
       - ./docs:/app/docs
-    command: >
-      sh -c "pip install --no-cache-dir -r requirements.txt &&
-             uvicorn src.api:app --host 0.0.0.0 --port 8001 --reload"
+    command: ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
     depends_on:
       postgres:
         condition: service_healthy

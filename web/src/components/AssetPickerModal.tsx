@@ -53,7 +53,7 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<PortfolioFile[]>([]);
   const [query, setQuery] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadFailedMessageRef.current = t("picker.loadFailed");
@@ -97,19 +97,16 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        if (!multiple) next.clear();
-        next.add(id);
-      }
-      return next;
+      if (prev.includes(id)) return prev.filter((selectedId) => selectedId !== id);
+      return multiple ? [...prev, id] : [id];
     });
   };
 
   const handleConfirm = () => {
-    const picked = filtered.filter((f) => selectedIds.has(f.id));
+    const filesById = new Map(files.map((file) => [file.id, file]));
+    const picked = selectedIds
+      .map((id) => filesById.get(id))
+      .filter((file): file is PortfolioFile => file !== undefined);
     const urls = picked.map((f) => getMediaUrl(f.path));
     onPick(urls);
     onClose();
@@ -201,7 +198,7 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {filtered.map((file) => {
-                const selected = selectedIds.has(file.id);
+                const selected = selectedIds.includes(file.id);
                 const kind = file.mime_type.startsWith("video/")
                   ? "video"
                   : file.mime_type.startsWith("image/")
@@ -256,7 +253,7 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
 
         <footer className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-default)]">
           <span className="text-[12px] text-[var(--text-muted)]">
-            {selectedIds.size > 0 ? `${t("picker.selectedPrefix")} ${selectedIds.size}` : t("picker.selectHint")}
+            {selectedIds.length > 0 ? `${t("picker.selectedPrefix")} ${selectedIds.length}` : t("picker.selectHint")}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -269,7 +266,7 @@ export default function AssetPickerModal({ acceptKind, multiple = false, onPick,
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={selectedIds.size === 0}
+              disabled={selectedIds.length === 0}
               className="px-4 py-1.5 rounded-lg text-[12px] font-medium bg-[var(--fortune-red)] text-white hover:bg-[var(--fortune-red-600)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t("picker.confirm")}

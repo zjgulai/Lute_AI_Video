@@ -173,7 +173,7 @@ class BaseRepository:
     # measure on top of the parameterised queries that asyncpg provides.
     _ALLOWED_FIELDS: dict[str, set[str]] = {
         "threads": {"id", "thread_id", "state", "current_step", "pipeline_complete", "created_at", "updated_at"},
-        "pipeline_states": {"id", "label", "scenario", "config", "steps", "current_step", "mode", "errors", "media_synthesis_errors", "gates", "schema_version", "pipeline_degraded", "degraded_reason", "trace_id", "structured_errors", "regenerate_chain", "soft_degraded_reasons", "tenant_id", "created_at", "updated_at"},
+        "pipeline_states": {"id", "label", "scenario", "config", "steps", "current_step", "mode", "errors", "media_synthesis_errors", "gates", "schema_version", "pipeline_degraded", "degraded_reason", "trace_id", "structured_errors", "regenerate_chain", "soft_degraded_reasons", "transparency", "tenant_id", "created_at", "updated_at"},
         "brand_packages": {"id", "name", "brand_guidelines", "assets", "created_at", "updated_at"},
         "influencers": {"id", "name", "platform", "profile", "contact_info", "created_at", "updated_at"},
         "publish_logs": {"id", "platform", "post_id", "content", "status", "url", "error", "created_at"},
@@ -270,6 +270,255 @@ class PipelineStateRepository(BaseRepository):
 
     async def get_by_label(self, label: str) -> dict[str, Any] | None:
         return await self.get_by_field("label", label)
+
+    async def update(
+        self,
+        id: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Keep the completion claim immutable across every state update."""
+
+        return await self.update_preserving_pipeline_completion(id, data)
+
+    async def update_preserving_pipeline_completion(
+        self,
+        id: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Update state without allowing a stale caller to delete its claim."""
+
+        if not data:
+            return await self.get_by_id(id)
+        incoming_config = data.get("config")
+        if type(incoming_config) is not dict:
+            raise ValueError("pipeline completion config is invalid")
+        claim_key = "pipeline_completion_metric_v1"
+        columns = list(data)
+        values: list[Any] = [id]
+        assignments: list[str] = []
+        for column in columns:
+            values.append(self._to_json(data[column]))
+            parameter = len(values)
+            if column == "config":
+                assignments.append(
+                    "config = CASE "
+                    f"WHEN COALESCE(config, '{{}}'::jsonb) ? '{claim_key}' "
+                    f"THEN jsonb_set(${parameter}::jsonb, "
+                    "'{pipeline_completion_metric_v1}', "
+                    f"COALESCE(config, '{{}}'::jsonb) -> '{claim_key}', true) "
+                    f"ELSE ${parameter}::jsonb END"
+                )
+            else:
+                assignments.append(f"{column} = ${parameter}")
+        query = f"""
+            UPDATE pipeline_states
+            SET {", ".join(assignments)}, updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        """
+        pool = await get_pool()
+        if pool is not None:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(query, *values)
+            if row is None:
+                return None
+            result = dict(row)
+            result["config"] = self._from_json(result.get("config"))
+            return result
+
+        conn = get_sqlite_conn()
+        if conn is None:
+            return None
+
+        def _sync_update() -> dict[str, Any] | None:
+            with get_sqlite_lock():
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    row = conn.execute(
+                        "SELECT config FROM pipeline_states WHERE id = ?",
+                        (id,),
+                    ).fetchone()
+                    if row is None:
+                        conn.commit()
+                        return None
+                    current_config = self._from_json(row["config"])
+                    if type(current_config) is not dict:
+                        raise RuntimeError("pipeline completion config is invalid")
+                    merged_data = dict(data)
+                    merged_config = dict(incoming_config)
+                    if claim_key in current_config:
+                        merged_config[claim_key] = current_config[claim_key]
+                    merged_data["config"] = merged_config
+                    set_clause = ", ".join(f"{column} = ?" for column in columns)
+                    conn.execute(
+                        f"""
+                        UPDATE pipeline_states
+                        SET {set_clause}, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        [self._to_json(merged_data[column]) for column in columns]
+                        + [id],
+                    )
+                    updated = conn.execute(
+                        "SELECT * FROM pipeline_states WHERE id = ?",
+                        (id,),
+                    ).fetchone()
+                    conn.commit()
+                    if updated is None:
+                        return None
+                    result = dict(updated)
+                    result["config"] = self._from_json(result.get("config"))
+                    return result
+                except Exception:
+                    if conn.in_transaction:
+                        conn.rollback()
+                    raise
+
+        return await asyncio.to_thread(_sync_update)
+
+    async def claim_pipeline_completion(
+        self,
+        label: str,
+        claim: dict[str, Any],
+    ) -> dict[str, Any] | bool | None:
+        """Atomically bind one claim to the current durable terminal state.
+
+        Returns ``None`` only when neither PostgreSQL nor SQLite persistence is
+        configured, ``False`` when no new terminal claim can be created, and
+        the winning claim otherwise. A configured store never degrades to a
+        non-atomic write.
+        """
+
+        from src.models.pipeline_completion import (
+            bind_claim_to_facts,
+            derive_pipeline_completion_facts,
+        )
+
+        def _durable_state(row: Any, config: dict[str, Any]) -> dict[str, Any]:
+            raw_degraded = row["pipeline_degraded"]
+            if type(raw_degraded) is bool:
+                degraded = raw_degraded
+            elif type(raw_degraded) is int and raw_degraded in {0, 1}:
+                degraded = bool(raw_degraded)
+            else:
+                raise RuntimeError("pipeline completion state is invalid")
+            lifecycle = config.get("execution_lifecycle")
+            lifecycle_status = (
+                lifecycle.get("lifecycle_status")
+                if type(lifecycle) is dict
+                else None
+            )
+            return {
+                "scenario": row["scenario"],
+                "lifecycle_status": lifecycle_status,
+                "current_step": row["current_step"],
+                "pipeline_degraded": degraded,
+                "errors": self._from_json(row["errors"]),
+            }
+
+        claim_key = "pipeline_completion_metric_v1"
+        pool = await get_pool()
+        if pool is not None:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    row = await conn.fetchrow(
+                        """
+                        SELECT scenario, config, current_step, errors,
+                               pipeline_degraded
+                        FROM pipeline_states
+                        WHERE label = $1
+                        FOR UPDATE
+                        """,
+                        label,
+                    )
+                    if row is None:
+                        raise RuntimeError("pipeline completion state is missing")
+                    config = self._from_json(row["config"])
+                    if type(config) is not dict:
+                        raise RuntimeError("pipeline completion config is invalid")
+                    if claim_key in config:
+                        return False
+                    durable_facts = derive_pipeline_completion_facts(
+                        _durable_state(row, config)
+                    )
+                    if durable_facts is None:
+                        return False
+                    winning_claim = bind_claim_to_facts(claim, durable_facts)
+                    updated = await conn.fetchrow(
+                        """
+                        UPDATE pipeline_states
+                        SET config = jsonb_set(
+                            COALESCE(config, '{}'::jsonb),
+                            '{pipeline_completion_metric_v1}',
+                            $2::jsonb,
+                            true
+                        ),
+                        updated_at = NOW()
+                        WHERE label = $1
+                          AND NOT (
+                            COALESCE(config, '{}'::jsonb)
+                            ? 'pipeline_completion_metric_v1'
+                          )
+                        RETURNING id
+                        """,
+                        label,
+                        json.dumps(winning_claim, default=self._json_default),
+                    )
+                    if updated is None:
+                        return False
+                    return winning_claim
+
+        conn = get_sqlite_conn()
+        if conn is None:
+            return None
+
+        def _sync_claim() -> dict[str, Any] | bool:
+            with get_sqlite_lock():
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    row = conn.execute(
+                        """
+                        SELECT scenario, config, current_step, errors,
+                               pipeline_degraded
+                        FROM pipeline_states
+                        WHERE label = ?
+                        """,
+                        (label,),
+                    ).fetchone()
+                    if row is None:
+                        raise RuntimeError("pipeline completion state is missing")
+                    raw_config = row["config"]
+                    config = self._from_json(raw_config)
+                    if not isinstance(config, dict):
+                        raise RuntimeError("pipeline completion config is invalid")
+                    if claim_key in config:
+                        conn.commit()
+                        return False
+                    durable_facts = derive_pipeline_completion_facts(
+                        _durable_state(row, config)
+                    )
+                    if durable_facts is None:
+                        conn.commit()
+                        return False
+                    winning_claim = bind_claim_to_facts(claim, durable_facts)
+                    config = dict(config)
+                    config[claim_key] = winning_claim
+                    conn.execute(
+                        """
+                        UPDATE pipeline_states
+                        SET config = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE label = ?
+                        """,
+                        (json.dumps(config, default=self._json_default), label),
+                    )
+                    conn.commit()
+                    return winning_claim
+                except Exception:
+                    if conn.in_transaction:
+                        conn.rollback()
+                    raise
+
+        return await asyncio.to_thread(_sync_claim)
 
 
 class BrandPackageRepository(BaseRepository):

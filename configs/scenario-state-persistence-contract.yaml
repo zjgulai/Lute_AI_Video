@@ -1,7 +1,7 @@
 version: 1
 owner: backend
 status: stable
-updated: "2026-06-01"
+updated: "2026-07-22"
 
 scenarios:
   - s1
@@ -30,6 +30,8 @@ required_top_level_keys:
   - pipeline_degraded
   - degraded_reason
   - structured_errors
+  - regenerate_chain
+  - soft_degraded_reasons
 
 json_object_keys:
   - config
@@ -40,6 +42,8 @@ json_array_keys:
   - errors
   - media_synthesis_errors
   - structured_errors
+  - regenerate_chain
+  - soft_degraded_reasons
 
 step_record_required_keys:
   - status
@@ -57,5 +61,13 @@ initial_state_defaults:
   pipeline_degraded: false
   degraded_reason: null
   structured_errors: []
+  regenerate_chain: []
+  soft_degraded_reasons: []
+
+server_owned_config_keys:
+  pipeline_completion_metric_v1:
+    version: pipeline-completion-metric.v1
+    purpose: Durable at-most-once terminal metric claim before Prometheus emission.
+    caller_supplied: false
 
 no_token_boundary: true

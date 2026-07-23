@@ -1,72 +1,68 @@
-"""C2PA Content Credentials signing for AI-generated videos (Sprint 3 P3-1).
-
-Closes diagnostic compliance requirement for EU AI Act 2026-08-02:
-AI-generated content distributed in EU must carry tamper-evident metadata
-identifying it as AI-generated, per Article 50 disclosure obligation.
-
-Implementation:
-- Uses official `c2pa-python` PyPI package (v0.32.x, Apache 2.0 / MIT).
-- Embeds C2PA manifest into mp4 with `claim_generator_info` + a
-  ``c2pa.actions`` assertion declaring ``c2pa.created`` with
-  ``digitalSourceType: aiGeneratedContent`` (IPTC vocabulary).
-- Lazy import: this module is only imported when called, so a missing
-  c2pa-python install does not break unrelated test paths.
-- Opt-in: signing is gated by ``C2PA_ENABLED`` env var. Default is
-  disabled so existing test paths and dev-mode deploys are unaffected.
-- Graceful degradation: if c2pa-python is missing, cert is not
-  provisioned, or signing raises, ``sign_video`` logs and returns the
-  unsigned input path so downstream pipelines never break.
-
-Production deployment notes (TODO before EU launch):
-- Provision an X.509 signing cert + private key. Self-signed dev certs
-  work for local testing; production needs a real cert from a CAI-trusted
-  issuer (e.g., DigiCert C2PA cert, Adobe Content Authenticity cert).
-- Set env vars:
-    C2PA_ENABLED=1
-    C2PA_CERT_PATH=/path/to/cert.pem
-    C2PA_KEY_PATH=/path/to/key.pem
-    C2PA_TSA_URL=http://timestamp.digicert.com  (optional, for legal proof)
-- Verify with c2patool / Adobe CAI's Content Credentials inspector before
-  EU rollout.
-"""
+"""Fail-closed C2PA signing and local Reader verification boundary."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-import structlog
 
-logger = structlog.get_logger()
+class C2PASigningError(RuntimeError):
+    """Stable, secret-free C2PA boundary error."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class C2PASigningPolicy:
+    mode: Literal["local_draft", "required"]
+
+    def __post_init__(self) -> None:
+        if self.mode not in {"local_draft", "required"}:
+            raise ValueError("c2pa signing policy is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class C2PASigningResult:
+    status: Literal["unsigned_pending_review", "signed_local_readback"]
+    output_path: Path
+    manifest_sha256: str | None
 
 
 def is_enabled() -> bool:
-    """Return True iff C2PA signing is enabled via env var."""
-    return os.environ.get("C2PA_ENABLED", "").lower() in ("1", "true", "yes")
+    """Compatibility projection; only exact truthy values request required signing."""
+
+    return os.environ.get("C2PA_ENABLED", "").lower() in {"1", "true", "yes"}
 
 
 def build_manifest(
     title: str,
     *,
-    pipeline_version: str = "0.3.0",
+    pipeline_version: str = "2.0.0",
     pipeline_name: str = "AI_Video_Pipeline",
+    media_format: str = "video/mp4",
 ) -> dict[str, Any]:
-    """Build the minimum C2PA manifest dict required for EU AI Act disclosure.
+    """Build the exact AI-generated C2PA manifest definition."""
 
-    Returns a dict suitable for c2pa-python's Builder. Includes:
-    - ``claim_generator_info``: identifies our pipeline as the producer
-    - ``format``: video/mp4
-    - ``title``: caller-supplied human-readable title
-    - ``assertions[c2pa.actions]``: declares the content as AI-generated
-      via IPTC ``aiGeneratedContent`` digitalSourceType.
-
-    See https://c2pa.org/specifications/specifications/2.0/specs/_attachments/C2PA_Specification.pdf
-    section "Actions" for the assertion schema.
-    """
+    if (
+        not title
+        or len(title) > 300
+        or any(ord(character) < 32 for character in title)
+        or not pipeline_version
+        or not pipeline_name
+    ):
+        raise C2PASigningError("c2pa_manifest_invalid")
+    if media_format not in {"video/mp4", "image/jpeg", "image/png", "image/webp"}:
+        raise C2PASigningError("c2pa_media_format_unsupported")
     return {
         "claim_generator_info": [{"name": pipeline_name, "version": pipeline_version}],
-        "format": "video/mp4",
+        "format": media_format,
         "title": title,
         "assertions": [
             {
@@ -76,7 +72,8 @@ def build_manifest(
                         {
                             "action": "c2pa.created",
                             "digitalSourceType": (
-                                "http://cv.iptc.org/newscodes/digitalsourcetype/aiGeneratedContent"
+                                "http://cv.iptc.org/newscodes/"
+                                "digitalsourcetype/aiGeneratedContent"
                             ),
                         }
                     ]
@@ -86,80 +83,257 @@ def build_manifest(
     }
 
 
+def _validate_readback(store: object) -> str:
+    if not isinstance(store, dict):
+        raise C2PASigningError("c2pa_readback_invalid")
+    active_id = store.get("active_manifest")
+    manifests = store.get("manifests")
+    if not isinstance(active_id, str) or not isinstance(manifests, dict):
+        raise C2PASigningError("c2pa_readback_invalid")
+    active = manifests.get(active_id)
+    if not isinstance(active, dict):
+        raise C2PASigningError("c2pa_readback_invalid")
+    assertions = active.get("assertions")
+    if not isinstance(assertions, list):
+        raise C2PASigningError("c2pa_readback_invalid")
+    actions_assertion = next(
+        (
+            assertion
+            for assertion in assertions
+            if isinstance(assertion, dict)
+            and assertion.get("label") in {"c2pa.actions", "c2pa.actions.v2"}
+        ),
+        None,
+    )
+    data = actions_assertion.get("data") if isinstance(actions_assertion, dict) else None
+    actions = data.get("actions") if isinstance(data, dict) else None
+    if not isinstance(actions, list) or not any(
+        isinstance(action, dict)
+        and action.get("action") == "c2pa.created"
+        and action.get("digitalSourceType")
+        == "http://cv.iptc.org/newscodes/digitalsourcetype/aiGeneratedContent"
+        for action in actions
+    ):
+        raise C2PASigningError("c2pa_readback_ai_label_missing")
+    validation_results = store.get("validation_results")
+    active_results = (
+        validation_results.get("activeManifest")
+        if isinstance(validation_results, dict)
+        else None
+    )
+    success_results = (
+        active_results.get("success") if isinstance(active_results, dict) else None
+    )
+    failure_results = (
+        active_results.get("failure") if isinstance(active_results, dict) else None
+    )
+    if not isinstance(success_results, list) or not isinstance(failure_results, list):
+        raise C2PASigningError("c2pa_readback_validation_missing")
+    success_codes = {
+        result.get("code") for result in success_results if isinstance(result, dict)
+    }
+    if not {"claimSignature.validated", "assertion.dataHash.match"}.issubset(
+        success_codes
+    ):
+        raise C2PASigningError("c2pa_readback_validation_missing")
+    failure_codes = {
+        result.get("code") for result in failure_results if isinstance(result, dict)
+    }
+    validation_status = store.get("validation_status", [])
+    if not isinstance(validation_status, list):
+        raise C2PASigningError("c2pa_readback_validation_failed")
+    status_codes = {
+        result.get("code") for result in validation_status if isinstance(result, dict)
+    }
+    if (failure_codes | status_codes) - {"signingCredential.untrusted"}:
+        raise C2PASigningError("c2pa_readback_validation_failed")
+    encoded = json.dumps(
+        active,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def sign_and_verify_media(
+    input_path: str | Path,
+    *,
+    output_path: str | Path,
+    title: str,
+    policy: C2PASigningPolicy,
+    certificate_path: str | Path | None = None,
+    private_key_path: str | Path | None = None,
+    timestamp_authority_url: str | None = "http://timestamp.digicert.com",
+    media_format: str = "video/mp4",
+) -> C2PASigningResult:
+    """Sign one file and require successful local Reader readback when policy demands it."""
+
+    source = Path(input_path)
+    destination = Path(output_path)
+    if policy.mode == "local_draft":
+        return C2PASigningResult("unsigned_pending_review", source, None)
+    try:
+        if source.is_symlink() or not source.is_file() or source.stat().st_size <= 0:
+            raise C2PASigningError("c2pa_input_invalid")
+    except OSError as exc:
+        raise C2PASigningError("c2pa_input_invalid") from exc
+
+    try:
+        if source.resolve() == destination.resolve() or destination.is_symlink() or destination.exists():
+            raise C2PASigningError("c2pa_output_unsafe")
+        if destination.parent.is_symlink():
+            raise C2PASigningError("c2pa_output_unsafe")
+    except OSError as exc:
+        raise C2PASigningError("c2pa_input_invalid") from exc
+
+    if certificate_path is None or private_key_path is None:
+        raise C2PASigningError("c2pa_credentials_missing")
+    if not isinstance(timestamp_authority_url, str) or not timestamp_authority_url:
+        raise C2PASigningError("c2pa_timestamp_authority_missing")
+    if timestamp_authority_url not in {
+        "http://timestamp.digicert.com",
+        "https://timestamp.digicert.com",
+    }:
+        raise C2PASigningError("c2pa_timestamp_authority_invalid")
+    certificate = Path(certificate_path)
+    private_key = Path(private_key_path)
+    if (
+        certificate.is_symlink()
+        or private_key.is_symlink()
+        or not certificate.is_file()
+        or not private_key.is_file()
+    ):
+        raise C2PASigningError("c2pa_credentials_missing")
+
+    try:
+        from c2pa import (
+            Builder,
+            C2paSignerInfo,
+            C2paSigningAlg,
+            Reader,
+            Signer,
+        )
+    except ImportError as exc:
+        raise C2PASigningError("c2pa_sdk_missing") from exc
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".partial",
+        dir=destination.parent,
+    )
+    os.close(fd)
+    temporary = Path(temp_name)
+    linked = False
+    try:
+        signer_info = C2paSignerInfo(
+            alg=C2paSigningAlg.ES256,
+            sign_cert=certificate.read_bytes(),
+            private_key=private_key.read_bytes(),
+            ta_url=timestamp_authority_url.encode("utf-8"),
+        )
+        manifest_json = json.dumps(
+            build_manifest(title, media_format=media_format),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        with Signer.from_info(signer_info) as signer:
+            with Builder(manifest_json) as builder:
+                with source.open("rb") as source_stream, temporary.open("w+b") as output_stream:
+                    builder.sign(signer, media_format, source_stream, output_stream)
+        if temporary.stat().st_size <= 0:
+            raise C2PASigningError("c2pa_signed_output_missing")
+        with temporary.open("rb") as signed_stream:
+            with Reader(media_format, signed_stream) as reader:
+                readback = json.loads(reader.json())
+        manifest_sha256 = _validate_readback(readback)
+        os.link(temporary, destination)
+        linked = True
+        temporary.unlink()
+        return C2PASigningResult("signed_local_readback", destination, manifest_sha256)
+    except C2PASigningError:
+        raise
+    except FileExistsError as exc:
+        raise C2PASigningError("c2pa_output_unsafe") from exc
+    except Exception as exc:
+        raise C2PASigningError("c2pa_sign_or_verify_failed") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+        if linked and not destination.is_file():
+            destination.unlink(missing_ok=True)
+
+
+def verify_signed_media_readback(
+    path: str | Path,
+    *,
+    media_format: str = "video/mp4",
+) -> str:
+    """Perform a Reader-only local verification without signing or TSA access."""
+
+    source = Path(path)
+    if media_format not in {"video/mp4", "image/jpeg", "image/png", "image/webp"}:
+        raise C2PASigningError("c2pa_media_format_unsupported")
+    try:
+        if source.is_symlink() or not source.is_file() or source.stat().st_size <= 0:
+            raise C2PASigningError("c2pa_input_invalid")
+    except OSError as exc:
+        raise C2PASigningError("c2pa_input_invalid") from exc
+    try:
+        from c2pa import Reader
+    except ImportError as exc:
+        raise C2PASigningError("c2pa_sdk_missing") from exc
+    try:
+        with source.open("rb") as signed_stream:
+            with Reader(media_format, signed_stream) as reader:
+                readback = json.loads(reader.json())
+        return _validate_readback(readback)
+    except C2PASigningError:
+        raise
+    except Exception as exc:
+        raise C2PASigningError("c2pa_readback_invalid") from exc
+
+
 def sign_video(
     input_path: str | Path,
     *,
     output_path: str | Path | None = None,
     title: str | None = None,
 ) -> str:
-    """Sign an mp4 with C2PA Content Credentials, returning the output path.
+    """Compatibility wrapper used by current S1/S2 until the F2 shared boundary lands."""
 
-    Behavior:
-    - If ``C2PA_ENABLED`` is not set → no-op, returns ``str(input_path)``.
-    - If c2pa-python is not installed → logs warning, returns input path.
-    - If cert / key env vars missing → logs warning, returns input path.
-    - On signing exception → logs error, returns input path (NEVER raises).
+    source = Path(input_path)
+    policy = C2PASigningPolicy(mode="required" if is_enabled() else "local_draft")
+    destination = (
+        Path(output_path)
+        if output_path is not None
+        else source.with_name(f"{source.stem}_signed{source.suffix}")
+    )
+    result = sign_and_verify_media(
+        source,
+        output_path=destination,
+        title=title or source.stem,
+        policy=policy,
+        certificate_path=os.environ.get("C2PA_CERT_PATH"),
+        private_key_path=os.environ.get("C2PA_KEY_PATH"),
+        timestamp_authority_url=os.environ.get(
+            "C2PA_TSA_URL",
+            "http://timestamp.digicert.com",
+        ),
+    )
+    return str(result.output_path)
 
-    Args:
-        input_path: source mp4 to sign.
-        output_path: where to write the signed mp4. Defaults to a sibling
-            file with `_signed.mp4` suffix.
-        title: human-readable title for the manifest. Defaults to the file
-            stem.
 
-    Returns:
-        Absolute path to the signed mp4 (or the original on no-op / failure).
-    """
-    src = Path(input_path)
-    if not is_enabled():
-        return str(src)
-
-    if not src.exists() or src.stat().st_size == 0:
-        logger.warning("c2pa: input not found or empty, skipping", path=str(src))
-        return str(src)
-
-    cert_path = os.environ.get("C2PA_CERT_PATH")
-    key_path = os.environ.get("C2PA_KEY_PATH")
-    if not cert_path or not key_path:
-        logger.warning(
-            "c2pa: cert/key env not configured, skipping signing",
-            cert_set=bool(cert_path),
-            key_set=bool(key_path),
-        )
-        return str(src)
-
-    try:
-        import c2pa  # type: ignore[import-not-found]
-    except ImportError:
-        logger.warning("c2pa: c2pa-python not installed, skipping signing")
-        return str(src)
-
-    dest = Path(output_path) if output_path else src.with_name(f"{src.stem}_signed{src.suffix}")
-    manifest = build_manifest(title=title or src.stem)
-    tsa_url = os.environ.get("C2PA_TSA_URL", "http://timestamp.digicert.com")
-
-    try:
-        with open(cert_path, "rb") as f:
-            certs_pem = f.read()
-        with open(key_path, "rb") as f:
-            key_pem = f.read()
-
-        # c2pa-python's high-level API; signature shape may evolve. Wrap in a
-        # broad except below so prod stays unbroken if the binding changes.
-        builder = c2pa.Builder(manifest)
-        signer = c2pa.create_signer(
-            certs=certs_pem,
-            private_key=key_pem,
-            alg="es256",
-            tsa_url=tsa_url,
-        )
-        builder.sign_file(str(src), str(dest), signer=signer)
-        logger.info("c2pa: signed", input=str(src), output=str(dest))
-        return str(dest)
-    except Exception as exc:
-        logger.error(
-            "c2pa: signing failed, returning unsigned input",
-            error=str(exc)[:300],
-            path=str(src),
-        )
-        return str(src)
+__all__ = [
+    "C2PASigningError",
+    "C2PASigningPolicy",
+    "C2PASigningResult",
+    "build_manifest",
+    "is_enabled",
+    "sign_and_verify_media",
+    "sign_video",
+    "verify_signed_media_readback",
+]

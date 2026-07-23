@@ -5,7 +5,7 @@ module: backend
 topic: route-auth-contract
 status: stable
 created: 2026-05-31
-updated: 2026-07-13
+updated: 2026-07-22
 owner: self
 source: human+ai
 ---
@@ -23,6 +23,8 @@ source: human+ai
 公开路由只能出现在 `public_routes`：
 
 - `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
 - `GET /metrics`
 - `GET /api/media/{media_path:path}`
 - `POST /api/admin/auth/login`
@@ -32,6 +34,20 @@ source: human+ai
 必须携带绑定 canonical path、tenant、purpose 与 expiry 的 tenant-bound token。
 `GET /api/media/sign` 通过 `verify_api_key` 取得 `AuthContext`，只使用认证上下文
 中的 tenant，不接受 client 自报 tenant。
+
+同一 mixed router 的两个 transparency GET 也必须直接依赖 `verify_api_key`：
+`GET /api/transparency/{resource_type}/{resource_id}` 与对应 `/package`。tenant 只来自
+`AuthContext`；client 不能提供 sidecar/path authority。read-only 不等于 public，二者
+都不得加入 `public_routes`。
+
+`GET /health/live` 只返回 process liveness；`GET /health/ready` 只返回脱敏的
+PostgreSQL required-schema 与 Alembic-head truth。两者不得返回 DSN、credential、
+raw exception 或 provider 状态，也不得执行 database migration。
+
+`GET /metrics` 在 FastAPI 内保持匿名，仅允许同一 `monitoring_internal` 网络上的
+Prometheus 直接抓取。canonical public nginx 必须对精确 `/metrics` 返回 `404`，不得
+proxy 到 backend。配置、验证和生产证据边界见
+[Monitoring ownership](./monitoring-ownership.md)。
 
 创作 API、资产 API、portfolio、telemetry、legacy `/api/assets/*` 必须通过 `verify_api_key` 挂载或 endpoint dependency 保护。
 
@@ -80,6 +96,8 @@ pytest tests/test_backend_route_auth_contract.py -q
 3. 创作 API route 优先挂在已有 `verify_api_key` router 下。
 4. 新增 tenant-bound readback router 时仍使用 mount-level `verify_api_key`，并在
    `api_key_router_mounts` 中登记；read-only 不等于 public。
+   Mixed router 的 transparency route 则同步更新 `transparency_routes` 并保持 endpoint
+   `verify_api_key` dependency。
 5. Acceptance create/read/revoke 同步核对 `acceptance_record_routes`，保持
    `artifact:accept|all`，并确认 `provider:submit` alone 不足。
 6. Publish adapter 同步核对 `publish_acceptance_routes`，保持

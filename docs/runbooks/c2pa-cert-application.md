@@ -1,127 +1,92 @@
 ---
 name: c2pa-cert-application
-description: C2PA cert 申请清单 + 模板邮件 + 流程跟踪。EU AI Act 8/2 deadline 强制 AI 生成视频签名。最迟 6/15 必须发送 CA 申请，CA 审批 7-14 天，B5 c2pa-python 镜像 1 day，B6 Adobe Inspector 验证 3 天。关键路径总 21-28 天。
+description: Production C2PA signing credential 的供应商调研、申请材料和 private-key custody 前置清单；不把 C2PA 当作唯一法律方案，也不预估未经核实的价格或周期。
 doc_type: runbook
 module: compliance
 topic: c2pa-pipeline
 status: stable
 created: 2026-05-17
-updated: 2026-05-17
+updated: 2026-07-23
 owner: User (operations) + AI (drafting support)
 related:
   - file: ../architecture/adr/006-c2pa-content-credentials.md
     relation: implements-decision-of
 ---
 
-# C2PA Cert 申请 — User Action Runbook
+# Production C2PA credential — owner action runbook
 
-## 一、Why now
+## 一、进入条件
 
-EU AI Act 自 **2026-08-02** 起强制要求 AI 生成内容（含视频）携带 C2PA Content Credentials 签名，否则在欧洲市场发布违规。
+EU Regulation 2024/1689 Article 50 的官方文本要求相关 AI system provider 在技术可行
+范围内提供 machine-readable、detectable marking，并对部分 deployer 场景规定可见披露；
+法规没有指定 C2PA 是唯一方案。
 
-关键路径：
+只有以下条件全部满足才启动采购/申请：
 
-```
-6/15 (latest) ─ 发送 CA 申请
-   ↓ 7-14 天 CA 审批
-6/22 ~ 6/29 ─ 收到 publisher cert
-   ↓ 1 天 B5 c2pa-python 入镜像
-6/23 ~ 6/30 ─ 镜像就绪
-   ↓ 3 天 B6 Adobe Inspector 验证
-6/26 ~ 7/03 ─ 验证完成
-   ↓ buffer for surprises
-8/2 ─ EU AI Act 生效（hard deadline）
-```
+- W4-06 owner/legal 已书面确认 operator role、geography、内容类型、例外与披露要求；
+- engineering owner 选择 C2PA 作为 production provenance 机制；
+- security owner 批准 private-key custody、rotation、revocation 与 incident response；
+- 目标 independent validator/trust list 和平台 preservation 验收方法已经确定。
 
-**今天 5/17 起到 6/15 还有 29 天 buffer。User 必须在 6/15 前 send。**
+供应商资格、费用、审批周期和平台支持在执行时通过官方渠道重新核实。旧日期、估价或
+非官方邮件地址不得作为采购事实。
 
-## 二、CA 二选一
+## 二、供应商调研
 
-| CA | 价格估算 | 流程 | 备注 |
-|---|---|---|---|
-| **DigiCert** | $400-$800/yr | 在线申请 + 公司验证 | 主流，文档清楚 |
-| **GlobalSign** | $300-$700/yr | 在线申请 + 法人电话验证 | 价格更友好 |
+可向 DigiCert、GlobalSign 或其他明确提供适用 C2PA signing credential 的供应商发起
+官方询价，但不得预设其当前产品可用。每家必须回答：
 
-**推荐**：同时询价两家，选回复快 + 价格 OK 的。
+- credential profile、algorithm/EKU 与 C2PA trust list 兼容性；
+- certificate chain、revocation/status service 与 timestamp 支持；
+- hardware-backed key generation、HSM/KMS/remote signing 选项；
+- key export policy、rotation/reissue、breach revocation 和 audit log；
+- 目标独立 validator 的可验证方法；
+- 当前正式价格、审批材料、SLA 和续期流程。
 
-## 三、所需材料 checklist
+## 三、材料最小化
 
-User 收集（约 1h）:
+供应商确认为必要后，由 owner 通过批准的私密渠道提供：
 
-- [ ] **公司营业执照** (PDF)
-- [ ] **法人身份证 / passport** (PDF)
-- [ ] **域名 ownership 证明**: `lute-tlz-dddd.top` WHOIS 截图 + DNS TXT 记录（CA 要求验证）
-- [ ] **业务用途说明**: "AI-generated short video content for cross-border e-commerce, distributed to TikTok/Facebook/Instagram"
-- [ ] **技术联系人邮箱** (User 提供)
-- [ ] **公司账单地址 + 付款方式**
+- 公司注册/授权材料；
+- signing identity 与业务用途说明；
+- 域名或组织控制证明（仅当供应商要求）；
+- 安全联系人、账单联系人与 incident contact；
+- 计划使用的 HSM/KMS/remote signing 架构。
 
-## 四、申请邮件模板（DigiCert）
+不要把营业执照、身份证件、私钥、申请表或供应商凭证放入仓库、issue、普通日志或
+Codex 记忆。本文不包含实际联系人、邮箱或 PII 模板。
 
-```
-Subject: C2PA Publisher Certificate Request — Lute / video.lute-tlz-dddd.top
+## 四、签发与 custody 验收
 
-To: cert-request@digicert.com
+1. 优先在 HSM/KMS/approved remote signer 内生成不可导出的 private key。
+2. 如供应商流程必须导入 key，使用 approved secret mount；禁止写入 image、Git、共享
+   volume、普通 `.env` 或命令历史。
+3. 记录 certificate chain、fingerprint、validity、EKU、owner、rotation/revocation 和
+   emergency disable procedure，但不记录 private key material。
+4. 在隔离环境签署 exact fixture media；由本地 Reader 和独立 validator 分别检查。
+5. 本地状态仍叫 `signed_local_readback`；只有 W4-08 独立结果可记录 independent evidence。
+6. 在目标平台的授权样本上传后验证 manifest/label preservation；平台 receipt 不能替代
+   这一检查。
 
-Dear DigiCert,
+## 五、失败与停止规则
 
-We are applying for a C2PA Content Credentials publisher certificate for
-our AI-generated video product.
+- 供应商不能证明适用 credential/trust path：停止，不使用普通 TLS/self-signed cert
+  冒充 production trust。
+- private key custody 不满足 security owner：停止，不导出到主机文件作为临时绕过。
+- Reader/validator/平台 preservation 任一失败：保持 acceptance/publish/delivery gate
+  关闭，保留证据并修根因。
+- 法律 scope 未批准：只保留本地 engineering provenance，不宣称合规。
 
-Company:           Lute (路特)
-Product:           Short Video AI Pipeline
-Production domain: https://video.lute-tlz-dddd.top
-Business:          Cross-border e-commerce video content (maternity products)
-                   distributed to TikTok / Facebook / Instagram
-EU AI Act:         Required to sign AI-generated content per 2026-08-02 deadline
+## 六、当前状态
 
-Cert requirements:
-- Identifier:      AI-generated content metadata
-- Validity:        1 year (auto-renew preferred)
-- Algorithm:       ES256 (ECDSA P-256)
-- Key usage:       digitalSignature
+当前仓库仅有 pinned `c2pa-python`、strict sidecar、fixture signing 和本地 Reader 回读
+证据。W4-06/W4-07/W4-08 均是独立外部 gate；本 runbook 本身不证明申请已发送、证书已
+签发、生产已配置、平台已保留或法律已验收。
 
-Attachments:
-1. Business license (公司营业执照).pdf
-2. Legal representative ID.pdf
-3. Domain ownership proof (WHOIS + DNS TXT).pdf
+## 相关资料
 
-Please confirm:
-- Total fee
-- Estimated approval timeline
-- Technical onboarding contact
-
-Best regards,
-[User Name]
-[User Email]
-[Phone]
-```
-
-## 五、收到 cert 后
-
-User 把 cert + private key 安全交付给运维（不要 commit 到 git）：
-
-```
-production:/opt/ai-video/secrets/
-├── c2pa-cert.pem        # public cert (chmod 644)
-└── c2pa-key.pem         # private key (chmod 600, owner=ai-video)
-```
-
-然后 AI 推进 B5（c2pa-python 入 backend image）+ B6（Adobe Inspector 验证）。
-
-## 六、Status tracking
-
-| Date | Stage | Owner | Status |
-|---|---|---|---|
-| 5/17 | runbook ready | AI | ✅ |
-| TBD | 发送 CA 申请 | User | ⏳ |
-| TBD | 收到 cert | User | ⏳ |
-| TBD | B5 c2pa-python 入镜像 | AI | ⏳ blocked on cert |
-| TBD | B6 Adobe Inspector 验证 | User+AI | ⏳ blocked on B5 |
-| 8/2 | EU AI Act 生效 deadline | n/a | ⚠️ |
-
-## 七、Fallback if CA approval delays
-
-如 6/29 仍未收到 cert：
-1. 启动 **GlobalSign 平行申请**（应早做）
-2. **emergency option**: 用 [Adobe Content Authenticity Initiative free dev cert](https://contentauthenticity.org/developer-tools) — 非生产可用，但能 demo 流程
-3. 评估 8/2 后的 graceful degradation：在视频 metadata 加 `_unsigned_pending_c2pa: true` 标记，避免完全停服
+- [ADR-006](../architecture/adr/006-c2pa-content-credentials.md)
+- [C2PA local checklist](./c2pa-dry-run-checklist.md)
+- [Transparency delivery](./transparency-delivery.md)
+- [EU Regulation 2024/1689](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng)
+- [C2PA Content Credentials specification](https://spec.c2pa.org/specifications/specifications/2.2/specs/ContentCredentials.html)

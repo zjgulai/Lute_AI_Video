@@ -255,6 +255,60 @@ class TestGate3ClipsLifecycle:
         assert reloaded["current_step"] is None
 
     @pytest.mark.asyncio
+    async def test_approve_real_clip_uses_transparency_snapshot_and_is_idempotent(
+        self,
+        isolated_state_dir,
+    ):
+        from src.models.transparency import validate_transparency_sidecar
+
+        label = "g3-real-approval"
+        clip = (
+            isolated_state_dir
+            / "tenants"
+            / "default"
+            / "pending_review"
+            / label
+            / "clips"
+            / "candidate.mp4"
+        )
+        clip.parent.mkdir(parents=True)
+        clip.write_bytes(b"real-gate-clip")
+        state = _gate_3_state(label, ["g3_real"])
+        candidate = state["gates"]["gate_3_clips"]["candidates"][0]
+        candidate["data"].update(
+            {
+                "video_path": str(clip),
+                "simulated": False,
+                "is_stub": False,
+            }
+        )
+        sm = PipelineStateManager()
+        await sm.save(label, state)
+
+        first = await approve_gate(label, "gate_3_clips", ["g3_real"])
+        persisted = await sm.load(label)
+        assert persisted is not None
+        projection = persisted["transparency"]
+        sidecar = validate_transparency_sidecar(
+            isolated_state_dir / projection["sidecar_path"],
+            expected_sha256=projection["sidecar_sha256"],
+            artifact_root=isolated_state_dir,
+        )
+        media_records = [record for record in sidecar.records if record.artifact]
+        assert first["idempotent"] is False
+        assert len(media_records) == 1
+        assert media_records[0].origin_kind == "human_edit"
+        assert media_records[0].c2pa_status == "unsigned_pending_review"
+        assert len(media_records[0].human_edit_ids) == 1
+        record_count = projection["record_count"]
+
+        replay = await approve_gate(label, "gate_3_clips", ["g3_real"])
+        replayed = await sm.load(label)
+        assert replay["idempotent"] is True
+        assert replayed is not None
+        assert replayed["transparency"]["record_count"] == record_count
+
+    @pytest.mark.asyncio
     async def test_approve_exceeds_max_selections_returns_error(self, isolated_state_dir):
         """Gate 3 has max_selections=1. Selecting 2 must error."""
         sm = PipelineStateManager()
@@ -267,6 +321,7 @@ class TestGate3ClipsLifecycle:
         assert "error" in result
         # Sanity: state did not advance
         reloaded = await sm.load("g3-toomany")
+        assert reloaded is not None
         assert reloaded["gates"]["gate_3_clips"]["approved"] is False
 
     @pytest.mark.asyncio
@@ -312,6 +367,7 @@ class TestCrossGateIsolation:
         await approve_gate("cross-iso", "gate_2_keyframe", ["c2_1"])
 
         reloaded = await sm.load("cross-iso")
+        assert reloaded is not None
         # Gate 2 approved
         assert reloaded["gates"]["gate_2_keyframe"]["approved"] is True
         # Gate 3 untouched

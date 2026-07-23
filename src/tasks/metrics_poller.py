@@ -12,6 +12,7 @@ Designed to be invoked from a FastAPI BackgroundTask or an asyncio loop.
 """
 
 import asyncio
+import inspect
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
@@ -312,7 +313,10 @@ class MetricsPoller:
         """Return a fail-closed source contract for metrics pull readiness."""
         summary_getter = getattr(self.repo, "get_active_post_source_summary", None)
         if callable(summary_getter):
-            summary = await summary_getter()
+            summary_result = summary_getter()
+            if not inspect.isawaitable(summary_result):
+                raise TypeError("metrics source summary must be awaitable")
+            summary = await summary_result
         else:
             posts = await self.repo.get_active_posts()
             summary = {
@@ -455,7 +459,19 @@ class MetricsPoller:
                 f"{platform} connector has no fetch_metrics method",
             )
         try:
-            return await fetch_metrics(post_id)
+            metrics_result = fetch_metrics(post_id)
+            if not inspect.isawaitable(metrics_result):
+                raise PlatformMetricsError(
+                    "schema_drift",
+                    f"{platform} connector fetch_metrics must be awaitable",
+                )
+            result = await metrics_result
+            if not isinstance(result, dict):
+                raise PlatformMetricsError(
+                    "schema_drift",
+                    f"{platform} connector fetch_metrics returned invalid payload",
+                )
+            return result
         except NotImplementedError as exc:
             raise PlatformMetricsError("not_implemented", str(exc)) from exc
         except PlatformMetricsError:

@@ -1511,6 +1511,61 @@ export function downloadJson(data: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+export type TransparencyResourceType = "fast" | "scenario";
+
+export interface TransparencyDisclosure {
+  schema_version: "transparency-disclosure.v1";
+  ai_generated: true;
+  label: "AI-generated";
+  verification_scope: "provenance_only" | "unsigned_pending_review" | "local_reader_only";
+  independently_validated: false;
+  sidecar_path: string;
+  sidecar_sha256: string;
+  record_count: number;
+  human_edit_record_count: number;
+  source_reference_count: number;
+  c2pa_signing_mode: "disabled" | "local_draft" | "required";
+  final_artifact_c2pa_status: "not_applicable" | "unsigned_pending_review" | "signed_local_readback";
+  package_available: true;
+}
+
+export async function getTransparencyDisclosure(
+  resourceType: TransparencyResourceType,
+  resourceId: string,
+  options?: { signal?: AbortSignal },
+): Promise<TransparencyDisclosure> {
+  const res = await apiFetch(
+    `/api/transparency/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}`,
+    {
+      headers: getHeaders(false),
+      signal: options?.signal,
+    },
+  );
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  return res.json();
+}
+
+export async function downloadTransparencyPackage(
+  resourceType: TransparencyResourceType,
+  resourceId: string,
+): Promise<void> {
+  const res = await apiFetch(
+    `/api/transparency/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}/package`,
+    { headers: getHeaders(false) },
+  );
+  if (!res.ok) throw new ApiError(await parseApiError(res));
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `transparency-${resourceId}.zip`;
+    anchor.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export async function fetchAssets(options?: { signal?: AbortSignal }): Promise<unknown[]> {
   if (isDemoMode()) {
     const { DEMO_ASSETS } = await import("@/demo-data");
@@ -2004,6 +2059,8 @@ export async function getScenarioStatus(
 ): Promise<{
   label: string;
   scenario: string;
+  step_order: string[];
+  gates?: Record<string, { status?: string }>;
   status: string;
   lifecycle_status?: string | null;
   completion_kind?: string | null;
@@ -2361,6 +2418,8 @@ export interface FastModeResult {
   tts_path: string | null;
   tts_is_fallback?: boolean;
   tts_fallback_reason?: string | null;
+  resource_type?: "fast";
+  resource_id?: string;
   error?: string;
 }
 
@@ -2455,7 +2514,11 @@ export async function pollFastStatus(
     if (
       ["done", "completed", "completed_bounded", "completed_full"].includes(terminalStatus)
       && snap.result
-    ) return snap.result;
+    ) return {
+      ...snap.result,
+      resource_type: "fast",
+      resource_id: taskId,
+    };
     if (snap.status === "failed" || terminalStatus === "failed" || terminalStatus === "error") {
       throw new FastTerminalError(snap.error || "Fast Mode generation failed");
     }

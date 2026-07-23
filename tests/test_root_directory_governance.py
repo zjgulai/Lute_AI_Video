@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = REPO_ROOT / "configs" / "root-directory-governance-contract.json"
@@ -31,7 +32,18 @@ def _tracked_root_entries() -> set[str]:
     return {path.split("/", 1)[0] for path in _tracked_paths()}
 
 
-def _contract() -> dict:
+def _visible_untracked_root_entries() -> set[str]:
+    output = subprocess.check_output(
+        ("git", "ls-files", "--others", "--exclude-standard", "-z"), cwd=REPO_ROOT
+    )
+    return {
+        path.split("/", 1)[0]
+        for path in output.decode().split("\0")
+        if path
+    }
+
+
+def _contract() -> dict[str, Any]:
     assert CONTRACT_PATH.exists(), "root directory governance contract is missing"
     return json.loads(CONTRACT_PATH.read_text())
 
@@ -46,8 +58,9 @@ def _classified_root_entries() -> set[str]:
     return entries
 
 
-def test_every_tracked_root_entry_is_classified():
-    assert _tracked_root_entries() == _classified_root_entries()
+def test_every_visible_root_entry_is_classified():
+    visible_root_entries = _tracked_root_entries() | _visible_untracked_root_entries()
+    assert visible_root_entries == _classified_root_entries()
 
 
 def test_root_contract_keeps_status_and_reason_for_every_entry():

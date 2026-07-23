@@ -8,6 +8,7 @@ import {
   XCircle,
   Clock,
 } from "@phosphor-icons/react";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface ServiceStatus {
   status: "healthy" | "degraded" | "down";
@@ -34,14 +35,15 @@ const SERVICE_LABELS: Record<string, string> = {
 };
 
 export default function AdminHealthPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<HealthData | null>(null);
   const [history, setHistory] = useState<HealthHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    setError("");
+    setError(false);
     try {
       const [statusData, historyData] = await Promise.all([
         adminFetchJson<HealthData>("/api/admin/health/status"),
@@ -52,7 +54,7 @@ export default function AdminHealthPage() {
       setData(statusData);
       setHistory(historyData.checks);
     } catch {
-      setError("Failed to load health data");
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -94,6 +96,14 @@ export default function AdminHealthPage() {
     }
   };
 
+  const statusLabel = (status: ServiceStatus["status"]) => t(
+    status === "healthy"
+      ? "admin.health.healthy"
+      : status === "degraded"
+        ? "admin.health.degraded"
+        : "admin.health.down",
+  );
+
   if (loading) {
     return (
       <div className="space-y-4" aria-busy="true" aria-live="polite">
@@ -123,21 +133,21 @@ export default function AdminHealthPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-[var(--text-h1)]">
-          System Health
+          {t("admin.health.title")}
         </h1>
         <button
           onClick={load}
           className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
         >
           <Clock size={12} weight="fill" />
-          Check Now
+          {t("admin.health.checkNow")}
         </button>
       </div>
 
       {error && (
         <div className="text-center py-8">
-          <p className="text-xs text-[var(--text-muted)] mb-2">{error}</p>
-          <button onClick={load} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">Retry</button>
+          <p className="text-xs text-[var(--text-muted)] mb-2">{t("admin.health.loadFailed")}</p>
+          <button onClick={load} className="apple-btn text-xs py-1 px-3 border border-[var(--border-default)]">{t("admin.common.retry")}</button>
         </div>
       )}
 
@@ -165,7 +175,7 @@ export default function AdminHealthPage() {
                       : "bg-[rgba(208,78,90,0.1)] text-[var(--crimson-mist)]"
                   }`}
                 >
-                  {svc.status}
+                  {statusLabel(svc.status)}
                 </span>
                 {svc.latency_ms > 0 && (
                   <span className="text-[var(--text-muted)]">
@@ -181,7 +191,10 @@ export default function AdminHealthPage() {
       {/* Checked at */}
       {data?.checked_at && (
         <p className="text-[11px] text-[var(--text-muted)]">
-          Last checked: {new Date(data.checked_at).toLocaleString()}
+          {t("admin.health.lastChecked").replace(
+            "{time}",
+            new Date(data.checked_at).toLocaleString(),
+          )}
         </p>
       )}
 
@@ -189,13 +202,13 @@ export default function AdminHealthPage() {
       {history.length > 0 && (
         <div className="apple-card overflow-hidden mt-4">
           <h2 className="text-sm font-medium text-[var(--text-h1)] p-4 pb-2 border-b border-[var(--divider-light)]">
-            Health Check History (24h)
+            {t("admin.health.history")}
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-[var(--divider-light)]">
-                  <th className="text-left p-2 text-[var(--text-muted)] font-medium">Time</th>
+                  <th className="text-left p-2 text-[var(--text-muted)] font-medium">{t("admin.common.time")}</th>
                   {historyServiceKeys.map((svc) => (
                     <th key={svc} className="text-left p-2 text-[var(--text-muted)] font-medium">
                       {SERVICE_LABELS[svc] || svc}
@@ -218,6 +231,7 @@ export default function AdminHealthPage() {
                         <td key={svcKey} className="p-2">
                           {svc ? (
                             <span
+                              aria-label={`${SERVICE_LABELS[svcKey] || svcKey}: ${statusLabel(svc.status)}`}
                               className={`inline-block w-2 h-2 rounded-full ${
                                 svc.status === "healthy"
                                   ? "bg-[var(--jade-accent)]"

@@ -72,7 +72,11 @@ def test_python_dev_tools_are_declared_in_pyproject_and_requirements() -> None:
     for tool in contract["python_dev_tools"]:
         assert tool in dev_deps, f"{tool} missing from pyproject dev dependencies"
         assert tool in req_deps, f"{tool} missing from requirements.txt"
-        assert dev_deps[tool] == req_deps[tool], f"{tool} spec differs between pyproject and requirements"
+        assert "==" in req_deps[tool], f"{tool} must be exact in the generated compatibility export"
+
+    assert contract["rules"]["python_dev_deps_use_pyproject_lock_authority"] is True
+    assert contract["rules"]["python_requirements_is_generated_export"] is True
+    assert "python_dev_deps_mirror_requirements" not in contract["rules"]
 
 
 def test_frontend_lockfile_matches_declared_dev_tools() -> None:
@@ -128,7 +132,12 @@ def test_workflow_node_jobs_use_npm_ci_and_package_lock_cache() -> None:
             ), f"{workflow_path} setup-node must use v6 or a pinned v6 commit"
             with_config = step.get("with") or {}
             assert with_config.get("cache") == "npm"
-            assert with_config.get("cache-dependency-path") == "web/package-lock.json"
+            cache_paths = {
+                line.strip()
+                for line in str(with_config.get("cache-dependency-path") or "").splitlines()
+                if line.strip()
+            }
+            assert "web/package-lock.json" in cache_paths
 
 
 def test_docker_dev_tool_parity_contract_is_documented_and_link_checked() -> None:
@@ -144,6 +153,8 @@ def test_docker_dev_tool_parity_contract_is_documented_and_link_checked() -> Non
     assert "npm ci" in runbook_text
     assert "package-lock.json" in runbook_text
     assert "pytest-timeout" in runbook_text
+    for tool in contract["python_dev_tools"]:
+        assert tool in runbook_text
     assert "不启动容器" in runbook_text
     assert "docs/runbooks/docker-dev-tool-parity.md" in scope_targets
     assert "docs/runbooks/docker-dev-tool-parity.md" in ci_text

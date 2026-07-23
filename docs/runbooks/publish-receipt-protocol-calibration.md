@@ -5,7 +5,7 @@ module: backend-frontend
 topic: publish-receipt-protocol-calibration
 status: stable
 created: 2026-07-14
-updated: 2026-07-14
+updated: 2026-07-23
 owner: self
 source: human+ai
 ---
@@ -101,6 +101,25 @@ Every newly written `published` attempt must contain one strict
 that receipt. Receipt JSON is canonical, limited to 8 KiB, and cannot contain
 credentials, signed upload URLs, staged parameters, provider payloads/errors,
 creator PII, product text, or absolute local paths.
+
+## Server-owned AI disclosure
+
+Publish preflight requires an `acceptance-create.v2` projection whose exact sidecar and final
+artifact currently verify as `signed_local_readback`. The service builds one strict
+`publish-disclosure.v1`; client metadata cannot supply, remove or override it.
+
+- TikTok: the effective description ends with exactly one `AI-generated content.` line. Hashtags
+  are included before the marker, and the final 2200-character limit is checked before acceptance
+  consume or connector mutation.
+- Shopify: the effective video title/alt starts with exactly one `[AI-generated] ` prefix, and the
+  final 300-character limit is checked before consume or mutation.
+- inspect/consume source, artifact and transparency projections must be identical. Drift after
+  preflight becomes non-retryable `publish_attempt_state_unknown`; the connector is not called.
+- durable attempt audit stores original metadata, effective metadata and the bounded disclosure.
+  The platform receipt remains separate and does not claim independent C2PA validation, trust or
+  platform manifest preservation.
+
+See [Transparency delivery](./transparency-delivery.md) for package/UI/error semantics.
 
 TikTok completion means Content Posting API v2 returned
 `PUBLISH_COMPLETE`. The receipt stores the async `publish_id` only as
