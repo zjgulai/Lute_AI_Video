@@ -131,12 +131,16 @@ stats = json.loads((backup_dir / "pg_dump_stats.json").read_text(encoding="utf-8
 expected = set(stats.get("expected_tables", []))
 if not expected or expected != set(stats.get("tables", {})):
     raise SystemExit("backup stats table set is invalid")
+schema_metadata = {"alembic_version"}
+if expected & schema_metadata:
+    raise SystemExit("backup stats must exclude schema metadata tables")
 actual = set()
 for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
     parts = line.split()
     if len(parts) >= 7 and parts[3:5] == ["TABLE", "public"]:
         actual.add(parts[5])
-if expected != actual:
+expected_schema = expected | schema_metadata
+if expected_schema != actual:
     raise SystemExit("schema archive table set does not match backup stats")
 PY
 if sudo test -f "$LATEST/restore_verified.json"; then
