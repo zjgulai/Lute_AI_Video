@@ -103,6 +103,54 @@ async def test_fast_mode_no_media_does_not_construct_media_clients() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fast_mode_implicit_run_ids_stay_unique_when_clock_is_frozen(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.services import fast_mode
+
+    monkeypatch.setattr(fast_mode.time, "time", lambda: 1_783_000_000.0)
+    monkeypatch.setattr(fast_mode, "OUTPUT_DIR", tmp_path)
+    service = fast_mode.FastModeService(
+        llm_client=_FakeLLM(),
+        seedance_client_factory=lambda **_: None,
+        cosyvoice_client_factory=lambda **_: None,
+    )
+    kwargs = {
+        "user_prompt": "safe object shot",
+        "duration": 10,
+        "enable_tts": False,
+        "artifact_disposition": "pending_review",
+        "tenant_id": "momcozy-marketing",
+        "provider_max_retries": 0,
+        "enable_media_synthesis": False,
+        "effective_generation_policy": _fast_policy(enable_media_synthesis=False),
+    }
+
+    first = await service.generate(**kwargs)
+    second = await service.generate(**kwargs)
+
+    first_run_id = first.get("artifact_run_id")
+    second_run_id = second.get("artifact_run_id")
+    assert isinstance(first_run_id, str)
+    assert isinstance(second_run_id, str)
+    assert first_run_id != second_run_id
+    first_dir = fast_mode._artifact_output_dir(
+        "pending_review",
+        tenant_id="momcozy-marketing",
+        run_id=first_run_id,
+    )
+    second_dir = fast_mode._artifact_output_dir(
+        "pending_review",
+        tenant_id="momcozy-marketing",
+        run_id=second_run_id,
+    )
+    assert first_dir != second_dir
+    assert first_dir.name == first_run_id
+    assert second_dir.name == second_run_id
+
+
+@pytest.mark.asyncio
 async def test_fast_mode_no_media_stops_before_seedance_and_tts() -> None:
     from src.services.fast_mode import FastModeService
 

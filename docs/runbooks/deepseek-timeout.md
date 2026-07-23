@@ -61,12 +61,13 @@ mutation，必须获得一次性的精确授权和预算后另行执行；不得
 
 ### 场景 C: 限速（429）
 
-- **判断**：日志出现 HTTP 429/`Too many requests`
+- **判断**：调用方或受控响应证据明确出现 HTTP 429/`Too many requests`；项目日志本身不保证保留 provider 名称或状态码。
 - **响应**：
-  1. 检查并发：`sudo docker logs ai_video_backend | grep -c "deepseek.*POST"` 看每分钟次数
-  2. 临时降并发：`OPT-E_SEEDANCE_SEMAPHORE`（注：seedance 是 poyo 不是 deepseek，这里指降低 pipeline 并发提交速率）
-  3. 联系 DeepSeek 增加配额；provider 切换属于配置与协议变更，必须单独审查和部署
-  4. **不要**直接重启容器
+  1. 可查看近一分钟的 best-effort 外部日志信号：`sudo docker logs --since 1m ai_video_backend 2>&1 | grep -ciE "deepseek.*(429|too many requests)"`。项目自有日志会把 provider 异常归一化，因此结果是 0 不能排除 429，也不能作为精确的 provider-call count。
+  2. 当前没有运行时暂停开关，也没有已接线的 runtime submit pause/concurrency control。操作员只能先停止人工或上游系统继续发起新任务；如需在 ingress 阻断新 POST，必须使用另行批准且有独立 SOP 的变更。不得把 `deploy maintenance`、停止 backend 或重启容器当作临时限流动作。
+  3. 若未来增加运行时暂停或并发控制，必须经过独立设计、代码审查、测试、授权和部署，不能把未接线对象当作操作旋钮。
+  4. 联系 DeepSeek 增加配额；provider 切换属于配置与协议变更，必须单独审查和部署
+  5. **不要**直接重启容器
 - **预防**：使用现有 pipeline failure-rate 告警；在 provider 指标拥有真实 call-site 前不得新增 provider latency panel
 
 ### 场景 D: 单个 pipeline 卡在某节点（不是全局故障）

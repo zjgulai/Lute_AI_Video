@@ -14,6 +14,7 @@ import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 import structlog
 from pydantic import ValidationError
@@ -57,6 +58,14 @@ def _safe_path_segment(value: str | None, fallback: str) -> str:
     return cleaned[:80] or fallback
 
 
+def _new_fast_run_id() -> str:
+    return f"fast_mode_{int(time.time())}_{uuid4().hex}"
+
+
+def _resolve_artifact_run_id(value: str | None) -> str:
+    return _safe_path_segment(value, _new_fast_run_id())
+
+
 def _artifact_output_dir(
     disposition: FastModeArtifactDisposition,
     *,
@@ -65,11 +74,11 @@ def _artifact_output_dir(
 ) -> Path:
     if disposition == "pending_review":
         tenant = _safe_path_segment(tenant_id, "default")
-        run = _safe_path_segment(run_id, f"fast_mode_{int(time.time())}")
+        run = _resolve_artifact_run_id(run_id)
         return OUTPUT_DIR / "tenants" / tenant / "pending_review" / "fast_mode" / run
     if disposition == "quarantine":
         tenant = _safe_path_segment(tenant_id, "default")
-        run = _safe_path_segment(run_id, f"fast_mode_{int(time.time())}")
+        run = _resolve_artifact_run_id(run_id)
         return OUTPUT_DIR / "tenants" / tenant / "quarantine" / "fast_mode" / run
     return FAST_MODE_OUTPUT_DIR
 
@@ -228,10 +237,7 @@ class FastModeService:
             provider_max_retries=provider_max_retries,
             enable_media_synthesis=enable_media_synthesis,
         )
-        resolved_run_id = _safe_path_segment(
-            artifact_run_id,
-            f"fast_mode_{int(time.time())}",
-        )
+        resolved_run_id = _resolve_artifact_run_id(artifact_run_id)
         token = bind_effective_generation_policy(policy)
         operation_scope_token = None
         try:

@@ -31,7 +31,13 @@ class _StubGptImageSkill:
     async def execute(self, params: dict[str, Any]) -> Any:
         from src.skills.base import SkillResult
 
-        return SkillResult(success=True, data={"image_path": f"/tmp/{params['image_id']}.png"})
+        return SkillResult(
+            success=True,
+            data={
+                "image_path": f"/tmp/{params['image_id']}.png",
+                "simulated": False,
+            },
+        )
 
     async def safe_execute(self, params: dict[str, Any]) -> Any:
         return await self.execute(params)

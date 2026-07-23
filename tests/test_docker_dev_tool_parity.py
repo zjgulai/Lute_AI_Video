@@ -94,6 +94,36 @@ def test_frontend_lockfile_matches_declared_dev_tools() -> None:
         assert root_lock["devDependencies"][tool] == package["devDependencies"][tool]
 
 
+def test_frontend_package_json_has_one_complete_override_policy() -> None:
+    duplicate_keys: list[str] = []
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                duplicate_keys.append(key)
+            result[key] = value
+        return result
+
+    package = json.loads(
+        WEB_PACKAGE_JSON.read_text(),
+        object_pairs_hook=unique_object,
+    )
+
+    assert duplicate_keys == []
+    assert package["overrides"] == {
+        "@babel/core": "7.29.7",
+        "minimatch@10.2.5": {"brace-expansion": "5.0.6"},
+        "undici": "7.28.0",
+        "vite": "8.1.0",
+        "js-yaml": "4.3.0",
+        "next": {
+            "postcss": "8.5.16",
+            "sharp": "0.35.3",
+        },
+    }
+
+
 def test_frontend_dockerfile_requires_lockfile_and_never_falls_back_to_npm_install() -> None:
     dockerfile = WEB_DOCKERFILE.read_text()
 

@@ -16,6 +16,7 @@ from typing import Any
 
 import structlog
 
+from src.models.provider_cost import ProviderCostContractError
 from src.pipeline.feedback_gate import evaluate_upstream_quality
 from src.skills.base import SkillCallable, SkillResult
 from src.skills.registry import SkillRegistry
@@ -100,7 +101,7 @@ class KeyframeImagesSkill(SkillCallable):
 
         async def _gen_one(
             i: int, shot: dict[str, Any]
-        ) -> tuple[int, str, str, bool | None]:
+        ) -> tuple[int, str, str, bool | None] | asyncio.CancelledError:
             comp_prompt = self._build_composition_prompt(
                 visual=shot.get("visual", ""),
                 camera=shot.get("camera", ""),
@@ -118,7 +119,15 @@ class KeyframeImagesSkill(SkillCallable):
                 generate_params["output_dir"] = output_dir
             if provider_max_retries is not None:
                 generate_params["provider_max_retries"] = provider_max_retries
-            result = await reg.execute("gpt-image-generate-skill", generate_params)
+            try:
+                result = await reg.execute(
+                    "gpt-image-generate-skill",
+                    generate_params,
+                )
+            except asyncio.CancelledError as exc:
+                # Preserve the exact cancellation object across gather so the
+                # caller observes cancellation rather than a fallback result.
+                return exc
             if result.success and result.data:
                 image_path = result.data.get("image_path", "")
                 logger.info("keyframe: generated", shot=i, image_path=image_path)
@@ -131,19 +140,50 @@ class KeyframeImagesSkill(SkillCallable):
                 )
             # Fallback
             fallback_path = self._write_placeholder_frame(shot, image_id, params)
-            logger.warning("keyframe: fallback for shot", shot=i, error=result.error)
+            logger.warning(
+                "keyframe: fallback for shot",
+                shot=i,
+                code="keyframe_provider_result_failed",
+            )
             return i, fallback_path, comp_prompt, True
 
         tasks = [_gen_one(i, shot) for i, shot in enumerate(capped_shots)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         simulation_truth: list[bool | None] = []
-        for raw in results:
+        for shot_index, raw in enumerate(results):
+            if isinstance(raw, ProviderCostContractError):
+                raise raw
+            if isinstance(raw, asyncio.CancelledError):
+                raise raw
             if isinstance(raw, Exception):
-                logger.error("keyframe: generation exception", error=str(raw))
-                continue
+                logger.error(
+                    "keyframe: generation exception",
+                    shot=shot_index,
+                    code="keyframe_generation_exception",
+                )
+                return SkillResult(
+                    success=False,
+                    error="keyframe_generation_failed",
+                    metadata={
+                        "non_retryable": True,
+                        "failed_shot": shot_index,
+                    },
+                )
             if not isinstance(raw, tuple):
-                continue
+                logger.error(
+                    "keyframe: invalid generation result",
+                    shot=shot_index,
+                    code="keyframe_generation_result_invalid",
+                )
+                return SkillResult(
+                    success=False,
+                    error="keyframe_generation_result_invalid",
+                    metadata={
+                        "non_retryable": True,
+                        "failed_shot": shot_index,
+                    },
+                )
             i, image_path, comp_prompt, simulated = raw
             capped_shots[i]["keyframe_image_path"] = image_path
             capped_shots[i]["keyframe_prompt"] = comp_prompt
@@ -152,9 +192,20 @@ class KeyframeImagesSkill(SkillCallable):
             simulation_truth.append(simulated)
 
         storyboard["shots"] = capped_shots
-        storyboard["keyframes_generated"] = len(capped_shots)
-        if simulation_truth and all(value is not None for value in simulation_truth):
-            storyboard["simulated"] = any(value is True for value in simulation_truth)
+        storyboard["keyframes_generated"] = len(simulation_truth)
+        if len(simulation_truth) != len(capped_shots):
+            return SkillResult(
+                success=False,
+                error="keyframe_generation_incomplete",
+                metadata={"non_retryable": True},
+            )
+        if any(value is None for value in simulation_truth):
+            return SkillResult(
+                success=False,
+                error="keyframe_simulation_truth_missing",
+                metadata={"non_retryable": True},
+            )
+        storyboard["simulated"] = any(value is True for value in simulation_truth)
         if params.get("_quality_warning"):
             storyboard["_quality_warning"] = params["_quality_warning"]
         return SkillResult(success=True, data=storyboard)
@@ -229,7 +280,7 @@ class KeyframeImagesSkill(SkillCallable):
         try:
             from PIL import Image
 
-            img = Image.new("RGB", (1024, 1792), color=(60, 60, 80))  # type: ignore[arg-type]
+            img = Image.new("RGB", (1024, 1792), color=(60, 60, 80))
             # Simple text indicator isn't possible with PIL alone in a
             # cross-platform way, but the placeholder is visually distinct.
             path.parent.mkdir(parents=True, exist_ok=True)

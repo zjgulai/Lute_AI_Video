@@ -1,87 +1,81 @@
 ---
 name: c2pa-content-credentials
-description: ADR-006 — 采用 C2PA、服务端 provenance sidecar 与可见 AI 标签作为内容透明度工程方案；法律适用、受信证书、独立验证和平台保留仍需单独证据。
+description: ADR-006 — 采用 C2PA Content Credentials 对 AI 生成视频签名以满足 EU AI Act 2026-08-02 deadline。决定 CA 选型、签名算法、镜像集成方式、验证策略。runbook 见 docs/runbooks/c2pa-cert-application.md。
 doc_type: adr
 module: compliance
 topic: content-provenance
-status: accepted
+status: deprecated
 created: 2026-05-17
 updated: 2026-07-23
 decision_makers: User
 related:
-  - file: ../../runbooks/transparency-delivery.md
-    relation: implemented-via
   - file: ../../runbooks/c2pa-cert-application.md
-    relation: external-prerequisite
+    relation: implemented-via
+  - file: ./008-transparency-evidence-boundary.md
+    relation: superseded-by
 ---
 
-# ADR-006: C2PA and visible disclosure for AI-generated media
+# ADR-006: C2PA Content Credentials for AI-Generated Videos
 
-## 2026-07-23 clarification
-
-本澄清保留“采用 C2PA 作为 provenance 工程机制”的原决定，但撤回旧版本中以下过度
-结论：EU AI Act 指定必须使用 C2PA、当前实现已经满足法律合规、平台必然保留或展示
-`C2PA verified`、以及本地自签回读等于受信或独立验证。
-
-EU Regulation 2024/1689 Article 50(2) 要求相关 provider 的合成内容输出在技术可行范围内
-以 machine-readable 形式标记并可检测；Article 50(4) 对特定 deep-fake deployer 另有清晰
-披露义务。法规文本没有把 C2PA 写成唯一技术方案。项目的主体角色、地域、内容类型、
-例外和最终义务必须由 W4-06 owner/legal 记录确定，工程团队不得自行宣称法律合规。
+> **Superseded by ADR-008.** 以下内容保留为 2026-05-17 的原始历史决策，不代表当前法律、信任或平台留存结论。
 
 ## Context
 
-系统需要同时保存机器可验证的生成来源和用户可见的 AI-generated 提示。单独的 UI
-文字无法提供 artifact-bound provenance；单独嵌入 C2PA 也不能证明证书受信、平台会保留
-manifest、用户会看到标签或法律义务已经满足。
+EU AI Act Article 50 强制要求自 **2026-08-02** 起，AI 生成的视频内容必须携带可验证的 provenance 元数据（C2PA Content Credentials），否则在欧盟市场分发违规。
+
+我们的产品 (短视频 AI Pipeline) 主要面向跨境电商 (TikTok / Facebook / Instagram)，部分流量来自欧洲，因此必须合规。
 
 ## Decision
 
-采用多层、fail-closed 的透明度边界：
+**Accepted Option A: CA-issued publisher cert + c2pa-python in backend image**
 
-1. 每个真实或 simulated producer 写入严格 hash-only `transparency-record.v1`，聚合为
-   immutable `transparency-sidecar.v1` 与 detached SHA-256。
-2. 最终 image/video 在 `required` policy 下必须由当前 pinned `c2pa-python` Signer 写入
-   AI-generated manifest，并由同一进程 Reader 回读；失败则不产生可验收 authority。
-3. 没有生产证书的本地草稿只能标记 `unsigned_pending_review`；本地 fixture certificate
-   的成功状态只能叫 `signed_local_readback`，不能叫 trusted、independently validated 或
-   compliant。
-4. Fast 和 S1-S5 结果/复核界面始终显示 AI-generated 标签。只有 durable projection、
-   sidecar、detached digest、artifact bytes 和本地 Reader truth 全部一致时，服务端才开放
-   transparency evidence package。
-5. human acceptance 绑定 exact sidecar/C2PA facts；publish 在 consume 前后重新验证同一
-   authority，并由服务端追加不可由 client 删除的 TikTok/Shopify 可见披露。
-6. provider receipt 只证明平台 operation/resource 的观察事实，不证明 transparency
-   manifest 被独立验证或在目标平台留存。
-
-## External gates
-
-- W4-06：owner/legal 确认 operator role、geography、内容类型、例外和可见标签规则。
-- W4-07：受信 production signing credential、private-key custody、rotation/revocation 和
-  HSM/KMS/secret mount 证据。
-- W4-08：独立 validator 对 exact media 的结果，以及目标平台上传后 preservation 和最终
-  用户可见披露证据。
-
-这些 gate 任一缺失时，不得把本地 `signed_local_readback` 或 evidence package 提升为
-production trust、independent validation、platform retention 或 legal compliance。
+1. **签名 CA**: DigiCert 或 GlobalSign（并行询价，2 周内选定）
+2. **签名算法**: ES256 (ECDSA P-256) — C2PA spec 推荐 + 性能合理
+3. **集成位置**: backend image 内嵌 `c2pa-python` SDK，每个生成视频在 `remotion_assemble` 后立即签名
+4. **元数据**: `c2pa.actions.ai_generated` claim + `c2pa.author` + `c2pa.created` timestamp
+5. **存储**: 签名后 .mp4 直接覆盖原文件，原始 unsigned 版本在 portfolio 不保留
+6. **验证**: Adobe Inspector / contentcredentials.org/verify 双源验证
 
 ## Alternatives considered
 
-- 只显示 UI/水印：不采用，不能提供 artifact-bound machine-readable provenance。
-- 只使用 C2PA、不显示文字披露：不采用，无法保证目标平台或用户实际看到披露。
-- 自签证书作为生产信任：不采用，本地链路测试不建立外部 trust anchor。
-- 第三方签名服务：未批准；成本、数据边界、SLA 和 custody 需要新的设计与授权。
+- **Option B: 自签 cert** — 拒绝。Adobe Inspector / TikTok / Facebook 校验器不信任自签 cert，欧盟监管不认可。
+- **Option C: 第三方 SaaS (e.g., Truepic)** — 拒绝。每视频 $0.05-$0.20 成本不可控，外部依赖增 SLA 风险。
+- **Option D: 不签名 + 在 UI 加 "AI generated" 文字水印** — 拒绝。不符合 EU AI Act 技术要求。
 
 ## Consequences
 
-- 正面：provenance、acceptance、package 和 publish metadata 使用同一服务端 authority，
-  缺失或不一致时 fail closed。
-- 代价：sidecar、artifact、certificate、Reader 和 platform metadata 都进入验收矩阵；
-  生产证书与独立 validator 仍是外部依赖。
-- 未验证：生产签名时延/容量、CA 费用/审批周期、平台 manifest 保留和法律充分性。
+### Positive
+- ✅ 满足 EU AI Act 8/2 deadline
+- ✅ 用户在 TikTok 看到 "C2PA verified" 徽章，增加信任度
+- ✅ 一次集成，长期受益（cert 1 年自动续）
 
-## References
+### Negative
+- ⚠️ Backend image 增 ~30MB (c2pa-python + dependencies)
+- ⚠️ 每视频签名增 100-300ms 处理时间
+- ⚠️ Cert 年费 ~$500
+- ⚠️ Private key 安全管理负担（chmod 600 + 不入 git）
 
-- [EU Regulation 2024/1689, Article 50](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng)
-- [C2PA Content Credentials specification](https://spec.c2pa.org/specifications/specifications/2.2/specs/ContentCredentials.html)
-- [Transparency delivery runbook](../../runbooks/transparency-delivery.md)
-- [C2PA local checklist](../../runbooks/c2pa-dry-run-checklist.md)
+### Risk
+- ⏰ CA 审批 7-14 天 — 必须 6/15 前发送，否则 8/2 前到不了手
+- ⚠️ c2pa-python 与 ffmpeg 二进制兼容性需要测试
+
+## Implementation roadmap
+
+```
+B4 ─ 申请 CA cert         (user, 6/15 deadline)
+   ↓ wait 7-14 d
+B5 ─ c2pa-python 入镜像   (AI, 1 d)
+   ↓
+B6 ─ Adobe Inspector 验证 (user + AI, 3 d)
+   ↓
+8/2 ─ EU AI Act 生效 hard deadline
+```
+
+详细操作步骤见 [c2pa-cert-application.md](../../runbooks/c2pa-cert-application.md)。
+
+## Related
+
+- [EU AI Act Article 50](https://artificialintelligenceact.eu/article/50/)
+- [C2PA Spec 2.0](https://c2pa.org/specifications/specifications/2.0/specs/C2PA_Specification.html)
+- [c2pa-python](https://github.com/contentauth/c2pa-python)
+- [Adobe Content Credentials Inspector](https://contentcredentials.org/verify)

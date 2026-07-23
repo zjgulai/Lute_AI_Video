@@ -4,6 +4,8 @@ from copy import deepcopy
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from src.skills.keyframe_images import KeyframeImagesSkill
 from src.skills.registry import SkillRegistry
 
@@ -161,6 +163,168 @@ def test_keyframe_images_fallback_on_failure():
     for shot in result.data["shots"]:
         assert "keyframe_image_path" in shot
         assert shot["keyframe_image_path"] != ""
+
+
+def test_keyframe_failure_logs_use_stable_codes_without_provider_details():
+    """Fallback logs must never include raw provider error text."""
+    import asyncio
+
+    from src.skills import keyframe_images as keyframe_module
+    from src.skills.base import SkillResult
+
+    skill = KeyframeImagesSkill()
+    with (
+        patch.object(SkillRegistry, "execute", new_callable=AsyncMock) as mock_exec,
+        patch.object(keyframe_module.logger, "warning") as warning,
+    ):
+        mock_exec.return_value = SkillResult(
+            success=False,
+            error="private-provider-detail",
+        )
+        result = asyncio.run(
+            skill.execute(
+                {
+                    "storyboard": deepcopy(SAMPLE_STORYBOARD),
+                    "_max_shots": 1,
+                }
+            )
+        )
+
+    assert result.success
+    fallback_log = next(
+        call for call in warning.call_args_list
+        if call.args and call.args[0] == "keyframe: fallback for shot"
+    )
+    assert fallback_log.kwargs["code"] == "keyframe_provider_result_failed"
+    assert "error" not in fallback_log.kwargs
+    assert "private-provider-detail" not in str(fallback_log)
+
+
+def test_keyframe_missing_result_fails_the_whole_step_and_logs_safely():
+    """A missing shot result must not return a partial successful storyboard."""
+    import asyncio
+
+    from src.skills import keyframe_images as keyframe_module
+
+    skill = KeyframeImagesSkill()
+    with (
+        patch.object(SkillRegistry, "execute", new_callable=AsyncMock) as mock_exec,
+        patch.object(keyframe_module.logger, "error") as error,
+    ):
+        mock_exec.side_effect = [
+            _mock_gpt_image_result("/tmp/real_keyframe.png"),
+            RuntimeError("private-provider-exception"),
+        ]
+        result = asyncio.run(
+            skill.execute(
+                {
+                    "storyboard": deepcopy(SAMPLE_STORYBOARD),
+                    "_max_shots": 2,
+                }
+            )
+        )
+
+    assert not result.success
+    assert result.error == "keyframe_generation_failed"
+    assert result.metadata == {
+        "non_retryable": True,
+        "failed_shot": 1,
+    }
+    exception_log = next(
+        call for call in error.call_args_list
+        if call.args and call.args[0] == "keyframe: generation exception"
+    )
+    assert exception_log.kwargs["code"] == "keyframe_generation_exception"
+    assert "error" not in exception_log.kwargs
+    assert "private-provider-exception" not in str(exception_log)
+
+
+def test_keyframe_provider_cost_contract_error_is_never_swallowed():
+    """Accounting contract failures must escape instead of becoming partial media."""
+    import asyncio
+
+    import pytest
+
+    from src.models.provider_cost import ProviderCostContractError
+
+    skill = KeyframeImagesSkill()
+    contract_error = ProviderCostContractError(
+        "provider_execution_context_missing",
+        "private-provider-detail",
+    )
+    with patch.object(
+        SkillRegistry,
+        "execute",
+        new_callable=AsyncMock,
+        side_effect=contract_error,
+    ):
+        with pytest.raises(ProviderCostContractError) as raised:
+            asyncio.run(
+                skill.execute(
+                    {
+                        "storyboard": deepcopy(SAMPLE_STORYBOARD),
+                        "_max_shots": 1,
+                    }
+                )
+            )
+
+    assert raised.value is contract_error
+
+
+def test_keyframe_cancellation_is_never_converted_to_a_result():
+    """Cancellation must preserve task semantics instead of becoming fallback."""
+    import asyncio
+
+    skill = KeyframeImagesSkill()
+    cancellation = asyncio.CancelledError("cancelled-provider-job")
+    with patch.object(
+        SkillRegistry,
+        "execute",
+        new_callable=AsyncMock,
+        side_effect=cancellation,
+    ):
+        with pytest.raises(asyncio.CancelledError) as raised:
+            asyncio.run(
+                skill.execute(
+                    {
+                        "storyboard": deepcopy(SAMPLE_STORYBOARD),
+                        "_max_shots": 1,
+                    }
+                )
+            )
+
+    assert raised.value is cancellation
+
+
+def test_keyframe_missing_simulation_truth_fails_closed():
+    """A successful nested skill must still declare real/simulated media truth."""
+    import asyncio
+
+    from src.skills.base import SkillResult
+
+    skill = KeyframeImagesSkill()
+    nested_result = SkillResult(
+        success=True,
+        data={"image_path": "/tmp/unknown_keyframe.png"},
+    )
+    with patch.object(
+        SkillRegistry,
+        "execute",
+        new_callable=AsyncMock,
+        return_value=nested_result,
+    ):
+        result = asyncio.run(
+            skill.execute(
+                {
+                    "storyboard": deepcopy(SAMPLE_STORYBOARD),
+                    "_max_shots": 1,
+                }
+            )
+        )
+
+    assert not result.success
+    assert result.error == "keyframe_simulation_truth_missing"
+    assert result.metadata == {"non_retryable": True}
 
 
 def test_keyframe_images_validate_params():

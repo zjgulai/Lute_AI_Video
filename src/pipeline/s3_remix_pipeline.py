@@ -30,6 +30,7 @@ import src.skills.continuity_storyboard_grid  # noqa: F401 — auto-register
 import src.skills.remix_script  # noqa: F401 — auto-register
 import src.skills.video_analysis  # noqa: F401 — auto-register
 from src.config import OUTPUT_DIR, S3_VIRAL_EXTRACT_DISABLED
+from src.models.provider_cost import ProviderCostContractError
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     build_continuity_audit_summary,
@@ -1045,20 +1046,31 @@ class S3InfluencerRemixPipeline:
                 generated = res.data.get("keyframes_generated", 0)
                 logger.info("s3: keyframe images done", generated=generated)
                 return res.data
-        except Exception as exc:
-            logger.error("s3: keyframe-images skill failed", error=str(exc))
+        except ProviderCostContractError:
+            raise
+        except Exception:
+            logger.error(
+                "s3: keyframe-images skill failed",
+                code="s3_keyframe_generation_failed",
+            )
 
         # Fallback: add empty keyframe_image_path to each shot
         logger.warning("s3: keyframe_images - using placeholder paths")
         fallback = dict(storyboard)
-        fallback_shots = fallback.get("shots", [])
+        fallback_shots = [
+            dict(shot)
+            for shot in fallback.get("shots", [])
+            if isinstance(shot, dict)
+        ]
         if image_job_cap is not None:
             fallback_shots = fallback_shots[: max(0, int(image_job_cap))]
         fallback["shots"] = fallback_shots
         for shot in fallback.get("shots", []):
             shot["keyframe_image_path"] = ""
             shot["keyframe_prompt"] = shot.get("visual", "")
-        fallback["keyframes_generated"] = len(fallback.get("shots", []))
+            shot["simulated"] = True
+        fallback["keyframes_generated"] = 0
+        fallback["simulated"] = True
         return fallback
 
     # ═══ Step 8-12: NEW media-producing steps ═══
