@@ -127,6 +127,64 @@ def test_source_manifest_rejects_symlinked_source_components(tmp_path: Path) -> 
         build_source_manifest(root, GIT_SHA, ["linked/app.py"])
 
 
+def test_source_manifest_allows_safe_tracked_file_symlink(tmp_path: Path) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "Dockerfile.backend").write_text("FROM scratch\n", encoding="utf-8")
+    (root / "Dockerfile").symlink_to("Dockerfile.backend")
+
+    manifest = build_source_manifest(
+        root,
+        GIT_SHA,
+        ["Dockerfile.backend", "Dockerfile"],
+    )
+    manifest_typed = cast(dict[str, Any], manifest)
+    dockerfile_entry = next(
+        entry for entry in manifest_typed["files"] if entry["path"] == "Dockerfile"
+    )
+
+    assert dockerfile_entry == {
+        "path": "Dockerfile",
+        "size_bytes": len(b"Dockerfile.backend"),
+        "sha256": hashlib.sha256(b"symlink\0Dockerfile.backend").hexdigest(),
+    }
+    assert validate_source_manifest(manifest, root) == manifest
+
+
+def test_source_manifest_rejects_unsafe_or_untracked_file_symlink(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "untracked.txt").write_text("not reviewed\n", encoding="utf-8")
+    (root / "untracked-link").symlink_to("untracked.txt")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    (root / "outside-link").symlink_to("../outside.txt")
+
+    with pytest.raises(BackupManifestError, match="source symlink target is not tracked"):
+        build_source_manifest(root, GIT_SHA, ["untracked-link"])
+    with pytest.raises(BackupManifestError, match="source file is missing or unsafe"):
+        build_source_manifest(root, GIT_SHA, ["outside-link"])
+
+
+def test_source_manifest_detects_symlink_replaced_by_same_text_file(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "target.txt").write_text("reviewed\n", encoding="utf-8")
+    link = root / "alias.txt"
+    link.symlink_to("target.txt")
+    manifest = build_source_manifest(root, GIT_SHA, ["alias.txt", "target.txt"])
+
+    link.unlink()
+    link.write_text("target.txt", encoding="utf-8")
+
+    with pytest.raises(BackupManifestError, match="source file checksum"):
+        validate_source_manifest(manifest, root)
+
+
 def test_source_manifest_allows_one_resolved_release_root_symlink(tmp_path: Path) -> None:
     release = tmp_path / "releases" / GIT_SHA
     release.mkdir(parents=True)
@@ -137,6 +195,41 @@ def test_source_manifest_allows_one_resolved_release_root_symlink(tmp_path: Path
     manifest = build_source_manifest(current, GIT_SHA, ["app.py"])
 
     assert validate_source_manifest(manifest, current) == manifest
+
+
+def test_source_create_cli_accepts_repository_tracked_internal_symlink(
+    tmp_path: Path,
+) -> None:
+    git_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    output = tmp_path / "source-manifest.v1.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "backup_manifest.py"),
+            "source-create",
+            "--root",
+            str(REPO_ROOT),
+            "--git-sha",
+            git_sha,
+            "--output",
+            str(output),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["status"] == "passed"
+    manifest = json.loads(output.read_text(encoding="utf-8"))
+    assert validate_source_manifest(manifest, REPO_ROOT) == manifest
 
 
 def test_source_create_cli_refuses_to_overwrite_existing_output(tmp_path: Path) -> None:

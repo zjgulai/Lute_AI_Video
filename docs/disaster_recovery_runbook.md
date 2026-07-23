@@ -44,7 +44,7 @@ PostgreSQL 证据，尚未部署，不能覆盖前述生产证据或声明 off-h
   - `pg_schema_signature_after.json`：schema archive 导出后的列签名；必须与数据事务内的签名一致。
   - `output/`：媒体文件目录快照。
   - `media_manifest.json`：媒体文件逐文件大小与 SHA-256。
-  - `source-manifest.v1.json`：reviewed Git SHA 对应的 tracked source 精确文件集、大小与 SHA-256。
+  - `source-manifest.v1.json`：reviewed Git SHA 对应的 tracked source 精确文件集、大小与 SHA-256。普通文件记录内容摘要；只允许最后一级、相对路径、仓库内且目标同样已跟踪的文件符号链接，链接摘要使用 `SHA-256("symlink\0" + 原始链接目标 UTF-8 字节)`，因此链接改向、逃逸、未跟踪目标、链接链或把链接替换为同文本普通文件都会 fail closed。
   - `backup-manifest.v1.json`：Git/source、immutable backend image ID/OCI revision、Alembic/PG、动态逐表行数、媒体精确文件集和所有恢复 artifact checksum 的 canonical SSOT。
   - `backup-manifest.v1.json.sha256`：canonical manifest 的 detached SHA-256。
   - `manifest.txt`：只保留兼容摘要，不再是恢复身份 SSOT。
