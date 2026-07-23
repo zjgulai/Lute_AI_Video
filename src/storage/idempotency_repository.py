@@ -16,13 +16,13 @@ import re
 import uuid
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 from . import db
 
 logger = logging.getLogger(__name__)
 
-ClaimOutcome = Literal["owner", "replay", "conflict"]
+ClaimOutcome = Literal["owner", "replay", "conflict", "authorization_conflict"]
 
 NONTERMINAL_STATUSES = frozenset({"reserved", "initializing", "queued", "running"})
 TERMINAL_STATUSES = frozenset({"completed", "failed", "recovery_required"})
@@ -30,6 +30,7 @@ ALLOWED_STATUSES = NONTERMINAL_STATUSES | TERMINAL_STATUSES
 ALLOWED_SCENARIOS = frozenset({"fast", "s1", "s2", "s3", "s4", "s5"})
 ALLOWED_RESOURCE_TYPES = frozenset({"fast", "scenario"})
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_AUTHORIZATION_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _JSON_COLUMNS = frozenset({"response_body", "result_snapshot"})
 
 
@@ -53,6 +54,7 @@ class SubmissionIdempotencyRepository:
             id,
             tenant_id,
             key_hash,
+            trusted_authorization_ref,
             fingerprint_version,
             request_hash,
             operation,
@@ -69,12 +71,12 @@ class SubmissionIdempotencyRepository:
             owner_instance_id,
             lease_expires_at
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            'reserved', 'reserved', $10, $11, $12::jsonb,
-            NULL, NULL, $13,
-            NOW() + make_interval(secs => $14::double precision)
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+            'reserved', 'reserved', $11, $12, $13::jsonb,
+            NULL, NULL, $14,
+            NOW() + make_interval(secs => $15::double precision)
         )
-        ON CONFLICT (tenant_id, key_hash) DO NOTHING
+        ON CONFLICT DO NOTHING
         RETURNING *
     """
 
@@ -89,6 +91,7 @@ class SubmissionIdempotencyRepository:
         *,
         tenant_id: str,
         key_hash: str,
+        trusted_authorization_ref: str | None = None,
         fingerprint_version: str,
         request_hash: str,
         operation: str,
@@ -106,6 +109,7 @@ class SubmissionIdempotencyRepository:
         self._validate_claim(
             tenant_id=tenant_id,
             key_hash=key_hash,
+            trusted_authorization_ref=trusted_authorization_ref,
             fingerprint_version=fingerprint_version,
             request_hash=request_hash,
             operation=operation,
@@ -129,6 +133,7 @@ class SubmissionIdempotencyRepository:
                         record_id,
                         tenant_id,
                         key_hash,
+                        trusted_authorization_ref,
                         fingerprint_version,
                         request_hash,
                         operation,
@@ -142,24 +147,38 @@ class SubmissionIdempotencyRepository:
                         lease_seconds,
                     )
                     inserted = row is not None
+                    authorization_conflict = False
                     if row is None:
                         row = await connection.fetchrow(
                             "SELECT * FROM idempotency_records WHERE tenant_id = $1 AND key_hash = $2",
                             tenant_id,
                             key_hash,
                         )
+                    if (
+                        row is None
+                        and trusted_authorization_ref is not None
+                    ):
+                        row = await connection.fetchrow(
+                            "SELECT * FROM idempotency_records "
+                            "WHERE tenant_id = $1 "
+                            "AND trusted_authorization_ref = $2",
+                            tenant_id,
+                            trusted_authorization_ref,
+                        )
+                        authorization_conflict = row is not None
                 if row is None:
                     raise IdempotencyStoreUnavailableError
                 record = self._normalize_record(row)
             else:
                 if sqlite_conn is None:  # Defensive; _backend already rejects it.
                     raise IdempotencyStoreUnavailableError
-                inserted, record = await asyncio.to_thread(
+                inserted, record, authorization_conflict = await asyncio.to_thread(
                     self._claim_sqlite,
                     sqlite_conn,
                     record_id,
                     tenant_id,
                     key_hash,
+                    trusted_authorization_ref,
                     fingerprint_version,
                     request_hash,
                     operation,
@@ -179,12 +198,15 @@ class SubmissionIdempotencyRepository:
 
         if inserted:
             return ClaimResult("owner", record)
+        if authorization_conflict:
+            return ClaimResult("authorization_conflict", record)
         if self._fingerprint_matches(
             record,
             fingerprint_version=fingerprint_version,
             request_hash=request_hash,
             operation=operation,
             scenario=scenario,
+            trusted_authorization_ref=trusted_authorization_ref,
         ):
             return ClaimResult("replay", record)
         return ClaimResult("conflict", record)
@@ -510,6 +532,7 @@ class SubmissionIdempotencyRepository:
         record_id: str,
         tenant_id: str,
         key_hash: str,
+        trusted_authorization_ref: str | None,
         fingerprint_version: str,
         request_hash: str,
         operation: str,
@@ -521,7 +544,7 @@ class SubmissionIdempotencyRepository:
         response_json: str,
         owner_instance_id: str,
         lease_seconds: int,
-    ) -> tuple[bool, dict[str, Any]]:
+    ) -> tuple[bool, dict[str, Any], bool]:
         with db.get_sqlite_lock():
             try:
                 connection.execute("BEGIN IMMEDIATE")
@@ -529,12 +552,13 @@ class SubmissionIdempotencyRepository:
                     """
                     INSERT OR IGNORE INTO idempotency_records (
                         id, tenant_id, key_hash, fingerprint_version,
+                        trusted_authorization_ref,
                         request_hash, operation, scenario, resource_type,
                         resource_id, record_status, stage,
                         effective_policy_version, response_status,
                         response_body, owner_instance_id, lease_expires_at
                     ) VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', 'reserved',
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', 'reserved',
                         ?, ?, ?, ?, datetime('now', ?)
                     )
                     """,
@@ -543,6 +567,7 @@ class SubmissionIdempotencyRepository:
                         tenant_id,
                         key_hash,
                         fingerprint_version,
+                        trusted_authorization_ref,
                         request_hash,
                         operation,
                         scenario,
@@ -559,13 +584,25 @@ class SubmissionIdempotencyRepository:
                     "SELECT * FROM idempotency_records WHERE tenant_id = ? AND key_hash = ?",
                     (tenant_id, key_hash),
                 ).fetchone()
+                authorization_conflict = False
+                if row is None and trusted_authorization_ref is not None:
+                    row = connection.execute(
+                        "SELECT * FROM idempotency_records "
+                        "WHERE tenant_id = ? AND trusted_authorization_ref = ?",
+                        (tenant_id, trusted_authorization_ref),
+                    ).fetchone()
+                    authorization_conflict = row is not None
                 connection.commit()
             except Exception:
                 connection.rollback()
                 raise
         if row is None:
             raise IdempotencyStoreUnavailableError
-        return cursor.rowcount == 1, SubmissionIdempotencyRepository._normalize_record(row)
+        return (
+            cursor.rowcount == 1,
+            SubmissionIdempotencyRepository._normalize_record(row),
+            authorization_conflict,
+        )
 
     @staticmethod
     def _transition_sqlite(
@@ -771,18 +808,27 @@ class SubmissionIdempotencyRepository:
         request_hash: str,
         operation: str,
         scenario: str,
+        trusted_authorization_ref: str | None,
     ) -> bool:
         return (
             record.get("fingerprint_version") == fingerprint_version
             and record.get("request_hash") == request_hash
             and record.get("operation") == operation
             and record.get("scenario") == scenario
+            and record.get("trusted_authorization_ref")
+            == trusted_authorization_ref
         )
 
     @classmethod
     def _validate_claim(cls, **values: Any) -> None:
         cls._require_text("tenant_id", values["tenant_id"])
         cls._require_digest("key_hash", values["key_hash"])
+        authorization_ref = values["trusted_authorization_ref"]
+        if authorization_ref is not None and (
+            not isinstance(authorization_ref, str)
+            or _AUTHORIZATION_REF_RE.fullmatch(authorization_ref) is None
+        ):
+            raise ValueError("trusted_authorization_ref is invalid")
         cls._require_text("fingerprint_version", values["fingerprint_version"])
         cls._require_digest("request_hash", values["request_hash"])
         cls._require_text("operation", values["operation"])
@@ -862,7 +908,7 @@ class SubmissionIdempotencyRepository:
             raise ValueError("safe projection must be canonical JSON") from exc
 
     @staticmethod
-    def _raise_store_unavailable(exc: Exception) -> None:
+    def _raise_store_unavailable(exc: Exception) -> NoReturn:
         logger.warning(
             "Submission idempotency store operation failed (%s)",
             type(exc).__name__,

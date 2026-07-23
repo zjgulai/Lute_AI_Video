@@ -93,6 +93,11 @@ class IdempotencyPayloadConflict(SubmissionIdempotencyError):
     code = "idempotency_payload_conflict"
 
 
+class ActivationAlreadyConsumed(SubmissionIdempotencyError):
+    status_code = 409
+    code = "w5_fast_activation_consumed"
+
+
 class SubmissionNotFound(SubmissionIdempotencyError):
     status_code = 404
     code = "submission_not_found"
@@ -248,7 +253,7 @@ def _default_repository() -> SubmissionRepository:
     # initialization and breaks the router/service/storage import cycle.
     from src.storage.idempotency_repository import SubmissionIdempotencyRepository
 
-    return SubmissionIdempotencyRepository()
+    return cast(SubmissionRepository, SubmissionIdempotencyRepository())
 
 
 def _is_store_unavailable_error(exc: Exception) -> bool:
@@ -425,7 +430,7 @@ class SubmissionIdempotencyService:
 
     def __init__(
         self,
-        repository: SubmissionRepository | None = None,
+        repository: Any | None = None,
         *,
         instance_id: str | None = None,
         lease_seconds: int = DEFAULT_LEASE_SECONDS,
@@ -452,6 +457,7 @@ class SubmissionIdempotencyService:
         resource_id: str,
         response_body: Mapping[str, Any],
         response_status: int = 200,
+        trusted_authorization_ref: str | None = None,
     ) -> SubmissionClaim:
         raw_key = validate_idempotency_key_headers([raw_key])
         fingerprint = build_request_fingerprint(
@@ -468,6 +474,7 @@ class SubmissionIdempotencyService:
             self.repository.claim,
             tenant_id=tenant_id,
             key_hash=hash_idempotency_key(raw_key),
+            trusted_authorization_ref=trusted_authorization_ref,
             fingerprint_version=fingerprint.version,
             request_hash=fingerprint.request_hash,
             operation=operation,
@@ -483,6 +490,8 @@ class SubmissionIdempotencyService:
         outcome = str(result.outcome)
         if outcome == "conflict":
             raise IdempotencyPayloadConflict()
+        if outcome == "authorization_conflict":
+            raise ActivationAlreadyConsumed()
         if outcome not in {"owner", "replay"}:
             raise RuntimeError("invalid idempotency claim outcome")
         record = dict(result.record)
@@ -495,6 +504,51 @@ class SubmissionIdempotencyService:
             outcome=cast(Literal["owner", "replay"], outcome),
             record=record,
         )
+
+    async def replay_submission(
+        self,
+        *,
+        tenant_id: str,
+        raw_key: str,
+        validated_request: BaseModel | Mapping[str, Any],
+        effective_policy: BaseModel | Mapping[str, Any],
+        operation: str,
+        scenario: str,
+        trusted_authorization_ref: str | None = None,
+    ) -> SubmissionClaim:
+        """Return an exact existing replay without any insert/owner path."""
+
+        raw_key = validate_idempotency_key_headers([raw_key])
+        fingerprint = build_request_fingerprint(
+            validated_request,
+            operation=operation,
+            scenario=scenario,
+            effective_policy=effective_policy,
+        )
+        record = await _call_repository(
+            self.repository.get_by_key_hash,
+            tenant_id=tenant_id,
+            key_hash=hash_idempotency_key(raw_key),
+        )
+        if record is None:
+            raise SubmissionNotFound()
+        if not (
+            record.get("fingerprint_version") == fingerprint.version
+            and record.get("request_hash") == fingerprint.request_hash
+            and record.get("operation") == operation
+            and record.get("scenario") == scenario
+            and (
+                trusted_authorization_ref is None
+                or record.get("trusted_authorization_ref")
+                == trusted_authorization_ref
+            )
+        ):
+            raise IdempotencyPayloadConflict()
+        current = await self._reconcile_record(
+            tenant_id=tenant_id,
+            record=record,
+        )
+        return SubmissionClaim(outcome="replay", record=current)
 
     async def _reconcile_record(self, *, tenant_id: str, record: Mapping[str, Any]) -> dict[str, Any]:
         current = dict(record)

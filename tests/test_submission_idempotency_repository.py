@@ -55,6 +55,7 @@ def _claim_kwargs(
     scenario: str = "s1",
     resource_type: str = "scenario",
     resource_id: str = "s1_job_original",
+    trusted_authorization_ref: str | None = None,
 ) -> dict[str, Any]:
     return {
         "tenant_id": tenant_id,
@@ -74,6 +75,7 @@ def _claim_kwargs(
         },
         "owner_instance_id": "worker-fixture",
         "lease_seconds": 120,
+        "trusted_authorization_ref": trusted_authorization_ref,
     }
 
 
@@ -93,6 +95,7 @@ def test_sqlite_schema_contains_ledger_constraints(sqlite_idempotency_db: sqlite
         "result_snapshot",
         "owner_instance_id",
         "lease_expires_at",
+        "trusted_authorization_ref",
     } <= columns
 
     unique_indexes = {
@@ -104,6 +107,104 @@ def test_sqlite_schema_contains_ledger_constraints(sqlite_idempotency_db: sqlite
     }
     assert ("tenant_id", "key_hash") in unique_indexes
     assert ("tenant_id", "resource_type", "resource_id") in unique_indexes
+    assert ("tenant_id", "trusted_authorization_ref") in unique_indexes
+
+
+@pytest.mark.asyncio
+async def test_sqlite_activation_reference_is_atomic_single_use_with_same_key_replay(
+    sqlite_idempotency_db: sqlite3.Connection,
+) -> None:
+    repository = SubmissionIdempotencyRepository(require_postgres=False)
+    activation_ref = "w5fastact:fixture-001"
+
+    owner = await repository.claim(
+        **_claim_kwargs(
+            scenario="fast",
+            operation="fast.submit",
+            resource_type="fast",
+            resource_id="fast_job_original",
+            trusted_authorization_ref=activation_ref,
+        )
+    )
+    replay = await repository.claim(
+        **_claim_kwargs(
+            scenario="fast",
+            operation="fast.submit",
+            resource_type="fast",
+            resource_id="fast_job_preallocated_replay",
+            trusted_authorization_ref=activation_ref,
+        )
+    )
+    consumed = await repository.claim(
+        **_claim_kwargs(
+            key_hash="c" * 64,
+            scenario="fast",
+            operation="fast.submit",
+            resource_type="fast",
+            resource_id="fast_job_second_key",
+            trusted_authorization_ref=activation_ref,
+        )
+    )
+
+    assert owner.outcome == "owner"
+    assert replay.outcome == "replay"
+    assert consumed.outcome == "authorization_conflict"
+    assert consumed.record["resource_id"] == "fast_job_original"
+    assert (
+        sqlite_idempotency_db.execute(
+            "SELECT COUNT(*) FROM idempotency_records "
+            "WHERE trusted_authorization_ref = ?",
+            (activation_ref,),
+        ).fetchone()[0]
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_service_maps_second_activation_key_to_stable_consumed_conflict(
+    sqlite_idempotency_db: sqlite3.Connection,
+) -> None:
+    from src.services.submission_idempotency import (
+        ActivationAlreadyConsumed,
+        SubmissionIdempotencyService,
+    )
+
+    del sqlite_idempotency_db
+    service = SubmissionIdempotencyService(
+        SubmissionIdempotencyRepository(require_postgres=False),
+        instance_id="activation-consume-fixture",
+    )
+    policy = {
+        "version": "generation-safety.v2",
+        "tenant_id": "tenant-alpha",
+    }
+    request = {"prompt": "safe fixture"}
+    common = {
+        "tenant_id": "tenant-alpha",
+        "validated_request": request,
+        "effective_policy": policy,
+        "operation": "fast.submit",
+        "scenario": "fast",
+        "resource_type": "fast",
+        "response_body": {"status": "reserved"},
+        "trusted_authorization_ref": "w5fastact:fixture-001",
+    }
+
+    first = await service.claim_submission(
+        raw_key="activation-key-first-0001",
+        resource_id="fast_job_first",
+        **common,
+    )
+    with pytest.raises(ActivationAlreadyConsumed) as exc_info:
+        await service.claim_submission(
+            raw_key="activation-key-second-0002",
+            resource_id="fast_job_second",
+            **common,
+        )
+
+    assert first.is_owner is True
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == {"code": "w5_fast_activation_consumed"}
 
 
 @pytest.mark.asyncio
@@ -393,7 +494,8 @@ async def test_repository_rejects_raw_or_malformed_digests_before_persistence(
 
 def test_postgres_claim_uses_unique_constraint_arbitration() -> None:
     source = inspect.getsource(SubmissionIdempotencyRepository)
-    assert "ON CONFLICT (tenant_id, key_hash) DO NOTHING" in source
+    assert "ON CONFLICT DO NOTHING" in source
+    assert "trusted_authorization_ref = $2" in source
     assert "RETURNING *" in source
 
 
@@ -406,3 +508,12 @@ def test_alembic_revision_descends_from_current_head() -> None:
     assert "idempotency_records" in migration
     assert "uq_idempotency_records_tenant_key" in migration
     assert "uq_idempotency_records_tenant_resource" in migration
+
+    activation_migration = Path(
+        "migrations/alembic/versions/"
+        "e0f1a2b3c4d5_bind_w5_activation_consumption.py"
+    ).read_text(encoding="utf-8")
+    assert 'revision: str = "e0f1a2b3c4d5"' in activation_migration
+    assert 'down_revision: str | None = "d9e0f1a2b3c4"' in activation_migration
+    assert "trusted_authorization_ref" in activation_migration
+    assert "uq_idempotency_records_tenant_authorization" in activation_migration

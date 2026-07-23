@@ -410,6 +410,8 @@ def test_contract_defines_current_public_and_secured_router_boundaries():
 
     assert _route_ids(contract["public_routes"]) == {
         "GET /health",
+        "GET /health/live",
+        "GET /health/ready",
         "GET /metrics",
         "GET /api/media/{media_path:path}",
         "POST /api/admin/auth/login",
@@ -423,6 +425,25 @@ def test_contract_defines_current_public_and_secured_router_boundaries():
     assert "brand_assets" in media_route["reason"]
     assert "demo" in media_route["reason"]
     assert "tenant-bound token" in media_route["reason"]
+    transparency = contract["transparency_routes"]
+    assert transparency == {
+        "authentication": "X-API-Key",
+        "tenant_source": "AuthContext",
+        "read_only": True,
+        "client_sidecar_allowed": False,
+        "routes": [
+            {
+                "name": "inspect",
+                "method": "GET",
+                "path": "/api/transparency/{resource_type}/{resource_id}",
+            },
+            {
+                "name": "package",
+                "method": "GET",
+                "path": "/api/transparency/{resource_type}/{resource_id}/package",
+            },
+        ],
+    }
 
 
 def test_api_reference_authentication_matches_machine_route_contract():
@@ -437,6 +458,8 @@ def test_api_reference_authentication_matches_machine_route_contract():
 
     assert _route_ids(contract["public_routes"]) == {
         "GET /health",
+        "GET /health/live",
+        "GET /health/ready",
         "GET /metrics",
         "GET /api/media/{media_path:path}",
         "POST /api/admin/auth/login",

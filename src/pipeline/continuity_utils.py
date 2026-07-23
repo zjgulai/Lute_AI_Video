@@ -14,13 +14,13 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
 from src.models.runtime_contracts import (
-    ClipDetail,
     ContinuityAuditSummary,
+    ContinuityDirection,
     TransitionMetadata,
 )
 from src.tools.safe_media import ffmpeg_local_input_args
@@ -172,7 +172,7 @@ def build_continuity_audit_summary(
     """
     base_audit = base_audit if isinstance(base_audit, dict) else {}
     clip_details = clip_details if isinstance(clip_details, list) else []
-    valid_clip_details: list[ClipDetail] = [
+    valid_clip_details: list[dict[str, Any]] = [
         detail for detail in clip_details if isinstance(detail, dict)
     ]
     clips_are_valid = bool(clip_details) and len(valid_clip_details) == len(clip_details)
@@ -249,9 +249,29 @@ def build_continuity_audit_summary(
     publish_status = base_audit.get("overall_status", "WARN")
     publish_score = base_audit.get("overall_score", 0)
 
-    return {
-        **base_audit,
-        "asset_ready_audit": {
+    clip_directions: list[ContinuityDirection] = []
+    scene_beats: list[str] = []
+    transition_intents: list[str] = []
+    for group in valid_clip_groups:
+        scene_beat = group.get("scene_beat")
+        beat_summary = group.get("beat_summary")
+        transition_intent = group.get("transition_intent")
+        scene_beat = scene_beat if isinstance(scene_beat, str) else ""
+        beat_summary = beat_summary if isinstance(beat_summary, str) else ""
+        transition_intent = transition_intent if isinstance(transition_intent, str) else ""
+        if scene_beat or beat_summary or transition_intent:
+            clip_directions.append({
+                "scene_beat": scene_beat,
+                "beat_summary": beat_summary,
+                "transition_intent": transition_intent,
+            })
+        if scene_beat:
+            scene_beats.append(scene_beat)
+        if transition_intent:
+            transition_intents.append(transition_intent)
+
+    summary = cast(ContinuityAuditSummary, dict(base_audit))
+    summary["asset_ready_audit"] = {
             "status": asset_status,
             "checks": {
                 "non_stub_clips": non_stub_ok,
@@ -260,37 +280,21 @@ def build_continuity_audit_summary(
                 "director_intent_metadata": director_intent_ok,
                 "final_video_present": final_video_ok,
             },
-        },
-        "publish_ready_audit": {
+        }
+    summary["publish_ready_audit"] = {
             "status": publish_status,
             "overall_status": publish_status,
             "overall_score": publish_score,
             "base_score": publish_score,
             "criteria": base_audit.get("criteria", []),
-        },
-        "continuity_direction_summary": {
-            "clip_directions": [
-                {
-                    "scene_beat": group.get("scene_beat", ""),
-                    "beat_summary": group.get("beat_summary", ""),
-                    "transition_intent": group.get("transition_intent", ""),
-                }
-                for group in valid_clip_groups
-                if group.get("scene_beat")
-                or group.get("beat_summary")
-                or group.get("transition_intent")
-            ],
-            "scene_beats": [
-                group.get("scene_beat") for group in valid_clip_groups
-                if group.get("scene_beat")
-            ],
-            "transition_intents": [
-                group.get("transition_intent") for group in valid_clip_groups
-                if group.get("transition_intent")
-            ],
-        },
-        "continuity_score": continuity_score,
-    }
+        }
+    summary["continuity_direction_summary"] = {
+            "clip_directions": clip_directions,
+            "scene_beats": scene_beats,
+            "transition_intents": transition_intents,
+        }
+    summary["continuity_score"] = continuity_score
+    return summary
 
 
 def extract_continuity_diagnostics(audit_report: dict[str, Any] | None) -> dict[str, Any]:

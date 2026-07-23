@@ -7,7 +7,9 @@
     "pytest-mock",
     "pytest-timeout",
     "pytest-cov",
-    "ruff"
+    "ruff",
+    "pyright",
+    "pip-audit"
   ],
   "frontend_dev_tools": [
     "@playwright/test",
@@ -30,6 +32,7 @@
     "frontend_docker_build_requires_exact_package_lock": true,
     "frontend_docker_build_disallows_npm_install_fallback": true,
     "workflow_node_cache_uses_package_lock": true,
-    "python_dev_deps_mirror_requirements": true
+    "python_dev_deps_use_pyproject_lock_authority": true,
+    "python_requirements_is_generated_export": true
   }
 }

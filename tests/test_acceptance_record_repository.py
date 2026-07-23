@@ -92,6 +92,12 @@ def _record_kwargs(
     artifact_sha256: str = "c" * 64,
     artifact_size_bytes: int = 1024,
     artifact_kind: str = "video",
+    transparency_sidecar_path: str = (
+        "tenants/tenant-alpha/pending_review/s1-job-completed/"
+        "transparency/transparency-sidecar.v1.fixture.json"
+    ),
+    transparency_sidecar_sha256: str = "e" * 64,
+    final_artifact_c2pa_status: str = "signed_local_readback",
     decision: str = "accepted",
     reviewer_key_id: str = "reviewer-key-alpha",
     reviewer_key_type: str = "tenant",
@@ -110,12 +116,38 @@ def _record_kwargs(
         "artifact_sha256": artifact_sha256,
         "artifact_size_bytes": artifact_size_bytes,
         "artifact_kind": artifact_kind,
+        "transparency_sidecar_path": transparency_sidecar_path,
+        "transparency_sidecar_sha256": transparency_sidecar_sha256,
+        "final_artifact_c2pa_status": final_artifact_c2pa_status,
         "decision": decision,
         "reviewer_key_id": reviewer_key_id,
         "reviewer_key_type": reviewer_key_type,
         "review_notes": review_notes,
         "expires_in_seconds": expires_in_seconds,
     }
+
+
+def _consume_kwargs(
+    acceptance_id: str,
+    **overrides: Any,
+) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "tenant_id": "tenant-alpha",
+        "acceptance_id": acceptance_id,
+        "artifact_path": "output/tenant-alpha/final.mp4",
+        "artifact_sha256": "c" * 64,
+        "artifact_size_bytes": 1024,
+        "transparency_sidecar_path": (
+            "tenants/tenant-alpha/pending_review/s1-job-completed/"
+            "transparency/transparency-sidecar.v1.fixture.json"
+        ),
+        "transparency_sidecar_sha256": "e" * 64,
+        "final_artifact_c2pa_status": "signed_local_readback",
+        "consumer_operation": "delivery.prepare",
+        "consumer_resource_id": "delivery-owner",
+    }
+    values.update(overrides)
+    return values
 
 
 def _normalized_sql(query: str) -> str:
@@ -304,8 +336,10 @@ class _AvailablePathCollisionPgConnection(_RecordingPgConnection):
         if normalized.startswith("INSERT INTO acceptance_records"):
             self.insert_failed = True
             error = UniqueViolationError("available path collision")
-            error.constraint_name = (
-                "uq_acceptance_records_tenant_available_path"
+            setattr(
+                error,
+                "constraint_name",
+                "uq_acceptance_records_tenant_available_path",
             )
             raise error
         raise AssertionError(f"unexpected fetchrow SQL: {normalized}")
@@ -329,6 +363,9 @@ def test_sqlite_schema_contains_lifecycle_constraints_and_partial_index(
         "source_resource_id",
         "artifact_path",
         "artifact_sha256",
+        "transparency_sidecar_path",
+        "transparency_sidecar_sha256",
+        "final_artifact_c2pa_status",
         "decision",
         "record_status",
         "expires_at",
@@ -378,6 +415,29 @@ async def test_sqlite_schema_rejects_invalid_lifecycle_shapes(
     with pytest.raises(sqlite3.IntegrityError):
         sqlite_acceptance_db.execute(
             "UPDATE acceptance_records SET record_status = 'consumed' WHERE id = ?",
+            (owner.record["id"],),
+        )
+    sqlite_acceptance_db.rollback()
+
+    with pytest.raises(sqlite3.IntegrityError):
+        sqlite_acceptance_db.execute(
+            """
+            UPDATE acceptance_records
+            SET fingerprint_version = 'acceptance-create.v2',
+                transparency_sidecar_path = NULL
+            WHERE id = ?
+            """,
+            (owner.record["id"],),
+        )
+    sqlite_acceptance_db.rollback()
+
+    with pytest.raises(sqlite3.IntegrityError):
+        sqlite_acceptance_db.execute(
+            """
+            UPDATE acceptance_records
+            SET final_artifact_c2pa_status = 'unsigned_pending_review'
+            WHERE id = ?
+            """,
             (owner.record["id"],),
         )
     sqlite_acceptance_db.rollback()
@@ -474,6 +534,29 @@ def test_acceptance_migration_descends_from_submission_ledger() -> None:
     assert "CREATE TABLE IF NOT EXISTS acceptance_records" in fresh_schema
     assert "uq_acceptance_records_tenant_available_path" in fresh_schema
     assert "acceptance_records" in db_module._REQUIRED_TABLES
+
+
+def test_acceptance_transparency_migration_is_additive_and_legacy_nullable() -> None:
+    migration = Path(
+        "migrations/alembic/versions/d9e0f1a2b3c4_bind_acceptance_transparency.py"
+    ).read_text(encoding="utf-8")
+    fresh_schema = Path("src/storage/migrations/001_init.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'revision: str = "d9e0f1a2b3c4"' in migration
+    assert 'down_revision: str | None = "c8d9e0f1a2b3"' in migration
+    for column in (
+        "transparency_sidecar_path",
+        "transparency_sidecar_sha256",
+        "final_artifact_c2pa_status",
+    ):
+        assert column in migration
+        assert column in fresh_schema
+    assert '"pipeline_states"' in migration
+    assert 'sa.Column("transparency", JSONB(), nullable=True)' in migration
+    assert "ADD COLUMN IF NOT EXISTS transparency JSONB" in fresh_schema
+    assert migration.count("nullable=True") == 4
 
 
 @pytest.mark.asyncio
@@ -688,21 +771,19 @@ async def test_consume_requires_exact_artifact_identity_and_blocks_revoke(
 
     with pytest.raises(AcceptanceNotAvailableError):
         await repository.consume(
-            tenant_id="tenant-alpha",
-            acceptance_id=owner.record["id"],
-            artifact_path="output/tenant-alpha/wrong.mp4",
-            artifact_sha256="c" * 64,
-            consumer_operation="delivery.prepare",
-            consumer_resource_id="delivery-wrong-path",
+            **_consume_kwargs(
+                owner.record["id"],
+                artifact_path="output/tenant-alpha/wrong.mp4",
+                consumer_resource_id="delivery-wrong-path",
+            )
         )
     with pytest.raises(AcceptanceNotAvailableError):
         await repository.consume(
-            tenant_id="tenant-alpha",
-            acceptance_id=owner.record["id"],
-            artifact_path="output/tenant-alpha/final.mp4",
-            artifact_sha256="d" * 64,
-            consumer_operation="delivery.prepare",
-            consumer_resource_id="delivery-wrong-digest",
+            **_consume_kwargs(
+                owner.record["id"],
+                artifact_sha256="d" * 64,
+                consumer_resource_id="delivery-wrong-digest",
+            )
         )
     unchanged = await repository.get_by_id(
         tenant_id="tenant-alpha",
@@ -713,12 +794,7 @@ async def test_consume_requires_exact_artifact_identity_and_blocks_revoke(
     assert unchanged["consumed_at"] is None
 
     consumed = await repository.consume(
-        tenant_id="tenant-alpha",
-        acceptance_id=owner.record["id"],
-        artifact_path="output/tenant-alpha/final.mp4",
-        artifact_sha256="c" * 64,
-        consumer_operation="delivery.prepare",
-        consumer_resource_id="delivery-owner",
+        **_consume_kwargs(owner.record["id"])
     )
     assert consumed["record_status"] == "consumed"
     assert consumed["consumed_at"] is not None
@@ -748,12 +824,10 @@ async def test_concurrent_consume_has_exactly_one_winner(
     results = await asyncio.gather(
         *(
             repository.consume(
-                tenant_id="tenant-alpha",
-                acceptance_id=owner.record["id"],
-                artifact_path="output/tenant-alpha/final.mp4",
-                artifact_sha256="c" * 64,
-                consumer_operation="delivery.prepare",
-                consumer_resource_id=f"delivery-{index}",
+                **_consume_kwargs(
+                    owner.record["id"],
+                    consumer_resource_id=f"delivery-{index}",
+                )
             )
             for index in range(12)
         ),
@@ -821,12 +895,11 @@ async def test_tenant_isolation_allows_same_path_without_cross_tenant_access(
         )
     with pytest.raises(AcceptanceNotAvailableError):
         await repository.consume(
-            tenant_id="tenant-beta",
-            acceptance_id=alpha.record["id"],
-            artifact_path="output/tenant-alpha/final.mp4",
-            artifact_sha256="c" * 64,
-            consumer_operation="delivery.prepare",
-            consumer_resource_id="cross-tenant-consumer",
+            **_consume_kwargs(
+                alpha.record["id"],
+                tenant_id="tenant-beta",
+                consumer_resource_id="cross-tenant-consumer",
+            )
         )
     persisted_alpha = sqlite_acceptance_db.execute(
         "SELECT * FROM acceptance_records WHERE id = ?",
@@ -946,7 +1019,7 @@ async def test_postgres_creation_locks_source_before_acceptance_side_effects(
 async def test_postgres_create_casts_reused_decision_parameter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Keep asyncpg from inferring both text and varchar for parameter 13."""
+    """Keep asyncpg from inferring both text and varchar for the decision."""
 
     from src.storage.acceptance_repository import AcceptanceRecordRepository
 
@@ -965,8 +1038,8 @@ async def test_postgres_create_casts_reused_decision_parameter(
         for call in connection.calls
         if call[1].startswith("INSERT INTO acceptance_records")
     )
-    assert "$13::varchar," in insert_sql
-    assert "CASE WHEN $13::varchar = 'accepted'" in insert_sql
+    assert "$16::varchar," in insert_sql
+    assert "CASE WHEN $16::varchar = 'accepted'" in insert_sql
 
 
 @pytest.mark.asyncio
@@ -1099,21 +1172,17 @@ async def test_postgres_lifecycle_uses_database_time_and_compare_and_set(
     )
     repository = AcceptanceRecordRepository(require_postgres=True)
     consumed = await repository.consume(
-        tenant_id="tenant-alpha",
-        acceptance_id="acceptance-lifecycle",
-        artifact_path="output/tenant-alpha/final.mp4",
-        artifact_sha256="c" * 64,
-        consumer_operation="delivery.prepare",
-        consumer_resource_id="delivery-pg",
+        **_consume_kwargs(
+            "acceptance-lifecycle",
+            consumer_resource_id="delivery-pg",
+        )
     )
     with pytest.raises(AcceptanceNotAvailableError):
         await repository.consume(
-            tenant_id="tenant-alpha",
-            acceptance_id="acceptance-lifecycle",
-            artifact_path="output/tenant-alpha/final.mp4",
-            artifact_sha256="c" * 64,
-            consumer_operation="delivery.prepare",
-            consumer_resource_id="delivery-pg-late",
+            **_consume_kwargs(
+                "acceptance-lifecycle",
+                consumer_resource_id="delivery-pg-late",
+            )
         )
     assert consumed["record_status"] == "consumed"
 

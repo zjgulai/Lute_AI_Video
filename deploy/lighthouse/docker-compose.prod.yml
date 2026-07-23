@@ -14,6 +14,8 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile.backend
+      args:
+        RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
     container_name: ai_video_backend
     # 2026-05-05 incident: backend import error 触发 unless-stopped 无限重启,
     # 拖死 docker daemon。改 on-failure:5 让 5 次失败后停止重启,人工介入。
@@ -31,9 +33,6 @@ services:
       - RENDERING_SERVICE_URL=http://rendering:3001
     volumes:
       - backend_output:/app/output
-      - ../../src:/app/src:ro
-      - ../../requirements.txt:/app/requirements.txt:ro
-      - ../../pyproject.toml:/app/pyproject.toml:ro
     networks:
       - ai_video_net
     depends_on:

@@ -17,6 +17,7 @@ import RuntimeMediaAudio from "./RuntimeMediaAudio";
 import RuntimeMediaImage from "./RuntimeMediaImage";
 import RuntimeMediaLink from "./RuntimeMediaLink";
 import RuntimeMediaVideo from "./RuntimeMediaVideo";
+import TransparencyStatus from "./TransparencyStatus";
 
 import { errorMessage } from "@/lib/errors";
 import { classifyGenerationResult } from "@/lib/generationLifecycle";
@@ -96,6 +97,9 @@ type OneShotResult = Record<string, unknown> & {
   pipeline_complete?: boolean;
   publish_allowed?: boolean;
   delivery_accepted?: boolean;
+  artifact_review_status?: string | null;
+  resource_type?: "scenario";
+  resource_id?: string;
   steps_completed?: number;
   briefs?: ResultItem[];
   scripts?: ScriptItem[];
@@ -158,6 +162,10 @@ export default function OneShotResultView({ scenario, result: rawResult, onReset
   const lifecycleState = classifyGenerationResult(result);
   const fullSuccess = lifecycleState === "full";
   const bounded = lifecycleState === "bounded";
+  const pendingReview = fullSuccess && (
+    result.artifact_review_status === "pending_review"
+    || result.publish_allowed !== true
+  );
   const stepsCompleted: number = result?.steps_completed || 0;
   const finalVideo: string = result?.final_video_path || "";
   const thumbImages: string[] = result?.thumbnail_image_paths || [];
@@ -209,6 +217,8 @@ export default function OneShotResultView({ scenario, result: rawResult, onReset
               <h2 className="text-base font-semibold text-[var(--text-h1)]">
                 {t(SCENARIO_LABELS[scenario] || scenario)} {bounded
                   ? t("result.bounded")
+                  : pendingReview
+                    ? t("result.pendingReviewFull")
                   : fullSuccess
                     ? t("result.complete")
                     : t("result.error")}
@@ -216,6 +226,8 @@ export default function OneShotResultView({ scenario, result: rawResult, onReset
               <p className="text-xs text-[var(--text-body)] mt-0.5">
                 {bounded
                   ? t("result.boundedNotice")
+                  : pendingReview
+                    ? t("result.pendingReviewNotice")
                   : fullSuccess
                     ? `${t("result.generated")} ${stepsCompleted || briefs.length + scripts.length + thumbnails.length} ${t("result.items")}`
                     : t("result.error")}
@@ -239,6 +251,13 @@ export default function OneShotResultView({ scenario, result: rawResult, onReset
               {t("result.newCreation")}
             </button>
           </div>
+        </div>
+
+        <div className="mt-3">
+          <TransparencyStatus
+            resourceType={result.resource_type}
+            resourceId={result.resource_id}
+          />
         </div>
 
         {/* Stats row */}
@@ -334,7 +353,7 @@ export default function OneShotResultView({ scenario, result: rawResult, onReset
                 {contentSub === "thumbnails" && <ThumbnailsView sets={thumbnails} thumbImages={thumbImages} onRegenerate={(index) => onEdit?.("thumbnails", index, { action: "regenerate" })} />}
               </div>
             )}
-            {tab === "media" && <MediaView finalVideo={finalVideo} thumbImages={thumbImages} audioPaths={audioPaths} clipPaths={clipPaths} audit={audit} scenario={scenario} result={result} />}
+            {tab === "media" && <MediaView finalVideo={finalVideo} thumbImages={thumbImages} audioPaths={audioPaths} clipPaths={clipPaths} audit={audit} result={result} publishAllowed={result.publish_allowed === true} />}
             {tab === "quality" && <QualityDashboard qualityReport={audit} />}
             {tab === "data" && (
               <div className="space-y-3">
@@ -611,14 +630,15 @@ function MediaView({
   clipPaths,
   audit,
   result,
+  publishAllowed,
 }: {
   finalVideo: string;
   thumbImages: string[];
   audioPaths: string[];
   clipPaths: string[];
   audit: AuditReport | null;
-  scenario: string;
   result: OneShotResult;
+  publishAllowed: boolean;
 }) {
   const { t } = useI18n();
   const [showPublish, setShowPublish] = useState(false);
@@ -648,12 +668,18 @@ function MediaView({
               <p className="text-[12px] font-semibold text-[var(--text-h1)]">{t("result.finalVideo")}</p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowPublish(true)}
-                className="apple-btn apple-btn-primary text-[12px] py-1 px-2 cursor-pointer"
-              >
-                {t("perf.publishTitle")}
-              </button>
+              {publishAllowed ? (
+                <button
+                  onClick={() => setShowPublish(true)}
+                  className="apple-btn apple-btn-primary text-[12px] py-1 px-2 cursor-pointer"
+                >
+                  {t("perf.publishTitle")}
+                </button>
+              ) : (
+                <span className="text-[12px] text-[var(--gold-foil)]">
+                  {t("result.publishLocked")}
+                </span>
+              )}
               {getMediaUrl(finalVideo) && (
                 <RuntimeMediaLink
                   href={finalVideo}
@@ -680,7 +706,7 @@ function MediaView({
       )}
 
       {/* Publish Panel */}
-      {showPublish && finalVideo && (
+      {showPublish && finalVideo && publishAllowed && (
         <PublishPanel
           videoPath={finalVideo}
           metadata={{

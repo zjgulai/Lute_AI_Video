@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type React from "react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import AdminDashboardPage from "./dashboard/page";
 import AdminHealthPage from "./health/page";
@@ -10,6 +12,7 @@ import AdminLoginPage from "./login/page";
 import AdminLogsPage from "./logs/page";
 import AdminTenantsPage from "./tenants/page";
 import AdminSidebar from "@/components/admin/AdminSidebar";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 const navigationState = vi.hoisted(() => ({
   pathname: "/admin/dashboard",
@@ -49,7 +52,7 @@ function render(node: React.ReactElement) {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(node);
+    root.render(<I18nProvider>{node}</I18nProvider>);
   });
   return {
     container,
@@ -137,11 +140,44 @@ function installAdminMocks() {
 
 describe("admin accessibility smoke", () => {
   beforeEach(() => {
+    localStorage.setItem("app-locale", "en");
     navigationState.pathname = "/admin/dashboard";
     navigationState.router.push.mockReset();
     adminFetch.mockReset();
     adminFetchJson.mockReset();
     installAdminMocks();
+  });
+
+  it("renders critical admin navigation, login, and dashboard controls in Chinese", async () => {
+    localStorage.setItem("app-locale", "zh");
+    navigationState.pathname = "/admin/dashboard";
+    const sidebar = render(<AdminSidebar />);
+    await flushEffects();
+    expect(sidebar.container.textContent).toContain("仪表盘");
+    expect(sidebar.container.textContent).toContain("租户");
+    expect(sidebar.container.querySelector("nav")?.getAttribute("aria-label")).toBe("管理后台导航");
+    sidebar.cleanup();
+
+    const login = render(<AdminLoginPage />);
+    await flushEffects();
+    expect(login.container.querySelector('label[for="admin-email"]')?.textContent).toContain("管理员邮箱");
+    expect(login.container.querySelector('button[type="submit"]')?.textContent).toContain("登录");
+    login.cleanup();
+
+    const dashboard = render(<AdminDashboardPage />);
+    await flushEffects();
+    expect(dashboard.container.textContent).toContain("仪表盘");
+    expect(dashboard.container.textContent).toContain("刷新");
+    dashboard.cleanup();
+  });
+
+  it("keeps review layouts responsive and provides global focus and reduced-motion contracts", () => {
+    const pageSource = readFileSync(join(process.cwd(), "src/app/page.tsx"), "utf8");
+    const globalsSource = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+
+    expect(pageSource.match(/grid-cols-1 lg:grid-cols-\[320px_minmax\(0,1fr\)\]/g)).toHaveLength(2);
+    expect(globalsSource).toContain(":focus-visible");
+    expect(globalsSource).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
   it("renders login with labeled fields and alert semantics without backend", async () => {
@@ -218,6 +254,47 @@ describe("admin accessibility smoke", () => {
           `${testCase.name} should expose ${expected}`,
         ).toBeTruthy();
       }
+      cleanup();
+    }
+  });
+
+  it("does not refetch admin page data when locale hydration settles", async () => {
+    const cases: Array<{
+      node: React.ReactElement;
+      matches: (path: string) => boolean;
+      expectedCalls: number;
+    }> = [
+      {
+        node: <AdminDashboardPage />,
+        matches: (path) => path === "/api/admin/dashboard/summary",
+        expectedCalls: 1,
+      },
+      {
+        node: <AdminLogsPage />,
+        matches: (path) => path.startsWith("/api/admin/logs?"),
+        expectedCalls: 1,
+      },
+      {
+        node: <AdminHealthPage />,
+        matches: (path) => path.startsWith("/api/admin/health/"),
+        expectedCalls: 2,
+      },
+      {
+        node: <AdminTenantsPage />,
+        matches: (path) => path.startsWith("/api/admin/tenants?"),
+        expectedCalls: 1,
+      },
+    ];
+
+    for (const testCase of cases) {
+      adminFetchJson.mockClear();
+      const { cleanup } = render(testCase.node);
+      await flushEffects();
+      await flushEffects();
+      const matchingCalls = adminFetchJson.mock.calls.filter(([path]) =>
+        testCase.matches(String(path)),
+      );
+      expect(matchingCalls).toHaveLength(testCase.expectedCalls);
       cleanup();
     }
   });

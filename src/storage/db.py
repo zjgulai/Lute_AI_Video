@@ -26,6 +26,13 @@ def _production_requires_postgres() -> bool:
     }
 
 
+def _sqlite_fallback_enabled() -> bool:
+    return (
+        not _production_requires_postgres()
+        and os.getenv("SQLITE_FALLBACK_ENABLED", "") == "1"
+    )
+
+
 async def get_pool() -> asyncpg.Pool | None:
     """Return asyncpg pool singleton, initializing if needed."""
     global _pool
@@ -42,8 +49,10 @@ async def get_pool() -> asyncpg.Pool | None:
                 logger.warning("PostgreSQL connection failed; falling back to SQLite")
         elif _production_requires_postgres():
             raise RuntimeError("PostgreSQL is required in production")
-        if _pool is None and _sqlite_conn is None:
+        if _pool is None and _sqlite_conn is None and _sqlite_fallback_enabled():
             _init_sqlite()
+        elif _pool is None and _sqlite_conn is None:
+            logger.info("SQLite fallback disabled; using filesystem-only persistence")
     return _pool
 
 
@@ -105,6 +114,7 @@ def _create_sqlite_tables() -> None:
             structured_errors TEXT DEFAULT '[]',
             regenerate_chain TEXT DEFAULT '[]',
             soft_degraded_reasons TEXT DEFAULT '[]',
+            transparency TEXT,
             tenant_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -170,6 +180,7 @@ def _create_sqlite_tables() -> None:
             id TEXT PRIMARY KEY,
             tenant_id TEXT NOT NULL,
             key_hash TEXT NOT NULL,
+            trusted_authorization_ref TEXT,
             fingerprint_version TEXT NOT NULL,
             request_hash TEXT NOT NULL,
             operation TEXT NOT NULL,
@@ -215,6 +226,9 @@ def _create_sqlite_tables() -> None:
             artifact_size_bytes INTEGER NOT NULL CHECK (artifact_size_bytes > 0),
             artifact_kind TEXT NOT NULL
                 CHECK (artifact_kind IN ('text', 'image', 'audio', 'video')),
+            transparency_sidecar_path TEXT,
+            transparency_sidecar_sha256 TEXT,
+            final_artifact_c2pa_status TEXT,
             decision TEXT NOT NULL
                 CHECK (decision IN ('accepted', 'rejected')),
             record_status TEXT NOT NULL
@@ -255,6 +269,23 @@ def _create_sqlite_tables() -> None:
                     AND revoked_by_key_id IS NOT NULL)
                 OR (record_status <> 'revoked' AND revoked_at IS NULL
                     AND revoked_by_key_id IS NULL AND revoked_by_record_id IS NULL)
+            ),
+            CONSTRAINT ck_acceptance_records_transparency_v2 CHECK (
+                fingerprint_version <> 'acceptance-create.v2' OR (
+                    transparency_sidecar_path IS NOT NULL
+                    AND transparency_sidecar_sha256 IS NOT NULL
+                    AND final_artifact_c2pa_status IS NOT NULL
+                )
+            ),
+            CONSTRAINT ck_acceptance_records_c2pa_status CHECK (
+                final_artifact_c2pa_status IS NULL OR
+                final_artifact_c2pa_status IN (
+                    'unsigned_pending_review', 'signed_local_readback'
+                )
+            ),
+            CONSTRAINT ck_acceptance_records_accepted_c2pa CHECK (
+                decision <> 'accepted' OR final_artifact_c2pa_status IS NULL OR
+                final_artifact_c2pa_status = 'signed_local_readback'
             ),
             CONSTRAINT ck_acceptance_records_expiry CHECK (expires_at > created_at)
         );
@@ -426,6 +457,9 @@ def _create_sqlite_tables() -> None:
         CREATE INDEX IF NOT EXISTS idx_idempotency_records_lease
             ON idempotency_records(lease_expires_at)
             WHERE lease_expires_at IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_idempotency_records_tenant_authorization
+            ON idempotency_records(tenant_id, trusted_authorization_ref)
+            WHERE trusted_authorization_ref IS NOT NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS uq_acceptance_records_tenant_available_path
             ON acceptance_records(tenant_id, artifact_path)
             WHERE record_status = 'available';
@@ -452,11 +486,13 @@ def _ensure_sqlite_compat_columns() -> None:
 
     for table, column, column_type in (
         ("pipeline_states", "tenant_id", "TEXT"),
+        ("pipeline_states", "transparency", "TEXT"),
         ("video_metrics", "tenant_id", "TEXT"),
         ("publish_logs", "tenant_id", "TEXT"),
         ("publish_logs", "acceptance_id", "TEXT"),
         ("publish_logs", "updated_at", "TIMESTAMP"),
         ("publish_logs", "receipt", "TEXT"),
+        ("idempotency_records", "trusted_authorization_ref", "TEXT"),
         ("provider_cost_attempts", "regeneration_epoch_ref", "TEXT"),
     ):
         rows = _sqlite_conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -490,6 +526,11 @@ _REQUIRED_TABLE_COLUMNS: dict[str, frozenset[str]] = {
             "acceptance_id",
             "updated_at",
             "receipt",
+        }
+    ),
+    "idempotency_records": frozenset(
+        {
+            "trusted_authorization_ref",
         }
     ),
     "job_budget_accounts": frozenset(
@@ -536,7 +577,8 @@ async def _verify_pg_tables(conn: asyncpg.Connection | asyncpg.pool.PoolConnecti
     """Verify all required tables exist in PG. Returns True if all present."""
     for table in _REQUIRED_TABLES:
         exists = await conn.fetchval(
-            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)",
+            "SELECT EXISTS (SELECT FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = $1)",
             table,
         )
         if not exists:
@@ -546,6 +588,117 @@ async def _verify_pg_tables(conn: asyncpg.Connection | asyncpg.pool.PoolConnecti
         return False
     logger.info("PG: all %d required tables verified", len(_REQUIRED_TABLES))
     return True
+
+
+def _code_alembic_head() -> str:
+    """Resolve the single reviewed code head without touching a database."""
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    repo_root = Path(__file__).resolve().parents[2]
+    config = Config(str(repo_root / "migrations" / "alembic.ini"))
+    config.set_main_option(
+        "script_location",
+        str(repo_root / "migrations" / "alembic"),
+    )
+    heads = ScriptDirectory.from_config(config).get_heads()
+    if len(heads) != 1:
+        raise RuntimeError("Alembic code history must have exactly one head")
+    return heads[0]
+
+
+async def _inspect_alembic_head(
+    conn: asyncpg.Connection | asyncpg.pool.PoolConnectionProxy,
+) -> dict[str, Any]:
+    """Compare the database revision with the single reviewed code head."""
+
+    try:
+        head_revision = _code_alembic_head()
+    except Exception:
+        return {
+            "ready": False,
+            "status": "code_head_unavailable",
+            "current_revision": None,
+            "head_revision": None,
+        }
+    try:
+        rows = await conn.fetch(
+            "SELECT version_num FROM alembic_version ORDER BY version_num"
+        )
+    except Exception:
+        return {
+            "ready": False,
+            "status": "version_missing",
+            "current_revision": None,
+            "head_revision": head_revision,
+        }
+    revisions = [str(row["version_num"]) for row in rows]
+    if not revisions:
+        status = "version_missing"
+        current_revision = None
+    elif len(revisions) != 1:
+        status = "multiple_current_revisions"
+        current_revision = None
+    else:
+        current_revision = revisions[0]
+        status = "at_head" if current_revision == head_revision else "behind_head"
+    return {
+        "ready": status == "at_head",
+        "status": status,
+        "current_revision": current_revision,
+        "head_revision": head_revision,
+    }
+
+
+async def check_database_readiness() -> dict[str, Any]:
+    """Return side-effect-free database readiness for HTTP and startup gates."""
+
+    global _pg_available
+    if _pool is None:
+        _pg_available = False
+        if _sqlite_conn is not None and _sqlite_fallback_enabled():
+            return {
+                "ready": True,
+                "backend": "sqlite",
+                "status": "ready_development_fallback",
+                "tables_verified": False,
+                "migration": {"ready": False, "status": "not_applicable"},
+            }
+        return {
+            "ready": False,
+            "backend": "postgresql" if _production_requires_postgres() else "filesystem",
+            "status": "not_initialized",
+            "tables_verified": False,
+            "migration": {"ready": False, "status": "not_checked"},
+        }
+    try:
+        async with _pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+            tables_ok = await _verify_pg_tables(conn)
+            migration = await _inspect_alembic_head(conn)
+    except Exception:
+        _pg_available = False
+        return {
+            "ready": False,
+            "backend": "postgresql",
+            "status": "connection_error",
+            "tables_verified": False,
+            "migration": {"ready": False, "status": "not_checked"},
+        }
+    ready = tables_ok and migration.get("ready") is True
+    _pg_available = ready
+    return {
+        "ready": ready,
+        "backend": "postgresql",
+        "status": "ready" if ready else (
+            "migration_not_ready"
+            if migration.get("ready") is not True
+            else "schema_not_ready"
+        ),
+        "tables_verified": tables_ok,
+        "migration": migration,
+    }
 
 
 async def check_pg_health() -> dict[str, Any]:
@@ -562,20 +715,32 @@ async def check_pg_health() -> dict[str, Any]:
             "status": "pg_unavailable",
             "fallback": "sqlite" if _sqlite_conn else "json_only",
         }
-    try:
-        async with _pool.acquire() as conn:
-            await conn.fetchval("SELECT 1")
-            tables_ok = await _verify_pg_tables(conn)
-        _pg_available = tables_ok
+    readiness = await check_database_readiness()
+    if readiness["backend"] != "postgresql":
         return {
-            "backend": "postgresql",
-            "status": "healthy" if tables_ok else "tables_missing",
-            "tables_verified": tables_ok,
+            "backend": readiness["backend"],
+            "status": "pg_unavailable",
+            "fallback": "sqlite" if _sqlite_conn else "json_only",
         }
-    except Exception as e:
-        _pg_available = False
-        logger.warning("PG health check failed: %s", e)
-        return {"backend": "postgresql", "status": "connection_error", "error": str(e)[:200]}
+    return {
+        "backend": "postgresql",
+        "status": "healthy" if readiness["ready"] else readiness["status"],
+        "tables_verified": readiness["tables_verified"],
+        "migration": readiness["migration"],
+    }
+
+
+async def _discard_failed_pool(pool: asyncpg.Pool) -> None:
+    """Close a startup-failed pool without masking the verification error."""
+
+    global _pool
+    try:
+        await pool.close()
+    except Exception as exc:
+        logger.warning("PG pool cleanup failed: %s", type(exc).__name__)
+    finally:
+        if _pool is pool:
+            _pool = None
 
 
 async def init_db() -> None:
@@ -598,8 +763,20 @@ async def init_db() -> None:
         async with pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
             if await _verify_pg_tables(conn):
-                _pg_available = True
-                logger.info("PostgreSQL initialized — pipeline_states and all tables verified")
+                migration = await _inspect_alembic_head(conn)
+                if migration["ready"] is True:
+                    _pg_available = True
+                    logger.info(
+                        "PostgreSQL initialized — required schema verified at Alembic head"
+                    )
+                else:
+                    _pg_available = False
+                    if _production_requires_postgres():
+                        raise RuntimeError("required PostgreSQL migration is not ready")
+                    logger.warning(
+                        "PG migration is not ready: %s",
+                        migration["status"],
+                    )
             else:
                 _pg_available = False
                 if _production_requires_postgres():
@@ -608,6 +785,7 @@ async def init_db() -> None:
     except Exception as exc:
         _pg_available = False
         if _production_requires_postgres():
+            await _discard_failed_pool(pool)
             if isinstance(exc, RuntimeError):
                 raise
             raise RuntimeError("PostgreSQL startup verification failed in production") from None

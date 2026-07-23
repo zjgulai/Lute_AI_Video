@@ -658,6 +658,54 @@ def test_scenario_submission_snapshot_allowlists_source_projection() -> None:
     ) == projection
 
 
+def test_scenario_submission_snapshot_preserves_state_audit_arrays() -> None:
+    from src.routers.scenario import (
+        _SCENARIO_RESULT_SNAPSHOT_KEYS,
+        _safe_result_snapshot,
+    )
+
+    audit = {
+        "regenerate_chain": [
+            {
+                "consumer": "keyframe_images",
+                "upstream_step": "storyboards",
+                "attempt": 1,
+            }
+        ],
+        "soft_degraded_reasons": [
+            {"step": "continuity_storyboard_grid", "reason": "fixture"}
+        ],
+    }
+
+    assert _safe_result_snapshot(
+        audit,
+        allowed_keys=_SCENARIO_RESULT_SNAPSHOT_KEYS,
+    ) == audit
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("regenerate_chain", "not-an-array"),
+        ("soft_degraded_reasons", ["not-an-object"]),
+    ],
+)
+def test_scenario_submission_snapshot_rejects_malformed_state_audit_arrays(
+    field: str,
+    value: object,
+) -> None:
+    from src.routers.scenario import (
+        _SCENARIO_RESULT_SNAPSHOT_KEYS,
+        _safe_result_snapshot,
+    )
+
+    with pytest.raises(ValueError, match="scenario state audit array"):
+        _safe_result_snapshot(
+            {field: value},
+            allowed_keys=_SCENARIO_RESULT_SNAPSHOT_KEYS,
+        )
+
+
 @pytest.mark.parametrize("scenario", ["fast", "s1", "s2", "s3", "s4", "s5"])
 def test_resolver_derives_fast_and_scenario_identity_from_durable_record(
     scenario: str,

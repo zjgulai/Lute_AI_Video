@@ -1,0 +1,426 @@
+vulnerabilities:
+- id: CVE-2025-59375
+  purls:
+  - pkg:deb/debian/libexpat1@2.7.1-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application does not parse tenant or provider XML; the media magic gate rejects XML before FFmpeg
+- id: CVE-2025-69720
+  purls:
+  - pkg:deb/debian/libncursesw6@6.5%2B20250216-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-interactive non-root runtime does not load caller-controlled terminal descriptions
+- id: CVE-2025-69720
+  purls:
+  - pkg:deb/debian/libtinfo6@6.5%2B20250216-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-interactive non-root runtime does not load caller-controlled terminal descriptions
+- id: CVE-2025-69720
+  purls:
+  - pkg:deb/debian/ncurses-base@6.5%2B20250216-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-interactive non-root runtime does not load caller-controlled terminal descriptions
+- id: CVE-2025-69720
+  purls:
+  - pkg:deb/debian/ncurses-bin@6.5%2B20250216-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-interactive non-root runtime does not load caller-controlled terminal descriptions
+- id: CVE-2026-0966
+  purls:
+  - pkg:deb/debian/libssh-4@0.11.2-1%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=FFmpeg inputs are file-pipe-only and no application SSH or SFTP path invokes libssh
+- id: CVE-2026-11822
+  purls:
+  - pkg:deb/debian/libsqlite3-0@3.46.1-7%2Bdeb13u1
+  expired_at: &id001 2026-08-21
+  statement: owner=self; reason=Production refuses SQLite fallback and server-created local SQLite databases do not enable FTS5
+- id: CVE-2026-11824
+  purls:
+  - pkg:deb/debian/libsqlite3-0@3.46.1-7%2Bdeb13u1
+  expired_at: *id001
+  statement: owner=self; reason=Production refuses SQLite fallback and server-created local SQLite databases do not enable FTS5
+- id: CVE-2026-11940
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application runtime does not use tarfile extraction on tenant or provider input
+- id: CVE-2026-11972
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application runtime does not use streaming tarfile mode on tenant or provider input
+- id: CVE-2026-12087
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl is not invoked by the backend runtime; Debian has no stable fix
+- id: CVE-2026-13221
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl is not invoked by the backend runtime; Debian has no stable fix
+- id: CVE-2026-15308
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application runtime does not use HTMLParser on tenant or provider input
+- id: CVE-2026-25210
+  purls:
+  - pkg:deb/debian/libexpat1@2.7.1-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application does not parse tenant or provider XML; the media magic gate rejects XML before FFmpeg
+- id: CVE-2026-25835
+  purls:
+  - pkg:deb/debian/libmbedcrypto16@3.6.5-0.1~deb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=FFmpeg is file-pipe-only and never uses the bundled Mbed TLS cryptographic path
+- id: CVE-2026-3298
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Linux runtime is not affected by the Windows ProactorEventLoop issue
+- id: CVE-2026-34872
+  purls:
+  - pkg:deb/debian/libmbedcrypto16@3.6.5-0.1~deb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=FFmpeg inputs are byte-validated demuxer-pinned and file-pipe-only; Debian has no stable fix
+- id: CVE-2026-34873
+  purls:
+  - pkg:deb/debian/libmbedcrypto16@3.6.5-0.1~deb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=FFmpeg inputs are byte-validated demuxer-pinned and file-pipe-only; Debian has no stable fix
+- id: CVE-2026-34874
+  purls:
+  - pkg:deb/debian/libmbedcrypto16@3.6.5-0.1~deb13u1
+  expired_at: *id001
+  statement: owner=self; reason=FFmpeg is file-pipe-only and never parses distinguished names through bundled Mbed TLS
+- id: CVE-2026-34875
+  purls:
+  - pkg:deb/debian/libmbedcrypto16@3.6.5-0.1~deb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=FFmpeg inputs are byte-validated demuxer-pinned and file-pipe-only; Debian has no stable fix
+- id: CVE-2026-34876
+  purls:
+  - pkg:deb/debian/libmbedcrypto16@3.6.5-0.1~deb13u1
+  expired_at: *id001
+  statement: owner=self; reason=FFmpeg is file-pipe-only and never invokes the bundled Mbed TLS CCM API
+- id: CVE-2026-3644
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application does not call Morsel update unpickle or js_output paths on untrusted input
+- id: CVE-2026-36849
+  purls:
+  - pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=TIFF extensions and containers are not accepted by the fail-closed media gate
+- id: CVE-2026-3731
+  purls:
+  - pkg:deb/debian/libssh-4@0.11.2-1%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=FFmpeg inputs are file-pipe-only and no application SSH or SFTP path invokes libssh
+- id: CVE-2026-37555
+  purls:
+  - pkg:deb/debian/libsndfile1@1.2.2-2%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=IMA ADPCM WAV is rejected from its format tag before FFmpeg or libsndfile invocation
+- id: CVE-2026-41080
+  purls:
+  - pkg:deb/debian/libexpat1@2.7.1-2
+  expired_at: *id001
+  statement: owner=self; reason=Application does not parse tenant or provider XML; the media magic gate rejects XML before FFmpeg
+- id: CVE-2026-41992
+  purls:
+  - pkg:deb/debian/gzip@1.13-1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=The system gzip executable and LZH decoder are not invoked by the application runtime
+- id: CVE-2026-4224
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application runtime does not parse untrusted XML or inline DTD content models
+- id: CVE-2026-42496
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl Archive::Tar is not invoked by the backend runtime; Debian deferred the fix
+- id: CVE-2026-42497
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl Archive-Tar is not invoked by the application runtime
+- id: CVE-2026-45186
+  purls:
+  - pkg:deb/debian/libexpat1@2.7.1-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application does not parse tenant or provider XML; the media magic gate rejects XML before FFmpeg
+- id: CVE-2026-4786
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application runtime does not invoke webbrowser on tenant or provider URLs
+- id: CVE-2026-48959
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: *id001
+  statement: owner=self; reason=Perl IO-Uncompress is not invoked by the application runtime
+- id: CVE-2026-48961
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: *id001
+  statement: owner=self; reason=Perl zipdetails is not invoked by the application runtime
+- id: CVE-2026-48962
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl IO-Compress is not invoked by the application runtime
+- id: CVE-2026-52584
+  purls:
+  - pkg:deb/debian/libjxl0.11@0.11.2-0.1~deb13u2
+  expired_at: *id001
+  statement: owner=self; reason=JPEG XL is not an accepted media container and libjxl is only an FFmpeg dependency
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/bsdutils@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/libblkid1@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/liblastlog2-2@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/libmount1@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/libsmartcols1@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/libuuid1@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/login@4.16.0-2%2Breally2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/mount@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-53615
+  purls:
+  - pkg:deb/debian/util-linux@2.41-5
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Non-root application runtime does not invoke mount partition or util-linux probing tools
+- id: CVE-2026-5435
+  purls:
+  - pkg:deb/debian/libc-bin@2.41-12%2Bdeb13u3
+  expired_at: *id001
+  statement: owner=self; reason=Application does not invoke deprecated glibc DNS pretty-print functions
+- id: CVE-2026-5435
+  purls:
+  - pkg:deb/debian/libc6@2.41-12%2Bdeb13u3
+  expired_at: *id001
+  statement: owner=self; reason=Application does not invoke deprecated glibc DNS pretty-print functions
+- id: CVE-2026-54369
+  purls:
+  - pkg:deb/debian/libacl1@2.3.2-2%2Bb1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application runtime does not invoke libacl mutation APIs and runs as a non-root user
+- id: CVE-2026-54370
+  purls:
+  - pkg:deb/debian/libacl1@2.3.2-2%2Bb1
+  expired_at: *id001
+  statement: owner=self; reason=Application does not invoke libacl pathname mutation APIs and runs as non-root
+- id: CVE-2026-5450
+  purls:
+  - pkg:deb/debian/libc-bin@2.41-12%2Bdeb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Backend does not accept caller-controlled scanf format strings; Debian has no stable fix
+- id: CVE-2026-5450
+  purls:
+  - pkg:deb/debian/libc6@2.41-12%2Bdeb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Backend does not accept caller-controlled scanf format strings; Debian has no stable fix
+- id: CVE-2026-56131
+  purls:
+  - pkg:deb/debian/libexpat1@2.7.1-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application does not parse tenant or provider XML; the media magic gate rejects XML before FFmpeg
+- id: CVE-2026-56208
+  purls:
+  - pkg:deb/debian/libaom3@3.12.1-1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Every video encoding callsite pins libx264 and never enables AV1 SVC encoding
+- id: CVE-2026-56209
+  purls:
+  - pkg:deb/debian/libaom3@3.12.1-1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Every video encoding callsite pins libx264 and never enables AV1 SVC encoding
+- id: CVE-2026-56210
+  purls:
+  - pkg:deb/debian/libaom3@3.12.1-1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Every video encoding callsite pins libx264 and never enables AV1 SVC encoding
+- id: CVE-2026-56211
+  purls:
+  - pkg:deb/debian/libaom3@3.12.1-1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Every video encoding callsite pins libx264 and never enables AV1 SVC encoding
+- id: CVE-2026-56407
+  purls:
+  - pkg:deb/debian/libexpat1@2.7.1-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application does not parse tenant or provider XML; the media magic gate rejects XML before FFmpeg
+- id: CVE-2026-56408
+  purls:
+  - pkg:deb/debian/libexpat1@2.7.1-2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application does not parse tenant or provider XML; the media magic gate rejects XML before FFmpeg
+- id: CVE-2026-57432
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl Storable is not invoked by the application runtime
+- id: CVE-2026-57433
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl Storable is not invoked by the backend runtime; Debian has no stable fix
+- id: CVE-2026-58010
+  purls:
+  - pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application exposes no GVariant parsing path and FFmpeg inputs remain demuxer-pinned local files
+- id: CVE-2026-58011
+  purls:
+  - pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application exposes no GDateTime parsing path and FFmpeg inputs remain demuxer-pinned local files
+- id: CVE-2026-58012
+  purls:
+  - pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application exposes no GLib regex replacement path for untrusted input
+- id: CVE-2026-58013
+  purls:
+  - pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application exposes no GLib GIOChannel line-reading path for untrusted input
+- id: CVE-2026-58014
+  purls:
+  - pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application exposes no GLib key-file locale-list path for untrusted input
+- id: CVE-2026-58015
+  purls:
+  - pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Application exposes no GLib GDBus authentication path and runs without D-Bus integration
+- id: CVE-2026-58016
+  purls:
+  - pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Backend does not parse GDBus introspection XML; Debian has no stable fix
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-58049
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
+- id: CVE-2026-5928
+  purls:
+  - pkg:deb/debian/libc-bin@2.41-12%2Bdeb13u3
+  expired_at: *id001
+  statement: owner=self; reason=Application does not expose ungetwc with caller-controlled overlapping character encodings
+- id: CVE-2026-5928
+  purls:
+  - pkg:deb/debian/libc6@2.41-12%2Bdeb13u3
+  expired_at: *id001
+  statement: owner=self; reason=Application does not expose ungetwc with caller-controlled overlapping character encodings
+- id: CVE-2026-6100
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application does not reuse stdlib decompressor objects after MemoryError and Python 3.12 has no newer security release
+- id: CVE-2026-6653
+  purls:
+  - pkg:deb/debian/libxml2@2.12.7%2Bdfsg%2Breally2.9.14-2.1%2Bdeb13u3
+  expired_at: 2026-08-21
+  statement: owner=self; reason=XML and playlist media are rejected before demuxer-pinned FFmpeg use; Debian has no stable fix
+- id: CVE-2026-7017
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: *id001
+  statement: owner=self; reason=Perl HTTP-Tiny is not invoked by the application runtime
+- id: CVE-2026-7210
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application does not parse untrusted XML and Python 3.12.13 is the latest 3.12 security release
+- id: CVE-2026-8376
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Backend is arm64 or amd64 and does not invoke Perl regex compilation
+- id: CVE-2026-9538
+  purls:
+  - pkg:deb/debian/perl-base@5.40.1-6
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Perl Archive-Tar is not invoked by the application runtime
+- id: CVE-2026-9669
+  purls:
+  - pkg:generic/python@3.12.13
+  expired_at: *id001
+  statement: owner=self; reason=Application does not reuse BZ2Decompressor after errors and Python 3.12 has no newer security release

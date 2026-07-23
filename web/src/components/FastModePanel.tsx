@@ -7,6 +7,7 @@ import { getSubmissionByIdempotencyKey, submitFastMode, pollFastStatus, isDemoMo
 import { DEMO_FAST_MODE_RESULT } from "@/demo-data";
 import { useSubmitting } from "@/hooks/useSubmitting";
 import RuntimeMediaVideo from "./RuntimeMediaVideo";
+import TransparencyStatus from "./TransparencyStatus";
 import { withExplicitMediaGenerationIntent } from "@/lib/scenarioPayload";
 import { classifyGenerationResult } from "@/lib/generationLifecycle";
 import {
@@ -459,6 +460,11 @@ export default function FastModePanel() {
               </span>
             )}
           </div>
+
+          <TransparencyStatus
+            resourceType={result.resource_type}
+            resourceId={result.resource_id}
+          />
 
           {/* Error, bounded completion, or full media */}
           {lifecycleState === "error" ? (

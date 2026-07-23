@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -66,10 +66,10 @@ _PARAMETER_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 _REQUIRED_SCOPES = frozenset({"read_products", "write_products", "write_files"})
 
-MediaProbe: TypeAlias = Callable[[Path], float | Awaitable[float]]
-Sleep: TypeAlias = Callable[[float], Awaitable[None]]
-Clock: TypeAlias = Callable[[], float]
-Now: TypeAlias = Callable[[], datetime]
+type MediaProbe = Callable[[Path], float | Awaitable[float]]
+type Sleep = Callable[[float], Awaitable[None]]
+type Clock = Callable[[], float]
+type Now = Callable[[], datetime]
 
 _PREFLIGHT_QUERY = """
 query PublishPreflight($productId: ID!) {

@@ -32,7 +32,7 @@ from src.storage import db as db_module
 from src.storage.provider_cost_repository import ProviderCostRepository
 
 TENANT_ID = "tenant-provider-routes"
-POLICY_VERSION = "generation-safety.v1"
+POLICY_VERSION = "generation-safety.v2"
 
 
 def _install_sqlite_connection(

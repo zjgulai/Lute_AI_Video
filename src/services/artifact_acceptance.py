@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast, overload
 
 from starlette.requests import Request
 
@@ -19,6 +19,11 @@ from src.models.acceptance import (
     AcceptanceCreateRequest,
     AcceptanceRecordResponse,
     AcceptanceReviewerProjection,
+    AcceptanceTransparencyProjection,
+)
+from src.models.transparency import (
+    TransparencyProjectionV1,
+    validate_transparency_sidecar,
 )
 from src.routers._deps import AuthContext
 from src.services.acceptance_source import (
@@ -54,8 +59,10 @@ from src.storage.idempotency_repository import (
     IdempotencyStoreUnavailableError,
     SubmissionIdempotencyRepository,
 )
+from src.tools.c2pa_signer import C2PASigningError, verify_signed_media_readback
 
-ACCEPTANCE_FINGERPRINT_VERSION = "acceptance-create.v1"
+ACCEPTANCE_FINGERPRINT_VERSION = "acceptance-create.v2"
+_LEGACY_ACCEPTANCE_FINGERPRINT_VERSION = "acceptance-create.v1"
 _VIDEO_SUFFIXES = {".mp4", ".webm"}
 _REVIEWER_KEY_TYPES = frozenset({"tenant", "test_bundle", "env_fallback"})
 _RESOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -72,6 +79,8 @@ AcceptanceConsumeOutcome = Literal[
     "not_available",
     "unknown",
 ]
+AcceptanceResourceType = Literal["fast", "scenario"]
+AcceptanceScenario = Literal["fast", "s1", "s2", "s3", "s4", "s5"]
 
 
 class ArtifactAcceptanceError(Exception):
@@ -160,12 +169,22 @@ class AcceptanceFingerprint:
 @dataclass(frozen=True, slots=True)
 class StoredArtifactAuthority:
     tenant_id: str
-    resource_type: str
+    resource_type: AcceptanceResourceType
     resource_id: str
-    scenario: str
+    scenario: AcceptanceScenario
     artifact_path: str
     artifact_sha256: str
     artifact_size_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class StoredTransparencyAuthority:
+    sidecar_path: str
+    sidecar_sha256: str
+    final_artifact_c2pa_status: Literal[
+        "unsigned_pending_review",
+        "signed_local_readback",
+    ]
 
 
 def build_acceptance_fingerprint(
@@ -174,11 +193,53 @@ def build_acceptance_fingerprint(
     tenant_id: str,
     reviewer_key_id: str,
     reviewer_key_type: str,
+    transparency_sidecar_path: str,
+    transparency_sidecar_sha256: str,
+    final_artifact_c2pa_status: str,
 ) -> AcceptanceFingerprint:
     """Hash the strict action plus authenticated principal, never credentials."""
 
     envelope = {
         "fingerprint_version": ACCEPTANCE_FINGERPRINT_VERSION,
+        "tenant_id": tenant_id,
+        "reviewer": {
+            "key_id": reviewer_key_id,
+            "key_type": reviewer_key_type,
+        },
+        "request": request.model_dump(
+            mode="json",
+            exclude_defaults=False,
+            exclude_none=False,
+            exclude_unset=False,
+        ),
+        "transparency": {
+            "sidecar_path": transparency_sidecar_path,
+            "sidecar_sha256": transparency_sidecar_sha256,
+            "final_artifact_c2pa_status": final_artifact_c2pa_status,
+        },
+    }
+    canonical = json.dumps(
+        envelope,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return AcceptanceFingerprint(
+        ACCEPTANCE_FINGERPRINT_VERSION,
+        hashlib.sha256(canonical).hexdigest(),
+    )
+
+
+def _build_legacy_acceptance_fingerprint(
+    request: AcceptanceCreateRequest,
+    *,
+    tenant_id: str,
+    reviewer_key_id: str,
+    reviewer_key_type: str,
+) -> AcceptanceFingerprint:
+    envelope = {
+        "fingerprint_version": _LEGACY_ACCEPTANCE_FINGERPRINT_VERSION,
         "tenant_id": tenant_id,
         "reviewer": {
             "key_id": reviewer_key_id,
@@ -199,7 +260,7 @@ def build_acceptance_fingerprint(
         allow_nan=False,
     ).encode("utf-8")
     return AcceptanceFingerprint(
-        ACCEPTANCE_FINGERPRINT_VERSION,
+        _LEGACY_ACCEPTANCE_FINGERPRINT_VERSION,
         hashlib.sha256(canonical).hexdigest(),
     )
 
@@ -224,12 +285,17 @@ class ArtifactAcceptanceService:
         submission_repository: SubmissionIdempotencyRepository | None = None,
         *,
         output_dir: Path | None = None,
+        c2pa_reader_verifier: Callable[[Path], str] | None = None,
     ) -> None:
         self.repository = repository or AcceptanceRecordRepository()
         self.submission_repository = (
             submission_repository or SubmissionIdempotencyRepository()
         )
         self.output_dir = output_dir or OUTPUT_DIR
+        self.c2pa_reader_verifier = (
+            c2pa_reader_verifier
+            or (lambda path: verify_signed_media_readback(path, media_format="video/mp4"))
+        )
 
     async def create(
         self,
@@ -240,12 +306,6 @@ class ArtifactAcceptanceService:
     ) -> tuple[AcceptanceRecordResponse, bool]:
         tenant_id, reviewer_key_id, reviewer_key_type = _reviewer_identity(auth)
         validated_key = _validate_raw_key(raw_key)
-        fingerprint = build_acceptance_fingerprint(
-            request,
-            tenant_id=tenant_id,
-            reviewer_key_id=reviewer_key_id,
-            reviewer_key_type=reviewer_key_type,
-        )
         creation_key_hash = hash_idempotency_key(validated_key)
 
         existing = await self._get_by_creation_key(
@@ -253,6 +313,28 @@ class ArtifactAcceptanceService:
             creation_key_hash=creation_key_hash,
         )
         if existing is not None:
+            if existing.get("fingerprint_version") == _LEGACY_ACCEPTANCE_FINGERPRINT_VERSION:
+                legacy_fingerprint = _build_legacy_acceptance_fingerprint(
+                    request,
+                    tenant_id=tenant_id,
+                    reviewer_key_id=reviewer_key_id,
+                    reviewer_key_type=reviewer_key_type,
+                )
+                if not _fingerprint_matches(existing, legacy_fingerprint):
+                    raise AcceptancePayloadConflict
+                return await self._current_replay(tenant_id, existing), True
+            stored_transparency = _validate_stored_transparency_authority(existing)
+            fingerprint = build_acceptance_fingerprint(
+                request,
+                tenant_id=tenant_id,
+                reviewer_key_id=reviewer_key_id,
+                reviewer_key_type=reviewer_key_type,
+                transparency_sidecar_path=stored_transparency.sidecar_path,
+                transparency_sidecar_sha256=stored_transparency.sidecar_sha256,
+                final_artifact_c2pa_status=(
+                    stored_transparency.final_artifact_c2pa_status
+                ),
+            )
             if not _fingerprint_matches(existing, fingerprint):
                 raise AcceptancePayloadConflict
             return await self._current_replay(tenant_id, existing), True
@@ -284,6 +366,26 @@ class ArtifactAcceptanceService:
         )
         if artifact.canonical_path != requested_path:
             raise AcceptanceArtifactMismatch
+        transparency = _validate_source_transparency(
+            source_record,
+            artifact=artifact,
+            tenant_id=source.tenant_id,
+            scenario=source.scenario,
+            resource_type=source.resource_type,
+            resource_id=source.resource_id,
+            output_dir=self.output_dir,
+            decision=request.decision,
+            c2pa_reader_verifier=self.c2pa_reader_verifier,
+        )
+        fingerprint = build_acceptance_fingerprint(
+            request,
+            tenant_id=tenant_id,
+            reviewer_key_id=reviewer_key_id,
+            reviewer_key_type=reviewer_key_type,
+            transparency_sidecar_path=transparency.sidecar_path,
+            transparency_sidecar_sha256=transparency.sidecar_sha256,
+            final_artifact_c2pa_status=transparency.final_artifact_c2pa_status,
+        )
 
         try:
             result = await self.repository.create_or_replay(
@@ -298,6 +400,11 @@ class ArtifactAcceptanceService:
                 artifact_sha256=artifact.sha256,
                 artifact_size_bytes=artifact.size_bytes,
                 artifact_kind=source.artifact_kind,
+                transparency_sidecar_path=transparency.sidecar_path,
+                transparency_sidecar_sha256=transparency.sidecar_sha256,
+                final_artifact_c2pa_status=(
+                    transparency.final_artifact_c2pa_status
+                ),
                 decision=request.decision,
                 reviewer_key_id=reviewer_key_id,
                 reviewer_key_type=reviewer_key_type,
@@ -422,6 +529,12 @@ class ArtifactAcceptanceService:
             or artifact.size_bytes != stored.artifact_size_bytes
         ):
             raise AcceptanceArtifactIntegrityMismatch
+        transparency = _revalidate_stored_transparency(
+            record,
+            artifact=artifact,
+            output_dir=self.output_dir,
+            c2pa_reader_verifier=self.c2pa_reader_verifier,
+        )
 
         try:
             consumed = await self.repository.consume(
@@ -429,6 +542,12 @@ class ArtifactAcceptanceService:
                 acceptance_id=acceptance_id,
                 artifact_path=artifact.canonical_path,
                 artifact_sha256=artifact.sha256,
+                artifact_size_bytes=artifact.size_bytes,
+                transparency_sidecar_path=transparency.sidecar_path,
+                transparency_sidecar_sha256=transparency.sidecar_sha256,
+                final_artifact_c2pa_status=(
+                    transparency.final_artifact_c2pa_status
+                ),
                 consumer_operation=consumer_operation,
                 consumer_resource_id=consumer_resource_id,
             )
@@ -485,6 +604,12 @@ class ArtifactAcceptanceService:
             or artifact.size_bytes != stored.artifact_size_bytes
         ):
             raise AcceptanceArtifactIntegrityMismatch
+        _revalidate_stored_transparency(
+            record,
+            artifact=artifact,
+            output_dir=self.output_dir,
+            c2pa_reader_verifier=self.c2pa_reader_verifier,
+        )
         return _project_record(
             record,
             idempotent_replay=False,
@@ -526,7 +651,7 @@ class ArtifactAcceptanceService:
             if record.get("id") != acceptance_id:
                 return "unknown"
 
-            _validate_stored_artifact_authority(
+            stored_artifact = _validate_stored_artifact_authority(
                 record,
                 expected_tenant_id=tenant_id,
             )
@@ -573,11 +698,15 @@ class ArtifactAcceptanceService:
                     or has_revocation_evidence
                 ):
                     return "unknown"
-                return (
-                    "not_available"
-                    if expires_at <= datetime.now(UTC)
-                    else "available_not_consumed"
+                if expires_at <= datetime.now(UTC):
+                    return "not_available"
+                _revalidate_stored_publish_authority(
+                    record,
+                    stored_artifact=stored_artifact,
+                    output_dir=self.output_dir,
+                    c2pa_reader_verifier=self.c2pa_reader_verifier,
                 )
+                return "available_not_consumed"
 
             if status == "consumed":
                 if (
@@ -592,6 +721,12 @@ class ArtifactAcceptanceService:
                     and consumed_event_at <= updated_at
                 ):
                     return "unknown"
+                _revalidate_stored_publish_authority(
+                    record,
+                    stored_artifact=stored_artifact,
+                    output_dir=self.output_dir,
+                    c2pa_reader_verifier=self.c2pa_reader_verifier,
+                )
                 validated_operation = _validate_consumer_identity(
                     stored_operation,
                     max_length=64,
@@ -913,6 +1048,218 @@ def _resolve_exact_artifact(
         raise missing_error from None
 
 
+def _result_snapshot(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    raw = record.get("result_snapshot")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("acceptance transparency snapshot is invalid") from exc
+    if not isinstance(raw, Mapping):
+        raise ValueError("acceptance transparency snapshot is invalid")
+    return raw
+
+
+def _validate_stored_transparency_authority(
+    record: Mapping[str, Any],
+) -> StoredTransparencyAuthority:
+    sidecar_path = record.get("transparency_sidecar_path")
+    sidecar_sha256 = record.get("transparency_sidecar_sha256")
+    c2pa_status = record.get("final_artifact_c2pa_status")
+    if not isinstance(sidecar_path, str) or not sidecar_path:
+        raise AcceptanceArtifactIntegrityMismatch
+    try:
+        canonical = validate_output_reference(sidecar_path)
+    except ArtifactIdentityError:
+        raise AcceptanceArtifactIntegrityMismatch from None
+    if canonical != sidecar_path or not sidecar_path.endswith(".json"):
+        raise AcceptanceArtifactIntegrityMismatch
+    if not isinstance(sidecar_sha256, str) or _SHA256_RE.fullmatch(sidecar_sha256) is None:
+        raise AcceptanceArtifactIntegrityMismatch
+    if c2pa_status not in {"unsigned_pending_review", "signed_local_readback"}:
+        raise AcceptanceArtifactIntegrityMismatch
+    return StoredTransparencyAuthority(
+        sidecar_path=sidecar_path,
+        sidecar_sha256=sidecar_sha256,
+        final_artifact_c2pa_status=cast(
+            Literal["unsigned_pending_review", "signed_local_readback"],
+            c2pa_status,
+        ),
+    )
+
+
+def _validate_transparency_sidecar_binding(
+    *,
+    transparency: StoredTransparencyAuthority,
+    artifact: ResolvedOutputArtifact,
+    tenant_id: str,
+    scenario: str,
+    resource_type: str,
+    resource_id: str,
+    output_dir: Path,
+    expected_record_id: str | None,
+    expected_record_count: int | None,
+    c2pa_reader_verifier: Callable[[Path], str],
+) -> None:
+    prefix = _source_prefix(
+        tenant_id=tenant_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+    )
+    if not transparency.sidecar_path.startswith(f"{prefix}/transparency/"):
+        raise AcceptanceArtifactIntegrityMismatch
+    try:
+        sidecar = validate_transparency_sidecar(
+            output_dir / transparency.sidecar_path,
+            expected_sha256=transparency.sidecar_sha256,
+            artifact_root=output_dir,
+        )
+    except (OSError, ValueError):
+        raise AcceptanceArtifactIntegrityMismatch from None
+    if expected_record_count is not None and len(sidecar.records) != expected_record_count:
+        raise AcceptanceArtifactIntegrityMismatch
+    matching = [
+        record
+        for record in sidecar.records
+        if record.artifact is not None
+        and record.artifact.relative_path == artifact.canonical_path
+    ]
+    if len(matching) != 1:
+        raise AcceptanceArtifactIntegrityMismatch
+    final_record = matching[0]
+    if (
+        final_record.tenant_id != tenant_id
+        or final_record.scenario != scenario
+        or final_record.resource_id != resource_id
+        or final_record.content_kind != "video"
+        or final_record.simulated
+        or final_record.artifact is None
+        or final_record.artifact.sha256 != artifact.sha256
+        or final_record.artifact.size_bytes != artifact.size_bytes
+        or final_record.c2pa_status != transparency.final_artifact_c2pa_status
+        or (expected_record_id is not None and final_record.record_id != expected_record_id)
+    ):
+        raise AcceptanceArtifactIntegrityMismatch
+    if transparency.final_artifact_c2pa_status == "signed_local_readback":
+        try:
+            manifest_digest = c2pa_reader_verifier(artifact.absolute_path)
+        except (C2PASigningError, OSError, RuntimeError, ValueError):
+            raise AcceptanceArtifactIntegrityMismatch from None
+        if not isinstance(manifest_digest, str) or _SHA256_RE.fullmatch(manifest_digest) is None:
+            raise AcceptanceArtifactIntegrityMismatch
+
+
+def _validate_source_transparency(
+    source_record: Mapping[str, Any],
+    *,
+    artifact: ResolvedOutputArtifact,
+    tenant_id: str,
+    scenario: str,
+    resource_type: str,
+    resource_id: str,
+    output_dir: Path,
+    decision: str,
+    c2pa_reader_verifier: Callable[[Path], str],
+) -> StoredTransparencyAuthority:
+    try:
+        raw_projection = _result_snapshot(source_record).get("transparency")
+        projection = TransparencyProjectionV1.model_validate(raw_projection)
+        transparency = StoredTransparencyAuthority(
+            sidecar_path=projection.sidecar_path,
+            sidecar_sha256=projection.sidecar_sha256,
+            final_artifact_c2pa_status=cast(
+                Literal["unsigned_pending_review", "signed_local_readback"],
+                projection.final_artifact_c2pa_status,
+            ),
+        )
+        if (
+            projection.final_artifact_record_id is None
+            or projection.final_artifact_c2pa_status
+            not in {"unsigned_pending_review", "signed_local_readback"}
+        ):
+            raise AcceptanceArtifactIntegrityMismatch
+        if decision == "accepted" and (
+            projection.c2pa_signing_mode != "required"
+            or projection.final_artifact_c2pa_status != "signed_local_readback"
+        ):
+            raise AcceptanceSourceNotEligible
+        _validate_transparency_sidecar_binding(
+            transparency=transparency,
+            artifact=artifact,
+            tenant_id=tenant_id,
+            scenario=scenario,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            output_dir=output_dir,
+            expected_record_id=projection.final_artifact_record_id,
+            expected_record_count=projection.record_count,
+            c2pa_reader_verifier=c2pa_reader_verifier,
+        )
+        return transparency
+    except AcceptanceSourceNotEligible:
+        raise
+    except (AcceptanceArtifactIntegrityMismatch, TypeError, ValueError):
+        raise AcceptanceSourceNotEligible from None
+
+
+def _revalidate_stored_transparency(
+    record: Mapping[str, Any],
+    *,
+    artifact: ResolvedOutputArtifact,
+    output_dir: Path,
+    c2pa_reader_verifier: Callable[[Path], str],
+) -> StoredTransparencyAuthority:
+    transparency = _validate_stored_transparency_authority(record)
+    artifact_authority = _validate_stored_artifact_authority(
+        record,
+        expected_tenant_id=str(record.get("tenant_id")),
+    )
+    if transparency.final_artifact_c2pa_status != "signed_local_readback":
+        raise AcceptanceArtifactIntegrityMismatch
+    _validate_transparency_sidecar_binding(
+        transparency=transparency,
+        artifact=artifact,
+        tenant_id=artifact_authority.tenant_id,
+        scenario=artifact_authority.scenario,
+        resource_type=artifact_authority.resource_type,
+        resource_id=artifact_authority.resource_id,
+        output_dir=output_dir,
+        expected_record_id=None,
+        expected_record_count=None,
+        c2pa_reader_verifier=c2pa_reader_verifier,
+    )
+    return transparency
+
+
+def _revalidate_stored_publish_authority(
+    record: Mapping[str, Any],
+    *,
+    stored_artifact: StoredArtifactAuthority,
+    output_dir: Path,
+    c2pa_reader_verifier: Callable[[Path], str],
+) -> None:
+    artifact = _resolve_exact_artifact(
+        stored_artifact.artifact_path,
+        tenant_id=stored_artifact.tenant_id,
+        resource_type=stored_artifact.resource_type,
+        resource_id=stored_artifact.resource_id,
+        output_dir=output_dir,
+        missing_error=AcceptanceArtifactIntegrityMismatch,
+    )
+    if (
+        artifact.canonical_path != stored_artifact.artifact_path
+        or artifact.sha256 != stored_artifact.artifact_sha256
+        or artifact.size_bytes != stored_artifact.artifact_size_bytes
+    ):
+        raise AcceptanceArtifactIntegrityMismatch
+    _revalidate_stored_transparency(
+        record,
+        artifact=artifact,
+        output_dir=output_dir,
+        c2pa_reader_verifier=c2pa_reader_verifier,
+    )
+
+
 def _validate_stored_artifact_authority(
     record: Mapping[str, Any],
     *,
@@ -969,9 +1316,9 @@ def _validate_stored_artifact_authority(
 
     return StoredArtifactAuthority(
         tenant_id=tenant_id,
-        resource_type=resource_type,
+        resource_type=cast(AcceptanceResourceType, resource_type),
         resource_id=resource_id,
-        scenario=scenario,
+        scenario=cast(AcceptanceScenario, scenario),
         artifact_path=canonical_path,
         artifact_sha256=artifact_sha256,
         artifact_size_bytes=artifact_size_bytes,
@@ -984,6 +1331,14 @@ def _ensure_consumable(record: Mapping[str, Any]) -> None:
         raise AcceptanceExpired
     if record.get("decision") != "accepted" or status != "available":
         raise AcceptanceNotAvailable
+
+
+@overload
+def _project_timestamp(value: Any, *, required: Literal[True]) -> str: ...
+
+
+@overload
+def _project_timestamp(value: Any, *, required: Literal[False]) -> str | None: ...
 
 
 def _project_timestamp(value: Any, *, required: bool) -> str | None:
@@ -1036,6 +1391,21 @@ def _project_record(
         ):
             raise AcceptanceStoreUnavailable
 
+        fingerprint_version = record.get("fingerprint_version")
+        if fingerprint_version == ACCEPTANCE_FINGERPRINT_VERSION:
+            stored_transparency = _validate_stored_transparency_authority(record)
+            transparency = AcceptanceTransparencyProjection(
+                sidecar_path=stored_transparency.sidecar_path,
+                sidecar_sha256=stored_transparency.sidecar_sha256,
+                final_artifact_c2pa_status=(
+                    stored_transparency.final_artifact_c2pa_status
+                ),
+            )
+        elif fingerprint_version == _LEGACY_ACCEPTANCE_FINGERPRINT_VERSION:
+            transparency = None
+        else:
+            raise AcceptanceStoreUnavailable
+
         expires_at = _project_timestamp(record.get("expires_at"), required=True)
         consumed_at = _project_timestamp(record.get("consumed_at"), required=False)
         revoked_at = _project_timestamp(record.get("revoked_at"), required=False)
@@ -1064,6 +1434,7 @@ def _project_record(
                 key_id=reviewer_key_id,
                 key_type=reviewer_key_type,
             ),
+            transparency=transparency,
             review_notes=review_notes,
             expires_at=expires_at,
             consumed_at=consumed_at,

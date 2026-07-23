@@ -162,7 +162,7 @@ if HAS_FASTAPI:
             logging.getLogger("api.startup").warning("admin background tasks registration failed: %s", _exc)
 
     @asynccontextmanager
-    async def _lifespan(_app: FastAPI):
+    async def _lifespan(_app: object):
         await _run_startup()
         try:
             yield
@@ -353,6 +353,31 @@ if HAS_FASTAPI:
             response.headers.update(_LEGACY_PUBLISH_HEADERS)
         return response
 
+    @app.middleware("http")
+    async def prometheus_http_middleware(request, call_next):
+        from src.telemetry_prometheus import record_http_request
+
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            route = getattr(request.scope.get("route"), "path", "__unmatched__")
+            record_http_request(
+                request.method,
+                route if isinstance(route, str) else "__unmatched__",
+                500,
+                time.perf_counter() - started,
+            )
+            raise
+        route = getattr(request.scope.get("route"), "path", "__unmatched__")
+        record_http_request(
+            request.method,
+            route if isinstance(route, str) else "__unmatched__",
+            response.status_code,
+            time.perf_counter() - started,
+        )
+        return response
+
     # ── Mount domain routers (P1-11) ──
     from src.routers import health
     from src.routers._deps import verify_api_key
@@ -490,4 +515,4 @@ if HAS_FASTAPI:
             )
         return schema
 
-    app.openapi = _openapi_with_exact_publish_request_schema  # type: ignore[method-assign]
+    setattr(app, "openapi", _openapi_with_exact_publish_request_schema)

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useI18n } from "@/i18n/I18nProvider";
 import {
   SquaresFour,
   Users,
@@ -10,14 +11,15 @@ import {
 } from "@phosphor-icons/react";
 
 const NAV_ITEMS = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: SquaresFour },
-  { href: "/admin/tenants", label: "Tenants", icon: Users },
-  { href: "/admin/logs", label: "Logs", icon: Scroll },
-  { href: "/admin/health", label: "Health", icon: Heartbeat },
+  { href: "/admin/dashboard", labelKey: "admin.nav.dashboard", icon: SquaresFour },
+  { href: "/admin/tenants", labelKey: "admin.nav.tenants", icon: Users },
+  { href: "/admin/logs", labelKey: "admin.nav.logs", icon: Scroll },
+  { href: "/admin/health", labelKey: "admin.nav.health", icon: Heartbeat },
 ];
 
 export default function AdminSidebar() {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   return (
     <aside className="w-[220px] shrink-0 bg-[var(--bg-panel)] border-r border-[var(--divider-light)] flex flex-col min-h-screen">
@@ -34,7 +36,7 @@ export default function AdminSidebar() {
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 p-3 space-y-1" aria-label="Admin navigation">
+      <nav className="flex-1 p-3 space-y-1" aria-label={t("admin.nav.navigation")}>
         {NAV_ITEMS.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -54,7 +56,7 @@ export default function AdminSidebar() {
               aria-current={isActive ? "page" : undefined}
             >
               <Icon size={18} weight={isActive ? "fill" : "regular"} />
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           );
         })}
@@ -63,7 +65,7 @@ export default function AdminSidebar() {
       {/* Footer */}
       <div className="px-4 py-3 border-t border-[var(--divider-light)]">
         <p className="text-[11px] text-[var(--text-muted)]">
-          Admin Panel v0.1.0
+          {t("admin.nav.version")}
         </p>
       </div>
     </aside>

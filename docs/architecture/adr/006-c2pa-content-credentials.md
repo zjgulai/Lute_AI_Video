@@ -4,16 +4,20 @@ description: ADR-006 — 采用 C2PA Content Credentials 对 AI 生成视频签�
 doc_type: adr
 module: compliance
 topic: content-provenance
-status: accepted
+status: deprecated
 created: 2026-05-17
-updated: 2026-05-17
+updated: 2026-07-23
 decision_makers: User
 related:
   - file: ../../runbooks/c2pa-cert-application.md
     relation: implemented-via
+  - file: ./008-transparency-evidence-boundary.md
+    relation: superseded-by
 ---
 
 # ADR-006: C2PA Content Credentials for AI-Generated Videos
+
+> **Superseded by ADR-008.** 以下内容保留为 2026-05-17 的原始历史决策，不代表当前法律、信任或平台留存结论。
 
 ## Context
 

@@ -14,6 +14,7 @@ import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 import structlog
 from pydantic import ValidationError
@@ -57,6 +58,14 @@ def _safe_path_segment(value: str | None, fallback: str) -> str:
     return cleaned[:80] or fallback
 
 
+def _new_fast_run_id() -> str:
+    return f"fast_mode_{int(time.time())}_{uuid4().hex}"
+
+
+def _resolve_artifact_run_id(value: str | None) -> str:
+    return _safe_path_segment(value, _new_fast_run_id())
+
+
 def _artifact_output_dir(
     disposition: FastModeArtifactDisposition,
     *,
@@ -65,11 +74,11 @@ def _artifact_output_dir(
 ) -> Path:
     if disposition == "pending_review":
         tenant = _safe_path_segment(tenant_id, "default")
-        run = _safe_path_segment(run_id, f"fast_mode_{int(time.time())}")
+        run = _resolve_artifact_run_id(run_id)
         return OUTPUT_DIR / "tenants" / tenant / "pending_review" / "fast_mode" / run
     if disposition == "quarantine":
         tenant = _safe_path_segment(tenant_id, "default")
-        run = _safe_path_segment(run_id, f"fast_mode_{int(time.time())}")
+        run = _resolve_artifact_run_id(run_id)
         return OUTPUT_DIR / "tenants" / tenant / "quarantine" / "fast_mode" / run
     return FAST_MODE_OUTPUT_DIR
 
@@ -228,22 +237,36 @@ class FastModeService:
             provider_max_retries=provider_max_retries,
             enable_media_synthesis=enable_media_synthesis,
         )
+        resolved_run_id = _resolve_artifact_run_id(artifact_run_id)
         token = bind_effective_generation_policy(policy)
         operation_scope_token = None
         try:
             operation_scope_token = bind_provider_operation_scope(
                 resolve_provider_operation_scope("fast", "generate")
             )
-            return await self._generate_with_policy(
+            result = await self._generate_with_policy(
                 user_prompt=user_prompt,
                 duration=duration,
                 enable_tts=enable_tts,
                 on_stage=on_stage,
                 artifact_disposition=policy.artifact_disposition,
                 tenant_id=policy.tenant_id,
-                artifact_run_id=artifact_run_id,
+                artifact_run_id=resolved_run_id,
                 provider_max_retries=policy.provider_max_retries,
                 enable_media_synthesis=policy.enable_media_synthesis,
+            )
+            from src.services.transparency_provenance import record_fast_provenance
+
+            return cast(
+                FastModeResult,
+                record_fast_provenance(
+                    result=result,
+                    tenant_id=policy.tenant_id,
+                    run_id=resolved_run_id,
+                    artifact_disposition=policy.artifact_disposition,
+                    c2pa_signing_mode=policy.c2pa_signing_mode,
+                    output_dir=OUTPUT_DIR,
+                ),
             )
         finally:
             if operation_scope_token is not None:
@@ -363,6 +386,7 @@ class FastModeService:
                     "tts": None,
                 },
                 "is_stub": False,
+                "simulated": False,
                 "tts_path": None,
                 "tts_is_fallback": False,
                 "tts_fallback_reason": None,
@@ -596,6 +620,7 @@ class FastModeService:
                 },
                 "model_info": model_info,
                 "is_stub": True,
+                "simulated": True,
                 "tts_path": None,
                 "tts_is_fallback": tts_is_fallback,
                 "tts_fallback_reason": tts_fallback_reason,
@@ -652,6 +677,7 @@ class FastModeService:
             },
             "model_info": model_info,
             "is_stub": False,
+            "simulated": False,
             "tts_path": scoped_tts_path,
             "tts_is_fallback": tts_is_fallback,
             "tts_fallback_reason": tts_fallback_reason,

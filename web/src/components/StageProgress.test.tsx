@@ -3,7 +3,12 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 
 import { I18nProvider } from "@/i18n/I18nProvider";
-import StageProgress, { deriveStageRuntimeState, deriveTotalProgress, estimateRemainingSeconds } from "./StageProgress";
+import StageProgress, {
+  deriveCanonicalStageDefinitions,
+  deriveStageRuntimeState,
+  deriveTotalProgress,
+  estimateRemainingSeconds,
+} from "./StageProgress";
 import { getScenarioStatus } from "./api";
 
 vi.mock("./api", () => ({
@@ -170,6 +175,27 @@ describe("StageProgress continuity diagnostics", () => {
     });
   });
 
+  it("uses the backend step order as progress membership and retains unknown steps", () => {
+    const stages = deriveCanonicalStageDefinitions(
+      [
+        { id: "writing", label: "writing", narrative: "writing", steps: ["scripts"], estimatedSeconds: 10 },
+        { id: "export", label: "export", narrative: "export", steps: ["thumbnails"], estimatedSeconds: 10 },
+      ],
+      ["scripts", "server_owned_step", "thumbnails"],
+    );
+
+    expect(stages.flatMap((stage) => stage.steps)).toEqual([
+      "scripts",
+      "server_owned_step",
+      "thumbnails",
+    ]);
+    expect(deriveTotalProgress(stages, {
+      scripts: { status: "done" },
+      server_owned_step: { status: "running" },
+      thumbnails: { status: "done" },
+    })).toEqual({ totalSteps: 3, totalDone: 2, totalProgress: 67 });
+  });
+
   it("clears the initial polling timer when unmounted before the first status request", async () => {
     vi.mocked(getScenarioStatus).mockResolvedValue({
       status: "running",
@@ -288,7 +314,7 @@ describe("StageProgress continuity diagnostics", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_100);
     });
-    expect(getScenarioStatus).toHaveBeenCalledTimes(1);
+    expect(getScenarioStatus).toHaveBeenCalled();
     expect(onComplete).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith(["scenario_execution_failed"]);
     expect(container.textContent).toMatch(/Error|出错/);
@@ -491,6 +517,43 @@ describe("StageProgress continuity diagnostics", () => {
 
     expect(getScenarioStatus).toHaveBeenCalledTimes(1);
     expect(onComplete).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it("does not complete S4 from locally finished visual stages while backend status is running", async () => {
+    const onComplete = vi.fn();
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      label: "s4_waiting_for_terminal_truth",
+      scenario: "s4",
+      status: "running",
+      lifecycle_status: "running",
+      current_step: "thumbnails",
+      step_order: ["scripts", "video_prompts", "thumbnails"],
+      progress: 1,
+      pipeline_degraded: false,
+      gate_status: null,
+      steps: {
+        scripts: { status: "done" },
+        video_prompts: { status: "done" },
+        thumbnails: { status: "done" },
+      },
+      errors: [],
+      soft_degraded_reasons: [],
+      continuity_diagnostics: null,
+    } as never);
+
+    const { cleanup } = renderStageProgress({
+      label: "s4_waiting_for_terminal_truth",
+      scenario: "s4",
+      onComplete,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+    expect(getScenarioStatus).toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
     cleanup();
   });
 

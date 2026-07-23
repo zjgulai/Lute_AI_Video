@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import AdminHealthPage from "./page";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 const adminFetchJson = vi.fn();
 vi.mock("@/components/api", async () => {
@@ -27,7 +28,7 @@ function render() {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<AdminHealthPage />);
+    root.render(<I18nProvider><AdminHealthPage /></I18nProvider>);
   });
   return {
     container,
@@ -40,6 +41,7 @@ function render() {
 
 describe("AdminHealthPage", () => {
   beforeEach(() => {
+    localStorage.setItem("app-locale", "en");
     adminFetchJson.mockReset();
   });
 
@@ -61,6 +63,30 @@ describe("AdminHealthPage", () => {
     const { container, cleanup } = render();
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(container.textContent || "").toMatch(/failed/i);
+    cleanup();
+  });
+
+  it("localizes status, checked time, and history labels in Chinese", async () => {
+    localStorage.setItem("app-locale", "zh");
+    adminFetchJson
+      .mockResolvedValueOnce({
+        ...SAMPLE_STATUS,
+        services: { postgres: { status: "degraded", latency_ms: 4 } },
+      })
+      .mockResolvedValueOnce({
+        checks: [{
+          checked_at: "2026-05-17T11:00:00Z",
+          services: { postgres: { status: "healthy", latency_ms: 4 } },
+        }],
+      });
+    const { container, cleanup } = render();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(container.textContent).toContain("降级");
+    expect(container.textContent).toContain("上次检查");
+    expect(container.textContent).toContain("健康检查历史（24 小时）");
+    expect(container.textContent).toContain("时间");
+    expect(container.querySelector('[aria-label="PostgreSQL: 健康"]')).toBeTruthy();
     cleanup();
   });
 });

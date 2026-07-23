@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import AdminDashboardPage from "./page";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 const adminFetchJson = vi.fn();
 vi.mock("@/components/api", async () => {
@@ -34,7 +35,7 @@ function render() {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<AdminDashboardPage />);
+    root.render(<I18nProvider><AdminDashboardPage /></I18nProvider>);
   });
   return {
     container,
@@ -47,6 +48,7 @@ function render() {
 
 describe("AdminDashboardPage", () => {
   beforeEach(() => {
+    localStorage.setItem("app-locale", "en");
     adminFetchJson.mockReset();
   });
 

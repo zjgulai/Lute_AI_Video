@@ -40,6 +40,21 @@ class AcceptanceReviewerProjection(_StrictModel):
     key_type: Literal["tenant", "test_bundle", "env_fallback"]
 
 
+class AcceptanceTransparencyProjection(_StrictModel):
+    schema_version: Literal["acceptance-transparency.v1"] = (
+        "acceptance-transparency.v1"
+    )
+    ai_generated: Literal[True] = True
+    label: Literal["AI-generated"] = "AI-generated"
+    sidecar_path: str
+    sidecar_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    final_artifact_c2pa_status: Literal[
+        "unsigned_pending_review",
+        "signed_local_readback",
+    ]
+    independently_validated: Literal[False] = False
+
+
 class AcceptanceRecordResponse(_StrictModel):
     acceptance_id: str
     tenant_id: str
@@ -50,6 +65,7 @@ class AcceptanceRecordResponse(_StrictModel):
     decision: Literal["accepted", "rejected"]
     status: Literal["available", "rejected", "consumed", "expired", "revoked"]
     reviewer: AcceptanceReviewerProjection
+    transparency: AcceptanceTransparencyProjection | None = None
     review_notes: str
     expires_at: str
     consumed_at: str | None

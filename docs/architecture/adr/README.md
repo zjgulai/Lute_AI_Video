@@ -22,8 +22,9 @@ description: ADR 索引文档，列出本仓库所有架构决策记录（ADR）
 | [003](./003-db-strategy.md) | PostgreSQL First, SQLite Fallback | Accepted | 生产 PG fail-fast，本地 dev / CI SQLite 默认，禁止静默退化 |
 | [004](./004-s3-copyright-fingerprint.md) | S3 Copyright Fingerprint Selection | **Accepted: Option D** | 2026-05-17 决议：关闭 S3 viral 提取接口（`S3_VIRAL_EXTRACT_DISABLED=1` 默认）。Pex/Audible Magic/自建均超预算或工期，跳过技术方案，等业务需求重启再评估 |
 | [005](./005-poster-extraction-everywhere.md) | Poster Extraction at Every Video Producer | Accepted | 2026-05-17 决议：废弃"靠 pipeline.completed 单一钩子"模型，改为 `ensure_poster()` 在 4 个写 mp4 的代码路径内联调用 + portfolio router backstop，解决 fast_mode 等旁路场景视频卡片黑底问题 |
-| [006](./006-c2pa-content-credentials.md) | C2PA Content Credentials for AI-Generated Videos | Accepted | 2026-05-17 决议：采用 CA-issued publisher cert + c2pa-python 在 backend image 内对 AI 生成视频签名，满足 EU AI Act 2026-08-02 provenance 要求 |
+| [006](./006-c2pa-content-credentials.md) | C2PA Content Credentials for AI-Generated Videos | Superseded by 008 | 保留 2026-05-17 原始历史决策；当前边界由 ADR-008 定义 |
 | [007](./007-defer-llm-director-planner.md) | Defer LLM Director Planner for Continuity | Accepted | 2026-05-27 决议：continuity 导演层默认保留确定性 `director_profile`，暂不引入 LLM planner；未来只能作为 feature-flagged 增强并带 schema 校验与 deterministic fallback |
+| [008](./008-transparency-evidence-boundary.md) | Transparency evidence boundary | Accepted, supersedes 006 | C2PA 是项目工程方案；本地回读不等于受信、独立验证、平台留存或法律合规 |
 
 ## 写新 ADR
 

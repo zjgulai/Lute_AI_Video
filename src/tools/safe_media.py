@@ -58,6 +58,43 @@ _DEMUXERS = {
     "gif": "gif",
 }
 
+_WAVE_FORMAT_IMA_ADPCM = 0x0011
+_WAVE_FORMAT_EXTENSIBLE = 0xFFFE
+_WAVE_SUBFORMAT_GUID_TAIL = bytes.fromhex("00001000800000aa00389b71")
+
+
+def _wav_format_tag(header: bytes) -> int | None:
+    offset = 12
+    while offset + 8 <= len(header):
+        chunk_id = header[offset : offset + 4]
+        chunk_size = int.from_bytes(header[offset + 4 : offset + 8], "little")
+        data_start = offset + 8
+        data_end = data_start + chunk_size
+        if data_end > len(header):
+            return None
+        if chunk_id == b"fmt ":
+            if chunk_size < 2:
+                return None
+            format_tag = int.from_bytes(header[data_start : data_start + 2], "little")
+            if format_tag != _WAVE_FORMAT_EXTENSIBLE:
+                return format_tag
+            if chunk_size < 40:
+                return None
+            extension_size = int.from_bytes(
+                header[data_start + 16 : data_start + 18], "little"
+            )
+            if extension_size < 22 or 18 + extension_size > chunk_size:
+                return None
+            subformat = header[data_start + 24 : data_start + 40]
+            if len(subformat) != 16 or subformat[4:] != _WAVE_SUBFORMAT_GUID_TAIL:
+                return None
+            effective_tag = int.from_bytes(subformat[:4], "little")
+            if effective_tag > 0xFFFF:
+                return None
+            return effective_tag
+        offset = data_end + (chunk_size & 1)
+    return None
+
 
 def _classify_header(header: bytes) -> str | None:
     stripped = header.lstrip()
@@ -117,6 +154,10 @@ def validate_media_file(
     kind = _classify_header(header)
     if kind is None or kind not in allowed_kinds:
         raise UnsafeMediaError("media bytes do not match the approved extension")
+    if kind == "wav":
+        format_tag = _wav_format_tag(header)
+        if format_tag is None or format_tag == _WAVE_FORMAT_IMA_ADPCM:
+            raise UnsafeMediaError("WAV codec is not approved")
     return MediaContainer(kind=kind, ffmpeg_demuxer=_DEMUXERS[kind])
 
 

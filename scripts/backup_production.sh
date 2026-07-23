@@ -15,6 +15,8 @@ BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
 PARTIAL_DIR="${BACKUP_ROOT}/.${TIMESTAMP}.partial"
 LOCK_FILE="${BACKUP_ROOT}/.backup.lock"
 DUMP_SCRIPT="${DUMP_SCRIPT:-${PROJECT_ROOT}/scripts/pg_dump_logical.py}"
+BACKUP_MANIFEST_SCRIPT="${BACKUP_MANIFEST_SCRIPT:-${PROJECT_ROOT}/scripts/backup_manifest.py}"
+SOURCE_MANIFEST_PATH="${SOURCE_MANIFEST_PATH:-${PROJECT_ROOT}/source-manifest.v1.json}"
 REMOTE_DUMP_SCRIPT="/tmp/pg_dump_logical_${TIMESTAMP}.py"
 REMOTE_DUMP_FILE="/tmp/pg_dump_${TIMESTAMP}.jsonl"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
@@ -78,6 +80,10 @@ require_non_negative_integer "MIN_PG_ROWS" "$MIN_PG_ROWS"
 command -v "$DOCKER_BIN" >/dev/null 2>&1 || fail "docker command not found: ${DOCKER_BIN}"
 command -v "$FLOCK_BIN" >/dev/null 2>&1 || fail "flock command not found: ${FLOCK_BIN}"
 [ -f "$DUMP_SCRIPT" ] || fail "logical dump script not found: ${DUMP_SCRIPT}"
+[ -f "$BACKUP_MANIFEST_SCRIPT" ] \
+  || fail "backup manifest script not found: ${BACKUP_MANIFEST_SCRIPT}"
+[ -f "$SOURCE_MANIFEST_PATH" ] \
+  || fail "source manifest not found: ${SOURCE_MANIFEST_PATH}"
 
 mkdir -p "$BACKUP_ROOT"
 exec 9>"$LOCK_FILE"
@@ -339,13 +345,46 @@ ALEMBIC_REVISION=$(
 )
 MEDIA_MANIFEST_SHA256=$(sha256_file "${PARTIAL_DIR}/media_manifest.json")
 BACKEND_IMAGE=$("$DOCKER_BIN" inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
+BACKEND_IMAGE_ID=$("$DOCKER_BIN" inspect "$CONTAINER_NAME" --format='{{.Image}}')
+[[ "$BACKEND_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ]] \
+  || fail "backend container image ID is invalid"
+BACKEND_OCI_REVISION=$(
+  "$DOCKER_BIN" image inspect "$BACKEND_IMAGE_ID" \
+    --format='{{index .Config.Labels "org.opencontainers.image.revision"}}'
+)
+[[ "$BACKEND_OCI_REVISION" =~ ^[0-9a-f]{40}$ ]] \
+  || fail "backend image OCI revision is invalid"
+BACKEND_REPO_DIGEST=$(
+  "$DOCKER_BIN" image inspect "$BACKEND_IMAGE_ID" \
+    --format='{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}'
+)
+COMPLETED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+MANIFEST_ARGS=(
+  create
+  --backup-dir "$PARTIAL_DIR"
+  --source-root "$PROJECT_ROOT"
+  --source-manifest "$SOURCE_MANIFEST_PATH"
+  --backend-image-reference "$BACKEND_IMAGE"
+  --backend-image-id "$BACKEND_IMAGE_ID"
+  --oci-revision "$BACKEND_OCI_REVISION"
+  --pg-client-source-tag "$PG_CLIENT_SOURCE_TAG"
+  --pg-client-image "$PG_CLIENT_IMAGE"
+  --completed-at "$COMPLETED_AT"
+  --backup-timestamp "$TIMESTAMP"
+)
+if [ -n "$BACKEND_REPO_DIGEST" ]; then
+  MANIFEST_ARGS+=(--backend-repo-digest "$BACKEND_REPO_DIGEST")
+fi
+python3 "$BACKUP_MANIFEST_SCRIPT" "${MANIFEST_ARGS[@]}" >/dev/null
 cat >"${PARTIAL_DIR}/manifest.txt" <<EOF
 project: ai-video
 backup_timestamp: ${TIMESTAMP}
-completed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+completed_at: ${COMPLETED_AT}
 hostname: $(hostname)
 container_name: ${CONTAINER_NAME}
 backend_image: ${BACKEND_IMAGE}
+backend_image_id: ${BACKEND_IMAGE_ID}
+backend_oci_revision: ${BACKEND_OCI_REVISION}
 pg_dump_size_bytes: ${PG_SIZE_BYTES}
 pg_dump_rows: ${PG_ROW_COUNT}
 pg_dump_sha256: ${PG_SHA256}
@@ -367,6 +406,8 @@ retention_days: ${RETENTION_DAYS}
 status: complete
 EOF
 
+python3 "$BACKUP_MANIFEST_SCRIPT" validate --backup-dir "$PARTIAL_DIR" >/dev/null
+
 mv "$PARTIAL_DIR" "$BACKUP_DIR"
 log "Published completed backup: ${BACKUP_DIR}"
 
@@ -385,7 +426,9 @@ verified = []
 for backup_dir in sorted(root.iterdir()):
     if not backup_dir.is_dir() or not pattern.fullmatch(backup_dir.name):
         continue
-    manifest_path = backup_dir / "manifest.txt"
+    manifest_path = backup_dir / "backup-manifest.v1.json"
+    if not manifest_path.is_file():
+        manifest_path = backup_dir / "manifest.txt"
     marker_path = backup_dir / "restore_verified.json"
     if not manifest_path.is_file() or not marker_path.is_file():
         continue

@@ -24,6 +24,8 @@ from src.models.provider_cost import (
 )
 from src.services.provider_cost import (
     TrustedRegenerationEpoch,
+    ValidatedBudgetAuthorization,
+    ValidatedPlanBudgetAuthorization,
     ValidatedProviderBudgetAuthorization,
     initialize_provider_cost_account,
 )
@@ -505,10 +507,13 @@ class ProviderExecutionService:
         budget_job_id: str,
         scenario_or_resource_type: str,
         generation_policy_version: str,
-        authorization: ValidatedProviderBudgetAuthorization | None = None,
+        authorization: ValidatedBudgetAuthorization | None = None,
         regeneration_epoch: TrustedRegenerationEpoch | None = None,
     ) -> ProviderExecutionContext:
-        if authorization is not None and not isinstance(authorization, ValidatedProviderBudgetAuthorization):
+        if authorization is not None and not isinstance(
+            authorization,
+            (ValidatedProviderBudgetAuthorization, ValidatedPlanBudgetAuthorization),
+        ):
             raise ProviderCostContractError(
                 "provider_budget_configuration_invalid",
                 "budget authority must be a validated object",
@@ -632,7 +637,7 @@ async def initialize_and_bind_provider_execution_context(
     budget_job_id: str,
     scenario_or_resource_type: str,
     generation_policy_version: str,
-    authorization: ValidatedProviderBudgetAuthorization | None = None,
+    authorization: ValidatedBudgetAuthorization | None = None,
     service: ProviderExecutionService | None = None,
 ) -> ProviderExecutionContext:
     """Initialize durable authority, then bind it to the current request task."""

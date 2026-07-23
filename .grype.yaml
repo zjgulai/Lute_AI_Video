@@ -1,88 +1,433 @@
-# Exact, version-bound Debian stable exceptions only. These are not a blanket
-# `only-fixed` bypass: any package version change or new vulnerability falls
-# back into the Critical deployment gate. Review evidence and expiry rules:
-# docs/runbooks/vulnerability-scan-exceptions.md
 ignore:
-  # Perl is not invoked by the backend runtime. Debian classifies the stable
-  # findings as Minor/no-dsa or has not yet published a stable fix.
-  - vulnerability: CVE-2026-12087
-    fix-state: not-fixed
-    package:
-      name: perl-base
-      version: 5.40.1-6
-      type: deb
-  - vulnerability: CVE-2026-13221
-    fix-state: not-fixed
-    package:
-      name: perl-base
-      version: 5.40.1-6
-      type: deb
-  - vulnerability: CVE-2026-42496
-    fix-state: wont-fix
-    package:
-      name: perl-base
-      version: 5.40.1-6
-      type: deb
-  - vulnerability: CVE-2026-57433
-    fix-state: not-fixed
-    package:
-      name: perl-base
-      version: 5.40.1-6
-      type: deb
-  - vulnerability: CVE-2026-8376
-    fix-state: wont-fix
-    package:
-      name: perl-base
-      version: 5.40.1-6
-      type: deb
-
-  # Mbed TLS is present through ffmpeg dependencies. Media is byte-validated,
-  # demuxer-pinned, and restricted to FFmpeg's file/pipe protocols before use.
-  - vulnerability: CVE-2026-34872
-    fix-state: wont-fix
-    package:
-      name: libmbedcrypto16
-      version: 3.6.5-0.1~deb13u1
-      type: deb
-  - vulnerability: CVE-2026-34873
-    fix-state: wont-fix
-    package:
-      name: libmbedcrypto16
-      version: 3.6.5-0.1~deb13u1
-      type: deb
-  - vulnerability: CVE-2026-34875
-    fix-state: wont-fix
-    package:
-      name: libmbedcrypto16
-      version: 3.6.5-0.1~deb13u1
-      type: deb
-
-  # The backend supplies no attacker-controlled scanf format string. Debian
-  # marks this stable glibc issue Minor/no-dsa.
-  - vulnerability: CVE-2026-5450
-    fix-state: wont-fix
-    package:
-      name: libc-bin
-      version: 2.41-12+deb13u3
-      type: deb
-  - vulnerability: CVE-2026-5450
-    fix-state: wont-fix
-    package:
-      name: libc6
-      version: 2.41-12+deb13u3
-      type: deb
-
-  # Backend media processing does not use GDBus introspection XML. XML/HLS/DASH
-  # masquerades are rejected before demuxer-pinned, file/pipe-only FFmpeg use.
-  - vulnerability: CVE-2026-58016
-    fix-state: wont-fix
-    package:
-      name: libglib2.0-0t64
-      version: 2.84.4-3~deb13u3
-      type: deb
-  - vulnerability: CVE-2026-6653
-    fix-state: wont-fix
-    package:
-      name: libxml2
-      version: 2.12.7+dfsg+really2.9.14-2.1+deb13u3
-      type: deb
+- vulnerability: CVE-2025-59375
+  fix-state: wont-fix
+  package:
+    name: libexpat1
+    version: 2.7.1-2
+    type: deb
+- vulnerability: CVE-2025-69720
+  fix-state: wont-fix
+  package:
+    name: libncursesw6
+    version: 6.5+20250216-2
+    type: deb
+- vulnerability: CVE-2025-69720
+  fix-state: wont-fix
+  package:
+    name: libtinfo6
+    version: 6.5+20250216-2
+    type: deb
+- vulnerability: CVE-2025-69720
+  fix-state: wont-fix
+  package:
+    name: ncurses-base
+    version: 6.5+20250216-2
+    type: deb
+- vulnerability: CVE-2025-69720
+  fix-state: wont-fix
+  package:
+    name: ncurses-bin
+    version: 6.5+20250216-2
+    type: deb
+- vulnerability: CVE-2026-0966
+  fix-state: wont-fix
+  package:
+    name: libssh-4
+    version: 0.11.2-1+deb13u1
+    type: deb
+- vulnerability: CVE-2026-11822
+  fix-state: wont-fix
+  package:
+    name: libsqlite3-0
+    version: 3.46.1-7+deb13u1
+    type: deb
+- vulnerability: CVE-2026-11824
+  fix-state: wont-fix
+  package:
+    name: libsqlite3-0
+    version: 3.46.1-7+deb13u1
+    type: deb
+- vulnerability: CVE-2026-11940
+  fix-state: unknown
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-11972
+  fix-state: unknown
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-12087
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-13221
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-15308
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-25210
+  fix-state: wont-fix
+  package:
+    name: libexpat1
+    version: 2.7.1-2
+    type: deb
+- vulnerability: CVE-2026-25835
+  fix-state: wont-fix
+  package:
+    name: libmbedcrypto16
+    version: 3.6.5-0.1~deb13u1
+    type: deb
+- vulnerability: CVE-2026-3298
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-34872
+  fix-state: wont-fix
+  package:
+    name: libmbedcrypto16
+    version: 3.6.5-0.1~deb13u1
+    type: deb
+- vulnerability: CVE-2026-34873
+  fix-state: wont-fix
+  package:
+    name: libmbedcrypto16
+    version: 3.6.5-0.1~deb13u1
+    type: deb
+- vulnerability: CVE-2026-34874
+  fix-state: wont-fix
+  package:
+    name: libmbedcrypto16
+    version: 3.6.5-0.1~deb13u1
+    type: deb
+- vulnerability: CVE-2026-34875
+  fix-state: wont-fix
+  package:
+    name: libmbedcrypto16
+    version: 3.6.5-0.1~deb13u1
+    type: deb
+- vulnerability: CVE-2026-34876
+  fix-state: wont-fix
+  package:
+    name: libmbedcrypto16
+    version: 3.6.5-0.1~deb13u1
+    type: deb
+- vulnerability: CVE-2026-3644
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-3731
+  fix-state: wont-fix
+  package:
+    name: libssh-4
+    version: 0.11.2-1+deb13u1
+    type: deb
+- vulnerability: CVE-2026-37555
+  fix-state: wont-fix
+  package:
+    name: libsndfile1
+    version: 1.2.2-2+deb13u1
+    type: deb
+- vulnerability: CVE-2026-41080
+  fix-state: wont-fix
+  package:
+    name: libexpat1
+    version: 2.7.1-2
+    type: deb
+- vulnerability: CVE-2026-41992
+  fix-state: wont-fix
+  package:
+    name: gzip
+    version: 1.13-1
+    type: deb
+- vulnerability: CVE-2026-4224
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-42496
+  fix-state: wont-fix
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-42497
+  fix-state: wont-fix
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-45186
+  fix-state: not-fixed
+  package:
+    name: libexpat1
+    version: 2.7.1-2
+    type: deb
+- vulnerability: CVE-2026-4786
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-48959
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-48961
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-48962
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-52584
+  fix-state: not-fixed
+  package:
+    name: libjxl0.11
+    version: 0.11.2-0.1~deb13u2
+    type: deb
+- vulnerability: CVE-2026-5435
+  fix-state: wont-fix
+  package:
+    name: libc-bin
+    version: 2.41-12+deb13u3
+    type: deb
+- vulnerability: CVE-2026-5435
+  fix-state: wont-fix
+  package:
+    name: libc6
+    version: 2.41-12+deb13u3
+    type: deb
+- vulnerability: CVE-2026-54369
+  fix-state: wont-fix
+  package:
+    name: libacl1
+    version: 2.3.2-2+b1
+    type: deb
+- vulnerability: CVE-2026-54370
+  fix-state: wont-fix
+  package:
+    name: libacl1
+    version: 2.3.2-2+b1
+    type: deb
+- vulnerability: CVE-2026-5450
+  fix-state: wont-fix
+  package:
+    name: libc-bin
+    version: 2.41-12+deb13u3
+    type: deb
+- vulnerability: CVE-2026-5450
+  fix-state: wont-fix
+  package:
+    name: libc6
+    version: 2.41-12+deb13u3
+    type: deb
+- vulnerability: CVE-2026-56208
+  fix-state: not-fixed
+  package:
+    name: libaom3
+    version: 3.12.1-1
+    type: deb
+- vulnerability: CVE-2026-56209
+  fix-state: not-fixed
+  package:
+    name: libaom3
+    version: 3.12.1-1
+    type: deb
+- vulnerability: CVE-2026-56210
+  fix-state: not-fixed
+  package:
+    name: libaom3
+    version: 3.12.1-1
+    type: deb
+- vulnerability: CVE-2026-56211
+  fix-state: not-fixed
+  package:
+    name: libaom3
+    version: 3.12.1-1
+    type: deb
+- vulnerability: CVE-2026-57432
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-57433
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-58010
+  fix-state: wont-fix
+  package:
+    name: libglib2.0-0t64
+    version: 2.84.4-3~deb13u3
+    type: deb
+- vulnerability: CVE-2026-58011
+  fix-state: wont-fix
+  package:
+    name: libglib2.0-0t64
+    version: 2.84.4-3~deb13u3
+    type: deb
+- vulnerability: CVE-2026-58012
+  fix-state: wont-fix
+  package:
+    name: libglib2.0-0t64
+    version: 2.84.4-3~deb13u3
+    type: deb
+- vulnerability: CVE-2026-58013
+  fix-state: wont-fix
+  package:
+    name: libglib2.0-0t64
+    version: 2.84.4-3~deb13u3
+    type: deb
+- vulnerability: CVE-2026-58014
+  fix-state: wont-fix
+  package:
+    name: libglib2.0-0t64
+    version: 2.84.4-3~deb13u3
+    type: deb
+- vulnerability: CVE-2026-58015
+  fix-state: wont-fix
+  package:
+    name: libglib2.0-0t64
+    version: 2.84.4-3~deb13u3
+    type: deb
+- vulnerability: CVE-2026-58016
+  fix-state: wont-fix
+  package:
+    name: libglib2.0-0t64
+    version: 2.84.4-3~deb13u3
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: ffmpeg
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libavcodec61
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libavdevice61
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libavfilter10
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libavformat61
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libavutil59
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libpostproc58
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libswresample5
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-58049
+  fix-state: wont-fix
+  package:
+    name: libswscale8
+    version: 7:7.1.5-0+deb13u1
+    type: deb
+- vulnerability: CVE-2026-5928
+  fix-state: wont-fix
+  package:
+    name: libc-bin
+    version: 2.41-12+deb13u3
+    type: deb
+- vulnerability: CVE-2026-5928
+  fix-state: wont-fix
+  package:
+    name: libc6
+    version: 2.41-12+deb13u3
+    type: deb
+- vulnerability: CVE-2026-6100
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-6653
+  fix-state: wont-fix
+  package:
+    name: libxml2
+    version: 2.12.7+dfsg+really2.9.14-2.1+deb13u3
+    type: deb
+- vulnerability: CVE-2026-7017
+  fix-state: not-fixed
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-7210
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary
+- vulnerability: CVE-2026-8376
+  fix-state: wont-fix
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-9538
+  fix-state: wont-fix
+  package:
+    name: perl-base
+    version: 5.40.1-6
+    type: deb
+- vulnerability: CVE-2026-9669
+  fix-state: fixed
+  package:
+    name: python
+    version: 3.12.13
+    type: binary

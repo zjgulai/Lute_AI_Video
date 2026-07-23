@@ -47,7 +47,7 @@ LOCAL_SYNC_SIDECAR_SUFFIXES = (
 
 def _script_paths() -> set[str]:
     result = subprocess.run(
-        ["git", "ls-files", "scripts"],
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "scripts"],
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,

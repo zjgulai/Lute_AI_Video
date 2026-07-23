@@ -39,6 +39,7 @@ def test_seedance_stub_shape_matches_contract():
     assert result["prompt_used"] == "safe prompt"
     assert result["duration"] == 0
     assert result["_stub_mode"] == "unit_test"
+    assert result["simulated"] is True
 
 
 def test_telemetry_endpoint_return_contracts_are_typed():

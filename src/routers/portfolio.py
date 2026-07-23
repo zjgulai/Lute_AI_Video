@@ -14,7 +14,7 @@ import time
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -89,7 +89,7 @@ BRAND_PATH_RE = re.compile(r"^brand_assets/([^/]+)/([^/]+)/images/")
 
 
 @lru_cache(maxsize=128)
-def _load_brand_info(brand: str, slug: str) -> dict | None:
+def _load_brand_info(brand: str, slug: str) -> dict[str, Any] | None:
     """Read brand_assets/<brand>/<slug>/info.json with LRU cache.
 
     Cache keyed by (brand, slug); invalidated by process restart (info.json is
@@ -460,7 +460,7 @@ def _negate_iso(iso: str) -> str:
 
 class BrandPresetsResponse(BaseModel):
     brand: str
-    presets: list[dict]
+    presets: list[dict[str, Any]]
     scraped_at: str | None = None
 
 

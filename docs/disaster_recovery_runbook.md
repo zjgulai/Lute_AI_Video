@@ -5,7 +5,7 @@ module: operations
 topic: production-backup-restore
 status: stable
 created: 2026-05-11
-updated: 2026-07-10
+updated: 2026-07-22
 owner: self
 source: human+ai
 ---
@@ -16,15 +16,13 @@ source: human+ai
 
 ## 当前生产门禁
 
-2026-07-10 只读审计确认：root cron 直接执行 `/opt/ai-video/scripts/backup_production.sh`，但 Lighthouse rsync 将该文件部署为 `0644`，日志持续出现 `Permission denied`。审计时没有确认到由该脚本生成的有效 AI Video 日备份。
+2026-07-21 的 provider-off release 已有新鲜生产备份与隔离恢复证据。2026-07-22
+新增的 `backup-manifest.v1`、exact restore-set 和 off-host protocol 目前只有本地/一次性
+PostgreSQL 证据，尚未部署，不能覆盖前述生产证据或声明 off-host DR 完成。
 
-因此，在以下四项形成新鲜证据前，正式部署状态为 `blocked`：
-
-1. 新备份脚本已通过最小范围同步到生产。
-2. root cron 已通过 `/bin/bash` 调用并核验唯一性。
-3. 已手动生成一个 `status: complete` 的数据库与媒体全量备份。
-4. `pg_dump_stats.json`、schema archive、JSONL 行数、checksum、manifest 和无 `.partial` 残留检查通过。
-5. 同一备份已在隔离 PostgreSQL 中先恢复 schema、再恢复数据，并逐表核对行数。
+真实 off-host bucket/KMS/retention（W3-12）与独立主机不可用恢复演练（W3-13）仍是
+外部授权门禁。没有这两层证据时，只能声明本机备份/隔离恢复能力，不能声明主机级 DR
+闭环。
 
 ## 一、备份策略
 
@@ -46,7 +44,10 @@ source: human+ai
   - `pg_schema_signature_after.json`：schema archive 导出后的列签名；必须与数据事务内的签名一致。
   - `output/`：媒体文件目录快照。
   - `media_manifest.json`：媒体文件逐文件大小与 SHA-256。
-  - `manifest.txt`：镜像、行数、文件数、SHA-256 与完成状态。
+  - `source-manifest.v1.json`：reviewed Git SHA 对应的 tracked source 精确文件集、大小与 SHA-256。
+  - `backup-manifest.v1.json`：Git/source、immutable backend image ID/OCI revision、Alembic/PG、动态逐表行数、媒体精确文件集和所有恢复 artifact checksum 的 canonical SSOT。
+  - `backup-manifest.v1.json.sha256`：canonical manifest 的 detached SHA-256。
+  - `manifest.txt`：只保留兼容摘要，不再是恢复身份 SSOT。
 - **日志**：`/var/log/hermes-backup.log`。
 
 ### 安装或修复 cron
@@ -59,7 +60,11 @@ sudo MIGRATE_LEGACY=1 RETENTION_DAYS=15 \
 sudo crontab -l | grep -F 'ai-video-production-backup'
 ```
 
-安装器会把运行时脚本复制到 root-owned 的 `/usr/local/libexec/ai-video-backup/`，避免 root cron 执行可由部署用户改写的仓库文件。`MIGRATE_LEGACY=1` 只用于本次已知旧 cron 迁移；缺少该显式开关时，安装器发现旧无 marker 行会 fail closed。
+安装器会把 backup、logical dump 和 canonical manifest validator 复制到 root-owned 的
+`/usr/local/libexec/ai-video-backup/`，避免 root cron 执行可由部署用户改写的运行脚本；
+cron 的 `PROJECT_ROOT`/`SOURCE_MANIFEST_PATH` 明确指向 `/opt/ai-video/current` 的 reviewed
+release。`MIGRATE_LEGACY=1` 只用于本次已知旧 cron 迁移；缺少该显式开关时，安装器发现
+旧无 marker 行会 fail closed。
 
 验收：只出现一行 AI Video 备份任务，命令包含 `RETENTION_DAYS=15 /bin/bash /usr/local/libexec/ai-video-backup/backup_production.sh`；其他 root cron 行保持不变，日志文件模式为 `0600`。
 
@@ -86,32 +91,28 @@ sudo test -s "$LATEST/pg_schema.dump"
 sudo test -s "$LATEST/pg_schema.list"
 sudo test -s "$LATEST/pg_schema_signature_after.json"
 sudo test -s "$LATEST/media_manifest.json"
-sudo test -s "$LATEST/manifest.txt"
+sudo test -s "$LATEST/source-manifest.v1.json"
+sudo test -s "$LATEST/backup-manifest.v1.json"
+sudo test -s "$LATEST/backup-manifest.v1.json.sha256"
+sudo python3 /opt/ai-video/scripts/backup_manifest.py validate \
+  --backup-dir "$LATEST"
 sudo python3 -m json.tool "$LATEST/pg_dump_stats.json" >/dev/null
 sudo python3 -m json.tool "$LATEST/media_manifest.json" >/dev/null
-sudo grep -Fx 'project: ai-video' "$LATEST/manifest.txt"
-sudo grep -Fx 'status: complete' "$LATEST/manifest.txt"
-EXPECTED_PG_SHA=$(sudo awk -F': ' '$1 == "pg_dump_sha256" {print $2}' "$LATEST/manifest.txt")
-ACTUAL_PG_SHA=$(sudo sha256sum "$LATEST/pg_dump.jsonl" | awk '{print $1}')
-EXPECTED_STATS_SHA=$(sudo awk -F': ' '$1 == "pg_dump_stats_sha256" {print $2}' "$LATEST/manifest.txt")
-ACTUAL_STATS_SHA=$(sudo sha256sum "$LATEST/pg_dump_stats.json" | awk '{print $1}')
-EXPECTED_SCHEMA_SHA=$(sudo awk -F': ' '$1 == "pg_schema_sha256" {print $2}' "$LATEST/manifest.txt")
-ACTUAL_SCHEMA_SHA=$(sudo sha256sum "$LATEST/pg_schema.dump" | awk '{print $1}')
-EXPECTED_SCHEMA_LIST_SHA=$(sudo awk -F': ' '$1 == "pg_schema_list_sha256" {print $2}' "$LATEST/manifest.txt")
-ACTUAL_SCHEMA_LIST_SHA=$(sudo sha256sum "$LATEST/pg_schema.list" | awk '{print $1}')
-EXPECTED_SCHEMA_SIGNATURE_AFTER_SHA=$(sudo awk -F': ' '$1 == "pg_schema_signature_after_sha256" {print $2}' "$LATEST/manifest.txt")
-ACTUAL_SCHEMA_SIGNATURE_AFTER_SHA=$(sudo sha256sum "$LATEST/pg_schema_signature_after.json" | awk '{print $1}')
-EXPECTED_MEDIA_SHA=$(sudo awk -F': ' '$1 == "media_manifest_sha256" {print $2}' "$LATEST/manifest.txt")
-ACTUAL_MEDIA_SHA=$(sudo sha256sum "$LATEST/media_manifest.json" | awk '{print $1}')
-test "$EXPECTED_PG_SHA" = "$ACTUAL_PG_SHA"
-test "$EXPECTED_STATS_SHA" = "$ACTUAL_STATS_SHA"
-test "$EXPECTED_SCHEMA_SHA" = "$ACTUAL_SCHEMA_SHA"
-test "$EXPECTED_SCHEMA_LIST_SHA" = "$ACTUAL_SCHEMA_LIST_SHA"
-test "$EXPECTED_SCHEMA_SIGNATURE_AFTER_SHA" = "$ACTUAL_SCHEMA_SIGNATURE_AFTER_SHA"
-test "$EXPECTED_MEDIA_SHA" = "$ACTUAL_MEDIA_SHA"
-PG_CLIENT_IMAGE=$(sudo awk -F': ' '$1 == "pg_client_image" {print $2}' "$LATEST/manifest.txt")
-PG_CLIENT_SOURCE_TAG=$(sudo awk -F': ' '$1 == "pg_client_source_tag" {print $2}' "$LATEST/manifest.txt")
-PG_SERVER_MAJOR=$(sudo awk -F': ' '$1 == "pg_server_major" {print $2}' "$LATEST/manifest.txt")
+mapfile -t PG_FACTS < <(
+  sudo python3 - "$LATEST/backup-manifest.v1.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+database = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["database"]
+print(database["client_image"])
+print(database["client_source_tag"])
+print(database["server_major"])
+PY
+)
+PG_CLIENT_IMAGE=${PG_FACTS[0]}
+PG_CLIENT_SOURCE_TAG=${PG_FACTS[1]}
+PG_SERVER_MAJOR=${PG_FACTS[2]}
 [[ "$PG_SERVER_MAJOR" =~ ^[0-9]+$ ]]
 [[ "$PG_CLIENT_SOURCE_TAG" == "postgres:${PG_SERVER_MAJOR}" ]]
 [[ "$PG_CLIENT_IMAGE" =~ ^postgres@sha256:[0-9a-f]{64}$ ]]
@@ -122,21 +123,21 @@ sudo cat "$LATEST/pg_schema.dump" \
   | sudo cmp - "$LATEST/pg_schema.list"
 sudo python3 - "$LATEST/pg_schema.list" <<'PY'
 import sys
+import json
 from pathlib import Path
 
-expected = {
-    "tenants", "admin_accounts", "api_keys", "admin_sessions", "threads",
-    "pipeline_states", "brand_packages", "influencers", "video_metrics",
-    "publish_logs", "error_logs", "audit_logs", "idempotency_records",
-    "acceptance_records", "job_budget_accounts", "provider_cost_attempts",
-}
+backup_dir = Path(sys.argv[1]).parent
+stats = json.loads((backup_dir / "pg_dump_stats.json").read_text(encoding="utf-8"))
+expected = set(stats.get("expected_tables", []))
+if not expected or expected != set(stats.get("tables", {})):
+    raise SystemExit("backup stats table set is invalid")
 actual = set()
 for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
     parts = line.split()
     if len(parts) >= 7 and parts[3:5] == ["TABLE", "public"]:
         actual.add(parts[5])
-if expected - actual:
-    raise SystemExit("schema archive is missing required tables")
+if expected != actual:
+    raise SystemExit("schema archive table set does not match backup stats")
 PY
 if sudo test -f "$LATEST/restore_verified.json"; then
   sudo python3 - "$LATEST" <<'PY'
@@ -147,7 +148,9 @@ from pathlib import Path
 
 backup_dir = Path(sys.argv[1])
 marker = json.loads((backup_dir / "restore_verified.json").read_text(encoding="utf-8"))
-manifest_sha = hashlib.sha256((backup_dir / "manifest.txt").read_bytes()).hexdigest()
+manifest_sha = hashlib.sha256(
+    (backup_dir / "backup-manifest.v1.json").read_bytes()
+).hexdigest()
 if marker.get("status") != "passed" or marker.get("manifest_sha256") != manifest_sha:
     raise SystemExit("restore verification marker is invalid")
 PY
@@ -207,6 +210,22 @@ test -z "$(sudo find /opt/ai-video-backups -maxdepth 1 -type d -name '.*.partial
 
 验收：所有校验命令成功，最后一条没有输出。首次有效生产备份还必须在隔离环境按 `media_manifest.json` 逐文件重算 SHA-256，并完成一次数据库恢复演练；只校验 manifest 文件自身的 checksum 不能替代逐文件复核。备份目录路径、manifest checksum 和备份开始/结束日志要写入部署证据；不要记录任何数据库内容或 secret。
 
+### Off-host dry-run 与边界
+
+只读 dry-run 会完整校验本地 canonical manifest，生成 create-only 对象计划；它没有
+client factory、provider SDK、凭证参数或 transport 构造路径：
+
+```bash
+python3 scripts/offhost_backup.py \
+  --backup-dir /opt/ai-video-backups/<YYYY-MM-DD_HHMMSS> \
+  --prefix ai-video-reviewed
+```
+
+`scripts/offhost_backup.py` 只提供 provider-neutral `put(create_only)`、`head`、`download`
+协议和 receipt 校验。receipt 必须包含 version ID、SHA-256、size 与 encryption metadata；
+duplicate key、缺失 version/encryption、checksum drift 和 ambiguous outcome 均 fail closed，且
+不自动重试。当前测试使用 fake store；未选择真实 object-store provider，也未发生上传。
+
 ## 二、完整恢复
 
 恢复会写生产数据库和媒体目录。必须先停止写流量、记录目标备份、准备回滚点，并取得单独 L4 授权。
@@ -248,7 +267,13 @@ printf '%s\n' "$TARGET_DATABASE_URL" \
 unset TARGET_DATABASE_URL
 ```
 
-wrapper 会验证备份 checksum、digest-pinned PostgreSQL 客户端、目标 hostname、空库状态和 schema list；schema 使用 `--single-transaction`，数据导入使用单独事务，随后逐表核对 12 表行数并写入与 manifest hash 绑定的 `restore_verified.json`。它不会启动 backend，也不允许 `--truncate-first`。schema archive 是恢复生产历史类型、约束、索引和 extension 的单一证据，不得用当前仓库的 `001_init.sql` 替代。
+wrapper 会先验证 canonical manifest 与 detached checksum，再验证 digest-pinned PostgreSQL
+客户端、目标 hostname、空库状态和 schema list；schema 使用 `--single-transaction`，数据
+导入使用单独事务。恢复器会在任何写入前要求目标 public business tables、backup stats 和
+JSONL 精确一致，verifier 再动态发现并逐表核对全部表，最后写入与
+`backup-manifest.v1.json` hash 绑定的 `restore_verified.json`。它不会启动 backend，也不允许
+`--truncate-first`。schema archive 是恢复生产历史类型、约束、索引和 extension 的单一证据，
+不得用当前仓库的 `001_init.sql` 替代。
 
 ### 步骤 3：恢复媒体
 
@@ -342,4 +367,4 @@ sudo find /opt/ai-video-backups -maxdepth 1 -type d -name '.*.partial' -print
 
 - **Ops 负责人**：在受控通讯录维护，不写入公开仓库。
 - **腾讯云 RDS 控制台**：由授权运维账号访问。
-- **脚本源码**：`scripts/backup_production.sh`、`scripts/install_backup_cron.sh`、`scripts/pg_dump_logical.py`、`scripts/pg_restore_logical.py`。
+- **脚本源码**：`scripts/backup_production.sh`、`scripts/backup_manifest.py`、`scripts/offhost_backup.py`、`scripts/install_backup_cron.sh`、`scripts/pg_dump_logical.py`、`scripts/pg_restore_logical.py`。

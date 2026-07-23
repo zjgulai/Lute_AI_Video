@@ -6,6 +6,9 @@ set -euo pipefail
 RETENTION_DAYS="${RETENTION_DAYS:-15}"
 BACKUP_SCRIPT="${BACKUP_SCRIPT:-/opt/ai-video/scripts/backup_production.sh}"
 DUMP_SCRIPT_SOURCE="${DUMP_SCRIPT_SOURCE:-$(dirname "$BACKUP_SCRIPT")/pg_dump_logical.py}"
+MANIFEST_SCRIPT_SOURCE="${MANIFEST_SCRIPT_SOURCE:-$(dirname "$BACKUP_SCRIPT")/backup_manifest.py}"
+CURRENT_RELEASE_ROOT="${CURRENT_RELEASE_ROOT:-/opt/ai-video/current}"
+SOURCE_MANIFEST_PATH="${SOURCE_MANIFEST_PATH:-${CURRENT_RELEASE_ROOT}/source-manifest.v1.json}"
 RUNTIME_DIR="${RUNTIME_DIR:-/usr/local/libexec/ai-video-backup}"
 BACKUP_LOG_FILE="${BACKUP_LOG_FILE:-/var/log/hermes-backup.log}"
 CRON_LOCK_FILE="${CRON_LOCK_FILE:-/var/lock/ai-video-backup-cron.lock}"
@@ -19,6 +22,7 @@ MARKER="ai-video-production-backup"
 RUNTIME_DIR="${RUNTIME_DIR%/}"
 RUNTIME_BACKUP_SCRIPT="${RUNTIME_DIR}/backup_production.sh"
 RUNTIME_DUMP_SCRIPT="${RUNTIME_DIR}/pg_dump_logical.py"
+RUNTIME_MANIFEST_SCRIPT="${RUNTIME_DIR}/backup_manifest.py"
 
 fail() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -38,6 +42,9 @@ require_safe_absolute_path() {
   || fail "MIGRATE_LEGACY must be 0 or 1"
 require_safe_absolute_path "BACKUP_SCRIPT" "$BACKUP_SCRIPT"
 require_safe_absolute_path "DUMP_SCRIPT_SOURCE" "$DUMP_SCRIPT_SOURCE"
+require_safe_absolute_path "MANIFEST_SCRIPT_SOURCE" "$MANIFEST_SCRIPT_SOURCE"
+require_safe_absolute_path "CURRENT_RELEASE_ROOT" "$CURRENT_RELEASE_ROOT"
+require_safe_absolute_path "SOURCE_MANIFEST_PATH" "$SOURCE_MANIFEST_PATH"
 require_safe_absolute_path "RUNTIME_DIR" "$RUNTIME_DIR"
 require_safe_absolute_path "BACKUP_LOG_FILE" "$BACKUP_LOG_FILE"
 require_safe_absolute_path "CRON_LOCK_FILE" "$CRON_LOCK_FILE"
@@ -52,6 +59,10 @@ do
 done
 [ -f "$BACKUP_SCRIPT" ] || fail "backup script not found: ${BACKUP_SCRIPT}"
 [ -f "$DUMP_SCRIPT_SOURCE" ] || fail "dump script not found: ${DUMP_SCRIPT_SOURCE}"
+[ -f "$MANIFEST_SCRIPT_SOURCE" ] \
+  || fail "manifest script not found: ${MANIFEST_SCRIPT_SOURCE}"
+[ -f "$SOURCE_MANIFEST_PATH" ] \
+  || fail "source manifest not found: ${SOURCE_MANIFEST_PATH}"
 
 DOCKER_PATH=$(command -v "$DOCKER_BIN")
 FLOCK_PATH=$(command -v "$FLOCK_BIN")
@@ -95,13 +106,15 @@ awk -v marker="$MARKER" -v script="$BACKUP_SCRIPT" -v migrate="$MIGRATE_LEGACY" 
 "$INSTALL_BIN" -d -o root -g root -m 0755 "$RUNTIME_DIR"
 "$INSTALL_BIN" -o root -g root -m 0755 "$BACKUP_SCRIPT" "$RUNTIME_BACKUP_SCRIPT"
 "$INSTALL_BIN" -o root -g root -m 0644 "$DUMP_SCRIPT_SOURCE" "$RUNTIME_DUMP_SCRIPT"
+"$INSTALL_BIN" -o root -g root -m 0644 \
+  "$MANIFEST_SCRIPT_SOURCE" "$RUNTIME_MANIFEST_SCRIPT"
 
 mkdir -p "$(dirname "$BACKUP_LOG_FILE")"
 touch "$BACKUP_LOG_FILE"
 "$CHOWN_BIN" root:root "$BACKUP_LOG_FILE"
 chmod 0600 "$BACKUP_LOG_FILE"
 
-CRON_LINE="0 3 * * * umask 077; DOCKER_BIN=${DOCKER_PATH} FLOCK_BIN=${FLOCK_PATH} DUMP_SCRIPT=${RUNTIME_DUMP_SCRIPT} RETENTION_DAYS=${RETENTION_DAYS} /bin/bash ${RUNTIME_BACKUP_SCRIPT} >> ${BACKUP_LOG_FILE} 2>&1 # ${MARKER}"
+CRON_LINE="0 3 * * * umask 077; DOCKER_BIN=${DOCKER_PATH} FLOCK_BIN=${FLOCK_PATH} PROJECT_ROOT=${CURRENT_RELEASE_ROOT} SOURCE_MANIFEST_PATH=${SOURCE_MANIFEST_PATH} DUMP_SCRIPT=${RUNTIME_DUMP_SCRIPT} BACKUP_MANIFEST_SCRIPT=${RUNTIME_MANIFEST_SCRIPT} RETENTION_DAYS=${RETENTION_DAYS} /bin/bash ${RUNTIME_BACKUP_SCRIPT} >> ${BACKUP_LOG_FILE} 2>&1 # ${MARKER}"
 printf '%s\n' "$CRON_LINE" >>"$UPDATED"
 
 "$CRONTAB_BIN" "$UPDATED"

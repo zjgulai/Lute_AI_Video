@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import AdminLoginPage from "./page";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -21,7 +22,7 @@ function renderLogin() {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<AdminLoginPage />);
+    root.render(<I18nProvider><AdminLoginPage /></I18nProvider>);
   });
   return {
     container,
@@ -34,6 +35,7 @@ function renderLogin() {
 
 describe("AdminLoginPage", () => {
   beforeEach(() => {
+    localStorage.setItem("app-locale", "en");
     adminFetch.mockReset();
   });
 
@@ -104,6 +106,33 @@ describe("AdminLoginPage", () => {
 
     expect(adminFetch).toHaveBeenCalled();
     expect(container.textContent || "").toMatch(/invalid credentials/i);
+    cleanup();
+  });
+
+  it("uses the selected locale instead of exposing a backend English 401 message", async () => {
+    localStorage.setItem("app-locale", "zh");
+    adminFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: "Backend-only invalid credentials text" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const { container, cleanup } = renderLogin();
+    const form = container.querySelector("form") as HTMLFormElement;
+    const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement;
+    const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
+
+    await act(async () => {
+      emailInput.value = "admin@example.com";
+      emailInput.dispatchEvent(new Event("input", { bubbles: true }));
+      passwordInput.value = "bad-pass";
+      passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("凭证无效");
+    expect(container.textContent).not.toContain("Backend-only invalid credentials text");
     cleanup();
   });
 });

@@ -7,6 +7,7 @@ import { ArrowRight, Bell, CheckCircle, Spinner, Warning, X } from "@phosphor-ic
 import { useI18n } from "@/i18n/I18nProvider";
 import { usePipelineStore } from "@/stores/usePipelineStore";
 import { useAppStore } from "@/stores/useAppStore";
+import { classifyGenerationResult } from "@/lib/generationLifecycle";
 import { getScenarioStatus } from "./api";
 
 const POLL_INTERVAL_MS = 5000;
@@ -32,12 +33,15 @@ const STEP_ESTIMATED_SECONDS: Record<string, number> = {
   vlog_strategy: 60,
 };
 
-type StatusKind = "running" | "paused" | "completed" | "error";
-const TERMINAL_SCENARIO_STATUSES = new Set([
-  "completed",
-  "completed_bounded",
-  "completed_full",
-]);
+type StatusKind =
+  | "running"
+  | "paused"
+  | "completed_bounded"
+  | "completed_full"
+  | "pending_review"
+  | "recovery_required"
+  | "degraded"
+  | "error";
 const FAILED_SCENARIO_STATUSES = new Set(["error", "failed", "recovery_required"]);
 
 interface StatusSnapshot {
@@ -79,16 +83,30 @@ export function deriveSnapshot(data: Record<string, unknown>): StatusSnapshot {
   const rawStatus = data?.status as string | undefined;
   const lifecycleStatus = data?.lifecycle_status as string | undefined;
   let status: StatusKind = "running";
-  if (
-    (rawStatus && TERMINAL_SCENARIO_STATUSES.has(rawStatus))
-    || (lifecycleStatus && TERMINAL_SCENARIO_STATUSES.has(lifecycleStatus))
-  ) status = "completed";
-  else if (rawStatus === "paused") status = "paused";
+  if (rawStatus === "recovery_required" || lifecycleStatus === "recovery_required") {
+    status = "recovery_required";
+  } else if (data?.pipeline_degraded === true) {
+    status = "degraded";
+  } else if (rawStatus === "paused") status = "paused";
   else if (
     (rawStatus && FAILED_SCENARIO_STATUSES.has(rawStatus))
     || (lifecycleStatus && FAILED_SCENARIO_STATUSES.has(lifecycleStatus))
-    || data?.pipeline_degraded
   ) status = "error";
+  else if (
+    rawStatus === "completed_full"
+    || rawStatus === "completed_bounded"
+    || lifecycleStatus !== undefined
+    || data?.completion_kind !== undefined
+    || data?.request_succeeded !== undefined
+    || data?.full_media_success !== undefined
+  ) {
+    const classified = classifyGenerationResult(data);
+    status = classified === "full"
+      ? "pending_review"
+      : classified === "bounded"
+        ? "completed_bounded"
+        : "error";
+  }
 
   return {
     status,
@@ -161,13 +179,25 @@ export default function PipelineStatusBar() {
         setSnapshot(snap);
         failureCountRef.current = 0;
 
-        if (snap.status === "completed" && !completionNotifiedRef.current) {
+        const completed = ["completed_full", "completed_bounded", "pending_review"].includes(snap.status);
+        if (completed && !completionNotifiedRef.current) {
           completionNotifiedRef.current = true;
-          showToast(t("pipeline.completedNotice", "你的作品已生成完成"), "success");
+          showToast(
+            snap.status === "pending_review"
+              ? t("pipeline.pendingReviewNotice", "完整产物已生成，等待人工验收")
+              : snap.status === "completed_full"
+                ? t("pipeline.completedNotice", "你的作品已生成完成")
+              : t("pipeline.boundedNotice", "任务已完成，但产物仍不可发布或交付"),
+            snap.status === "completed_full" ? "success" : "info",
+          );
           if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
             try {
               new Notification(t("pipeline.completedTitle", "Short Video Factory"), {
-                body: t("pipeline.completedNotice", "你的作品已生成完成"),
+                body: snap.status === "pending_review"
+                  ? t("pipeline.pendingReviewNotice", "完整产物已生成，等待人工验收")
+                  : snap.status === "completed_full"
+                    ? t("pipeline.completedNotice", "你的作品已生成完成")
+                  : t("pipeline.boundedNotice", "任务已完成，但产物仍不可发布或交付"),
                 icon: "/favicon.ico",
                 tag: activePipeline.label,
               });
@@ -192,7 +222,7 @@ export default function PipelineStatusBar() {
           pausedNotifiedRef.current = false;
         }
 
-        if (snap.status === "completed" || snap.status === "error") {
+        if (completed || ["error", "degraded", "recovery_required"].includes(snap.status)) {
           return;
         }
       } catch {
@@ -223,22 +253,28 @@ export default function PipelineStatusBar() {
   const doneSteps = snapshot?.doneSteps ?? 0;
   const remainingSteps = snapshot?.remainingStepNames ?? [];
   const remainingSeconds = status === "running" ? estimateRemainingSeconds(remainingSteps) : 0;
+  const completed = ["completed_full", "completed_bounded", "pending_review"].includes(status);
+  const failed = status === "error" || status === "degraded" || status === "recovery_required";
 
   const tone =
-    status === "completed"
+    status === "completed_full"
       ? "border-l-[var(--jade-accent)] bg-[rgba(120,175,140,0.08)]"
-      : status === "error"
+      : status === "completed_bounded" || status === "pending_review" || status === "recovery_required"
+        ? "border-l-[var(--gold-foil)] bg-[rgba(216,190,120,0.10)]"
+      : status === "error" || status === "degraded"
         ? "border-l-[var(--crimson-mist)] bg-[rgba(196,91,80,0.08)]"
         : status === "paused"
           ? "border-l-[var(--gold-foil)] bg-[rgba(216,190,120,0.10)]"
           : "border-l-[var(--fortune-red)] bg-[rgba(215,92,112,0.08)]";
 
   const StatusIcon =
-    status === "completed" ? CheckCircle : status === "error" ? Warning : Spinner;
+    completed ? CheckCircle : failed ? Warning : Spinner;
   const iconColor =
-    status === "completed"
+    status === "completed_full"
       ? "text-[var(--jade-accent)]"
-      : status === "error"
+      : status === "completed_bounded" || status === "pending_review" || status === "recovery_required"
+        ? "text-[var(--gold-foil)]"
+      : status === "error" || status === "degraded"
         ? "text-[var(--crimson-mist)]"
         : status === "paused"
           ? "text-[var(--gold-foil)]"
@@ -246,8 +282,16 @@ export default function PipelineStatusBar() {
   const iconClass = status === "running" ? `${iconColor} animate-spin` : iconColor;
 
   const headlineKey =
-    status === "completed"
+    status === "completed_full"
       ? t("pipeline.completedHeadline", "作品已完成")
+      : status === "pending_review"
+        ? t("pipeline.pendingReviewHeadline", "完整产物待人工验收")
+      : status === "completed_bounded"
+        ? t("pipeline.boundedHeadline", "有界完成，产物待审")
+      : status === "recovery_required"
+        ? t("submission.recoveryRequiredTitle", "原任务需要人工恢复")
+      : status === "degraded"
+        ? t("pipeline.degradedHeadline", "流水线已降级终止")
       : status === "error"
         ? t("pipeline.errorHeadline", "流水线出错")
         : status === "paused"
@@ -258,7 +302,7 @@ export default function PipelineStatusBar() {
   const completedRoute = "/works";
 
   const handleDismiss = () => {
-    if (status === "completed") {
+    if (completed) {
       clearActivePipeline();
     } else {
       setHidden(true);
@@ -267,7 +311,7 @@ export default function PipelineStatusBar() {
   };
 
   const handleViewDetails = () => {
-    if (status === "completed") {
+    if (status === "completed_full") {
       router.push(completedRoute);
       clearActivePipeline();
     } else {
@@ -305,7 +349,7 @@ export default function PipelineStatusBar() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-[12px] sm:text-[13px]">
             <span className="font-medium text-[var(--text-h1)] truncate">{headlineKey}</span>
-            {snapshot && totalSteps > 0 && status !== "error" && (
+            {snapshot && totalSteps > 0 && !failed && (
               <span className="text-[var(--text-muted)] tabular-nums">
                 {doneSteps}/{totalSteps} · {progress}%
               </span>
@@ -319,12 +363,12 @@ export default function PipelineStatusBar() {
               {formatElapsed(elapsed)}
             </span>
           </div>
-          {status === "error" && snapshot?.errors && snapshot.errors[0] && (
+          {failed && snapshot?.errors && snapshot.errors[0] && (
             <p className="text-[11px] text-[var(--crimson-mist)] mt-0.5 truncate">
               {snapshot.errors[0]}
             </p>
           )}
-          {status !== "error" && status !== "completed" && (
+          {!failed && !completed && (
             <div
               className="mt-1 h-[2px] w-full bg-[var(--bg-panel)] rounded-full overflow-hidden"
               role="progressbar"
@@ -357,10 +401,10 @@ export default function PipelineStatusBar() {
             onClick={handleViewDetails}
             className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[12px] font-medium text-[var(--fortune-red)] hover:bg-[rgba(215,92,112,0.10)] transition-colors cursor-pointer"
           >
-            {status === "completed" ? t("pipeline.viewWorks", "查看作品") : t("pipeline.viewDetails", "查看详情")}
+            {status === "completed_full" ? t("pipeline.viewWorks", "查看作品") : t("pipeline.viewDetails", "查看详情")}
             <ArrowRight size={12} weight="bold" />
           </button>
-          {status === "completed" && (
+          {status === "completed_full" && (
             <Link
               href={completedRoute}
               onClick={() => clearActivePipeline()}

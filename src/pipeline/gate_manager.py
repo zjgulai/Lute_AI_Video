@@ -628,29 +628,6 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
     gates_state[gate_id] = gate_state
     state["gates"] = gates_state
 
-    # ── A/B test tracking: record which variant was chosen ──
-    try:
-        from src.quality.ab_tracker import ABTracker
-
-        tracker = ABTracker()
-        # Extract scores for all candidates
-        all_scores = {
-            c.get("variant", c.get("id", "unknown")): c.get("score", {}).get("overall", 0) for c in candidates
-        }
-        primary = selected_candidates[0]
-        tracker.record_gate_choice(
-            pipeline_label=label,
-            gate_id=gate_id,
-            chosen_variant=primary.get("variant", "unknown"),
-            candidate_scores=all_scores,
-            script_features={
-                "candidate_count": len(candidates),
-                "selected_count": len(selected_ids),
-            },
-        )
-    except Exception as e:
-        logger.warning("ab_tracker: failed to record gate choice", error=str(e))
-
     # Set the selected candidate's data as the step output for downstream consumption
     # Use the first selected candidate's data as the "edited" output
     step_order = list(profile.allowed_steps)
@@ -678,6 +655,7 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
                     "clip_details": [raw_data],
                     "total_duration": raw_data.get("duration_seconds", 0),
                     "target_duration": 30,
+                    "simulated": raw_data.get("simulated"),
                 }
             else:
                 edited_output = raw_data
@@ -686,6 +664,23 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
 
         steps_data = dict(state.get("steps", {}))
         step_data = dict(steps_data.get(candidate_step, {}))
+        from src.services.transparency_provenance import record_step_provenance
+
+        edited_output, transparency = record_step_provenance(
+            state=state,
+            step_name=candidate_step,
+            output=edited_output,
+            output_dir=state_manager.OUTPUT_DIR,
+            origin_kind="human_edit",
+            human_edit={
+                "gate_id": gate_id,
+                "selected_ids": list(selected_ids),
+                "selected_variants": [
+                    candidate["variant"] for candidate in selected_candidates
+                ],
+            },
+        )
+        state["transparency"] = transparency
         step_data["edited"] = True
         step_data["edited_output"] = edited_output
         step_data["gate_selected"] = True
@@ -705,6 +700,31 @@ async def approve_gate(label: str, gate_id: str, selected_ids: list[str]) -> dic
         pass
 
     await state_manager.save(label, state)
+
+    # Non-authoritative analytics runs only after the canonical state commit.
+    try:
+        from src.quality.ab_tracker import ABTracker
+
+        tracker = ABTracker()
+        all_scores = {
+            candidate.get("variant", candidate.get("id", "unknown")): candidate.get(
+                "score", {}
+            ).get("overall", 0)
+            for candidate in candidates
+        }
+        primary = selected_candidates[0]
+        tracker.record_gate_choice(
+            pipeline_label=label,
+            gate_id=gate_id,
+            chosen_variant=primary.get("variant", "unknown"),
+            candidate_scores=all_scores,
+            script_features={
+                "candidate_count": len(candidates),
+                "selected_count": len(selected_ids),
+            },
+        )
+    except Exception as e:
+        logger.warning("ab_tracker: failed to record gate choice", error=str(e))
 
     logger.info(
         "gate_manager: gate approved",

@@ -169,17 +169,56 @@ describe("PipelineStatusBar notifications", () => {
   });
 
   it.each([
-    { status: "completed_bounded" },
-    { status: "completed_full" },
-    { status: "running", lifecycle_status: "completed_bounded" },
-    { status: "running", lifecycle_status: "completed_full" },
-  ])("treats every completion lifecycle as terminal: %o", (payload) => {
+    {
+      payload: {
+        status: "completed_bounded",
+        lifecycle_status: "completed_bounded",
+        completion_kind: "no_media",
+        request_succeeded: true,
+        success: false,
+        full_media_success: false,
+      },
+      expected: "completed_bounded",
+    },
+    {
+      payload: {
+        status: "completed_full",
+        lifecycle_status: "completed_full",
+        completion_kind: "full_media",
+        request_succeeded: true,
+        success: true,
+        full_media_success: true,
+        publish_allowed: false,
+      },
+      expected: "pending_review",
+    },
+  ])("keeps completion lifecycle distinct: $payload", ({ payload, expected }) => {
     expect(deriveSnapshot({
       ...payload,
       current_step: null,
       steps: { strategy: { status: "done" } },
       errors: [],
-    }).status).toBe("completed");
+    }).status).toBe(expected);
+  });
+
+  it.each([
+    { status: "completed_full" },
+    { status: "running", lifecycle_status: "completed_full" },
+    {
+      status: "completed_bounded",
+      lifecycle_status: "completed_full",
+      completion_kind: "full_media",
+      request_succeeded: true,
+      success: true,
+      full_media_success: true,
+    },
+  ])("fails closed on contradictory or incomplete completion truth: %o", (payload) => {
+    expect(deriveSnapshot({
+      ...payload,
+      current_step: null,
+      steps: { strategy: { status: "done" } },
+      errors: [],
+    }).status).toBe("error");
   });
 
   it.each([
@@ -187,12 +226,27 @@ describe("PipelineStatusBar notifications", () => {
     { status: "recovery_required" },
     { status: "running", lifecycle_status: "failed" },
     { status: "running", lifecycle_status: "recovery_required" },
-  ])("treats explicit failure lifecycle as terminal error: %o", (payload) => {
+  ])("keeps recovery distinct from generic terminal errors: %o", (payload) => {
     expect(deriveSnapshot({
       ...payload,
       current_step: null,
       steps: { strategy: { status: "error" } },
       errors: ["safe failure"],
-    }).status).toBe("error");
+    }).status).toBe(
+      payload.status === "recovery_required"
+        || payload.lifecycle_status === "recovery_required"
+        ? "recovery_required"
+        : "error",
+    );
+  });
+
+  it("keeps pipeline_degraded distinct from generic failure", () => {
+    expect(deriveSnapshot({
+      status: "running",
+      pipeline_degraded: true,
+      current_step: null,
+      steps: { strategy: { status: "done" } },
+      errors: ["scenario_execution_failed"],
+    }).status).toBe("degraded");
   });
 });

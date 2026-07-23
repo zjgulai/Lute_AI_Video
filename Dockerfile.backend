@@ -1,9 +1,8 @@
-FROM python:3.14-slim
-ARG RELEASE_SOURCE_SHA
-LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
+FROM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+COPY --from=ghcr.io/astral-sh/uv:0.11.11@sha256:798712e57f879c5393777cbda2bb309b29fcdeb0532129d4b1c3125c5385975a /uv /uvx /bin/
 WORKDIR /app
 
-# 2026-05-15 incident: apt-get install gcc/libpq-dev/ffmpeg (~200MB across 49
+# 2026-05-15 incident: apt-get install system media/build packages
 # packages) hung 74+ min on deb.debian.org from China. Switch to Aliyun mirror
 # before any apt-get call. Debian 13 Trixie uses deb822 format in
 # sources.list.d/debian.sources, not the legacy /etc/apt/sources.list.
@@ -16,49 +15,31 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list; \
     fi
 
-# Install system deps:
-#   - gcc, libpq-dev: psycopg2-binary, pillow build deps
+# Install the only runtime system dependency. All Python packages used here
+# have reviewed CPython 3.12 wheels in uv.lock, including psycopg[binary] and
+# Pillow, so compiler and development headers must not remain in the image.
 #   - ffmpeg: required by validated local media probes, stub generation, and
 #     frame extraction. yt-dlp is explicitly single-format/native/fixup-never;
 #     it must not invoke ffmpeg before the downloaded bytes pass safe-media.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev ffmpeg && \
+    ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
-# 2026-05-05 incident:从默认 PyPI 拉包在中国大陆访问慢/卡死,docker build
-# 卡 buildkit 22 分钟无产出。改用阿里云镜像加速。
-# 配置成系统级,后续 RUN pip install 都走镜像。
-# 镜像可被 PIP_INDEX_URL build-arg 覆盖,海外环境跑 build 时 reset 到 pypi。
-ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
-ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
-ENV PIP_INDEX_URL=$PIP_INDEX_URL
-ENV PIP_TRUSTED_HOST=$PIP_TRUSTED_HOST
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
-COPY requirements.txt ./
-# Keep Lighthouse backend images CPU-only. The PyPI torch wheel can pull CUDA
-# side packages on Linux/Python 3.14, which makes rebuilds slow and bloats disk.
-# GPU-specific images must override both build args explicitly.
-ARG TORCH_WHEEL_VERSION=2.13.0+cpu
-ARG TORCH_WHEEL_INDEX_URL=https://download.pytorch.org/whl/cpu
-RUN printf 'torch==%s\n' "$TORCH_WHEEL_VERSION" > /tmp/torch-wheel-constraints.txt && \
-    pip install --no-cache-dir \
-      --extra-index-url "$TORCH_WHEEL_INDEX_URL" \
-      -r requirements.txt \
-      -c /tmp/torch-wheel-constraints.txt && \
-    rm -f /tmp/torch-wheel-constraints.txt
-# Record requirements hash for deploy.sh change detection (replaces unreliable mtime comparison)
-RUN sha256sum requirements.txt > /app/.requirements_sha256
-RUN python -c 'import hashlib, pathlib, re; lines = []; [lines.append(re.sub(r"\s+#.*$", "", line).strip()) for line in pathlib.Path("requirements.txt").read_text().splitlines() if re.sub(r"\s+#.*$", "", line).strip() and not re.sub(r"\s+#.*$", "", line).strip().startswith("#")]; print(hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest())' > /app/.requirements_semantic_sha256
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --no-install-project
 
 # Copy all backend source code
 COPY src ./src
 COPY scripts ./scripts
 COPY configs ./configs
-COPY pyproject.toml ./
 
 # Phase 0 #1 (2026-05-15): alembic migrations must travel with the image so
 # scripts/run_alembic_upgrade.sh can find /app/migrations inside the running
-# container. Before this, only src/ + scripts/ + requirements.txt were in
+# container. Before this, only source and dependency declaration files were in
 # the image, so alembic upgrade failed with "Path doesn't exist: alembic".
 COPY migrations ./migrations
 
@@ -77,8 +58,14 @@ RUN mkdir -p /app/output
 # P3-3: Run as non-root user for security
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
     chown -R appuser:appgroup /app
+
+# Release identity is metadata-only. Keep it after all filesystem layers so a
+# new reviewed SHA cannot invalidate the pinned apt and uv dependency layers.
+ARG RELEASE_SOURCE_SHA
+LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
 USER appuser
 
 ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8001
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -114,7 +114,7 @@ async def _async_bound_context(
         budget_job_kind="canonical",
         budget_job_id=f"job-{name}",
         scenario_or_resource_type="s1",
-        generation_policy_version="generation-safety.v1",
+        generation_policy_version="generation-safety.v2",
     )
 
     def factory(registry: Any) -> ProviderCostService:

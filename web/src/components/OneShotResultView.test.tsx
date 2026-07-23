@@ -55,4 +55,30 @@ describe("OneShotResultView lifecycle presentation", () => {
     expect(container.textContent).not.toContain("生成出错");
     cleanup();
   });
+
+  it("renders full pending-review output without publish or delivery action", () => {
+    const { container, cleanup } = renderResult({
+      status: "completed_full",
+      lifecycle_status: "completed_full",
+      completion_kind: "full_media",
+      request_succeeded: true,
+      success: true,
+      full_media_success: true,
+      pipeline_complete: true,
+      publish_allowed: false,
+      delivery_accepted: false,
+      artifact_review_status: "pending_review",
+      final_video_path: "tenants/a/pending_review/run/final.mp4",
+      briefs: [],
+      scripts: [],
+    });
+
+    expect(container.textContent).toContain("完整生成（待人工验收）");
+    const classicButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("经典视图"),
+    );
+    act(() => classicButton?.click());
+    expect(container.textContent).not.toContain("发布视频");
+    cleanup();
+  });
 });

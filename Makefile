@@ -1,11 +1,13 @@
-.PHONY: install test test-hermetic-scenarios test-hermetic-full lint coverage clean ci portfolio portfolio-sync
+.PHONY: install test test-hermetic-scenarios test-hermetic-full lint typecheck monitoring-check recovery-check coverage clean ci portfolio portfolio-sync
 
 PYTHON ?= .venv/bin/python
+PROMTOOL_IMAGE ?= prom/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893
+ALERTMANAGER_IMAGE ?= prom/alertmanager:v0.32.1@sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286
 
 # ── Setup ──
 
 install:
-	$(PYTHON) -m pip install -e ".[dev]"
+	uv sync --locked --extra dev
 
 # ── Testing ──
 
@@ -30,6 +32,23 @@ lint:
 lint-fix:
 	$(PYTHON) -m ruff check src tests scripts --fix
 
+typecheck:
+	uv run --locked --extra dev pyright --pythonpath .venv/bin/python src
+	uv run --locked --extra dev python scripts/check_pyright_ratchet.py
+
+monitoring-check:
+	docker run --rm --entrypoint /bin/promtool -v "$(CURDIR)/deploy/lighthouse/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro" -v "$(CURDIR)/deploy/lighthouse/prometheus-alerts.yml:/etc/prometheus/prometheus-alerts.yml:ro" $(PROMTOOL_IMAGE) check config /etc/prometheus/prometheus.yml
+	docker run --rm --entrypoint /bin/promtool -v "$(CURDIR):/workspace:ro" -w /workspace $(PROMTOOL_IMAGE) check rules deploy/lighthouse/prometheus-alerts.yml
+	docker run --rm --entrypoint /bin/promtool -v "$(CURDIR):/workspace:ro" -w /workspace $(PROMTOOL_IMAGE) test rules tests/fixtures/prometheus-alerts.test.yml
+	docker run --rm --entrypoint /bin/amtool -v "$(CURDIR)/deploy/lighthouse/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" $(ALERTMANAGER_IMAGE) check-config /etc/alertmanager/alertmanager.yml
+	GRAFANA_ADMIN_PASSWORD_FILE=/dev/null RELEASE_SOURCE_SHA=monitoring-contract TEST_BUNDLE_KEY=monitoring-contract docker compose -f deploy/lighthouse/docker-compose.monitoring.yml --profile monitoring config --quiet
+	$(PYTHON) -m pytest -q tests/test_prometheus_query_contract.py tests/test_monitoring_config.py tests/test_monitoring_ownership_contract.py
+
+recovery-check:
+	$(PYTHON) -m pytest -q tests/test_backup_manifest.py tests/test_offhost_backup.py tests/test_pg_restore_logical.py tests/test_backup_production_contract.py
+	bash -n scripts/backup_production.sh scripts/restore_backup_database.sh scripts/install_backup_cron.sh deploy/lighthouse/build-and-deploy.sh
+	uv run --locked --extra dev pyright --pythonpath .venv/bin/python scripts/pg_restore_logical.py scripts/verify_restored_database.py scripts/backup_manifest.py scripts/offhost_backup.py
+
 # ── Cleanup ──
 
 clean:
@@ -39,7 +58,7 @@ clean:
 
 # ── CI check (full pipeline) ──
 
-ci: lint test
+ci: lint typecheck test
 	@echo "=== CI OK ==="
 
 # ── Portfolio index ──

@@ -51,6 +51,7 @@ from src.pipeline.continuity_utils import (
     extract_clip_last_frame,
     normalize_continuity_config,
 )
+from src.pipeline.media_truth import aggregate_simulated, media_paths
 from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
@@ -238,6 +239,7 @@ class S1ProductDirectPipeline:
             expected_scenario="s1",
         )
 
+        pipeline_started = time.perf_counter()
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label)
@@ -253,6 +255,10 @@ class S1ProductDirectPipeline:
                 final_state = await runner.resume(label)
         else:
             final_state = await self._resume_without_media_synthesis(runner, label)
+        await runner.finalize_pipeline_completion(
+            final_state,
+            started_at=pipeline_started,
+        )
 
         # Convert final state back to the legacy result dict for backwards compat
         steps = final_state.get("steps", {})
@@ -284,7 +290,9 @@ class S1ProductDirectPipeline:
 
         if not enable_media_synthesis:
             logger.info("s1: complete (no media synthesis)", label=label)
-            return result
+            from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+            return project_scenario_wrapper_result(result, final_state)
 
         seedance_output = self._get_step_output(steps, "seedance_clips") or {}
         result["clip_paths"] = seedance_output.get("clip_paths", []) if isinstance(seedance_output, dict) else (seedance_output if isinstance(seedance_output, list) else [])
@@ -296,7 +304,9 @@ class S1ProductDirectPipeline:
             # Backwards compat: old list format
             result["audio_paths"] = tts_output if isinstance(tts_output, list) else []
             result["lyrics_paths"] = []
-        result["thumbnail_image_paths"] = self._get_step_output(steps, "thumbnail_images") or []
+        result["thumbnail_image_paths"] = media_paths(
+            self._get_step_output(steps, "thumbnail_images"), "image_paths"
+        )
 
         assemble_output = self._get_step_output(steps, "assemble_final") or {}
         final_video_path, render_json_path = self._extract_assemble_paths(assemble_output)
@@ -324,21 +334,11 @@ class S1ProductDirectPipeline:
                 stop_step=S1_BOUNDED_MEDIA_STOP_STEP,
                 clips=len(result["clip_paths"]),
             )
-            return result
+            from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+            return project_scenario_wrapper_result(result, final_state)
 
         result["steps_completed"] = 12
-
-        # Sprint 3 P3-1: C2PA Content Credentials signing for EU AI Act
-        # compliance. No-op when C2PA_ENABLED is unset (default). Replaces
-        # final_video_path with a signed copy when the env var is set and
-        # cert/key are provisioned; on any failure, returns the unsigned
-        # path so downstream consumers never break.
-        if result.get("final_video_path"):
-            from src.tools.c2pa_signer import sign_video
-            result["final_video_path"] = sign_video(
-                result["final_video_path"],
-                title=f"{brand_name or product_name} (AI generated)",
-            )
 
         # Sprint 3 P3-3: surface partial artifacts when degraded so callers
         # can salvage usable outputs (clips, audio, scripts) instead of
@@ -366,7 +366,9 @@ class S1ProductDirectPipeline:
                     audit_status=result["audit_report"].get("overall_status") if result["audit_report"] else None,
                     errors=len(result["errors"]))
 
-        return result
+        from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+        return project_scenario_wrapper_result(result, final_state)
 
     async def _resume_bounded_media_pilot(
         self,
@@ -393,9 +395,7 @@ class S1ProductDirectPipeline:
                 final_state["config"]["provider_max_retries"] = provider_max_retries
                 final_state["config"]["provider_job_caps"] = dict(S1_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
                 final_state["config"]["seedance_quality_gate_enabled"] = False
-                save = getattr(runner.state_manager, "save", None)
-                if callable(save):
-                    await save(label, final_state)
+                await runner.state_manager.save(label, final_state)
                 break
         return final_state
 
@@ -410,9 +410,7 @@ class S1ProductDirectPipeline:
                 break
         if final_state and not final_state.get("pipeline_degraded"):
             final_state["current_step"] = None
-            save = getattr(runner.state_manager, "save", None)
-            if callable(save):
-                await save(label, final_state)
+            await runner.state_manager.save(label, final_state)
         return final_state
 
     @staticmethod
@@ -644,7 +642,7 @@ class S1ProductDirectPipeline:
             # Guard: if all clips are stubs, skip assembly — nothing to assemble
             if not clip_paths or all_clips_are_stubs(clip_paths, clip_details):
                 media_errors.append("all_seedance_clips_are_stubs; skipping assembly")
-                return "", ""
+                return {}
             return await self._step_assemble_final(
                 reg=reg,
                 storyboards=storyboards,
@@ -656,6 +654,7 @@ class S1ProductDirectPipeline:
                 brand_guidelines=config.get("brand_guidelines") or {},
                 label=config.get("output_label", "s1"),
                 errors=media_errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "assemble"),
             )
 
         if step_name == "audit":
@@ -670,7 +669,9 @@ class S1ProductDirectPipeline:
                 audio_paths = tts_output.get("audio_paths", [])
             else:
                 audio_paths = tts_output if isinstance(tts_output, list) else []
-            thumb_image_paths = self._get_step_output(steps, "thumbnail_images") or []
+            thumb_image_paths = media_paths(
+                self._get_step_output(steps, "thumbnail_images"), "image_paths"
+            )
             continuity_grid = self._get_step_output(steps, "continuity_storyboard_grid") or {}
             seedance_out = self._get_step_output(steps, "seedance_clips") or {}
             clip_paths = seedance_out.get("clip_paths", []) if isinstance(seedance_out, dict) else (seedance_out if isinstance(seedance_out, list) else [])
@@ -1293,6 +1294,7 @@ class S1ProductDirectPipeline:
                         "path": p,
                         "duration": dur,
                         "is_stub": skill_result.data.get("is_stub", False),
+                        "simulated": skill_result.data.get("simulated"),
                         "file_size": skill_result.data.get("file_size_bytes", 0),
                         "verification": skill_result.data.get("verification", {}),
                         "prompt_used": skill_result.data.get("prompt_used", ""),
@@ -1366,6 +1368,7 @@ class S1ProductDirectPipeline:
                         "path": p,
                         "duration": dur,
                         "is_stub": res.data.get("is_stub", False),
+                        "simulated": res.data.get("simulated"),
                         "file_size": res.data.get("file_size_bytes", 0),
                         "verification": res.data.get("verification", {}),
                         "prompt_used": res.data.get("prompt_used", ""),
@@ -1399,12 +1402,16 @@ class S1ProductDirectPipeline:
             status = quality_report.get("overall_status", "N/A")
             logger.info("seedance_clips: quality gate complete", status=status)
 
-        return {
+        output = {
             "clip_paths": clip_paths,
             "clip_details": clip_details,
             "total_duration": sum(clip_durations),
             "target_duration": video_duration,
         }
+        simulated = aggregate_simulated(clip_details)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_tts_audio(
         self,
@@ -1425,6 +1432,7 @@ class S1ProductDirectPipeline:
         """
         audio_paths: list[str] = []
         lyrics_paths: list[str] = []
+        audio_results: list[dict[str, Any]] = []
 
         scripts_to_synthesize = scripts[:MAX_CLIPS_PER_DEMO]
         if tts_job_cap is not None:
@@ -1470,6 +1478,7 @@ class S1ProductDirectPipeline:
                 tts_params["provider_max_retries"] = provider_max_retries
             res = await reg.execute("elevenlabs-tts-skill", tts_params)
             if res.success and res.data:
+                audio_results.append(res.data)
                 p = res.data.get("audio_path", "")
                 if p:
                     audio_paths.append(p)
@@ -1481,7 +1490,14 @@ class S1ProductDirectPipeline:
             else:
                 errors.append(f"tts_failed: {res.error}")
 
-        return {"audio_paths": audio_paths, "lyrics_paths": lyrics_paths}
+        output: dict[str, Any] = {
+            "audio_paths": audio_paths,
+            "lyrics_paths": lyrics_paths,
+        }
+        simulated = aggregate_simulated(audio_results)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_thumbnail_images(
         self,
@@ -1492,8 +1508,9 @@ class S1ProductDirectPipeline:
         artifact_output_dir: str | None = None,
         provider_max_retries: int | None = None,
         thumbnail_job_cap: int | None = None,
-    ) -> list[str]:
+    ) -> dict[str, Any]:
         thumb_paths: list[str] = []
+        thumbnail_results: list[dict[str, Any]] = []
         flat_prompts: list[str] = []
         for ts in thumbnail_sets:
             for v in ts.get("variants", []):
@@ -1505,7 +1522,7 @@ class S1ProductDirectPipeline:
         if thumbnail_job_cap is not None:
             capped_prompts = capped_prompts[:max(0, int(thumbnail_job_cap))]
         if not capped_prompts:
-            return thumb_paths
+            return {"image_paths": thumb_paths}
 
         thumb_sem = asyncio.Semaphore(2)
 
@@ -1535,6 +1552,7 @@ class S1ProductDirectPipeline:
                 continue
             i, res = raw
             if res.success and res.data:
+                thumbnail_results.append(res.data)
                 p = res.data.get("image_path", "")
                 if p:
                     thumb_paths.append(p)
@@ -1542,7 +1560,11 @@ class S1ProductDirectPipeline:
                     errors.append(f"thumb_{i}_verification: {res.data['verification']}")
             else:
                 errors.append(f"thumb_{i}_failed: {res.error}")
-        return thumb_paths
+        output: dict[str, Any] = {"image_paths": thumb_paths}
+        simulated = aggregate_simulated(thumbnail_results)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_assemble_final(
         self,
@@ -1556,7 +1578,8 @@ class S1ProductDirectPipeline:
         label: str,
         errors: list[str],
         clip_details: list[dict[str, Any]] | None = None,
-    ) -> tuple[str, str]:
+        artifact_output_dir: str | None = None,
+    ) -> dict[str, Any]:
         # Flatten storyboards into a single shot list. If no storyboards, derive from scripts.
         shots = collect_shots(storyboards, scripts)
         captions = collect_captions(scripts)
@@ -1578,7 +1601,7 @@ class S1ProductDirectPipeline:
                 "description": transition_to_next,
             })
 
-        res = await reg.execute("remotion-assemble-skill", {
+        assemble_params: dict[str, Any] = {
             "shots": shots,
             "captions": captions,
             "audio_paths": audio_paths,
@@ -1588,11 +1611,14 @@ class S1ProductDirectPipeline:
             "output_label": label,
             "total_duration": total_duration,
             "transitions": transitions,
-        })
+        }
+        if artifact_output_dir:
+            assemble_params["output_dir"] = artifact_output_dir
+        res = await reg.execute("remotion-assemble-skill", assemble_params)
         if res.success and res.data:
-            return res.data.get("video_path", ""), res.data.get("render_json_path", "")
+            return dict(res.data)
         errors.append(f"assemble_failed: {res.error}")
-        return "", ""
+        return {}
 
     async def _step_audit(
         self,

@@ -35,11 +35,21 @@ const PRIORITY_STYLES: Record<string, { border: string; badge: string; badgeText
   },
 };
 
+const PRODUCT_VIEW_LIMIT = 6;
+
+function splitAssetPaths(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export default function GuidedCard({ card, value, onChange, isFocused, onFocus, error }: Props) {
   const { t, locale } = useI18n();
   const [isExpanded, setIsExpanded] = useState(card.priority !== "optional" || !value);
   const [isCompleted] = useState(!!value && value.trim().length > 0);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,6 +60,9 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
   const placeholderLocalized = card.placeholder
     ? (tCardCopy(card.placeholder, locale) ?? t(card.placeholder))
     : undefined;
+  const isProductViews = card.fieldKey === "product_views" && card.inputType === "image-upload";
+  const selectedAssetPaths = splitAssetPaths(value);
+  const effectiveError = uploadError || error;
 
   const handleChange = useCallback(
     (newValue: string) => {
@@ -63,31 +76,76 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
     onFocus();
   }, [onFocus]);
 
-  const handleUpload = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const uploadFiles = useCallback(
+    async (incomingFiles: File[]) => {
+      if (incomingFiles.length === 0) return;
+      setUploadError(null);
+      const existingPaths = splitAssetPaths(value);
+      const files = isProductViews ? incomingFiles : incomingFiles.slice(0, 1);
+      const remaining = PRODUCT_VIEW_LIMIT - existingPaths.length;
+      if (isProductViews && (remaining <= 0 || files.length > remaining)) {
+        setUploadError(t("upload.productViewsLimit"));
+        return;
+      }
       setUploading(true);
+      const uploadedPaths: string[] = [];
+      let failureCount = 0;
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await apiFetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          handleChange(data.path || data.filename || file.name);
-        } else {
-          console.error("Upload failed", res.status);
+        for (const file of files) {
+          if (isProductViews && !file.type.startsWith("image/")) {
+            failureCount += 1;
+            continue;
+          }
+          try {
+            const formData = new FormData();
+            formData.append("file", file);
+            const res = await apiFetch("/api/upload", {
+              method: "POST",
+              body: formData,
+            });
+            if (!res.ok) {
+              failureCount += 1;
+              continue;
+            }
+            const data = await res.json();
+            const uploadedPath = data.path || data.filename || file.name;
+            if (typeof uploadedPath === "string" && uploadedPath.trim()) {
+              uploadedPaths.push(uploadedPath.trim());
+            } else {
+              failureCount += 1;
+            }
+          } catch {
+            failureCount += 1;
+          }
         }
-      } catch (err) {
-        console.error("Upload error", err);
+        if (uploadedPaths.length > 0) {
+          handleChange(
+            isProductViews
+              ? [...existingPaths, ...uploadedPaths].join("\n")
+              : uploadedPaths[0],
+          );
+        }
+        if (failureCount > 0) {
+          setUploadError(
+            t("upload.someFailed", "{count} file(s) failed to upload").replace(
+              "{count}",
+              String(failureCount),
+            ),
+          );
+        }
       } finally {
         setUploading(false);
       }
     },
-    [handleChange]
+    [handleChange, isProductViews, t, value],
+  );
+
+  const handleUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      await uploadFiles(Array.from(e.target.files || []));
+      e.target.value = "";
+    },
+    [uploadFiles],
   );
 
   const renderInput = () => {
@@ -95,10 +153,10 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
     const hintId = `${fieldId}-hint`;
     const errorId = `${fieldId}-error`;
     const requiredProp = card.priority === "required" ? { "aria-required": "true" as const } : {};
-    const errorProps = error
+    const errorProps = effectiveError
       ? { "aria-invalid": true as const, "aria-describedby": `${hintId} ${errorId}` }
       : { "aria-describedby": hintId };
-    const errorClass = error ? " border-[var(--fortune-red)]" : "";
+    const errorClass = effectiveError ? " border-[var(--fortune-red)]" : "";
 
     switch (card.inputType) {
       case "textarea":
@@ -229,7 +287,23 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
         return (
           <div className="space-y-2">
             <div
+              data-upload-dropzone={card.fieldKey}
+              role="button"
+              tabIndex={0}
+              aria-controls={fieldId}
+              aria-describedby={effectiveError ? `${hintId} ${errorId}` : hintId}
               onClick={() => !uploading && fileInputRef.current?.click()}
+              onKeyDown={(event) => {
+                if (!uploading && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (!uploading) void uploadFiles(Array.from(event.dataTransfer.files));
+              }}
               className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${
                 value
                   ? "border-[var(--jade-accent)] bg-[rgba(120,175,140,0.05)]"
@@ -240,8 +314,10 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
               <p className="text-sm text-[var(--color-text-tertiary)]">
                 {uploading
                   ? t("upload.uploading")
-                  : value
-                  ? value.split("/").pop()
+                  : selectedAssetPaths.length > 0
+                  ? isProductViews
+                    ? `${selectedAssetPaths.length} / ${PRODUCT_VIEW_LIMIT}`
+                    : selectedAssetPaths[0]?.split("/").pop()
                   : t("upload.dragInactive")}
               </p>
               <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
@@ -255,6 +331,7 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
               type="file"
               className="hidden"
               accept={card.inputType === "image-upload" ? "image/*" : "video/*"}
+              multiple={isProductViews}
               aria-label={stepNameLocalized}
               aria-describedby={hintId}
               {...requiredProp}
@@ -282,8 +359,19 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
             {pickerOpen && (
               <AssetPickerModal
                 acceptKind={(card.inputType === "image-upload" ? "image" : "video") as AcceptKind}
+                multiple={isProductViews}
                 onPick={(urls) => {
-                  if (urls.length > 0) handleChange(urls[0]);
+                  if (urls.length === 0) return;
+                  if (!isProductViews) {
+                    handleChange(urls[0]);
+                    return;
+                  }
+                  if (selectedAssetPaths.length + urls.length > PRODUCT_VIEW_LIMIT) {
+                    setUploadError(t("upload.productViewsLimit"));
+                    return;
+                  }
+                  setUploadError(null);
+                  handleChange([...selectedAssetPaths, ...urls].join("\n"));
                 }}
                 onClose={() => setPickerOpen(false)}
               />
@@ -374,13 +462,13 @@ export default function GuidedCard({ card, value, onChange, isFocused, onFocus, 
       {/* 输入区域 */}
       <div onClick={(e) => e.stopPropagation()}>{renderInput()}</div>
 
-      {error && (
+      {effectiveError && (
         <p
           id={`guided-${card.fieldKey}-error`}
           role="alert"
           className="mt-1.5 text-[12px] text-[var(--fortune-red)]"
         >
-          {error}
+          {effectiveError}
         </p>
       )}
 

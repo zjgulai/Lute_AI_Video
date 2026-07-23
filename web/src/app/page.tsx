@@ -1380,8 +1380,8 @@ export default function Home() {
           ) : null}
 
           {showCompletion && (
-            <div className="grid grid-cols-[320px_1fr] gap-3">
-              <div>
+            <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-3">
+              <div className="min-w-0">
                 <PipelineMonitor
                   state={reviewState!.state}
                   currentReview={null}
@@ -1390,15 +1390,15 @@ export default function Home() {
                   onReset={resetAll}
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <DistributionView threadId={threadId!} onRestart={resetAll} />
               </div>
             </div>
           )}
 
           {showReview && (
-            <div className="grid grid-cols-[320px_1fr] gap-3">
-              <div>
+            <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-3">
+              <div className="min-w-0">
                 <PipelineMonitor
                   state={reviewState!.state}
                   currentReview={currentReview}
@@ -1407,7 +1407,7 @@ export default function Home() {
                   onReset={resetAll}
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 {disconnected && (
                   <div className="apple-card p-4 mb-4 border-l-4 border-[var(--cinnabar)] bg-[rgba(208,78,90,0.08)]">
                     <p className="text-sm text-[var(--cinnabar)] font-medium">{t("app.backendDisconnected")}</p>

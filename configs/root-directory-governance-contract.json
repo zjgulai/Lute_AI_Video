@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-20",
+  "updated": "2026-07-22",
   "runbook": "docs/runbooks/root-directory-governance.md",
   "policy": {
     "default_documents": "docs/ or drafts/docs/",
@@ -29,6 +29,16 @@
       "path": ".grype.yaml",
       "status": "config",
       "reason": "Exact version-bound release image vulnerability scan policy."
+    },
+    {
+      "path": ".python-version",
+      "status": "config",
+      "reason": "Canonical CPython runtime version pin."
+    },
+    {
+      "path": ".trivyignore.yaml",
+      "status": "config",
+      "reason": "Exact package-version-bound and expiring CI image vulnerability exception policy."
     },
     {
       "path": "AGENTS.md",

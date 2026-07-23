@@ -7,13 +7,14 @@ import os
 import secrets
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from src.config import OUTPUT_DIR
+from src.models.transparency import TransparencyDisclosureV1
 from src.routers._deps import AuthContext, verify_api_key
 from src.services.artifact_identity import (
     PUBLIC_OUTPUT_ROOTS,
@@ -22,6 +23,13 @@ from src.services.artifact_identity import (
     canonicalize_output_artifact_path,
     classify_output_scope,
     validate_output_reference,
+)
+from src.services.transparency_disclosure import (
+    TransparencyDisclosureIntegrityError,
+    TransparencyDisclosureNotFound,
+    TransparencyDisclosureService,
+    TransparencyDisclosureStoreUnavailable,
+    get_transparency_disclosure_service,
 )
 
 
@@ -158,6 +166,73 @@ def _resolve_media_path(media_path: str) -> tuple[str, Path]:
 router = APIRouter()
 
 
+def _raise_transparency_http_error(exc: Exception) -> None:
+    if isinstance(exc, TransparencyDisclosureNotFound):
+        raise HTTPException(status_code=404, detail="transparency_not_found") from None
+    if isinstance(exc, TransparencyDisclosureIntegrityError):
+        raise HTTPException(status_code=409, detail="transparency_integrity_error") from None
+    raise HTTPException(status_code=503, detail="transparency_store_unavailable") from None
+
+
+@router.get(
+    "/api/transparency/{resource_type}/{resource_id}",
+    response_model=TransparencyDisclosureV1,
+)
+async def get_transparency_disclosure(
+    resource_type: Literal["fast", "scenario"],
+    resource_id: str,
+    ctx: AuthContext = Depends(verify_api_key),
+    service: TransparencyDisclosureService = Depends(
+        get_transparency_disclosure_service
+    ),
+) -> TransparencyDisclosureV1:
+    try:
+        return await service.inspect(
+            tenant_id=ctx.tenant_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+    except (
+        TransparencyDisclosureIntegrityError,
+        TransparencyDisclosureNotFound,
+        TransparencyDisclosureStoreUnavailable,
+    ) as exc:
+        _raise_transparency_http_error(exc)
+    raise AssertionError("unreachable")
+
+
+@router.get("/api/transparency/{resource_type}/{resource_id}/package")
+async def get_transparency_package(
+    resource_type: Literal["fast", "scenario"],
+    resource_id: str,
+    ctx: AuthContext = Depends(verify_api_key),
+    service: TransparencyDisclosureService = Depends(
+        get_transparency_disclosure_service
+    ),
+) -> Response:
+    try:
+        package = await service.build_package(
+            tenant_id=ctx.tenant_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+    except (
+        TransparencyDisclosureIntegrityError,
+        TransparencyDisclosureNotFound,
+        TransparencyDisclosureStoreUnavailable,
+    ) as exc:
+        _raise_transparency_http_error(exc)
+        raise AssertionError("unreachable")
+    return Response(
+        content=package.payload,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{package.filename}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
 @router.get("/api/media/sign")
 async def get_signed_media_url(
     request: Request,
@@ -172,10 +247,12 @@ async def get_signed_media_url(
     if not media_path:
         raise HTTPException(status_code=400, detail="path is required")
     purpose = request.query_params.get("purpose", "view")
+    if purpose not in {"view", "download"}:
+        raise HTTPException(status_code=400, detail="Invalid purpose")
     signed_url = sign_media_url(
         media_path,
         tenant_id=ctx.tenant_id,
-        purpose=purpose,
+        purpose=cast(MediaPurpose, purpose),
     )
     return {"url": signed_url, "expires_in": _MEDIA_TOKEN_TTL}
 

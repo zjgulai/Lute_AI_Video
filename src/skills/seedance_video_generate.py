@@ -279,6 +279,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 "resolution": resolution,
                 "prompt_used": prompt,
                 "is_stub": is_stub,
+                "simulated": is_stub,
                 "verification": verification,
                 "output_label": output_label,
             },
@@ -687,6 +688,7 @@ class SeedanceVideoGenerateSkill(SkillCallable):
                 "resolution": params.get("resolution", DEFAULT_RESOLUTION),
                 "prompt_used": params.get("prompt", ""),
                 "is_stub": True,
+                "simulated": True,
                 "verification": {
                     "file_exists": True, "size_ok": True, "header_ok": True,
                     "duration_ok": True, "all_ok": True, "failures": [],

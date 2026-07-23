@@ -1,0 +1,199 @@
+rule_files:
+  - ../../deploy/lighthouse/prometheus-alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: PipelineErrorRateHigh / non-firing
+    interval: 1m
+    input_series:
+      - series: 'pipeline_runs_total{scenario="s1",status="success"}'
+        values: '0+10x20'
+      - series: 'pipeline_runs_total{scenario="s1",status="failure"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PipelineErrorRateHigh
+        exp_alerts: []
+  - name: PipelineErrorRateHigh / firing
+    interval: 1m
+    input_series:
+      - series: 'pipeline_runs_total{scenario="s1",status="success"}'
+        values: '0+10x20'
+      - series: 'pipeline_runs_total{scenario="s1",status="failure"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PipelineErrorRateHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: Pipeline error rate exceeds 5%
+              description: Pipeline error rate is 9.091% over the last 5 minutes.
+  - name: PipelineErrorRateHigh / resolved
+    interval: 1m
+    input_series:
+      - series: 'pipeline_runs_total{scenario="s1",status="success"}'
+        values: '0+10x25'
+      - series: 'pipeline_runs_total{scenario="s1",status="failure"}'
+        values: '0+1x5 5+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PipelineErrorRateHigh
+        exp_alerts: []
+
+  - name: StepDurationP99High / non-firing
+    interval: 1m
+    input_series:
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="300"}'
+        values: '0+1x20'
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="600"}'
+        values: '0+1x20'
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="+Inf"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: StepDurationP99High
+        exp_alerts: []
+  - name: StepDurationP99High / firing
+    interval: 1m
+    input_series:
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="300"}'
+        values: '0+0x20'
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="600"}'
+        values: '0+1x20'
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="+Inf"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: StepDurationP99High
+        exp_alerts:
+          - exp_labels: {severity: warning, step: fixture}
+            exp_annotations:
+              summary: Step fixture p99 duration > 300s
+              description: p99 step duration for fixture is 597s over the last 10 minutes.
+  - name: StepDurationP99High / resolved
+    interval: 1m
+    input_series:
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="300"}'
+        values: '0+0x5 0+1x20'
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="600"}'
+        values: '0+1x25'
+      - series: 'step_duration_seconds_bucket{scenario="s1",step="fixture",le="+Inf"}'
+        values: '0+1x25'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: StepDurationP99High
+        exp_alerts: []
+
+  - name: API5xxRateHigh / non-firing
+    interval: 1m
+    input_series:
+      - series: 'api_requests_total{method="GET",route="/health",status_class="2xx"}'
+        values: '0+100x20'
+      - series: 'api_requests_total{method="GET",route="/health",status_class="5xx"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: API5xxRateHigh
+        exp_alerts: []
+  - name: API5xxRateHigh / firing
+    interval: 1m
+    input_series:
+      - series: 'api_requests_total{method="GET",route="/health",status_class="2xx"}'
+        values: '0+100x20'
+      - series: 'api_requests_total{method="GET",route="/health",status_class="5xx"}'
+        values: '0+2x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: API5xxRateHigh
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: API 5xx rate exceeds 1%
+              description: API 5xx error rate is 1.961% over the last 5 minutes.
+  - name: API5xxRateHigh / resolved
+    interval: 1m
+    input_series:
+      - series: 'api_requests_total{method="GET",route="/health",status_class="2xx"}'
+        values: '0+100x25'
+      - series: 'api_requests_total{method="GET",route="/health",status_class="5xx"}'
+        values: '0+2x5 10+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: API5xxRateHigh
+        exp_alerts: []
+
+  - name: APILatencyP95High / non-firing
+    interval: 1m
+    input_series:
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="5"}'
+        values: '0+1x20'
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="10"}'
+        values: '0+1x20'
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="+Inf"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: APILatencyP95High
+        exp_alerts: []
+  - name: APILatencyP95High / firing
+    interval: 1m
+    input_series:
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="5"}'
+        values: '0+0x20'
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="10"}'
+        values: '0+1x20'
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="+Inf"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: APILatencyP95High
+        exp_alerts:
+          - exp_labels: {severity: warning, route: /health}
+            exp_annotations:
+              summary: API route /health p95 latency > 5s
+              description: p95 API latency for /health is 9.75s.
+  - name: APILatencyP95High / resolved
+    interval: 1m
+    input_series:
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="5"}'
+        values: '0+0x5 0+1x20'
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="10"}'
+        values: '0+1x25'
+      - series: 'api_request_duration_seconds_bucket{method="GET",route="/health",le="+Inf"}'
+        values: '0+1x25'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: APILatencyP95High
+        exp_alerts: []
+
+  - name: BackgroundTasksSpike / non-firing
+    interval: 1m
+    input_series:
+      - series: active_background_tasks
+        values: '5x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BackgroundTasksSpike
+        exp_alerts: []
+  - name: BackgroundTasksSpike / firing
+    interval: 1m
+    input_series:
+      - series: active_background_tasks
+        values: '30x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BackgroundTasksSpike
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: Background tasks spike detected
+              description: 30 background tasks active for more than 5 minutes.
+  - name: BackgroundTasksSpike / resolved
+    interval: 1m
+    input_series:
+      - series: active_background_tasks
+        values: '30x5 0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: BackgroundTasksSpike
+        exp_alerts: []

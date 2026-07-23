@@ -10,7 +10,15 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from src.models.provider_cost import (
     MAX_SIGNED_BIGINT,
@@ -75,6 +83,75 @@ class ValidatedProviderBudgetAuthorization(_StrictFrozenModel):
         if self.per_job_cost_ceiling_usd_nanos > self.max_total_cost_usd_nanos:
             raise ValueError("approval per-job ceiling exceeds total")
         return self
+
+
+class ValidatedPlanBudgetAuthorization(_StrictFrozenModel):
+    """Trusted provider-neutral total cap for one reviewed execution plan."""
+
+    authorization_ref: SafeIdentifier
+    authorization_scope: SafeIdentifier
+    approved_at: datetime
+    expires_at: datetime
+    budget_limit_usd_nanos: PositiveMoney
+    max_total_cost_usd_nanos: PositiveMoney
+    per_job_cost_ceiling_usd_nanos: PositiveMoney
+    provider_job_caps: tuple[tuple[str, int], ...]
+
+    @field_validator("provider_job_caps", mode="before")
+    @classmethod
+    def _load_provider_job_caps(cls, value: object) -> object:
+        if type(value) is not dict:
+            return value
+        category_order = ("llm", "image", "video", "tts", "thumbnail")
+        if set(value) - set(category_order):
+            raise ValueError("provider job cap categories contain unsupported values")
+        return tuple(
+            (category, value[category])
+            for category in category_order
+            if category in value
+        )
+
+    @field_serializer("provider_job_caps")
+    def _serialize_provider_job_caps(
+        self,
+        value: tuple[tuple[str, int], ...],
+    ) -> dict[str, int]:
+        return dict(value)
+
+    @model_validator(mode="after")
+    def validate_authority(self) -> ValidatedPlanBudgetAuthorization:
+        if self.approved_at.tzinfo is None or self.approved_at.utcoffset() is None:
+            raise ValueError("approval time must be timezone-aware")
+        if self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None:
+            raise ValueError("approval expiry must be timezone-aware")
+        if self.expires_at <= self.approved_at:
+            raise ValueError("approval expiry must follow approval time")
+        if self.max_total_cost_usd_nanos > self.budget_limit_usd_nanos:
+            raise ValueError("approval total exceeds budget limit")
+        if self.per_job_cost_ceiling_usd_nanos > self.max_total_cost_usd_nanos:
+            raise ValueError("approval per-job ceiling exceeds total")
+        allowed_categories = {"llm", "image", "video", "tts", "thumbnail"}
+        caps = dict(self.provider_job_caps)
+        if (
+            not caps
+            or len(caps) != len(self.provider_job_caps)
+            or set(caps) - allowed_categories
+            or any(type(value) is not int or value <= 0 or value > 10_000 for value in caps.values())
+        ):
+            raise ValueError("provider job caps must be unique positive bounded integers")
+        return self
+
+
+ValidatedBudgetAuthorization = (
+    ValidatedProviderBudgetAuthorization | ValidatedPlanBudgetAuthorization
+)
+
+
+def _is_validated_budget_authorization(value: object) -> bool:
+    return isinstance(
+        value,
+        (ValidatedProviderBudgetAuthorization, ValidatedPlanBudgetAuthorization),
+    )
 
 
 class TrustedRegenerationEpoch(_StrictFrozenModel):
@@ -273,7 +350,7 @@ async def initialize_provider_cost_account(
     identity: ProviderCostAccountIdentity,
     server_cap_usd_nanos: int,
     now: datetime,
-    authorization: ValidatedProviderBudgetAuthorization | None = None,
+    authorization: ValidatedBudgetAuthorization | None = None,
 ) -> dict[str, Any]:
     """Create or replay one account without requiring a paid-operation registry.
 
@@ -300,7 +377,7 @@ async def initialize_provider_cost_account(
         if identity.budget_source_kind != "server_config" or identity.budget_source_ref is not None:
             raise _invalid_authorization("server budget source identity conflicts")
     else:
-        if not isinstance(authorization, ValidatedProviderBudgetAuthorization):
+        if not _is_validated_budget_authorization(authorization):
             raise _invalid_authorization("budget authority must be a validated object")
         if normalized_now >= authorization.expires_at:
             raise _invalid_authorization("budget authority is expired")
@@ -383,7 +460,7 @@ class ProviderCostService:
         *,
         identity: ProviderCostAccountIdentity,
         server_cap_usd_nanos: int,
-        authorization: ValidatedProviderBudgetAuthorization | None = None,
+        authorization: ValidatedBudgetAuthorization | None = None,
     ) -> dict[str, Any]:
         return await initialize_provider_cost_account(
             repository=self._repository,

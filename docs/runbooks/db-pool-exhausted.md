@@ -1,6 +1,6 @@
 ---
 name: runbook-db-pool-exhausted
-description: Runbook 文档，处理 asyncpg 连接池耗尽导致请求挂起 / 503 的诊断与恢复步骤。当后端日志出现「pool exhausted」、API 大量返回 503、或 `db_pool_available_connections` 告警触发时使用。
+description: Runbook 文档，处理 asyncpg 连接池耗尽导致请求挂起 / 503 的诊断与恢复步骤。当后端日志出现「pool exhausted」、readiness 失败或 API 大量返回 503 时使用。
 ---
 
 # Runbook — Database Connection Pool Exhausted
@@ -17,7 +17,7 @@ description: Runbook 文档，处理 asyncpg 连接池耗尽导致请求挂起 /
 | 信号源 | 内容 |
 |---|---|
 | 后端日志 | `asyncpg.exceptions.ConnectionDoesNotExistError` 或 `pool exhausted` 或长时间 hang |
-| Prometheus | `db_pool_available_connections == 0` 持续 5 分钟 |
+| Readiness/HTTP | `/health/ready` 失败，且 `api_requests_total{status_class="5xx"}` 上升 |
 | 前端 | 大量 API 返回 503 / 504，admin 页面也打不开 |
 | 用户感受 | "整个系统卡了" |
 
@@ -98,7 +98,7 @@ sudo docker exec ai_video_backend curl -sS --max-time 5 http://localhost:8001/he
 - **响应**：
   1. 临时提高 pool 上限：环境变量 `DB_POOL_MAX=20`（重启 backend 生效）
   2. 评估 PG 实例规格升级（Tencent RDS 控制台）
-  3. 加 Prometheus 告警：`rate(http_requests_total[1m]) > N` 提前预警
+  3. 观察现有 `rate(api_requests_total[1m])`；新增流量阈值前先按容量测试结果定标
 
 ## 四、永久 fix
 
@@ -110,15 +110,10 @@ sudo docker exec ai_video_backend curl -sS --max-time 5 http://localhost:8001/he
 
 ## 五、关联指标
 
-部署完 Prometheus 后应有：
-
-- `db_pool_available_connections` — gauge
-- `db_pool_total_connections` — gauge
-- `db_pool_acquire_duration_seconds` — histogram（获取连接的等待时间）
-
-告警阈值：
-
-- `db_pool_available_connections < 2 for 5m` → DingTalk
+当前 exporter 不发布 pool gauge：旧 family 没有真实更新路径，已按 fail-honest 原则删除。
+现阶段使用 `/health/ready`、稳定错误码、`api_requests_total{status_class="5xx"}` 和
+只读 `pg_stat_activity` 联合诊断。只有在 pool acquire/release 路径接入真实采样并有
+低基数 contract 后，才能重新增加 pool 指标和告警；不得用永久零值代替可观测性。
 
 ## 六、相关 Runbook
 

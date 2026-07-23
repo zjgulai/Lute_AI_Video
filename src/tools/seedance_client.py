@@ -512,6 +512,7 @@ class SeedanceClient:
             "duration": duration,
             "_poyo_state": poyo_state,
             "task_id": result.get("task_id", ""),
+            "simulated": False,
         }
 
     def _stub_result(self, prompt: str, mode: str = "unknown") -> SeedanceVideoResult:
@@ -521,6 +522,7 @@ class SeedanceClient:
             "prompt_used": prompt,
             "duration": 0,
             "_stub_mode": mode,
+            "simulated": True,
         }
 
     async def close(self):

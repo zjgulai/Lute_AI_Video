@@ -5,7 +5,7 @@ module: backend
 topic: single-use-human-acceptance
 status: stable
 created: 2026-07-12
-updated: 2026-07-13
+updated: 2026-07-23
 owner: self
 source: human+ai
 ---
@@ -39,15 +39,24 @@ source: human+ai
    - `GET /acceptance-records/{acceptance_id}`（read）；
    - `POST /acceptance-records/{acceptance_id}/revoke`（revoke）。
 2. 三条 route 都要求有效 `X-API-Key`，且 reviewer permission 必须是 `artifact:accept` 或 `all`。只有 `provider:submit` 的 key 不足，返回 `403 Insufficient permission`。
-3. `tenant_id`、reviewer identity、scenario、artifact digest/size、status、expiry 与 consume metadata 都由服务端决定；request 不得自报这些 authority fields。
+3. `tenant_id`、reviewer identity、scenario、artifact digest/size、transparency sidecar
+   path/digest、最终 C2PA status、status、expiry 与 consume metadata 都由服务端决定；
+   request 不得自报这些 authority fields。
 4. accepted source 必须来自当前 tenant 的 durable Fast/Scenario submission，状态为 `completed`，并投影到 exact canonical final video path：`pending_review`、`.mp4`/`.webm`、`full_media_success=true`、`is_stub=false`、`pipeline_degraded=false`。请求路径必须与 durable source 的最终路径逐字一致，文件必须存在于 tenant-owned output root。
 5. rejected decision 仍要求 terminal (`completed`/`failed`) 且存在合法 final-video projection；它不会生成可 consume 的 authority。
 6. create 使用一个 action-stable `Idempotency-Key`。服务端只持久化 hash，不记录或回显 raw key；日志、工单和截图不得包含 raw key、`X-API-Key`、请求正文或 provider credential。
-7. 当前 **no UI**：没有新增 review UI。当前 **no HTTP consume**：consume 只存在于 internal service boundary。
+7. 当前 **no UI for acceptance mutations**：没有 acceptance create/revoke UI；结果/复核界面的 transparency status 不是 human
+   acceptance 操作。当前 **no HTTP consume**：consume 只存在于 internal service boundary。
 8. W1-23 integration 已达到 `completed_local`：只有 `artifact:publish|all` 的
    canonical/deprecated adapter 可把 acceptance ID 传入 shared service；
    `artifact:accept`、`provider:submit`、client path 和 body human assertion
    都不是 publish authority。该状态不等于 production migration 或 live publish。
+9. 新记录使用 `acceptance-create.v2`：exact source projection 必须指向同一 run scope
+   内可验证的 canonical sidecar，sidecar 中必须恰有一条与 final video path/hash/size/
+   record ID 一致的非 simulated file record。`accepted` 只允许 server policy
+   `required` 且当前 Reader 验证为 `signed_local_readback`。旧
+   `acceptance-create.v1` 可继续 read/revoke/同 key replay，但不能通过 publish inspect
+   或 consume；禁止用回填值伪造历史透明度。
 
 ## Create / replay / conflict
 
@@ -71,14 +80,24 @@ source: human+ai
 
 ## Internal single-use consume 与 changed-file integrity
 
-`consume_for_publish(...)` 是 internal、single-use、tenant-bound 操作，不是 HTTP endpoint。它在消费前重新打开 stored canonical path，重新计算 exact bytes 的 SHA-256 与 size：
+`consume_for_publish(...)` 是 internal、single-use、tenant-bound 操作，不是 HTTP endpoint。它在消费前重新打开 stored canonical path，重新计算 exact bytes 的 SHA-256 与 size，并重新验证 stored sidecar digest、final file record 与 C2PA Reader truth：
 
-- path、digest 或 size 与创建时记录不同，或文件已缺失，返回 `409 acceptance_artifact_integrity_mismatch`；记录保持未消费；
+- path、digest、size、sidecar digest/facts 或 Reader truth 与创建时记录不同，或文件/
+  sidecar 已缺失，返回 `409 acceptance_artifact_integrity_mismatch`；记录保持未消费；
 - 记录已经过期，返回 `409 acceptance_expired`；
 - revoked、rejected、consumed 或其他非 available 状态返回 `409 acceptance_not_available`；
 - repository 通过 compare-and-set 把 `available` 原子改为 `consumed`，并写入 consumer operation/resource；并发调用只能有一个 winner。
 
-这项 integrity 检查证明的是“当前文件仍是 reviewer 接受的 exact bytes”。read `200` 只展示 stored projection，不等于文件未被改变，也不等于 publish 已获授权。
+这项 integrity 检查证明的是“当前文件仍是 reviewer 接受的 exact bytes，且本地
+C2PA Reader 仍验证其 AI-generated manifest”。它不是受信证书或独立 validator
+证据。read `200` 只展示 stored projection，不等于文件/sidecar 未被改变，也不等于
+publish 已获授权。
+
+新 `acceptance-create.v2` readback 带最小 `acceptance-transparency.v1`，只包含
+AI-generated label、sidecar path/digest、最终 C2PA status 与
+`independently_validated=false`。旧 v1 readback 的 `transparency=null` 是历史边界，不能
+通过 package/publish 入口伪装成新 authority。结果 UI 和 exact evidence package 的诊断见
+[Transparency delivery](./transparency-delivery.md)。
 
 W1-23 使用 `consumed_by_operation=distribution.publish` 与
 `consumed_by_resource_id=<publish_attempt_id>` 做 durable correlation。若 consume
@@ -177,11 +196,13 @@ delivery 或 enterprise full-chain completion。任何 production write、deploy
 - [API endpoint reference](../reference/api-endpoints.md)
 - [Backend route auth contract](./backend-route-auth-contract.md)
 - [Publish acceptance consumption](./publish-acceptance-consumption.md)
+- [Transparency delivery](./transparency-delivery.md)
 - Approved design: `docs/superpowers/specs/2026-07-12-single-use-human-acceptance-record-design.md`
 - `src/routers/acceptance_records.py`
 - `src/services/artifact_acceptance.py`
 - `src/storage/acceptance_repository.py`
 - `migrations/alembic/versions/e8f1a2b3c4d5_add_acceptance_records.py`
+- `migrations/alembic/versions/d9e0f1a2b3c4_bind_acceptance_transparency.py`
 - `scripts/pg_dump_logical.py`
 - `scripts/pg_restore_logical.py`
 - `scripts/verify_restored_database.py`

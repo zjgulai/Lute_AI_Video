@@ -8,6 +8,7 @@ import {
   FilmSlate,
   WarningOctagon,
 } from "@phosphor-icons/react";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface DashboardData {
   tenant_count: number;
@@ -30,20 +31,21 @@ interface DashboardData {
 }
 
 export default function AdminDashboardPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
-    setError("");
+    setError(false);
     try {
       const result = await adminFetchJson<DashboardData>(
         "/api/admin/dashboard/summary"
       );
       setData(result);
     } catch {
-      setError("Failed to load dashboard data");
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -90,12 +92,14 @@ export default function AdminDashboardPage() {
   if (error || !data) {
     return (
       <div className="text-center py-16">
-        <p className="text-sm text-[var(--text-muted)] mb-2">{error || "No data"}</p>
+        <p className="text-sm text-[var(--text-muted)] mb-2">
+          {error ? t("admin.dashboard.loadFailed") : t("admin.common.noData")}
+        </p>
         <button
           onClick={loadData}
           className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
         >
-          Retry
+          {t("admin.common.retry")}
         </button>
       </div>
     );
@@ -105,13 +109,13 @@ export default function AdminDashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-[var(--text-h1)]">
-          Dashboard
+          {t("admin.nav.dashboard")}
         </h1>
         <button
           onClick={loadData}
           className="text-xs text-[var(--text-muted)] hover:text-[var(--fortune-red)] transition-colors cursor-pointer"
         >
-          Refresh
+          {t("admin.common.refresh")}
         </button>
       </div>
 
@@ -130,7 +134,7 @@ export default function AdminDashboardPage() {
                 {data.tenant_count}
               </p>
               <p className="text-xs text-[var(--text-muted)]">
-                Active Tenants{data.tenant_count_today > 0 ? ` · +${data.tenant_count_today} today` : ""}
+                {t("admin.dashboard.activeTenants")}{data.tenant_count_today > 0 ? ` · +${data.tenant_count_today} ${t("admin.dashboard.today")}` : ""}
               </p>
             </div>
           </div>
@@ -149,9 +153,9 @@ export default function AdminDashboardPage() {
                 {data.pipeline_runs_today.total}
               </p>
               <p className="text-xs text-[var(--text-muted)]">
-                Pipeline runs today
+                {t("admin.dashboard.pipelineRunsToday")}
                 {data.pipeline_runs_today.failed > 0
-                  ? ` · ${data.pipeline_runs_today.failed} failed`
+                  ? ` · ${data.pipeline_runs_today.failed} ${t("admin.dashboard.failed")}`
                   : ""}
               </p>
             </div>
@@ -182,7 +186,7 @@ export default function AdminDashboardPage() {
                 {(data.error_rate_24h * 100).toFixed(1)}%
               </p>
               <p className="text-xs text-[var(--text-muted)]">
-                Error rate (24h)
+                {t("admin.dashboard.errorRate")}
               </p>
             </div>
           </div>
@@ -192,11 +196,11 @@ export default function AdminDashboardPage() {
       {/* Recent errors */}
       <div className="apple-card p-4">
         <h2 className="text-sm font-medium text-[var(--text-h1)] mb-3">
-          Recent Errors
+          {t("admin.dashboard.recentErrors")}
         </h2>
         {data.recent_errors.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)] py-4 text-center">
-            No errors recorded — system healthy
+            {t("admin.dashboard.noErrors")}
           </p>
         ) : (
           <div className="space-y-2">

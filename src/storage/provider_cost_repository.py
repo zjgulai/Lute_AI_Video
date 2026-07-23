@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal, get_args
+from typing import Any, Literal, NoReturn, get_args
 
 import asyncpg
 from pydantic import BaseModel, ValidationError
@@ -1174,23 +1174,23 @@ class ProviderCostRepository:
         }
 
     @staticmethod
-    def _normalize_account(row: Any) -> dict[str, Any]:
+    def _normalize_account(
+        row: asyncpg.Record | sqlite3.Row | None,
+    ) -> dict[str, Any]:
         if row is None:
             ProviderCostRepository._conflict("budget account was not found")
         try:
-            record = dict(row)
+            record: dict[str, Any] = {key: row[key] for key in row.keys()}
             record["account_id"] = ProviderCostRepository._normalize_stored_uuid4(
                 record.get("account_id"),
                 "account ID",
             )
-            identity = ProviderCostAccountIdentity(
-                tenant_id=record.get("tenant_id"),
-                job_kind=record.get("job_kind"),
-                job_id=record.get("job_id"),
-                scenario_or_resource_type=record.get("scenario_or_resource_type"),
-                budget_source_kind=record.get("budget_source_kind"),
-                budget_source_ref=record.get("budget_source_ref"),
-                budget_policy_version=record.get("budget_policy_version"),
+            identity = ProviderCostAccountIdentity.model_validate(
+                {
+                    field: record.get(field)
+                    for field in ProviderCostAccountIdentity.model_fields
+                },
+                strict=True,
             )
             for field in (
                 "cap_usd_nanos",
@@ -1222,11 +1222,13 @@ class ProviderCostRepository:
             ProviderCostRepository._raise_store_unavailable(exc)
 
     @staticmethod
-    def _normalize_attempt(row: Any) -> dict[str, Any]:
+    def _normalize_attempt(
+        row: asyncpg.Record | sqlite3.Row | None,
+    ) -> dict[str, Any]:
         if row is None:
             ProviderCostRepository._conflict("provider attempt was not found")
         try:
-            record = dict(row)
+            record: dict[str, Any] = {key: row[key] for key in row.keys()}
             record["attempt_id"] = ProviderCostRepository._normalize_stored_uuid4(
                 record.get("attempt_id"),
                 "attempt ID",
@@ -1235,16 +1237,12 @@ class ProviderCostRepository:
                 record.get("account_id"),
                 "account ID",
             )
-            identity = ProviderCostAttemptIdentity(
-                logical_operation=record.get("logical_operation"),
-                catalog_operation=record.get("catalog_operation"),
-                ordinal=record.get("ordinal"),
-                provider=record.get("provider"),
-                canonical_model=record.get("canonical_model"),
-                provider_billing_region=record.get("provider_billing_region"),
-                media_type=record.get("media_type"),
-                billing_fact_kind=record.get("billing_fact_kind"),
-                state=record.get("state"),
+            identity = ProviderCostAttemptIdentity.model_validate(
+                {
+                    field: record.get(field)
+                    for field in ProviderCostAttemptIdentity.model_fields
+                },
+                strict=True,
             )
             ProviderCostRepository._require_safe_id(record.get("tenant_id"), "tenant ID")
             ProviderCostRepository._require_safe_id(record.get("job_id"), "job ID")
@@ -1492,19 +1490,19 @@ class ProviderCostRepository:
             return connection.execute(query, args).fetchone()
 
     @staticmethod
-    def _usage_error(detail: str) -> None:
+    def _usage_error(detail: str) -> NoReturn:
         raise ProviderCostContractError("provider_cost_usage_invalid", detail)
 
     @staticmethod
-    def _conflict(detail: str) -> None:
+    def _conflict(detail: str) -> NoReturn:
         raise ProviderCostContractError("provider_cost_attempt_conflict", detail)
 
     @staticmethod
-    def _store_error(detail: str) -> None:
+    def _store_error(detail: str) -> NoReturn:
         raise ProviderCostContractError("provider_cost_store_unavailable", detail)
 
     @staticmethod
-    def _raise_store_unavailable(exc: Exception) -> None:
+    def _raise_store_unavailable(exc: Exception) -> NoReturn:
         logger.warning(
             "Provider cost store operation failed (%s)",
             type(exc).__name__,

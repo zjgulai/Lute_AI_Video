@@ -9,7 +9,7 @@ import CandidateSelector, {
 } from "@/components/CandidateSelector";
 import InlineTooltip from "@/components/InlineTooltip";
 import { useI18n } from "@/i18n/I18nProvider";
-import { isDemoMode, fetchS1State, apiFetch, fetchGateState } from "./api";
+import { isDemoMode, getScenarioStatus, apiFetch, fetchGateState } from "./api";
 import {
   getContinuityDiagnosticsSummary,
   hasContinuityDiagnostics,
@@ -102,6 +102,60 @@ interface Props {
   onBack: () => void;
 }
 
+type GatePollFailure = "stalled" | "timeout" | "exception";
+
+interface GateResumePollingContext {
+  selectedIds: string[];
+  nextGateId: string | null;
+  isLastGate: boolean;
+}
+
+const GATE_RESUME_MAX_POLLS = 360;
+const GATE_RESUME_INITIAL_DELAY_MS = 3000;
+const GATE_RESUME_INTERVAL_MS = 5000;
+const GATE_RESUME_FAILURE_STATUSES = new Set([
+  "error",
+  "failed",
+  "invalid_state",
+  "policy_blocked",
+  "recovery_required",
+]);
+const GATE_TERMINAL_STATUSES = new Set(["completed_bounded", "completed_full"]);
+
+function isCoherentGateTerminal(state: {
+  status?: unknown;
+  lifecycle_status?: unknown;
+  completion_kind?: unknown;
+  request_succeeded?: unknown;
+  success?: unknown;
+  full_media_success?: unknown;
+  pipeline_complete?: unknown;
+  publish_allowed?: unknown;
+  delivery_accepted?: unknown;
+}): boolean {
+  if (state.status === "completed_bounded") {
+    return state.lifecycle_status === "completed_bounded"
+      && (state.completion_kind === "no_media" || state.completion_kind === "bounded_media")
+      && state.request_succeeded === true
+      && state.success === false
+      && state.full_media_success === false
+      && state.pipeline_complete === false
+      && state.publish_allowed === false
+      && state.delivery_accepted === false;
+  }
+  if (state.status === "completed_full") {
+    return state.lifecycle_status === "completed_full"
+      && state.completion_kind === "full_media"
+      && state.request_succeeded === true
+      && state.success === true
+      && state.full_media_success === true
+      && state.pipeline_complete === true
+      && state.publish_allowed === false
+      && state.delivery_accepted === false;
+  }
+  return false;
+}
+
 function getRuntimeStatus(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   const status = (value as { status?: unknown }).status;
@@ -133,10 +187,14 @@ export default function GatePanel({
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [pollFailure, setPollFailure] = useState<GatePollFailure | null>(null);
   const [editCandidateId, setEditCandidateId] = useState<string | null>(null);
   const [continuityDiagnostics, setContinuityDiagnostics] = useState<ContinuityDiagnosticsPayload | null>(null);
   const hasGenerated = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resumePollingContextRef = useRef<GateResumePollingContext | null>(null);
+  const resumeCompletedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const scenario = label.startsWith("s") ? label.charAt(0) + label.charAt(1) : "s1";
 
@@ -249,17 +307,130 @@ export default function GatePanel({
     }
   };
 
-  // Cleanup poll timer on unmount
-  useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearTimeout(pollTimerRef.current);
+  const clearPollTimer = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const completeResumePolling = useCallback((ids: string[]) => {
+    if (!mountedRef.current || resumeCompletedRef.current) return;
+    resumeCompletedRef.current = true;
+    clearPollTimer();
+    setProcessing(false);
+    setPollFailure(null);
+    onApprove(ids);
+  }, [clearPollTimer, onApprove]);
+
+  const startResumePolling = useCallback((context: GateResumePollingContext) => {
+    clearPollTimer();
+    resumePollingContextRef.current = context;
+    resumeCompletedRef.current = false;
+    setPollFailure(null);
+    setProcessing(true);
+
+    let lastStateHash = "";
+    let stableCount = 0;
+
+    const failClosed = (reason: GatePollFailure) => {
+      if (!mountedRef.current) return;
+      clearPollTimer();
+      setProcessing(false);
+      setPollFailure(reason);
+    };
+
+    const poll = async (pollCount: number) => {
+      if (!mountedRef.current || resumeCompletedRef.current) return;
+      if (pollCount >= GATE_RESUME_MAX_POLLS) {
+        failClosed("timeout");
+        return;
+      }
+
+      try {
+        const state = await getScenarioStatus(scenario, label);
+        if (!mountedRef.current || resumeCompletedRef.current) return;
+        const gates = state.gates || {};
+        const currentStepName = state.current_step;
+
+        const lifecycleStatus = typeof state.lifecycle_status === "string"
+          ? state.lifecycle_status
+          : "";
+        if (
+          state.pipeline_degraded
+          || GATE_RESUME_FAILURE_STATUSES.has(state.status)
+          || GATE_RESUME_FAILURE_STATUSES.has(lifecycleStatus)
+        ) {
+          failClosed("exception");
+          return;
+        }
+        const coherentTerminal = isCoherentGateTerminal(state);
+        const claimsTerminal = GATE_TERMINAL_STATUSES.has(state.status)
+          || GATE_TERMINAL_STATUSES.has(lifecycleStatus);
+        if (claimsTerminal && !coherentTerminal) {
+          failClosed("exception");
+          return;
+        }
+        if (coherentTerminal) {
+          completeResumePolling(context.selectedIds);
+          return;
+        }
+        if (context.nextGateId && gates[context.nextGateId]?.status === "awaiting_approval") {
+          completeResumePolling(context.selectedIds);
+          return;
+        }
+        if (context.isLastGate) {
+          const steps = state.steps || {};
+          if (
+            getRuntimeStatus(steps.audit) === "done"
+            || getRuntimeStatus(steps.assemble_final) === "done"
+          ) {
+            completeResumePolling(context.selectedIds);
+            return;
+          }
+        }
+
+        const stateHash = JSON.stringify({
+          current_step: currentStepName,
+          gates: summarizeRuntimeStatuses(gates),
+          steps: summarizeRuntimeStatuses(state.steps),
+        });
+        if (stateHash === lastStateHash) {
+          stableCount += 1;
+          if (stableCount >= 3) {
+            failClosed("stalled");
+            return;
+          }
+        } else {
+          stableCount = 0;
+          lastStateHash = stateHash;
+        }
+
+        pollTimerRef.current = setTimeout(
+          () => poll(pollCount + 1),
+          GATE_RESUME_INTERVAL_MS,
+        );
+      } catch (pollError: unknown) {
+        console.error("GatePanel poll error:", pollError);
+        failClosed("exception");
       }
     };
-  }, []);
+
+    pollTimerRef.current = setTimeout(() => poll(0), GATE_RESUME_INITIAL_DELAY_MS);
+  }, [clearPollTimer, completeResumePolling, label, scenario]);
+
+  // Cleanup poll timer on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearPollTimer();
+    };
+  }, [clearPollTimer]);
 
   const handleApprove = async () => {
     if (selectedIds.length === 0) return;
+    setPollFailure(null);
     setApproving(true);
 
     // Demo mode: skip API, directly approve
@@ -297,75 +468,11 @@ export default function GatePanel({
         const nextGateId = currentIdx >= 0 && currentIdx + 1 < seq.length ? seq[currentIdx + 1].gateId : null;
         const isLastGate = currentIdx >= 0 && currentIdx + 1 === seq.length;
 
-        let lastStateHash = "";
-        let stableCount = 0;
-        const maxPolls = 360; // 30 minutes max (5s * 360)
-
-        const poll = async (pollCount: number) => {
-          if (pollCount >= maxPolls) {
-            setProcessing(false);
-            onApprove(selectedIds);
-            return;
-          }
-
-          try {
-            const state = await fetchS1State(label);
-            const gates = state.gates || {};
-            const currentStepName = state.current_step;
-
-            // Completion check 1: pipeline fully complete (current_step is null)
-            if (currentStepName === null) {
-              setProcessing(false);
-              onApprove(selectedIds);
-              return;
-            }
-
-            // Completion check 2: next gate is awaiting approval
-            if (nextGateId && gates[nextGateId]?.status === "awaiting_approval") {
-              setProcessing(false);
-              onApprove(selectedIds);
-              return;
-            }
-
-            // Completion check 3: last gate — assemble_final or audit done
-            if (isLastGate) {
-              const steps = state.steps || {};
-              if (steps.audit?.status === "done" || steps.assemble_final?.status === "done") {
-                setProcessing(false);
-                onApprove(selectedIds);
-                return;
-              }
-            }
-
-            // Completion check 4: state has stabilized (no changes for 3 consecutive polls)
-            const stateHash = JSON.stringify({
-              current_step: currentStepName,
-              gates: summarizeRuntimeStatuses(gates),
-              steps: summarizeRuntimeStatuses(state.steps),
-            });
-            if (stateHash === lastStateHash) {
-              stableCount++;
-              if (stableCount >= 3) {
-                setProcessing(false);
-                onApprove(selectedIds);
-                return;
-              }
-            } else {
-              stableCount = 0;
-              lastStateHash = stateHash;
-            }
-
-            // Continue polling
-            pollTimerRef.current = setTimeout(() => poll(pollCount + 1), 5000);
-          } catch (pollErr: unknown) {
-            console.error("GatePanel poll error:", pollErr);
-            // Continue polling on error
-            pollTimerRef.current = setTimeout(() => poll(pollCount + 1), 5000);
-          }
-        };
-
-        // Start polling after a short delay to let backend begin resume
-        pollTimerRef.current = setTimeout(() => poll(0), 3000);
+        startResumePolling({
+          selectedIds: [...selectedIds],
+          nextGateId,
+          isLastGate,
+        });
       } else {
         setApproved(true);
         setTimeout(() => {
@@ -378,6 +485,11 @@ export default function GatePanel({
     } finally {
       setApproving(false);
     }
+  };
+
+  const retryResumePolling = () => {
+    const context = resumePollingContextRef.current;
+    if (context) startResumePolling(context);
   };
 
   // ── Progress indicator ──
@@ -633,8 +745,23 @@ export default function GatePanel({
         </div>
       )}
 
+      {pollFailure && !processing && (
+        <div className="apple-card p-4 border-l-4 border-[var(--gold-foil)]" role="alert">
+          <p className="text-sm font-medium text-[var(--text-h1)]">
+            {t(`gate.poll.${pollFailure}`)}
+          </p>
+          <button
+            type="button"
+            onClick={retryResumePolling}
+            className="mt-3 apple-btn text-xs px-3 py-1.5 border border-[var(--border-default)]"
+          >
+            {t("gate.continueChecking")}
+          </button>
+        </div>
+      )}
+
       {/* Action buttons */}
-      {!loading && !error && !approved && !processing && (
+      {!loading && !error && !approved && !processing && !pollFailure && (
         <div className="flex items-center justify-between">
           <button
             onClick={onBack}

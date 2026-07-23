@@ -10,6 +10,7 @@ BACKEND_CONTAINER="${BACKEND_CONTAINER:-ai_video_backend}"
 NETWORK_NAME="${NETWORK_NAME:-lighthouse_ai_video_net}"
 RESTORE_SCRIPT="${RESTORE_SCRIPT:-/opt/ai-video/scripts/pg_restore_logical.py}"
 VERIFY_SCRIPT="${VERIFY_SCRIPT:-/opt/ai-video/scripts/verify_restored_database.py}"
+BACKUP_MANIFEST_SCRIPT="${BACKUP_MANIFEST_SCRIPT:-/opt/ai-video/scripts/backup_manifest.py}"
 EXPECTED_RESTORE_HOST="${EXPECTED_RESTORE_HOST:-}"
 RESTORE_SCOPE="${RESTORE_SCOPE:-isolated}"
 RESTORE_CONFIRMATION="${RESTORE_CONFIRMATION:-}"
@@ -60,10 +61,36 @@ for value in (pgpass, host, str(port), database, user, sslmode):
 
 manifest_field() {
   local key="$1"
-  local value
-  value=$(awk -F': ' -v key="$key" '$1 == key {print $2}' "${BACKUP_DIR}/manifest.txt")
-  [ -n "$value" ] || fail "manifest field is missing: ${key}"
-  printf '%s\n' "$value"
+  python3 - "${BACKUP_DIR}/backup-manifest.v1.json" "$key" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+key = sys.argv[2]
+artifacts = payload.get("artifacts", {})
+database = payload.get("database", {})
+mapping = {
+    "project": payload.get("project"),
+    "status": "complete",
+    "pg_dump_sha256": artifacts.get("pg_dump.jsonl", {}).get("sha256"),
+    "pg_dump_stats_sha256": artifacts.get("pg_dump_stats.json", {}).get("sha256"),
+    "pg_schema_sha256": artifacts.get("pg_schema.dump", {}).get("sha256"),
+    "pg_schema_list_sha256": artifacts.get("pg_schema.list", {}).get("sha256"),
+    "pg_schema_signature_after_sha256": artifacts.get(
+        "pg_schema_signature_after.json", {}
+    ).get("sha256"),
+    "pg_schema_signature": database.get("schema_signature"),
+    "alembic_revision": database.get("alembic_head"),
+    "pg_server_major": database.get("server_major"),
+    "pg_client_source_tag": database.get("client_source_tag"),
+    "pg_client_image": database.get("client_image"),
+}
+value = mapping.get(key)
+if not isinstance(value, (str, int)) or isinstance(value, bool) or str(value) == "":
+    raise SystemExit(f"canonical manifest field is missing: {key}")
+print(value)
+PY
 }
 
 cleanup() {
@@ -76,6 +103,7 @@ trap 'exit 130' HUP INT TERM
 
 [ -n "$BACKUP_DIR" ] || fail "backup directory argument is required"
 [ -d "$BACKUP_DIR" ] || fail "backup directory does not exist"
+[ ! -L "$BACKUP_DIR" ] || fail "backup directory must not be a symlink"
 [ -n "$EXPECTED_RESTORE_HOST" ] || fail "EXPECTED_RESTORE_HOST is required"
 [ "$RESTORE_CONFIRMATION" = "RESTORE_EMPTY_DATABASE" ] \
   || fail "RESTORE_CONFIRMATION must be RESTORE_EMPTY_DATABASE"
@@ -109,8 +137,9 @@ if parsed.hostname != expected:
 ' "$EXPECTED_RESTORE_HOST"
 
 for required_file in \
-  manifest.txt pg_dump.jsonl pg_dump_stats.json pg_schema.dump pg_schema.list \
-  pg_schema_signature_after.json; do
+  backup-manifest.v1.json backup-manifest.v1.json.sha256 source-manifest.v1.json \
+  pg_dump.jsonl pg_dump_stats.json pg_schema.dump pg_schema.list \
+  pg_schema_signature_after.json media_manifest.json; do
   [ -f "${BACKUP_DIR}/${required_file}" ] \
     || fail "required backup artifact is missing: ${required_file}"
   [ ! -L "${BACKUP_DIR}/${required_file}" ] \
@@ -118,7 +147,11 @@ for required_file in \
 done
 [ -f "$RESTORE_SCRIPT" ] || fail "logical restore script not found"
 [ -f "$VERIFY_SCRIPT" ] || fail "restore verifier script not found"
+[ -f "$BACKUP_MANIFEST_SCRIPT" ] || fail "backup manifest validator not found"
 command -v "$DOCKER_BIN" >/dev/null 2>&1 || fail "docker command not found"
+
+python3 "$BACKUP_MANIFEST_SCRIPT" validate --backup-dir "$BACKUP_DIR" >/dev/null \
+  || fail "canonical backup manifest validation failed"
 
 [ "$(manifest_field project)" = "ai-video" ] || fail "backup project marker is invalid"
 [ "$(manifest_field status)" = "complete" ] || fail "backup is not complete"
@@ -276,7 +309,7 @@ printf '%s\n' "$TARGET_DATABASE_URL" \
       -eu -c 'IFS= read -r database_url; export DATABASE_URL="$database_url"; unset database_url; cd /app; exec python3 /run/verify.py /backup/pg_dump_stats.json' \
       >"$VERIFY_OUTPUT"
 
-MANIFEST_SHA256=$(sha256_file "${BACKUP_DIR}/manifest.txt")
+MANIFEST_SHA256=$(sha256_file "${BACKUP_DIR}/backup-manifest.v1.json")
 python3 - \
   "$VERIFY_OUTPUT" \
   "${BACKUP_DIR}/restore_verified.json" \

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import { I18nProvider } from "@/i18n/I18nProvider";
@@ -6,6 +6,7 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 vi.mock("./api", () => ({
   isDemoMode: vi.fn(() => true),
   fetchS1State: vi.fn(),
+  getScenarioStatus: vi.fn(),
   apiFetch: vi.fn(),
   fetchGateState: vi.fn(),
 }));
@@ -38,7 +39,7 @@ vi.mock("@/demo-data", () => ({
 }));
 
 import GatePanel from "./GatePanel";
-import { apiFetch, fetchGateState, isDemoMode } from "./api";
+import { apiFetch, fetchGateState, fetchS1State, getScenarioStatus, isDemoMode } from "./api";
 
 async function renderGate(props: React.ComponentProps<typeof GatePanel>) {
   const container = document.createElement("div");
@@ -79,6 +80,342 @@ describe("GatePanel — demo mode rendering (D3)", () => {
     vi.clearAllMocks();
     vi.mocked(isDemoMode).mockReturnValue(true);
     localStorage.setItem("app-locale", "zh");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function enterLiveResumePolling(
+    onApprove: (selectedIds: string[]) => void,
+    props: Partial<React.ComponentProps<typeof GatePanel>> = {},
+  ) {
+    vi.mocked(isDemoMode).mockReturnValue(false);
+    vi.mocked(fetchGateState).mockResolvedValue({
+      candidates: [{
+        id: "live-script-1",
+        variant: "standard",
+        score: { overall: 0.9, explanation: "fixture" },
+        data: { hook: "fixture" },
+        recommended: true,
+      }],
+      continuity_diagnostics: null,
+    } as never);
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => ({
+      ok: true,
+      json: async () => path.endsWith("/approve") ? { resuming: true } : {},
+    } as Response));
+
+    const rendered = await renderGate({ ...baseProps, ...props, onApprove });
+    const card = rendered.container.querySelector('[data-candidate-id="live-script-1"]') as HTMLElement;
+    const selectButton = card.querySelector("button") as HTMLButtonElement;
+    await act(async () => {
+      selectButton.click();
+    });
+    const approveButton = Array.from(rendered.container.querySelectorAll("button")).find(
+      (button) => /Approve & Continue|审批通过并继续/.test(button.textContent || ""),
+    ) as HTMLButtonElement;
+    vi.useFakeTimers();
+    await act(async () => {
+      approveButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    return rendered;
+  }
+
+  it("fails closed on a resume polling exception and retries by read-only polling only", async () => {
+    localStorage.setItem("app-locale", "en");
+    const onApprove = vi.fn();
+    vi.mocked(getScenarioStatus).mockRejectedValueOnce(new Error("fixture poll failure"));
+    const { container, cleanup } = await enterLiveResumePolling(onApprove);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+
+    expect(onApprove).not.toHaveBeenCalled();
+    const retryButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => /Continue checking/.test(button.textContent || ""),
+    ) as HTMLButtonElement | undefined;
+    expect(retryButton).toBeTruthy();
+    const mutationCallsBeforeRetry = vi.mocked(apiFetch).mock.calls.filter(
+      ([path]) => String(path).endsWith("/approve"),
+    ).length;
+
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      current_step: "storyboards",
+      gates: { gate_2_keyframe: { status: "awaiting_approval" } },
+      steps: {},
+    } as never);
+    await act(async () => {
+      retryButton?.click();
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiFetch).mock.calls.filter(
+      ([path]) => String(path).endsWith("/approve"),
+    )).toHaveLength(mutationCallsBeforeRetry);
+    cleanup();
+  });
+
+  it("fails closed when the resume state stays unchanged", async () => {
+    localStorage.setItem("app-locale", "en");
+    const onApprove = vi.fn();
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      current_step: "storyboards",
+      gates: { gate_1_script: { status: "approved" } },
+      steps: { storyboards: { status: "running" } },
+    } as never);
+    const { container, cleanup } = await enterLiveResumePolling(onApprove);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("stopped changing");
+    expect(container.textContent).toContain("Continue checking");
+    cleanup();
+  });
+
+  it("fails closed at the bounded resume polling timeout", async () => {
+    localStorage.setItem("app-locale", "en");
+    const onApprove = vi.fn();
+    let pollIndex = 0;
+    vi.mocked(getScenarioStatus).mockImplementation(async () => {
+      pollIndex += 1;
+      return {
+        current_step: `running_step_${pollIndex}`,
+        gates: { gate_1_script: { status: "approved" } },
+        steps: { [`running_step_${pollIndex}`]: { status: "running" } },
+      } as never;
+    });
+    const { container, cleanup } = await enterLiveResumePolling(onApprove);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_810_000);
+    });
+
+    expect(getScenarioStatus).toHaveBeenCalledTimes(360);
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("exceeded the wait limit");
+    expect(container.textContent).toContain("Continue checking");
+    cleanup();
+  });
+
+  it.each(["s2", "s3", "s4", "s5"])(
+    "polls canonical %s status after approval instead of the S1 state route",
+    async (scenario) => {
+      localStorage.setItem("app-locale", "en");
+      const onApprove = vi.fn();
+      vi.mocked(getScenarioStatus).mockResolvedValue({
+        scenario,
+        status: "paused",
+        lifecycle_status: null,
+        current_step: "keyframe_images",
+        gates: { gate_2_keyframe: { status: "awaiting_approval" } },
+        steps: {},
+        pipeline_degraded: false,
+      } as never);
+      const { cleanup } = await enterLiveResumePolling(onApprove, {
+        ...baseProps,
+        label: `${scenario}_gate_resume`,
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_100);
+      });
+
+      expect(getScenarioStatus).toHaveBeenCalledWith(scenario, `${scenario}_gate_resume`);
+      expect(fetchS1State).not.toHaveBeenCalled();
+      expect(onApprove).toHaveBeenCalledTimes(1);
+      cleanup();
+    },
+  );
+
+  it.each([
+    { status: "invalid_state", lifecycle_status: null, pipeline_degraded: false },
+    { status: "recovery_required", lifecycle_status: "recovery_required", pipeline_degraded: false },
+    { status: "error", lifecycle_status: "error", pipeline_degraded: true },
+  ])("does not advance from a null cursor in $status state", async (state) => {
+    localStorage.setItem("app-locale", "en");
+    const onApprove = vi.fn();
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      scenario: "s1",
+      current_step: null,
+      gates: {},
+      steps: {},
+      ...state,
+    } as never);
+    const { container, cleanup } = await enterLiveResumePolling(onApprove);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Gate was not advanced");
+    cleanup();
+  });
+
+  it.each([
+    {
+      status: "completed_bounded",
+      lifecycle_status: "completed_bounded",
+      completion_kind: "no_media",
+      request_succeeded: true,
+      success: false,
+      full_media_success: false,
+      pipeline_complete: false,
+      publish_allowed: false,
+      delivery_accepted: false,
+    },
+    {
+      status: "completed_full",
+      lifecycle_status: "completed_full",
+      completion_kind: "full_media",
+      request_succeeded: true,
+      success: true,
+      full_media_success: true,
+      pipeline_complete: true,
+      publish_allowed: false,
+      delivery_accepted: false,
+    },
+  ])("advances from a null cursor only for coherent $status truth", async (state) => {
+    localStorage.setItem("app-locale", "en");
+    const onApprove = vi.fn();
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      scenario: "s1",
+      current_step: null,
+      gates: {},
+      steps: {},
+      pipeline_degraded: false,
+      ...state,
+    } as never);
+    const { cleanup } = await enterLiveResumePolling(onApprove);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it.each([
+    {
+      name: "bounded pipeline_complete",
+      state: {
+        status: "completed_bounded",
+        lifecycle_status: "completed_bounded",
+        completion_kind: "no_media",
+        request_succeeded: true,
+        success: false,
+        full_media_success: false,
+        pipeline_complete: true,
+        publish_allowed: false,
+        delivery_accepted: false,
+      },
+    },
+    {
+      name: "bounded publish_allowed",
+      state: {
+        status: "completed_bounded",
+        lifecycle_status: "completed_bounded",
+        completion_kind: "no_media",
+        request_succeeded: true,
+        success: false,
+        full_media_success: false,
+        pipeline_complete: false,
+        publish_allowed: true,
+        delivery_accepted: false,
+      },
+    },
+    {
+      name: "bounded delivery_accepted",
+      state: {
+        status: "completed_bounded",
+        lifecycle_status: "completed_bounded",
+        completion_kind: "no_media",
+        request_succeeded: true,
+        success: false,
+        full_media_success: false,
+        pipeline_complete: false,
+        publish_allowed: false,
+        delivery_accepted: true,
+      },
+    },
+    {
+      name: "full pipeline_complete",
+      state: {
+        status: "completed_full",
+        lifecycle_status: "completed_full",
+        completion_kind: "full_media",
+        request_succeeded: true,
+        success: true,
+        full_media_success: true,
+        pipeline_complete: false,
+        publish_allowed: false,
+        delivery_accepted: false,
+      },
+    },
+    {
+      name: "full publish_allowed",
+      state: {
+        status: "completed_full",
+        lifecycle_status: "completed_full",
+        completion_kind: "full_media",
+        request_succeeded: true,
+        success: true,
+        full_media_success: true,
+        pipeline_complete: true,
+        publish_allowed: true,
+        delivery_accepted: false,
+      },
+    },
+    {
+      name: "full delivery_accepted",
+      state: {
+        status: "completed_full",
+        lifecycle_status: "completed_full",
+        completion_kind: "full_media",
+        request_succeeded: true,
+        success: true,
+        full_media_success: true,
+        pipeline_complete: true,
+        publish_allowed: false,
+        delivery_accepted: true,
+      },
+    },
+  ])("fails closed for contradictory terminal field: $name", async ({ state }) => {
+    localStorage.setItem("app-locale", "en");
+    const onApprove = vi.fn();
+    vi.mocked(getScenarioStatus).mockResolvedValue({
+      scenario: "s1",
+      current_step: null,
+      gates: {},
+      steps: {},
+      pipeline_degraded: false,
+      ...state,
+    } as never);
+    const { container, cleanup } = await enterLiveResumePolling(onApprove);
+    const approvalCallsBeforePoll = vi.mocked(apiFetch).mock.calls.filter(
+      ([path]) => String(path).endsWith("/approve"),
+    ).length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(vi.mocked(apiFetch).mock.calls.filter(
+      ([path]) => String(path).endsWith("/approve"),
+    )).toHaveLength(approvalCallsBeforePoll);
+    expect(container.textContent).toContain("Gate was not advanced");
+    expect(container.textContent).toContain("Continue checking");
+    cleanup();
   });
 
   it("renders the approval flow in English without Chinese fallback text", async () => {

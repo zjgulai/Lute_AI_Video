@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,15 @@ import pytest
 from starlette.requests import Request
 
 from src.models.acceptance import AcceptanceCreateRequest
+from src.models.transparency import (
+    C2PAStatus,
+    SigningMode,
+    TransparencyProjectionV1,
+    build_file_transparency_record,
+    build_transparency_sidecar,
+    transparency_sidecar_sha256,
+    write_transparency_sidecar,
+)
 from src.routers._deps import ApiKeyType, AuthContext
 from src.services import artifact_acceptance as service_module
 from src.services.artifact_acceptance import (
@@ -114,7 +124,76 @@ class AcceptanceHarness:
         absolute = self.output_dir / path
         absolute.parent.mkdir(parents=True, exist_ok=True)
         absolute.write_bytes(content)
+        if content:
+            self.attach_transparency(path)
         return absolute
+
+    def attach_transparency(
+        self,
+        path: str,
+        *,
+        c2pa_status: C2PAStatus = "signed_local_readback",
+        signing_mode: SigningMode = "required",
+    ) -> dict[str, object]:
+        parts = Path(path).parts
+        resource_type = "fast" if "fast_mode" in parts else "scenario"
+        resource_id = parts[4] if resource_type == "fast" else parts[3]
+        row = self.connection.execute(
+            """
+            SELECT id, scenario, result_snapshot FROM idempotency_records
+            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+            """,
+            (TENANT_ID, resource_type, resource_id),
+        ).fetchone()
+        if row is None:
+            return {}
+        record = build_file_transparency_record(
+            tenant_id=TENANT_ID,
+            scenario=row["scenario"],
+            resource_id=resource_id,
+            producer_step="video" if resource_type == "fast" else "assemble_final",
+            content_kind="video",
+            artifact_path=path,
+            artifact_root=self.output_dir,
+            origin_kind="local",
+            provider=None,
+            model=None,
+            generated_at="2026-07-22T00:00:00Z",
+            parent_record_ids=(),
+            simulated=False,
+            c2pa_status=c2pa_status,
+        )
+        sidecar = build_transparency_sidecar([record])
+        digest = transparency_sidecar_sha256(sidecar)
+        run_root = Path(*parts[:5]) if resource_type == "fast" else Path(*parts[:4])
+        relative_sidecar = (
+            run_root
+            / "transparency"
+            / f"transparency-sidecar.v1.{digest}.json"
+        )
+        sidecar_path = self.output_dir / relative_sidecar
+        if not sidecar_path.exists():
+            write_transparency_sidecar(
+                sidecar_path,
+                sidecar,
+                output_root=self.output_dir,
+            )
+        projection = TransparencyProjectionV1(
+            sidecar_path=relative_sidecar.as_posix(),
+            sidecar_sha256=digest,
+            record_count=1,
+            c2pa_signing_mode=signing_mode,
+            final_artifact_record_id=record.record_id,
+            final_artifact_c2pa_status=c2pa_status,
+        ).model_dump(mode="json")
+        snapshot = json.loads(row["result_snapshot"])
+        snapshot["transparency"] = projection
+        self.connection.execute(
+            "UPDATE idempotency_records SET result_snapshot = ? WHERE id = ?",
+            (json.dumps(snapshot, sort_keys=True), row["id"]),
+        )
+        self.connection.commit()
+        return projection
 
     def seed_source(
         self,
@@ -189,7 +268,7 @@ class AcceptanceHarness:
 def acceptance_harness(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> AcceptanceHarness:
+) -> Iterator[AcceptanceHarness]:
     connection = sqlite3.connect(
         str(tmp_path / "acceptance-service.db"),
         check_same_thread=False,
@@ -211,6 +290,7 @@ def acceptance_harness(
         AcceptanceRecordRepository(require_postgres=False),
         SubmissionIdempotencyRepository(require_postgres=False),
         output_dir=output_dir,
+        c2pa_reader_verifier=lambda path: "b" * 64,
     )
     yield AcceptanceHarness(connection, output_dir, service)
     connection.close()
@@ -234,18 +314,141 @@ def test_fingerprint_includes_reviewer_and_excludes_credentials() -> None:
         tenant_id=TENANT_ID,
         reviewer_key_id="reviewer-a",
         reviewer_key_type="tenant",
+        transparency_sidecar_path="tenants/tenant-alpha/pending_review/s1_service_fixture/transparency/transparency-sidecar.v1.json",
+        transparency_sidecar_sha256="a" * 64,
+        final_artifact_c2pa_status="signed_local_readback",
     )
     second = build_acceptance_fingerprint(
         request,
         tenant_id=TENANT_ID,
         reviewer_key_id="reviewer-b",
         reviewer_key_type="tenant",
+        transparency_sidecar_path="tenants/tenant-alpha/pending_review/s1_service_fixture/transparency/transparency-sidecar.v1.json",
+        transparency_sidecar_sha256="a" * 64,
+        final_artifact_c2pa_status="signed_local_readback",
     )
 
     assert first.version == ACCEPTANCE_FINGERPRINT_VERSION
     assert first.request_hash != second.request_hash
     assert "reviewer-a" not in first.request_hash
     assert VALID_KEY not in first.request_hash
+
+
+@pytest.mark.asyncio
+async def test_accepted_record_binds_transparency_and_c2pa_facts(
+    acceptance_harness: AcceptanceHarness,
+) -> None:
+    resource_id = "s1_transparency_binding"
+    final_path = acceptance_harness.seed_source(
+        scenario="s1",
+        resource_id=resource_id,
+    )
+    acceptance_harness.write_artifact(final_path)
+    projection = acceptance_harness.attach_transparency(final_path)
+
+    record, _ = await acceptance_harness.service.create(
+        auth=_auth(),
+        raw_key="acceptance-transparency-0001",
+        request=_request(scenario="s1", resource_id=resource_id),
+    )
+
+    stored = acceptance_harness.connection.execute(
+        "SELECT * FROM acceptance_records WHERE id = ?",
+        (record.acceptance_id,),
+    ).fetchone()
+    assert stored["fingerprint_version"] == "acceptance-create.v2"
+    assert stored["transparency_sidecar_path"] == projection["sidecar_path"]
+    assert stored["transparency_sidecar_sha256"] == projection["sidecar_sha256"]
+    assert stored["final_artifact_c2pa_status"] == "signed_local_readback"
+    assert record.transparency is not None
+    assert record.transparency.ai_generated is True
+    assert record.transparency.label == "AI-generated"
+    assert record.transparency.sidecar_path == projection["sidecar_path"]
+    assert record.transparency.sidecar_sha256 == projection["sidecar_sha256"]
+    assert record.transparency.final_artifact_c2pa_status == "signed_local_readback"
+    assert record.transparency.independently_validated is False
+
+
+@pytest.mark.asyncio
+async def test_unsigned_local_draft_cannot_create_available_acceptance(
+    acceptance_harness: AcceptanceHarness,
+) -> None:
+    resource_id = "s1_unsigned_source"
+    final_path = acceptance_harness.seed_source(
+        scenario="s1",
+        resource_id=resource_id,
+    )
+    acceptance_harness.write_artifact(final_path)
+    acceptance_harness.attach_transparency(
+        final_path,
+        c2pa_status="unsigned_pending_review",
+        signing_mode="local_draft",
+    )
+
+    with pytest.raises(AcceptanceSourceNotEligible):
+        await acceptance_harness.service.create(
+            auth=_auth(),
+            raw_key="acceptance-transparency-0002",
+            request=_request(scenario="s1", resource_id=resource_id),
+        )
+
+
+@pytest.mark.asyncio
+async def test_publish_inspect_revalidates_bound_sidecar(
+    acceptance_harness: AcceptanceHarness,
+) -> None:
+    resource_id = "s1_sidecar_drift"
+    final_path = acceptance_harness.seed_source(
+        scenario="s1",
+        resource_id=resource_id,
+    )
+    acceptance_harness.write_artifact(final_path)
+    record, _ = await acceptance_harness.service.create(
+        auth=_auth(),
+        raw_key="acceptance-transparency-0003",
+        request=_request(scenario="s1", resource_id=resource_id),
+    )
+    stored = acceptance_harness.connection.execute(
+        "SELECT transparency_sidecar_path FROM acceptance_records WHERE id = ?",
+        (record.acceptance_id,),
+    ).fetchone()
+    (acceptance_harness.output_dir / stored[0]).write_text("{}", encoding="utf-8")
+
+    with pytest.raises(AcceptanceArtifactIntegrityMismatch):
+        await acceptance_harness.service.inspect_for_publish(
+            tenant_id=TENANT_ID,
+            acceptance_id=record.acceptance_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_acceptance_rejects_projection_record_count_drift(
+    acceptance_harness: AcceptanceHarness,
+) -> None:
+    resource_id = "s1_projection_count_drift"
+    final_path = acceptance_harness.seed_source(
+        scenario="s1",
+        resource_id=resource_id,
+    )
+    acceptance_harness.write_artifact(final_path)
+    row = acceptance_harness.connection.execute(
+        "SELECT id, result_snapshot FROM idempotency_records WHERE resource_id = ?",
+        (resource_id,),
+    ).fetchone()
+    snapshot = json.loads(row["result_snapshot"])
+    snapshot["transparency"]["record_count"] = 2
+    acceptance_harness.connection.execute(
+        "UPDATE idempotency_records SET result_snapshot = ? WHERE id = ?",
+        (json.dumps(snapshot, sort_keys=True), row["id"]),
+    )
+    acceptance_harness.connection.commit()
+
+    with pytest.raises(AcceptanceSourceNotEligible):
+        await acceptance_harness.service.create(
+            auth=_auth(),
+            raw_key="acceptance-transparency-count-0001",
+            request=_request(scenario="s1", resource_id=resource_id),
+        )
 
 
 def test_extract_acceptance_key_maps_missing_invalid_and_duplicate_headers() -> None:
@@ -363,6 +566,104 @@ async def test_same_key_replay_returns_current_record_without_source_or_file_acc
     assert current.status == "revoked"
     assert current.idempotent_replay is True
     assert calls == {"source_repository": 0, "source_resolver": 0, "file_resolver": 0}
+
+
+@pytest.mark.asyncio
+async def test_legacy_v1_record_remains_readable_revocable_and_replayable(
+    acceptance_harness: AcceptanceHarness,
+) -> None:
+    resource_id = "s1_legacy_v1_replay_fixture"
+    final_path = acceptance_harness.seed_source(
+        scenario="s1",
+        resource_id=resource_id,
+    )
+    artifact = acceptance_harness.write_artifact(final_path)
+    request = _request(scenario="s1", resource_id=resource_id)
+    first, _ = await acceptance_harness.service.create(
+        auth=_auth(), raw_key=VALID_KEY, request=request
+    )
+    legacy = service_module._build_legacy_acceptance_fingerprint(
+        request,
+        tenant_id=TENANT_ID,
+        reviewer_key_id=REVIEWER_ID,
+        reviewer_key_type="tenant",
+    )
+    acceptance_harness.connection.execute(
+        """
+        UPDATE acceptance_records
+        SET fingerprint_version = ?, request_hash = ?,
+            transparency_sidecar_path = NULL,
+            transparency_sidecar_sha256 = NULL,
+            final_artifact_c2pa_status = NULL
+        WHERE id = ?
+        """,
+        (legacy.version, legacy.request_hash, first.acceptance_id),
+    )
+    acceptance_harness.connection.commit()
+
+    readback = await acceptance_harness.service.read(
+        auth=_auth(), acceptance_id=first.acceptance_id
+    )
+    revoked = await acceptance_harness.service.revoke(
+        auth=_auth(), acceptance_id=first.acceptance_id
+    )
+    artifact.unlink()
+    acceptance_harness.connection.execute(
+        "DELETE FROM idempotency_records WHERE resource_id = ?",
+        (resource_id,),
+    )
+    acceptance_harness.connection.commit()
+    replayed, is_replay = await acceptance_harness.service.create(
+        auth=_auth(), raw_key=VALID_KEY, request=request
+    )
+
+    assert readback.status == "available"
+    assert revoked.status == "revoked"
+    assert is_replay is True
+    assert replayed.acceptance_id == first.acceptance_id
+    assert replayed.status == "revoked"
+
+
+@pytest.mark.asyncio
+async def test_legacy_v1_record_cannot_authorize_publish_or_consume(
+    acceptance_harness: AcceptanceHarness,
+) -> None:
+    resource_id = "s1_legacy_v1_publish_fixture"
+    final_path = acceptance_harness.seed_source(
+        scenario="s1",
+        resource_id=resource_id,
+    )
+    acceptance_harness.write_artifact(final_path)
+    record, _ = await acceptance_harness.service.create(
+        auth=_auth(),
+        raw_key="acceptance-legacy-v1-publish-0001",
+        request=_request(scenario="s1", resource_id=resource_id),
+    )
+    acceptance_harness.connection.execute(
+        """
+        UPDATE acceptance_records
+        SET fingerprint_version = 'acceptance-create.v1',
+            transparency_sidecar_path = NULL,
+            transparency_sidecar_sha256 = NULL,
+            final_artifact_c2pa_status = NULL
+        WHERE id = ?
+        """,
+        (record.acceptance_id,),
+    )
+    acceptance_harness.connection.commit()
+
+    with pytest.raises(AcceptanceArtifactIntegrityMismatch):
+        await acceptance_harness.service.inspect_for_publish(
+            tenant_id=TENANT_ID,
+            acceptance_id=record.acceptance_id,
+        )
+    with pytest.raises(AcceptanceArtifactIntegrityMismatch):
+        await acceptance_harness.service.consume_for_publish(
+            tenant_id=TENANT_ID,
+            acceptance_id=record.acceptance_id,
+            consumer_operation="distribution.publish",
+            consumer_resource_id="publish-legacy-v1",
+        )
 
 
 @pytest.mark.asyncio
@@ -1425,8 +1726,8 @@ async def test_concurrent_consume_has_one_winner_and_one_typed_loser(
         return_exceptions=True,
     )
 
-    winners = [result for result in results if not isinstance(result, Exception)]
-    losers = [result for result in results if isinstance(result, Exception)]
+    winners = [result for result in results if not isinstance(result, BaseException)]
+    losers = [result for result in results if isinstance(result, BaseException)]
     assert len(winners) == 1
     assert winners[0].status == "consumed"
     assert len(losers) == 1

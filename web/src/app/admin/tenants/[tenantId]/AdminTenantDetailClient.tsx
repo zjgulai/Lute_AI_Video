@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { adminFetchJson } from "@/components/api";
 import { errorMessage } from "@/lib/errors";
+import { useI18n } from "@/i18n/I18nProvider";
+import { useModalBehavior } from "@/hooks/useModalBehavior";
 import {
   ArrowLeft,
   Key,
@@ -41,6 +43,7 @@ function defaultExpiryDate(): string {
 }
 
 export default function AdminTenantDetailClient({ tenantId }: { tenantId: string }) {
+  const { t } = useI18n();
   const [data, setData] = useState<TenantDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -56,6 +59,8 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
   // Disable confirm
   const [showDisable, setShowDisable] = useState(false);
   const [disableConfirm, setDisableConfirm] = useState("");
+  const disableDialogRef = useRef<HTMLButtonElement>(null);
+  const createKeyDialogRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,11 +71,31 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
       );
       setData(result);
     } catch {
-      setError("Failed to load tenant");
+      setError("load_failed");
     } finally {
       setLoading(false);
     }
   }, [tenantId]);
+
+  const closeDisable = useCallback(() => {
+    setShowDisable(false);
+    setDisableConfirm("");
+  }, []);
+  const closeCreateKey = useCallback(() => {
+    setShowCreateKey(false);
+    if (newKey) void load();
+  }, [load, newKey]);
+
+  useModalBehavior({
+    open: showDisable,
+    onClose: closeDisable,
+    initialFocusRef: disableDialogRef,
+  });
+  useModalBehavior({
+    open: showCreateKey,
+    onClose: closeCreateKey,
+    initialFocusRef: createKeyDialogRef,
+  });
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -95,14 +120,14 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
       setNewKey(result.api_key);
       setKeyVisible(false);
     } catch (err: unknown) {
-      alert(errorMessage(err, "Failed to create key"));
+      alert(errorMessage(err, t("admin.tenant.createKeyFailed")));
     } finally {
       setCreating(false);
     }
   };
 
   const handleRevokeKey = async (keyId: string) => {
-    if (!confirm("Revoke this API key? This cannot be undone.")) return;
+    if (!confirm(t("admin.tenant.revokeConfirm"))) return;
     try {
       await adminFetchJson(
         `/api/admin/tenants/${tenantId}/keys/${keyId}/revoke`,
@@ -110,7 +135,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
       );
       void load();
     } catch (err: unknown) {
-      alert(errorMessage(err, "Failed to revoke key"));
+      alert(errorMessage(err, t("admin.tenant.revokeKeyFailed")));
     }
   };
 
@@ -119,7 +144,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
     if (
       newStatus === "disabled" &&
       !confirm(
-        "Disabling will immediately revoke ALL API keys. Continue?"
+        t("admin.tenant.disableConfirm")
       )
     ) {
       return;
@@ -133,7 +158,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
       void load();
       setShowDisable(false);
     } catch (err: unknown) {
-      alert(errorMessage(err, "Failed to update tenant"));
+      alert(errorMessage(err, t("admin.tenant.updateFailed")));
     }
   };
 
@@ -148,9 +173,11 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
   if (error || !data) {
     return (
       <div className="text-center py-16">
-        <p className="text-xs text-[var(--text-muted)] mb-2">{error || "Not found"}</p>
+        <p className="text-xs text-[var(--text-muted)] mb-2">
+          {error ? t("admin.tenant.loadFailed") : t("admin.tenant.notFound")}
+        </p>
         <Link href="/admin/tenants" className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)] no-underline">
-          Back to Tenants
+          {t("admin.tenant.back")}
         </Link>
       </div>
     );
@@ -164,7 +191,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
         className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--fortune-red)] no-underline transition-colors"
       >
         <ArrowLeft size={12} weight="fill" />
-        Back to Tenants
+        {t("admin.tenant.back")}
       </Link>
 
       <h1 className="text-lg font-semibold text-[var(--text-h1)]">
@@ -175,7 +202,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
       <div className="apple-card p-4 space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-[var(--text-muted)]">Tenant ID</p>
+            <p className="text-xs text-[var(--text-muted)]">{t("admin.tenant.tenantId")}</p>
             <p className="text-sm font-mono text-[var(--text-h1)]">
               {data.tenant_id}
             </p>
@@ -187,11 +214,11 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                 : "bg-[rgba(208,78,90,0.1)] text-[var(--crimson-mist)]"
             }`}
           >
-            {data.status}
+            {t(data.status === "active" ? "admin.common.active" : "admin.common.disabled")}
           </span>
         </div>
         <div>
-          <p className="text-xs text-[var(--text-muted)]">Contact</p>
+          <p className="text-xs text-[var(--text-muted)]">{t("admin.tenant.contact")}</p>
           <p className="text-sm text-[var(--text-body)]">
             {data.contact_email || "—"}
           </p>
@@ -204,7 +231,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
               : "border-[var(--jade-accent)] text-[var(--jade-accent)]"
           }`}
         >
-          {data.status === "active" ? "Disable Tenant" : "Enable Tenant"}
+          {data.status === "active" ? t("admin.tenant.disable") : t("admin.tenant.enable")}
         </button>
       </div>
 
@@ -212,7 +239,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
       <div className="apple-card p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-[var(--text-h1)]">
-            API Keys ({data.keys.length})
+            {t("admin.tenant.apiKeys")} ({data.keys.length})
           </h2>
           <button
             onClick={() => {
@@ -224,13 +251,13 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
             className="flex items-center gap-1 apple-btn apple-btn-primary text-xs py-1 px-2"
           >
             <Key size={12} weight="fill" />
-            New Key
+            {t("admin.tenant.newKey")}
           </button>
         </div>
 
         {data.keys.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)] py-4 text-center">
-            No API keys yet
+            {t("admin.tenant.noKeys")}
           </p>
         ) : (
           <div className="space-y-1">
@@ -245,18 +272,31 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                     {key.label ? ` · ${key.label}` : ""}
                   </p>
                   <p className="text-[11px] text-[var(--text-muted)]">
-                    {key.status}
+                    {t(
+                      key.status === "active"
+                        ? "admin.common.active"
+                        : key.status === "revoked"
+                          ? "admin.common.revoked"
+                          : "admin.common.disabled",
+                    )}
                     {key.last_used_at
-                      ? ` · last used ${new Date(key.last_used_at).toLocaleDateString()}`
+                      ? ` · ${t("admin.tenant.lastUsed").replace(
+                          "{date}",
+                          new Date(key.last_used_at).toLocaleDateString(),
+                        )}`
                       : ""}
                     {key.expires_at
-                      ? ` · expires ${new Date(key.expires_at).toLocaleDateString()}`
+                      ? ` · ${t("admin.tenant.expires").replace(
+                          "{date}",
+                          new Date(key.expires_at).toLocaleDateString(),
+                        )}`
                       : ""}
                   </p>
                 </div>
                 {key.status === "active" && (
                   <button
                     onClick={() => handleRevokeKey(key.id)}
+                    aria-label={t("admin.tenant.revokeKey").replace("{key}", key.key_preview)}
                     className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--crimson-mist)] transition-colors"
                   >
                     <Trash size={14} weight="fill" />
@@ -270,21 +310,25 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
 
       {/* Disable confirm modal */}
       {showDisable && (
-        <div className="apple-modal-overlay" onClick={() => setShowDisable(false)}>
+        <div className="apple-modal-overlay" onClick={closeDisable}>
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-tenant-status-dialog-title"
             className="apple-card w-full max-w-sm mx-4 p-4 animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-sm font-semibold text-[var(--text-h1)] mb-2">
-              {data.status === "active" ? "Disable" : "Enable"} Tenant
+            <h2 id="admin-tenant-status-dialog-title" className="text-sm font-semibold text-[var(--text-h1)] mb-2">
+              {data.status === "active" ? t("admin.tenant.disableTitle") : t("admin.tenant.enableTitle")}
             </h2>
             {data.status === "active" && (
               <>
                 <p className="text-xs text-[var(--text-muted)] mb-3">
-                  This will immediately revoke all API keys. Type the tenant ID to confirm:
+                  {t("admin.tenant.disableBody")}
                 </p>
                 <input
                   type="text"
+                  aria-label={t("admin.tenant.confirmTenantId")}
                   value={disableConfirm}
                   onChange={(e) => setDisableConfirm(e.target.value)}
                   placeholder={data.tenant_id}
@@ -294,10 +338,11 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
             )}
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => { setShowDisable(false); setDisableConfirm(""); }}
+                ref={disableDialogRef}
+                onClick={closeDisable}
                 className="apple-btn text-xs py-1.5 px-3 border border-[var(--border-default)]"
               >
-                Cancel
+                {t("admin.tenant.cancel")}
               </button>
               <button
                 onClick={handleToggleStatus}
@@ -310,7 +355,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                     : "bg-[var(--jade-accent)] text-white"
                 }`}
               >
-                {data.status === "active" ? "Disable" : "Enable"}
+                {data.status === "active" ? t("admin.tenant.disableAction") : t("admin.tenant.enableAction")}
               </button>
             </div>
           </div>
@@ -319,21 +364,23 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
 
       {/* Create key modal */}
       {showCreateKey && (
-        <div className="apple-modal-overlay" onClick={() => setShowCreateKey(false)}>
+        <div className="apple-modal-overlay" onClick={closeCreateKey}>
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-create-key-dialog-title"
             className="apple-card w-full max-w-sm mx-4 p-4 animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[var(--text-h1)]">
-                {newKey ? "API Key Created" : "Create API Key"}
+              <h2 id="admin-create-key-dialog-title" className="text-sm font-semibold text-[var(--text-h1)]">
+                {newKey ? t("admin.tenant.keyCreated") : t("admin.tenant.createKey")}
               </h2>
               <button
-                onClick={() => {
-                  setShowCreateKey(false);
-                  if (newKey) void load();
-                }}
+                ref={createKeyDialogRef}
+                onClick={closeCreateKey}
                 className="cursor-pointer"
+                aria-label={t("admin.tenant.closeKeyDialog")}
               >
                 <X size={16} weight="fill" className="text-[var(--text-muted)]" />
               </button>
@@ -343,7 +390,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
               <div className="space-y-3">
                 <div className="p-3 rounded-lg bg-[rgba(215,92,112,0.06)] border border-[rgba(215,92,112,0.2)]">
                   <p className="text-[11px] text-[var(--text-muted)] mb-1">
-                    Copy this key now — it will not be shown again:
+                    {t("admin.tenant.copyNow")}
                   </p>
                   <div className="flex items-center gap-1">
                     <code className="flex-1 text-xs break-all bg-[var(--bg-layer3)] p-1.5 rounded font-mono">
@@ -351,6 +398,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                     </code>
                     <button
                       onClick={() => setKeyVisible(!keyVisible)}
+                      aria-label={t(keyVisible ? "admin.tenant.hideKey" : "admin.tenant.showKey")}
                       className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--fortune-red)] p-1"
                     >
                       {keyVisible ? (
@@ -364,6 +412,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                         navigator.clipboard.writeText(newKey);
                       }}
                       className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--fortune-red)] p-1"
+                      aria-label={t("admin.tenant.copyKey")}
                     >
                       <Copy size={14} weight="fill" />
                     </button>
@@ -371,20 +420,21 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                 </div>
                 <div className="flex items-center gap-1 text-[11px] text-[var(--gold-foil)]">
                   <WarningCircle size={12} weight="fill" />
-                  Store this key securely. You won&apos;t see it again.
+                  {t("admin.tenant.storeSecurely")}
                 </div>
               </div>
             ) : (
               <form onSubmit={handleCreateKey} className="space-y-3">
                 <input
                   type="text"
+                  aria-label={t("admin.tenant.keyLabelAria")}
                   value={keyLabel}
                   onChange={(e) => setKeyLabel(e.target.value)}
-                  placeholder="Key label (optional, e.g. production)"
+                  placeholder={t("admin.tenant.keyLabel")}
                   className="apple-input text-xs w-full"
                 />
                 <label className="block text-xs text-[var(--text-muted)]">
-                  Expires on
+                  {t("admin.tenant.expiresOn")}
                   <input
                     type="date"
                     required
@@ -399,7 +449,7 @@ export default function AdminTenantDetailClient({ tenantId }: { tenantId: string
                   disabled={creating}
                   className="apple-btn apple-btn-primary text-xs w-full py-2 disabled:opacity-50"
                 >
-                  {creating ? "Generating..." : "Generate Key"}
+                  {creating ? t("admin.tenant.generating") : t("admin.tenant.generateKey")}
                 </button>
               </form>
             )}

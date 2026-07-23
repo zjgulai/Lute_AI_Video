@@ -6,6 +6,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -241,6 +242,18 @@ async def test_restore_uses_one_transaction_and_coerces_insert_values(
         )
         + "\n"
     )
+    stats_path = tmp_path / "stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "expected_tables": ["threads"],
+                "tables": {"threads": {"rows": 1}},
+                "total_rows": 1,
+                "alembic_revision": "c8d9e0f1a2b3",
+            }
+        )
+        + "\n"
+    )
 
     class FakeTransaction:
         entered = False
@@ -264,6 +277,8 @@ async def test_restore_uses_one_transaction_and_coerces_insert_values(
             if "information_schema.tables" in query:
                 return [{"table_name": "threads"}]
             if "pg_catalog.pg_constraint" in query:
+                return []
+            if "SELECT version_num FROM alembic_version" in query:
                 return []
             assert args == ("threads",)
             return [
@@ -301,12 +316,13 @@ async def test_restore_uses_one_transaction_and_coerces_insert_values(
 
     monkeypatch.setattr(db, "get_pool", fake_get_pool)
 
-    stats = await restore.restore(dump, truncate=True)
+    stats = await restore.restore(dump, stats_path=stats_path, truncate=True)
 
     assert connection.transaction_context.entered is True
     assert connection.transaction_context.exited is True
-    assert connection.executions[0][0].startswith("TRUNCATE TABLE")
-    insert_query, insert_args = connection.executions[1]
+    assert connection.executions[0][0].startswith("INSERT INTO alembic_version")
+    assert connection.executions[1][0].startswith("TRUNCATE TABLE")
+    insert_query, insert_args = connection.executions[2]
     assert 'INSERT INTO "threads"' in insert_query
     assert insert_args == (UUID(identifier), datetime(2026, 7, 10, 3, 4, 5))
     assert stats["tables"]["threads"] == {"available": 1, "inserted": 1}
@@ -321,6 +337,18 @@ async def test_restore_rejects_valid_but_absent_schema_table(
     dump = tmp_path / "dump.jsonl"
     dump.write_text(
         json.dumps({"_table": "not_in_restored_schema", "_data": {"id": "1"}})
+        + "\n"
+    )
+    stats_path = tmp_path / "stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "expected_tables": ["not_in_restored_schema"],
+                "tables": {"not_in_restored_schema": {"rows": 1}},
+                "total_rows": 1,
+                "alembic_revision": "c8d9e0f1a2b3",
+            }
+        )
         + "\n"
     )
 
@@ -357,8 +385,143 @@ async def test_restore_rejects_valid_but_absent_schema_table(
         return FakePool()
 
     monkeypatch.setattr(db, "get_pool", fake_get_pool)
-    with pytest.raises(ValueError, match="absent from restored schema"):
-        await restore.restore(dump)
+    with pytest.raises(ValueError, match="restore target table set"):
+        await restore.restore(dump, stats_path=stats_path)
+
+
+@pytest.mark.asyncio
+async def test_restore_requires_stats_before_database_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    restore = _load_restore_module()
+    dump = tmp_path / "dump.jsonl"
+    dump.write_text(
+        json.dumps({"_table": "tenants", "_data": {"id": "tenant-1"}}) + "\n"
+    )
+
+    async def unexpected_get_pool() -> object:
+        raise AssertionError("database access must not happen without restore stats")
+
+    monkeypatch.setattr(db, "get_pool", unexpected_get_pool)
+    restore_fn = cast(Any, restore.restore)
+    with pytest.raises(TypeError):
+        await restore_fn(dump, truncate=True)
+    source = RESTORE_SCRIPT.read_text()
+    assert "stats_path: Path | None" not in source
+    assert 'if "--stats" not in args' in source
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("target_tables", "message"),
+    [
+        (["tenants", "empty_jobs", "target_only"], "restore target table set"),
+        (["tenants"], "restore target table set"),
+    ],
+)
+async def test_restore_rejects_target_table_set_drift_before_any_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target_tables: list[str],
+    message: str,
+) -> None:
+    restore = _load_restore_module()
+    dump = tmp_path / "dump.jsonl"
+    dump.write_text(
+        json.dumps({"_table": "tenants", "_data": {"id": "tenant-1"}}) + "\n"
+    )
+    stats_path = tmp_path / "stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "expected_tables": ["tenants", "empty_jobs"],
+                "tables": {
+                    "tenants": {"rows": 1},
+                    "empty_jobs": {"rows": 0},
+                },
+                "total_rows": 1,
+                "alembic_revision": "c8d9e0f1a2b3",
+            }
+        )
+        + "\n"
+    )
+
+    class FakeTransaction:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.executions: list[str] = []
+
+        def transaction(self) -> FakeTransaction:
+            return FakeTransaction()
+
+        async def fetch(self, query: str, *_args: object) -> list[dict[str, str]]:
+            if "information_schema.tables" in query:
+                return [{"table_name": table} for table in target_tables]
+            if "pg_catalog.pg_constraint" in query:
+                return []
+            raise AssertionError(f"unexpected query before table-set validation: {query}")
+
+        async def execute(self, query: str, *_args: object) -> None:
+            self.executions.append(query)
+
+    connection = FakeConnection()
+
+    class AcquireContext:
+        async def __aenter__(self) -> FakeConnection:
+            return connection
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class FakePool:
+        def acquire(self) -> AcquireContext:
+            return AcquireContext()
+
+    async def fake_get_pool() -> FakePool:
+        return FakePool()
+
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    with pytest.raises(ValueError, match=message):
+        await restore.restore(dump, stats_path=stats_path)
+    assert connection.executions == []
+
+
+@pytest.mark.asyncio
+async def test_restore_rejects_stats_dump_row_mismatch_before_database_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    restore = _load_restore_module()
+    dump = tmp_path / "dump.jsonl"
+    dump.write_text(
+        json.dumps({"_table": "tenants", "_data": {"id": "tenant-1"}}) + "\n"
+    )
+    stats_path = tmp_path / "stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "expected_tables": ["tenants"],
+                "tables": {"tenants": {"rows": 0}},
+                "total_rows": 0,
+                "alembic_revision": "c8d9e0f1a2b3",
+            }
+        )
+        + "\n"
+    )
+
+    async def unexpected_get_pool() -> object:
+        raise AssertionError("database access must not happen for an invalid restore set")
+
+    monkeypatch.setattr(db, "get_pool", unexpected_get_pool)
+    with pytest.raises(ValueError, match="backup dump row counts"):
+        await restore.restore(dump, stats_path=stats_path)
 
 
 @pytest.mark.asyncio
@@ -387,6 +550,8 @@ async def test_verify_restored_database_requires_exact_table_count_parity(
             return 1 if '"tenants"' in query else 0
 
         async def fetch(self, query: str) -> list[dict[str, str]]:
+            if "information_schema.tables" in query:
+                return [{"table_name": table} for table in expected_tables]
             assert query == "SELECT version_num FROM alembic_version"
             return [{"version_num": "c8d9e0f1a2b3"}]
 
@@ -414,10 +579,121 @@ async def test_verify_restored_database_requires_exact_table_count_parity(
     assert result["alembic_revision"] == "c8d9e0f1a2b3"
 
 
-def test_restore_requires_valid_alembic_revision_in_stats(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_verify_restored_database_rejects_target_extra_or_missing_tables(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = _load_script_module("verify_restored_database_set", VERIFY_SCRIPT)
+    stats_path = tmp_path / "pg_dump_stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "expected_tables": ["tenants"],
+                "tables": {"tenants": {"rows": 1}},
+                "total_rows": 1,
+                "alembic_revision": "c8d9e0f1a2b3",
+            }
+        )
+        + "\n"
+    )
+
+    class FakeConnection:
+        async def fetch(self, query: str) -> list[dict[str, str]]:
+            assert "information_schema.tables" in query
+            return [{"table_name": "tenants"}, {"table_name": "target_only"}]
+
+        async def fetchval(self, query: str) -> int:
+            raise AssertionError(f"row counts must not run before set validation: {query}")
+
+    class AcquireContext:
+        async def __aenter__(self) -> FakeConnection:
+            return FakeConnection()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class FakePool:
+        def acquire(self) -> AcquireContext:
+            return AcquireContext()
+
+    async def fake_get_pool() -> FakePool:
+        return FakePool()
+
+    monkeypatch.setattr(db, "get_pool", fake_get_pool)
+    with pytest.raises(ValueError, match="restored database table set"):
+        await verifier.verify_restored_database(stats_path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("rows", True),
+        ("rows", 1.0),
+        ("rows", "1"),
+        ("total_rows", True),
+        ("total_rows", 1.0),
+        ("total_rows", "1"),
+    ],
+)
+async def test_verify_restored_database_rejects_non_strict_row_counts_before_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    invalid: object,
+) -> None:
+    verifier = _load_script_module("verify_restored_database_strict_rows", VERIFY_SCRIPT)
+    rows: object = invalid if field == "rows" else 1
+    total_rows: object = invalid if field == "total_rows" else 1
+    stats_path = tmp_path / "pg_dump_stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "expected_tables": ["tenants"],
+                "tables": {"tenants": {"rows": rows}},
+                "total_rows": total_rows,
+                "alembic_revision": "c8d9e0f1a2b3",
+            }
+        )
+        + "\n"
+    )
+
+    async def unexpected_get_pool() -> object:
+        raise AssertionError("database access must not happen for malformed row counts")
+
+    monkeypatch.setattr(db, "get_pool", unexpected_get_pool)
+    with pytest.raises(ValueError, match="invalid row count|total row count"):
+        await verifier.verify_restored_database(stats_path)
+
+
+@pytest.mark.asyncio
+async def test_restore_requires_valid_alembic_revision_before_database_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     restore = _load_restore_module()
+    dump = tmp_path / "dump.jsonl"
+    dump.write_text(
+        json.dumps({"_table": "tenants", "_data": {"id": "tenant-1"}}) + "\n"
+    )
     stats = tmp_path / "stats.json"
-    stats.write_text(json.dumps({"alembic_revision": "unsafe revision"}))
+    stats.write_text(
+        json.dumps(
+            {
+                "expected_tables": ["tenants"],
+                "tables": {"tenants": {"rows": 1}},
+                "total_rows": 1,
+                "alembic_revision": "unsafe revision",
+            }
+        )
+        + "\n"
+    )
+
+    async def unexpected_get_pool() -> object:
+        raise AssertionError("database access must not happen for invalid revision")
+
+    monkeypatch.setattr(db, "get_pool", unexpected_get_pool)
 
     with pytest.raises(ValueError, match="invalid Alembic revision"):
-        restore._load_alembic_revision(stats)
+        await restore.restore(dump, stats)

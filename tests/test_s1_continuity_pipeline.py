@@ -775,6 +775,7 @@ async def test_direct_run_preserves_explicit_continuity_false(
 
     captured: dict[str, object] = {}
     executed_steps: list[str] = []
+    completion_calls: list[dict[str, Any]] = []
 
     class FakeStepRunner:
         def __init__(self, state_manager: object) -> None:
@@ -805,6 +806,15 @@ async def test_direct_run_preserves_explicit_continuity_false(
         async def resume(self, label: str) -> dict:
             raise AssertionError("no-media S1 must not resume the full media pipeline")
 
+        async def finalize_pipeline_completion(
+            self,
+            state: dict[str, Any],
+            *,
+            started_at: float,
+        ) -> bool:
+            completion_calls.append(state)
+            return True
+
     monkeypatch.setattr(s1_product_pipeline, "StepRunner", FakeStepRunner)
 
     await s1_product_pipeline.S1ProductDirectPipeline().run(
@@ -828,6 +838,7 @@ async def test_direct_run_preserves_explicit_continuity_false(
         "continuity_storyboard_grid",
     ]
     assert "keyframe_images" not in executed_steps
+    assert len(completion_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -870,6 +881,7 @@ async def test_scenario_s1_no_media_stops_before_provider_backed_steps(
         async def resume(self, label: str) -> dict:
             raise AssertionError("no-media /scenario/s1 must not resume the full media pipeline")
 
+        async def finalize_pipeline_completion(self, state, *, started_at): return True
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
     _authorize_generation_route(monkeypatch, scenario)
@@ -895,7 +907,6 @@ async def test_scenario_s1_no_media_stops_before_provider_backed_steps(
         "storyboards",
         "continuity_storyboard_grid",
     ]
-
 
 @pytest.mark.asyncio
 async def test_scenario_s1_request_entry_preserves_explicit_continuity_false(
@@ -939,7 +950,7 @@ async def test_scenario_s1_request_entry_preserves_explicit_continuity_false(
 
         async def run_step(self, label: str, step_name: str) -> dict:
             return await self.resume(label)
-
+        async def finalize_pipeline_completion(self, state, *, started_at): return True
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
     _authorize_generation_route(monkeypatch, scenario)
@@ -1004,6 +1015,7 @@ async def test_scenario_s1_bounded_response_does_not_expose_persisted_assemble_l
                 "media_synthesis_errors": [],
             }
 
+        async def finalize_pipeline_completion(self, state, *, started_at): return True
     monkeypatch.setattr(translate, "translate_catalog_to_english", fake_translate_catalog)
     monkeypatch.setattr("src.pipeline.step_runner.StepRunner", FakeStepRunner)
     _authorize_generation_route(monkeypatch, scenario)
@@ -1025,7 +1037,6 @@ async def test_scenario_s1_bounded_response_does_not_expose_persisted_assemble_l
     assert result["clip_paths"] == ["/tmp/clip-1.mp4"]
     assert result["final_video_path"] == ""
     assert result["render_json_path"] == ""
-
 
 @pytest.mark.asyncio
 async def test_scenario_s1_typeerror_never_replays_legacy_pipeline(
@@ -1336,6 +1347,8 @@ async def test_assemble_final_passes_clip_transitions_to_remotion(
             data={
                 "video_path": "/tmp/final.mp4",
                 "render_json_path": "/tmp/final_input.json",
+                "is_stub": False,
+                "simulated": False,
             },
         )
 
@@ -1375,7 +1388,12 @@ async def test_assemble_final_passes_clip_transitions_to_remotion(
         errors=[],
     )
 
-    assert result == ("/tmp/final.mp4", "/tmp/final_input.json")
+    assert result == {
+        "video_path": "/tmp/final.mp4",
+        "render_json_path": "/tmp/final_input.json",
+        "is_stub": False,
+        "simulated": False,
+    }
     assert captured["skill_name"] == "remotion-assemble-skill"
     assert captured["params"]["transitions"] == [
         {

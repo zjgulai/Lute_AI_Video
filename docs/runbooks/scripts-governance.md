@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-07-10
+updated: 2026-07-23
 owner: self
 source: human+ai
 ---
@@ -16,7 +16,7 @@ source: human+ai
 
 `scripts/` 只保留可复用、可解释、可审计的项目脚本。一次性修复、机器同步、provider 探测、历史 E2E 工具必须被显式分类，禁止默认 CI、部署或 hermetic regression 隐式调用。
 
-治理契约在 `configs/scripts-governance-contract.json`。新增、迁移或归档 git-tracked 脚本时，先更新契约，再运行 `tests/test_scripts_governance.py`。本地被 `.gitignore` 排除的 `scripts/test_*.py` provider 探针不进入正式契约。
+治理契约在 `configs/scripts-governance-contract.json`。新增、迁移或归档 git-tracked 或当前非忽略的待跟踪脚本时，先更新契约，再运行 `tests/test_scripts_governance.py`。本地被 `.gitignore` 排除的 `scripts/test_*.py` provider 探针不进入正式契约。
 
 ## 2. 分类规则
 
@@ -35,6 +35,8 @@ source: human+ai
 | --- | --- |
 | `scripts/check_openapi_types_drift.py` | active_reusable |
 | `scripts/check_step_order_consistency.py` | active_reusable |
+| `scripts/check_pyright_ratchet.py` | active_reusable |
+| `scripts/backup_manifest.py` | active_reusable |
 | `scripts/brand_review_audit.py` | active_reusable |
 | `scripts/brand_token_intake.py` | active_reusable |
 | `scripts/build_authorized_live_approval_record.py` | active_reusable |
@@ -43,6 +45,9 @@ source: human+ai
 | `scripts/build_pending_review_asset_packet.py` | active_reusable |
 | `scripts/build_pending_review_decision_record.py` | active_reusable |
 | `scripts/build_provider_account_readiness_record.py` | active_reusable |
+| `scripts/build_w5_acceptance_plan.py` | active_reusable |
+| `scripts/build_w5_fast_runtime_binding.py` | active_reusable |
+| `scripts/check_w5_fast_readiness.py` | active_reusable |
 | `scripts/build_w1_31_billing_approval.py` | active_reusable |
 | `scripts/commercial_token_smoke_preflight.py` | active_reusable |
 | `scripts/l4c_token_smoke_plan.py` | active_reusable |
@@ -52,6 +57,7 @@ source: human+ai
 | `scripts/generate_portfolio_posters.py` | active_reusable |
 | `scripts/generate_portfolio_thumbnails.py` | active_reusable |
 | `scripts/no_token_commercial_benchmark.py` | active_reusable |
+| `scripts/monitoring_fixture_receiver.py` | active_reusable |
 | `scripts/p2_recharge_smoke_checklist.py` | active_reusable |
 | `scripts/production_non_token_e2e_check.py` | active_reusable |
 | `scripts/production_readonly_log_gate.py` | active_reusable |
@@ -72,8 +78,10 @@ source: human+ai
 
 | path | status |
 | --- | --- |
+| `scripts/bootstrap_postgres.py` | manual_deploy_only |
 | `scripts/backup_production.sh` | manual_deploy_only |
 | `scripts/install_backup_cron.sh` | manual_deploy_only |
+| `scripts/offhost_backup.py` | manual_deploy_only |
 | `scripts/pg_dump_logical.py` | manual_deploy_only |
 | `scripts/pg_restore_logical.py` | manual_deploy_only |
 | `scripts/restore_backup_database.sh` | manual_deploy_only |

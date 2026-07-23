@@ -510,6 +510,11 @@ def _check_budget_stop_loss(approval_payload: Mapping[str, Any] | None) -> Prefl
             status="block",
             detail=f"approval record missing positive budget stop-loss fields: {', '.join(missing)}",
         )
+    assert max_sample_count is not None
+    assert max_provider_calls is not None
+    assert max_total_cost_usd is not None
+    assert per_job_cost_ceiling_usd is not None
+    assert max_retry_count is not None
 
     budget_limit_usd = _approval_budget_limit_usd(approval_payload)
     if budget_limit_usd is None or max_total_cost_usd > budget_limit_usd:
@@ -1120,8 +1125,11 @@ def _utc_now_z() -> str:
 def _approval_budget_limit_usd(payload: Mapping[str, Any] | None) -> float | None:
     if payload is None:
         return None
+    raw_value = payload.get("budget_limit_usd")
+    if raw_value is None:
+        return None
     try:
-        value = float(payload.get("budget_limit_usd"))
+        value = float(raw_value)
     except (TypeError, ValueError):
         return None
     return value if math.isfinite(value) else None

@@ -20,7 +20,7 @@
 ## 前置要求
 
 1. 腾讯云账号（已完成实名认证）
-2. 本项目的 `Dockerfile.backend` 和 `requirements.txt`
+2. 本项目的 `Dockerfile.backend`、`pyproject.toml` 和 `uv.lock`
 
 ---
 
@@ -71,7 +71,7 @@
 1. 在项目根目录执行：
 ```bash
 cd /path/to/Lute_AI_Video
-zip -r deploy.zip Dockerfile.backend requirements.txt src/ scripts/ pyproject.toml
+zip -r deploy.zip Dockerfile.backend pyproject.toml uv.lock src/ scripts/ configs/ migrations/ strategy_source/ rendering/
 ```
 
 2. 点击「上传代码包」
@@ -112,7 +112,8 @@ CloudBase 云托管按量计费：
 ## 故障排查
 
 ### 构建失败
-- 检查 Dockerfile 中的 `requirements.txt` 路径是否正确
+- 检查代码包包含 `pyproject.toml` 与 `uv.lock`，且 Docker build 中
+  `uv sync --locked --no-dev --no-install-project` 未报告 lock 漂移
 - 检查是否有系统依赖需要安装（如 `libpq-dev`）
 
 ### 服务启动失败

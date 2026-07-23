@@ -14,6 +14,37 @@ alembic current
 
 ## Usage
 
+### Empty PostgreSQL 18 database
+
+Use the guarded atomic baseline bootstrap only when the target database has no
+application tables:
+
+```bash
+POSTGRES_BOOTSTRAP_AUTH=APPLY_EMPTY_DATABASE_BASELINE \
+  python scripts/bootstrap_postgres.py
+```
+
+The script requires `DATABASE_URL`, verifies PostgreSQL major version 18 and an
+empty schema, applies `src/storage/migrations/001_init.sql`, verifies required
+tables/columns, and stamps the single Alembic head in one transaction. It
+refuses a non-empty database or any existing non-empty `alembic_version`
+lineage and never prints the connection string. An existing revision is
+historical authority and must never be overwritten by the empty bootstrap.
+
+### Historical database
+
+Historical databases must never run the empty baseline bootstrap. Use the
+reviewed deployment gate, which executes `alembic upgrade head` and verifies
+that the post-apply revision equals the single code head:
+
+```bash
+ENVIRONMENT=production DEPLOY_MIGRATION_AUTH=APPLY_REVIEWED_RELEASE \
+  scripts/deploy_alembic_gate.sh --apply
+```
+
+Application startup and `/health/ready` are read-only schema/head checks. They
+never create tables, stamp revisions, or apply migrations.
+
 ```bash
 # Run all pending migrations
 alembic upgrade head
@@ -45,3 +76,4 @@ alembic history --verbose
 |----------|-------------|
 | 42eb2682e54b | Baseline — existing tables (threads, pipeline_states, brand_packages, influencers, publish_logs) |
 | 1efc41794d64 | Add `video_metrics` table (previously SQLite-only) |
+| d9e0f1a2b3c4 | Bind new acceptance records to transparency sidecar and final C2PA truth; keep legacy rows nullable |

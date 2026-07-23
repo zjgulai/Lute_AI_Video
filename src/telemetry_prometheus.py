@@ -19,6 +19,10 @@ from __future__ import annotations
 
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
+_HTTP_METHODS = frozenset(
+    {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"}
+)
+
 # ── Pipeline-level metrics ──
 
 pipeline_runs_total = Counter(
@@ -57,52 +61,24 @@ step_failures_total = Counter(
 
 # ── Runtime gauges ──
 
-active_pipelines = Gauge(
-    "active_pipelines",
-    "Currently running pipelines (incremented by caller)",
+# ── HTTP and task metrics with canonical low-cardinality labels ──
+
+api_requests_total = Counter(
+    "api_requests_total",
+    "HTTP requests by method, route template, and status class",
+    ["method", "route", "status_class"],
 )
 
-
-# ── External LLM API metrics (MASTER-PLAN TODO-C4 + C5, 2026-05-16) ──
-
-llm_api_errors_total = Counter(
-    "llm_api_errors_total",
-    "Total errors from external LLM/media API calls, partitioned by provider",
-    ["provider", "error_kind"],
+api_request_duration_seconds = Histogram(
+    "api_request_duration_seconds",
+    "HTTP request duration by method and route template",
+    ["method", "route"],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
 )
 
-llm_api_duration_seconds = Histogram(
-    "llm_api_duration_seconds",
-    "External LLM/media API call duration, partitioned by provider",
-    ["provider"],
-    buckets=[0.5, 1, 2, 5, 10, 30, 60, 120, 300],
-)
-
-
-# ── DB pool metrics (MASTER-PLAN TODO-C6, 2026-05-16) ──
-
-db_pool_available_connections = Gauge(
-    "db_pool_available_connections",
-    "Free asyncpg connections in the pool (PG only). 0 = saturation.",
-)
-
-db_pool_size = Gauge(
-    "db_pool_size",
-    "Configured maximum pool size for asyncpg.",
-)
-
-
-# ── Admin / tenant metrics (MASTER-PLAN TODO-C7, 2026-05-16) ──
-
-admin_login_attempts_total = Counter(
-    "admin_login_attempts_total",
-    "Admin panel login attempts, partitioned by outcome",
-    ["outcome"],
-)
-
-tenant_active_count = Gauge(
-    "tenant_active_count",
-    "Currently active (non-disabled) tenants in the system",
+active_background_tasks = Gauge(
+    "active_background_tasks",
+    "Tasks currently owned by the canonical background task registry",
 )
 
 
@@ -135,35 +111,32 @@ def record_step_run(
         step_failures_total.labels(scenario=scenario, step=step).inc()
 
 
-def record_llm_call(
-    provider: str,
+def record_http_request(
+    method: str,
+    route: str,
+    status_code: int,
     duration_sec: float,
-    success: bool,
-    error_kind: str | None = None,
 ) -> None:
-    """Record an external LLM/media API call. provider: 'deepseek'|'poyo'|'siliconflow'|'openai'|etc."""
-    llm_api_duration_seconds.labels(provider=provider).observe(duration_sec)
-    if not success:
-        llm_api_errors_total.labels(
-            provider=provider,
-            error_kind=error_kind or "unknown",
-        ).inc()
+    """Record one request using only bounded route-template labels."""
+    normalized_method = method.upper()
+    if normalized_method not in _HTTP_METHODS:
+        normalized_method = "OTHER"
+    status_class = f"{status_code // 100}xx" if 100 <= status_code <= 599 else "unknown"
+    api_requests_total.labels(
+        method=normalized_method,
+        route=route,
+        status_class=status_class,
+    ).inc()
+    api_request_duration_seconds.labels(method=normalized_method, route=route).observe(
+        duration_sec
+    )
 
 
-def record_admin_login(outcome: str) -> None:
-    """Record an admin login attempt. outcome: 'success'|'invalid_creds'|'rate_limited'|'db_error'."""
-    admin_login_attempts_total.labels(outcome=outcome).inc()
-
-
-def update_db_pool_stats(available: int, size: int) -> None:
-    """Update DB pool gauges. Called periodically by background task or on each acquire."""
-    db_pool_available_connections.set(available)
-    db_pool_size.set(size)
-
-
-def update_tenant_active_count(count: int) -> None:
-    """Update the active tenant gauge. Called by tenant CRUD events or periodic refresh."""
-    tenant_active_count.set(count)
+def update_active_background_tasks(count: int) -> None:
+    """Project the exact canonical registry size into Prometheus."""
+    if count < 0:
+        raise ValueError("active background task count cannot be negative")
+    active_background_tasks.set(count)
 
 
 def prometheus_content() -> tuple[bytes, str]:

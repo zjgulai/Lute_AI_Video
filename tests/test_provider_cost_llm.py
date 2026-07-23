@@ -171,7 +171,7 @@ async def _paid_client_scope(
         budget_job_kind="canonical",
         budget_job_id=job_id,
         scenario_or_resource_type=scenario_or_resource_type,
-        generation_policy_version="generation-safety.v1",
+        generation_policy_version="generation-safety.v2",
     )
 
     constructor_calls: list[dict[str, Any]] = []
@@ -838,8 +838,12 @@ async def test_invalid_or_over_reservation_usage_holds_accounting_error_and_retu
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "transport_error",
-    [ConnectionError("fixture disconnect"), TimeoutError("fixture timeout")],
-    ids=["disconnect", "timeout"],
+    [
+        ConnectionError("fixture disconnect"),
+        TimeoutError("fixture timeout"),
+        RuntimeError("fixture provider rejected request after submit"),
+    ],
+    ids=["disconnect", "timeout", "provider-rejection"],
 )
 async def test_transport_uncertainty_is_ambiguous_single_attempt_without_fallback(
     isolated_provider_cost_db: sqlite3.Connection,

@@ -14,6 +14,8 @@ P1-4: Persistence strategy (PG-primary with FS fallback):
 
 from __future__ import annotations
 
+import asyncio
+import fcntl
 import json
 import logging
 import os
@@ -22,10 +24,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from src.config import OUTPUT_DIR as _CONFIG_OUTPUT_DIR
+from pydantic import ValidationError
 
-PipelineStateRepository: Any = None  # type: ignore
-is_pg_available: Any = lambda: False  # type: ignore
+from src.config import OUTPUT_DIR as _CONFIG_OUTPUT_DIR
+from src.models.pipeline_completion import (
+    bind_claim_to_facts,
+    derive_pipeline_completion_facts,
+)
+from src.models.transparency import TransparencyProjectionV1
+
+PipelineStateRepository: Any = None
+is_pg_available: Any = lambda: False
 try:
     from src.storage.db import is_pg_available
     from src.storage.repository import PipelineStateRepository
@@ -53,6 +62,7 @@ _STATE_REPOSITORY_FIELDS = (
     "tenant_id",
     "regenerate_chain",
     "soft_degraded_reasons",
+    "transparency",
 )
 
 _EXECUTION_LIFECYCLE_FIELDS = (
@@ -69,11 +79,67 @@ _EXECUTION_LIFECYCLE_FIELDS = (
     "provider_job_caps",
 )
 _CORE_EXECUTION_LIFECYCLE_FIELDS = frozenset(_EXECUTION_LIFECYCLE_FIELDS[:9])
+_STATE_AUDIT_ARRAY_FIELDS = ("regenerate_chain", "soft_degraded_reasons")
+_MISSING = object()
+_PIPELINE_COMPLETION_CLAIM_KEY = "pipeline_completion_metric_v1"
+_CUSTOM_COMPLETION_LOCKS: dict[tuple[int, str], asyncio.Lock] = {}
+
+
+class ScenarioStateIntegrityError(ValueError):
+    """Persisted scenario state violates the stable machine contract."""
+
+
+def _normalize_state_audit_arrays(
+    state: Any,
+    *,
+    materialize_missing: bool = False,
+) -> dict[str, Any]:
+    """Default missing legacy fields and reject every malformed present value."""
+
+    if not isinstance(state, dict):
+        raise ScenarioStateIntegrityError("scenario_state_integrity_error:root")
+    normalized = dict(state)
+    for field in _STATE_AUDIT_ARRAY_FIELDS:
+        if field not in normalized:
+            if materialize_missing:
+                normalized[field] = []
+            continue
+        value = normalized[field]
+        if type(value) is not list or not all(type(item) is dict for item in value):
+            raise ScenarioStateIntegrityError(
+                f"scenario_state_integrity_error:{field}"
+            )
+        normalized[field] = [dict(item) for item in value]
+    return normalized
+
+
+def _normalize_transparency_projection(state: dict[str, Any]) -> dict[str, Any]:
+    """Preserve one strict durable sidecar pointer and reject malformed truth."""
+
+    if "transparency" not in state:
+        return state
+    try:
+        projection = TransparencyProjectionV1.model_validate(state["transparency"])
+    except ValidationError as exc:
+        raise ScenarioStateIntegrityError(
+            "scenario_state_integrity_error:transparency"
+        ) from exc
+    normalized = dict(state)
+    normalized["transparency"] = projection.model_dump(mode="json")
+    return normalized
 
 
 def _validate_label(label: str) -> None:
     if not label or not isinstance(label, str) or not _LABEL_PATTERN.match(label):
         raise ValueError(f"Invalid label: {label!r}. Only alphanumeric, hyphen, underscore allowed.")
+
+
+def _postgres_persistence_configured() -> bool:
+    environment = os.getenv("ENVIRONMENT", "development").strip().lower()
+    return bool(os.getenv("DATABASE_URL", "").strip()) or environment in {
+        "prod",
+        "production",
+    }
 
 
 def _json_default(obj):
@@ -112,10 +178,12 @@ def _check_schema_version(state: dict[str, Any] | None, label: str) -> None:
 
 def _repository_payload(state: dict[str, Any]) -> dict[str, Any]:
     """Build the canonical PG projection for persisted scenario state."""
-    state_for_pg = dict(state)
+    state_for_pg = _normalize_transparency_projection(
+        _normalize_state_audit_arrays(state, materialize_missing=True)
+    )
     lifecycle_status = state.get("lifecycle_status")
     has_terminal_lifecycle = (
-        lifecycle_status in {"completed_bounded", "policy_blocked"}
+        lifecycle_status in {"completed_bounded", "completed_full", "policy_blocked"}
         and state.get("status") == lifecycle_status
     )
     if has_terminal_lifecycle:
@@ -150,8 +218,95 @@ def _strict_json_equal(left: Any, right: Any) -> bool:
     return left == right
 
 
+def _lifecycle_profile_matches(
+    state: dict[str, Any],
+    lifecycle: dict[str, Any],
+    persisted_profile: Any,
+) -> bool:
+    from src.pipeline.generation_policy import (
+        BOUNDED_MEDIA_STEP_PROFILES,
+        GENERATION_EXECUTION_PROFILE_VERSION,
+        NO_MEDIA_STEP_PROFILES,
+        S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS,
+        S2_SEGMENTED_MEDIA_STEP_PROFILES,
+    )
+    from src.pipeline.scenario_config import SCENARIO_STEP_ORDERS
+
+    required_fields = {
+        "version",
+        "profile_id",
+        "scenario",
+        "allowed_steps",
+        "provider_job_caps",
+        "completion_kind",
+        "refs_only",
+    }
+    if type(persisted_profile) is not dict or set(persisted_profile) != required_fields:
+        return False
+    scenario = state.get("scenario")
+    completion_kind = lifecycle.get("completion_kind")
+    profile_id = lifecycle.get("execution_profile_id")
+    provider_caps = lifecycle.get("provider_job_caps")
+    if (
+        scenario not in SCENARIO_STEP_ORDERS
+        or persisted_profile.get("version") != GENERATION_EXECUTION_PROFILE_VERSION
+        or persisted_profile.get("scenario") != scenario
+        or persisted_profile.get("profile_id") != profile_id
+        or persisted_profile.get("completion_kind") != completion_kind
+        or type(persisted_profile.get("refs_only")) is not bool
+        or type(persisted_profile.get("allowed_steps")) is not list
+        or type(provider_caps) is not dict
+        or any(
+            type(key) is not str or type(cap) is not int or cap < 0
+            for key, cap in provider_caps.items()
+        )
+        or not _strict_json_equal(persisted_profile.get("provider_job_caps"), provider_caps)
+    ):
+        return False
+
+    expected_profile_id: str
+    expected_steps: list[str]
+    expected_refs_only = False
+    expected_caps: dict[str, int] | None = None
+    if completion_kind == "full_media":
+        expected_profile_id = f"{GENERATION_EXECUTION_PROFILE_VERSION}:{scenario}:full-media"
+        expected_steps = list(SCENARIO_STEP_ORDERS[scenario])
+    elif completion_kind == "no_media":
+        expected_profile_id = f"{GENERATION_EXECUTION_PROFILE_VERSION}:{scenario}:no-media"
+        expected_steps = list(NO_MEDIA_STEP_PROFILES[scenario])
+        expected_caps = {}
+    elif completion_kind == "bounded_media" and scenario == "s2":
+        stop_step = str(profile_id).removeprefix(
+            f"{GENERATION_EXECUTION_PROFILE_VERSION}:s2:"
+        )
+        if stop_step not in S2_SEGMENTED_MEDIA_STEP_PROFILES:
+            return False
+        expected_profile_id = f"{GENERATION_EXECUTION_PROFILE_VERSION}:s2:{stop_step}"
+        expected_steps = list(S2_SEGMENTED_MEDIA_STEP_PROFILES[stop_step])
+        expected_caps = dict(S2_SEGMENTED_MEDIA_PROVIDER_JOB_CAPS[stop_step])
+        expected_refs_only = stop_step in {"assemble_final", "audit"}
+    elif completion_kind == "bounded_media" and scenario in BOUNDED_MEDIA_STEP_PROFILES:
+        expected_profile_id = (
+            f"{GENERATION_EXECUTION_PROFILE_VERSION}:{scenario}:bounded-seedance"
+        )
+        expected_steps = list(BOUNDED_MEDIA_STEP_PROFILES[scenario])
+        expected_caps = {"image": 1, "video": 1}
+    else:
+        return False
+
+    return (
+        profile_id == expected_profile_id
+        and persisted_profile["allowed_steps"] == expected_steps
+        and persisted_profile["refs_only"] is expected_refs_only
+        and (
+            expected_caps is None
+            or _strict_json_equal(provider_caps, expected_caps)
+        )
+    )
+
+
 def _hydrate_execution_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
-    """Restore bounded lifecycle fields stored inside the PG config JSON."""
+    """Restore and validate terminal lifecycle fields stored in PG config JSON."""
 
     config = state.get("config")
     lifecycle = config.get("execution_lifecycle") if isinstance(config, dict) else None
@@ -164,6 +319,7 @@ def _hydrate_execution_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
                 "top-level execution lifecycle requires a complete config envelope"
             )
         return state
+    assert isinstance(config, dict)
     required = {
         "status",
         "lifecycle_status",
@@ -179,7 +335,7 @@ def _hydrate_execution_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
     if set(lifecycle) - allowed or not required.issubset(lifecycle):
         raise ValueError("execution lifecycle envelope has invalid fields")
     status = lifecycle["status"]
-    if status not in {"completed_bounded", "policy_blocked"}:
+    if status not in {"completed_bounded", "completed_full", "policy_blocked"}:
         raise ValueError("execution lifecycle status is invalid")
     if lifecycle["lifecycle_status"] != status:
         raise ValueError("execution lifecycle status mismatch")
@@ -193,29 +349,46 @@ def _hydrate_execution_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
     ):
         if type(lifecycle[key]) is not bool:
             raise ValueError(f"execution lifecycle {key} must be boolean")
-    expected_request_succeeded = status == "completed_bounded"
+    expected_request_succeeded = status in {"completed_bounded", "completed_full"}
     if lifecycle["request_succeeded"] is not expected_request_succeeded:
         raise ValueError("execution lifecycle request_succeeded invariant failed")
-    if any(
-        lifecycle[key]
-        for key in (
-            "success",
-            "full_media_success",
-            "pipeline_complete",
-            "publish_allowed",
-            "delivery_accepted",
-        )
-    ):
-        raise ValueError("execution lifecycle cannot escalate bounded success")
-    if status == "completed_bounded" and lifecycle["completion_kind"] not in {
-        "no_media",
-        "bounded_media",
-    }:
-        raise ValueError("execution lifecycle completion_kind is invalid")
-    if status == "policy_blocked" and lifecycle["completion_kind"] != "legacy_no_policy_blocked":
-        raise ValueError("execution lifecycle blocked completion_kind is invalid")
+    if status == "completed_full":
+        if lifecycle["completion_kind"] != "full_media" or any(
+            lifecycle[key] is not True
+            for key in ("success", "full_media_success", "pipeline_complete")
+        ):
+            raise ValueError("execution lifecycle full completion invariant failed")
+        if lifecycle["publish_allowed"] or lifecycle["delivery_accepted"]:
+            raise ValueError("generation completion cannot grant publish or delivery")
+        if (
+            state.get("pipeline_degraded") is True
+            or bool(state.get("errors"))
+            or bool(state.get("media_synthesis_errors"))
+            or bool(state.get("soft_degraded_reasons"))
+            or state.get("current_step") is not None
+        ):
+            raise ValueError("full execution lifecycle cannot be degraded or errored")
+    else:
+        if any(
+            lifecycle[key]
+            for key in (
+                "success",
+                "full_media_success",
+                "pipeline_complete",
+                "publish_allowed",
+                "delivery_accepted",
+            )
+        ):
+            raise ValueError("execution lifecycle cannot escalate bounded success")
+        if status == "completed_bounded" and lifecycle["completion_kind"] not in {
+            "no_media",
+            "bounded_media",
+        }:
+            raise ValueError("execution lifecycle completion_kind is invalid")
+        if status == "policy_blocked" and lifecycle["completion_kind"] != "legacy_no_policy_blocked":
+            raise ValueError("execution lifecycle blocked completion_kind is invalid")
 
-    if status == "completed_bounded":
+    if status in {"completed_bounded", "completed_full"}:
         profile_id = lifecycle.get("execution_profile_id")
         provider_caps = lifecycle.get("provider_job_caps")
         persisted_profile = config.get("effective_generation_execution_profile")
@@ -223,12 +396,7 @@ def _hydrate_execution_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
         if (
             type(profile_id) is not str
             or type(provider_caps) is not dict
-            or type(persisted_profile) is not dict
-            or persisted_profile.get("profile_id") != profile_id
-            or not _strict_json_equal(
-                persisted_profile.get("provider_job_caps"),
-                provider_caps,
-            )
+            or not _lifecycle_profile_matches(state, lifecycle, persisted_profile)
             or not _strict_json_equal(persisted_caps, provider_caps)
         ):
             raise ValueError("execution lifecycle profile/caps mismatch")
@@ -300,21 +468,67 @@ class PipelineStateManager:
         _validate_label(label)
         return self._state_dir() / f"{label}.json"
 
-    def _save_to_fs(self, label: str, state: dict[str, Any]) -> None:
-        """Serialize state to JSON file (crash-safe, always-on).
+    def _save_to_fs_unlocked(self, label: str, state: dict[str, Any]) -> None:
+        """Serialize state while the caller owns the per-label lock.
 
         P1-3: Writes to a temporary file first, then performs an atomic
         rename via os.replace(). This ensures that a crash during write
         never leaves a partially-written (truncated) JSON file.
         """
+        normalized_state = _normalize_transparency_projection(
+            _normalize_state_audit_arrays(state)
+        )
         state_path = self._state_path(label)
         tmp_path = state_path.with_suffix(".json.tmp")
         with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, ensure_ascii=False, default=_json_default)
+            json.dump(normalized_state, f, indent=2, ensure_ascii=False, default=_json_default)
             f.flush()
             os.fsync(f.fileno())  # Ensure data hits disk before rename
         # Atomic replace: readers always see a complete file
         os.replace(tmp_path, state_path)
+
+    def _save_to_fs(self, label: str, state: dict[str, Any]) -> None:
+        """Save state while preserving an existing server-owned claim."""
+
+        lock_path = self._state_path(label).with_suffix(".completion.lock")
+        with open(lock_path, "a+b") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                current = self._load_from_fs(label)
+                current_config = current.get("config") if current is not None else None
+                if type(current_config) is dict and _PIPELINE_COMPLETION_CLAIM_KEY in current_config:
+                    config = dict(state.get("config") or {})
+                    config[_PIPELINE_COMPLETION_CLAIM_KEY] = current_config[
+                        _PIPELINE_COMPLETION_CLAIM_KEY
+                    ]
+                    state["config"] = config
+                self._save_to_fs_unlocked(label, state)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+    def _cache_pipeline_completion_claim(
+        self,
+        label: str,
+        claim: dict[str, Any],
+    ) -> None:
+        """Merge only the PG-winning claim into the existing filesystem cache."""
+
+        lock_path = self._state_path(label).with_suffix(".completion.lock")
+        with open(lock_path, "a+b") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                current = self._load_from_fs(label)
+                if current is None:
+                    return
+                current_config = current.get("config")
+                if type(current_config) is not dict:
+                    raise RuntimeError("pipeline completion config is invalid")
+                updated_config = dict(current_config)
+                updated_config[_PIPELINE_COMPLETION_CLAIM_KEY] = claim
+                current["config"] = updated_config
+                self._save_to_fs_unlocked(label, current)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     def _load_from_fs(self, label: str) -> dict[str, Any] | None:
         """Deserialize state from JSON file.
@@ -325,7 +539,9 @@ class PipelineStateManager:
         if not state_path.exists():
             return None
         with open(state_path, encoding="utf-8") as f:
-            return json.load(f)
+            return _normalize_transparency_projection(
+                _normalize_state_audit_arrays(json.load(f))
+            )
 
     async def save(self, label: str, state: dict[str, Any]) -> None:
         """Save state — PG first (primary), then FS (fallback/cache).
@@ -341,7 +557,10 @@ class PipelineStateManager:
                 existing = await repo.get_by_label(label)
                 data = _repository_payload(state)
                 if existing:
-                    await repo.update(existing["id"], data)
+                    saved = await repo.update(existing["id"], data)
+                    saved_config = saved.get("config") if isinstance(saved, dict) else None
+                    if type(saved_config) is dict:
+                        state["config"] = dict(saved_config)
                 else:
                     await repo.create({"label": label, **data})
                 pg_ok = True
@@ -356,6 +575,66 @@ class PipelineStateManager:
                 "State saved to filesystem only (PG unavailable). "
                 "Next load will sync from FS to PG when PG recovers."
             )
+
+    async def claim_pipeline_completion(
+        self,
+        label: str,
+        state: dict[str, Any],
+        claim: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Persist and return one claim bound to current durable terminal truth."""
+
+        _validate_label(label)
+        if self.use_pg and is_pg_available():
+            repo = PipelineStateRepository()
+            winning_claim = await repo.claim_pipeline_completion(label, claim)
+            if winning_claim is None:
+                raise RuntimeError("pipeline completion store is unavailable")
+            if winning_claim is False:
+                return None
+            config = dict(state.get("config") or {})
+            config[_PIPELINE_COMPLETION_CLAIM_KEY] = winning_claim
+            state["config"] = config
+            await asyncio.to_thread(
+                self._cache_pipeline_completion_claim,
+                label,
+                winning_claim,
+            )
+            return winning_claim
+        if self.use_pg and _postgres_persistence_configured():
+            raise RuntimeError("pipeline completion store is unavailable")
+
+        def _claim_filesystem() -> dict[str, Any] | None:
+            lock_path = self._state_path(label).with_suffix(".completion.lock")
+            with open(lock_path, "a+b") as lock_file:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    current = self._load_from_fs(label)
+                    if current is None:
+                        raise RuntimeError("pipeline completion state is missing")
+                    current_config = current.get("config")
+                    if type(current_config) is not dict:
+                        raise RuntimeError("pipeline completion config is invalid")
+                    if _PIPELINE_COMPLETION_CLAIM_KEY in current_config:
+                        return None
+                    durable_facts = derive_pipeline_completion_facts(current)
+                    if durable_facts is None:
+                        return None
+                    winning_claim = bind_claim_to_facts(claim, durable_facts)
+                    updated_config = dict(current_config)
+                    updated_config[_PIPELINE_COMPLETION_CLAIM_KEY] = winning_claim
+                    current["config"] = updated_config
+                    self._save_to_fs_unlocked(label, current)
+                    return winning_claim
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        winning_claim = await asyncio.to_thread(_claim_filesystem)
+        if winning_claim is not None:
+            config = dict(state.get("config") or {})
+            config[_PIPELINE_COMPLETION_CLAIM_KEY] = winning_claim
+            state["config"] = config
+        return winning_claim
 
     async def load(self, label: str) -> dict[str, Any] | None:
         """Load state — PG primary, with FS-backfill on PG miss.
@@ -393,7 +672,10 @@ class PipelineStateManager:
                         except (KeyError, IndexError):
                             return default
 
-                    pg_state = {
+                    transparency_value = _safe_get("transparency", _MISSING)
+
+                    pg_state = _normalize_transparency_projection(
+                        _normalize_state_audit_arrays({
                         "label": row["label"],
                         "scenario": row["scenario"],
                         "config": row["config"],
@@ -409,9 +691,26 @@ class PipelineStateManager:
                         "trace_id": _safe_get("trace_id"),
                         "structured_errors": _safe_get("structured_errors", []) or [],
                         "tenant_id": _safe_get("tenant_id"),
-                        "regenerate_chain": _safe_get("regenerate_chain", []) or [],
-                        "soft_degraded_reasons": _safe_get("soft_degraded_reasons", []) or [],
-                    }
+                        **(
+                            {"regenerate_chain": _safe_get("regenerate_chain")}
+                            if _safe_get("regenerate_chain", _MISSING) is not _MISSING
+                            else {}
+                        ),
+                        **(
+                            {"soft_degraded_reasons": _safe_get("soft_degraded_reasons")}
+                            if _safe_get("soft_degraded_reasons", _MISSING) is not _MISSING
+                            else {}
+                        ),
+                        **(
+                            {"transparency": transparency_value}
+                            if transparency_value is not _MISSING
+                            and transparency_value is not None
+                            else {}
+                        ),
+                    }, materialize_missing=True)
+                    )
+            except ScenarioStateIntegrityError:
+                raise
             except Exception as e:
                 logger.warning("PG load failed, using filesystem: %s", str(e)[:100])
                 fs_state = _hydrate_execution_lifecycle(fs_state) if fs_state is not None else None
@@ -484,3 +783,37 @@ class PipelineStateManager:
                 await repo.create({"label": label, **data})
             count += 1
         return count
+
+
+async def claim_pipeline_completion(
+    state_manager: Any,
+    *,
+    label: str,
+    state: dict[str, Any],
+    claim: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Use durable truth plus storage atomicity for the winning claim."""
+
+    if isinstance(state_manager, PipelineStateManager):
+        return await state_manager.claim_pipeline_completion(label, state, claim)
+
+    lock_key = (id(asyncio.get_running_loop()), label)
+    lock = _CUSTOM_COMPLETION_LOCKS.setdefault(lock_key, asyncio.Lock())
+    async with lock:
+        current = await state_manager.load(label)
+        durable = current if current is not None else state
+        config = durable.get("config")
+        if type(config) is not dict:
+            raise RuntimeError("pipeline completion config is invalid")
+        if _PIPELINE_COMPLETION_CLAIM_KEY in config:
+            return None
+        durable_facts = derive_pipeline_completion_facts(durable)
+        if durable_facts is None:
+            return None
+        winning_claim = bind_claim_to_facts(claim, durable_facts)
+        updated_config = dict(config)
+        updated_config[_PIPELINE_COMPLETION_CLAIM_KEY] = winning_claim
+        durable["config"] = updated_config
+        await state_manager.save(label, durable)
+        state["config"] = dict(updated_config)
+        return winning_claim

@@ -33,6 +33,7 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["ALLOW_MOCK_MODE"] = "1"
 os.environ["RUN_TOKEN_SMOKE"] = "0"
 os.environ["DATABASE_URL"] = ""
+os.environ["SQLITE_FALLBACK_ENABLED"] = "1"
 # Keep hermetic tests on the exact approved SiliconFlow contract even when a
 # developer .env contains historical regional/custom values.
 os.environ["SILICONFLOW_API_BASE"] = "https://api.siliconflow.com/v1"
@@ -123,6 +124,7 @@ def _isolate_provider_test_context(monkeypatch):
     monkeypatch.setenv("ALLOW_MOCK_MODE", "1")
     monkeypatch.setenv("RUN_TOKEN_SMOKE", "0")
     monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("SQLITE_FALLBACK_ENABLED", "1")
     monkeypatch.setenv("PROVIDER_JOB_BUDGET_USD", "5.00")
     for provider_key in PROVIDER_KEY_ENV_NAMES:
         monkeypatch.setenv(provider_key, "")

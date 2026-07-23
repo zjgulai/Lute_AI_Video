@@ -317,6 +317,7 @@ class TestS3Pipeline:
     async def test_skip_media_stops_before_provider_backed_steps(self, monkeypatch: pytest.MonkeyPatch):
         executed_steps: list[str] = []
         saved_states: list[dict[str, object]] = []
+        completion_calls: list[dict[str, Any]] = []
 
         class FakeStateManager:
             async def save(self, label: str, state: dict[str, object]) -> None:
@@ -331,6 +332,10 @@ class TestS3Pipeline:
 
             async def resume(self, label):
                 raise AssertionError("no-media S3 must not resume the full media pipeline")
+
+            async def finalize_pipeline_completion(self, state, *, started_at):
+                completion_calls.append(state)
+                return True
 
             async def run_step(self, label, step_name):
                 executed_steps.append(step_name)
@@ -367,11 +372,13 @@ class TestS3Pipeline:
         ]
         assert "keyframe_images" not in executed_steps
         assert result.success is True
+        assert result.to_dict()["_execution_completed"] is False
         assert result.clip_paths == []
         assert result.audio_paths == []
         assert result.thumbnail_image_paths == []
         assert result.final_video_path == ""
         assert saved_states[-1]["current_step"] is None
+        assert len(completion_calls) == 1
 
     @pytest.mark.asyncio
     @pytest.mark.hermetic_slow
@@ -379,8 +386,10 @@ class TestS3Pipeline:
         """S3 no-media profile completes the pre-media analysis chain."""
         result = await _run_cached(**_STANDARD_RUN_KWARGS)
 
-        assert result.success, f"Pipeline failed: {result.errors}"
+        assert result.success is False
         assert result._execution_completed is True
+        assert result.lifecycle_projection["status"] == "completed_bounded"
+        assert result.lifecycle_projection["completion_kind"] == "no_media"
         assert result.errors == []
         assert result.video_analysis is not None
         assert result.remix_script is not None
@@ -492,7 +501,9 @@ class TestS3Pipeline:
         result = await _run_cached(**_STANDARD_RUN_KWARGS)
 
         d = result.to_dict()
-        assert d["success"] is True
+        assert d["success"] is False
+        assert d["status"] == "completed_bounded"
+        assert d["completion_kind"] == "no_media"
         assert isinstance(d["segment_count"], int)
         assert d["segment_count"] > 0
         assert isinstance(d["video_prompts"], list)
@@ -631,6 +642,7 @@ class TestS3Pipeline:
                     data={
                         "video_path": f"/tmp/s3-clip-{index}.mp4",
                         "duration_seconds": params["duration"],
+                        "simulated": False,
                         "verification": {"all_ok": True},
                     },
                 )
@@ -672,6 +684,7 @@ class TestS3Pipeline:
 
         assert captured_durations == [4, 6, 8]
         assert result["total_duration"] == 18
+        assert result["simulated"] is False
         assert result["clip_details"][0]["scene_beat"] == "creator_hook"
         assert result["clip_details"][1]["beat_summary"] == "creator usage walkthrough"
         assert result["clip_details"][2]["transition_intent"] == "land the recommendation cleanly"
@@ -821,6 +834,7 @@ async def test_s3_bounded_media_stops_after_seedance_and_clears_publishable_outp
     executed_steps: list[str] = []
     saved_states: list[dict[str, object]] = []
     captured_config: dict[str, object] = {}
+    completion_calls: list[dict[str, Any]] = []
 
     class FakeStateManager:
         async def save(self, label: str, state: dict[str, object]) -> None:
@@ -842,6 +856,10 @@ async def test_s3_bounded_media_stops_after_seedance_and_clears_publishable_outp
 
         async def resume(self, label):
             raise AssertionError("bounded S3 must not resume the full media pipeline")
+
+        async def finalize_pipeline_completion(self, state, *, started_at):
+            completion_calls.append(state)
+            return True
 
         async def run_step(self, label, step_name):
             executed_steps.append(step_name)
@@ -914,6 +932,7 @@ async def test_s3_bounded_media_stops_after_seedance_and_clears_publishable_outp
     )
 
     assert executed_steps == s3_remix_pipeline.S3_BOUNDED_MEDIA_STEP_ORDER
+    assert len(completion_calls) == 1
     assert captured_config["provider_max_retries"] == 0
     assert captured_config["provider_job_caps"] == {"image": 1, "video": 1}
     assert captured_config["seedance_quality_gate_enabled"] is False

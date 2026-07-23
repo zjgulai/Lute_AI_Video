@@ -6,8 +6,14 @@ public_routes:
     path: /health
     reason: Load balancer and deploy smoke health check.
   - method: GET
+    path: /health/live
+    reason: Process-only liveness probe; contains no database or credential state.
+  - method: GET
+    path: /health/ready
+    reason: Sanitized database schema and migration readiness used by the backend container healthcheck.
+  - method: GET
     path: /metrics
-    reason: Prometheus scrape endpoint; production exposure is controlled at nginx/network layer.
+    reason: Unauthenticated internal scrape endpoint; canonical nginx returns 404 and Prometheus connects directly over the internal monitoring network.
   - method: GET
     path: /api/media/{media_path:path}
     reason: Unsigned access is limited to brand_assets/demo; every protected path requires a tenant-bound token in media.py.
@@ -79,3 +85,16 @@ publish_acceptance_routes:
       method: POST
       path: /publish/{video_id}
       deprecated: true
+
+transparency_routes:
+  authentication: X-API-Key
+  tenant_source: AuthContext
+  read_only: true
+  client_sidecar_allowed: false
+  routes:
+    - name: inspect
+      method: GET
+      path: /api/transparency/{resource_type}/{resource_id}
+    - name: package
+      method: GET
+      path: /api/transparency/{resource_type}/{resource_id}/package

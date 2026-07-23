@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import AdminTenantsPage from "./page";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 const adminFetchJson = vi.fn();
 vi.mock("@/components/api", async () => {
@@ -38,7 +39,7 @@ function render() {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<AdminTenantsPage />);
+    root.render(<I18nProvider><AdminTenantsPage /></I18nProvider>);
   });
   return {
     container,
@@ -51,6 +52,7 @@ function render() {
 
 describe("AdminTenantsPage", () => {
   beforeEach(() => {
+    localStorage.setItem("app-locale", "en");
     adminFetchJson.mockReset();
   });
 
@@ -72,6 +74,24 @@ describe("AdminTenantsPage", () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(container.textContent || "").toMatch(/failed/i);
     cleanup();
+  });
+
+  it("localizes table headers, status, and empty state in Chinese", async () => {
+    localStorage.setItem("app-locale", "zh");
+    adminFetchJson.mockResolvedValueOnce(SAMPLE);
+    const first = render();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(first.container.textContent).toContain("租户");
+    expect(first.container.textContent).toContain("状态");
+    expect(first.container.textContent).toContain("密钥数");
+    expect(first.container.textContent).toContain("启用");
+    first.cleanup();
+
+    adminFetchJson.mockResolvedValueOnce({ items: [], total: 0 });
+    const empty = render();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(empty.container.textContent).toContain("暂无租户");
+    empty.cleanup();
   });
 
   it("issues POST /api/admin/tenants when create form is submitted", async () => {

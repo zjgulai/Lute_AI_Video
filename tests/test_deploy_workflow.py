@@ -511,13 +511,13 @@ class TestDeployWorkflow:
         assert "REBUILD_RENDERING" not in text
         assert "RELEASE_SOURCE_SHA must be the reviewed" in text
 
-    def test_backend_dockerfile_records_requirements_semantic_hash(self):
+    def test_backend_dockerfile_consumes_the_canonical_uv_lock(self):
         text = BACKEND_DOCKERFILE.read_text()
 
-        assert ".requirements_sha256" in text
-        assert ".requirements_semantic_sha256" in text
-        assert "requirements.txt" in text
-        assert "hashlib.sha256" in text
+        assert "COPY pyproject.toml uv.lock ./" in text
+        assert "uv sync --locked --no-dev --no-install-project" in text
+        assert "requirements.txt" not in text
+        assert "pip install" not in text
 
     def test_backend_release_image_contains_provider_catalog_runtime_dependency(self):
         text = BACKEND_DOCKERFILE.read_text()
@@ -600,12 +600,14 @@ class TestDeployWorkflow:
 
     def test_backend_dockerfile_pins_torch_cpu_wheel(self):
         text = BACKEND_DOCKERFILE.read_text()
+        pyproject = PYPROJECT.read_text()
 
-        assert "TORCH_WHEEL_VERSION=2.13.0+cpu" in text
-        assert "TORCH_WHEEL_INDEX_URL=https://download.pytorch.org/whl/cpu" in text
-        assert "torch==%s" in text
-        assert "--extra-index-url \"$TORCH_WHEEL_INDEX_URL\"" in text
-        assert "-c /tmp/torch-wheel-constraints.txt" in text
+        assert 'torch = { index = "pytorch-cpu" }' in pyproject
+        assert 'name = "pytorch-cpu"' in pyproject
+        assert 'url = "https://download.pytorch.org/whl/cpu"' in pyproject
+        assert "explicit = true" in pyproject
+        assert "TORCH_WHEEL_INDEX_URL" not in text
+        assert "--extra-index-url" not in text
 
     def test_lighthouse_build_wrapper_forwards_deploy_control_flags(self):
         text = LIGHTHOUSE_BUILD_AND_DEPLOY.read_text()
@@ -681,10 +683,10 @@ class TestDeployWorkflow:
             assert scan["id"] == f"scan-{component}"
             assert scan["continue-on-error"] is True
             assert scan["with"]["fail-build"] is True
-            assert scan["with"]["severity-cutoff"] == "critical"
+            assert scan["with"]["severity-cutoff"] == "high"
 
         upload = _step_by_name(steps, "Upload vulnerability scan evidence")
-        enforce = _step_by_name(steps, "Enforce critical vulnerability scan results")
+        enforce = _step_by_name(steps, "Enforce High/Critical vulnerability scan results")
         assert upload["if"] == "always()"
         assert upload["uses"] == (
             "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"
@@ -704,9 +706,9 @@ class TestDeployWorkflow:
             'test "$RENDERING_SCAN_OUTCOME" = success',
         ]
         assert step_names.index("Upload vulnerability scan evidence") < step_names.index(
-            "Enforce critical vulnerability scan results"
+            "Enforce High/Critical vulnerability scan results"
         )
-        assert step_names.index("Enforce critical vulnerability scan results") < (
+        assert step_names.index("Enforce High/Critical vulnerability scan results") < (
             step_names.index("Package exact reviewed release images and digests")
         )
 

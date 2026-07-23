@@ -47,6 +47,7 @@ from src.pipeline.generation_policy import (
     assert_review_scoped_media_ref,
     get_effective_generation_policy,
 )
+from src.pipeline.media_truth import media_paths
 from src.pipeline.model_router import select_model
 from src.pipeline.s1_product_pipeline import S1ProductDirectPipeline
 from src.pipeline.scenario_config import get_scenario_step_order
@@ -517,6 +518,7 @@ class S2BrandCampaignPipeline:
             duration=video_duration,
         )
 
+        pipeline_started = time.perf_counter()
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(
@@ -539,6 +541,10 @@ class S2BrandCampaignPipeline:
                 final_state = await runner.resume(label)
         else:
             final_state = await self._resume_without_media_synthesis(runner, label)
+        await runner.finalize_pipeline_completion(
+            final_state,
+            started_at=pipeline_started,
+        )
 
         return self._build_result(
             final_state=final_state,
@@ -628,9 +634,7 @@ class S2BrandCampaignPipeline:
                     final_state["config"]["refs_only_media_assembly"] = True
                 if media_stop_step == "audit":
                     final_state["config"]["refs_only_media_audit"] = True
-                save = getattr(runner.state_manager, "save", None)
-                if callable(save):
-                    await save(label, final_state)
+                await runner.state_manager.save(label, final_state)
                 break
         return final_state
 
@@ -655,28 +659,29 @@ class S2BrandCampaignPipeline:
             disposition=artifact_disposition,
         )
 
-        completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         steps = state.setdefault("steps", {})
 
-        def seed_step(step_name: str, output: Any) -> None:
+        def seed_source_ref(step_name: str, output: Any) -> None:
             step = steps.setdefault(step_name, {})
-            step["status"] = "done"
+            step["status"] = "pending"
             step["output"] = output
-            step["completed_at"] = completed_at
+            step["source_ref"] = True
+            step["started_at"] = ""
+            step["completed_at"] = ""
 
-        seed_step("scripts", refs["scripts"])
-        seed_step("storyboards", refs["storyboards"])
-        seed_step("seedance_clips", {
+        seed_source_ref("scripts", refs["scripts"])
+        seed_source_ref("storyboards", refs["storyboards"])
+        seed_source_ref("seedance_clips", {
             "clip_paths": refs["clip_paths"],
             "clip_details": refs["clip_details"],
             "refs_only": True,
         })
-        seed_step("tts_audio", {
+        seed_source_ref("tts_audio", {
             "audio_paths": refs["audio_paths"],
             "lyrics_paths": refs["lyrics_paths"],
             "refs_only": True,
         })
-        seed_step("thumbnail_images", refs["thumbnail_image_paths"])
+        seed_source_ref("thumbnail_images", refs["thumbnail_image_paths"])
 
         state["current_step"] = "assemble_final"
         state["bounded_media_pilot"] = True
@@ -715,31 +720,32 @@ class S2BrandCampaignPipeline:
             disposition=artifact_disposition,
         )
 
-        completed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         steps = state.setdefault("steps", {})
 
-        def seed_step(step_name: str, output: Any) -> None:
+        def seed_source_ref(step_name: str, output: Any) -> None:
             step = steps.setdefault(step_name, {})
-            step["status"] = "done"
+            step["status"] = "pending"
             step["output"] = output
-            step["completed_at"] = completed_at
+            step["source_ref"] = True
+            step["started_at"] = ""
+            step["completed_at"] = ""
 
-        seed_step("scripts", refs["scripts"])
-        seed_step("storyboards", refs["storyboards"])
-        seed_step("continuity_storyboard_grid", refs["continuity_storyboard_grid"])
-        seed_step("seedance_clips", {
+        seed_source_ref("scripts", refs["scripts"])
+        seed_source_ref("storyboards", refs["storyboards"])
+        seed_source_ref("continuity_storyboard_grid", refs["continuity_storyboard_grid"])
+        seed_source_ref("seedance_clips", {
             "clip_paths": refs["clip_paths"],
             "clip_details": refs["clip_details"],
             "refs_only": True,
         })
-        seed_step("tts_audio", {
+        seed_source_ref("tts_audio", {
             "audio_paths": refs["audio_paths"],
             "lyrics_paths": refs["lyrics_paths"],
             "refs_only": True,
         })
-        seed_step("thumbnail_prompts", refs["thumbnail_prompts"])
-        seed_step("thumbnail_images", refs["thumbnail_image_paths"])
-        seed_step("assemble_final", {
+        seed_source_ref("thumbnail_prompts", refs["thumbnail_prompts"])
+        seed_source_ref("thumbnail_images", refs["thumbnail_image_paths"])
+        seed_source_ref("assemble_final", {
             "video_path": refs["video_path"],
             "render_json_path": refs["render_json_path"],
             "refs_only": True,
@@ -860,7 +866,9 @@ class S2BrandCampaignPipeline:
 
         if not enable_media_synthesis:
             logger.info("s2: complete (no media synthesis)", brand=brand_name, label=label)
-            return result
+            from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+            return project_scenario_wrapper_result(result, final_state)
 
         seedance_output = get(steps, "seedance_clips") or {}
         if isinstance(seedance_output, dict):
@@ -878,7 +886,9 @@ class S2BrandCampaignPipeline:
             result["audio_paths"] = tts_output if isinstance(tts_output, list) else []
             result["lyrics_paths"] = []
 
-        result["thumbnail_image_paths"] = get(steps, "thumbnail_images") or []
+        result["thumbnail_image_paths"] = media_paths(
+            get(steps, "thumbnail_images"), "image_paths"
+        )
 
         assemble_output = get(steps, "assemble_final") or {}
         final_video_path, render_json_path = extract_assemble_paths(assemble_output)
@@ -914,18 +924,11 @@ class S2BrandCampaignPipeline:
                 stop_step=bounded_stop_step,
                 clips=len(result["clip_paths"]),
             )
-            return result
+            from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+            return project_scenario_wrapper_result(result, final_state)
 
         result["steps_completed"] = 12
-
-        # Sprint 3 P3-1: C2PA signing for EU AI Act compliance (no-op when
-        # C2PA_ENABLED unset).
-        if result.get("final_video_path"):
-            from src.tools.c2pa_signer import sign_video
-            result["final_video_path"] = sign_video(
-                result["final_video_path"],
-                title=f"{brand_name} brand campaign (AI generated)",
-            )
 
         # Sprint 3 P3-3: partial artifacts when degraded
         from src.pipeline.partial_artifacts import summarize_partial_artifacts
@@ -946,4 +949,6 @@ class S2BrandCampaignPipeline:
             errors=len(result["errors"]),
         )
 
-        return result
+        from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+        return project_scenario_wrapper_result(result, final_state)

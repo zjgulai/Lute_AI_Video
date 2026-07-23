@@ -14,10 +14,11 @@ from typing import Any
 
 import structlog
 
+from src.models.pipeline_completion import derive_pipeline_completion_facts
 from src.pipeline.gate_manager import SCENARIO_GATE_DEFINITIONS
 from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.scenario_injection_plan import attach_step_injection_visibility
-from src.pipeline.state_manager import PipelineStateManager
+from src.pipeline.state_manager import PipelineStateManager, claim_pipeline_completion
 from src.telemetry import error_collector, generate_trace_id, pipeline_metrics
 
 
@@ -59,6 +60,105 @@ def _detect_regenerate_signal(result: Any) -> dict[str, Any] | None:
     if isinstance(result, list) and result and isinstance(result[0], dict) and result[0].get("_regenerate_upstream"):
         return result[0]
     return None
+
+
+_QUALITY_REWIND_MAX_ATTEMPTS = 2
+_PIPELINE_COMPLETION_CLAIM_KEY = "pipeline_completion_metric_v1"
+
+
+def _validate_pipeline_completion_claim(raw: Any) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    if (
+        type(raw) is not dict
+        or set(raw)
+        != {
+            "version",
+            "outcome",
+            "claimed_at",
+            "duration_ms",
+            "error_count",
+            "scenario",
+        }
+        or raw.get("version") != "pipeline-completion-metric.v1"
+        or raw.get("outcome") not in {"success", "failure"}
+        or type(raw.get("claimed_at")) is not str
+        or not raw["claimed_at"]
+        or type(raw.get("duration_ms")) not in {int, float}
+        or raw["duration_ms"] < 0
+        or type(raw.get("error_count")) is not int
+        or raw["error_count"] < 0
+        or type(raw.get("scenario")) is not str
+        or not raw["scenario"]
+    ):
+        raise ValueError("pipeline_completion_metric_invalid")
+    return raw
+
+
+def _quality_rewind_envelope(state: dict[str, Any]) -> dict[str, Any] | None:
+    from fastapi import HTTPException
+
+    config = state.get("config")
+    if not isinstance(config, dict) or "quality_rewind" not in config:
+        return None
+    rewind = config["quality_rewind"]
+    if (
+        type(rewind) is not dict
+        or set(rewind)
+        != {"upstream_step", "consumer_step", "attempt", "status"}
+        or type(rewind.get("upstream_step")) is not str
+        or not rewind["upstream_step"]
+        or type(rewind.get("consumer_step")) is not str
+        or not rewind["consumer_step"]
+        or type(rewind.get("attempt")) is not int
+        or not 1 <= rewind["attempt"] <= _QUALITY_REWIND_MAX_ATTEMPTS
+        or rewind.get("status") not in {"awaiting_upstream", "upstream_completed"}
+    ):
+        raise HTTPException(status_code=422, detail="Invalid quality rewind state")
+    return rewind
+
+
+def _assert_quality_rewind_step_allowed(state: dict[str, Any], step_name: str) -> None:
+    from fastapi import HTTPException
+
+    rewind = _quality_rewind_envelope(state)
+    if (
+        rewind is not None
+        and rewind["status"] == "awaiting_upstream"
+        and step_name == rewind["consumer_step"]
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Quality rewind requires upstream completion before consumer execution",
+        )
+
+
+def _record_quality_rewind_step_completion(
+    state: dict[str, Any],
+    step_name: str,
+) -> None:
+    rewind = _quality_rewind_envelope(state)
+    if rewind is None:
+        return
+    if rewind["status"] == "awaiting_upstream" and step_name == rewind["upstream_step"]:
+        rewind["status"] = "upstream_completed"
+    elif rewind["status"] == "upstream_completed" and step_name == rewind["consumer_step"]:
+        config = state.get("config")
+        assert isinstance(config, dict)
+        config.pop("quality_rewind", None)
+
+
+def _mark_quality_rewind_invalid(
+    state: dict[str, Any],
+    step_data: dict[str, Any],
+    error_code: str,
+) -> None:
+    step_data["status"] = "error"
+    state["pipeline_degraded"] = True
+    state["degraded_reason"] = error_code
+    errors = state.setdefault("errors", [])
+    if error_code not in errors:
+        errors.append(error_code)
 
 
 def _result_indicates_all_stubs(result: Any) -> bool:
@@ -222,33 +322,67 @@ def _mirror_continuity_output(state: dict[str, Any], result: Any) -> None:
         state["continuity_storyboard_metadata"] = result["metadata"]
 
 
-def _mark_completed_bounded(
+def _record_step_transparency(
     state: dict[str, Any],
     *,
-    profile: Any | None,
-    completion_kind: str | None = None,
-) -> dict[str, Any]:
-    """Persist truthful terminal semantics for an intentionally bounded run."""
+    step_name: str,
+    output: Any,
+    skipped: bool = False,
+) -> Any:
+    from src.config import OUTPUT_DIR
+    from src.services.transparency_provenance import record_step_provenance
 
-    kind = completion_kind or (profile.completion_kind if profile is not None else "no_media")
-    state.update(
-        {
-            "status": "completed_bounded",
-            "lifecycle_status": "completed_bounded",
-            "completion_kind": kind,
-            "request_succeeded": True,
-            "success": False,
-            "full_media_success": False,
-            "pipeline_complete": False,
-            "publish_allowed": False,
-            "delivery_accepted": False,
-            "current_step": None,
-        }
+    updated_output, transparency = record_step_provenance(
+        state=state,
+        step_name=step_name,
+        output=output,
+        output_dir=OUTPUT_DIR,
+        origin_kind="simulated" if skipped else "local",
     )
-    if profile is not None:
-        state["execution_profile_id"] = profile.profile_id
-        state["provider_job_caps"] = dict(profile.provider_job_caps)
-    state.setdefault("config", {})["execution_lifecycle"] = {
+    state["transparency"] = transparency
+    return updated_output
+
+
+def _mark_execution_terminal(
+    state: dict[str, Any],
+    *,
+    profile: Any,
+) -> dict[str, Any]:
+    """Derive and persist one truthful terminal lifecycle envelope."""
+
+    from src.pipeline import completion_truth
+
+    state["current_step"] = None
+    lifecycle = completion_truth.derive_scenario_completion(
+        state,
+        expected_completion_kind=profile.completion_kind,
+    )
+    config = state.setdefault("config", {})
+    if lifecycle["status"] == "error":
+        for field in (
+            "status",
+            "lifecycle_status",
+            "completion_kind",
+            "request_succeeded",
+            "success",
+            "full_media_success",
+            "pipeline_complete",
+            "publish_allowed",
+            "delivery_accepted",
+        ):
+            state.pop(field, None)
+        config.pop("execution_lifecycle", None)
+        state["pipeline_degraded"] = True
+        state["degraded_reason"] = "completion_truth_failed"
+        errors = state.setdefault("errors", [])
+        if "completion_truth_failed" not in errors:
+            errors.append("completion_truth_failed")
+        return state
+
+    state.update(lifecycle)
+    state["execution_profile_id"] = profile.profile_id
+    state["provider_job_caps"] = dict(profile.provider_job_caps)
+    config["execution_lifecycle"] = {
         key: state[key]
         for key in (
             "status",
@@ -263,7 +397,6 @@ def _mark_completed_bounded(
             "execution_profile_id",
             "provider_job_caps",
         )
-        if key in state
     }
     return state
 
@@ -323,6 +456,8 @@ class StepRunner:
         scenario_cfg = _get_scenario_config(scenario)
         step_order = scenario_cfg["step_order"]
         config = dict(_with_continuity_defaults(config, scenario))
+        if _PIPELINE_COMPLETION_CLAIM_KEY in config:
+            raise ValueError("pipeline completion metric claim is server-owned")
 
         # Request-time generation authority is server-owned.  Blocking
         # scenario wrappers build their own config before reaching StepRunner,
@@ -375,6 +510,7 @@ class StepRunner:
                     "enable_media_synthesis": effective_policy.enable_media_synthesis,
                     "artifact_disposition": effective_policy.artifact_disposition,
                     "provider_max_retries": effective_policy.provider_max_retries,
+                    "c2pa_signing_mode": effective_policy.c2pa_signing_mode,
                     "effective_generation_policy": effective_policy.model_dump(mode="json"),
                     PROVIDER_EXECUTION_CONFIG_KEY: execution_projection,
                 }
@@ -435,6 +571,8 @@ class StepRunner:
             "pipeline_degraded": False,
             "degraded_reason": None,
             "structured_errors": [],
+            "regenerate_chain": [],
+            "soft_degraded_reasons": [],
         }
 
         if effective_policy is not None:
@@ -463,6 +601,62 @@ class StepRunner:
 
         return await self._execute_step(state, step_name, force=False)
 
+    async def finalize_pipeline_completion(
+        self,
+        state: dict[str, Any],
+        *,
+        started_at: float,
+    ) -> bool:
+        """Atomically persist one terminal claim before emitting completion."""
+        config = state.get("config")
+        if type(config) is not dict:
+            raise ValueError("pipeline_completion_metric_invalid")
+        existing = _validate_pipeline_completion_claim(
+            config.get(_PIPELINE_COMPLETION_CLAIM_KEY)
+        )
+        if existing is not None:
+            return False
+
+        proposed_facts = derive_pipeline_completion_facts(state)
+        if proposed_facts is None:
+            return False
+
+        duration_ms = max((time.perf_counter() - started_at) * 1000, 0.0)
+        claim = {
+            "version": "pipeline-completion-metric.v1",
+            "outcome": proposed_facts["outcome"],
+            "claimed_at": datetime.now().astimezone().isoformat(),
+            "duration_ms": duration_ms,
+            "error_count": proposed_facts["error_count"],
+            "scenario": proposed_facts["scenario"],
+        }
+        winning_claim = await claim_pipeline_completion(
+            self.state_manager,
+            label=state["label"],
+            state=state,
+            claim=claim,
+        )
+        if winning_claim is None:
+            return False
+        success = winning_claim["outcome"] == "success"
+        pipeline_metrics.record_pipeline(
+            label=state["label"],
+            scenario=winning_claim["scenario"],
+            total_duration_ms=winning_claim["duration_ms"],
+            success=success,
+            error_count=winning_claim["error_count"],
+        )
+        logger.info(
+            "step_runner: pipeline completion claimed",
+            label=state["label"],
+            trace_id=state.get("trace_id", "unknown"),
+            scenario=winning_claim["scenario"],
+            total_duration_ms=round(winning_claim["duration_ms"], 2),
+            success=success,
+            error_count=winning_claim["error_count"],
+        )
+        return True
+
     async def regenerate_step(self, label: str, step_name: str) -> dict[str, Any]:
         """Force re-execution of a step even if it is already done."""
         state = await self.state_manager.load(label)
@@ -472,6 +666,8 @@ class StepRunner:
         scenario_cfg = _get_scenario_config(state.get("scenario", "s1"))
         if step_name not in scenario_cfg["step_order"]:
             raise ValueError(f"Unknown step name: {step_name}")
+
+        _assert_quality_rewind_step_allowed(state, step_name)
 
         from src.pipeline.generation_policy import assert_generation_step_allowed
         from src.services.provider_execution import (
@@ -492,6 +688,7 @@ class StepRunner:
         state = await self.state_manager.load(label)
         if state is None:
             raise ValueError(f"State not found for label: {label}")
+        pipeline_start = time.perf_counter()
 
         from fastapi import HTTPException
 
@@ -501,6 +698,7 @@ class StepRunner:
         if not isinstance(config, dict) or "effective_generation_policy" not in config:
             _mark_policy_blocked(state)
             await self.state_manager.save(label, state)
+            await self.finalize_pipeline_completion(state, started_at=pipeline_start)
             return state
 
         profile = resolve_generation_execution_profile(state)
@@ -509,21 +707,30 @@ class StepRunner:
         if current is None:
             incomplete = [step for step in step_order if state.get("steps", {}).get(step, {}).get("status") != "done"]
             if incomplete or state.get("pipeline_degraded"):
+                await self.finalize_pipeline_completion(
+                    state,
+                    started_at=pipeline_start,
+                )
                 raise HTTPException(
                     status_code=422,
                     detail="Empty execution cursor has incomplete or failed profile steps",
                 )
             if state.get("status") != "completed_bounded":
-                _mark_completed_bounded(state, profile=profile)
+                _mark_execution_terminal(state, profile=profile)
                 await self.state_manager.save(label, state)
+            await self.finalize_pipeline_completion(state, started_at=pipeline_start)
             return state
 
         if current not in step_order:
             canonical_order = _get_scenario_config(state.get("scenario", "s1"))["step_order"]
             completed_allowed = all(state.get("steps", {}).get(step, {}).get("status") == "done" for step in step_order)
             if current in canonical_order and completed_allowed and not state.get("pipeline_degraded"):
-                _mark_completed_bounded(state, profile=profile)
+                _mark_execution_terminal(state, profile=profile)
                 await self.state_manager.save(label, state)
+                await self.finalize_pipeline_completion(
+                    state,
+                    started_at=pipeline_start,
+                )
                 return state
             raise HTTPException(
                 status_code=422,
@@ -535,17 +742,12 @@ class StepRunner:
         except ValueError:
             raise ValueError(f"Invalid current_step in state: {current}")
 
-        pipeline_start = time.perf_counter()
-        total_errors = len(state.get("errors", []))
-        success = True
-
         for step_name in step_order[start_idx:]:
             # P0: Degraded guard — if any previous step set pipeline_degraded, stop
             if state.get("pipeline_degraded"):
                 logger.error(
                     "step_runner: pipeline degraded, halting", step=step_name, reason=state.get("degraded_reason")
                 )
-                success = False
                 break
             # Gate check: if this step has a gate awaiting approval, pause and return
             gate_id = _get_gate_id_for_step(step_name, state.get("scenario", "s1"))
@@ -557,7 +759,13 @@ class StepRunner:
                     await self.state_manager.save(state["label"], state)
                     return state
             state = await self._execute_step(state, step_name, force=False)
-            total_errors = len(state.get("errors", []))
+            rewind = _quality_rewind_envelope(state)
+            if (
+                rewind is not None
+                and rewind["status"] == "awaiting_upstream"
+                and state.get("current_step") == rewind["upstream_step"]
+            ):
+                return state
 
             # Post-step gate check: if the step we just ran registered a gate
             # (e.g. keyframe_images → gate_2_keyframe), the gate is now
@@ -577,29 +785,10 @@ class StepRunner:
                     return state
 
         if not state.get("pipeline_degraded") and state.get("current_step") is None:
-            _mark_completed_bounded(state, profile=profile)
+            _mark_execution_terminal(state, profile=profile)
             await self.state_manager.save(label, state)
 
-        pipeline_duration_ms = (time.perf_counter() - pipeline_start) * 1000
-        scenario = state.get("scenario", "unknown")
-        trace_id = state.get("trace_id", "unknown")
-
-        pipeline_metrics.record_pipeline(
-            label=label,
-            scenario=scenario,
-            total_duration_ms=pipeline_duration_ms,
-            success=success,
-            error_count=total_errors,
-        )
-        logger.info(
-            "step_runner: pipeline complete",
-            label=label,
-            trace_id=trace_id,
-            scenario=scenario,
-            total_duration_ms=round(pipeline_duration_ms, 2),
-            success=success,
-            error_count=total_errors,
-        )
+        await self.finalize_pipeline_completion(state, started_at=pipeline_start)
         return state
 
     async def _execute_step(self, state: dict[str, Any], step_name: str, force: bool = False) -> dict[str, Any]:
@@ -607,6 +796,7 @@ class StepRunner:
         from src.pipeline.generation_policy import assert_generation_step_allowed
 
         profile = assert_generation_step_allowed(state, step_name, force=force)
+        _assert_quality_rewind_step_allowed(state, step_name)
         steps = state.get("steps", {})
         if step_name not in steps:
             raise ValueError(f"Step '{step_name}' not found in state steps")
@@ -629,7 +819,12 @@ class StepRunner:
         if step_name == "compliance" and not config.get("brand_mode"):
             logger.info("step_runner: skipping compliance (brand_mode=False)")
             step_data["status"] = "done"
-            step_data["output"] = None
+            step_data["output"] = _record_step_transparency(
+                state,
+                step_name=step_name,
+                output=None,
+                skipped=True,
+            )
             step_data["completed_at"] = datetime.now().isoformat()
             next_step = _get_next_step(step_name, step_order)
             state["current_step"] = next_step
@@ -647,7 +842,12 @@ class StepRunner:
         if _skip_thumbnail:
             logger.info("step_runner: skipping thumbnail_images in auto mode (SKIP_THUMBNAIL_IN_AUTO)")
             step_data["status"] = "done"
-            step_data["output"] = []
+            step_data["output"] = _record_step_transparency(
+                state,
+                step_name=step_name,
+                output=[],
+                skipped=True,
+            )
             step_data["completed_at"] = datetime.now().isoformat()
             next_step = _get_next_step(step_name, step_order)
             state["current_step"] = next_step
@@ -689,6 +889,11 @@ class StepRunner:
                         pipeline_class = getattr(pipeline_module, pipeline_class_name)
                         pipeline = pipeline_class()
                         result = await pipeline.run_step(step_name, state)
+                        result = _record_step_transparency(
+                            state,
+                            step_name=step_name,
+                            output=result,
+                        )
         except Exception as exc:
             step_duration_ms = (time.perf_counter() - step_start) * 1000
             logger.error("step_runner: step failed", step=step_name, error=str(exc), trace_id=trace_id)
@@ -740,6 +945,7 @@ class StepRunner:
         step_data["status"] = "done"
         step_data["completed_at"] = datetime.now().isoformat()
         step_data["duration_ms"] = round(step_duration_ms)
+        _record_quality_rewind_step_completion(state, step_name)
 
         if step_name == "continuity_storyboard_grid":
             _mirror_continuity_output(state, result)
@@ -794,7 +1000,7 @@ class StepRunner:
         next_step = _get_next_step(step_name, step_order)
         state["current_step"] = next_step
         if next_step is None and not state.get("pipeline_degraded"):
-            _mark_completed_bounded(state, profile=profile)
+            _mark_execution_terminal(state, profile=profile)
 
         await self.state_manager.save(state["label"], state)
         logger.info(
@@ -824,9 +1030,18 @@ class StepRunner:
         next loop will re-run it after upstream regenerates.
         """
         upstream_skill = signal.get("_regenerate_upstream") or signal.get("regenerate_upstream") or ""
-        upstream_step = _SCENARIO_REGENERATE_STEP_MAP.get(upstream_skill, upstream_skill)
+        upstream_step = (
+            _SCENARIO_REGENERATE_STEP_MAP.get(upstream_skill, upstream_skill)
+            if type(upstream_skill) is str
+            else ""
+        )
         steps = state.get("steps", {})
-        if upstream_step not in steps:
+        if (
+            type(upstream_skill) is not str
+            or not upstream_skill
+            or type(upstream_step) is not str
+            or upstream_step not in steps
+        ):
             logger.warning(
                 "step_runner: regenerate signal points at unknown upstream step",
                 upstream_skill=upstream_skill,
@@ -834,9 +1049,28 @@ class StepRunner:
                 consumer=step_name,
                 trace_id=trace_id,
             )
-            step_data["status"] = "done"
-            step_data["completed_at"] = datetime.now().isoformat()
-            step_data["duration_ms"] = round(step_duration_ms)
+            _mark_quality_rewind_invalid(
+                state,
+                step_data,
+                "quality_rewind_upstream_invalid",
+            )
+            await self.state_manager.save(state["label"], state)
+            return state
+
+        upstream_step_data = steps[upstream_step]
+        raw_attempt = signal.get("attempt")
+        durable_attempt = upstream_step_data.get("_quality_attempt", 0)
+        if (
+            type(raw_attempt) is not int
+            or type(durable_attempt) is not int
+            or raw_attempt != durable_attempt
+            or not 0 <= durable_attempt < _QUALITY_REWIND_MAX_ATTEMPTS
+        ):
+            _mark_quality_rewind_invalid(
+                state,
+                step_data,
+                "quality_rewind_attempt_invalid",
+            )
             await self.state_manager.save(state["label"], state)
             return state
 
@@ -845,19 +1079,12 @@ class StepRunner:
             persist_trusted_regeneration_epoch,
         )
 
-        assert_generation_step_allowed(state, upstream_step, force=True)
-        await persist_trusted_regeneration_epoch(
-            state,
-            state_writer=self.state_manager,
-            operation_key=f"feedback.regenerate.{upstream_step}",
-        )
-
         chain: list[dict[str, Any]] = state.setdefault("regenerate_chain", [])
-        attempt = int(signal.get("attempt", 0)) + 1
+        attempt = durable_attempt + 1
         chain.append(
             {
                 "ts": datetime.now().isoformat(),
-                "consumer": signal.get("consumer", step_name),
+                "consumer": step_name,
                 "upstream_skill": upstream_skill,
                 "upstream_step": upstream_step,
                 "score": signal.get("score"),
@@ -867,13 +1094,27 @@ class StepRunner:
             }
         )
 
-        upstream_step_data = steps[upstream_step]
         upstream_step_data["status"] = "pending"
         upstream_step_data["_quality_attempt"] = attempt
         upstream_step_data.pop("completed_at", None)
         step_data["status"] = "pending"
         step_data.pop("completed_at", None)
+        config = state.setdefault("config", {})
+        config["quality_rewind"] = {
+            "upstream_step": upstream_step,
+            "consumer_step": step_name,
+            "attempt": attempt,
+            "status": "awaiting_upstream",
+        }
         state["current_step"] = upstream_step
+
+        assert_generation_step_allowed(state, upstream_step, force=True)
+        await persist_trusted_regeneration_epoch(
+            state,
+            state_writer=self.state_manager,
+            operation_key=f"feedback.regenerate.{upstream_step}",
+        )
+
         logger.info(
             "step_runner: feedback_gate regenerate dispatched",
             consumer=step_name,
@@ -882,5 +1123,4 @@ class StepRunner:
             score=signal.get("score"),
             trace_id=trace_id,
         )
-        await self.state_manager.save(state["label"], state)
         return state

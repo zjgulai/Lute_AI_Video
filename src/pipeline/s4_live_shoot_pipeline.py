@@ -26,11 +26,13 @@ import structlog
 import src.skills.continuity_storyboard_grid  # noqa: F401
 import src.skills.script_writer  # noqa: F401
 from src.config import DEFAULT_LANGUAGES, OUTPUT_DIR
+from src.models.runtime_contracts import ContinuityAuditSummary
 from src.pipeline.artifact_paths import extract_assemble_paths
 from src.pipeline.continuity_utils import (
     build_continuity_audit_summary,
     build_transitions_from_clip_details,
 )
+from src.pipeline.media_truth import aggregate_simulated
 from src.pipeline.scenario_config import get_scenario_step_order
 from src.pipeline.scenario_injection_plan import with_optional_injection_config
 from src.pipeline.state_manager import PipelineStateManager
@@ -232,6 +234,7 @@ class S4LiveShootPipeline:
                 scripts=scripts,
                 language=config.get("target_language", "en"),
                 errors=errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "audio"),
             )
 
         if step_name == "assemble_final":
@@ -252,6 +255,7 @@ class S4LiveShootPipeline:
                 brand_guidelines=config.get("brand_guidelines") or {},
                 label=config.get("output_label", "s4"),
                 errors=errors,
+                artifact_output_dir=_artifact_media_output_dir(state, config, "assemble"),
             )
 
         if step_name == "audit":
@@ -695,6 +699,8 @@ class S4LiveShootPipeline:
             if isinstance(raw, Exception):
                 errors.append(f"clip_failed_with_exception: {raw}")
                 continue
+            if not isinstance(raw, tuple):
+                continue
             i, skill_result = raw
             if skill_result.success and skill_result.data:
                 p = skill_result.data.get("video_path", "")
@@ -704,6 +710,7 @@ class S4LiveShootPipeline:
                         "path": p,
                         "duration": skill_result.data.get("duration_seconds", 0),
                         "is_stub": skill_result.data.get("is_stub", False),
+                        "simulated": skill_result.data.get("simulated"),
                         "verification": skill_result.data.get("verification", {}),
                         "continuity_frame_used": None,
                         "transition_to_next": capped_prompts[i].get("transition_to_next", ""),
@@ -718,11 +725,15 @@ class S4LiveShootPipeline:
             else:
                 errors.append(f"clip_{i}_failed: {skill_result.error}")
 
-        return {
+        output = {
             "clip_paths": clip_paths,
             "clip_details": clip_details,
             "total_duration": sum(d.get("duration", 5) for d in clip_details),
         }
+        simulated = aggregate_simulated(clip_details)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_tts_audio(
         self,
@@ -730,10 +741,12 @@ class S4LiveShootPipeline:
         scripts: list[dict[str, Any]],
         language: str,
         errors: list[str],
+        artifact_output_dir: str | None = None,
     ) -> dict[str, Any]:
         """Generate voiceover audio from script segments."""
         audio_paths: list[str] = []
         lyrics_paths: list[str] = []
+        audio_results: list[dict[str, Any]] = []
 
         for script_index, script in enumerate(scripts[:MAX_SCRIPTS_PER_RUN]):
             voiceover_parts: list[str] = []
@@ -744,12 +757,16 @@ class S4LiveShootPipeline:
             if not voiceover_parts:
                 continue
             merged_text = "\n".join(voiceover_parts)
-            res = await reg.execute("elevenlabs-tts-skill", {
+            tts_params: dict[str, Any] = {
                 "text": merged_text,
                 "language": language,
                 "operation_instance": f"script.{script_index}",
-            })
+            }
+            if artifact_output_dir:
+                tts_params["output_dir"] = artifact_output_dir
+            res = await reg.execute("elevenlabs-tts-skill", tts_params)
             if res.success and res.data:
+                audio_results.append(res.data)
                 p = res.data.get("audio_path", "")
                 if p:
                     audio_paths.append(p)
@@ -759,7 +776,14 @@ class S4LiveShootPipeline:
             else:
                 errors.append(f"tts_failed: {res.error}")
 
-        return {"audio_paths": audio_paths, "lyrics_paths": lyrics_paths}
+        output: dict[str, Any] = {
+            "audio_paths": audio_paths,
+            "lyrics_paths": lyrics_paths,
+        }
+        simulated = aggregate_simulated(audio_results)
+        if simulated is not None:
+            output["simulated"] = simulated
+        return output
 
     async def _step_assemble_final(
         self,
@@ -772,7 +796,8 @@ class S4LiveShootPipeline:
         brand_guidelines: dict[str, Any],
         label: str,
         errors: list[str],
-    ) -> tuple[str, str]:
+        artifact_output_dir: str | None = None,
+    ) -> dict[str, Any]:
         """Assemble final video via Remotion."""
         # Derive shots from scripts (S4 has no storyboards)
         shots: list[dict[str, Any]] = []
@@ -801,7 +826,7 @@ class S4LiveShootPipeline:
 
         transitions = build_transitions_from_clip_details(clip_details or [])
 
-        res = await reg.execute("remotion-assemble-skill", {
+        assemble_params: dict[str, Any] = {
             "shots": shots,
             "captions": captions,
             "audio_paths": audio_paths,
@@ -811,11 +836,14 @@ class S4LiveShootPipeline:
             "output_label": label,
             "total_duration": total_duration,
             "transitions": transitions,
-        })
+        }
+        if artifact_output_dir:
+            assemble_params["output_dir"] = artifact_output_dir
+        res = await reg.execute("remotion-assemble-skill", assemble_params)
         if res.success and res.data:
-            return res.data.get("video_path", ""), res.data.get("render_json_path", "")
+            return dict(res.data)
         errors.append(f"assemble_failed: {res.error}")
-        return "", ""
+        return {}
 
     async def _step_audit(
         self,
@@ -831,7 +859,7 @@ class S4LiveShootPipeline:
         language: str,
         errors: list[str],
         continuity_grid: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ContinuityAuditSummary:
         """Run quality audit on final outputs."""
         script_text = " ".join([
             (seg.get("voiceover", "") or seg.get("description", ""))
@@ -928,6 +956,7 @@ class S4LiveShootPipeline:
             expected_scenario="s4",
         )
 
+        pipeline_started = time.perf_counter()
         state_manager = PipelineStateManager()
         runner = StepRunner(state_manager)
         label = await runner.init_state(config=config, mode="auto", label=label, scenario="s4")
@@ -943,6 +972,10 @@ class S4LiveShootPipeline:
                 final_state = await runner.resume(label)
         else:
             final_state = await self._resume_without_media_synthesis(runner, label)
+        await runner.finalize_pipeline_completion(
+            final_state,
+            started_at=pipeline_started,
+        )
 
         # Convert final state back to the legacy result dict
         steps = final_state.get("steps", {})
@@ -1020,7 +1053,9 @@ class S4LiveShootPipeline:
             thumbnails=len(result["thumbnail_sets"]),
             errors=len(result.get("errors", [])),
         )
-        return result
+        from src.pipeline.completion_truth import project_scenario_wrapper_result
+
+        return project_scenario_wrapper_result(result, final_state)
 
     async def _resume_bounded_media_pilot(
         self,
@@ -1047,9 +1082,7 @@ class S4LiveShootPipeline:
                 final_state["config"]["provider_max_retries"] = provider_max_retries
                 final_state["config"]["provider_job_caps"] = dict(S4_BOUNDED_MEDIA_PROVIDER_JOB_CAPS)
                 final_state["config"]["seedance_quality_gate_enabled"] = False
-                save = getattr(runner.state_manager, "save", None)
-                if callable(save):
-                    await save(label, final_state)
+                await runner.state_manager.save(label, final_state)
                 break
         return final_state
 
@@ -1064,7 +1097,5 @@ class S4LiveShootPipeline:
                 break
         if final_state and not final_state.get("pipeline_degraded"):
             final_state["current_step"] = None
-            save = getattr(runner.state_manager, "save", None)
-            if callable(save):
-                await save(label, final_state)
+            await runner.state_manager.save(label, final_state)
         return final_state

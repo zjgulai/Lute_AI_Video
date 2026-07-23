@@ -23,7 +23,10 @@ from src.connectors.registry import (
     get_connector,
     inspect_publish_readiness,
 )
-from src.models.acceptance import AcceptanceRecordResponse
+from src.models.acceptance import (
+    AcceptanceRecordResponse,
+    AcceptanceTransparencyProjection,
+)
 from src.models.publish_attempt import (
     DurableTikTokStatusResponse,
     PublishAttemptErrorCode,
@@ -31,10 +34,13 @@ from src.models.publish_attempt import (
     PublishAttemptReadbackResponse,
     PublishAttemptRequest,
     PublishAttemptResponse,
+    PublishDisclosureV1,
     PublishMetadata,
     PublishReceiptV1,
     ShopifyPublishOptions,
     TikTokPublishOptions,
+    effective_shopify_title,
+    effective_tiktok_metadata,
 )
 from src.routers._deps import AuthContext
 from src.services.artifact_acceptance import (
@@ -107,17 +113,15 @@ def _tiktok_content(
     metadata: PublishMetadata,
     options: TikTokPublishOptions,
     video_path: Path,
+    disclosure: PublishDisclosureV1,
 ) -> dict[str, Any]:
-    title = metadata.title or metadata.hook or "AI-generated video"
-    description = metadata.description or metadata.hook or title
-    tags = list(metadata.hashtags or metadata.tags)
-    if tags:
-        description = description + "\n" + " ".join(f"#{tag}" for tag in tags)
+    title, description, tags = effective_tiktok_metadata(metadata)
     return {
         "video_path": str(video_path),
         "title": title,
         "description": description,
         "tags": tags,
+        "disclosure": disclosure.model_dump(mode="json"),
         "platform_options": options.model_dump(mode="json"),
     }
 
@@ -126,12 +130,14 @@ def _shopify_content(
     metadata: PublishMetadata,
     options: ShopifyPublishOptions,
     video_path: Path,
+    disclosure: PublishDisclosureV1,
 ) -> dict[str, Any]:
-    title = metadata.title or metadata.hook or "AI-generated video"
+    title = effective_shopify_title(metadata)
     return {
         "video_path": str(video_path),
         "title": title,
         "product_name": metadata.product_name or title,
+        "disclosure": disclosure.model_dump(mode="json"),
         "platform_options": options.model_dump(mode="json"),
     }
 
@@ -251,6 +257,7 @@ class PublishAttemptService:
             preflight_content = self._build_connector_content(
                 request=request,
                 video_path=inspected_artifact.absolute_path,
+                transparency=inspected.transparency,
             )
         except (ArtifactIdentityError, OSError, RuntimeError, ValueError) as exc:
             await self._record_authorization_failure_or_unknown(
@@ -290,7 +297,9 @@ class PublishAttemptService:
                 tenant_id=tenant_id,
                 route_kind=route_kind,
                 request=request,
+                inspected=inspected,
                 consumed=consumed,
+                connector_content=preflight_content,
             )
         except (AttributeError, TypeError, ValueError) as exc:
             self._raise_error(
@@ -326,10 +335,25 @@ class PublishAttemptService:
                 cause=exc,
             )
 
-        connector_content = self._build_connector_content(
-            request=request,
-            video_path=artifact.absolute_path,
-        )
+        try:
+            connector_content = self._build_connector_content(
+                request=request,
+                video_path=artifact.absolute_path,
+                transparency=consumed.transparency,
+            )
+            if connector_content != preflight_content:
+                raise ValueError("consumed connector content is inconsistent")
+        except (AttributeError, TypeError, ValueError) as exc:
+            self._raise_error(
+                status_code=500,
+                code="publish_attempt_state_unknown",
+                attempt_id=attempt_id,
+                acceptance_consumed=True,
+                retry_allowed=False,
+                platform=request.platform,
+                trace_id=trace_id,
+                cause=exc,
+            )
         return await self._publish_once_and_persist(
             tenant_id=tenant_id,
             attempt_id=attempt_id,
@@ -438,7 +462,18 @@ class PublishAttemptService:
         *,
         request: PublishAttemptRequest,
         video_path: Path,
+        transparency: AcceptanceTransparencyProjection | None,
     ) -> dict[str, Any]:
+        if (
+            transparency is None
+            or transparency.ai_generated is not True
+            or transparency.final_artifact_c2pa_status != "signed_local_readback"
+        ):
+            raise ValueError("validated transparency disclosure is required")
+        disclosure = PublishDisclosureV1(
+            sidecar_sha256=transparency.sidecar_sha256,
+            final_artifact_c2pa_status="signed_local_readback",
+        )
         if request.platform == "tiktok":
             if not isinstance(request.platform_options, TikTokPublishOptions):
                 raise ValueError("TikTok publish options are invalid")
@@ -446,6 +481,7 @@ class PublishAttemptService:
                 request.metadata,
                 request.platform_options,
                 video_path,
+                disclosure,
             )
         if not isinstance(request.platform_options, ShopifyPublishOptions):
             raise ValueError("Shopify publish options are invalid")
@@ -453,6 +489,7 @@ class PublishAttemptService:
             request.metadata,
             request.platform_options,
             video_path,
+            disclosure,
         )
 
     async def _inspect_acceptance_or_fail_closed(
@@ -781,7 +818,9 @@ class PublishAttemptService:
         tenant_id: str,
         route_kind: RouteKind,
         request: PublishAttemptRequest,
+        inspected: AcceptanceRecordResponse,
         consumed: AcceptanceRecordResponse,
+        connector_content: Mapping[str, Any],
     ) -> dict[str, Any]:
         if (
             consumed.acceptance_id != request.acceptance_id
@@ -789,8 +828,24 @@ class PublishAttemptService:
             or consumed.decision != "accepted"
             or consumed.status != "consumed"
             or consumed.artifact.kind != "video"
+            or consumed.transparency is None
+            or inspected.source_resource_type != consumed.source_resource_type
+            or inspected.source_resource_id != consumed.source_resource_id
+            or inspected.scenario != consumed.scenario
+            or inspected.artifact != consumed.artifact
+            or inspected.transparency != consumed.transparency
         ):
             raise ValueError("consumed acceptance projection is invalid")
+        disclosure = PublishDisclosureV1.model_validate(
+            connector_content.get("disclosure")
+        )
+        if disclosure.sidecar_sha256 != consumed.transparency.sidecar_sha256:
+            raise ValueError("consumed transparency disclosure is inconsistent")
+        effective_metadata = {
+            key: connector_content[key]
+            for key in ("title", "description", "tags", "product_name")
+            if key in connector_content
+        }
         return {
             "schema_version": "publish-attempt.v1",
             "route_kind": route_kind,
@@ -809,6 +864,8 @@ class PublishAttemptService:
                 mode="json",
                 exclude_none=True,
             ),
+            "effective_metadata": effective_metadata,
+            "disclosure": disclosure.model_dump(mode="json"),
         }
 
     async def _mark_acceptance_consumed_or_stop(
