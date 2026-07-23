@@ -205,6 +205,11 @@ if not isinstance(tables, dict) or not tables:
 expected_tables = stats.get("expected_tables")
 if not isinstance(expected_tables, list) or not expected_tables:
     raise SystemExit("backup stats do not declare expected tables")
+schema_metadata_tables = {"alembic_version"}
+if schema_metadata_tables & set(expected_tables):
+    raise SystemExit("backup stats must exclude schema metadata tables")
+if schema_metadata_tables & set(tables):
+    raise SystemExit("backup stats must exclude schema metadata tables")
 if set(expected_tables) != set(tables):
     raise SystemExit("logical dump table set does not match expected tables")
 
@@ -232,9 +237,11 @@ for line in schema_list_path.read_text(encoding="utf-8").splitlines():
     parts = line.split()
     if len(parts) >= 7 and parts[3:5] == ["TABLE", "public"]:
         schema_tables.add(parts[5])
-missing_schema_tables = set(expected_tables) - schema_tables
-if missing_schema_tables:
-    raise SystemExit("schema archive is missing required tables")
+expected_schema_tables = set(expected_tables) | schema_metadata_tables
+if schema_tables != expected_schema_tables:
+    raise SystemExit(
+        "schema archive table set does not match business tables plus migration metadata"
+    )
 
 before_signature = stats.get("schema_signature")
 after_signature = json.loads(

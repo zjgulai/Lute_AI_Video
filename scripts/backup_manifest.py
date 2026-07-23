@@ -37,6 +37,7 @@ BACKUP_ARTIFACTS = (
     "pg_schema_signature_after.json",
     SOURCE_MANIFEST_NAME,
 )
+SCHEMA_METADATA_TABLES = frozenset({"alembic_version"})
 
 
 class BackupManifestError(ValueError):
@@ -304,7 +305,15 @@ def _database_facts(
         )
     ):
         raise BackupManifestError("PostgreSQL expected table set is invalid")
+    if set(expected_tables) & SCHEMA_METADATA_TABLES:
+        raise BackupManifestError(
+            "PostgreSQL business table set includes schema metadata"
+        )
     tables = _validate_table_stats(stats_payload.get("tables"))
+    if set(tables) & SCHEMA_METADATA_TABLES:
+        raise BackupManifestError(
+            "PostgreSQL business table stats include schema metadata"
+        )
     if set(tables) != set(expected_tables):
         raise BackupManifestError("PostgreSQL stats table set is inconsistent")
     total_rows = stats_payload.get("total_rows")
@@ -347,7 +356,8 @@ def _database_facts(
             if not IDENTIFIER_RE.fullmatch(table) or table in schema_tables:
                 raise BackupManifestError("PostgreSQL schema table set is invalid")
             schema_tables.add(table)
-    if schema_tables != set(expected_tables):
+    expected_schema_tables = set(expected_tables) | SCHEMA_METADATA_TABLES
+    if schema_tables != expected_schema_tables:
         raise BackupManifestError("PostgreSQL schema table set is inconsistent")
 
     server_version_num = stats_payload.get("server_version_num")

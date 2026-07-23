@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 from scripts.backup_manifest import (
     build_source_manifest,
     create_backup_manifest,
@@ -62,13 +64,26 @@ def _fake_backup_tools(tmp_path: Path) -> tuple[Path, Path]:
         '{"_table":"tenants","_data":{"id":"tenant-1"}}\n'
         '{"_table":"api_keys","_data":{"id":"key-1"}}\n'
     )
+    dump_content_with_alembic = (
+        dump_content
+        + '{"_table":"alembic_version","_data":{"version_num":"c8d9e0f1a2b3"}}\n'
+    )
     dump_size = len(dump_content.encode())
+    dump_size_with_alembic = len(dump_content_with_alembic.encode())
     schema_tables = EXPECTED_RECOVERY_TABLES
+    schema_archive_tables = [*schema_tables, "alembic_version"]
     schema_listing = "".join(
-        f"1; 1259 1 TABLE public {table} owner\\n" for table in schema_tables
+        f"1; 1259 1 TABLE public {table} owner\\n"
+        for table in schema_archive_tables
     )
     schema_listing_without_audit = schema_listing.replace(
         "1; 1259 1 TABLE public audit_logs owner\\n", ""
+    )
+    schema_listing_without_alembic = schema_listing.replace(
+        "1; 1259 1 TABLE public alembic_version owner\\n", ""
+    )
+    schema_listing_with_extra = (
+        schema_listing + "1; 1259 1 TABLE public unexpected_table owner\\n"
     )
     schema_signature = "a" * 64
     schema_signature_mismatch = "b" * 64
@@ -91,6 +106,26 @@ def _fake_backup_tools(tmp_path: Path) -> tuple[Path, Path]:
         },
         separators=(",", ":"),
     )
+    dump_stats_with_alembic = json.dumps(
+        {
+            "timestamp": "2026-07-10T00:00:00Z",
+            "server_version_num": "180004",
+            "server_major": 18,
+            "schema_signature": schema_signature,
+            "alembic_revision": alembic_revision,
+            "expected_tables": [*schema_tables, "alembic_version"],
+            "tables": {
+                **{
+                    table: {"rows": 1 if table in {"tenants", "api_keys"} else 0}
+                    for table in schema_tables
+                },
+                "alembic_version": {"rows": 1},
+            },
+            "total_rows": 3,
+            "file_size": dump_size_with_alembic,
+        },
+        separators=(",", ":"),
+    )
     docker = _write_executable(
         tmp_path / "docker",
         f"""#!/usr/bin/env bash
@@ -103,8 +138,13 @@ case "$command_name" in
     source_path="$1"
     destination_path="$2"
     if [[ "$source_path" == *":/tmp/pg_dump_"* ]]; then
-      cat >"$destination_path" <<'EOF'
+      if [ "${{FAKE_STATS_INCLUDE_ALEMBIC:-0}}" = "1" ]; then
+        cat >"$destination_path" <<'EOF'
+{dump_content_with_alembic}EOF
+      else
+        cat >"$destination_path" <<'EOF'
 {dump_content}EOF
+      fi
     elif [[ "$source_path" == *":/app/output/." ]]; then
       if [ "${{FAKE_DOCKER_FAIL_MEDIA:-0}}" = "1" ]; then
         exit 42
@@ -123,7 +163,11 @@ case "$command_name" in
         printf '%s\n' '{{"schema_signature":"{schema_signature}","alembic_revision":"{alembic_revision}"}}'
       fi
     elif [[ "$*" == *" python3 "* ]]; then
-      printf '%s\n' '{dump_stats}'
+      if [ "${{FAKE_STATS_INCLUDE_ALEMBIC:-0}}" = "1" ]; then
+        printf '%s\n' '{dump_stats_with_alembic}'
+      else
+        printf '%s\n' '{dump_stats}'
+      fi
     fi
     ;;
   image)
@@ -146,6 +190,10 @@ case "$command_name" in
       cat >/dev/null
       if [ "${{FAKE_SCHEMA_MISSING_TABLE:-0}}" = "1" ]; then
         printf '%b' '{schema_listing_without_audit}'
+      elif [ "${{FAKE_SCHEMA_MISSING_ALEMBIC:-0}}" = "1" ]; then
+        printf '%b' '{schema_listing_without_alembic}'
+      elif [ "${{FAKE_SCHEMA_EXTRA_TABLE:-0}}" = "1" ]; then
+        printf '%b' '{schema_listing_with_extra}'
       else
         printf '%b' '{schema_listing}'
       fi
@@ -270,6 +318,9 @@ def test_backup_publishes_only_validated_snapshot_then_applies_15_day_retention(
     assert (completed / "pg_dump.jsonl").read_text().count("\n") == 2
     assert (completed / "pg_schema.dump").read_text() == "fixture-schema-archive"
     assert "TABLE public audit_logs" in (completed / "pg_schema.list").read_text()
+    assert "TABLE public alembic_version" in (
+        completed / "pg_schema.list"
+    ).read_text()
     assert json.loads((completed / "pg_schema_signature_after.json").read_text()) == {
         "schema_signature": "a" * 64,
         "alembic_revision": "c8d9e0f1a2b3",
@@ -342,10 +393,66 @@ def test_backup_rejects_schema_archive_missing_a_required_table(
     )
 
     assert result.returncode != 0
-    assert "schema archive is missing required tables" in result.stderr
+    assert (
+        "schema archive table set does not match business tables plus migration metadata"
+        in result.stderr
+    )
     assert expired.is_dir(), "retention must not run after schema validation fails"
     assert not (backup_root / "2026-07-10_120000").exists()
     assert not (backup_root / ".2026-07-10_120000.partial").exists()
+    assert ":/app/output/." not in Path(env["FAKE_DOCKER_LOG"]).read_text()
+
+
+@pytest.mark.parametrize(
+    "flag",
+    ["FAKE_SCHEMA_MISSING_ALEMBIC", "FAKE_SCHEMA_EXTRA_TABLE"],
+)
+def test_backup_rejects_schema_archive_metadata_or_extra_table_drift(
+    tmp_path: Path,
+    flag: str,
+) -> None:
+    env, backup_root = _backup_env(tmp_path)
+    env[flag] = "1"
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert (
+        "schema archive table set does not match business tables plus migration metadata"
+        in result.stderr
+    )
+    assert not (backup_root / "2026-07-10_120000").exists()
+    assert not (backup_root / ".2026-07-10_120000.partial").exists()
+    assert ":/app/output/." not in Path(env["FAKE_DOCKER_LOG"]).read_text()
+
+
+def test_backup_rejects_schema_metadata_in_business_stats_before_media_copy(
+    tmp_path: Path,
+) -> None:
+    env, backup_root = _backup_env(tmp_path)
+    env["FAKE_STATS_INCLUDE_ALEMBIC"] = "1"
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "backup stats must exclude schema metadata tables" in result.stderr
+    assert not (backup_root / "2026-07-10_120000").exists()
+    assert not (backup_root / ".2026-07-10_120000.partial").exists()
+    assert ":/app/output/." not in Path(env["FAKE_DOCKER_LOG"]).read_text()
 
 
 def test_backup_rejects_postgres_client_image_with_wrong_major(
@@ -688,7 +795,10 @@ def _write_restore_backup_fixture(tmp_path: Path) -> tuple[Path, str]:
         + "\n"
     )
     schema.write_text("fixture-schema-archive")
-    schema_list.write_text("1; 1259 1 TABLE public tenants owner\n")
+    schema_list.write_text(
+        "1; 1259 1 TABLE public tenants owner\n"
+        "2; 1259 2 TABLE public alembic_version owner\n"
+    )
     schema_after.write_text(
         json.dumps(
             {

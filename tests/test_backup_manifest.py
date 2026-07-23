@@ -65,7 +65,8 @@ def _backup_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     (backup_dir / "pg_schema.dump").write_bytes(b"schema")
     (backup_dir / "pg_schema.list").write_text(
         "1; 1259 1 TABLE public tenants owner\n"
-        "2; 1259 2 TABLE public empty_jobs owner\n",
+        "2; 1259 2 TABLE public empty_jobs owner\n"
+        "3; 1259 3 TABLE public alembic_version owner\n",
         encoding="utf-8",
     )
     _write_json(
@@ -328,6 +329,60 @@ def test_canonical_backup_manifest_records_and_validates_all_recovery_identity(
         hashlib.sha256((backup_dir / "backup-manifest.v1.json").read_bytes()).hexdigest()
         + "  backup-manifest.v1.json\n"
     )
+
+
+@pytest.mark.parametrize(
+    "schema_drift",
+    ["missing_metadata", "unknown_extra", "metadata_in_business_data"],
+)
+def test_backup_manifest_rejects_schema_archive_metadata_or_extra_table_drift(
+    tmp_path: Path,
+    schema_drift: str,
+) -> None:
+    backup_dir, source_root, source_manifest_path = _backup_fixture(tmp_path)
+    schema_list = backup_dir / "pg_schema.list"
+    contents = schema_list.read_text(encoding="utf-8")
+    if schema_drift == "missing_metadata":
+        contents = contents.replace(
+            "3; 1259 3 TABLE public alembic_version owner\n",
+            "",
+        )
+    elif schema_drift == "unknown_extra":
+        contents += "4; 1259 4 TABLE public unexpected_table owner\n"
+    schema_list.write_text(contents, encoding="utf-8")
+    if schema_drift == "metadata_in_business_data":
+        dump_path = backup_dir / "pg_dump.jsonl"
+        with dump_path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                '{"_table":"alembic_version","_data":{"version_num":"c8d9e0f1a2b3"}}\n'
+            )
+        stats_path = backup_dir / "pg_dump_stats.json"
+        stats = json.loads(stats_path.read_text(encoding="utf-8"))
+        stats["expected_tables"].append("alembic_version")
+        stats["tables"]["alembic_version"] = {"rows": 1}
+        stats["total_rows"] += 1
+        stats["file_size"] = dump_path.stat().st_size
+        _write_json(stats_path, stats)
+
+    expected_error = (
+        "schema metadata"
+        if schema_drift == "metadata_in_business_data"
+        else "schema table set is inconsistent"
+    )
+    with pytest.raises(BackupManifestError, match=expected_error):
+        create_backup_manifest(
+            backup_dir=backup_dir,
+            source_root=source_root,
+            source_manifest_path=source_manifest_path,
+            backend_image_reference=f"lighthouse-backend:{GIT_SHA}",
+            backend_image_id=IMAGE_ID,
+            backend_repo_digest=None,
+            oci_revision=GIT_SHA,
+            pg_client_source_tag="postgres:18",
+            pg_client_image="postgres@sha256:" + ("d" * 64),
+            completed_at="2026-07-22T12:00:00Z",
+            backup_timestamp="2026-07-22_200000",
+        )
 
 
 def test_backup_manifest_rejects_git_image_source_identity_mismatch(

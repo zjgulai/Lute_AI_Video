@@ -56,6 +56,7 @@ def _make_backup(tmp_path: Path) -> Path:
     (backup / "pg_schema.dump").write_bytes(b"schema")
     (backup / "pg_schema.list").write_text(
         "1; 1259 1 TABLE public tenants owner\n"
+        "2; 1259 2 TABLE public alembic_version owner\n"
     )
     (backup / "pg_schema_signature_after.json").write_text(
         json.dumps(
