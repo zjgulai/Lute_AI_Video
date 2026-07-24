@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -11,6 +12,20 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WINDOW = REPO_ROOT / "deploy" / "lighthouse" / "w5-fast-one-shot-window.sh"
 OPERATOR = REPO_ROOT / "scripts" / "w5_fast_one_shot_operator.py"
+DEPLOY_WRAPPER = REPO_ROOT / "deploy" / "lighthouse" / "build-and-deploy.sh"
+RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "w5-fast-one-shot-operator.md"
+
+
+def _write_valid_plan(stage: Path, *, budget_limit_usd_nanos: object = 3_150_000_000) -> None:
+    (stage / "plan.json").write_text(
+        json.dumps(
+            {
+                "version": "w5-l4-plan-draft.v1",
+                "budget_limit_usd_nanos": budget_limit_usd_nanos,
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_window_shell_syntax_and_restore_contract() -> None:
@@ -46,6 +61,15 @@ def test_window_shell_syntax_and_restore_contract() -> None:
     assert parent_owner_index < leaf_owner_index
     assert "TIKTOK_PUBLISH_ENABLED" in source
     assert "SHOPIFY_PUBLISH_ENABLED" in source
+    assert "PROVIDER_JOB_BUDGET_USD" in source
+
+
+def test_release_mode_safe_window_invocation_is_governed() -> None:
+    deploy_source = DEPLOY_WRAPPER.read_text(encoding="utf-8")
+    runbook = RUNBOOK.read_text(encoding="utf-8")
+
+    assert "--chmod=F644,D755" in deploy_source
+    assert "bash deploy/lighthouse/w5-fast-one-shot-window.sh" in runbook
 
 
 def test_operator_cli_has_fixed_backend_and_separate_execute_gate() -> None:
@@ -70,6 +94,7 @@ def test_window_fixture_restores_byte_identical_provider_off_env(
     private = tmp_path / "private"
     stage.mkdir()
     private.mkdir()
+    _write_valid_plan(stage)
     env_file = tmp_path / ".env.prod"
     original = (
         b"POYO_VIDEO_MODEL=happy-horse\n"
@@ -90,6 +115,7 @@ def test_window_fixture_restores_byte_identical_provider_off_env(
         "AI_VIDEO_ENV_FILE": str(env_file),
         "AI_VIDEO_W5_WINDOW_FIXTURE": "1",
         "AI_VIDEO_W5_FIXTURE_RESULT": str(operator_result),
+        "AI_VIDEO_W5_FIXTURE_ASSERT_BUDGET": "3.15",
     }
     result = subprocess.run(
         ["bash", str(WINDOW)],
@@ -106,6 +132,7 @@ def test_window_fixture_restores_byte_identical_provider_off_env(
         "provider_off_restore=pass"
     )
     assert "provider-off restoration verified" in result.stderr
+    assert (stage / "window-budget-receipt.txt").read_text().strip() == "3.15"
 
 
 def test_window_fixture_restore_failure_overrides_operation_success(
@@ -115,6 +142,7 @@ def test_window_fixture_restore_failure_overrides_operation_success(
     private = tmp_path / "private"
     stage.mkdir()
     private.mkdir()
+    _write_valid_plan(stage)
     env_file = tmp_path / ".env.prod"
     original = b"TIKTOK_PUBLISH_ENABLED=false\nSHOPIFY_PUBLISH_ENABLED=false\n"
     env_file.write_bytes(original)
@@ -144,6 +172,148 @@ def test_window_fixture_restore_failure_overrides_operation_success(
     assert env_file.read_bytes() == original
     assert not (stage / "restore-receipt.txt").exists()
     assert "provider-off restoration failed" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "plan_payload",
+    [
+        None,
+        "{}",
+        '{"budget_limit_usd_nanos":true}',
+        '{"budget_limit_usd_nanos":0}',
+        '{"budget_limit_usd_nanos":3150000000.0}',
+        '{"budget_limit_usd_nanos":9223372036854775808}',
+        '{"budget_limit_usd_nanos":3150000000,"budget_limit_usd_nanos":1}',
+    ],
+)
+def test_window_rejects_invalid_plan_budget_before_env_mutation(
+    tmp_path: Path,
+    plan_payload: str | None,
+) -> None:
+    stage = tmp_path / "stage"
+    private = tmp_path / "private"
+    stage.mkdir()
+    private.mkdir()
+    if plan_payload is not None:
+        (stage / "plan.json").write_text(plan_payload, encoding="utf-8")
+    env_file = tmp_path / ".env.prod"
+    original = b"TIKTOK_PUBLISH_ENABLED=false\nSHOPIFY_PUBLISH_ENABLED=false\n"
+    env_file.write_bytes(original)
+
+    result = subprocess.run(
+        ["bash", str(WINDOW)],
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "EXPECTED_SHA": "b" * 40,
+            "EXPECTED_BACKEND_IMAGE_ID": "sha256:" + "d" * 64,
+            "AI_VIDEO_W5_FIXTURE_IMAGE_REVISION": "b" * 40,
+            "AI_VIDEO_W5_FIXTURE_IMAGE_ID": "sha256:" + "d" * 64,
+            "REMOTE_STAGE": str(stage),
+            "REMOTE_PRIVATE": str(private),
+            "AI_VIDEO_ENV_FILE": str(env_file),
+            "AI_VIDEO_W5_WINDOW_FIXTURE": "1",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert env_file.read_bytes() == original
+    assert not list(stage.glob("provider-off-backup.*"))
+    assert not (stage / "persistent-evidence").exists()
+
+
+@pytest.mark.parametrize(
+    ("budget_limit_usd_nanos", "expected_display"),
+    [
+        (1, "0.000000001"),
+        (1_000_000_000, "1"),
+        (3_150_000_000, "3.15"),
+        (2**63 - 1, "9223372036.854775807"),
+    ],
+)
+def test_window_derives_canonical_provider_budget_from_plan(
+    tmp_path: Path,
+    budget_limit_usd_nanos: int,
+    expected_display: str,
+) -> None:
+    stage = tmp_path / "stage"
+    private = tmp_path / "private"
+    stage.mkdir()
+    private.mkdir()
+    _write_valid_plan(stage, budget_limit_usd_nanos=budget_limit_usd_nanos)
+    env_file = tmp_path / ".env.prod"
+    original = b"TIKTOK_PUBLISH_ENABLED=false\nSHOPIFY_PUBLISH_ENABLED=false\n"
+    env_file.write_bytes(original)
+
+    result = subprocess.run(
+        ["bash", str(WINDOW)],
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "EXPECTED_SHA": "b" * 40,
+            "EXPECTED_BACKEND_IMAGE_ID": "sha256:" + "d" * 64,
+            "AI_VIDEO_W5_FIXTURE_IMAGE_REVISION": "b" * 40,
+            "AI_VIDEO_W5_FIXTURE_IMAGE_ID": "sha256:" + "d" * 64,
+            "REMOTE_STAGE": str(stage),
+            "REMOTE_PRIVATE": str(private),
+            "AI_VIDEO_ENV_FILE": str(env_file),
+            "AI_VIDEO_W5_WINDOW_FIXTURE": "1",
+            "AI_VIDEO_W5_FIXTURE_ASSERT_BUDGET": expected_display,
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert env_file.read_bytes() == original
+    assert (stage / "window-budget-receipt.txt").read_text().strip() == expected_display
+
+
+def test_window_freezes_same_plan_bytes_for_budget_and_runtime_copy(
+    tmp_path: Path,
+) -> None:
+    stage = tmp_path / "stage"
+    private = tmp_path / "private"
+    stage.mkdir()
+    private.mkdir()
+    _write_valid_plan(stage, budget_limit_usd_nanos=3_150_000_000)
+    env_file = tmp_path / ".env.prod"
+    original = b"TIKTOK_PUBLISH_ENABLED=false\nSHOPIFY_PUBLISH_ENABLED=false\n"
+    env_file.write_bytes(original)
+
+    result = subprocess.run(
+        ["bash", str(WINDOW)],
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "EXPECTED_SHA": "b" * 40,
+            "EXPECTED_BACKEND_IMAGE_ID": "sha256:" + "d" * 64,
+            "AI_VIDEO_W5_FIXTURE_IMAGE_REVISION": "b" * 40,
+            "AI_VIDEO_W5_FIXTURE_IMAGE_ID": "sha256:" + "d" * 64,
+            "REMOTE_STAGE": str(stage),
+            "REMOTE_PRIVATE": str(private),
+            "AI_VIDEO_ENV_FILE": str(env_file),
+            "AI_VIDEO_W5_WINDOW_FIXTURE": "1",
+            "AI_VIDEO_W5_FIXTURE_ASSERT_BUDGET": "3.15",
+            "AI_VIDEO_W5_FIXTURE_SWAP_PLAN_BUDGET_NANOS": "4000000000",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    frozen = stage / ".w5-plan-snapshot.json"
+    assert result.returncode == 0, result.stderr
+    assert json.loads((stage / "plan.json").read_text())["budget_limit_usd_nanos"] == 4_000_000_000
+    assert json.loads(frozen.read_text())["budget_limit_usd_nanos"] == 3_150_000_000
+    assert (private / "plan.json").read_bytes() == frozen.read_bytes()
+    assert (frozen.stat().st_mode & 0o777) == 0o600
+    assert (stage / "window-budget-receipt.txt").read_text().strip() == "3.15"
+    assert env_file.read_bytes() == original
 
 
 @pytest.mark.parametrize(
@@ -196,6 +366,7 @@ def test_window_image_identity_drift_fails_before_env_mutation(
     private = tmp_path / "private"
     stage.mkdir()
     private.mkdir()
+    _write_valid_plan(stage)
     env_file = tmp_path / ".env.prod"
     original = b"TIKTOK_PUBLISH_ENABLED=false\nSHOPIFY_PUBLISH_ENABLED=false\n"
     env_file.write_bytes(original)
@@ -293,6 +464,7 @@ def test_persistent_marker_survives_restore_and_blocks_second_post(
     private = tmp_path / "private"
     stage.mkdir()
     private.mkdir()
+    _write_valid_plan(stage)
     env_file = tmp_path / ".env.prod"
     original = b"TIKTOK_PUBLISH_ENABLED=false\nSHOPIFY_PUBLISH_ENABLED=false\n"
     env_file.write_bytes(original)

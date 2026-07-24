@@ -41,9 +41,14 @@ EVIDENCE_ID=""
 EVIDENCE_DIR=""
 RESTORE_ARMED=0
 RESTORE_RUNNING=0
+PLAN_BUDGET_USD=""
+FROZEN_PLAN=""
+FROZEN_PLAN_SHA256=""
 
 _restart_backend() {
   if [[ "${FIXTURE_MODE}" == "1" ]]; then
+    cp "${FROZEN_PLAN}" "${REMOTE_PRIVATE}/plan.json"
+    chmod 600 "${REMOTE_PRIVATE}/plan.json"
     return 0
   fi
   sudo env \
@@ -142,6 +147,154 @@ _assert_persistent_evidence_unused() {
   fi
   sudo docker exec ai_video_backend sh -c \
     'test ! -e "$1/submit-invoked.json"' -- "${EVIDENCE_DIR}"
+}
+
+freeze_plan_and_derive_budget() {
+  FROZEN_PLAN="${REMOTE_STAGE}/.w5-plan-snapshot.json"
+  local command=(python3 - "${REMOTE_STAGE}/plan.json" "${FROZEN_PLAN}")
+  if [[ "${FIXTURE_MODE}" != "1" ]]; then
+    command=(sudo python3 - "${REMOTE_STAGE}/plan.json" "${FROZEN_PLAN}")
+  fi
+  local derived
+  derived="$("${command[@]}" <<'PY'
+import hashlib
+import json
+import os
+import stat
+import sys
+
+MAX_SIGNED_BIGINT = 2**63 - 1
+USD_NANOS_PER_USD = 1_000_000_000
+
+
+def reject_number(value: str) -> int:
+    raise ValueError("non-integer plan number")
+
+
+def strict_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate plan key")
+        result[key] = value
+    return result
+
+
+def read_plan(path: str) -> tuple[bytes, dict[str, object]]:
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+    )
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size <= 0 or before.st_size > 65536:
+            raise ValueError("plan file contract")
+        raw = os.read(descriptor, 65537)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    if (
+        len(raw) > 65536
+        or len(raw) != before.st_size
+        or before.st_dev != after.st_dev
+        or before.st_ino != after.st_ino
+        or before.st_size != after.st_size
+        or before.st_mtime_ns != after.st_mtime_ns
+        or before.st_ctime_ns != after.st_ctime_ns
+    ):
+        raise ValueError("unstable plan file")
+    value = json.loads(
+        raw.decode("utf-8"),
+        object_pairs_hook=strict_object,
+        parse_float=reject_number,
+        parse_constant=reject_number,
+    )
+    if type(value) is not dict:
+        raise ValueError("plan root contract")
+    return raw, value
+
+
+def freeze_plan(path: str, raw: bytes) -> None:
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+        0o600,
+    )
+    try:
+        os.fchmod(descriptor, 0o600)
+        view = memoryview(raw)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short snapshot write")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    parent = os.open(os.path.dirname(path), os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        os.fsync(parent)
+    finally:
+        os.close(parent)
+
+
+try:
+    raw, plan = read_plan(sys.argv[1])
+    nanos = plan.get("budget_limit_usd_nanos")
+    if type(nanos) is not int or nanos <= 0 or nanos > MAX_SIGNED_BIGINT:
+        raise ValueError("plan budget contract")
+    whole, fraction = divmod(nanos, USD_NANOS_PER_USD)
+    if fraction:
+        display = f"{whole}.{fraction:09d}".rstrip("0")
+    else:
+        display = str(whole)
+    freeze_plan(sys.argv[2], raw)
+    print(display, hashlib.sha256(raw).hexdigest())
+except (OSError, UnicodeError, ValueError, TypeError, RecursionError, json.JSONDecodeError):
+    print("invalid W5 plan budget", file=sys.stderr)
+    raise SystemExit(2) from None
+PY
+)"
+  local extra=""
+  IFS=' ' read -r PLAN_BUDGET_USD FROZEN_PLAN_SHA256 extra <<< "${derived}"
+  [[ "${PLAN_BUDGET_USD}" =~ ^(0|[1-9][0-9]*)(\.[0-9]{1,9})?$ ]] || {
+    echo "invalid W5 plan budget" >&2
+    return 2
+  }
+  [[ "${FROZEN_PLAN_SHA256}" =~ ^[0-9a-f]{64}$ && -z "${extra}" ]] || {
+    echo "invalid W5 plan snapshot" >&2
+    return 2
+  }
+}
+
+fixture_swap_staged_plan() {
+  [[ "${FIXTURE_MODE}" == "1" ]] || return 0
+  [[ -n "${AI_VIDEO_W5_FIXTURE_SWAP_PLAN_BUDGET_NANOS:-}" ]] || return 0
+  python3 - \
+    "${REMOTE_STAGE}/plan.json" \
+    "${AI_VIDEO_W5_FIXTURE_SWAP_PLAN_BUDGET_NANOS}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+nanos = int(sys.argv[2])
+if nanos <= 0 or nanos > 2**63 - 1:
+    raise SystemExit(2)
+value = json.loads(path.read_text(encoding="utf-8"))
+value["budget_limit_usd_nanos"] = nanos
+temporary = path.with_name(path.name + ".fixture-swap")
+descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try:
+    with os.fdopen(descriptor, "w", encoding="utf-8", closefd=False) as target:
+        json.dump(value, target, sort_keys=True, separators=(",", ":"))
+        target.flush()
+        os.fsync(target.fileno())
+finally:
+    os.close(descriptor)
+os.replace(temporary, path)
+PY
 }
 
 _provider_off_env_is_safe() {
@@ -243,9 +396,9 @@ restore_provider_off() {
 trap restore_provider_off EXIT
 
 configure_w5_window() {
-  local command=(python3 - "${ENV_FILE}" "${REMOTE_PRIVATE}" "${EVIDENCE_DIR}")
+  local command=(python3 - "${ENV_FILE}" "${REMOTE_PRIVATE}" "${EVIDENCE_DIR}" "${PLAN_BUDGET_USD}")
   if [[ "${FIXTURE_MODE}" != "1" ]]; then
-    command=(sudo python3 - "${ENV_FILE}" "${REMOTE_PRIVATE}" "${EVIDENCE_DIR}")
+    command=(sudo python3 - "${ENV_FILE}" "${REMOTE_PRIVATE}" "${EVIDENCE_DIR}" "${PLAN_BUDGET_USD}")
   fi
   "${command[@]}" <<'PY'
 import os
@@ -255,8 +408,10 @@ from pathlib import Path
 env_path = Path(sys.argv[1])
 private = sys.argv[2]
 evidence = sys.argv[3]
+provider_job_budget_usd = sys.argv[4]
 managed = {
     "POYO_VIDEO_MODEL",
+    "PROVIDER_JOB_BUDGET_USD",
     "W5_FAST_PLAN_PATH",
     "W5_FAST_ACTIVATION_PATH",
     "W5_FAST_RUNTIME_BINDING_PATH",
@@ -273,6 +428,7 @@ for line in env_path.read_text(encoding="utf-8").splitlines():
 kept.extend(
     [
         "POYO_VIDEO_MODEL=seedance-2",
+        f"PROVIDER_JOB_BUDGET_USD={provider_job_budget_usd}",
         f"W5_FAST_PLAN_PATH={private}/plan.json",
         f"W5_FAST_ACTIVATION_PATH={private}/activation.json",
         f"W5_FAST_RUNTIME_BINDING_PATH={private}/binding.json",
@@ -304,9 +460,13 @@ PY
   sudo docker exec -u 0 ai_video_backend mkdir -m 700 "${REMOTE_PRIVATE}"
   local name
   for name in plan.json activation.json binding.json request.json; do
-    sudo test -f "${REMOTE_STAGE}/${name}"
+    local source_path="${REMOTE_STAGE}/${name}"
+    if [[ "${name}" == "plan.json" ]]; then
+      source_path="${FROZEN_PLAN}"
+    fi
+    sudo test -f "${source_path}"
     sudo docker cp \
-      "${REMOTE_STAGE}/${name}" \
+      "${source_path}" \
       "ai_video_backend:${REMOTE_PRIVATE}/${name}" >/dev/null
   done
   local container_uid container_gid
@@ -323,8 +483,12 @@ PY
   sudo docker exec -u 0 ai_video_backend sh -c \
     'set -eu; umask 077; parent=/app/output/.w5-one-shot; test ! -L /app/output; if test ! -e "$parent"; then mkdir -m 700 "$parent"; fi; test -d "$parent"; test ! -L "$parent"; chown "$2:$3" "$parent"; chmod 700 "$parent"; if test ! -e "$1"; then mkdir -m 700 "$1"; fi; test -d "$1"; test ! -L "$1"; test -z "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit)"; chown "$2:$3" "$1"; chmod 700 "$1"' -- \
     "${EVIDENCE_DIR}" "${container_uid}" "${container_gid}"
-  sudo docker exec -i ai_video_backend python3 - <<'PY'
+  sudo docker exec -i ai_video_backend python3 - \
+    "${PLAN_BUDGET_USD}" "${FROZEN_PLAN_SHA256}" <<'PY'
+import hashlib
+import json
 import os
+import sys
 from pathlib import Path
 
 private_keys = (
@@ -339,6 +503,19 @@ if not evidence or not Path(evidence).is_dir():
     raise SystemExit(1)
 if os.environ.get("POYO_VIDEO_MODEL") != "seedance-2":
     raise SystemExit(1)
+if os.environ.get("PROVIDER_JOB_BUDGET_USD") != sys.argv[1]:
+    raise SystemExit(1)
+plan_raw = Path(os.environ["W5_FAST_PLAN_PATH"]).read_bytes()
+if len(plan_raw) > 65536 or hashlib.sha256(plan_raw).hexdigest() != sys.argv[2]:
+    raise SystemExit(1)
+plan = json.loads(plan_raw)
+plan_nanos = plan.get("budget_limit_usd_nanos") if type(plan) is dict else None
+if type(plan_nanos) is not int or plan_nanos <= 0 or plan_nanos > 2**63 - 1:
+    raise SystemExit(1)
+whole, fraction = divmod(plan_nanos, 1_000_000_000)
+plan_display = f"{whole}.{fraction:09d}".rstrip("0") if fraction else str(whole)
+if plan_display != sys.argv[1]:
+    raise SystemExit(1)
 for key in ("TIKTOK_PUBLISH_ENABLED", "SHOPIFY_PUBLISH_ENABLED"):
     if os.environ.get(key, "false").lower() in {"1", "true", "yes", "on"}:
         raise SystemExit(1)
@@ -347,6 +524,13 @@ PY
 
 run_operator() {
   if [[ "${FIXTURE_MODE}" == "1" ]]; then
+    if [[ -n "${AI_VIDEO_W5_FIXTURE_ASSERT_BUDGET:-}" ]]; then
+      grep -Fqx \
+        "PROVIDER_JOB_BUDGET_USD=${AI_VIDEO_W5_FIXTURE_ASSERT_BUDGET}" \
+        "${ENV_FILE}" || return 88
+      printf '%s\n' "${AI_VIDEO_W5_FIXTURE_ASSERT_BUDGET}" > \
+        "${REMOTE_STAGE}/window-budget-receipt.txt"
+    fi
     mkdir -p -m 700 "${EVIDENCE_DIR}"
     (
       set -o noclobber
@@ -410,7 +594,6 @@ prepare_provider_off_backup() {
     sudo cp -p "${ENV_FILE}" "${BACKUP_FILE}"
   fi
   _provider_off_env_is_safe "${BACKUP_FILE}"
-  RESTORE_ARMED=1
 }
 
 main() {
@@ -418,7 +601,10 @@ main() {
   _verify_reviewed_image
   _verify_running_backend_identity
   _assert_persistent_evidence_unused
+  freeze_plan_and_derive_budget
+  fixture_swap_staged_plan
   prepare_provider_off_backup
+  RESTORE_ARMED=1
   configure_w5_window
   run_operator
 }
