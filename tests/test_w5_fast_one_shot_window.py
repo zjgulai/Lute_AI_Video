@@ -256,7 +256,8 @@ sudo() {{
   elif [[ "$*" == *'{{{{.Image}}}}'* ]]; then
     printf '%s\\n' "$ACTUAL_IMAGE_ID"
   else
-    return 1
+    printf 'UNEXPECTED_SUDO_CALL: %s\\n' "$*" >&2
+    return 111
   fi
 }}
 _verify_running_backend_identity || exit 17
@@ -276,9 +277,11 @@ _verify_running_backend_identity || exit 17
         check=False,
         capture_output=True,
         text=True,
+        timeout=10,
     )
 
     assert result.returncode == 17, result.stderr
+    assert "UNEXPECTED_SUDO_CALL" not in result.stderr, result.stderr
 
 
 @pytest.mark.parametrize("operator_result", [0, 2, 3])
