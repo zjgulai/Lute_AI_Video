@@ -228,6 +228,59 @@ def test_window_image_identity_drift_fails_before_env_mutation(
     assert not (stage / "provider-off-backup").exists()
 
 
+@pytest.mark.parametrize("drift", ["revision", "image_id", "configured_ref"])
+def test_running_backend_identity_rejects_each_independent_drift(
+    drift: str,
+) -> None:
+    source = WINDOW.read_text()
+    start = source.index("_verify_running_backend_identity() {")
+    end = source.index("\n}\n\n_derive_evidence_path", start) + 2
+    function_source = source[start:end]
+    expected_sha = "7" * 40
+    expected_id = "sha256:" + "8" * 64
+    actual_revision = "9" * 40 if drift == "revision" else expected_sha
+    actual_id = "sha256:" + "a" * 64 if drift == "image_id" else expected_id
+    actual_ref = (
+        "lighthouse-backend:drift"
+        if drift == "configured_ref"
+        else f"lighthouse-backend:{expected_sha}"
+    )
+    script = f"""
+set -euo pipefail
+{function_source}
+sudo() {{
+  if [[ "$*" == *org.opencontainers.image.revision* ]]; then
+    printf '%s\\n' "$ACTUAL_REVISION"
+  elif [[ "$*" == *'{{{{.Config.Image}}}}'* ]]; then
+    printf '%s\\n' "$ACTUAL_CONFIGURED_REF"
+  elif [[ "$*" == *'{{{{.Image}}}}'* ]]; then
+    printf '%s\\n' "$ACTUAL_IMAGE_ID"
+  else
+    return 1
+  fi
+}}
+_verify_running_backend_identity || exit 17
+"""
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "FIXTURE_MODE": "0",
+            "EXPECTED_SHA": expected_sha,
+            "EXPECTED_BACKEND_IMAGE_ID": expected_id,
+            "ACTUAL_REVISION": actual_revision,
+            "ACTUAL_IMAGE_ID": actual_id,
+            "ACTUAL_CONFIGURED_REF": actual_ref,
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 17, result.stderr
+
+
 @pytest.mark.parametrize("operator_result", [0, 2, 3])
 def test_persistent_marker_survives_restore_and_blocks_second_post(
     tmp_path: Path,

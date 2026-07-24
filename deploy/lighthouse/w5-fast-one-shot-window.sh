@@ -96,9 +96,9 @@ _verify_running_backend_identity() {
   revision="$(sudo docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' ai_video_backend)"
   image_id="$(sudo docker inspect -f '{{.Image}}' ai_video_backend)"
   configured_ref="$(sudo docker inspect -f '{{.Config.Image}}' ai_video_backend)"
-  [[ "${revision}" == "${EXPECTED_SHA}" ]]
-  [[ "${image_id}" == "${EXPECTED_BACKEND_IMAGE_ID}" ]]
-  [[ "${configured_ref}" == "lighthouse-backend:${EXPECTED_SHA}" ]]
+  [[ "${revision}" == "${EXPECTED_SHA}" ]] || return 1
+  [[ "${image_id}" == "${EXPECTED_BACKEND_IMAGE_ID}" ]] || return 1
+  [[ "${configured_ref}" == "lighthouse-backend:${EXPECTED_SHA}" ]] || return 1
 }
 
 _derive_evidence_path() {
