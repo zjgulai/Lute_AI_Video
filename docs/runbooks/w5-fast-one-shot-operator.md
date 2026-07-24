@@ -41,7 +41,10 @@ source: human+ai
   配置变更前安装；所有返回码与异常路径都恢复 byte-identical env，重建 exact
   backend，并验证 image revision、immutable Docker image ID、W5 路径消失和
   TikTok/Shopify publish flags 关闭。正确 tag 但 revision/image ID 漂移也会在环境
-  变更前阻断。
+  变更前阻断。窗口先以 `O_EXCL` 冻结一份私有 plan 快照，再从同一字节严格导出
+  canonical `PROVIDER_JOB_BUDGET_USD` 并把同一快照复制进 backend；marker 前再次
+  比较容器内 plan SHA-256、plan 预算与环境预算。该 cap 仅在窗口内生效，不能用
+  客户端字段或普通环境默认值扩大预算。
 - 四个私有 JSON 只能复制到固定 `/run/ai-video-w5`，恢复重建后自然销毁；禁止把
   `/`、`/app`、`/app/output`、重复分隔符或 traversal path 传给 ownership 命令。
 - Safe evidence 独立写入 backend 已挂载的
@@ -99,6 +102,16 @@ raw key 不写文件、不进入环境变量、不出现在命令参数或日志
 5. 必须看到 `provider-off restoration verified`，再独立复核 exact image、健康、
    W5 env 消失和 publish flags false。恢复失败返回 90，是生产阻塞，不得因业务
    结果看似成功而忽略。
+
+发布同步器有意使用 `--chmod=F644,D755`，因此生产 release 内脚本不依赖可执行位。
+唯一受支持的调用形式是显式通过 Bash 解释器执行：
+
+```bash
+bash deploy/lighthouse/w5-fast-one-shot-window.sh
+```
+
+不得用 `./deploy/lighthouse/w5-fast-one-shot-window.sh` 作为生产窗口命令，也不得临时
+修改已审查 release 文件的权限或内容。
 
 Host stage 输入不由窗口脚本盲删，按私有文件保留策略单独清理。Safe evidence 位于
 持久 output volume，可只读复制到批准的证据包；不得移动或删除

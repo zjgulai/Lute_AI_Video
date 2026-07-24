@@ -87,6 +87,17 @@ findings or records an exact blocker.
 
 ## External gate
 
-After local approval, GitHub/CI, provider-off deployment/L3, and a fresh W5-04
-activation/submit authorization remain three separate approvals. The historical
-marker, activation, binding, and raw idempotency key are permanently unusable.
+The first governed production window later consumed exactly one fresh marker at
+SHA `0bb5022e2f03c212f1681789428e0e1c42b13255` and received HTTP 500
+`submission_initialization_failed` before provider account/client creation.
+Durable account was absent, attempt count was 0, no artifact existed, and
+provider-off restoration passed. That activation, binding, marker, and raw key
+are permanently unusable.
+
+The resulting H3 local repair freezes one exact plan snapshot, derives the
+server-owned budget and digest from those bytes, copies the same snapshot, and
+validates the installed plan before marker creation. Same-thread independent
+review closed one Medium plan-swap TOCTOU and returned `PASS / APPROVE` with
+`accepted_actionable_findings=0`; full local CI passed `4487` tests. The repair
+is not committed or deployed. Atomic promotion, provider-off deployment/L3,
+and a wholly fresh W5-04 activation/submit authorization remain separate gates.
