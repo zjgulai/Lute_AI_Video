@@ -107,6 +107,7 @@ source: human+ai
 | `scripts/discover_poyo_models.py` | provider_probe |
 | `scripts/probe_sora2pro.py` | provider_probe |
 | `scripts/w1_31_provider_billing_reconciliation.py` | provider_probe |
+| `scripts/w5_fast_one_shot_operator.py` | provider_probe |
 
 ### legacy_one_off_scripts
 
