@@ -3,7 +3,7 @@ title: W5 Fast One-Shot Operator Runbook
 doc_type: workflow
 module: acceptance
 topic: w5-fast-one-shot-operator
-status: active
+status: stable
 created: 2026-07-24
 updated: 2026-07-24
 owner: self

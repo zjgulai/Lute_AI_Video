@@ -3,7 +3,7 @@ title: "W5 Fast One-Shot Operator Governance Plan"
 doc_type: workflow
 module: acceptance
 topic: fast-one-shot-operator
-status: active
+status: stable
 created: 2026-07-24
 updated: 2026-07-24
 owner: self
