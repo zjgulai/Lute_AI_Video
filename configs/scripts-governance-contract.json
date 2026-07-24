@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-23",
+  "updated": "2026-07-24",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
@@ -331,6 +331,11 @@
       "path": "scripts/w1_31_provider_billing_reconciliation.py",
       "status": "provider_probe",
       "reason": "Retired W1-31 one-shot provider runner; remains provider-sensitive even though execute entrypoints now fail closed."
+    },
+    {
+      "path": "scripts/w5_fast_one_shot_operator.py",
+      "status": "provider_probe",
+      "reason": "Governed W5 Fast one-shot operator; default-off and exact-authority gated, but an explicitly authorized submit command may call paid providers through the canonical backend."
     }
   ],
   "legacy_one_off_scripts": [
