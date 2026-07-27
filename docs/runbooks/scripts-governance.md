@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-07-23
+updated: 2026-07-27
 owner: self
 source: human+ai
 ---
@@ -147,7 +147,13 @@ source: human+ai
 
 `provider_probe_scripts` 只能在充值后、显式设置 key 和确认变量后运行。默认 CI、`Makefile`、Lighthouse deploy、`run_s1_s5_hermetic_regression.sh` 不得调用这些脚本。
 
-`scripts/backup_production.sh` 与 `scripts/install_backup_cron.sh` 都属于生产写操作。Lighthouse rsync 会把普通文件模式统一为 `0644`，所以 cron 与人工命令必须显式使用 `/bin/bash` 调用，不能依赖 executable bit。安装器把执行文件复制到 root-owned 的 `/usr/local/libexec/ai-video-backup/`，常规重跑只替换带 `ai-video-production-backup` marker 的行；发现指向仓库脚本的旧无 marker 行时必须显式设置 `MIGRATE_LEGACY=1`，并始终保留其他 cron 任务。
+`scripts/backup_production.sh` 与 `scripts/install_backup_cron.sh` 都属于生产写操作。Lighthouse rsync 会把普通文件模式统一为 `0644`，所以 cron 与人工命令必须显式使用 `/bin/bash` 调用，不能依赖 executable bit。安装器把执行文件复制到 root-owned 的 `/usr/local/libexec/ai-video-backup/`，常规重跑只替换带 `ai-video-production-backup` marker 的行；发现指向 current source、历史 `/opt/ai-video/scripts/backup_production.sh` 或 root-owned runtime 的旧无 marker 行时必须显式设置 `MIGRATE_LEGACY=1`，精确移除这些 AI Video job，并始终保留其他 cron 任务。
+
+安装器的 `MODE=verify` 是只读运行时漂移门禁：它逐字节比较 reviewed backup、logical
+dump、canonical manifest 三份 `/opt/ai-video/current/scripts/` 源文件与 root-owned
+runtime，拒绝符号链接、非 root owner/group 和模式漂移，并要求唯一 managed cron 行和
+预期命令完全一致；它不复制文件、不改 crontab、日志或 lock。默认安装模式完成写入后也
+运行同一校验，未得到 `backup_runtime_verification=passed` 不得声称 runtime 安装完成。
 
 `scripts/production_readonly_log_gate.py` 只做本地 backend log / summary 回放，不创建 key、不访问生产、不调用 provider。它用于 L4D/L4E 这类生产只读回归的日志判定：允许 `GET /portfolio` 和本地健康检查噪音（`127.0.0.1 /health`、`rendering:3001/health`），继续禁止外部 health/admin/media 请求、scenario/Fast submit、provider、publish、delivery 和 approved brand token 相关日志。
 

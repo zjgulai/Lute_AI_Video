@@ -3,11 +3,13 @@
 
 set -euo pipefail
 
-RETENTION_DAYS="${RETENTION_DAYS:-15}"
-BACKUP_SCRIPT="${BACKUP_SCRIPT:-/opt/ai-video/scripts/backup_production.sh}"
-DUMP_SCRIPT_SOURCE="${DUMP_SCRIPT_SOURCE:-$(dirname "$BACKUP_SCRIPT")/pg_dump_logical.py}"
-MANIFEST_SCRIPT_SOURCE="${MANIFEST_SCRIPT_SOURCE:-$(dirname "$BACKUP_SCRIPT")/backup_manifest.py}"
+RETENTION_DAYS="${RETENTION_DAYS:-3}"
+MAX_RETENTION_DAYS=3650
+MODE="${MODE:-install}"
 CURRENT_RELEASE_ROOT="${CURRENT_RELEASE_ROOT:-/opt/ai-video/current}"
+BACKUP_SCRIPT="${BACKUP_SCRIPT:-${CURRENT_RELEASE_ROOT}/scripts/backup_production.sh}"
+DUMP_SCRIPT_SOURCE="${DUMP_SCRIPT_SOURCE:-${CURRENT_RELEASE_ROOT}/scripts/pg_dump_logical.py}"
+MANIFEST_SCRIPT_SOURCE="${MANIFEST_SCRIPT_SOURCE:-${CURRENT_RELEASE_ROOT}/scripts/backup_manifest.py}"
 SOURCE_MANIFEST_PATH="${SOURCE_MANIFEST_PATH:-${CURRENT_RELEASE_ROOT}/source-manifest.v1.json}"
 RUNTIME_DIR="${RUNTIME_DIR:-/usr/local/libexec/ai-video-backup}"
 BACKUP_LOG_FILE="${BACKUP_LOG_FILE:-/var/log/hermes-backup.log}"
@@ -18,7 +20,10 @@ INSTALL_BIN="${INSTALL_BIN:-install}"
 CHOWN_BIN="${CHOWN_BIN:-chown}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 FLOCK_BIN="${FLOCK_BIN:-flock}"
+CMP_BIN="${CMP_BIN:-cmp}"
+STAT_BIN="${STAT_BIN:-stat}"
 MARKER="ai-video-production-backup"
+LEGACY_SHARED_BACKUP_SCRIPT="/opt/ai-video/scripts/backup_production.sh"
 RUNTIME_DIR="${RUNTIME_DIR%/}"
 RUNTIME_BACKUP_SCRIPT="${RUNTIME_DIR}/backup_production.sh"
 RUNTIME_DUMP_SCRIPT="${RUNTIME_DIR}/pg_dump_logical.py"
@@ -36,8 +41,12 @@ require_safe_absolute_path() {
     || fail "${name} must be an absolute path without shell metacharacters"
 }
 
-[[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]] \
-  || fail "RETENTION_DAYS must be a positive integer"
+[[ "$RETENTION_DAYS" =~ ^[1-9][0-9]{0,3}$ ]] \
+  || fail "RETENTION_DAYS must be a canonical decimal integer between 1 and ${MAX_RETENTION_DAYS}"
+[ "$((10#$RETENTION_DAYS))" -le "$MAX_RETENTION_DAYS" ] \
+  || fail "RETENTION_DAYS must be a canonical decimal integer between 1 and ${MAX_RETENTION_DAYS}"
+[[ "$MODE" =~ ^(install|verify)$ ]] \
+  || fail "MODE must be install or verify"
 [[ "$MIGRATE_LEGACY" =~ ^[01]$ ]] \
   || fail "MIGRATE_LEGACY must be 0 or 1"
 require_safe_absolute_path "BACKUP_SCRIPT" "$BACKUP_SCRIPT"
@@ -51,12 +60,17 @@ require_safe_absolute_path "CRON_LOCK_FILE" "$CRON_LOCK_FILE"
 [ "$RUNTIME_DIR" != "/" ] || fail "RUNTIME_DIR cannot be root"
 [ "$(id -u)" -eq 0 ] || fail "run with sudo /bin/bash so the root crontab is updated"
 
-for command_name in \
-  "$CRONTAB_BIN" "$INSTALL_BIN" "$CHOWN_BIN" "$DOCKER_BIN" "$FLOCK_BIN"
+for command_name in "$CRONTAB_BIN" "$DOCKER_BIN" "$FLOCK_BIN" "$CMP_BIN" "$STAT_BIN"
 do
   command -v "$command_name" >/dev/null 2>&1 \
     || fail "required command not found: ${command_name}"
 done
+if [ "$MODE" = "install" ]; then
+  for command_name in "$INSTALL_BIN" "$CHOWN_BIN"; do
+    command -v "$command_name" >/dev/null 2>&1 \
+      || fail "required command not found: ${command_name}"
+  done
+fi
 [ -f "$BACKUP_SCRIPT" ] || fail "backup script not found: ${BACKUP_SCRIPT}"
 [ -f "$DUMP_SCRIPT_SOURCE" ] || fail "dump script not found: ${DUMP_SCRIPT_SOURCE}"
 [ -f "$MANIFEST_SCRIPT_SOURCE" ] \
@@ -68,6 +82,91 @@ DOCKER_PATH=$(command -v "$DOCKER_BIN")
 FLOCK_PATH=$(command -v "$FLOCK_BIN")
 require_safe_absolute_path "DOCKER_PATH" "$DOCKER_PATH"
 require_safe_absolute_path "FLOCK_PATH" "$FLOCK_PATH"
+
+CRON_LINE="0 3 * * * umask 077; DOCKER_BIN=${DOCKER_PATH} FLOCK_BIN=${FLOCK_PATH} PROJECT_ROOT=${CURRENT_RELEASE_ROOT} SOURCE_MANIFEST_PATH=${SOURCE_MANIFEST_PATH} DUMP_SCRIPT=${RUNTIME_DUMP_SCRIPT} BACKUP_MANIFEST_SCRIPT=${RUNTIME_MANIFEST_SCRIPT} RETENTION_DAYS=${RETENTION_DAYS} /bin/bash ${RUNTIME_BACKUP_SCRIPT} >> ${BACKUP_LOG_FILE} 2>&1 # ${MARKER}"
+
+count_unmanaged_backup_jobs() {
+  awk \
+    -v marker="$MARKER" \
+    -v current="$BACKUP_SCRIPT" \
+    -v shared="$LEGACY_SHARED_BACKUP_SCRIPT" \
+    -v runtime="$RUNTIME_BACKUP_SCRIPT" '
+    function has_backup_script() {
+      for (field = 1; field <= NF; field += 1) {
+        if ($field == current || $field == shared || $field == runtime) {
+          return 1
+        }
+      }
+      return 0
+    }
+    index($0, marker) == 0 && has_backup_script() { count += 1 }
+    END { print count + 0 }
+  '
+}
+
+verify_runtime() {
+  local installed_count installed_legacy_count installed_line
+  local path expected_kind expected_mode actual_uid actual_gid actual_mode
+  local runtime_contract
+
+  for runtime_contract in \
+    "${RUNTIME_DIR}:directory:755" \
+    "${RUNTIME_BACKUP_SCRIPT}:file:755" \
+    "${RUNTIME_DUMP_SCRIPT}:file:644" \
+    "${RUNTIME_MANIFEST_SCRIPT}:file:644"
+  do
+    IFS=: read -r path expected_kind expected_mode <<<"$runtime_contract"
+    [ ! -L "$path" ] \
+      || fail "installed backup runtime metadata differs from expected"
+    if [ "$expected_kind" = "directory" ]; then
+      [ -d "$path" ] \
+        || fail "installed backup runtime metadata differs from expected"
+    else
+      [ -f "$path" ] \
+        || fail "installed backup runtime metadata differs from expected"
+    fi
+    if actual_uid=$("$STAT_BIN" -c '%u' "$path" 2>/dev/null); then
+      actual_gid=$("$STAT_BIN" -c '%g' "$path")
+      actual_mode=$("$STAT_BIN" -c '%a' "$path")
+    else
+      actual_uid=$("$STAT_BIN" -f '%u' "$path")
+      actual_gid=$("$STAT_BIN" -f '%g' "$path")
+      actual_mode=$("$STAT_BIN" -f '%Lp' "$path")
+    fi
+    [ "$actual_uid" = "0" ] \
+      && [ "$actual_gid" = "0" ] \
+      && [ "$actual_mode" = "$expected_mode" ] \
+      || fail "installed backup runtime metadata differs from expected"
+  done
+
+  [ -f "$RUNTIME_BACKUP_SCRIPT" ] \
+    || fail "installed backup runtime is missing: ${RUNTIME_BACKUP_SCRIPT}"
+  [ -f "$RUNTIME_DUMP_SCRIPT" ] \
+    || fail "installed dump runtime is missing: ${RUNTIME_DUMP_SCRIPT}"
+  [ -f "$RUNTIME_MANIFEST_SCRIPT" ] \
+    || fail "installed manifest runtime is missing: ${RUNTIME_MANIFEST_SCRIPT}"
+  "$CMP_BIN" -s "$BACKUP_SCRIPT" "$RUNTIME_BACKUP_SCRIPT" \
+    || fail "installed backup runtime differs from reviewed source"
+  "$CMP_BIN" -s "$DUMP_SCRIPT_SOURCE" "$RUNTIME_DUMP_SCRIPT" \
+    || fail "installed dump runtime differs from reviewed source"
+  "$CMP_BIN" -s "$MANIFEST_SCRIPT_SOURCE" "$RUNTIME_MANIFEST_SCRIPT" \
+    || fail "installed manifest runtime differs from reviewed source"
+
+  installed_legacy_count=$("$CRONTAB_BIN" -l | count_unmanaged_backup_jobs)
+  [ "$installed_legacy_count" -eq 0 ] \
+    || fail "unmanaged backup cron verification failed"
+  installed_count=$("$CRONTAB_BIN" -l | grep -Fc "$MARKER" || true)
+  [ "$installed_count" -eq 1 ] || fail "backup cron verification failed"
+  installed_line=$("$CRONTAB_BIN" -l | grep -F "$MARKER")
+  [ "$installed_line" = "$CRON_LINE" ] \
+    || fail "installed backup cron differs from expected"
+  printf 'backup_runtime_verification=passed\n'
+}
+
+if [ "$MODE" = "verify" ]; then
+  verify_runtime
+  exit 0
+fi
 
 mkdir -p "$(dirname "$CRON_LOCK_FILE")"
 exec 8>"$CRON_LOCK_FILE"
@@ -89,17 +188,27 @@ if ! "$CRONTAB_BIN" -l >"$CURRENT" 2>"$ERROR_LOG"; then
   : >"$CURRENT"
 fi
 
-LEGACY_COUNT=$(awk -v marker="$MARKER" -v script="$BACKUP_SCRIPT" '
-  index($0, marker) == 0 && index($0, script) > 0 { count += 1 }
-  END { print count + 0 }
-' "$CURRENT")
+LEGACY_COUNT=$(count_unmanaged_backup_jobs <"$CURRENT")
 if [ "$LEGACY_COUNT" -gt 0 ] && [ "$MIGRATE_LEGACY" != "1" ]; then
   fail "legacy backup cron found; review it and rerun with MIGRATE_LEGACY=1"
 fi
 
-awk -v marker="$MARKER" -v script="$BACKUP_SCRIPT" -v migrate="$MIGRATE_LEGACY" '
+awk \
+  -v marker="$MARKER" \
+  -v current="$BACKUP_SCRIPT" \
+  -v shared="$LEGACY_SHARED_BACKUP_SCRIPT" \
+  -v runtime="$RUNTIME_BACKUP_SCRIPT" \
+  -v migrate="$MIGRATE_LEGACY" '
+  function has_backup_script() {
+    for (field = 1; field <= NF; field += 1) {
+      if ($field == current || $field == shared || $field == runtime) {
+        return 1
+      }
+    }
+    return 0
+  }
   index($0, marker) > 0 { next }
-  migrate == "1" && index($0, script) > 0 { next }
+  migrate == "1" && has_backup_script() { next }
   { print }
 ' "$CURRENT" >"$UPDATED"
 
@@ -114,13 +223,9 @@ touch "$BACKUP_LOG_FILE"
 "$CHOWN_BIN" root:root "$BACKUP_LOG_FILE"
 chmod 0600 "$BACKUP_LOG_FILE"
 
-CRON_LINE="0 3 * * * umask 077; DOCKER_BIN=${DOCKER_PATH} FLOCK_BIN=${FLOCK_PATH} PROJECT_ROOT=${CURRENT_RELEASE_ROOT} SOURCE_MANIFEST_PATH=${SOURCE_MANIFEST_PATH} DUMP_SCRIPT=${RUNTIME_DUMP_SCRIPT} BACKUP_MANIFEST_SCRIPT=${RUNTIME_MANIFEST_SCRIPT} RETENTION_DAYS=${RETENTION_DAYS} /bin/bash ${RUNTIME_BACKUP_SCRIPT} >> ${BACKUP_LOG_FILE} 2>&1 # ${MARKER}"
 printf '%s\n' "$CRON_LINE" >>"$UPDATED"
 
 "$CRONTAB_BIN" "$UPDATED"
 
-INSTALLED_COUNT=$("$CRONTAB_BIN" -l | grep -Fc "$MARKER" || true)
-[ "$INSTALLED_COUNT" -eq 1 ] || fail "backup cron verification failed"
-INSTALLED_LINE=$("$CRONTAB_BIN" -l | grep -F "$MARKER")
-[ "$INSTALLED_LINE" = "$CRON_LINE" ] || fail "installed backup cron differs from expected"
-printf 'Installed root cron entry:\n%s\n' "$INSTALLED_LINE"
+verify_runtime
+printf 'Installed root cron entry:\n%s\n' "$CRON_LINE"

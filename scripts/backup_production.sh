@@ -8,7 +8,8 @@ umask 077
 BACKUP_ROOT="${BACKUP_ROOT:-/opt/ai-video-backups}"
 PROJECT_ROOT="${PROJECT_ROOT:-/opt/ai-video}"
 CONTAINER_NAME="${CONTAINER_NAME:-ai_video_backend}"
-RETENTION_DAYS="${RETENTION_DAYS:-15}"
+RETENTION_DAYS="${RETENTION_DAYS:-3}"
+MAX_RETENTION_DAYS=3650
 MIN_PG_ROWS="${MIN_PG_ROWS:-1}"
 TIMESTAMP="${BACKUP_TIMESTAMP:-$(date +%Y-%m-%d_%H%M%S)}"
 BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
@@ -22,6 +23,8 @@ REMOTE_DUMP_FILE="/tmp/pg_dump_${TIMESTAMP}.jsonl"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 FLOCK_BIN="${FLOCK_BIN:-flock}"
 PG_CLIENT_SOURCE_TAG="${PG_CLIENT_IMAGE:-}"
+REMOTE_CLEANUP_ARMED=0
+RETENTION_LIST=""
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S%z')" "$*"
@@ -38,10 +41,11 @@ require_non_negative_integer() {
   [[ "$value" =~ ^[0-9]+$ ]] || fail "${name} must be a non-negative integer"
 }
 
-require_positive_integer() {
-  local name="$1"
-  local value="$2"
-  [[ "$value" =~ ^[1-9][0-9]*$ ]] || fail "${name} must be a positive integer"
+require_retention_days() {
+  [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]{0,3}$ ]] \
+    || fail "RETENTION_DAYS must be a canonical decimal integer between 1 and ${MAX_RETENTION_DAYS}"
+  [ "$((10#$RETENTION_DAYS))" -le "$MAX_RETENTION_DAYS" ] \
+    || fail "RETENTION_DAYS must be a canonical decimal integer between 1 and ${MAX_RETENTION_DAYS}"
 }
 
 sha256_file() {
@@ -58,8 +62,13 @@ sha256_file() {
 cleanup() {
   local exit_code=$?
 
-  "$DOCKER_BIN" exec "$CONTAINER_NAME" rm -f \
-    "$REMOTE_DUMP_SCRIPT" "$REMOTE_DUMP_FILE" >/dev/null 2>&1 || true
+  if [ "$REMOTE_CLEANUP_ARMED" = "1" ]; then
+    "$DOCKER_BIN" exec "$CONTAINER_NAME" rm -f \
+      "$REMOTE_DUMP_SCRIPT" "$REMOTE_DUMP_FILE" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$RETENTION_LIST" ]; then
+    rm -f -- "$RETENTION_LIST"
+  fi
 
   if [ "$exit_code" -ne 0 ] && [ -d "$PARTIAL_DIR" ]; then
     rm -rf -- "$PARTIAL_DIR"
@@ -70,7 +79,8 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
-require_positive_integer "RETENTION_DAYS" "$RETENTION_DAYS"
+require_retention_days
+RETENTION_MINUTES=$((10#$RETENTION_DAYS * 1440))
 require_non_negative_integer "MIN_PG_ROWS" "$MIN_PG_ROWS"
 [[ "$TIMESTAMP" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{6}$ ]] \
   || fail "BACKUP_TIMESTAMP must use YYYY-MM-DD_HHMMSS"
@@ -95,6 +105,7 @@ mkdir "$PARTIAL_DIR"
 
 log "=== Hermes-Evo Backup Start ==="
 log "1/6 Dumping PostgreSQL data through backend container"
+REMOTE_CLEANUP_ARMED=1
 "$DOCKER_BIN" cp "$DUMP_SCRIPT" "${CONTAINER_NAME}:${REMOTE_DUMP_SCRIPT}"
 "$DOCKER_BIN" exec "$CONTAINER_NAME" \
   python3 "$REMOTE_DUMP_SCRIPT" "$REMOTE_DUMP_FILE" \
@@ -433,18 +444,45 @@ verified = []
 for backup_dir in sorted(root.iterdir()):
     if not backup_dir.is_dir() or not pattern.fullmatch(backup_dir.name):
         continue
-    manifest_path = backup_dir / "backup-manifest.v1.json"
-    if not manifest_path.is_file():
-        manifest_path = backup_dir / "manifest.txt"
+    canonical_path = backup_dir / "backup-manifest.v1.json"
+    detached_path = backup_dir / "backup-manifest.v1.json.sha256"
+    legacy_path = backup_dir / "manifest.txt"
     marker_path = backup_dir / "restore_verified.json"
-    if not manifest_path.is_file() or not marker_path.is_file():
+    if marker_path.is_symlink() or not marker_path.is_file():
+        continue
+    canonical_present = canonical_path.exists() or canonical_path.is_symlink()
+    legacy_present = legacy_path.exists() or legacy_path.is_symlink()
+    if canonical_present:
+        if canonical_path.is_symlink() or not canonical_path.is_file():
+            continue
+        if detached_path.is_symlink() or not detached_path.is_file():
+            continue
+        try:
+            digest = hashlib.sha256(canonical_path.read_bytes()).hexdigest()
+            detached_lines = detached_path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError):
+            continue
+        expected_detached = f"{digest}  {canonical_path.name}"
+        if detached_lines != [expected_detached]:
+            continue
+    elif legacy_present:
+        if legacy_path.is_symlink() or not legacy_path.is_file():
+            continue
+        try:
+            digest = hashlib.sha256(legacy_path.read_bytes()).hexdigest()
+        except OSError:
+            continue
+    else:
         continue
     try:
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
         continue
-    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    if marker.get("status") == "passed" and marker.get("manifest_sha256") == digest:
+    if (
+        isinstance(marker, dict)
+        and marker.get("status") == "passed"
+        and marker.get("manifest_sha256") == digest
+    ):
         verified.append(backup_dir)
 if verified:
     print(verified[-1])
@@ -452,6 +490,14 @@ PY
 )
 if [ -z "$LATEST_VERIFIED_BACKUP" ]; then
   log "Skipping retention cleanup: no restore-verified recovery point exists"
+fi
+RETENTION_LIST=$(mktemp "${BACKUP_ROOT}/.retention-expired.XXXXXX")
+if ! python3 "$BACKUP_MANIFEST_SCRIPT" list-expired \
+  --backup-root "$BACKUP_ROOT" \
+  --retention-seconds "$((RETENTION_MINUTES * 60))" \
+  >"$RETENTION_LIST"
+then
+  fail "retention candidate discovery failed"
 fi
 while IFS= read -r -d '' expired_dir; do
   manifest="${expired_dir}/manifest.txt"
@@ -467,15 +513,9 @@ while IFS= read -r -d '' expired_dir; do
   else
     log "Skipping unrecognized timestamp directory: ${expired_dir}"
   fi
-done < <(
-  find "$BACKUP_ROOT" \
-    -mindepth 1 \
-    -maxdepth 1 \
-    -type d \
-    -name '20??-??-??_??????' \
-    -mtime "+${RETENTION_DAYS}" \
-    -print0
-)
+done <"$RETENTION_LIST"
+rm -f -- "$RETENTION_LIST"
+RETENTION_LIST=""
 
 REMAINING=0
 while IFS= read -r -d '' retained_dir; do

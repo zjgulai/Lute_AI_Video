@@ -34,7 +34,7 @@ jobs:
           cache: "pip"
 
       - name: Install uv
-        run: python -m pip install uv==0.11.11
+        run: python -m pip install uv==0.11.32
 
       - name: Sync locked dependencies
         run: uv sync --locked --extra dev
@@ -59,7 +59,7 @@ jobs:
           cache: "pip"
 
       - name: Install uv
-        run: python -m pip install uv==0.11.11
+        run: python -m pip install uv==0.11.32
 
       - name: Set up Node.js for OpenAPI type drift guard
         uses: actions/setup-node@v6
@@ -119,7 +119,7 @@ jobs:
           cache: "pip"
 
       - name: Install uv
-        run: python -m pip install uv==0.11.11
+        run: python -m pip install uv==0.11.32
 
       - name: Sync locked dependencies
         run: uv sync --locked --extra dev
@@ -287,7 +287,7 @@ jobs:
           cache: "pip"
 
       - name: Install uv
-        run: python -m pip install uv==0.11.11
+        run: python -m pip install uv==0.11.32
 
       - name: Sync locked dependencies
         run: uv sync --locked --extra dev

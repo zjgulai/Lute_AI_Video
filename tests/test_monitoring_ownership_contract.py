@@ -11,6 +11,11 @@ OVERLAY = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.monitoring.yml"
 NGINX = REPO_ROOT / "deploy" / "lighthouse" / "ai_video_locations.conf"
 MAKEFILE = REPO_ROOT / "Makefile"
 CI = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+DEPLOY = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
+UV_VERSION = "0.11.32"
+UV_IMAGE_DIGEST = "df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c"
+UV_INSTALL_COMMAND = f"python -m pip install uv=={UV_VERSION}"
+UV_IMAGE_REF = f"ghcr.io/astral-sh/uv:{UV_VERSION}@sha256:{UV_IMAGE_DIGEST}"
 ACTIVE_MONITORING_RUNBOOKS = (
     REPO_ROOT / "docs" / "runbooks" / "deepseek-timeout.md",
     REPO_ROOT / "docs" / "runbooks" / "db-pool-exhausted.md",
@@ -100,7 +105,7 @@ def test_docker_validation_prepares_locked_python_before_monitoring_tests() -> N
     install_index = next(
         index
         for index, step in enumerate(steps)
-        if step.get("run") == "python -m pip install uv==0.11.11"
+        if step.get("run") == UV_INSTALL_COMMAND
     )
     sync_index = next(
         index
@@ -110,6 +115,23 @@ def test_docker_validation_prepares_locked_python_before_monitoring_tests() -> N
 
     assert steps[setup_index]["with"]["python-version"] == "3.12.13"
     assert setup_index < install_index < sync_index < monitoring_index
+
+
+def test_uv_toolchain_is_pinned_consistently_and_patched() -> None:
+    dockerfile_alias = REPO_ROOT / "Dockerfile"
+    assert dockerfile_alias.is_symlink()
+    assert dockerfile_alias.readlink() == Path("Dockerfile.backend")
+
+    copy_command = f"COPY --from={UV_IMAGE_REF} /uv /uvx /bin/"
+    for dockerfile in (dockerfile_alias, REPO_ROOT / "Dockerfile.backend"):
+        text = dockerfile.read_text()
+        assert text.count(copy_command) == 1
+        assert text.count("COPY --from=ghcr.io/astral-sh/uv:") == 1
+
+    for workflow, expected_count in ((CI, 4), (DEPLOY, 1)):
+        text = workflow.read_text()
+        assert text.count(UV_INSTALL_COMMAND) == expected_count
+        assert text.count("python -m pip install uv==") == expected_count
 
 
 def test_active_runbooks_do_not_restore_removed_fake_metric_families() -> None:
