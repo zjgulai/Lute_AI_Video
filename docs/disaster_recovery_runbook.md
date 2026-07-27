@@ -5,7 +5,7 @@ module: operations
 topic: production-backup-restore
 status: stable
 created: 2026-05-11
-updated: 2026-07-22
+updated: 2026-07-27
 owner: self
 source: human+ai
 ---
@@ -20,6 +20,10 @@ source: human+ai
 新增的 `backup-manifest.v1`、exact restore-set 和 off-host protocol 目前只有本地/一次性
 PostgreSQL 证据，尚未部署，不能覆盖前述生产证据或声明 off-host DR 完成。
 
+2026-07-27 H8-A 将 root-owned runtime 字节一致性检查、精确 72 小时保留边界和
+canonical restore marker 校验加入本地候选；在 H8-B 获得独立生产授权并完成安装、只读
+复核前，这些说明不能作为生产已更新的证据。
+
 真实 off-host bucket/KMS/retention（W3-12）与独立主机不可用恢复演练（W3-13）仍是
 外部授权门禁。没有这两层证据时，只能声明本机备份/隔离恢复能力，不能声明主机级 DR
 闭环。
@@ -29,7 +33,9 @@ PostgreSQL 证据，尚未部署，不能覆盖前述生产证据或声明 off-h
 ### 自动备份
 
 - **频率**：每天 03:00（UTC+8）。
-- **保留**：默认 15 天；可用 `RETENTION_DAYS` 调整。没有与 manifest hash 绑定的 `restore_verified.json` 时不执行删除；存在验证点后只清理其他过期 complete 目录，并始终保留最新的 restore-verified 恢复点。
+- **保留**：默认 3 天（精确 72 小时）；`RETENTION_DAYS` 只接受无前导零的十进制 `1..3650`。没有有效 restore-verified 恢复点时不执行删除；存在验证点后只清理其他达到或超过精确分钟边界的 complete 目录，并始终保留最新的 restore-verified 恢复点。
+- **恢复点授权**：canonical 目录必须同时满足 `backup-manifest.v1.json` 内容摘要、严格单行 detached checksum 和 `restore_verified.json.manifest_sha256` 三者一致；canonical 文件存在但损坏、不可读、为符号链接或 detached checksum 缺失时 fail closed，不能回退到 `manifest.txt`。只有不含 canonical manifest 的历史备份才允许使用非符号链接 `manifest.txt` 与 marker 摘要一致的兼容路径。
+- **清理失败语义**：过期目录发现使用纳秒 cutoff；helper、权限或目录校验失败时不删除任何历史备份，保留本次已完成快照，但整次 job 返回非零且不输出 `Backup Complete`。
 - **位置**：`/opt/ai-video-backups/{YYYY-MM-DD_HHMMSS}/`。
 - **原子性**：先写 `.{timestamp}.partial`，数据库与媒体校验通过后再原子重命名；失败会删除 partial，不会执行 retention cleanup。
 - **互斥**：使用 `flock`，并发备份会 fail closed。
@@ -55,25 +61,32 @@ PostgreSQL 证据，尚未部署，不能覆盖前述生产证据或声明 off-h
 这是生产 crontab 写操作，只能在明确 L4 授权后执行：
 
 ```bash
-sudo MIGRATE_LEGACY=1 RETENTION_DAYS=15 \
-  /bin/bash /opt/ai-video/scripts/install_backup_cron.sh
-sudo crontab -l | grep -F 'ai-video-production-backup'
+sudo MIGRATE_LEGACY=1 RETENTION_DAYS=3 \
+  /bin/bash /opt/ai-video/current/scripts/install_backup_cron.sh
+sudo MODE=verify RETENTION_DAYS=3 \
+  /bin/bash /opt/ai-video/current/scripts/install_backup_cron.sh
 ```
 
 安装器会把 backup、logical dump 和 canonical manifest validator 复制到 root-owned 的
 `/usr/local/libexec/ai-video-backup/`，避免 root cron 执行可由部署用户改写的运行脚本；
 cron 的 `PROJECT_ROOT`/`SOURCE_MANIFEST_PATH` 明确指向 `/opt/ai-video/current` 的 reviewed
 release。`MIGRATE_LEGACY=1` 只用于本次已知旧 cron 迁移；缺少该显式开关时，安装器发现
-旧无 marker 行会 fail closed。
+旧无 marker 行会 fail closed。受支持的精确 legacy executable 包括当前 reviewed source、
+历史 `/opt/ai-video/scripts/backup_production.sh` 和 root-owned runtime；迁移后只允许一条
+带 marker 的 managed job。安装模式在复制并写入 cron 后立即执行相同校验；
+`MODE=verify` 只读比较 `/opt/ai-video/current/scripts/` 下三份 reviewed source 与
+root-owned runtime 的字节，拒绝 runtime 目录或文件符号链接、非 root owner/group 和
+非预期模式（目录与 backup 为 `0755`，Python 文件为 `0644`），并要求唯一 managed cron
+行与预期命令完全一致；它不覆盖 runtime、不改 crontab、日志或 lock。
 
-验收：只出现一行 AI Video 备份任务，命令包含 `RETENTION_DAYS=15 /bin/bash /usr/local/libexec/ai-video-backup/backup_production.sh`；其他 root cron 行保持不变，日志文件模式为 `0600`。
+验收：输出 `backup_runtime_verification=passed`；只出现一行 AI Video 备份任务，命令包含 `RETENTION_DAYS=3 /bin/bash /usr/local/libexec/ai-video-backup/backup_production.sh`；其他 root cron 行保持不变，日志文件模式为 `0600`。
 
 ### 手动备份
 
 这是生产数据库和文件系统读取、备份目录写入及过期备份清理操作，只能在明确 L4 授权后执行：
 
 ```bash
-sudo RETENTION_DAYS=15 \
+sudo RETENTION_DAYS=3 \
   /bin/bash /usr/local/libexec/ai-video-backup/backup_production.sh
 ```
 

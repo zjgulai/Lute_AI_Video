@@ -264,6 +264,32 @@ def _age(path: Path, days: int) -> None:
     os.utime(path, (timestamp, timestamp))
 
 
+def _age_seconds(path: Path, seconds: int) -> None:
+    timestamp = time.time() - seconds
+    os.utime(path, (timestamp, timestamp))
+
+
+def _write_canonical_restore_marker(
+    backup_dir: Path,
+    *,
+    detached_digest: str | None = None,
+) -> None:
+    canonical_manifest = backup_dir / "backup-manifest.v1.json"
+    canonical_manifest.write_text(
+        '{"schema_version":"backup-manifest.v1"}\n',
+        encoding="utf-8",
+    )
+    digest = hashlib.sha256(canonical_manifest.read_bytes()).hexdigest()
+    (backup_dir / "backup-manifest.v1.json.sha256").write_text(
+        f"{detached_digest or digest}  backup-manifest.v1.json\n",
+        encoding="utf-8",
+    )
+    (backup_dir / "restore_verified.json").write_text(
+        json.dumps({"status": "passed", "manifest_sha256": digest}) + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_backup_publishes_only_validated_snapshot_then_applies_15_day_retention(
     tmp_path: Path,
 ) -> None:
@@ -370,6 +396,169 @@ def test_backup_publishes_only_validated_snapshot_then_applies_15_day_retention(
     docker_log = Path(env["FAKE_DOCKER_LOG"]).read_text()
     assert "postgresql://" not in docker_log
     assert "--dbname=" not in docker_log
+
+
+def test_backup_retention_rejects_canonical_marker_with_bad_detached_checksum(
+    tmp_path: Path,
+) -> None:
+    env, backup_root = _backup_env(tmp_path)
+    backup_root.mkdir()
+    invalid_verified = backup_root / "2026-05-30_030000"
+    invalid_verified.mkdir()
+    (invalid_verified / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _write_canonical_restore_marker(
+        invalid_verified,
+        detached_digest="0" * 64,
+    )
+    _age(invalid_verified, 20)
+    downgrade_attempt = backup_root / "2026-05-30_040000"
+    downgrade_attempt.mkdir()
+    downgrade_legacy = downgrade_attempt / "manifest.txt"
+    downgrade_legacy.write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    (downgrade_attempt / "backup-manifest.v1.json").symlink_to("manifest.txt")
+    (downgrade_attempt / "restore_verified.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "manifest_sha256": hashlib.sha256(
+                    downgrade_legacy.read_bytes()
+                ).hexdigest(),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _age(downgrade_attempt, 20)
+    malformed_marker = backup_root / "2026-05-30_050000"
+    malformed_marker.mkdir()
+    (malformed_marker / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    (malformed_marker / "restore_verified.json").write_text("[]\n", encoding="utf-8")
+    _age(malformed_marker, 20)
+    expired = backup_root / "2026-05-31_030000"
+    expired.mkdir()
+    (expired / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _age(expired, 20)
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert invalid_verified.is_dir()
+    assert downgrade_attempt.is_dir()
+    assert malformed_marker.is_dir()
+    assert expired.is_dir(), "invalid canonical evidence must block retention deletion"
+    assert "no restore-verified recovery point" in result.stdout
+
+
+def test_backup_retention_uses_exact_72_hour_minute_boundary(
+    tmp_path: Path,
+) -> None:
+    env, backup_root = _backup_env(tmp_path)
+    env["RETENTION_DAYS"] = "3"
+    backup_root.mkdir()
+    verified = backup_root / "2026-05-30_030000"
+    verified.mkdir()
+    (verified / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _write_canonical_restore_marker(verified)
+    _age(verified, 20)
+    outside_boundary = backup_root / "2026-05-31_030000"
+    outside_boundary.mkdir()
+    (outside_boundary / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _age_seconds(outside_boundary, (3 * 24 * 60 * 60) + 300)
+    inside_boundary = backup_root / "2026-06-01_030000"
+    inside_boundary.mkdir()
+    (inside_boundary / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _age_seconds(inside_boundary, (3 * 24 * 60 * 60) - 300)
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert verified.is_dir()
+    assert not outside_boundary.exists()
+    assert inside_boundary.is_dir()
+
+
+def test_backup_reports_failure_and_preserves_backups_when_retention_discovery_fails(
+    tmp_path: Path,
+) -> None:
+    env, backup_root = _backup_env(tmp_path)
+    backup_root.mkdir()
+    expired = backup_root / "2026-05-31_030000"
+    expired.mkdir()
+    (expired / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _age(expired, 20)
+    failing_manifest = tmp_path / "failing_backup_manifest.py"
+    failing_manifest.write_text(
+        "\n".join(
+            [
+                "import os",
+                "import sys",
+                "",
+                "if len(sys.argv) > 1 and sys.argv[1] == 'list-expired':",
+                "    raise SystemExit(42)",
+                "os.execv(",
+                "    sys.executable,",
+                f"    [sys.executable, {str(BACKUP_MANIFEST_SCRIPT)!r}, *sys.argv[1:]],",
+                ")",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env["BACKUP_MANIFEST_SCRIPT"] = str(failing_manifest)
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "retention candidate discovery failed" in result.stderr
+    assert "Backup Complete" not in result.stdout
+    assert expired.is_dir()
+    assert (backup_root / "2026-07-10_120000").is_dir()
+    assert not list(backup_root.glob(".retention-expired.*"))
 
 
 def test_backup_rejects_schema_archive_missing_a_required_table(
@@ -542,8 +731,53 @@ def test_backup_rejects_zero_day_retention_before_creating_snapshot(tmp_path: Pa
     )
 
     assert result.returncode != 0
-    assert "RETENTION_DAYS must be a positive integer" in result.stderr
+    assert "RETENTION_DAYS must be a canonical decimal integer" in result.stderr
     assert not (backup_root / "2026-07-10_120000").exists()
+    assert Path(env["FAKE_DOCKER_LOG"]).read_text() == ""
+
+
+@pytest.mark.parametrize(
+    "retention_days",
+    ["09", "3651", "9223372036854775807"],
+)
+def test_backup_rejects_noncanonical_or_unbounded_retention_without_deletion(
+    tmp_path: Path,
+    retention_days: str,
+) -> None:
+    env, backup_root = _backup_env(tmp_path)
+    env["RETENTION_DAYS"] = retention_days
+    backup_root.mkdir()
+    verified = backup_root / "2026-05-30_030000"
+    verified.mkdir()
+    (verified / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _write_canonical_restore_marker(verified)
+    _age(verified, 20)
+    expired = backup_root / "2026-05-31_030000"
+    expired.mkdir()
+    (expired / "manifest.txt").write_text(
+        "project: ai-video\nstatus: complete\n",
+        encoding="utf-8",
+    )
+    _age(expired, 20)
+
+    result = subprocess.run(
+        ["bash", str(BACKUP_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "RETENTION_DAYS must be a canonical decimal integer" in result.stderr
+    assert verified.is_dir()
+    assert expired.is_dir()
+    assert not (backup_root / "2026-07-10_120000").exists()
+    assert Path(env["FAKE_DOCKER_LOG"]).read_text() == ""
 
 
 def _fake_crontab(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
@@ -575,10 +809,12 @@ cp "$1" "${FAKE_CRONTAB_FILE:?}"
 set -euo pipefail
 directory_mode=0
 paths=()
+mode=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -d) directory_mode=1; shift ;;
-    -o|-g|-m) shift 2 ;;
+    -m) mode="$2"; shift 2 ;;
+    -o|-g) shift 2 ;;
     *) paths+=("$1"); shift ;;
   esac
 done
@@ -590,6 +826,7 @@ else
   mkdir -p "$(dirname "$destination")"
   cp "$source_path" "$destination"
 fi
+[ -z "$mode" ] || chmod "$mode" "$destination"
 """,
     )
     fake_chown = _write_executable(
@@ -599,28 +836,61 @@ fi
     return fake_id, fake_crontab, fake_install, fake_chown, store
 
 
+def _fake_root_stat(tmp_path: Path) -> Path:
+    return _write_executable(
+        tmp_path / "stat-command",
+        """#!/usr/bin/env bash
+set -euo pipefail
+format="${2:?}"
+path="${3:?}"
+python3 - "$format" "$path" <<'PY'
+import os
+import stat
+import sys
+
+format_string, path = sys.argv[1:]
+metadata = os.lstat(path)
+if format_string == "%u":
+    print(os.environ.get("FAKE_STAT_UID", "0"))
+elif format_string == "%g":
+    print(os.environ.get("FAKE_STAT_GID", "0"))
+elif format_string in {"%a", "%Lp"}:
+    print(f"{stat.S_IMODE(metadata.st_mode):o}")
+else:
+    raise SystemExit(f"unsupported fake stat format: {format_string}")
+PY
+""",
+    )
+
+
 def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Path) -> None:
     _, fake_crontab, fake_install, fake_chown, store = _fake_crontab(tmp_path)
-    backup_script = tmp_path / "backup_production.sh"
-    backup_script.write_text("#!/usr/bin/env bash\n")
-    dump_script = tmp_path / "pg_dump_logical.py"
-    dump_script.write_text("# fixture\n")
-    manifest_script = tmp_path / "backup_manifest.py"
-    manifest_script.write_text("# fixture\n")
     current_release = tmp_path / "current"
-    current_release.mkdir()
+    scripts_dir = current_release / "scripts"
+    scripts_dir.mkdir(parents=True)
+    backup_script = scripts_dir / "backup_production.sh"
+    backup_script.write_text("#!/usr/bin/env bash\n")
+    dump_script = scripts_dir / "pg_dump_logical.py"
+    dump_script.write_text("# fixture\n")
+    manifest_script = scripts_dir / "backup_manifest.py"
+    manifest_script.write_text("# fixture\n")
     (current_release / "source-manifest.v1.json").write_text("{}\n")
     runtime_dir = tmp_path / "runtime"
     log_file = tmp_path / "hermes-backup.log"
     store.write_text(
         "15 4 * * * /usr/local/bin/unrelated-job\n"
         f"0 3 * * * {backup_script} >> /tmp/old-backup.log 2>&1\n"
+        "0 2 * * * /bin/bash /opt/ai-video/scripts/backup_production.sh "
+        ">> /tmp/old-shared-backup.log 2>&1\n"
+        f"0 1 * * * /bin/bash {runtime_dir}/backup_production.sh "
+        ">> /tmp/old-runtime-backup.log 2>&1\n"
     )
     fake_flock = _write_executable(tmp_path / "flock", "#!/usr/bin/env bash\nexit 0\n")
     fake_docker = _write_executable(
         tmp_path / "docker-command",
         "#!/usr/bin/env bash\nexit 0\n",
     )
+    fake_stat = _fake_root_stat(tmp_path)
     env = os.environ.copy()
     env.update(
         {
@@ -630,10 +900,8 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
             "CHOWN_BIN": str(fake_chown),
             "DOCKER_BIN": str(fake_docker),
             "FLOCK_BIN": str(fake_flock),
+            "STAT_BIN": str(fake_stat),
             "FAKE_CRONTAB_FILE": str(store),
-            "BACKUP_SCRIPT": str(backup_script),
-            "DUMP_SCRIPT_SOURCE": str(dump_script),
-            "MANIFEST_SCRIPT_SOURCE": str(manifest_script),
             "CURRENT_RELEASE_ROOT": str(current_release),
             "RUNTIME_DIR": str(runtime_dir),
             "CRON_LOCK_FILE": str(tmp_path / "cron.lock"),
@@ -657,6 +925,8 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
     assert "15 4 * * * /usr/local/bin/unrelated-job" in installed
     assert installed.count("ai-video-production-backup") == 1
     assert installed.count(str(backup_script)) == 0
+    assert "/opt/ai-video/scripts/backup_production.sh" not in installed
+    assert installed.count(f"/bin/bash {runtime_dir}/backup_production.sh") == 1
     assert f"/bin/bash {runtime_dir}/backup_production.sh" in installed
     assert f"DUMP_SCRIPT={runtime_dir}/pg_dump_logical.py" in installed
     assert f"BACKUP_MANIFEST_SCRIPT={runtime_dir}/backup_manifest.py" in installed
@@ -665,8 +935,129 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
     assert (runtime_dir / "backup_production.sh").is_file()
     assert (runtime_dir / "pg_dump_logical.py").is_file()
     assert (runtime_dir / "backup_manifest.py").is_file()
+    assert (runtime_dir / "backup_production.sh").stat().st_mode & 0o777 == 0o755
+    assert (runtime_dir / "pg_dump_logical.py").stat().st_mode & 0o777 == 0o644
+    assert (runtime_dir / "backup_manifest.py").stat().st_mode & 0o777 == 0o644
     assert log_file.is_file()
     assert log_file.stat().st_mode & 0o777 == 0o600
+
+    env["MODE"] = "verify"
+    verified = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert verified.returncode == 0, verified.stderr
+    assert "backup_runtime_verification=passed" in verified.stdout
+
+    managed_crontab = store.read_text()
+    store.write_text(
+        managed_crontab
+        + "0 2 * * * /bin/bash /opt/ai-video/scripts/backup_production.sh "
+        ">> /tmp/old-shared-backup.log 2>&1\n"
+    )
+    unmanaged_before_verify = store.read_text()
+    rejected_unmanaged = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected_unmanaged.returncode != 0
+    assert "unmanaged backup cron verification failed" in rejected_unmanaged.stderr
+    assert store.read_text() == unmanaged_before_verify
+    store.write_text(managed_crontab)
+
+    drifted_runtime = runtime_dir / "backup_production.sh"
+    drifted_runtime.write_text("#!/usr/bin/env bash\n# drift\n")
+    crontab_before_verify = store.read_text()
+    rejected = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected.returncode != 0
+    assert "installed backup runtime differs from reviewed source" in rejected.stderr
+    assert drifted_runtime.read_text() == "#!/usr/bin/env bash\n# drift\n"
+    assert store.read_text() == crontab_before_verify
+
+    drifted_runtime.write_text(backup_script.read_text())
+    store.write_text(
+        store.read_text().replace("RETENTION_DAYS=15", "RETENTION_DAYS=14")
+    )
+    cron_before_verify = store.read_text()
+    rejected_cron = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected_cron.returncode != 0
+    assert "installed backup cron differs from expected" in rejected_cron.stderr
+    assert store.read_text() == cron_before_verify
+
+    store.write_text(store.read_text().replace("RETENTION_DAYS=14", "RETENTION_DAYS=15"))
+    runtime_dump = runtime_dir / "pg_dump_logical.py"
+    runtime_dump.chmod(0o666)
+    store_before_metadata_verify = store.read_text()
+    log_before_metadata_verify = log_file.read_bytes()
+    lock_before_metadata_verify = (tmp_path / "cron.lock").read_bytes()
+    rejected_mode = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected_mode.returncode != 0
+    assert "installed backup runtime metadata differs from expected" in rejected_mode.stderr
+    assert runtime_dump.stat().st_mode & 0o777 == 0o666
+    assert store.read_text() == store_before_metadata_verify
+    assert log_file.read_bytes() == log_before_metadata_verify
+    assert (tmp_path / "cron.lock").read_bytes() == lock_before_metadata_verify
+
+    runtime_dump.chmod(0o644)
+    env["FAKE_STAT_UID"] = "501"
+    rejected_owner = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected_owner.returncode != 0
+    assert "installed backup runtime metadata differs from expected" in rejected_owner.stderr
+    env.pop("FAKE_STAT_UID")
+
+    runtime_manifest = runtime_dir / "backup_manifest.py"
+    runtime_manifest.unlink()
+    runtime_manifest.symlink_to(manifest_script)
+    rejected_symlink = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected_symlink.returncode != 0
+    assert "installed backup runtime metadata differs from expected" in rejected_symlink.stderr
+    assert runtime_manifest.is_symlink()
+    assert store.read_text() == store_before_metadata_verify
+    assert log_file.read_bytes() == log_before_metadata_verify
+    assert (tmp_path / "cron.lock").read_bytes() == lock_before_metadata_verify
 
 
 def test_cron_installer_requires_explicit_legacy_migration(tmp_path: Path) -> None:
@@ -680,7 +1071,10 @@ def test_cron_installer_requires_explicit_legacy_migration(tmp_path: Path) -> No
     current_release = tmp_path / "current"
     current_release.mkdir()
     (current_release / "source-manifest.v1.json").write_text("{}\n")
-    original = f"0 3 * * * {backup_script} >> /tmp/legacy.log 2>&1\n"
+    original = (
+        "0 3 * * * /bin/bash /opt/ai-video/scripts/backup_production.sh "
+        ">> /tmp/legacy.log 2>&1\n"
+    )
     store.write_text(original)
     fake_flock = _write_executable(tmp_path / "flock", "#!/usr/bin/env bash\nexit 0\n")
     fake_docker = _write_executable(tmp_path / "docker-command", "#!/usr/bin/env bash\nexit 0\n")
@@ -718,6 +1112,43 @@ def test_cron_installer_requires_explicit_legacy_migration(tmp_path: Path) -> No
     assert store.read_text() == original
 
 
+@pytest.mark.parametrize(
+    "retention_days",
+    ["09", "3651", "9223372036854775807"],
+)
+def test_cron_installer_rejects_noncanonical_or_unbounded_retention_without_mutation(
+    tmp_path: Path,
+    retention_days: str,
+) -> None:
+    _, fake_crontab, _, _, store = _fake_crontab(tmp_path)
+    original = "15 4 * * * /usr/local/bin/unrelated-job\n"
+    store.write_text(original)
+    env = os.environ.copy()
+    env.update(
+        {
+            "CRONTAB_BIN": str(fake_crontab),
+            "FAKE_CRONTAB_FILE": str(store),
+            "RETENTION_DAYS": retention_days,
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "RETENTION_DAYS must be a canonical decimal integer" in result.stderr
+    assert store.read_text() == original
+    assert not (tmp_path / "runtime").exists()
+    assert not (tmp_path / "backup.log").exists()
+    assert not (tmp_path / "cron.lock").exists()
+
+
 def test_backup_stats_stdout_remains_machine_readable_json() -> None:
     source = PG_DUMP_SCRIPT.read_text()
     assert 'print(f"Dumping PG to {out_path}...", file=sys.stderr)' in source
@@ -726,6 +1157,29 @@ def test_backup_stats_stdout_remains_machine_readable_json() -> None:
     assert "table_name <> 'alembic_version'" in source
     assert "foreign-key cycle" in source
     assert 'conn.transaction(isolation="repeatable_read", readonly=True)' in source
+
+
+def test_backup_runtime_defaults_match_exact_72_hour_policy() -> None:
+    backup_source = BACKUP_SCRIPT.read_text()
+    installer_source = CRON_INSTALLER.read_text()
+    runbook = DR_RUNBOOK.read_text()
+
+    assert 'RETENTION_DAYS="${RETENTION_DAYS:-3}"' in backup_source
+    assert 'RETENTION_DAYS="${RETENTION_DAYS:-3}"' in installer_source
+    assert "MAX_RETENTION_DAYS=3650" in backup_source
+    assert "MAX_RETENTION_DAYS=3650" in installer_source
+    assert "list-expired" in backup_source
+    assert "--retention-seconds" in backup_source
+    assert "-mmin" not in backup_source
+    assert (
+        'BACKUP_SCRIPT="${BACKUP_SCRIPT:-${CURRENT_RELEASE_ROOT}/scripts/'
+        'backup_production.sh}"'
+    ) in installer_source
+    assert (
+        installer_source.index('CURRENT_RELEASE_ROOT="${CURRENT_RELEASE_ROOT:-')
+        < installer_source.index('BACKUP_SCRIPT="${BACKUP_SCRIPT:-')
+    )
+    assert "默认 3 天" in runbook
 
 
 def test_logical_recovery_uses_dynamic_current_schema_contract() -> None:

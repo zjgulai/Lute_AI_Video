@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from scripts.backup_manifest import (
     BackupManifestError,
     build_source_manifest,
     create_backup_manifest,
+    list_expired_backup_directories,
     validate_backup_manifest,
     validate_source_manifest,
 )
@@ -94,6 +96,49 @@ def _backup_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         },
     )
     return backup_dir, source_root, source_manifest_path
+
+
+def test_expired_backup_directories_use_exact_half_open_nanosecond_boundary(
+    tmp_path: Path,
+) -> None:
+    backup_root = tmp_path / "backups"
+    backup_root.mkdir()
+    retention_seconds = 3 * 24 * 60 * 60
+    now_ns = 1_800_000_000_000_000_000
+    cutoff_ns = now_ns - (retention_seconds * 1_000_000_000)
+
+    outside = backup_root / "2026-07-20_030000"
+    outside.mkdir()
+    os.utime(outside, ns=(cutoff_ns - 1, cutoff_ns - 1))
+    at_boundary = backup_root / "2026-07-21_030000"
+    at_boundary.mkdir()
+    os.utime(at_boundary, ns=(cutoff_ns, cutoff_ns))
+    inside = backup_root / "2026-07-22_030000"
+    inside.mkdir()
+    os.utime(inside, ns=(cutoff_ns + 1, cutoff_ns + 1))
+    linked = backup_root / "2026-07-23_030000"
+    linked.symlink_to(outside, target_is_directory=True)
+    unrelated = backup_root / "not-an-ai-video-backup"
+    unrelated.mkdir()
+    os.utime(unrelated, ns=(cutoff_ns - 1, cutoff_ns - 1))
+
+    assert list_expired_backup_directories(
+        backup_root,
+        retention_seconds,
+        now_ns=now_ns,
+    ) == [outside, at_boundary]
+
+
+@pytest.mark.parametrize("retention_seconds", [False, 0, (3650 * 86400) + 1])
+def test_expired_backup_directories_reject_invalid_retention(
+    tmp_path: Path,
+    retention_seconds: int,
+) -> None:
+    backup_root = tmp_path / "backups"
+    backup_root.mkdir()
+
+    with pytest.raises(BackupManifestError, match="retention seconds are invalid"):
+        list_expired_backup_directories(backup_root, retention_seconds)
 
 
 def test_source_manifest_is_deterministic_and_validates_exact_bytes(

@@ -8,8 +8,10 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
+import time
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
@@ -38,6 +40,7 @@ BACKUP_ARTIFACTS = (
     SOURCE_MANIFEST_NAME,
 )
 SCHEMA_METADATA_TABLES = frozenset({"alembic_version"})
+MAX_RETENTION_SECONDS = 3650 * 24 * 60 * 60
 
 
 class BackupManifestError(ValueError):
@@ -738,6 +741,42 @@ def validate_backup_manifest(backup_dir: Path) -> dict[str, object]:
     return manifest
 
 
+def list_expired_backup_directories(
+    backup_root: Path,
+    retention_seconds: int,
+    *,
+    now_ns: int | None = None,
+) -> list[Path]:
+    """Return timestamped regular directories at or beyond the retention cutoff."""
+    if backup_root.is_symlink() or not backup_root.is_dir():
+        raise BackupManifestError("backup root is missing or unsafe")
+    if (
+        isinstance(retention_seconds, bool)
+        or not isinstance(retention_seconds, int)
+        or not 1 <= retention_seconds <= MAX_RETENTION_SECONDS
+    ):
+        raise BackupManifestError("retention seconds are invalid")
+    reference_ns = time.time_ns() if now_ns is None else now_ns
+    if isinstance(reference_ns, bool) or not isinstance(reference_ns, int):
+        raise BackupManifestError("retention reference time is invalid")
+    cutoff_ns = reference_ns - (retention_seconds * 1_000_000_000)
+    expired: list[Path] = []
+    try:
+        candidates = sorted(backup_root.iterdir())
+    except OSError as exc:
+        raise BackupManifestError("backup root is missing or unsafe") from exc
+    for candidate in candidates:
+        if not BACKUP_TIMESTAMP_RE.fullmatch(candidate.name):
+            continue
+        try:
+            metadata = candidate.lstat()
+        except OSError:
+            continue
+        if stat.S_ISDIR(metadata.st_mode) and metadata.st_mtime_ns <= cutoff_ns:
+            expired.append(candidate)
+    return expired
+
+
 def _git_tracked_files(root: Path, git_sha: str) -> list[str]:
     try:
         head = subprocess.run(
@@ -782,6 +821,9 @@ def _build_parser() -> argparse.ArgumentParser:
     create.add_argument("--backup-timestamp", required=True)
     validate = subparsers.add_parser("validate")
     validate.add_argument("--backup-dir", type=Path, required=True)
+    expired = subparsers.add_parser("list-expired")
+    expired.add_argument("--backup-root", type=Path, required=True)
+    expired.add_argument("--retention-seconds", type=int, required=True)
     return parser
 
 
@@ -815,9 +857,16 @@ def main() -> int:
                 backup_timestamp=args.backup_timestamp,
             )
             print(json.dumps({"status": "passed", "git_sha": manifest["git_sha"]}))
-        else:
+        elif args.command == "validate":
             manifest = validate_backup_manifest(args.backup_dir)
             print(json.dumps({"status": "passed", "git_sha": manifest["git_sha"]}))
+        else:
+            expired = list_expired_backup_directories(
+                args.backup_root,
+                args.retention_seconds,
+            )
+            for path in expired:
+                sys.stdout.buffer.write(os.fsencode(path) + b"\0")
     except BackupManifestError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
