@@ -7,6 +7,7 @@
 
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 
@@ -18,6 +19,9 @@ interface RenderConfig {
   width?: number;
   height?: number;
 }
+
+const CHROME_EXECUTABLE = "/usr/bin/google-chrome-stable";
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 async function parseArgs(): Promise<RenderConfig> {
   const args = process.argv.slice(2);
@@ -127,7 +131,7 @@ async function main() {
   );
 
   // Bundle the Remotion project
-  const entry = path.resolve(__dirname, "Root.tsx");
+  const entry = path.resolve(MODULE_DIR, "index.ts");
   console.log("   Bundling...");
   const bundleLocation = await bundle({ entryPoint: entry });
 
@@ -137,6 +141,7 @@ async function main() {
     serveUrl: bundleLocation,
     id: config.compositionId || "ShortVideo",
     inputProps: renderProps,
+    browserExecutable: CHROME_EXECUTABLE,
   });
 
   // Render
@@ -149,8 +154,10 @@ async function main() {
     composition,
     serveUrl: bundleLocation,
     codec: "h264",
+    imageFormat: "jpeg",
     outputLocation: outputPath,
     inputProps: renderProps,
+    browserExecutable: CHROME_EXECUTABLE,
     onProgress: ({ progress }) => {
       process.stdout.write(`\r   Progress: ${Math.round(progress * 100)}%`);
     },

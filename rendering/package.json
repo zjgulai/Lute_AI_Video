@@ -7,7 +7,8 @@
     "dev": "remotion studio",
     "build": "remotion render",
     "render": "tsx src/render.ts",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.494",

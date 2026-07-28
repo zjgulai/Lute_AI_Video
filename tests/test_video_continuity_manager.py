@@ -30,10 +30,10 @@ def tiny_mp4(tmp_path: Path) -> Path:
 
 class TestExtractLastFrame:
     @pytest.mark.asyncio
-    async def test_extract_produces_png(self, tiny_mp4: Path, tmp_path: Path):
+    async def test_extract_produces_jpeg(self, tiny_mp4: Path, tmp_path: Path):
         frame = await extract_last_frame(tiny_mp4, output_dir=tmp_path)
         assert frame.exists()
-        assert frame.suffix == ".png"
+        assert frame.suffix == ".jpg"
         assert frame.stat().st_size > 100
 
     @pytest.mark.asyncio
@@ -72,6 +72,7 @@ class TestVideoContinuityManagerSkill:
         skill = VideoContinuityManagerSkill()
         result = await skill.safe_execute({})
         assert result.success is False
+        assert result.error is not None
         assert "video_path" in result.error
 
     @pytest.mark.asyncio

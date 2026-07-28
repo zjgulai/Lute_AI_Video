@@ -55,17 +55,24 @@ COPY rendering ./rendering
 # Create output directory (used by VIDEO_OUTPUT_DIR)
 RUN mkdir -p /app/output
 
-# P3-3: Run as non-root user for security
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser && \
-    chown -R appuser:appgroup /app
+# P3-3: Run as the same explicit numeric non-root identity as the renderer so
+# the two containers can share only the Unix socket and output volumes. Debian
+# runtime dependencies may already reserve UID/GID 999 (for example
+# systemd-journal), so identity creation must be collision-safe and ownership
+# must not depend on a mutable account/group name.
+RUN (getent group 999 >/dev/null || groupadd --gid 999 appgroup) && \
+    (getent passwd 999 >/dev/null || \
+      useradd --uid 999 --gid 999 --no-create-home --shell /usr/sbin/nologin appuser) && \
+    chown -R 999:999 /app
 
 # Release identity is metadata-only. Keep it after all filesystem layers so a
 # new reviewed SHA cannot invalidate the pinned apt and uv dependency layers.
 ARG RELEASE_SOURCE_SHA
 LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
-USER appuser
 
 ENV PYTHONPATH=/app
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" \
+    XDG_DATA_HOME=/usr/share
+USER 999:999
 EXPOSE 8001
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8001"]

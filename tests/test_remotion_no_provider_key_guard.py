@@ -28,7 +28,18 @@ def _contract() -> dict[str, Any]:
 
 
 def _tracked_rendering_paths() -> list[Path]:
-    output = subprocess.check_output(("git", "ls-files", "-z", "rendering"), cwd=REPO_ROOT)
+    output = subprocess.check_output(
+        (
+            "git",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "rendering",
+        ),
+        cwd=REPO_ROOT,
+    )
     return [
         REPO_ROOT / path
         for path in output.decode().split("\0")
@@ -126,12 +137,14 @@ def test_rendering_env_reads_are_limited_to_local_runtime_controls() -> None:
     text = "\n".join(path.read_text() for path in _tracked_rendering_paths())
 
     js_env_reads = set(re.findall(r"process\.env\.([A-Z0-9_]+)", text))
-    docker_env_assignments = _docker_runtime_env_assignments(
-        (REPO_ROOT / "rendering" / "Dockerfile").read_text()
-    )
+    dockerfile = (REPO_ROOT / "rendering" / "Dockerfile").read_text()
+    docker_env_assignments = _docker_runtime_env_assignments(dockerfile)
 
     assert js_env_reads <= allowed_env_names
     assert docker_env_assignments <= allowed_env_names
+    assert "XDG_DATA_HOME" in allowed_env_names
+    assert "XDG_DATA_HOME" in docker_env_assignments
+    assert "XDG_DATA_HOME=/usr/share" in dockerfile
 
 
 def test_lighthouse_rendering_service_receives_only_local_runtime_env() -> None:
@@ -139,8 +152,8 @@ def test_lighthouse_rendering_service_receives_only_local_runtime_env() -> None:
     compose = yaml.safe_load(PROD_COMPOSE_PATH.read_text())
     service = compose["services"]["rendering"]
 
-    assert service["build"]["context"] == "../../rendering"
-    assert service["build"]["dockerfile"] == "Dockerfile"
+    assert service["build"]["context"] == "../.."
+    assert service["build"]["dockerfile"] == "rendering/Dockerfile"
     assert _env_entries(service.get("environment")) == set(contract["rendering_compose_env"])
     assert "env_file" not in service
 
@@ -178,11 +191,15 @@ def test_remotion_no_provider_contract_is_documented_and_link_checked() -> None:
 
     assert contract["status"] == "stable"
     assert contract["no_token_boundary"] is True
+    assert contract["renderer_health_probe_timeout_seconds"] == 20
+    assert contract["backend_uds_probe_timeout_seconds"] == 25
     assert "remotion-no-provider-key-contract.json" in runbook_text
     assert "tests/test_remotion_no_provider_key_guard.py" in runbook_text
-    assert "PORT" in runbook_text
+    assert "RENDERING_SERVICE_SOCKET" in runbook_text
+    assert "Unix Domain Socket" in runbook_text
     assert "OUTPUT_DIR" in runbook_text
     assert "POYO_API_KEY" in runbook_text
     assert "不执行 Docker build" in runbook_text
+    assert "backend UDS consumer 最多等待 25 秒" in runbook_text
     assert "docs/runbooks/remotion-no-provider-key.md" in scope_targets
     assert "docs/runbooks/remotion-no-provider-key.md" in ci_text

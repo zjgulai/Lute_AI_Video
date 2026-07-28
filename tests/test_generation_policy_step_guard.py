@@ -608,10 +608,10 @@ async def test_force_never_reexecutes_provider_step_with_attempt_evidence(
     assert persisted["steps"]["strategy"]["_quality_attempt"] == 1
 
 
-@pytest.mark.parametrize("rendering_service_url", ["", "https://renderer.invalid"])
+@pytest.mark.parametrize("rendering_service_socket", ["", "/run/rendering/rendering.sock"])
 @pytest.mark.asyncio
 async def test_assemble_force_is_blocked_before_local_or_remote_renderer_construction(
-    rendering_service_url: str,
+    rendering_service_socket: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Assembly writes a new artifact, so force needs a durable artifact ledger."""
@@ -628,7 +628,7 @@ async def test_assemble_force_is_blocked_before_local_or_remote_renderer_constru
     state["steps"]["assemble_final"]["_quality_attempt"] = 1
     manager = MemoryStateManager(state)
     original = _SCENARIO_CONFIGS["s2"]
-    monkeypatch.setenv("RENDERING_SERVICE_URL", rendering_service_url)
+    monkeypatch.setenv("RENDERING_SERVICE_SOCKET", rendering_service_socket)
     monkeypatch.setitem(
         _SCENARIO_CONFIGS,
         "s2",

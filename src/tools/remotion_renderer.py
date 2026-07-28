@@ -198,7 +198,7 @@ class RemotionRenderer:
             blocking: If True, wait for render to complete.
             composition_id: Remotion composition id to render (Sprint 4 P4-2).
                 Defaults to "ShortVideo" (9:16). Other registered compositions
-                in rendering/src/Root.tsx: "ShortVideo_1x1", "ShortVideo_16x9".
+                in rendering/src/Root.tsx: "ShortVideo-1x1", "ShortVideo-16x9".
 
         Returns:
             Path to output video (or expected path if async).

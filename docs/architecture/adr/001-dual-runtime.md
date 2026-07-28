@@ -1,6 +1,6 @@
 ---
 name: adr-001-dual-runtime
-description: ADR #001 文档，记录"Python FastAPI 后端 + Node.js Remotion 渲染服务"双运行时架构的决策依据、当前实现位置、备选方案与回退路径。当评估部署拓扑、添加新组件、调试 rendering:3001 服务、或需要理解为什么 LLM 推理与视频合成走不同 runtime 时使用。
+description: ADR #001 文档，记录"Python FastAPI 后端 + Node.js Remotion 渲染服务"双运行时架构的决策依据、当前实现位置、备选方案与回退路径。当评估部署拓扑、添加新组件、调试 renderer Unix Domain Socket、或需要理解为什么 LLM 推理与视频合成走不同 runtime 时使用。
 ---
 
 # ADR #001 — Dual Runtime Strategy
@@ -9,6 +9,7 @@ description: ADR #001 文档，记录"Python FastAPI 后端 + Node.js Remotion �
 |---|---|
 | **状态** | Accepted |
 | **日期** | 2026-05-11（追溯记录 2026-04-29 决策） |
+| **安全修订** | 2026-07-27（H9：TCP 改为私有 UDS，renderer 禁网） |
 | **决策者** | 工程团队 |
 | **影响** | 部署拓扑、Dockerfile 数量、CI 矩阵、运维心智模型 |
 
@@ -26,9 +27,9 @@ Short Video Agent 的工作链路涉及两类完全不同的计算：
 **采用双运行时**：
 
 - Python 3.11+ FastAPI 进程跑业务流水（端口 8001），见 [`src/api.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/api.py) + [`src/graph/pipeline.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/graph/pipeline.py)
-- Node.js 22 Remotion 进程跑视频合成（端口 3001），见 [`rendering/server.mjs`](file:///Users/pray/project/hermes_evo/AI_vedio/rendering/server.mjs) + [`rendering/src/Root.tsx`](file:///Users/pray/project/hermes_evo/AI_vedio/rendering/src/Root.tsx)
-- 两者通过 HTTP 通信：Python 把 pipeline 状态 JSON POST 到 `http://rendering:3001/assemble`，Remotion 渲染完返回 `final_video_path`
-- 共用 `output/` volume（Docker bind mount），两边都能读写媒体资产
+- Node.js 22 Remotion 进程跑视频合成，不监听 TCP，见 [`rendering/server.mjs`](file:///Users/pray/project/hermes_evo/AI_vedio/rendering/server.mjs) + [`rendering/src/Root.tsx`](file:///Users/pray/project/hermes_evo/AI_vedio/rendering/src/Root.tsx)
+- 两者通过 Unix Domain Socket 通信：Python 把严格校验后的 tenant/run-bound JSON POST 到 `/run/rendering/rendering.sock` 上的 `/assemble`
+- 共用 tenant-scoped `output/` volume；renderer 另与 backend 共用只承载 UDS 的 `renderer_socket` volume
 
 ## 三、当前实现
 
@@ -40,14 +41,15 @@ Short Video Agent 的工作链路涉及两类完全不同的计算：
 
 ### Node.js 侧
 - 独立目录 [`rendering/`](file:///Users/pray/project/hermes_evo/AI_vedio/rendering)，自己的 `package.json` + `Dockerfile`
-- 入口 `node server.mjs`，监听 3001
+- 入口 `node server.mjs`，只监听 `/run/rendering/rendering.sock`
 - 用 `@remotion/renderer` API 读取 pipeline state JSON → 合成 mp4
 - 不打包 Python
+- `network_mode=none`，固定非 root `999:999`、只读 rootfs、capless、no-new-privileges 与资源上限
 
 ### 编排
-- 本地：[`docker-compose.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/docker-compose.yml) 定义 `backend` + `rendering` + `postgres` + `frontend` 4 个服务
-- 生产（Tencent Lighthouse）：[`deploy/lighthouse/docker-compose.prod.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/deploy/lighthouse/docker-compose.prod.yml) 同上结构 + nginx
-- 通信：backend 用 `httpx` POST `http://rendering:3001/assemble`（容器网络内互相可达）
+- 本地：[`docker-compose.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/docker-compose.yml) 定义 `backend` + `postgres` + `frontend` 3 个服务；`rendering/` 只挂载为 backend-local 开发工具，不启动独立 renderer
+- 生产（Tencent Lighthouse）：[`deploy/lighthouse/docker-compose.prod.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/deploy/lighthouse/docker-compose.prod.yml) 才启动独立 `rendering` service，并与 backend/frontend/nginx 共同编排
+- 通信：backend 用 `httpx.AsyncHTTPTransport(uds=...)` 通过私有 UDS POST `/assemble`；renderer 不加入容器网络
 
 ## 四、Consequences（带来的好处和代价）
 
@@ -59,7 +61,7 @@ Short Video Agent 的工作链路涉及两类完全不同的计算：
 - **测试简化**：Python 测试不用 Node + Remotion 环境，反之同理
 
 ### 代价
-- **网络一跳**：backend → rendering 多一次 HTTP，本地 docker network 几毫秒可忽略，跨主机部署时需要保证网络可达
+- **IPC 一跳**：backend → rendering 多一次本机 UDS HTTP；当前拓扑要求二者位于同一 Docker host 并共享 socket volume
 - **共享卷**：`output/` 必须两个容器都挂载，且权限一致
 - **运维复杂度 +1**：监控、日志、健康检查要做两份
 - **冷启动**：rendering 进程首次启动需加载 React/Babel + 预热 Chromium，1-2s 延迟
@@ -93,6 +95,6 @@ Short Video Agent 的工作链路涉及两类完全不同的计算：
 
 - [`src/api.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/api.py) — backend 入口
 - [`src/skills/remotion_assemble.py`](file:///Users/pray/project/hermes_evo/AI_vedio/src/skills/remotion_assemble.py) — 调 rendering 服务的 skill
-- [`rendering/server.mjs`](file:///Users/pray/project/hermes_evo/AI_vedio/rendering/server.mjs) — Remotion HTTP 服务
+- [`rendering/server.mjs`](file:///Users/pray/project/hermes_evo/AI_vedio/rendering/server.mjs) — Remotion UDS HTTP 服务
 - [`docker-compose.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/docker-compose.yml) — 本地编排
 - [`deploy/lighthouse/docker-compose.prod.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/deploy/lighthouse/docker-compose.prod.yml) — 生产编排

@@ -17,6 +17,7 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -54,7 +55,10 @@ HERMETIC_PYTEST_ENV = {
 }
 
 
-def _step_by_name(steps: list[dict], name: str) -> dict:
+def _step_by_name(
+    steps: list[dict[str, Any]],
+    name: str,
+) -> dict[str, Any]:
     matches = [step for step in steps if step.get("name") == name]
     assert matches, f"missing workflow step: {name}"
     return matches[0]
@@ -202,7 +206,10 @@ class TestDeployWorkflow:
 
         assert node_step["with"]["node-version"] == "22"
         assert node_step["with"]["cache"] == "npm"
-        assert node_step["with"]["cache-dependency-path"] == "web/package-lock.json"
+        assert node_step["with"]["cache-dependency-path"].splitlines() == [
+            "web/package-lock.json",
+            "rendering/package-lock.json",
+        ]
         assert install_step["working-directory"] == "web"
         assert install_step["run"] == "npm ci"
         assert step_names.index(node_step["name"]) < step_names.index(install_step["name"])
@@ -356,7 +363,10 @@ class TestDeployWorkflow:
 
         backend_mounts = services["backend"].get("volumes") or []
         frontend_mounts = services["frontend"].get("volumes") or []
-        assert backend_mounts == ["backend_output:/app/output"]
+        assert backend_mounts == [
+            "backend_output:/app/output",
+            "renderer_socket:/run/rendering",
+        ]
         assert frontend_mounts == []
 
         compose_text = LIGHTHOUSE_RELEASE_COMPOSE.read_text()
@@ -533,35 +543,35 @@ class TestDeployWorkflow:
     def test_rendering_dockerfile_uses_reproducible_production_install(self):
         text = RENDERING_DOCKERFILE.read_text()
 
-        assert "COPY package.json package-lock.json" in text
+        assert "COPY rendering/package.json rendering/package-lock.json" in text
         assert "RUN npm ci --omit=dev --no-audit --no-fund" in text
         assert "npm install --omit=dev" not in text
 
     def test_rendering_health_fails_closed_when_required_runtime_is_missing(self):
         text = RENDERING_SERVER.read_text()
 
-        assert "Boolean(remotionVersion) && ffmpegOk && chromiumOk" in text
-        assert "res.status(ready ? 200 : 503)" in text
+        assert "&& ffmpegOk" in text
+        assert "&& ffprobeOk" in text
+        assert "&& chromiumOk" in text
+        assert "response.status(ready ? 200 : 503)" in text
         assert 'status: ready ? "ok" : "unready"' in text
 
         smoke = (REPO_ROOT / "deploy/lighthouse/smoke.sh").read_text()
         assert "200|500" not in smoke
         assert "expected 200, got" in smoke
 
-    def test_lighthouse_rendering_build_uses_an_overrideable_alpine_mirror(self):
+    def test_lighthouse_rendering_build_pins_fixed_google_chrome(self):
         dockerfile = RENDERING_DOCKERFILE.read_text()
         deploy_script = LIGHTHOUSE_DEPLOY.read_text()
 
-        assert "ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine" in dockerfile
+        assert "GOOGLE_CHROME_VERSION=150.0.7871.186-1" in dockerfile
         assert (
-            'sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" '
-            "/etc/apk/repositories"
-        ) in dockerfile
-        assert (
-            'RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-'
-            'https://mirrors.cloud.tencent.com/alpine}"'
-        ) in deploy_script
-        assert "export RENDERING_ALPINE_MIRROR" in deploy_script
+            "ADD --checksum=sha256:"
+            "4193e00b6d5d5969ee63f7a69596868f546aa0e8cb077b3e0bf9cc1e2c719d00"
+            in dockerfile
+        )
+        assert "google-chrome-stable_150.0.7871.186-1_amd64.deb" in dockerfile
+        assert "RENDERING_ALPINE_MIRROR" not in deploy_script
 
     def test_lighthouse_deploy_manages_rendering_service_explicitly(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
@@ -569,7 +579,7 @@ class TestDeployWorkflow:
         assert "sudo docker load -i" in text
         assert '"${COMPOSE[@]}" up -d --no-deps --force-recreate rendering backend frontend' in text
         assert "docker exec ai_video_rendering" in text
-        assert "http://127.0.0.1:3001/health" in text
+        assert "node /app/healthcheck.mjs" in text
 
     def test_lighthouse_cleanup_is_explicit_and_canonical_deploy_is_provider_off(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
@@ -677,6 +687,25 @@ class TestDeployWorkflow:
         assert "Smoke exact frontend and rendering image runtimes" in text
         assert "release-smoke-frontend" in text
         assert "release-smoke-rendering" in text
+
+    def test_renderer_release_smoke_uses_production_security_boundary(self, workflow):
+        steps = workflow["jobs"]["build-images"].get("steps") or []
+        smoke = _step_by_name(steps, "Smoke exact frontend and rendering image runtimes")
+        run = smoke.get("run") or ""
+
+        for required in (
+            "--network none",
+            "--read-only",
+            "--cap-drop ALL",
+            "--security-opt no-new-privileges",
+            "--cpus 2",
+            "--memory 4g",
+            "--pids-limit 256",
+            "--tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m",
+            "release-smoke-renderer-output:/app/output",
+            "release-smoke-renderer-socket:/run/rendering",
+        ):
+            assert required in run
 
     def test_image_scan_failures_upload_evidence_before_failing_closed(self, workflow):
         steps = workflow["jobs"]["build-images"].get("steps") or []
@@ -812,7 +841,10 @@ class TestCIWorkflow:
         assert node_step["uses"] == "actions/setup-node@v6"
         assert node_step["with"]["node-version"] == "22"
         assert node_step["with"]["cache"] == "npm"
-        assert node_step["with"]["cache-dependency-path"] == "web/package-lock.json"
+        assert node_step["with"]["cache-dependency-path"].splitlines() == [
+            "web/package-lock.json",
+            "rendering/package-lock.json",
+        ]
         assert install_step["run"] == "cd web && npm ci"
         assert step_names.index(node_step["name"]) < step_names.index(install_step["name"])
         assert step_names.index(install_step["name"]) < step_names.index(pytest_step["name"])

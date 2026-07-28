@@ -66,7 +66,7 @@ def test_allows_portfolio_gets_and_local_health_noise(tmp_path: Path):
                 "GET /portfolio/ \u2192 200 (13ms)",
                 'INFO:     172.20.0.3:60404 - "GET /portfolio/?kind=creation_intermediate HTTP/1.1" 200 OK',
                 'INFO:     172.20.0.3:60404 - "GET /portfolio/?kind=final_work&limit=500 HTTP/1.1" 200 OK',
-                'HTTP Request: GET http://rendering:3001/health "HTTP/1.1 200 OK"',
+                'HTTP Request: GET http://rendering/health "HTTP/1.1 200 OK"',
                 "PG: all 6 required tables verified",
                 "GET /health \u2192 200 (577ms)",
                 'INFO:     127.0.0.1:45754 - "GET /health HTTP/1.1" 200 OK',
@@ -83,6 +83,23 @@ def test_allows_portfolio_gets_and_local_health_noise(tmp_path: Path):
     assert report["local_health_noise_count"] == 3
     assert report["external_forbidden_count"] == 0
     assert report["legacy_summary_forbidden_endpoint_count_ignored"] is True
+
+
+def test_keeps_legacy_renderer_tcp_health_log_as_historical_noise(tmp_path: Path):
+    result = _run_gate(
+        tmp_path,
+        "\n".join(
+            [
+                'HTTP Request: GET http://rendering:3001/health "HTTP/1.1 200 OK"',
+                "GET /health \u2192 200 (577ms)",
+            ]
+        ),
+    )
+
+    assert result.returncode == 0
+    report = json.loads((tmp_path / "report.json").read_text())
+    assert report["rendering_health_count"] == 1
+    assert report["local_health_noise_count"] == 2
 
 
 def test_blocks_external_health_from_browser_or_proxy(tmp_path: Path):

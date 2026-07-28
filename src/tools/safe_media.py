@@ -31,7 +31,6 @@ _EXTENSION_KINDS: dict[str, frozenset[str]] = {
     ".m4a": frozenset({"iso-bmff"}),
     ".webm": frozenset({"matroska"}),
     ".mkv": frozenset({"matroska"}),
-    ".avi": frozenset({"avi"}),
     ".mp3": frozenset({"mp3"}),
     ".wav": frozenset({"wav"}),
     ".ogg": frozenset({"ogg"}),
@@ -47,7 +46,6 @@ _EXTENSION_KINDS: dict[str, frozenset[str]] = {
 _DEMUXERS = {
     "iso-bmff": "mov",
     "matroska": "matroska",
-    "avi": "avi",
     "mp3": "mp3",
     "wav": "wav",
     "ogg": "ogg",
@@ -105,8 +103,6 @@ def _classify_header(header: bytes) -> str | None:
         return "iso-bmff"
     if header.startswith(b"\x1aE\xdf\xa3"):
         return "matroska"
-    if header.startswith(b"RIFF") and header[8:12] == b"AVI ":
-        return "avi"
     if header.startswith(b"RIFF") and header[8:12] == b"WAVE":
         return "wav"
     if header.startswith(b"ID3") or (
@@ -128,6 +124,27 @@ def _classify_header(header: bytes) -> str | None:
     return None
 
 
+def validate_media_header(
+    header: bytes,
+    *,
+    expected_extension: str,
+) -> MediaContainer:
+    """Classify approved media from bytes already bound to a trusted handle."""
+
+    extension = expected_extension.lower()
+    allowed_kinds = _EXTENSION_KINDS.get(extension)
+    if allowed_kinds is None:
+        raise UnsafeMediaError("media extension is not approved")
+    kind = _classify_header(header)
+    if kind is None or kind not in allowed_kinds:
+        raise UnsafeMediaError("media bytes do not match the approved extension")
+    if kind == "wav":
+        format_tag = _wav_format_tag(header)
+        if format_tag is None or format_tag == _WAVE_FORMAT_IMA_ADPCM:
+            raise UnsafeMediaError("WAV codec is not approved")
+    return MediaContainer(kind=kind, ffmpeg_demuxer=_DEMUXERS[kind])
+
+
 def validate_media_file(
     path: str | Path,
     *,
@@ -142,23 +159,13 @@ def validate_media_file(
     media_path = Path(path)
     if not media_path.is_file() or media_path.is_symlink():
         raise UnsafeMediaError("media input must be a regular local file")
-    extension = (expected_extension or media_path.suffix).lower()
-    allowed_kinds = _EXTENSION_KINDS.get(extension)
-    if allowed_kinds is None:
-        raise UnsafeMediaError("media extension is not approved")
+    extension = expected_extension or media_path.suffix
     try:
         with media_path.open("rb") as handle:
             header = handle.read(4096)
     except OSError as exc:
         raise UnsafeMediaError("media input could not be read") from exc
-    kind = _classify_header(header)
-    if kind is None or kind not in allowed_kinds:
-        raise UnsafeMediaError("media bytes do not match the approved extension")
-    if kind == "wav":
-        format_tag = _wav_format_tag(header)
-        if format_tag is None or format_tag == _WAVE_FORMAT_IMA_ADPCM:
-            raise UnsafeMediaError("WAV codec is not approved")
-    return MediaContainer(kind=kind, ffmpeg_demuxer=_DEMUXERS[kind])
+    return validate_media_header(header, expected_extension=extension)
 
 
 def ffmpeg_local_input_args(path: str | Path) -> list[str]:

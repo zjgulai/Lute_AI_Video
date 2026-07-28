@@ -30,8 +30,13 @@ Output schema:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
+import re
+import secrets
+import stat
 import time
 from pathlib import Path
 from typing import Any
@@ -50,6 +55,7 @@ from src.tools.safe_media import (
     ffmpeg_local_input_args,
     ffprobe_local_input_args,
     validate_media_file,
+    validate_media_header,
 )
 
 logger = structlog.get_logger()
@@ -61,6 +67,245 @@ DEFAULT_FPS = 30
 DEFAULT_RESOLUTION = (1080, 1920)
 
 MP4_FTYP_BRANDS = [b"isom", b"iso2", b"avc1", b"mp41", b"mp42", b"M4V ", b"M4A "]
+_SAFE_OUTPUT_LABEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}\Z")
+_SAFE_MANIFEST_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+_MAX_RENDER_SECONDS = 180.0
+_MAX_LYRICS_BYTES = 64 * 1024
+_MAX_RENDER_INPUT_BYTES = 1024 * 1024
+_MAX_RENDER_ARTIFACT_BYTES = 2 * 1024 * 1024 * 1024
+_RENDERING_CLIENT_TIMEOUT_SECONDS = 600.0
+_SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _freeze_rendered_artifact(
+    video_path: Path,
+    *,
+    output_dir: Path,
+    expected_size: int,
+    expected_sha256: str,
+) -> Path:
+    """Copy one renderer artifact handle into a read-only no-clobber snapshot."""
+
+    frozen_path: Path | None = None
+    source_fd: int | None = None
+    snapshot_fd: int | None = None
+    snapshot_inode: tuple[int, int] | None = None
+    snapshot_ready = False
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+
+    try:
+        if (
+            not video_path.is_absolute()
+            or ".." in video_path.parts
+            or _SAFE_MANIFEST_SEGMENT_RE.fullmatch(video_path.name) is None
+            or expected_size <= 0
+            or expected_size > _MAX_RENDER_ARTIFACT_BYTES
+            or _SHA256_RE.fullmatch(expected_sha256) is None
+        ):
+            raise UnsafeMediaError("rendering output evidence is invalid")
+
+        canonical_output_dir = output_dir.resolve(strict=True)
+        canonical_parent = video_path.parent.resolve(strict=True)
+        canonical_parent.relative_to(canonical_output_dir)
+        source_path = canonical_parent / video_path.name
+
+        source_fd = os.open(source_path, os.O_RDONLY | nofollow | cloexec)
+        before = os.fstat(source_fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_size != expected_size:
+            raise UnsafeMediaError("rendering output evidence is invalid")
+
+        frozen_path = canonical_parent / (
+            f"{video_path.stem}.validated-{secrets.token_hex(16)}{video_path.suffix}"
+        )
+        snapshot_fd = os.open(
+            frozen_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow | cloexec,
+            0o400,
+        )
+        created_snapshot = os.fstat(snapshot_fd)
+        if not stat.S_ISREG(created_snapshot.st_mode):
+            raise UnsafeMediaError("rendering output snapshot is invalid")
+        snapshot_inode = (created_snapshot.st_dev, created_snapshot.st_ino)
+        digest = hashlib.sha256()
+        copied_size = 0
+        header = bytearray()
+        with os.fdopen(source_fd, "rb") as source_handle:
+            source_fd = None
+            with os.fdopen(snapshot_fd, "wb", closefd=False) as snapshot_handle:
+                while chunk := source_handle.read(1024 * 1024):
+                    copied_size += len(chunk)
+                    if copied_size > _MAX_RENDER_ARTIFACT_BYTES:
+                        raise UnsafeMediaError("rendering output evidence is invalid")
+                    digest.update(chunk)
+                    if len(header) < 4096:
+                        header.extend(chunk[: 4096 - len(header)])
+                    snapshot_handle.write(chunk)
+                snapshot_handle.flush()
+                os.fsync(snapshot_handle.fileno())
+                os.fchmod(snapshot_handle.fileno(), 0o400)
+                frozen_stat = os.fstat(snapshot_handle.fileno())
+                if snapshot_inode != (frozen_stat.st_dev, frozen_stat.st_ino):
+                    raise UnsafeMediaError("rendering output snapshot changed")
+            after = os.fstat(source_handle.fileno())
+
+        stable_source_fields = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if any(getattr(before, field) != getattr(after, field) for field in stable_source_fields):
+            raise UnsafeMediaError("rendering output changed during snapshot")
+        if copied_size != expected_size or digest.hexdigest() != expected_sha256:
+            raise UnsafeMediaError("rendering output evidence is invalid")
+
+        validate_media_header(
+            bytes(header),
+            expected_extension=video_path.suffix,
+        )
+        published = frozen_path.stat(follow_symlinks=False)
+        if (
+            snapshot_inode != (published.st_dev, published.st_ino)
+            or not stat.S_ISREG(published.st_mode)
+            or published.st_size != expected_size
+            or stat.S_IMODE(published.st_mode) != 0o400
+        ):
+            raise UnsafeMediaError("rendering output snapshot changed")
+        snapshot_ready = True
+        return frozen_path
+    except UnsafeMediaError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise UnsafeMediaError("rendering output snapshot failed") from exc
+    finally:
+        if source_fd is not None:
+            os.close(source_fd)
+        if frozen_path is not None and not snapshot_ready:
+            if snapshot_inode is not None:
+                try:
+                    current = frozen_path.stat(follow_symlinks=False)
+                    if snapshot_inode == (current.st_dev, current.st_ino):
+                        _cleanup_intermediate(frozen_path)
+                except OSError as cleanup_exc:
+                    logger.warning(
+                        "remotion_assemble: snapshot cleanup inspection failed",
+                        error_type=type(cleanup_exc).__name__,
+                    )
+        if snapshot_fd is not None:
+            os.close(snapshot_fd)
+
+
+def _validate_output_label(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or _SAFE_OUTPUT_LABEL_RE.fullmatch(value) is None
+        or ".." in value
+    ):
+        raise UnsafeMediaError("assemble output label is unsafe")
+    return value
+
+
+def _write_safe_concat_manifest(
+    media_paths: list[Path],
+    *,
+    output_path: Path,
+    label: str,
+    kind: str,
+) -> Path:
+    resolved_paths = [item.resolve(strict=True) for item in media_paths]
+    output_parent = output_path.parent.resolve(strict=True)
+    common = Path(os.path.commonpath([output_parent, *resolved_paths]))
+    if common == Path(common.anchor):
+        raise UnsafeMediaError("concat inputs do not share a bounded root")
+    relative_paths: list[Path] = []
+    for resolved in resolved_paths:
+        try:
+            relative = resolved.relative_to(common)
+        except ValueError as exc:
+            raise UnsafeMediaError("concat media path is outside bounded root") from exc
+        if any(
+            part in {".", ".."} or _SAFE_MANIFEST_SEGMENT_RE.fullmatch(part) is None
+            for part in relative.parts
+        ):
+            raise UnsafeMediaError("concat media path is not manifest-safe")
+        relative_paths.append(relative)
+    manifest_path = common / f".{label}-{kind}-{secrets.token_hex(8)}.concat"
+    try:
+        with manifest_path.open("x", encoding="utf-8") as handle:
+            for relative in relative_paths:
+                handle.write(f"file '{relative.as_posix()}'\n")
+    except FileExistsError as exc:
+        raise UnsafeMediaError("concat manifest already exists") from exc
+    return manifest_path
+
+
+def _write_or_reuse_render_payload(
+    render_json_path: Path,
+    render_payload: dict[str, Any],
+) -> None:
+    encoded = json.dumps(render_payload, indent=2, default=str).encode("utf-8")
+    if len(encoded) > _MAX_RENDER_INPUT_BYTES:
+        raise UnsafeMediaError("assemble render input is too large")
+
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(
+            render_json_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow,
+            0o640,
+        )
+    except FileExistsError:
+        try:
+            existing_fd = os.open(render_json_path, os.O_RDONLY | nofollow)
+            with os.fdopen(existing_fd, "rb") as existing_handle:
+                metadata = os.fstat(existing_handle.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > _MAX_RENDER_INPUT_BYTES:
+                    raise UnsafeMediaError("assemble render input conflict")
+                existing = existing_handle.read(_MAX_RENDER_INPUT_BYTES + 1)
+        except UnsafeMediaError:
+            raise
+        except OSError as exc:
+            raise UnsafeMediaError("assemble render input conflict") from exc
+        if existing != encoded:
+            raise UnsafeMediaError("assemble render input conflict")
+        return
+    except OSError as exc:
+        raise UnsafeMediaError("assemble render input write failed") from exc
+
+    try:
+        with os.fdopen(fd, "wb") as render_json_handle:
+            render_json_handle.write(encoded)
+            render_json_handle.flush()
+            os.fsync(render_json_handle.fileno())
+    except OSError as exc:
+        try:
+            render_json_path.unlink(missing_ok=True)
+        except OSError as cleanup_exc:
+            logger.warning(
+                "remotion_assemble: render input cleanup failed",
+                error_type=type(cleanup_exc).__name__,
+            )
+        raise UnsafeMediaError("assemble render input write failed") from exc
+
+
+def _cleanup_intermediate(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("remotion_assemble: intermediate cleanup failed")
 
 
 def _resolve_render_output_dir(params: dict[str, Any]) -> Path:
@@ -111,6 +356,55 @@ def _resolve_render_output_dir(params: dict[str, Any]) -> Path:
     return renders_dir
 
 
+def _read_scoped_lyrics(path_value: object, output_dir: Path) -> str:
+    from src.config import OUTPUT_DIR
+    from src.pipeline.generation_policy import get_effective_generation_policy
+
+    if not isinstance(path_value, (str, Path)) or not str(path_value):
+        raise UnsafeMediaError("lyrics input path is invalid")
+    candidate = Path(path_value)
+    if candidate.suffix.lower() != ".txt" or candidate.is_symlink():
+        raise UnsafeMediaError("lyrics input path is invalid")
+    try:
+        resolved = candidate.resolve(strict=True)
+        file_stat = resolved.stat()
+    except OSError as exc:
+        raise UnsafeMediaError("lyrics input path is invalid") from exc
+    if (
+        not resolved.is_file()
+        or file_stat.st_size <= 10
+        or file_stat.st_size > _MAX_LYRICS_BYTES
+    ):
+        raise UnsafeMediaError("lyrics input path is invalid")
+
+    policy = get_effective_generation_policy()
+    if policy is not None:
+        try:
+            tenant_root = (
+                OUTPUT_DIR
+                / "tenants"
+                / policy.tenant_id
+                / policy.artifact_disposition
+            ).resolve(strict=True)
+        except OSError as exc:
+            raise UnsafeMediaError("lyrics output scope is invalid") from exc
+        try:
+            output_relative = output_dir.resolve(strict=True).relative_to(tenant_root)
+        except (OSError, ValueError) as exc:
+            raise UnsafeMediaError("lyrics output scope is invalid") from exc
+        if len(output_relative.parts) < 2:
+            raise UnsafeMediaError("lyrics output scope is invalid")
+        run_root = tenant_root / output_relative.parts[0]
+        try:
+            resolved.relative_to(run_root)
+        except ValueError as exc:
+            raise UnsafeMediaError("lyrics input is outside the active run") from exc
+    try:
+        return resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise UnsafeMediaError("lyrics input is invalid UTF-8") from exc
+
+
 class RemotionAssembleSkill(SkillCallable):
     """Renders the final mp4 via Remotion (Node.js) and verifies it."""
 
@@ -129,24 +423,28 @@ class RemotionAssembleSkill(SkillCallable):
         clip_paths = params.get("clip_paths") or []
         transitions = params.get("transitions") or []
         brand_guidelines = params.get("brand_guidelines") or {}
-        output_label = params.get("output_label", f"video_{int(time.time())}")
-        total_duration = params.get("total_duration") or self._compute_total_duration(shots)
+        output_label = _validate_output_label(
+            params.get("output_label", f"video_{int(time.time())}")
+        )
+        try:
+            total_duration = float(
+                params.get("total_duration") or self._compute_total_duration(shots)
+            )
+        except (TypeError, ValueError) as exc:
+            raise UnsafeMediaError("assemble duration is invalid") from exc
+        if not math.isfinite(total_duration) or not 1 <= total_duration <= _MAX_RENDER_SECONDS:
+            raise UnsafeMediaError("assemble duration is outside the approved range")
+        renders_dir = _resolve_render_output_dir(params)
 
         # Load generated lyrics text if available
         lyrics_text = ""
         if lyrics_paths:
             for lp in lyrics_paths:
-                p = Path(lp)
-                if p.exists() and p.stat().st_size > 10:
-                    try:
-                        lyrics_text = p.read_text(encoding="utf-8")
-                        break
-                    except Exception as exc:
-                        logger.warning(
-                            "remotion_assemble: lyrics read failed",
-                            lyrics_path=str(p),
-                            error=str(exc)[:200],
-                        )
+                try:
+                    lyrics_text = _read_scoped_lyrics(lp, renders_dir)
+                    break
+                except UnsafeMediaError:
+                    logger.warning("remotion_assemble: lyrics input rejected")
 
         # === Build render JSON in the shape render.ts expects ===
         render_payload = self._build_render_payload(
@@ -162,26 +460,36 @@ class RemotionAssembleSkill(SkillCallable):
         )
 
         # Write JSON to disk (for debugging / future Remotion use)
-        renders_dir = _resolve_render_output_dir(params)
         render_json_path = renders_dir / f"{output_label}_input.json"
-        with open(render_json_path, "w") as f:
-            json.dump(render_payload, f, indent=2, default=str)
+        _write_or_reuse_render_payload(render_json_path, render_payload)
 
         output_filename = f"{output_label}.mp4"
 
         # === PRIORITY 0: Delegate to dedicated rendering container if configured ===
-        rendering_url = os.environ.get("RENDERING_SERVICE_URL", "").rstrip("/")
-        if rendering_url:
+        rendering_socket = os.environ.get("RENDERING_SERVICE_SOCKET", "")
+        if rendering_socket:
+            from src.pipeline.generation_policy import get_effective_generation_policy
+
+            policy = get_effective_generation_policy()
+            if policy is None:
+                return SkillResult(
+                    success=False,
+                    error="rendering_service_boundary_unavailable",
+                    metadata={"non_retryable": True},
+                )
             remote_result = await self._render_via_service(
-                rendering_url=rendering_url,
+                rendering_socket=rendering_socket,
                 clip_paths=clip_paths,
                 audio_paths=audio_paths,
                 render_payload=render_payload,
                 output_label=output_label,
+                output_dir=renders_dir,
+                tenant_id=policy.tenant_id,
+                artifact_disposition=policy.artifact_disposition,
             )
             if remote_result is not None:
                 video_path = Path(remote_result["video_path"])
-                is_stub_remote = bool(remote_result.get("is_stub", False))
+                is_stub_remote = remote_result["is_stub"]
                 verification = self._self_verify(video_path, is_stub=is_stub_remote)
                 if not is_stub_remote and not verification["all_ok"]:
                     return SkillResult(
@@ -212,13 +520,16 @@ class RemotionAssembleSkill(SkillCallable):
                     },
                     metadata={
                         "render_mode": remote_result.get("render_mode", "rendering_service"),
-                        "rendering_service": rendering_url,
-                        "audio_muxed": bool(remote_result.get("audio_muxed", False))
-                        and not is_stub_remote,
+                        "rendering_service": "unix_socket",
+                        "audio_muxed": remote_result["audio_muxed"] and not is_stub_remote,
                         "clip_count": len(clip_paths),
                     },
                 )
-            logger.warning("remotion_assemble: rendering service unavailable, falling back to local path", url=rendering_url)
+            return SkillResult(
+                success=False,
+                error="rendering_service_failed",
+                metadata={"non_retryable": True},
+            )
 
         output_path = renders_dir / output_filename
         valid_clips = [
@@ -288,8 +599,8 @@ class RemotionAssembleSkill(SkillCallable):
         # Map aspect ratio → Remotion composition id (registered in Root.tsx)
         _ASPECT_TO_COMPOSITION_ID: dict[str, str] = {
             "9:16": "ShortVideo",
-            "1:1": "ShortVideo_1x1",
-            "16:9": "ShortVideo_16x9",
+            "1:1": "ShortVideo-1x1",
+            "16:9": "ShortVideo-16x9",
         }
         video_paths: dict[str, str] = {"9:16": str(output_path)}
         if remotion_done and len(aspect_ratios) > 1 and is_remotion_available:
@@ -398,46 +709,76 @@ class RemotionAssembleSkill(SkillCallable):
 
     async def _render_via_service(
         self,
-        rendering_url: str,
+        rendering_socket: str,
         clip_paths: list[str],
         audio_paths: list[str],
         render_payload: dict[str, Any],
         output_label: str,
+        output_dir: Path,
+        tenant_id: str,
+        artifact_disposition: str,
     ) -> dict[str, Any] | None:
         try:
             import httpx
         except ImportError:
-            logger.warning("remotion_assemble: httpx not available, skipping rendering service")
+            logger.warning("remotion_assemble: httpx unavailable")
             return None
 
         body = {
+            "tenant_id": tenant_id,
+            "artifact_disposition": artifact_disposition,
+            "output_dir": str(output_dir),
             "clip_paths": [str(p) for p in clip_paths if p],
             "audio_paths": [str(p) for p in audio_paths if p],
             "render_payload": render_payload,
             "output_label": output_label,
         }
-        url = f"{rendering_url}/assemble"
         try:
-            async with httpx.AsyncClient(timeout=600.0) as client:
-                resp = await client.post(url, json=body)
+            if (
+                not rendering_socket.startswith("/")
+                or ".." in Path(rendering_socket).parts
+            ):
+                raise ValueError("rendering socket path is invalid")
+            transport = httpx.AsyncHTTPTransport(uds=rendering_socket)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://rendering",
+                timeout=_RENDERING_CLIENT_TIMEOUT_SECONDS,
+            ) as client:
+                resp = await client.post("/assemble", json=body)
                 if resp.status_code != 200:
                     logger.error(
                         "remotion_assemble: rendering service returned non-200",
-                        url=url,
                         status=resp.status_code,
-                        body=resp.text[:300],
                     )
                     return None
                 data = resp.json()
-                if not data.get("success"):
-                    logger.error("remotion_assemble: rendering service reported failure", data=data)
+                if (
+                    type(data) is not dict
+                    or data.get("success") is not True
+                    or type(data.get("video_path")) is not str
+                    or type(data.get("file_size_bytes")) is not int
+                    or data["file_size_bytes"] <= 0
+                    or type(data.get("artifact_sha256")) is not str
+                    or _SHA256_RE.fullmatch(data["artifact_sha256"]) is None
+                    or type(data.get("is_stub")) is not bool
+                    or type(data.get("audio_muxed")) is not bool
+                ):
+                    logger.error("remotion_assemble: rendering service contract invalid")
                     return None
-                return data
-        except Exception as e:
+                frozen_path = _freeze_rendered_artifact(
+                    Path(data["video_path"]),
+                    output_dir=output_dir,
+                    expected_size=data["file_size_bytes"],
+                    expected_sha256=data["artifact_sha256"],
+                )
+                frozen_data = dict(data)
+                frozen_data["video_path"] = str(frozen_path)
+                return frozen_data
+        except Exception as exc:
             logger.warning(
                 "remotion_assemble: rendering service call failed",
-                url=url,
-                error=str(e),
+                error_type=type(exc).__name__,
             )
             return None
 
@@ -471,16 +812,12 @@ class RemotionAssembleSkill(SkillCallable):
         # Build audio_plans.segments from audio_paths if needed
         audio_segments = []
         if audio_paths:
-            # Distribute audio paths across shots evenly (simple alignment)
-            audio_per_shot = max(1, len(audio_paths) // max(1, len(normalized_shots)))
-            for i, shot in enumerate(normalized_shots):
-                audio_idx = min(i, len(audio_paths) - 1)
+            for shot in normalized_shots:
                 audio_segments.append({
                     "type": "voiceover",
                     "start_time": shot["start_time"],
                     "end_time": shot["end_time"],
                     "text": shot.get("text_overlay", ""),
-                    "audio_path": audio_paths[audio_idx],
                 })
 
         # Merge captions: prefer lyrics text if available, otherwise script captions
@@ -588,14 +925,25 @@ class RemotionAssembleSkill(SkillCallable):
 
         tw, th = DEFAULT_RESOLUTION
         target_str = f"{tw}x{th}"
+        concat_list_path: Path | None = None
+        output_existed_before_attempt = output_path.exists() or output_path.is_symlink()
+        attempt_output = (
+            output_path.parent
+            / f".{output_path.stem}-concat-{secrets.token_hex(8)}{output_path.suffix}"
+        )
 
         try:
             # Build concat list file
-            concat_list_path = output_path.parent / f"{output_path.stem}_concat.txt"
-            with open(concat_list_path, "w") as f:
-                for cp in clip_paths:
-                    validate_media_file(cp)
-                    f.write(f"file '{cp.resolve()}'\n")
+            for cp in clip_paths:
+                validate_media_file(cp)
+            if output_existed_before_attempt:
+                raise UnsafeMediaError("assemble output already exists")
+            concat_list_path = _write_safe_concat_manifest(
+                clip_paths,
+                output_path=output_path,
+                label=_validate_output_label(output_path.stem),
+                kind="video",
+            )
 
             used_reencode = False
 
@@ -603,57 +951,100 @@ class RemotionAssembleSkill(SkillCallable):
             try:
                 subprocess.run(
                     [
-                        "ffmpeg", "-y", "-protocol_whitelist", "file,pipe",
-                        "-f", "concat", "-safe", "0",
-                        "-i", str(concat_list_path),
-                        "-c", "copy",
-                        "-movflags", "+faststart",
-                        str(output_path),
+                        "ffmpeg",
+                        "-n",
+                        "-protocol_whitelist",
+                        "file,pipe",
+                        "-f",
+                        "concat",
+                        "-safe",
+                        "1",
+                        "-i",
+                        str(concat_list_path),
+                        "-c",
+                        "copy",
+                        "-movflags",
+                        "+faststart",
+                        str(attempt_output),
                     ],
-                    capture_output=True, timeout=120, check=True,
+                    capture_output=True,
+                    timeout=120,
+                    check=True,
                 )
             except subprocess.CalledProcessError:
                 logger.warning("remotion_assemble: concat -c copy failed, falling back to re-encode")
+                _cleanup_intermediate(attempt_output)
                 used_reencode = True
 
             # If copy succeeded, verify dimensions match target
-            if not used_reencode and output_path.exists():
-                dims = self._get_video_dimensions(output_path)
+            if not used_reencode and attempt_output.exists():
+                dims = self._get_video_dimensions(attempt_output)
                 if dims is None or f"{dims[0]}x{dims[1]}" != target_str:
                     logger.warning(
                         "remotion_assemble: copy output dimensions %s != target %s, re-encoding",
-                        dims, target_str,
+                        dims,
+                        target_str,
                     )
                     used_reencode = True
                     # Remove the bad copy output before re-encoding
-                    output_path.unlink(missing_ok=True)
+                    attempt_output.unlink(missing_ok=True)
 
             if used_reencode:
                 # Force统一分辨率: scale to fit within target, then pad with black
                 scale_filter = (
-                    f"scale={tw}:{th}:force_original_aspect_ratio=decrease,"
-                    f"pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:black"
+                    f"scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:black"
                 )
                 subprocess.run(
                     [
-                        "ffmpeg", "-y", "-protocol_whitelist", "file,pipe",
-                        "-f", "concat", "-safe", "0",
-                        "-i", str(concat_list_path),
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                        "-vf", scale_filter,
-                        "-c:a", "aac", "-b:a", "128k",
-                        "-movflags", "+faststart",
-                        str(output_path),
+                        "ffmpeg",
+                        "-n",
+                        "-protocol_whitelist",
+                        "file,pipe",
+                        "-f",
+                        "concat",
+                        "-safe",
+                        "1",
+                        "-i",
+                        str(concat_list_path),
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        "fast",
+                        "-crf",
+                        "23",
+                        "-vf",
+                        scale_filter,
+                        "-c:a",
+                        "aac",
+                        "-b:a",
+                        "128k",
+                        "-movflags",
+                        "+faststart",
+                        str(attempt_output),
                     ],
-                    capture_output=True, timeout=300, check=True,
+                    capture_output=True,
+                    timeout=300,
+                    check=True,
                 )
 
-            if output_path.exists() and output_path.stat().st_size > 10000:
+            if attempt_output.exists() and attempt_output.stat().st_size > 10000:
+                try:
+                    os.link(attempt_output, output_path, follow_symlinks=False)
+                except FileExistsError as exc:
+                    raise UnsafeMediaError("assemble output already exists") from exc
+                except OSError as exc:
+                    raise UnsafeMediaError("assemble output publication failed") from exc
                 return output_path
         except UnsafeMediaError:
             raise
-        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as e:
-            logger.warning("remotion_assemble: ffmpeg concat failed", error=str(e))
+        except Exception as exc:
+            logger.warning(
+                "remotion_assemble: ffmpeg concat failed",
+                error_type=type(exc).__name__,
+            )
+        finally:
+            _cleanup_intermediate(concat_list_path)
+            _cleanup_intermediate(attempt_output)
         return None
 
     def _try_burn_lyrics(
@@ -722,54 +1113,92 @@ class RemotionAssembleSkill(SkillCallable):
         """Concat audio paths and mux into the video. Returns new path or None on failure."""
         import subprocess
 
+        concat_list_path: Path | None = None
+        concat_audio: Path | None = None
+        attempt_muxed: Path | None = None
         try:
-
             # Filter out non-existent or stub audio
             valid_audios = [Path(p) for p in audio_paths if Path(p).exists() and Path(p).stat().st_size > 200]
             if not valid_audios:
                 return None
 
             # Concatenate audios via ffmpeg concat demuxer
-            from src.config import OUTPUT_DIR
-            concat_list_path = OUTPUT_DIR / "renders" / f"{output_label}_concat.txt"
-            with open(concat_list_path, "w") as f:
-                for ap in valid_audios:
-                    validate_media_file(ap)
-                    f.write(f"file '{ap.resolve()}'\n")
+            for ap in valid_audios:
+                validate_media_file(ap)
+            concat_list_path = _write_safe_concat_manifest(
+                valid_audios,
+                output_path=video_path,
+                label=_validate_output_label(output_label),
+                kind="audio",
+            )
 
             # Concat audios
-            concat_audio = OUTPUT_DIR / "renders" / f"{output_label}_audio.mp3"
+            concat_audio = video_path.parent / f".{output_label}-audio-{secrets.token_hex(8)}.mkv"
             subprocess.run(
                 [
-                    "ffmpeg", "-y", "-protocol_whitelist", "file,pipe",
-                    "-f", "concat", "-safe", "0",
-                    "-i", str(concat_list_path),
-                    "-c", "copy",
+                    "ffmpeg",
+                    "-n",
+                    "-protocol_whitelist",
+                    "file,pipe",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "1",
+                    "-i",
+                    str(concat_list_path),
+                    "-c",
+                    "copy",
                     str(concat_audio),
                 ],
-                capture_output=True, timeout=60, check=True,
+                capture_output=True,
+                timeout=60,
+                check=True,
             )
 
-            # Mux audio into video
+            # Mux audio into video via a staged, symlink-safe publication.
             muxed_path = video_path.parent / f"{video_path.stem}_with_audio{video_path.suffix}"
+            if muxed_path.exists() or muxed_path.is_symlink():
+                raise UnsafeMediaError("audio mux output already exists")
+            attempt_muxed = (
+                video_path.parent
+                / f".{video_path.stem}-mux-{secrets.token_hex(8)}{video_path.suffix}"
+            )
             subprocess.run(
                 [
-                    "ffmpeg", "-y",
+                    "ffmpeg",
+                    "-n",
                     *ffmpeg_local_input_args(video_path),
                     *ffmpeg_local_input_args(concat_audio),
-                    "-c:v", "copy",
-                    "-c:a", "aac",
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
                     "-shortest",
-                    str(muxed_path),
+                    str(attempt_muxed),
                 ],
-                capture_output=True, timeout=120, check=True,
+                capture_output=True,
+                timeout=120,
+                check=True,
             )
-            if muxed_path.exists():
+            if attempt_muxed.exists() and attempt_muxed.stat().st_size > 0:
+                try:
+                    os.link(attempt_muxed, muxed_path, follow_symlinks=False)
+                except FileExistsError as exc:
+                    raise UnsafeMediaError("audio mux output already exists") from exc
+                except OSError as exc:
+                    raise UnsafeMediaError("audio mux output publication failed") from exc
                 return muxed_path
         except UnsafeMediaError:
             raise
-        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as e:
-            logger.warning("remotion_assemble: ffmpeg mux failed (continuing without audio)", error=str(e))
+        except Exception as exc:
+            logger.warning(
+                "remotion_assemble: ffmpeg mux failed (continuing without audio)",
+                error_type=type(exc).__name__,
+            )
+        finally:
+            _cleanup_intermediate(attempt_muxed)
+            _cleanup_intermediate(concat_audio)
+            _cleanup_intermediate(concat_list_path)
         return None
 
     # === Self-verification ===
