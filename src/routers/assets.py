@@ -148,7 +148,7 @@ async def list_files():
             continue
         ext = f.suffix.lower()
         file_type = "document"
-        if ext in {".mp4", ".mov", ".webm", ".avi", ".mkv"}:
+        if ext in {".mp4", ".mov", ".webm", ".mkv"}:
             file_type = "video"
         elif ext in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
             file_type = "image"

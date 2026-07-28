@@ -305,7 +305,7 @@ async def test_remotion_unsafe_concat_returns_non_retryable_failure_without_fall
 
     monkeypatch.setattr(subprocess, "run", forbidden)
     monkeypatch.setattr("src.config.OUTPUT_DIR", tmp_path)
-    monkeypatch.delenv("RENDERING_SERVICE_URL", raising=False)
+    monkeypatch.delenv("RENDERING_SERVICE_SOCKET", raising=False)
     monkeypatch.setattr(
         "src.tools.remotion_renderer.RemotionRenderer.validate_environment",
         lambda _self: {"available": False, "issues": ["fixture"]},
@@ -334,7 +334,7 @@ async def test_remotion_does_not_claim_audio_mux_when_mux_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("src.config.OUTPUT_DIR", tmp_path)
-    monkeypatch.delenv("RENDERING_SERVICE_URL", raising=False)
+    monkeypatch.delenv("RENDERING_SERVICE_SOCKET", raising=False)
     monkeypatch.setattr(
         "src.tools.remotion_renderer.RemotionRenderer.validate_environment",
         lambda _self: {"available": True, "issues": []},

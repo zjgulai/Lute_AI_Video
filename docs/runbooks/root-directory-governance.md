@@ -37,8 +37,10 @@ source: human+ai
 | `.dockerignore` | config |
 | `.env.example` | config |
 | `.gitignore` | config |
+| `.grype-rendering.yaml` | config |
 | `.grype.yaml` | config |
 | `.python-version` | config |
+| `.trivyignore-rendering.yaml` | config |
 | `.trivyignore.yaml` | config |
 | `AGENTS.md` | entrypoint |
 | `CHANGELOG.md` | entrypoint |

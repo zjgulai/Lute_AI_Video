@@ -9,6 +9,14 @@ vi.mock("./DirectorPlayback", () => ({
   default: () => <div data-testid="director-playback" />,
 }));
 
+vi.mock("@/hooks/useSignedMediaUrl", () => ({
+  useSignedMediaUrl: (source: string) => ({
+    url: source ? `/test-media/${encodeURIComponent(source)}` : "",
+    loading: false,
+    error: null,
+  }),
+}));
+
 function renderResult(result: Record<string, unknown>) {
   localStorage.setItem("app-locale", "zh");
   const container = document.createElement("div");

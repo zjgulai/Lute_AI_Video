@@ -20,7 +20,6 @@ CLEANUP_AFTER_DEPLOY="${CLEANUP_AFTER_DEPLOY:-0}"
 CLEANUP_TIMEOUT_SECONDS="${CLEANUP_TIMEOUT_SECONDS:-180}"
 RUN_TOKEN_SMOKE="${RUN_TOKEN_SMOKE:-0}"
 RUN_DEPLOY_SMOKE="${RUN_DEPLOY_SMOKE:-0}"
-RENDERING_ALPINE_MIRROR="${RENDERING_ALPINE_MIRROR:-https://mirrors.cloud.tencent.com/alpine}"
 RELEASE_IMAGE_ARCHIVE="${RELEASE_IMAGE_ARCHIVE:-}"
 RELEASE_IMAGE_ARCHIVE_SHA256="${RELEASE_IMAGE_ARCHIVE_SHA256:-${RELEASE_IMAGE_ARCHIVE}.sha256}"
 
@@ -70,7 +69,6 @@ fi
 export RELEASE_SOURCE_SHA
 export RELEASE_IMAGE_TAG="$RELEASE_SOURCE_SHA"
 export AI_VIDEO_SHARED_ROOT AI_VIDEO_ENV_FILE PORTAL_AUTH_ENV_FILE
-export RENDERING_ALPINE_MIRROR
 
 # Production sudo uses env_reset, so compose interpolation inputs must cross the
 # privilege boundary explicitly. Do not rely on shell exports surviving sudo.
@@ -79,7 +77,6 @@ COMPOSE=(
   "RELEASE_SOURCE_SHA=$RELEASE_SOURCE_SHA"
   "RELEASE_IMAGE_TAG=$RELEASE_IMAGE_TAG"
   "AI_VIDEO_ENV_FILE=$AI_VIDEO_ENV_FILE"
-  "RENDERING_ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR"
   docker compose -f "$COMPOSE_FILE"
 )
 
@@ -109,7 +106,6 @@ configure_active_release() {
       "AI_VIDEO_SHARED_ROOT=$AI_VIDEO_SHARED_ROOT"
       "AI_VIDEO_ENV_FILE=$AI_VIDEO_ENV_FILE"
       "PORTAL_AUTH_ENV_FILE=$PORTAL_AUTH_ENV_FILE"
-      "RENDERING_ALPINE_MIRROR=$RENDERING_ALPINE_MIRROR"
       docker compose -f "$previous_compose"
     )
     ACTIVE_RELEASE_KIND="immutable"
@@ -159,7 +155,9 @@ verify_release_health() {
   for attempt in $(seq 1 24); do
     if verify_backend_health \
       && sudo docker exec ai_video_frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 \
-      && sudo docker exec ai_video_rendering wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1; then
+      && sudo docker exec ai_video_rendering node -e \
+        "const h=require('node:http');const r=h.request({socketPath:'/run/rendering/rendering.sock',path:'/health'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()" \
+        >/dev/null 2>&1; then
       echo "  Application containers healthy with verified PostgreSQL schema (attempt $attempt/24)"
       return 0
     fi

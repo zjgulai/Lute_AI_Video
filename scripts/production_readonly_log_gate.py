@@ -21,7 +21,8 @@ SUMMARY_ENDPOINT_RE = re.compile(
     r"^(?P<method>[A-Z]+)\s+(?P<target>\S+)\s+\u2192\s+(?P<status>\d+)"
 )
 RENDERING_HEALTH_RE = re.compile(
-    r'HTTP Request:\s+GET\s+http://rendering:3001/health\s+"HTTP/[^"]+\s+200\s+OK"'
+    r'HTTP Request:\s+GET\s+http://rendering(?::3001)?/health\s+'
+    r'"HTTP/[^"]+\s+200\s+OK"'
 )
 
 SUMMARY_ZERO_COUNTERS = (
@@ -278,7 +279,7 @@ def build_report(backend_log: Path, summary_path: Path, output_path: Path | None
         "legacy_summary_forbidden_endpoint_count_ignored": True,
         "allowed_readonly_paths": sorted(ALLOWED_READONLY_PATHS),
         "notes": [
-            "127.0.0.1 /health and rendering:3001/health are classified as local health noise.",
+            "127.0.0.1 /health and renderer Unix-socket health are classified as local health noise; the retired rendering:3001 form remains accepted for historical log replay.",
             "External browser/client health, admin session, media, scenario, fast, provider, publish, delivery, and approved brand token paths remain forbidden.",
         ],
     }

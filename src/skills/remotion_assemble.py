@@ -30,8 +30,11 @@ Output schema:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -61,6 +64,64 @@ DEFAULT_FPS = 30
 DEFAULT_RESOLUTION = (1080, 1920)
 
 MP4_FTYP_BRANDS = [b"isom", b"iso2", b"avc1", b"mp41", b"mp42", b"M4V ", b"M4A "]
+_SAFE_OUTPUT_LABEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}\Z")
+_SAFE_MANIFEST_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+_MAX_RENDER_SECONDS = 180.0
+_MAX_LYRICS_BYTES = 64 * 1024
+_RENDERING_CLIENT_TIMEOUT_SECONDS = 600.0
+_SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_output_label(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or _SAFE_OUTPUT_LABEL_RE.fullmatch(value) is None
+        or ".." in value
+    ):
+        raise UnsafeMediaError("assemble output label is unsafe")
+    return value
+
+
+def _write_safe_concat_manifest(
+    media_paths: list[Path],
+    *,
+    output_path: Path,
+    label: str,
+    kind: str,
+) -> Path:
+    resolved_paths = [item.resolve(strict=True) for item in media_paths]
+    output_parent = output_path.parent.resolve(strict=True)
+    common = Path(os.path.commonpath([output_parent, *resolved_paths]))
+    if common == Path(common.anchor):
+        raise UnsafeMediaError("concat inputs do not share a bounded root")
+    relative_paths: list[Path] = []
+    for resolved in resolved_paths:
+        try:
+            relative = resolved.relative_to(common)
+        except ValueError as exc:
+            raise UnsafeMediaError("concat media path is outside bounded root") from exc
+        if any(
+            part in {".", ".."} or _SAFE_MANIFEST_SEGMENT_RE.fullmatch(part) is None
+            for part in relative.parts
+        ):
+            raise UnsafeMediaError("concat media path is not manifest-safe")
+        relative_paths.append(relative)
+    manifest_path = common / f".{label}-{kind}.concat"
+    try:
+        with manifest_path.open("x", encoding="utf-8") as handle:
+            for relative in relative_paths:
+                handle.write(f"file '{relative.as_posix()}'\n")
+    except FileExistsError as exc:
+        raise UnsafeMediaError("concat manifest already exists") from exc
+    return manifest_path
 
 
 def _resolve_render_output_dir(params: dict[str, Any]) -> Path:
@@ -111,6 +172,52 @@ def _resolve_render_output_dir(params: dict[str, Any]) -> Path:
     return renders_dir
 
 
+def _read_scoped_lyrics(path_value: object, output_dir: Path) -> str:
+    from src.config import OUTPUT_DIR
+    from src.pipeline.generation_policy import get_effective_generation_policy
+
+    if not isinstance(path_value, (str, Path)) or not str(path_value):
+        raise UnsafeMediaError("lyrics input path is invalid")
+    candidate = Path(path_value)
+    if candidate.suffix.lower() != ".txt" or candidate.is_symlink():
+        raise UnsafeMediaError("lyrics input path is invalid")
+    try:
+        resolved = candidate.resolve(strict=True)
+        file_stat = resolved.stat()
+    except OSError as exc:
+        raise UnsafeMediaError("lyrics input path is invalid") from exc
+    if (
+        not resolved.is_file()
+        or file_stat.st_size <= 10
+        or file_stat.st_size > _MAX_LYRICS_BYTES
+    ):
+        raise UnsafeMediaError("lyrics input path is invalid")
+
+    policy = get_effective_generation_policy()
+    if policy is not None:
+        tenant_root = (
+            OUTPUT_DIR
+            / "tenants"
+            / policy.tenant_id
+            / policy.artifact_disposition
+        ).resolve(strict=True)
+        try:
+            output_relative = output_dir.resolve(strict=True).relative_to(tenant_root)
+        except (OSError, ValueError) as exc:
+            raise UnsafeMediaError("lyrics output scope is invalid") from exc
+        if len(output_relative.parts) < 2:
+            raise UnsafeMediaError("lyrics output scope is invalid")
+        run_root = tenant_root / output_relative.parts[0]
+        try:
+            resolved.relative_to(run_root)
+        except ValueError as exc:
+            raise UnsafeMediaError("lyrics input is outside the active run") from exc
+    try:
+        return resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise UnsafeMediaError("lyrics input is invalid UTF-8") from exc
+
+
 class RemotionAssembleSkill(SkillCallable):
     """Renders the final mp4 via Remotion (Node.js) and verifies it."""
 
@@ -129,24 +236,28 @@ class RemotionAssembleSkill(SkillCallable):
         clip_paths = params.get("clip_paths") or []
         transitions = params.get("transitions") or []
         brand_guidelines = params.get("brand_guidelines") or {}
-        output_label = params.get("output_label", f"video_{int(time.time())}")
-        total_duration = params.get("total_duration") or self._compute_total_duration(shots)
+        output_label = _validate_output_label(
+            params.get("output_label", f"video_{int(time.time())}")
+        )
+        try:
+            total_duration = float(
+                params.get("total_duration") or self._compute_total_duration(shots)
+            )
+        except (TypeError, ValueError) as exc:
+            raise UnsafeMediaError("assemble duration is invalid") from exc
+        if not math.isfinite(total_duration) or not 1 <= total_duration <= 180:
+            raise UnsafeMediaError("assemble duration is outside the approved range")
+        renders_dir = _resolve_render_output_dir(params)
 
         # Load generated lyrics text if available
         lyrics_text = ""
         if lyrics_paths:
             for lp in lyrics_paths:
-                p = Path(lp)
-                if p.exists() and p.stat().st_size > 10:
-                    try:
-                        lyrics_text = p.read_text(encoding="utf-8")
-                        break
-                    except Exception as exc:
-                        logger.warning(
-                            "remotion_assemble: lyrics read failed",
-                            lyrics_path=str(p),
-                            error=str(exc)[:200],
-                        )
+                try:
+                    lyrics_text = _read_scoped_lyrics(lp, renders_dir)
+                    break
+                except UnsafeMediaError:
+                    logger.warning("remotion_assemble: lyrics input rejected")
 
         # === Build render JSON in the shape render.ts expects ===
         render_payload = self._build_render_payload(
@@ -162,26 +273,41 @@ class RemotionAssembleSkill(SkillCallable):
         )
 
         # Write JSON to disk (for debugging / future Remotion use)
-        renders_dir = _resolve_render_output_dir(params)
         render_json_path = renders_dir / f"{output_label}_input.json"
-        with open(render_json_path, "w") as f:
+        try:
+            render_json_handle = render_json_path.open("x", encoding="utf-8")
+        except FileExistsError as exc:
+            raise UnsafeMediaError("assemble render input already exists") from exc
+        with render_json_handle as f:
             json.dump(render_payload, f, indent=2, default=str)
 
         output_filename = f"{output_label}.mp4"
 
         # === PRIORITY 0: Delegate to dedicated rendering container if configured ===
-        rendering_url = os.environ.get("RENDERING_SERVICE_URL", "").rstrip("/")
-        if rendering_url:
+        rendering_socket = os.environ.get("RENDERING_SERVICE_SOCKET", "")
+        if rendering_socket:
+            from src.pipeline.generation_policy import get_effective_generation_policy
+
+            policy = get_effective_generation_policy()
+            if policy is None:
+                return SkillResult(
+                    success=False,
+                    error="rendering_service_boundary_unavailable",
+                    metadata={"non_retryable": True},
+                )
             remote_result = await self._render_via_service(
-                rendering_url=rendering_url,
+                rendering_socket=rendering_socket,
                 clip_paths=clip_paths,
                 audio_paths=audio_paths,
                 render_payload=render_payload,
                 output_label=output_label,
+                output_dir=renders_dir,
+                tenant_id=policy.tenant_id,
+                artifact_disposition=policy.artifact_disposition,
             )
             if remote_result is not None:
                 video_path = Path(remote_result["video_path"])
-                is_stub_remote = bool(remote_result.get("is_stub", False))
+                is_stub_remote = remote_result["is_stub"]
                 verification = self._self_verify(video_path, is_stub=is_stub_remote)
                 if not is_stub_remote and not verification["all_ok"]:
                     return SkillResult(
@@ -212,13 +338,16 @@ class RemotionAssembleSkill(SkillCallable):
                     },
                     metadata={
                         "render_mode": remote_result.get("render_mode", "rendering_service"),
-                        "rendering_service": rendering_url,
-                        "audio_muxed": bool(remote_result.get("audio_muxed", False))
-                        and not is_stub_remote,
+                        "rendering_service": "unix_socket",
+                        "audio_muxed": remote_result["audio_muxed"] and not is_stub_remote,
                         "clip_count": len(clip_paths),
                     },
                 )
-            logger.warning("remotion_assemble: rendering service unavailable, falling back to local path", url=rendering_url)
+            return SkillResult(
+                success=False,
+                error="rendering_service_failed",
+                metadata={"non_retryable": True},
+            )
 
         output_path = renders_dir / output_filename
         valid_clips = [
@@ -288,8 +417,8 @@ class RemotionAssembleSkill(SkillCallable):
         # Map aspect ratio → Remotion composition id (registered in Root.tsx)
         _ASPECT_TO_COMPOSITION_ID: dict[str, str] = {
             "9:16": "ShortVideo",
-            "1:1": "ShortVideo_1x1",
-            "16:9": "ShortVideo_16x9",
+            "1:1": "ShortVideo-1x1",
+            "16:9": "ShortVideo-16x9",
         }
         video_paths: dict[str, str] = {"9:16": str(output_path)}
         if remotion_done and len(aspect_ratios) > 1 and is_remotion_available:
@@ -398,46 +527,82 @@ class RemotionAssembleSkill(SkillCallable):
 
     async def _render_via_service(
         self,
-        rendering_url: str,
+        rendering_socket: str,
         clip_paths: list[str],
         audio_paths: list[str],
         render_payload: dict[str, Any],
         output_label: str,
+        output_dir: Path,
+        tenant_id: str,
+        artifact_disposition: str,
     ) -> dict[str, Any] | None:
         try:
             import httpx
         except ImportError:
-            logger.warning("remotion_assemble: httpx not available, skipping rendering service")
+            logger.warning("remotion_assemble: httpx unavailable")
             return None
 
         body = {
+            "tenant_id": tenant_id,
+            "artifact_disposition": artifact_disposition,
+            "output_dir": str(output_dir),
             "clip_paths": [str(p) for p in clip_paths if p],
             "audio_paths": [str(p) for p in audio_paths if p],
             "render_payload": render_payload,
             "output_label": output_label,
         }
-        url = f"{rendering_url}/assemble"
         try:
-            async with httpx.AsyncClient(timeout=600.0) as client:
-                resp = await client.post(url, json=body)
+            if (
+                not rendering_socket.startswith("/")
+                or ".." in Path(rendering_socket).parts
+            ):
+                raise ValueError("rendering socket path is invalid")
+            transport = httpx.AsyncHTTPTransport(uds=rendering_socket)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://rendering",
+                timeout=_RENDERING_CLIENT_TIMEOUT_SECONDS,
+            ) as client:
+                resp = await client.post("/assemble", json=body)
                 if resp.status_code != 200:
                     logger.error(
                         "remotion_assemble: rendering service returned non-200",
-                        url=url,
                         status=resp.status_code,
-                        body=resp.text[:300],
                     )
                     return None
                 data = resp.json()
-                if not data.get("success"):
-                    logger.error("remotion_assemble: rendering service reported failure", data=data)
+                if (
+                    type(data) is not dict
+                    or data.get("success") is not True
+                    or type(data.get("video_path")) is not str
+                    or type(data.get("file_size_bytes")) is not int
+                    or data["file_size_bytes"] <= 0
+                    or type(data.get("artifact_sha256")) is not str
+                    or _SHA256_RE.fullmatch(data["artifact_sha256"]) is None
+                    or type(data.get("is_stub")) is not bool
+                    or type(data.get("audio_muxed")) is not bool
+                ):
+                    logger.error("remotion_assemble: rendering service contract invalid")
+                    return None
+                video_path = Path(data["video_path"])
+                try:
+                    video_path.resolve(strict=True).relative_to(
+                        output_dir.resolve(strict=True)
+                    )
+                except (OSError, ValueError):
+                    logger.error("remotion_assemble: rendering output scope invalid")
+                    return None
+                validate_media_file(video_path)
+                if (
+                    video_path.stat().st_size != data["file_size_bytes"]
+                    or _sha256_file(video_path) != data["artifact_sha256"]
+                ):
+                    logger.error("remotion_assemble: rendering output evidence invalid")
                     return None
                 return data
-        except Exception as e:
+        except Exception:
             logger.warning(
                 "remotion_assemble: rendering service call failed",
-                url=url,
-                error=str(e),
             )
             return None
 
@@ -471,16 +636,12 @@ class RemotionAssembleSkill(SkillCallable):
         # Build audio_plans.segments from audio_paths if needed
         audio_segments = []
         if audio_paths:
-            # Distribute audio paths across shots evenly (simple alignment)
-            audio_per_shot = max(1, len(audio_paths) // max(1, len(normalized_shots)))
-            for i, shot in enumerate(normalized_shots):
-                audio_idx = min(i, len(audio_paths) - 1)
+            for shot in normalized_shots:
                 audio_segments.append({
                     "type": "voiceover",
                     "start_time": shot["start_time"],
                     "end_time": shot["end_time"],
                     "text": shot.get("text_overlay", ""),
-                    "audio_path": audio_paths[audio_idx],
                 })
 
         # Merge captions: prefer lyrics text if available, otherwise script captions
@@ -591,11 +752,14 @@ class RemotionAssembleSkill(SkillCallable):
 
         try:
             # Build concat list file
-            concat_list_path = output_path.parent / f"{output_path.stem}_concat.txt"
-            with open(concat_list_path, "w") as f:
-                for cp in clip_paths:
-                    validate_media_file(cp)
-                    f.write(f"file '{cp.resolve()}'\n")
+            for cp in clip_paths:
+                validate_media_file(cp)
+            concat_list_path = _write_safe_concat_manifest(
+                clip_paths,
+                output_path=output_path,
+                label=_validate_output_label(output_path.stem),
+                kind="video",
+            )
 
             used_reencode = False
 
@@ -603,8 +767,8 @@ class RemotionAssembleSkill(SkillCallable):
             try:
                 subprocess.run(
                     [
-                        "ffmpeg", "-y", "-protocol_whitelist", "file,pipe",
-                        "-f", "concat", "-safe", "0",
+                        "ffmpeg", "-n", "-protocol_whitelist", "file,pipe",
+                        "-f", "concat", "-safe", "1",
                         "-i", str(concat_list_path),
                         "-c", "copy",
                         "-movflags", "+faststart",
@@ -636,8 +800,8 @@ class RemotionAssembleSkill(SkillCallable):
                 )
                 subprocess.run(
                     [
-                        "ffmpeg", "-y", "-protocol_whitelist", "file,pipe",
-                        "-f", "concat", "-safe", "0",
+                        "ffmpeg", "-n", "-protocol_whitelist", "file,pipe",
+                        "-f", "concat", "-safe", "1",
                         "-i", str(concat_list_path),
                         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                         "-vf", scale_filter,
@@ -730,19 +894,21 @@ class RemotionAssembleSkill(SkillCallable):
                 return None
 
             # Concatenate audios via ffmpeg concat demuxer
-            from src.config import OUTPUT_DIR
-            concat_list_path = OUTPUT_DIR / "renders" / f"{output_label}_concat.txt"
-            with open(concat_list_path, "w") as f:
-                for ap in valid_audios:
-                    validate_media_file(ap)
-                    f.write(f"file '{ap.resolve()}'\n")
+            for ap in valid_audios:
+                validate_media_file(ap)
+            concat_list_path = _write_safe_concat_manifest(
+                valid_audios,
+                output_path=video_path,
+                label=_validate_output_label(output_label),
+                kind="audio",
+            )
 
             # Concat audios
-            concat_audio = OUTPUT_DIR / "renders" / f"{output_label}_audio.mp3"
+            concat_audio = video_path.parent / f".{output_label}_audio.mkv"
             subprocess.run(
                 [
-                    "ffmpeg", "-y", "-protocol_whitelist", "file,pipe",
-                    "-f", "concat", "-safe", "0",
+                    "ffmpeg", "-n", "-protocol_whitelist", "file,pipe",
+                    "-f", "concat", "-safe", "1",
                     "-i", str(concat_list_path),
                     "-c", "copy",
                     str(concat_audio),

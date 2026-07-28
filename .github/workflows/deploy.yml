@@ -55,7 +55,9 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            rendering/package-lock.json
 
       - name: Install media test tools
         run: |
@@ -65,6 +67,18 @@ jobs:
       - name: Install frontend deps
         working-directory: web
         run: npm ci
+
+      - name: Install renderer test deps
+        working-directory: rendering
+        run: npm ci
+
+      - name: Test renderer process boundary
+        working-directory: rendering
+        run: npm test
+
+      - name: Type check renderer
+        working-directory: rendering
+        run: npm exec tsc -- --noEmit
 
       - name: Install Python deps
         run: uv sync --locked --extra dev
@@ -171,7 +185,7 @@ jobs:
       - name: Build rendering image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
-          context: ./rendering
+          context: .
           file: ./rendering/Dockerfile
           push: false
           load: true
@@ -180,6 +194,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=rendering
           build-args: |
             RELEASE_SOURCE_SHA=${{ github.sha }}
+            APT_MIRROR=deb.debian.org
 
       - name: Verify release image revision labels and backend runtime config
         run: |
@@ -205,18 +220,34 @@ jobs:
           cleanup() {
             docker rm -f release-smoke-frontend release-smoke-rendering >/dev/null 2>&1 || true
             docker network rm release-smoke >/dev/null 2>&1 || true
+            docker volume rm \
+              release-smoke-renderer-output \
+              release-smoke-renderer-socket >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
           docker network create --internal release-smoke >/dev/null
           docker run -d --name release-smoke-frontend --network release-smoke \
             lighthouse-frontend:${{ github.sha }} >/dev/null
-          docker run -d --name release-smoke-rendering --network release-smoke \
+          docker run -d --name release-smoke-rendering \
+            --init \
+            --network none \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --cpus 2 \
+            --memory 4g \
+            --pids-limit 256 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m \
+            --volume release-smoke-renderer-output:/app/output \
+            --volume release-smoke-renderer-socket:/run/rendering \
             lighthouse-rendering:${{ github.sha }} >/dev/null
           for attempt in $(seq 1 30); do
             frontend_ok=0
             rendering_ok=0
             docker exec release-smoke-frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 && frontend_ok=1
-            docker exec release-smoke-rendering wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1 && rendering_ok=1
+            docker exec release-smoke-rendering node -e \
+              "const h=require('node:http');const r=h.request({socketPath:'/run/rendering/rendering.sock',path:'/health'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()" \
+              >/dev/null 2>&1 && rendering_ok=1
             if [ "$frontend_ok" = 1 ] && [ "$rendering_ok" = 1 ]; then
               exit 0
             fi
@@ -256,7 +287,8 @@ jobs:
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: lighthouse-backend:${{ github.sha }}
-          config: .grype.yaml
+          # Backend and renderer both ship the guarded FFmpeg media runtime.
+          config: .grype-rendering.yaml
           fail-build: true
           severity-cutoff: high
           output-format: json
@@ -280,7 +312,7 @@ jobs:
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: lighthouse-rendering:${{ github.sha }}
-          config: .grype.yaml
+          config: .grype-rendering.yaml
           fail-build: true
           severity-cutoff: high
           output-format: json

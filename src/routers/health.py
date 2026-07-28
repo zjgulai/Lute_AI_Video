@@ -2,6 +2,7 @@
 
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
@@ -20,6 +21,7 @@ except ImportError:
 
 
 router = APIRouter()
+_RENDERER_HEALTH_PROBE_TIMEOUT_SECONDS = 25.0
 
 
 @router.get("/health/live")
@@ -80,14 +82,17 @@ _INTERNAL_PATH_RE = re.compile(
 )
 
 
-async def _probe_rendering_service(url: str, timeout: float = 3.0) -> dict[str, Any]:
-    """HTTP-probe the dedicated rendering service.
+async def _probe_rendering_service(
+    socket_path: str,
+    timeout: float = _RENDERER_HEALTH_PROBE_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Probe the dedicated rendering service over its private Unix socket.
 
     Why: backend container has no node/npx; the legacy
     `subprocess.run(['npx', 'remotion', '--version'])` check always
-    returned `available=false` even when `rendering:3001` was healthy,
-    misleading the SettingsPanel UI. When `RENDERING_SERVICE_URL` is
-    set we ask the rendering container itself.
+    returned `available=false` even when the dedicated renderer was healthy,
+    misleading the SettingsPanel UI. When `RENDERING_SERVICE_SOCKET` is set
+    we ask the rendering container itself without exposing a TCP listener.
 
     Returns the same shape as `RemotionRenderer.validate_environment()`
     so /health response stays compatible.
@@ -100,12 +105,20 @@ async def _probe_rendering_service(url: str, timeout: float = 3.0) -> dict[str, 
         "remotion_version": None,
         "render_script_exists": True,
         "node_modules_exist": True,
-        "rendering_service_url": url,
+        "rendering_service_transport": "unix_socket",
         "issues": [],
     }
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.get(f"{url}/health")
+        socket = Path(socket_path)
+        if not socket.is_absolute() or ".." in socket.parts:
+            raise ValueError("rendering socket path is invalid")
+        transport = httpx.AsyncHTTPTransport(uds=socket_path)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://rendering",
+            timeout=timeout,
+        ) as client:
+            resp = await client.get("/health")
         if resp.status_code != 200:
             info["issues"].append(
                 f"rendering service returned HTTP {resp.status_code}"
@@ -115,12 +128,15 @@ async def _probe_rendering_service(url: str, timeout: float = 3.0) -> dict[str, 
         info["node_version"] = data.get("node")
         info["remotion_version"] = data.get("remotion")
         info["ffmpeg_ok"] = bool(data.get("ffmpeg"))
+        info["ffprobe_ok"] = bool(data.get("ffprobe"))
         info["chromium_ok"] = bool(data.get("chromium"))
         info["available"] = bool(
             data.get("status") == "ok"
             and data.get("node")
             and data.get("remotion")
             and data.get("ffmpeg")
+            and data.get("ffprobe")
+            and data.get("chromium")
         )
         if not info["available"]:
             info["issues"].append(f"rendering service degraded: {data}")
@@ -165,10 +181,10 @@ def _sanitize_health_payload(value: Any) -> Any:
 @router.get("/health")
 async def health():
     """Health check with persistence and Remotion status."""
-    rendering_url = os.environ.get("RENDERING_SERVICE_URL", "").rstrip("/")
+    rendering_socket = os.environ.get("RENDERING_SERVICE_SOCKET", "")
 
-    if rendering_url:
-        remotion_env = await _probe_rendering_service(rendering_url)
+    if rendering_socket:
+        remotion_env = await _probe_rendering_service(rendering_socket)
     else:
         from src.tools.remotion_renderer import RemotionRenderer
         renderer = RemotionRenderer()

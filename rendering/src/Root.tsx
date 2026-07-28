@@ -73,8 +73,8 @@ const fps = 30;
 // skill picks the composition by id when `aspect_ratios` is requested.
 const ASPECT_PRESETS = [
   { id: "ShortVideo", label: "9:16", width: 1080, height: 1920 },
-  { id: "ShortVideo_1x1", label: "1:1", width: 1080, height: 1080 },
-  { id: "ShortVideo_16x9", label: "16:9", width: 1920, height: 1080 },
+  { id: "ShortVideo-1x1", label: "1:1", width: 1080, height: 1080 },
+  { id: "ShortVideo-16x9", label: "16:9", width: 1920, height: 1080 },
 ];
 
 export const RemotionRoot: React.FC = () => {
@@ -86,6 +86,15 @@ export const RemotionRoot: React.FC = () => {
           id={preset.id}
           component={VideoComposition}
           durationInFrames={Math.ceil(45 * fps)}
+          calculateMetadata={({ props }) => {
+            const data = props.data as { total_duration: number };
+            return {
+              durationInFrames: Math.max(
+                1,
+                Math.ceil(data.total_duration * fps),
+              ),
+            };
+          }}
           fps={fps}
           width={preset.width}
           height={preset.height}

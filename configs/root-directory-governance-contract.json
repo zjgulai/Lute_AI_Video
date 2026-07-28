@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-22",
+  "updated": "2026-07-28",
   "runbook": "docs/runbooks/root-directory-governance.md",
   "policy": {
     "default_documents": "docs/ or drafts/docs/",
@@ -28,7 +28,12 @@
     {
       "path": ".grype.yaml",
       "status": "config",
-      "reason": "Exact version-bound release image vulnerability scan policy."
+      "reason": "Exact version-bound frontend vulnerability scan policy."
+    },
+    {
+      "path": ".grype-rendering.yaml",
+      "status": "config",
+      "reason": "Exact version-bound backend and renderer media-runtime vulnerability scan policy."
     },
     {
       "path": ".python-version",
@@ -38,7 +43,12 @@
     {
       "path": ".trivyignore.yaml",
       "status": "config",
-      "reason": "Exact package-version-bound and expiring CI image vulnerability exception policy."
+      "reason": "Exact package-version-bound and expiring frontend vulnerability exception policy."
+    },
+    {
+      "path": ".trivyignore-rendering.yaml",
+      "status": "config",
+      "reason": "Exact package-version-bound and expiring backend and renderer media-runtime vulnerability exception policy."
     },
     {
       "path": "AGENTS.md",

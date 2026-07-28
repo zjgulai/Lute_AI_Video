@@ -816,8 +816,10 @@ None. The v0.2.6 release is clean.
 
 ### 🔵 Architecture-level references
 
-- **Remotion rendering integration:** `rendering:3001` HTTP service since 2026-05-02.
-  Backend posts pipeline state JSON to `/assemble`.
+- **Remotion rendering integration:** the production renderer is private IPC, not
+  a TCP service. Backend posts strict tenant/run-bound assembly JSON to
+  `/assemble` over `/run/rendering/rendering.sock`; the renderer has
+  `network_mode=none`.
 - **pyright strict:** `reportUnknownMemberType` / `reportUnknownVariableType` not
   enabled. Noise far outweighs value while the codebase is `dict[str, Any]`-heavy.
   Revisit if typed data classes (`ProductCatalog`, `PipelineConfig`, etc.) are

@@ -155,7 +155,7 @@ runtime，拒绝符号链接、非 root owner/group 和模式漂移，并要求�
 预期命令完全一致；它不复制文件、不改 crontab、日志或 lock。默认安装模式完成写入后也
 运行同一校验，未得到 `backup_runtime_verification=passed` 不得声称 runtime 安装完成。
 
-`scripts/production_readonly_log_gate.py` 只做本地 backend log / summary 回放，不创建 key、不访问生产、不调用 provider。它用于 L4D/L4E 这类生产只读回归的日志判定：允许 `GET /portfolio` 和本地健康检查噪音（`127.0.0.1 /health`、`rendering:3001/health`），继续禁止外部 health/admin/media 请求、scenario/Fast submit、provider、publish、delivery 和 approved brand token 相关日志。
+`scripts/production_readonly_log_gate.py` 只做本地 backend log / summary 回放，不创建 key、不访问生产、不调用 provider。它用于 L4D/L4E 这类生产只读回归的日志判定：允许 `GET /portfolio` 和本地健康检查噪音（`127.0.0.1 /health`、当前 renderer UDS 的 `http://rendering/health` 日志；为历史证据回放兼容退役的 `rendering:3001/health` 形式），继续禁止外部 health/admin/media 请求、scenario/Fast submit、provider、publish、delivery 和 approved brand token 相关日志。
 
 `legacy_one_off_scripts` 的下一步是迁移到 `archive/scripts/` 或删除。迁移、删除、批量重命名前必须先列出 diff 和影响范围，并获得确认。
 

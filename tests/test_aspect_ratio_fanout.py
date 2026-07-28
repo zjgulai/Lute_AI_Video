@@ -6,7 +6,7 @@ Verifies the multi-aspect-ratio surface introduced in Sprint 4 P4-2:
 - RemotionAssembleSkill returns video_paths: dict[ratio, path] when
   aspect_ratios contains > 1 entry; defaults to single 9:16 entry.
 - Composition IDs in rendering/src/Root.tsx are aligned with what the
-  Python skill expects (ShortVideo / ShortVideo_1x1 / ShortVideo_16x9).
+  Python skill expects (ShortVideo / ShortVideo-1x1 / ShortVideo-16x9).
 
 These tests use mocked Remotion (no real npx tsx call) — they verify the
 contract surface, not the rendering itself. Real-rendering verification
@@ -66,13 +66,13 @@ class TestRemotionRendererCompositionId:
             input_json=input_json,
             output_filename="o.mp4",
             blocking=True,
-            composition_id="ShortVideo_1x1",
+            composition_id="ShortVideo-1x1",
         )
 
         assert captured_cmds, "subprocess.run was not called"
         cmd = captured_cmds[0]
         assert "--composition" in cmd
-        assert "ShortVideo_1x1" in cmd
+        assert "ShortVideo-1x1" in cmd
 
 
 class TestAspectRatioCompositionIDsAligned:
@@ -85,7 +85,7 @@ class TestAspectRatioCompositionIDsAligned:
         root_tsx = Path(__file__).parent.parent / "rendering" / "src" / "Root.tsx"
         assert root_tsx.exists(), f"Root.tsx not found at {root_tsx}"
         content = root_tsx.read_text(encoding="utf-8")
-        for comp_id in ("ShortVideo", "ShortVideo_1x1", "ShortVideo_16x9"):
+        for comp_id in ("ShortVideo", "ShortVideo-1x1", "ShortVideo-16x9"):
             assert comp_id in content, f"composition id {comp_id!r} missing from Root.tsx"
 
     def test_skill_maps_three_aspect_ratios(self):
@@ -94,8 +94,8 @@ class TestAspectRatioCompositionIDsAligned:
         src = inspect.getsource(ra)
         # The aspect-to-composition map must include all 3
         assert '"9:16"' in src and "ShortVideo" in src
-        assert '"1:1"' in src and "ShortVideo_1x1" in src
-        assert '"16:9"' in src and "ShortVideo_16x9" in src
+        assert '"1:1"' in src and "ShortVideo-1x1" in src
+        assert '"16:9"' in src and "ShortVideo-16x9" in src
 
 
 class TestAssembleResultShape:

@@ -31,7 +31,6 @@ _EXTENSION_KINDS: dict[str, frozenset[str]] = {
     ".m4a": frozenset({"iso-bmff"}),
     ".webm": frozenset({"matroska"}),
     ".mkv": frozenset({"matroska"}),
-    ".avi": frozenset({"avi"}),
     ".mp3": frozenset({"mp3"}),
     ".wav": frozenset({"wav"}),
     ".ogg": frozenset({"ogg"}),
@@ -47,7 +46,6 @@ _EXTENSION_KINDS: dict[str, frozenset[str]] = {
 _DEMUXERS = {
     "iso-bmff": "mov",
     "matroska": "matroska",
-    "avi": "avi",
     "mp3": "mp3",
     "wav": "wav",
     "ogg": "ogg",
@@ -105,8 +103,6 @@ def _classify_header(header: bytes) -> str | None:
         return "iso-bmff"
     if header.startswith(b"\x1aE\xdf\xa3"):
         return "matroska"
-    if header.startswith(b"RIFF") and header[8:12] == b"AVI ":
-        return "avi"
     if header.startswith(b"RIFF") and header[8:12] == b"WAVE":
         return "wav"
     if header.startswith(b"ID3") or (

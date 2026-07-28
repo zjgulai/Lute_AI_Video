@@ -21,7 +21,7 @@ from src.config import OUTPUT_DIR
 logger = structlog.get_logger()
 
 # Allowed file extensions for upload
-ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".webm", ".mkv"}
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 ALLOWED_EXTENSIONS = ALLOWED_VIDEO_EXTENSIONS | ALLOWED_IMAGE_EXTENSIONS
 
@@ -322,7 +322,6 @@ class AssetStorage:
         mime_map = {
             ".mp4": "video/mp4",
             ".mov": "video/quicktime",
-            ".avi": "video/x-msvideo",
             ".webm": "video/webm",
             ".mkv": "video/x-matroska",
             ".jpg": "image/jpeg",
