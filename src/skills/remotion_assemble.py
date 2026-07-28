@@ -140,8 +140,7 @@ def _freeze_rendered_artifact(
         header = bytearray()
         with os.fdopen(source_fd, "rb") as source_handle:
             source_fd = None
-            with os.fdopen(snapshot_fd, "wb") as snapshot_handle:
-                snapshot_fd = None
+            with os.fdopen(snapshot_fd, "wb", closefd=False) as snapshot_handle:
                 while chunk := source_handle.read(1024 * 1024):
                     copied_size += len(chunk)
                     if copied_size > _MAX_RENDER_ARTIFACT_BYTES:
@@ -192,8 +191,6 @@ def _freeze_rendered_artifact(
     finally:
         if source_fd is not None:
             os.close(source_fd)
-        if snapshot_fd is not None:
-            os.close(snapshot_fd)
         if frozen_path is not None and not snapshot_ready:
             if snapshot_inode is not None:
                 try:
@@ -205,6 +202,8 @@ def _freeze_rendered_artifact(
                         "remotion_assemble: snapshot cleanup inspection failed",
                         error_type=type(cleanup_exc).__name__,
                     )
+        if snapshot_fd is not None:
+            os.close(snapshot_fd)
 
 
 def _validate_output_label(value: object) -> str:
