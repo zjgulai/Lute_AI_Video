@@ -35,6 +35,7 @@ import {
   startRendererServer,
   validateProbePayload,
 } from "../server.mjs";
+import { probeRendererHealth } from "../healthcheck.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -194,6 +195,7 @@ test("media path rejects URL, traversal, symlink, cross-tenant, and AVI before t
 
   const options = {
     tenantRoot: fixture.tenantRoot,
+    runRoot: fixture.runRoot,
     kind: "video",
     minimumBytes: 1_000,
   };
@@ -459,12 +461,15 @@ test("production renderer home is fixed and prepared for the non-root runtime", 
 });
 
 test("production entrypoint listens only on a Unix socket and rejects bad schema", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
   const socketDir = await mkdtemp(path.join(os.tmpdir(), "renderer-socket-"));
   const socketPath = path.join(socketDir, "rendering.sock");
-  const server = await startRendererServer(socketPath);
-  if (!server.listening) await once(server, "listening");
+  let server;
 
   try {
+    process.env.NODE_ENV = "test";
+    server = await startRendererServer(socketPath);
+    if (!server.listening) await once(server, "listening");
     const response = await new Promise((resolve, reject) => {
       const request = http.request(
         {
@@ -495,6 +500,41 @@ test("production entrypoint listens only on a Unix socket and rejects bad schema
       error: "request_schema_invalid",
     });
   } finally {
-    await new Promise((resolve) => server.close(resolve));
+    if (server !== undefined) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+  }
+});
+
+test("renderer health probe requires a complete 200 response before its deadline", async () => {
+  const socketDir = await mkdtemp(path.join(os.tmpdir(), "renderer-health-"));
+  const healthySocket = path.join(socketDir, "healthy.sock");
+  const stalledSocket = path.join(socketDir, "stalled.sock");
+  const healthyServer = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end('{"status":"ok"}');
+  });
+  const stalledServer = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.write('{"status":');
+  });
+
+  try {
+    healthyServer.listen(healthySocket);
+    stalledServer.listen(stalledSocket);
+    await Promise.all([
+      once(healthyServer, "listening"),
+      once(stalledServer, "listening"),
+    ]);
+
+    assert.equal(await probeRendererHealth(healthySocket, 1_000), true);
+    assert.equal(await probeRendererHealth(stalledSocket, 50), false);
+  } finally {
+    await Promise.all([
+      new Promise((resolve) => healthyServer.close(resolve)),
+      new Promise((resolve) => stalledServer.close(resolve)),
+    ]);
   }
 });

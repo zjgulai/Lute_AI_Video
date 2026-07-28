@@ -28,7 +28,18 @@ def _contract() -> dict[str, Any]:
 
 
 def _tracked_rendering_paths() -> list[Path]:
-    output = subprocess.check_output(("git", "ls-files", "-z", "rendering"), cwd=REPO_ROOT)
+    output = subprocess.check_output(
+        (
+            "git",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "rendering",
+        ),
+        cwd=REPO_ROOT,
+    )
     return [
         REPO_ROOT / path
         for path in output.decode().split("\0")

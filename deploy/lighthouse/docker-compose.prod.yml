@@ -46,7 +46,8 @@ services:
     networks:
       - ai_video_net
     depends_on:
-      - rendering
+      rendering:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')\""]
       interval: 30s
@@ -59,6 +60,8 @@ services:
     build:
       context: ../..
       dockerfile: rendering/Dockerfile
+      args:
+        RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
     container_name: ai_video_rendering
     restart: unless-stopped
     init: true
@@ -83,7 +86,7 @@ services:
     tmpfs:
       - /tmp:size=1073741824,mode=1777
     healthcheck:
-      test: ["CMD", "node", "-e", "const h=require('node:http');const r=h.request({socketPath:'/run/rendering/rendering.sock',path:'/health'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()"]
+      test: ["CMD", "node", "/app/healthcheck.mjs"]
       interval: 30s
       timeout: 30s
       retries: 3

@@ -27,7 +27,7 @@ source: human+ai
 - `/assemble` 只接受 strict JSON：tenant、disposition、output dir、label、clip/audio 列表和 render payload 必须完整且无额外字段。路径必须位于同一 tenant/run 的 `pending_review|quarantine` 根内，拒绝 symlink、URL、控制字符、跨 run/tenant、AVI、container/magic 不一致和不允许 codec。单请求在读取/哈希前统一限制为最多 16 个唯一媒体文件、合计 4 GiB 与最多 64 个 timeline item；禁止重复路径放大与并行无界哈希。
 - 所有媒体在已打开的原始文件句柄上冻结 SHA-256，再复制成 request-private snapshot 并复算一致性；FFprobe/FFmpeg 在 input 前固定 protocol/codec/demuxer/probe/stream allowlist，concat manifest 只写安全相对路径并固定 `-safe 1`、`file,pipe`。
 - renderer 的 540 秒总 deadline 必须短于 backend 600 秒 UDS 客户端 deadline；子进程超时终止完整 process group。相同 output label 使用 atomic hard-link no-clobber；在 link commit 前完成 source chmod、fsync、size/SHA 计算，commit 后清理失败只能记录稳定告警，不能把已发布成功翻转为失败。backend 必须复核返回的 artifact size 和 SHA-256。
-- 540 秒 deadline 覆盖命令、snapshot copy、hash 与 publish 全过程；health 中每个 Chrome/FFmpeg probe 最多 20 秒，backend UDS consumer 最多等待 25 秒，两者仍小于 renderer 容器 30 秒 health timeout。backend 容器健康检查只调用数据库 `/health/ready`，不把较慢的 renderer 详情探针串进 10 秒 Docker 健康预算。
+- 540 秒 deadline 覆盖命令、snapshot copy、hash 与 publish 全过程；health 中每个 Chrome/FFmpeg probe 最多 20 秒，backend UDS consumer 最多等待 25 秒，两者仍小于 renderer 容器 30 秒 health timeout。canonical compose 在首次启动 backend 前等待 renderer `service_healthy`；backend 自身的持续健康检查仍只调用数据库 `/health/ready`，不把较慢的 renderer 详情探针串进 10 秒 Docker 健康预算。
 - render payload 固定为 1–180 秒、有限 shot/caption/audio 数量与一致时间区间；Remotion composition 按请求时长计算帧数，并固定 JPEG 中间帧和镜像内 Google Chrome。
 - 本地 `docker-compose.yml` 不单独定义 provider-enabled rendering service，只把 `./rendering` 作为后端容器内本地工具目录挂载。
 
@@ -68,3 +68,5 @@ git diff --check
 - `rendering` compose service 出现 `env_file`：移除，避免 `.env.prod` 中的 provider credentials 泄入渲染容器。
 - `rendering` 出现 TCP listener、外部 network、`-safe 0`、AVI 或 caller-controlled absolute manifest：删除该入口并恢复 UDS/strict snapshot 边界。
 - CI rendering 步骤注入 provider env：拆分为无 token build/test；真实生成 smoke 继续走 P2 充值后的专用流程。
+- 进程被 SIGKILL 或主机异常断电后若遗留 `.renderer-<label>.lock`：先停止 renderer，确认对应 tenant/run 目录中没有同 label 的已发布 `.mp4`，并确认 lock 的修改时间已超过 540 秒总 deadline；再对该精确目录执行 `lstat`，确认它是普通目录且不是 symlink，最后只删除这一条精确 lock 目录并重启 renderer。禁止在 renderer 运行时清理、禁止跨 tenant/run 扫描删除，也禁止用宽泛的 `find ... -delete`。
+- 固定 Chrome `.deb` URL 或 checksum 失效：Docker build 必须失败关闭；重新从受信上游取得精确版本与 SHA-256，经独立构建/扫描复验后同时更新版本和 checksum，禁止临时切换到未固定的 latest URL。

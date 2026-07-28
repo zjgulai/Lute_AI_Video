@@ -332,8 +332,8 @@ jobs:
       - name: Scan backend image
         uses: aquasecurity/trivy-action@v0.33.1
         env:
-          # Backend and renderer both ship the guarded FFmpeg media runtime.
-          TRIVY_IGNOREFILE: .trivyignore-rendering.yaml
+          # Backend ships FFmpeg but does not inherit renderer-only network isolation.
+          TRIVY_IGNOREFILE: .trivyignore-backend.yaml
         with:
           version: v0.69.3
           image-ref: ai-video-backend:ci-${{ github.sha }}

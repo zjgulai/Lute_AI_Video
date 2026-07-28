@@ -4,17 +4,26 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
-from src.skills.remotion_assemble import RemotionAssembleSkill, _read_scoped_lyrics
+import src.skills.remotion_assemble as assemble_module
+from src.skills.remotion_assemble import (
+    RemotionAssembleSkill,
+    _read_scoped_lyrics,
+    _write_or_reuse_render_payload,
+)
 from src.tools.safe_media import UnsafeMediaError, validate_media_file
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RENDERING_PACKAGE = REPO_ROOT / "rendering" / "package.json"
 RENDERING_SERVER = REPO_ROOT / "rendering" / "server.mjs"
+RENDERING_HEALTHCHECK = REPO_ROOT / "rendering" / "healthcheck.mjs"
 RENDERING_RENDER = REPO_ROOT / "rendering" / "src" / "render.ts"
 RENDERING_ROOT = REPO_ROOT / "rendering" / "src" / "Root.tsx"
 RENDERING_DOCKERFILE = REPO_ROOT / "rendering" / "Dockerfile"
@@ -24,7 +33,9 @@ RELEASE_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.release.
 PROD_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.prod.yml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DEPLOY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
+DEPLOY_SCRIPT = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
 DUAL_RUNTIME_ADR = REPO_ROOT / "docs" / "architecture" / "adr" / "001-dual-runtime.md"
+REMOTION_RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "remotion-no-provider-key.md"
 TRANSLATIONS = REPO_ROOT / "web" / "src" / "i18n" / "translations.ts"
 
 
@@ -51,6 +62,57 @@ def test_lyrics_reader_rejects_symlink_and_oversized_input(tmp_path: Path) -> No
         _read_scoped_lyrics(linked, output_dir)
     with pytest.raises(UnsafeMediaError, match="path is invalid"):
         _read_scoped_lyrics(oversized, output_dir)
+
+
+def test_lyrics_reader_normalizes_missing_tenant_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_root = tmp_path / "missing-output-root"
+    output_dir = tmp_path / "existing-run" / "assemble"
+    output_dir.mkdir(parents=True)
+    lyrics = tmp_path / "lyrics.txt"
+    lyrics.write_text("safe lyrics content")
+    policy = SimpleNamespace(
+        tenant_id="tenant-a",
+        artifact_disposition="pending_review",
+    )
+
+    monkeypatch.setattr("src.config.OUTPUT_DIR", output_root)
+    monkeypatch.setattr(
+        "src.pipeline.generation_policy.get_effective_generation_policy",
+        lambda: policy,
+    )
+
+    with pytest.raises(UnsafeMediaError, match="output scope is invalid"):
+        _read_scoped_lyrics(lyrics, output_dir)
+
+
+def test_render_payload_exact_replay_is_safe_and_conflicts_fail_closed(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "video_input.json"
+    payload = {"clip_paths": [], "duration": 15}
+
+    _write_or_reuse_render_payload(path, payload)
+    original = path.read_bytes()
+    _write_or_reuse_render_payload(path, payload)
+    assert path.read_bytes() == original
+    assert os.stat(path).st_mode & 0o777 == 0o640
+
+    with pytest.raises(UnsafeMediaError, match="render input conflict"):
+        _write_or_reuse_render_payload(path, {"clip_paths": ["changed"]})
+
+    symlink = tmp_path / "linked_input.json"
+    symlink.symlink_to(path)
+    with pytest.raises(UnsafeMediaError, match="render input conflict"):
+        _write_or_reuse_render_payload(symlink, payload)
+
+    with pytest.raises(UnsafeMediaError, match="render input is too large"):
+        _write_or_reuse_render_payload(
+            tmp_path / "oversized.json",
+            {"payload": "x" * (1024 * 1024)},
+        )
 
 
 def test_production_ffmpeg_paths_do_not_select_vulnerable_features() -> None:
@@ -147,6 +209,8 @@ def test_renderer_server_is_uds_only_bounded_and_never_uses_unsafe_concat() -> N
     assert "HEALTH_PROBE_TIMEOUT_MS = 20_000" in source
     assert "timeoutMs: HEALTH_PROBE_TIMEOUT_MS" in source
     assert '"renderer_busy"' in source
+    assert 'path.join(REMOTION_PROJECT, "node_modules", "remotion"' in source
+    assert '"./node_modules/remotion/package.json"' not in source
     render_source = RENDERING_RENDER.read_text()
     assert render_source.count("browserExecutable: CHROME_EXECUTABLE") == 2
     assert 'const CHROME_EXECUTABLE = "/usr/bin/google-chrome-stable"' in render_source
@@ -162,6 +226,9 @@ def test_renderer_server_is_uds_only_bounded_and_never_uses_unsafe_concat() -> N
     assert "ShortVideo_16x9" not in root_source
     assert "ShortVideo-1x1" in root_source
     assert "ShortVideo-16x9" in root_source
+    assert "Number.isFinite(requestedDuration)" in root_source
+    assert "requestedDuration >= 1" in root_source
+    assert "requestedDuration <= 180" in root_source
 
 
 def test_release_renderer_is_nonroot_readonly_capless_and_not_on_tcp_network() -> None:
@@ -189,6 +256,15 @@ def test_release_renderer_is_nonroot_readonly_capless_and_not_on_tcp_network() -
         assert rendering["security_opt"] == ["no-new-privileges:true"]
         assert rendering["healthcheck"]["timeout"] == "30s"
         assert rendering["healthcheck"]["start_period"] == "60s"
+        assert rendering["healthcheck"]["test"] == [
+            "CMD",
+            "node",
+            "/app/healthcheck.mjs",
+        ]
+        assert backend["depends_on"]["rendering"]["condition"] == "service_healthy"
+        assert rendering["build"]["args"]["RELEASE_SOURCE_SHA"] == (
+            "${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}"
+        )
         assert any(
             mount == "renderer_socket:/run/rendering"
             for mount in rendering["volumes"]
@@ -209,6 +285,15 @@ def test_release_renderer_is_nonroot_readonly_capless_and_not_on_tcp_network() -
         "docker run -d --name release-smoke-rendering", 1
     )[1].split("lighthouse-rendering:", 1)[0]
     assert "--init" in renderer_command
+    assert "node /app/healthcheck.mjs" in smoke["run"]
+
+    dockerfile = RENDERING_DOCKERFILE.read_text()
+    assert "COPY rendering/healthcheck.mjs" in dockerfile
+    assert 'CMD ["node", "/app/healthcheck.mjs"]' in dockerfile
+    assert "node /app/healthcheck.mjs" in DEPLOY_SCRIPT.read_text()
+    healthcheck = RENDERING_HEALTHCHECK.read_text()
+    assert "socketPath" in healthcheck
+    assert 'path: "/health"' in healthcheck
 
 
 def test_release_backend_has_nonwritable_fixed_xdg_media_root() -> None:
@@ -282,6 +367,129 @@ def test_images_pin_existing_shared_nonroot_identity_and_fixed_google_chrome() -
     assert "getent passwd 999 >/dev/null" in backend
     assert "chown -R 999:999 /app" in backend
     assert "chown -R appuser:appgroup /app" not in backend
+
+
+def test_stale_renderer_lock_recovery_is_scoped_and_fail_closed() -> None:
+    runbook = REMOTION_RUNBOOK.read_text()
+
+    assert "停止 renderer" in runbook
+    assert "超过 540 秒" in runbook
+    assert "没有同 label 的已发布 `.mp4`" in runbook
+    assert "`lstat`" in runbook
+    assert "禁止用宽泛的 `find ... -delete`" in runbook
+
+
+def test_concat_retry_removes_partial_output_and_attempt_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clips = [tmp_path / "clip-a.mp4", tmp_path / "clip-b.mp4"]
+    for clip in clips:
+        clip.write_bytes(b"clip")
+    output = tmp_path / "assembled.mp4"
+    calls = 0
+
+    monkeypatch.setattr(assemble_module, "validate_media_file", lambda _path: None)
+
+    def fake_run(command: list[str], **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        attempt_output = Path(command[-1])
+        if calls == 1:
+            attempt_output.write_bytes(b"partial")
+            raise subprocess.CalledProcessError(1, command)
+        assert not attempt_output.exists()
+        attempt_output.write_bytes(b"x" * 10_001)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = RemotionAssembleSkill()._concat_clips(clips, output)
+
+    assert result == output
+    assert calls == 2
+    assert not list(tmp_path.glob(".*.concat"))
+    assert not list(tmp_path.glob(".*-concat-*.mp4"))
+
+    original = output.read_bytes()
+    with pytest.raises(UnsafeMediaError, match="output already exists"):
+        RemotionAssembleSkill()._concat_clips(clips, output)
+    assert output.read_bytes() == original
+    assert calls == 2
+
+
+def test_audio_mux_attempt_intermediates_are_always_cleaned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    video = tmp_path / "assembled.mp4"
+    video.write_bytes(b"v" * 1_000)
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"a" * 1_000)
+
+    monkeypatch.setattr(assemble_module, "validate_media_file", lambda _path: None)
+    monkeypatch.setattr(
+        assemble_module,
+        "ffmpeg_local_input_args",
+        lambda path: ["-i", str(path)],
+    )
+
+    def fake_run(command: list[str], **_kwargs: object) -> None:
+        Path(command[-1]).write_bytes(b"muxed" * 100)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = RemotionAssembleSkill()._try_mux_audio(
+        video_path=video,
+        audio_paths=[str(audio)],
+        output_label="assembled",
+    )
+
+    assert result is not None
+    assert result == tmp_path / "assembled_with_audio.mp4"
+    assert result.exists()
+    assert not list(tmp_path.glob(".*.concat"))
+    assert not list(tmp_path.glob(".*-audio-*.mkv"))
+
+
+def test_concat_publication_preserves_a_concurrent_winner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clips = [tmp_path / "clip-a.mp4", tmp_path / "clip-b.mp4"]
+    for clip in clips:
+        clip.write_bytes(b"clip")
+    output = tmp_path / "assembled.mp4"
+
+    monkeypatch.setattr(assemble_module, "validate_media_file", lambda _path: None)
+    monkeypatch.setattr(
+        RemotionAssembleSkill,
+        "_get_video_dimensions",
+        staticmethod(lambda _path: (1080, 1920)),
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda command, **_kwargs: Path(command[-1]).write_bytes(b"x" * 10_001),
+    )
+
+    def concurrent_link(
+        _source: Path,
+        destination: Path,
+        *,
+        follow_symlinks: bool,
+    ) -> None:
+        assert follow_symlinks is False
+        destination.write_bytes(b"winner")
+        raise FileExistsError
+
+    monkeypatch.setattr(assemble_module.os, "link", concurrent_link)
+
+    with pytest.raises(UnsafeMediaError, match="output already exists"):
+        RemotionAssembleSkill()._concat_clips(clips, output)
+
+    assert output.read_bytes() == b"winner"
+    assert not list(tmp_path.glob(".*.concat"))
+    assert not list(tmp_path.glob(".*-concat-*.mp4"))
 
 
 @pytest.mark.asyncio

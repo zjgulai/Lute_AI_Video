@@ -47,8 +47,8 @@ Short Video Agent 的工作链路涉及两类完全不同的计算：
 - `network_mode=none`，固定非 root `999:999`、只读 rootfs、capless、no-new-privileges 与资源上限
 
 ### 编排
-- 本地：[`docker-compose.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/docker-compose.yml) 定义 `backend` + `rendering` + `postgres` + `frontend` 4 个服务
-- 生产（Tencent Lighthouse）：[`deploy/lighthouse/docker-compose.prod.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/deploy/lighthouse/docker-compose.prod.yml) 同上结构 + nginx
+- 本地：[`docker-compose.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/docker-compose.yml) 定义 `backend` + `postgres` + `frontend` 3 个服务；`rendering/` 只挂载为 backend-local 开发工具，不启动独立 renderer
+- 生产（Tencent Lighthouse）：[`deploy/lighthouse/docker-compose.prod.yml`](file:///Users/pray/project/hermes_evo/AI_vedio/deploy/lighthouse/docker-compose.prod.yml) 才启动独立 `rendering` service，并与 backend/frontend/nginx 共同编排
 - 通信：backend 用 `httpx.AsyncHTTPTransport(uds=...)` 通过私有 UDS POST `/assemble`；renderer 不加入容器网络
 
 ## 四、Consequences（带来的好处和代价）

@@ -87,11 +87,19 @@ export const RemotionRoot: React.FC = () => {
           component={VideoComposition}
           durationInFrames={Math.ceil(45 * fps)}
           calculateMetadata={({ props }) => {
-            const data = props.data as { total_duration: number };
+            const data = props.data as { total_duration?: unknown } | undefined;
+            const requestedDuration = Number(data?.total_duration);
+            const totalDuration = (
+              Number.isFinite(requestedDuration)
+              && requestedDuration >= 1
+              && requestedDuration <= 180
+            )
+              ? requestedDuration
+              : sampleData.total_duration;
             return {
               durationInFrames: Math.max(
                 1,
-                Math.ceil(data.total_duration * fps),
+                Math.ceil(totalDuration * fps),
               ),
             };
           }}

@@ -219,7 +219,10 @@ async function probeFile(filePath) {
 async function probeRemotionVersion() {
   try {
     const pkg = JSON.parse(
-      await readFile("./node_modules/remotion/package.json", "utf8"),
+      await readFile(
+        path.join(REMOTION_PROJECT, "node_modules", "remotion", "package.json"),
+        "utf8",
+      ),
     );
     return pkg.version || null;
   } catch {

@@ -71,7 +71,7 @@ RUN npm ci --omit=dev --no-audit --no-fund \
     && test ! -e /usr/local/lib/node_modules/npm
 
 COPY rendering/src ./src
-COPY rendering/media-safety.mjs rendering/server.mjs ./
+COPY rendering/healthcheck.mjs rendering/media-safety.mjs rendering/server.mjs ./
 
 RUN (getent group 999 >/dev/null || groupadd --gid 999 renderer) \
     && (getent passwd 999 >/dev/null \
@@ -82,6 +82,6 @@ RUN (getent group 999 >/dev/null || groupadd --gid 999 renderer) \
 USER 999:999
 
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-  CMD ["node", "-e", "const h=require('node:http');const r=h.request({socketPath:'/run/rendering/rendering.sock',path:'/health'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()"]
+  CMD ["node", "/app/healthcheck.mjs"]
 
 CMD ["node", "server.mjs"]

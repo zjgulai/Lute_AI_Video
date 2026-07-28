@@ -31,9 +31,14 @@
       "reason": "Exact version-bound frontend vulnerability scan policy."
     },
     {
+      "path": ".grype-backend.yaml",
+      "status": "config",
+      "reason": "Exact version-bound backend vulnerability scan policy without renderer-only network-isolation exceptions."
+    },
+    {
       "path": ".grype-rendering.yaml",
       "status": "config",
-      "reason": "Exact version-bound backend and renderer media-runtime vulnerability scan policy."
+      "reason": "Exact version-bound renderer media-runtime vulnerability scan policy."
     },
     {
       "path": ".python-version",
@@ -46,9 +51,14 @@
       "reason": "Exact package-version-bound and expiring frontend vulnerability exception policy."
     },
     {
+      "path": ".trivyignore-backend.yaml",
+      "status": "config",
+      "reason": "Exact package-version-bound and expiring backend vulnerability exception policy without renderer-only network-isolation exceptions."
+    },
+    {
       "path": ".trivyignore-rendering.yaml",
       "status": "config",
-      "reason": "Exact package-version-bound and expiring backend and renderer media-runtime vulnerability exception policy."
+      "reason": "Exact package-version-bound and expiring renderer media-runtime vulnerability exception policy."
     },
     {
       "path": "AGENTS.md",

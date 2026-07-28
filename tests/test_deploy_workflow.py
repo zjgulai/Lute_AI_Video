@@ -579,7 +579,7 @@ class TestDeployWorkflow:
         assert "sudo docker load -i" in text
         assert '"${COMPOSE[@]}" up -d --no-deps --force-recreate rendering backend frontend' in text
         assert "docker exec ai_video_rendering" in text
-        assert "/run/rendering/rendering.sock" in text
+        assert "node /app/healthcheck.mjs" in text
 
     def test_lighthouse_cleanup_is_explicit_and_canonical_deploy_is_provider_off(self):
         text = LIGHTHOUSE_DEPLOY.read_text()

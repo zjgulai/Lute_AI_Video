@@ -245,8 +245,7 @@ jobs:
             frontend_ok=0
             rendering_ok=0
             docker exec release-smoke-frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 && frontend_ok=1
-            docker exec release-smoke-rendering node -e \
-              "const h=require('node:http');const r=h.request({socketPath:'/run/rendering/rendering.sock',path:'/health'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()" \
+            docker exec release-smoke-rendering node /app/healthcheck.mjs \
               >/dev/null 2>&1 && rendering_ok=1
             if [ "$frontend_ok" = 1 ] && [ "$rendering_ok" = 1 ]; then
               exit 0
@@ -287,8 +286,8 @@ jobs:
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: lighthouse-backend:${{ github.sha }}
-          # Backend and renderer both ship the guarded FFmpeg media runtime.
-          config: .grype-rendering.yaml
+          # Backend ships FFmpeg but does not inherit renderer-only network isolation.
+          config: .grype-backend.yaml
           fail-build: true
           severity-cutoff: high
           output-format: json

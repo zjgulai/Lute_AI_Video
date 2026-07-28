@@ -155,8 +155,7 @@ verify_release_health() {
   for attempt in $(seq 1 24); do
     if verify_backend_health \
       && sudo docker exec ai_video_frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 \
-      && sudo docker exec ai_video_rendering node -e \
-        "const h=require('node:http');const r=h.request({socketPath:'/run/rendering/rendering.sock',path:'/health'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()" \
+      && sudo docker exec ai_video_rendering node /app/healthcheck.mjs \
         >/dev/null 2>&1; then
       echo "  Application containers healthy with verified PostgreSQL schema (attempt $attempt/24)"
       return 0
