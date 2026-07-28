@@ -23,6 +23,7 @@ from src.tools.safe_media import (
     UnsafeMediaError,
     ffmpeg_local_input_args,
     validate_media_file,
+    validate_media_header,
 )
 from src.tools.video_downloader import (
     YTDLP_SAFE_FORMAT,
@@ -44,6 +45,14 @@ def test_mp4_input_is_byte_validated_and_ffmpeg_is_fail_closed(tmp_path: Path) -
         "-i",
         str(media),
     ]
+
+
+def test_media_header_validation_reuses_the_file_container_contract() -> None:
+    header = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2"
+
+    assert validate_media_header(header, expected_extension=".mp4").ffmpeg_demuxer == "mov"
+    with pytest.raises(UnsafeMediaError, match="media bytes do not match"):
+        validate_media_header(header, expected_extension=".webm")
 
 
 @pytest.mark.parametrize(

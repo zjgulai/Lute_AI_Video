@@ -55,6 +55,7 @@ from src.tools.safe_media import (
     ffmpeg_local_input_args,
     ffprobe_local_input_args,
     validate_media_file,
+    validate_media_header,
 )
 
 logger = structlog.get_logger()
@@ -71,6 +72,7 @@ _SAFE_MANIFEST_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _MAX_RENDER_SECONDS = 180.0
 _MAX_LYRICS_BYTES = 64 * 1024
 _MAX_RENDER_INPUT_BYTES = 1024 * 1024
+_MAX_RENDER_ARTIFACT_BYTES = 2 * 1024 * 1024 * 1024
 _RENDERING_CLIENT_TIMEOUT_SECONDS = 600.0
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -81,6 +83,128 @@ def _sha256_file(path: Path) -> str:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _freeze_rendered_artifact(
+    video_path: Path,
+    *,
+    output_dir: Path,
+    expected_size: int,
+    expected_sha256: str,
+) -> Path:
+    """Copy one renderer artifact handle into a read-only no-clobber snapshot."""
+
+    frozen_path: Path | None = None
+    source_fd: int | None = None
+    snapshot_fd: int | None = None
+    snapshot_inode: tuple[int, int] | None = None
+    snapshot_ready = False
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+
+    try:
+        if (
+            not video_path.is_absolute()
+            or ".." in video_path.parts
+            or _SAFE_MANIFEST_SEGMENT_RE.fullmatch(video_path.name) is None
+            or expected_size <= 0
+            or expected_size > _MAX_RENDER_ARTIFACT_BYTES
+            or _SHA256_RE.fullmatch(expected_sha256) is None
+        ):
+            raise UnsafeMediaError("rendering output evidence is invalid")
+
+        canonical_output_dir = output_dir.resolve(strict=True)
+        canonical_parent = video_path.parent.resolve(strict=True)
+        canonical_parent.relative_to(canonical_output_dir)
+        source_path = canonical_parent / video_path.name
+
+        source_fd = os.open(source_path, os.O_RDONLY | nofollow | cloexec)
+        before = os.fstat(source_fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_size != expected_size:
+            raise UnsafeMediaError("rendering output evidence is invalid")
+
+        frozen_path = canonical_parent / (
+            f"{video_path.stem}.validated-{secrets.token_hex(16)}{video_path.suffix}"
+        )
+        snapshot_fd = os.open(
+            frozen_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow | cloexec,
+            0o400,
+        )
+        created_snapshot = os.fstat(snapshot_fd)
+        if not stat.S_ISREG(created_snapshot.st_mode):
+            raise UnsafeMediaError("rendering output snapshot is invalid")
+        snapshot_inode = (created_snapshot.st_dev, created_snapshot.st_ino)
+        digest = hashlib.sha256()
+        copied_size = 0
+        header = bytearray()
+        with os.fdopen(source_fd, "rb") as source_handle:
+            source_fd = None
+            with os.fdopen(snapshot_fd, "wb") as snapshot_handle:
+                snapshot_fd = None
+                while chunk := source_handle.read(1024 * 1024):
+                    copied_size += len(chunk)
+                    if copied_size > _MAX_RENDER_ARTIFACT_BYTES:
+                        raise UnsafeMediaError("rendering output evidence is invalid")
+                    digest.update(chunk)
+                    if len(header) < 4096:
+                        header.extend(chunk[: 4096 - len(header)])
+                    snapshot_handle.write(chunk)
+                snapshot_handle.flush()
+                os.fsync(snapshot_handle.fileno())
+                os.fchmod(snapshot_handle.fileno(), 0o400)
+                frozen_stat = os.fstat(snapshot_handle.fileno())
+                if snapshot_inode != (frozen_stat.st_dev, frozen_stat.st_ino):
+                    raise UnsafeMediaError("rendering output snapshot changed")
+            after = os.fstat(source_handle.fileno())
+
+        stable_source_fields = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if any(getattr(before, field) != getattr(after, field) for field in stable_source_fields):
+            raise UnsafeMediaError("rendering output changed during snapshot")
+        if copied_size != expected_size or digest.hexdigest() != expected_sha256:
+            raise UnsafeMediaError("rendering output evidence is invalid")
+
+        validate_media_header(
+            bytes(header),
+            expected_extension=video_path.suffix,
+        )
+        published = frozen_path.stat(follow_symlinks=False)
+        if (
+            snapshot_inode != (published.st_dev, published.st_ino)
+            or not stat.S_ISREG(published.st_mode)
+            or published.st_size != expected_size
+            or stat.S_IMODE(published.st_mode) != 0o400
+        ):
+            raise UnsafeMediaError("rendering output snapshot changed")
+        snapshot_ready = True
+        return frozen_path
+    except UnsafeMediaError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise UnsafeMediaError("rendering output snapshot failed") from exc
+    finally:
+        if source_fd is not None:
+            os.close(source_fd)
+        if snapshot_fd is not None:
+            os.close(snapshot_fd)
+        if frozen_path is not None and not snapshot_ready:
+            if snapshot_inode is not None:
+                try:
+                    current = frozen_path.stat(follow_symlinks=False)
+                    if snapshot_inode == (current.st_dev, current.st_ino):
+                        _cleanup_intermediate(frozen_path)
+                except OSError as cleanup_exc:
+                    logger.warning(
+                        "remotion_assemble: snapshot cleanup inspection failed",
+                        error_type=type(cleanup_exc).__name__,
+                    )
 
 
 def _validate_output_label(value: object) -> str:
@@ -643,22 +767,15 @@ class RemotionAssembleSkill(SkillCallable):
                 ):
                     logger.error("remotion_assemble: rendering service contract invalid")
                     return None
-                video_path = Path(data["video_path"])
-                try:
-                    video_path.resolve(strict=True).relative_to(
-                        output_dir.resolve(strict=True)
-                    )
-                except (OSError, ValueError):
-                    logger.error("remotion_assemble: rendering output scope invalid")
-                    return None
-                validate_media_file(video_path)
-                if (
-                    video_path.stat().st_size != data["file_size_bytes"]
-                    or _sha256_file(video_path) != data["artifact_sha256"]
-                ):
-                    logger.error("remotion_assemble: rendering output evidence invalid")
-                    return None
-                return data
+                frozen_path = _freeze_rendered_artifact(
+                    Path(data["video_path"]),
+                    output_dir=output_dir,
+                    expected_size=data["file_size_bytes"],
+                    expected_sha256=data["artifact_sha256"],
+                )
+                frozen_data = dict(data)
+                frozen_data["video_path"] = str(frozen_path)
+                return frozen_data
         except Exception as exc:
             logger.warning(
                 "remotion_assemble: rendering service call failed",
@@ -999,6 +1116,7 @@ class RemotionAssembleSkill(SkillCallable):
 
         concat_list_path: Path | None = None
         concat_audio: Path | None = None
+        attempt_muxed: Path | None = None
         try:
             # Filter out non-existent or stub audio
             valid_audios = [Path(p) for p in audio_paths if Path(p).exists() and Path(p).stat().st_size > 200]
@@ -1038,12 +1156,18 @@ class RemotionAssembleSkill(SkillCallable):
                 check=True,
             )
 
-            # Mux audio into video
+            # Mux audio into video via a staged, symlink-safe publication.
             muxed_path = video_path.parent / f"{video_path.stem}_with_audio{video_path.suffix}"
+            if muxed_path.exists() or muxed_path.is_symlink():
+                raise UnsafeMediaError("audio mux output already exists")
+            attempt_muxed = (
+                video_path.parent
+                / f".{video_path.stem}-mux-{secrets.token_hex(8)}{video_path.suffix}"
+            )
             subprocess.run(
                 [
                     "ffmpeg",
-                    "-y",
+                    "-n",
                     *ffmpeg_local_input_args(video_path),
                     *ffmpeg_local_input_args(concat_audio),
                     "-c:v",
@@ -1051,13 +1175,19 @@ class RemotionAssembleSkill(SkillCallable):
                     "-c:a",
                     "aac",
                     "-shortest",
-                    str(muxed_path),
+                    str(attempt_muxed),
                 ],
                 capture_output=True,
                 timeout=120,
                 check=True,
             )
-            if muxed_path.exists():
+            if attempt_muxed.exists() and attempt_muxed.stat().st_size > 0:
+                try:
+                    os.link(attempt_muxed, muxed_path, follow_symlinks=False)
+                except FileExistsError as exc:
+                    raise UnsafeMediaError("audio mux output already exists") from exc
+                except OSError as exc:
+                    raise UnsafeMediaError("audio mux output publication failed") from exc
                 return muxed_path
         except UnsafeMediaError:
             raise
@@ -1067,6 +1197,7 @@ class RemotionAssembleSkill(SkillCallable):
                 error_type=type(exc).__name__,
             )
         finally:
+            _cleanup_intermediate(attempt_muxed)
             _cleanup_intermediate(concat_audio)
             _cleanup_intermediate(concat_list_path)
         return None

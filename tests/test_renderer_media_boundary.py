@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -433,7 +434,10 @@ def test_audio_mux_attempt_intermediates_are_always_cleaned(
         lambda path: ["-i", str(path)],
     )
 
+    commands: list[list[str]] = []
+
     def fake_run(command: list[str], **_kwargs: object) -> None:
+        commands.append(command)
         Path(command[-1]).write_bytes(b"muxed" * 100)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -449,6 +453,56 @@ def test_audio_mux_attempt_intermediates_are_always_cleaned(
     assert result.exists()
     assert not list(tmp_path.glob(".*.concat"))
     assert not list(tmp_path.glob(".*-audio-*.mkv"))
+    assert not list(tmp_path.glob(".*-mux-*.mp4"))
+    assert len(commands) == 2
+    assert all("-n" in command and "-y" not in command for command in commands)
+
+
+def test_audio_mux_publication_preserves_a_concurrent_winner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    video = tmp_path / "assembled.mp4"
+    video.write_bytes(b"v" * 1_000)
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"a" * 1_000)
+    muxed_path = tmp_path / "assembled_with_audio.mp4"
+
+    monkeypatch.setattr(assemble_module, "validate_media_file", lambda _path: None)
+    monkeypatch.setattr(
+        assemble_module,
+        "ffmpeg_local_input_args",
+        lambda path: ["-i", str(path)],
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda command, **_kwargs: Path(command[-1]).write_bytes(b"muxed" * 100),
+    )
+
+    def concurrent_link(
+        _source: Path,
+        destination: Path,
+        *,
+        follow_symlinks: bool,
+    ) -> None:
+        assert follow_symlinks is False
+        destination.write_bytes(b"winner")
+        raise FileExistsError
+
+    monkeypatch.setattr(assemble_module.os, "link", concurrent_link)
+
+    with pytest.raises(UnsafeMediaError, match="audio mux output already exists"):
+        RemotionAssembleSkill()._try_mux_audio(
+            video_path=video,
+            audio_paths=[str(audio)],
+            output_label="assembled",
+        )
+
+    assert muxed_path.read_bytes() == b"winner"
+    assert not list(tmp_path.glob(".*.concat"))
+    assert not list(tmp_path.glob(".*-audio-*.mkv"))
+    assert not list(tmp_path.glob(".*-mux-*.mp4"))
 
 
 def test_concat_publication_preserves_a_concurrent_winner(
@@ -561,7 +615,21 @@ async def test_backend_renderer_bridge_uses_uds_and_rejects_loose_response_types
     )
 
     assert result is not None
-    assert result["video_path"] == str(video)
+    frozen_video = Path(result["video_path"])
+    assert frozen_video.parent == output_dir
+    assert frozen_video.name.startswith("video-001.validated-")
+    assert frozen_video.suffix == ".mp4"
+    assert frozen_video.read_bytes() == (
+        b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"0" * 2_000
+    )
+    assert stat.S_IMODE(frozen_video.stat().st_mode) == 0o400
+    assert video.exists()
+    assert hashlib.sha256(frozen_video.read_bytes()).hexdigest() == (
+        FakeResponse.payload["artifact_sha256"]
+    )
+    video.write_bytes(b"changed-after-snapshot")
+    assert frozen_video.read_bytes() != video.read_bytes()
+    assert not list(output_dir.glob(".*-snapshot-*.mp4"))
     assert seen["uds"] == socket_path
     assert seen["base_url"] == "http://rendering"
     assert seen["route"] == "/assemble"
@@ -587,3 +655,213 @@ async def test_backend_renderer_bridge_uses_uds_and_rejects_loose_response_types
         artifact_disposition="pending_review",
     )
     assert loose is None
+
+
+def test_rendered_artifact_snapshot_replacement_fails_closed_without_deleting_winner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "assemble"
+    output_dir.mkdir()
+    video = output_dir / "video-001.mp4"
+    expected = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"0" * 2_000
+    tampered = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"X" * 2_000
+    video.write_bytes(expected)
+    replacement: Path | None = None
+    original_validator = assemble_module.validate_media_header
+
+    def replace_snapshot(
+        header: bytes,
+        *,
+        expected_extension: str,
+    ) -> object:
+        nonlocal replacement
+        replacement = next(output_dir.glob("video-001.validated-*.mp4"))
+        replacement.unlink()
+        replacement.write_bytes(tampered)
+        replacement.chmod(0o644)
+        return original_validator(header, expected_extension=expected_extension)
+
+    monkeypatch.setattr(assemble_module, "validate_media_header", replace_snapshot)
+
+    with pytest.raises(UnsafeMediaError, match="snapshot changed"):
+        assemble_module._freeze_rendered_artifact(
+            video,
+            output_dir=output_dir,
+            expected_size=len(expected),
+            expected_sha256=hashlib.sha256(expected).hexdigest(),
+        )
+
+    assert replacement is not None
+    assert replacement.read_bytes() == tampered
+    assert stat.S_IMODE(replacement.stat().st_mode) == 0o644
+
+
+@pytest.mark.parametrize("failure", ["size", "hash"])
+def test_rendered_artifact_snapshot_rejects_evidence_mismatch_without_residue(
+    tmp_path: Path,
+    failure: str,
+) -> None:
+    output_dir = tmp_path / "assemble"
+    output_dir.mkdir()
+    video = output_dir / "video-001.mp4"
+    payload = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"0" * 2_000
+    video.write_bytes(payload)
+    expected_size = len(payload) + 1 if failure == "size" else len(payload)
+    expected_sha256 = (
+        hashlib.sha256(b"different").hexdigest()
+        if failure == "hash"
+        else hashlib.sha256(payload).hexdigest()
+    )
+
+    with pytest.raises(UnsafeMediaError, match="evidence is invalid"):
+        assemble_module._freeze_rendered_artifact(
+            video,
+            output_dir=output_dir,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+        )
+
+    assert video.read_bytes() == payload
+    assert not list(output_dir.glob("video-001.validated-*.mp4"))
+
+
+def test_rendered_artifact_snapshot_rejects_symlink_outside_scope_and_oversize(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "assemble"
+    output_dir.mkdir()
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    payload = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"0" * 2_000
+    outside = outside_dir / "video-001.mp4"
+    outside.write_bytes(payload)
+    linked = output_dir / "linked.mp4"
+    linked.symlink_to(outside)
+    digest = hashlib.sha256(payload).hexdigest()
+
+    for candidate, size in (
+        (linked, len(payload)),
+        (outside, len(payload)),
+    ):
+        with pytest.raises(UnsafeMediaError):
+            assemble_module._freeze_rendered_artifact(
+                candidate,
+                output_dir=output_dir,
+                expected_size=size,
+                expected_sha256=digest,
+            )
+
+    assert linked.is_symlink()
+    assert outside.read_bytes() == payload
+    assert not list(output_dir.glob("*.validated-*.mp4"))
+    assert not list(outside_dir.glob("*.validated-*.mp4"))
+
+
+def test_rendered_artifact_snapshot_rejects_oversize_before_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "assemble"
+    output_dir.mkdir()
+    video = output_dir / "video-001.mp4"
+    payload = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2"
+    video.write_bytes(payload)
+    open_calls = 0
+
+    def forbidden_open(*_args: object, **_kwargs: object) -> int:
+        nonlocal open_calls
+        open_calls += 1
+        raise AssertionError("oversize declaration must fail before opening media")
+
+    monkeypatch.setattr(assemble_module.os, "open", forbidden_open)
+
+    with pytest.raises(UnsafeMediaError, match="evidence is invalid"):
+        assemble_module._freeze_rendered_artifact(
+            video,
+            output_dir=output_dir,
+            expected_size=assemble_module._MAX_RENDER_ARTIFACT_BYTES + 1,
+            expected_sha256=hashlib.sha256(payload).hexdigest(),
+        )
+
+    assert open_calls == 0
+    assert video.read_bytes() == payload
+
+
+def test_rendered_artifact_snapshot_rejects_source_metadata_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "assemble"
+    output_dir.mkdir()
+    video = output_dir / "video-001.mp4"
+    payload = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"0" * 2_000
+    video.write_bytes(payload)
+    source_inode = video.stat().st_ino
+    original_fstat = assemble_module.os.fstat
+    source_fstat_calls = 0
+
+    def drifting_fstat(fd: int) -> object:
+        nonlocal source_fstat_calls
+        result = original_fstat(fd)
+        if result.st_ino != source_inode:
+            return result
+        source_fstat_calls += 1
+        if source_fstat_calls == 1:
+            return result
+        return SimpleNamespace(
+            st_dev=result.st_dev,
+            st_ino=result.st_ino,
+            st_mode=result.st_mode,
+            st_size=result.st_size,
+            st_mtime_ns=result.st_mtime_ns + 1,
+            st_ctime_ns=result.st_ctime_ns,
+        )
+
+    monkeypatch.setattr(assemble_module.os, "fstat", drifting_fstat)
+
+    with pytest.raises(UnsafeMediaError, match="changed during snapshot"):
+        assemble_module._freeze_rendered_artifact(
+            video,
+            output_dir=output_dir,
+            expected_size=len(payload),
+            expected_sha256=hashlib.sha256(payload).hexdigest(),
+        )
+
+    assert source_fstat_calls == 2
+    assert video.read_bytes() == payload
+    assert not list(output_dir.glob("video-001.validated-*.mp4"))
+
+
+def test_rendered_artifact_snapshot_fsync_failure_does_not_delete_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "assemble"
+    output_dir.mkdir()
+    video = output_dir / "video-001.mp4"
+    payload = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2" + b"0" * 2_000
+    winner = b"WINNER"
+    video.write_bytes(payload)
+    replacement: Path | None = None
+
+    def replace_then_fail(_fd: int) -> None:
+        nonlocal replacement
+        replacement = next(output_dir.glob("video-001.validated-*.mp4"))
+        replacement.unlink()
+        replacement.write_bytes(winner)
+        raise OSError("fixture fsync failure")
+
+    monkeypatch.setattr(assemble_module.os, "fsync", replace_then_fail)
+
+    with pytest.raises(UnsafeMediaError, match="snapshot failed"):
+        assemble_module._freeze_rendered_artifact(
+            video,
+            output_dir=output_dir,
+            expected_size=len(payload),
+            expected_sha256=hashlib.sha256(payload).hexdigest(),
+        )
+
+    assert replacement is not None
+    assert replacement.read_bytes() == winner
+    assert video.read_bytes() == payload
