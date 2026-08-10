@@ -302,6 +302,7 @@ jobs:
       - name: Docker compose config validation (no start)
         run: |
           : > .env
+          export APP_VERSION="$(python scripts/project_version.py --check)"
           docker compose -f docker-compose.yml config --quiet
           AI_VIDEO_SHARED_ROOT=/tmp/ai-video-shared AI_VIDEO_ENV_FILE=/dev/null \
             PORTAL_AUTH_ENV_FILE=/dev/null RELEASE_SOURCE_SHA=${{ github.sha }} \
