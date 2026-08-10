@@ -13,6 +13,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
     "86708357d126af84c16f80d9c57335d1e8c845c5.patch"
 )
+DVBSUB_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "02fc47e13f903768b75f7985a2706a6223ab4506.patch"
+)
+CFHD_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "16b2049d4d5222db6cd7c031409058571c94f6a9.patch"
+)
 BUILD_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "build-h10-debs.sh"
 INSTALL_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "install-h10-build-deps.sh"
 VERIFY_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "verify-h10-runtime.sh"
@@ -23,13 +29,19 @@ RENDERING_DOCKERFILE = REPO_ROOT / "rendering" / "Dockerfile"
 CLOUDBASE_DEPLOY_GUIDE = REPO_ROOT / "deploy" / "tencent-cloudbase.md"
 
 PATCH_SHA256 = "b800c259300e41ba3a35a626953ca7665648e7de9955e168d8477d7414e7e3f1"
+DVBSUB_PATCH_SHA256 = (
+    "6a06c12bab05882f3116b32e81562750c450a421d23635aaf25bddd254a80525"
+)
+CFHD_PATCH_SHA256 = (
+    "dd5ab52749f5aabbdf02202d0bd26703079261cd429a0f6e6013299d6d468646"
+)
 ORIGINAL_SOURCE_SHA256 = (
     "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
 )
 DEBIAN_SOURCE_SHA256 = (
     "a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef"
 )
-H10_VERSION = "7:7.1.5-0+deb13u1+h10.3"
+H10_VERSION = "7:7.1.5-0+deb13u1+h10.4"
 FFMPEG_RUNTIME_PACKAGES = {
     "ffmpeg",
     "libavcodec61",
@@ -130,13 +142,56 @@ def test_upstream_iamf_patch_is_exact_and_auditable() -> None:
     assert "count_label > len - avio_tell(pbc)" in patch_text
 
 
+@pytest.mark.parametrize(
+    ("patch", "expected_sha256", "commit", "source_file", "fixed_expression"),
+    (
+        (
+            DVBSUB_PATCH,
+            DVBSUB_PATCH_SHA256,
+            "02fc47e13f903768b75f7985a2706a6223ab4506",
+            "libavcodec/dvbsub_parser.c",
+            "PARSE_BUF_SIZE - pc->packet_index",
+        ),
+        (
+            CFHD_PATCH,
+            CFHD_PATCH_SHA256,
+            "16b2049d4d5222db6cd7c031409058571c94f6a9",
+            "libavcodec/cfhd.c",
+            "lowpass_width * 2 > s->plane[plane].width",
+        ),
+    ),
+)
+def test_new_upstream_ffmpeg_patches_are_exact_and_auditable(
+    patch: Path,
+    expected_sha256: str,
+    commit: str,
+    source_file: str,
+    fixed_expression: str,
+) -> None:
+    patch_bytes = patch.read_bytes()
+    patch_text = patch_bytes.decode()
+
+    assert hashlib.sha256(patch_bytes).hexdigest() == expected_sha256
+    assert f"From {commit}" in patch_text
+    assert source_file in patch_text
+    assert fixed_expression in patch_text
+
+
 def test_builder_patches_exact_debian_source_and_disables_iamf() -> None:
     source = BUILD_SCRIPT.read_text()
 
     assert ORIGINAL_SOURCE_SHA256 in source
     assert DEBIAN_SOURCE_SHA256 in source
     assert PATCH_SHA256 in source
+    assert DVBSUB_PATCH_SHA256 in source
+    assert CFHD_PATCH_SHA256 in source
     assert H10_VERSION in source
+    assert (
+        'for patch_name in "$PATCH_NAME" "$DVBSUB_PATCH_NAME" '
+        '"$CFHD_PATCH_NAME"'
+    ) in source
+    assert '"$DVBSUB_PATCH_SHA256" "$SOURCE_ROOT/$DVBSUB_PATCH_NAME"' in source
+    assert '"$CFHD_PATCH_SHA256" "$SOURCE_ROOT/$CFHD_PATCH_NAME"' in source
     assert 'mkdir -p "$BUILD_ROOT/debian/patches"' in source
     assert "--disable-demuxer=iamf" in source
     assert "--disable-libssh" in source
@@ -278,6 +333,8 @@ def test_backend_and_renderer_install_the_same_h10_packages() -> None:
         assert "install-h10-build-deps.sh" in source
         assert "build-h10-debs.sh" in source
         assert "86708357d126af84c16f80d9c57335d1e8c845c5.patch" in source
+        assert "02fc47e13f903768b75f7985a2706a6223ab4506.patch" in source
+        assert "16b2049d4d5222db6cd7c031409058571c94f6a9.patch" in source
         assert "COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs" in source
         assert "verify-h10-runtime.sh" in source
         assert "rm -rf /tmp/ffmpeg-debs" in source

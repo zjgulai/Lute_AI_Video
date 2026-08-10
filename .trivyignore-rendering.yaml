@@ -326,47 +326,47 @@ vulnerabilities:
   statement: owner=self; reason=Backend does not parse GDBus introspection XML; Debian has no stable fix
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-58049
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RASC is not an accepted container and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-5928
@@ -416,272 +416,272 @@ vulnerabilities:
   statement: owner=self; reason=Application does not reuse BZ2Decompressor after errors and Python 3.12 has no newer security release
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64830
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=VobSub subtitle inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64831
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Installed FFmpeg 7.1.5 predates the affected 8.0 range and the runtime does not enable Vulkan hardware decoding
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64832
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Release containers have no NVIDIA device and application FFmpeg calls never enable NVDEC hardware acceleration
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64833
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Application outputs never select the SPDIF muxer and DTS-HD remuxing is not exposed
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64834
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=RTP and ASF network inputs are excluded by the file-pipe protocol whitelist and pinned local demuxers
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2026-64835
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=ADX and AAX inputs are not accepted and every FFmpeg input uses an allowlisted pinned demuxer
 - id: CVE-2022-4055
@@ -741,182 +741,182 @@ vulnerabilities:
   statement: owner=self; reason=wget is an unused Chrome package dependency and the renderer has network_mode none
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65703
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=AVI and the TDSC decoder are rejected before FFmpeg; inputs use pinned approved containers and codecs
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65704
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Concat uses request-private relative snapshots with -safe 1 and pinned demuxer and codec allowlists
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65705
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The floodfill filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-65706
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The swaprect filter is absent from every application FFmpeg command
 - id: CVE-2026-66032
@@ -941,272 +941,272 @@ vulnerabilities:
   statement: owner=self; reason=Renderer has network_mode none and no SSH or SFTP code path invokes libssh2
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66036
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The hqdn3d filter is absent from every application FFmpeg command
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66037
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=The exact upstream 86708357 IAMF fix is applied and the IAMF demuxer is compiled out
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66038
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=LCL and ZLIB video decoding are excluded by container magic and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66039
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=CAF and MACE6 audio are excluded by extension container and codec allowlists
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66040
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Production image paths use JPEG or mjpeg and never select native PNG or APNG encoders
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-66041
   purls:
-  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.3
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=PGS subtitles and the quirc filter are not exposed by any application FFmpeg command
 - id: CVE-2026-8286
@@ -1249,3 +1249,93 @@ vulnerabilities:
   - pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u4
   expired_at: 2026-08-21
   statement: owner=self; reason=Renderer has network_mode none and no application curl or libcurl invocation; the dependency is inert
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70628
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 02fc47e1 is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/ffmpeg@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libavcodec61@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libavdevice61@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libavfilter10@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libavformat61@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libavutil59@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libpostproc58@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libswresample5@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-70632
+  purls:
+  - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build

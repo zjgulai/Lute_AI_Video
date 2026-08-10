@@ -3,14 +3,18 @@ set -eu
 
 readonly UPSTREAM_VERSION="7.1.5"
 readonly DEBIAN_VERSION="7:7.1.5-0+deb13u1"
-readonly H10_VERSION="7:7.1.5-0+deb13u1+h10.3"
+readonly H10_VERSION="7:7.1.5-0+deb13u1+h10.4"
 readonly SOURCE_ROOT="/opt/ffmpeg"
 readonly BUILD_ROOT="/build/ffmpeg"
 readonly OUTPUT_ROOT="/ffmpeg-debs"
 readonly PATCH_NAME="86708357d126af84c16f80d9c57335d1e8c845c5.patch"
+readonly DVBSUB_PATCH_NAME="02fc47e13f903768b75f7985a2706a6223ab4506.patch"
+readonly CFHD_PATCH_NAME="16b2049d4d5222db6cd7c031409058571c94f6a9.patch"
 readonly ORIGINAL_SOURCE_SHA256="de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
 readonly DEBIAN_SOURCE_SHA256="a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef"
 readonly PATCH_SHA256="b800c259300e41ba3a35a626953ca7665648e7de9955e168d8477d7414e7e3f1"
+readonly DVBSUB_PATCH_SHA256="6a06c12bab05882f3116b32e81562750c450a421d23635aaf25bddd254a80525"
+readonly CFHD_PATCH_SHA256="dd5ab52749f5aabbdf02202d0bd26703079261cd429a0f6e6013299d6d468646"
 readonly RUNTIME_PACKAGES="
 ffmpeg
 libavcodec61
@@ -28,6 +32,8 @@ verify_inputs() {
     "$ORIGINAL_SOURCE_SHA256" "$SOURCE_ROOT/ffmpeg_${UPSTREAM_VERSION}.orig.tar.xz" \
     "$DEBIAN_SOURCE_SHA256" "$SOURCE_ROOT/ffmpeg_${UPSTREAM_VERSION}-0+deb13u1.debian.tar.xz" \
     "$PATCH_SHA256" "$SOURCE_ROOT/$PATCH_NAME" \
+    "$DVBSUB_PATCH_SHA256" "$SOURCE_ROOT/$DVBSUB_PATCH_NAME" \
+    "$CFHD_PATCH_SHA256" "$SOURCE_ROOT/$CFHD_PATCH_NAME" \
     | sha256sum -c -
 }
 
@@ -40,15 +46,17 @@ prepare_source() {
 
   mkdir -p "$BUILD_ROOT/debian/patches"
   touch "$BUILD_ROOT/debian/patches/series"
-  cp "$SOURCE_ROOT/$PATCH_NAME" "$BUILD_ROOT/debian/patches/$PATCH_NAME"
-  grep -qxF "$PATCH_NAME" "$BUILD_ROOT/debian/patches/series" \
-    || printf '%s\n' "$PATCH_NAME" >> "$BUILD_ROOT/debian/patches/series"
+  for patch_name in "$PATCH_NAME" "$DVBSUB_PATCH_NAME" "$CFHD_PATCH_NAME"; do
+    cp "$SOURCE_ROOT/$patch_name" "$BUILD_ROOT/debian/patches/$patch_name"
+    grep -qxF "$patch_name" "$BUILD_ROOT/debian/patches/series" \
+      || printf '%s\n' "$patch_name" >> "$BUILD_ROOT/debian/patches/series"
+  done
 
   sed -i \
     "1s/(${DEBIAN_VERSION})/(${H10_VERSION})/" \
     "$BUILD_ROOT/debian/changelog"
   sed -i \
-    '3i\  * H10: backport IAMF fix; disable IAMF, libssh/SFTP, and librist/RIST.' \
+    '3i\  * H10: backport IAMF, DVB subtitle, and CFHD fixes; disable IAMF, libssh/SFTP, and librist/RIST.' \
     "$BUILD_ROOT/debian/changelog"
   printf '\n# H10 defense in depth: the application never accepts IAMF.\n' \
     >> "$BUILD_ROOT/debian/rules"
