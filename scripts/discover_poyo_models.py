@@ -1,72 +1,19 @@
 #!/usr/bin/env python3
-"""Discover available poyo.ai models by trial.
+"""Retired non-W5 provider entrypoint; retained only for historical references."""
 
-This submits real poyo.ai generation requests and may consume credits.
-Run only after recharge with CONFIRM_POYO_PROBE=1 and POYO_API_KEY set.
-"""
+from __future__ import annotations
 
-import asyncio
-import os
-
-import httpx
-
-API_KEY = os.getenv("POYO_API_KEY")
-BASE = "https://api.poyo.ai"
-CONFIRM_ENV = "CONFIRM_POYO_PROBE"
-
-IMAGE_MODELS = ["gpt-image-2", "gpt-image-1", "gpt-4o-image", "seedream", "dall-e-3", "dalle-3"]
-AUDIO_MODELS = ["tts", "voice", "speech", "ai-music", "aimusic", "extend-music", "music"]
+import sys
 
 
-def require_probe_confirmation() -> None:
-    if os.getenv(CONFIRM_ENV) != "1":
-        raise SystemExit(
-            f"{CONFIRM_ENV}=1 is required because this script submits real poyo.ai generation requests "
-            "and may consume credits."
-        )
-
-
-async def test_model(client, model, payload):
-    body = {"model": model, "input": payload}
-    try:
-        r = await client.post("/api/generate/submit", json=body, timeout=30)
-        data = r.json()
-        code = data.get("code")
-        if code == 200:
-            task_id = data.get("data", {}).get("task_id")
-            print(f"  ✅ {model}: task_id={task_id}")
-            # Cancel immediately to avoid charges
-            return True
-        else:
-            msg = data.get("message", data.get("msg", str(data)))
-            print(f"  ❌ {model}: {msg[:120]}")
-            return False
-    except Exception as e:
-        print(f"  ❌ {model}: {e}")
-        return False
-
-
-async def main():
-    if not API_KEY:
-        raise SystemExit("POYO_API_KEY is required")
-    require_probe_confirmation()
-
-    client = httpx.AsyncClient(
-        base_url=BASE,
-        headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+def main() -> int:
+    print(
+        "ERROR: discover_poyo_models.py is retired and cannot execute; "
+        "use a fresh governed W5 exact-authorization plan.",
+        file=sys.stderr,
     )
-    print("=== Testing IMAGE models ===")
-    img_payload = {"prompt": "A cute baby bottle on white background", "n": 1, "size": "1024x1792"}
-    for m in IMAGE_MODELS:
-        await test_model(client, m, img_payload)
-
-    print("\n=== Testing AUDIO models ===")
-    audio_payload = {"prompt": "A warm female voice saying hello", "duration": 5}
-    for m in AUDIO_MODELS:
-        await test_model(client, m, audio_payload)
-
-    await client.aclose()
+    return 2
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(main())

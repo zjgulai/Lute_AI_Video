@@ -246,9 +246,33 @@ def test_source_manifest_allows_one_resolved_release_root_symlink(tmp_path: Path
 def test_source_create_cli_accepts_repository_tracked_internal_symlink(
     tmp_path: Path,
 ) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "Dockerfile.backend").write_text("FROM scratch\n", encoding="utf-8")
+    (source_root / "Dockerfile").symlink_to("Dockerfile.backend")
+    subprocess.run(["git", "init", "-q"], cwd=source_root, check=True)
+    subprocess.run(
+        ["git", "add", "Dockerfile", "Dockerfile.backend"],
+        cwd=source_root,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        cwd=source_root,
+        check=True,
+    )
     git_sha = subprocess.run(
         ["git", "rev-parse", "HEAD"],
-        cwd=REPO_ROOT,
+        cwd=source_root,
         check=True,
         capture_output=True,
         text=True,
@@ -261,7 +285,7 @@ def test_source_create_cli_accepts_repository_tracked_internal_symlink(
             str(REPO_ROOT / "scripts" / "backup_manifest.py"),
             "source-create",
             "--root",
-            str(REPO_ROOT),
+            str(source_root),
             "--git-sha",
             git_sha,
             "--output",
@@ -275,7 +299,7 @@ def test_source_create_cli_accepts_repository_tracked_internal_symlink(
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["status"] == "passed"
     manifest = json.loads(output.read_text(encoding="utf-8"))
-    assert validate_source_manifest(manifest, REPO_ROOT) == manifest
+    assert validate_source_manifest(manifest, source_root) == manifest
 
 
 def test_source_create_cli_refuses_to_overwrite_existing_output(tmp_path: Path) -> None:

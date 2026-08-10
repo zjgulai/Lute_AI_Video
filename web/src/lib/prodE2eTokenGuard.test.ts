@@ -92,7 +92,7 @@ describe("Production E2E token smoke guardrails", () => {
     expect(config).toContain("ignoreHTTPSErrors: !runTokenSmoke");
   });
 
-  it("requires explicit workflow opt-in for token-smoke specs", () => {
+  it("keeps the legacy token-smoke workflow definition hard-disabled", () => {
     const workflow = readRepoFileFromWeb(".github/workflows/e2e-prod.yml");
 
     expect(workflow).toContain("token_smoke_spec");
@@ -104,6 +104,8 @@ describe("Production E2E token smoke guardrails", () => {
     expect(workflow).toContain("PROD_TOKEN_SMOKE_API_KEY");
     expect(workflow).toContain("PLAYWRIGHT_TOKEN_SMOKE_SPEC");
     expect(workflow).toContain("--workers=1 --retries=0");
+    expect(workflow).toContain("if: ${{ false }}");
+    expect(workflow).toContain("W5 is the sole current provider executor");
     expect(workflow).not.toContain("run_token_smoke:");
   });
 
@@ -179,12 +181,12 @@ describe("Production E2E token smoke guardrails", () => {
     }
   });
 
-  it("documents production token-smoke secret and manual opt-in", () => {
+  it("documents the hard-disabled token-smoke boundary and W5 replacement", () => {
     const runbook = readRepoFileFromWeb("docs/runbooks/production-e2e-token-smoke.md");
     const demoKey = ["ai", "video", "demo", "2026"].join("_");
 
     for (const token of [
-      "PROD_DEMO_API_KEY",
+      "public read-only job intentionally receives no API key",
       "PROD_TOKEN_SMOKE_API_KEY",
       "token_smoke_spec",
       "approval_record_path",
@@ -192,7 +194,8 @@ describe("Production E2E token smoke guardrails", () => {
       "RUN_TOKEN_SMOKE=1",
       "@token-smoke",
       demoKey,
-      "only after recharge",
+      "hard-disabled",
+      "W5 exact-authorization",
     ]) {
       expect(runbook).toContain(token);
     }
@@ -212,6 +215,16 @@ describe("Production E2E token smoke guardrails", () => {
         expect(source, `${specPath} must use production helpers instead of demo key fallback`).not.toContain(fallback);
       }
     }
+  });
+
+  it("does not inject any API key into the public read-only production job", () => {
+    const workflow = readRepoFileFromWeb(".github/workflows/e2e-prod.yml");
+    const readonlyJob = workflow.split("  e2e-prod-readonly:", 2)[1]?.split("  e2e-prod-token-smoke:", 1)[0] ?? "";
+
+    expect(readonlyJob).not.toBe("");
+    expect(readonlyJob).not.toContain("PLAYWRIGHT_API_KEY");
+    expect(readonlyJob).not.toContain("secrets.");
+    expect(readonlyJob).not.toContain("@token-smoke");
   });
 
   it("skips authenticated production checks when only the demo key is present", () => {

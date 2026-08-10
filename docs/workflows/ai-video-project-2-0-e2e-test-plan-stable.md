@@ -3,7 +3,7 @@ title: AI Video Project 2.0 E2E 测试计划
 doc_type: workflow
 module: ai-video-2.0
 topic: e2e-test-plan
-status: stable
+status: historical
 created: 2026-06-06
 updated: 2026-06-26
 owner: self
@@ -11,6 +11,9 @@ source: human+ai
 ---
 
 # AI Video Project 2.0 E2E 测试计划
+
+> 历史证据：不作为当前执行入口。本文中的 P2/C21/L4C 命令均已退役，
+> 当前任何 provider mutation 只能使用全新的 W5 exact-authorization 计划。
 
 ## 目标
 

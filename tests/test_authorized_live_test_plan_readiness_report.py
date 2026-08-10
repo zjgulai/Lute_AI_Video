@@ -22,7 +22,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "build_authorized_live_test_plan_readiness_report.py"
 
 
-def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_script(
+    *args: str, extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     clean_env = {
         key: value
         for key, value in os.environ.items()
@@ -39,6 +41,8 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
             ACCOUNT_READINESS_RECORD_ENV,
         }
     }
+    if extra_env:
+        clean_env.update(extra_env)
     return subprocess.run(
         [sys.executable, str(SCRIPT_PATH), *args],
         cwd=REPO_ROOT,
@@ -60,11 +64,12 @@ def test_default_report_is_ready_for_discussion_but_not_live_execution():
     assert report["ready_for_test_plan_discussion"] is True
     assert report["ready_for_live_execution"] is False
     assert report["provider_call_allowed"] is False
+    assert report["execution_allowed"] is False
+    assert report["replacement"] == "fresh governed W5 exact-authorization plan"
     assert report["required_authorization_statement"] == _approval_statement()
     assert report["required_private_records"]["approval_record_env"] == APPROVAL_RECORD_ENV
     assert report["required_private_records"]["account_readiness_record_env"] == ACCOUNT_READINESS_RECORD_ENV
-    assert report["required_runtime_env"]["CONFIRM_P2_TOKEN_SMOKE"] == "1"
-    assert report["required_runtime_env"][RUN_TOKEN_SMOKE_ENV] == "1"
+    assert report["required_runtime_env"] == {}
     assert report["sample_plan"]["sample_plan_ref"] == SAMPLE_PLAN_REF
     assert report["sample_plan"]["limits"]["max_provider_calls"] == 4
     assert report["sample_plan"]["limits"]["max_total_cost_usd"] == 3.0
@@ -90,24 +95,38 @@ def test_default_report_lists_all_discussion_artifacts_and_execution_blockers():
 
     for ref in [
         "docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md",
-        "docs/runbooks/p2-recharge-smoke-checklist.md",
         "scripts/commercial_token_smoke_preflight.py",
         "scripts/build_authorized_live_approval_record.py",
         "scripts/build_provider_account_readiness_record.py",
         "scripts/build_authorized_live_smoke_packet.py",
-        "scripts/p2_recharge_smoke_checklist.py",
         SAMPLE_PLAN_REF,
         PROVIDER_REVALIDATION_REF,
     ]:
         assert artifact_status[ref] == "pass"
 
-    assert "exact_c21_authorization_statement" in blocker_names
-    assert "production_backend_keys" in blocker_names
-    assert "double_execute_flags" in blocker_names
-    assert "run_token_smoke" in blocker_names
-    assert "authorized_live_approval" in blocker_names
-    assert "api_key:POYO_API_KEY" in blocker_names
-    assert "provider_account_readiness" in blocker_names
+    assert blocker_names == {"legacy_execution_retired"}
+
+
+def test_hostile_legacy_env_cannot_produce_provider_permission() -> None:
+    hostile = {
+        "CONFIRM_P2_TOKEN_SMOKE": "1",
+        RUN_TOKEN_SMOKE_ENV: "1",
+        "API_KEY": "sk_fixture_secret",
+        "PLAYWRIGHT_API_KEY": "sk_fixture_secret",
+        "POYO_API_KEY": "sk_fixture_secret",
+        "DEEPSEEK_API_KEY": "sk_fixture_secret",
+        "SILICONFLOW_API_KEY": "sk_fixture_secret",
+    }
+    result = _run_script(extra_env=hostile)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["provider_call_allowed"] is False
+    assert report["execution_allowed"] is False
+    assert report["preflight_env_source"] == "empty"
+
+    rejected = _run_script("--preflight-env", "current", extra_env=hostile)
+    assert rejected.returncode == 2
+    assert "invalid choice" in rejected.stderr
 
 
 def test_report_output_must_stay_private(tmp_path: Path):

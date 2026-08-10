@@ -1,8 +1,10 @@
 # Multi-stage Dockerfile for AI Video frontend
 # P3-3: Pre-built image — no runtime dependency install/build
 
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
 # ── Stage 1: Build ──
-FROM node:22-alpine AS builder
+FROM ${NODE_IMAGE} AS builder
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -22,10 +24,12 @@ ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
 RUN npm run build
 
 # ── Stage 2: Runtime ──
-FROM node:22-alpine AS runner
+FROM ${NODE_IMAGE} AS runner
 
 ARG RELEASE_SOURCE_SHA
-LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
+ARG APP_VERSION
+LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -46,14 +50,16 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
     && test ! -e /usr/local/lib/node_modules/npm
 
 # Copy only the production artifacts
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+COPY --chown=1000:1000 --from=builder /app/.next/standalone ./
+COPY --chown=1000:1000 --from=builder /app/.next/static ./.next/static
+COPY --chown=1000:1000 --from=builder /app/public ./public
 
 # P3-6: Health check (use 127.0.0.1 to avoid IPv6 ::1 fallback)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000 || exit 1
 
 EXPOSE 3000
+
+USER 1000:1000
 
 CMD ["node", "server.js"]

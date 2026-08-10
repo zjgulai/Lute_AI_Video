@@ -2,7 +2,8 @@
 title: 已知缺口与待办清单
 doc_type: knowledge
 module: project
-status: stable
+topic: historical-known-gaps-ledger
+status: historical
 created: 2026-05-08
 updated: 2026-07-10
 owner: self
@@ -10,6 +11,10 @@ source: human+ai
 ---
 
 # 已知缺口与待办清单
+
+> **Historical append-only ledger — 不作为当前执行入口。** 当前可执行待办只见
+> [`docs/backlog/current.md`](../backlog/current.md)。本文件保留历史事实、收据与当时
+> 判断，不再承担当前优先级或发布授权。
 
 ## 2026-07-10 备份与密钥部署门禁（历史审计与修复过程）
 

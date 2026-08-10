@@ -133,15 +133,27 @@ def test_codegraph_workspace_state_is_ignored_and_never_tracked() -> None:
 def test_release_rsync_tree_preserves_every_tracked_source_manifest_entry(
     tmp_path: Path,
 ) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    source_archive = tmp_path / "source.tar"
+    subprocess.run(
+        ["git", "archive", "--format=tar", "-o", str(source_archive), "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    subprocess.run(
+        ["tar", "-xf", str(source_archive), "-C", str(source_root)],
+        check=True,
+    )
     tracked = subprocess.run(
-        ["git", "ls-files", "-z"],
+        ["git", "ls-tree", "-r", "--name-only", "-z", "HEAD"],
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,
         text=True,
     ).stdout.split("\0")
     tracked = [path for path in tracked if path]
-    manifest = build_source_manifest(REPO_ROOT, "0" * 40, tracked)
+    manifest = build_source_manifest(source_root, "0" * 40, tracked)
     release_root = tmp_path / "release"
     release_root.mkdir()
     file_list = tmp_path / "tracked-files.zlist"
@@ -157,7 +169,7 @@ def test_release_rsync_tree_preserves_every_tracked_source_manifest_entry(
             "--from0",
             f"--files-from={file_list}",
             f"--exclude-from={exclude_list}",
-            f"{REPO_ROOT}/",
+            f"{source_root}/",
             f"{release_root}/",
         ],
         check=True,

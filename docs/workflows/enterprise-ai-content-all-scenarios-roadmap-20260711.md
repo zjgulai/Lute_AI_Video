@@ -5,7 +5,7 @@ module: project
 topic: enterprise-ai-content-all-scenarios-closure
 status: stable
 created: 2026-07-11
-updated: 2026-07-21
+updated: 2026-08-01
 owner: self
 source: human+ai
 ---
@@ -29,6 +29,17 @@ source: human+ai
 执行分支：`codex/enterprise-ai-content-closure-20260711`。
 
 默认禁止：provider submit、生产数据库写入、live deploy、publish、webhook send、delivery acceptance、metrics live pull、证书/私钥操作、off-host backup 实际上传。
+
+2026-08-01 当前收口入口已拆分为：
+
+- `docs/backlog/current.md`：当前待办和外部门禁；
+- `docs/claude/known-gaps-stable.md`：append-only 历史，不作为当前执行入口；
+- `docs/runbooks/production-operations.md`：deploy / DR / token smoke 唯一当前索引；
+- `docs/release/current.md`：semantic version 与 exact source revision 的独立身份。
+
+W4-09–W4-13 已完成本地实现、全量 source/application release lane 与十轮同线程
+独立六维复验，状态为 `completed_local / independent_review=true`。fresh combined image
+仍因 Docker Hub OAuth 外部不可达而缺少本候选镜像证据；生产与 Git 未变化。
 
 ## 2. Wave 0 — 基线、设计与治理
 
@@ -176,11 +187,11 @@ source: human+ai
 
 ### 6.2 文档、版本和安全事实源
 
-- [ ] `pending_local` W4-09：版本由单一构建源生成，在 backend health、web package、tag、release notes、AGENTS/README 一致。
-- [ ] `pending_local` W4-10：API key/test-bundle/tenant/admin 权限合同以代码测试为准，同步 AGENTS、CLAUDE 和 Creation Guide。
-- [ ] `pending_local` W4-11：建立唯一 canonical deploy/DR/token-smoke SOP；旧 `status: stable` 破坏性文档改 historical/archived，删除可复制 live 命令。
-- [ ] `pending_local` W4-12：CI 文档治理禁止 active docs 出现 live `down --volumes`、未预览 `rsync --delete` 和 `.env.prod` key 提取。
-- [ ] `pending_local` W4-13：把 `known-gaps` 拆为 current backlog 和 append-only history；ignored agent-local journals 仅保留指向当前 tracked 路线图的可选指针。
+- [x] `completed_local` W4-09：版本由 `pyproject.toml` 单一构建源检查，在 backend health、web package、OCI labels、release identity、AGENTS/README 一致；source revision 独立暴露，expected tag 尚未创建。
+- [x] `completed_local` W4-10：API key/test-bundle/tenant/admin 权限合同已按代码建立并同步 AGENTS、CLAUDE 和 Creation Guide；未把 demo/test key 表述为生产凭据。
+- [x] `completed_local` W4-11：唯一 canonical deploy/DR/token-smoke 索引已建立；重复/破坏性 stable SOP 已改为无命令 historical pointer，历史执行源码由 Git history 保存。
+- [x] `completed_local` W4-12：CI governance 已禁止 active surfaces 出现 live volume delete、不安全 SSH、secret extraction、repo-root key 与直接 destructive rsync；W5 是唯一当前 paid-provider mutation path。
+- [x] `completed_local` W4-13：current backlog 已与 append-only history 分离，ignored journals 保持 optional。十轮同线程独立复验最终 `PASS / APPROVE`、`accepted_actionable_findings=0`；fresh combined image 仍因 Docker Hub OAuth 外部不可达而无本候选镜像证据。
 
 ## 7. Wave 5 — Fast 与 S1–S5 纵向验收
 

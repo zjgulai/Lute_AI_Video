@@ -2,11 +2,13 @@
 
 ## Overview
 
-**Short Video Agent** (v0.2.4) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
+**Short Video Agent** (2.0.0) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics. `pyproject.toml` is the semantic-version authority; `v2.0.0` is only the expected tag until an authorized release creates it. Runtime identity also requires the exact source revision.
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
-**Current status (2026-05-11, v0.2.4):** Production live at `https://101.34.52.232` on Tencent Lighthouse. 6 scenarios (Fast Mode + S1-S5) verified end-to-end in non-demo mode. Quality system in observe mode (frame variance, AV sync, video specs).
+**Current status:** the canonical domain is `https://video.lute-tlz-dddd.top`. Production health and the current local candidate are separate evidence layers; see `docs/backlog/current.md` and `docs/release/current.md` before making release claims.
+
+**Authentication authority:** a database-backed tenant API key may contain only `all`, `provider:submit`, `artifact:accept`, or `artifact:publish`; the private environment fallback is default-tenant compatibility with `all`; the test-bundle key is local/test-only, rejected in production by default, and has `all` only under explicit exceptional enablement; admin cookie + CSRF is a separate authentication plane.
 
 **Recent releases (v0.2.0 → v0.2.4):**
 - **v0.2.4** (`7daadc1`, 2026-05-11) — Brand assets Phase 2-4: rich product metadata in `/api/portfolio/?kind=brand_kit` (title/price/description/source URL via LRU `info.json`), new `/api/portfolio/brand-presets?brand=X` endpoint, `QuickTemplate` consumes API + falls back to demo data, refresh script + cron runbook.
@@ -16,7 +18,7 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
 - **v0.2.0 baseline** (2026-05-09) — 6 scenarios E2E verified, S2/S4 production crashes fixed, frontend UX v2 (4-tab nav, `/works` + `/library`).
 
 > 历史更新记录见 `docs/claude/updates/project-updates-202605-stable.md`。
-> 已知缺口与下一步计划见 `docs/claude/known-gaps-stable.md`；当前企业内容收敛入口见 `docs/workflows/enterprise-ai-content-all-scenarios-roadmap-20260711.md`。
+> 当前待办见 `docs/backlog/current.md`；`docs/claude/known-gaps-stable.md` 仅保留 append-only 历史；企业内容收敛入口见 `docs/workflows/enterprise-ai-content-all-scenarios-roadmap-20260711.md`。
 > Claude Code Agent 体系与项目标准见 `docs/claude/project-standard-stable.md`。
 > 详细生产部署指南见 `docs/workflows/deploy-lighthouse-stable.md` + `docs/runbooks/README.md`。
 > 架构决策见 `docs/architecture/adr/README.md`。
@@ -334,7 +336,7 @@ The app is created at module level with 5 middleware layers:
 2. **Rate Limiting** (P3-1) — 120 requests per 60s per IP, skips `/health`
 3. **Request Logging** — logs method, path, status, duration for every request
 4. **Response Wrapper** (P-TEST) — injects `_meta` {trace_id, duration_ms, version, timestamp} into all JSON responses, echoes `X-Client-Trace-Id` as `X-Trace-Id`
-5. **API Key Auth** — `verify_api_key` dependency applied to most routers. `API_KEY` 是按用户分发的全权限凭证(每个开通的租户/用户拿一组独立 key),没有"低权限只读 key"的概念。生产 `.env.prod` 当前 `API_KEY=ai_video_demo_2026`,这就是真实 key 字符串、不是 demo 限制标记;以后随着租户开通会变更。模型矩阵(DeepSeek + POYO + SiliconFlow CosyVoice)由后端环境统一管理,不随 key 切换。
+5. **API Key Auth** — `verify_api_key` protects tenant routers. Database tenant keys are permission-scoped; the private environment fallback has `all`; the test-bundle key is rejected in production by default and is never documented as a real production credential. Admin authentication remains separate cookie + CSRF.
 
 Routers are mounted on startup:
 

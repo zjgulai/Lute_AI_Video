@@ -428,7 +428,7 @@ export default function SettingsPanel({ onClose }: Props) {
                         type="password"
                         value={key}
                         onChange={(e) => setKey(e.target.value)}
-                        placeholder="ai_video_demo_2026"
+                        placeholder="tenant-api-key"
                         className="apple-input text-sm"
                         autoComplete="current-password"
                         aria-describedby={apiKeyHintId}

@@ -74,7 +74,7 @@ def test_production_token_workflow_is_single_spec_and_environment_protected():
         "${{ secrets.PROD_TOKEN_SMOKE_API_KEY }}"
     ) == 2
     assert "inputs.base_url" not in yaml.safe_dump(token_job)
-    assert "github.ref == 'refs/heads/main'" in token_job["if"]
+    assert token_job["if"] == "${{ false }}"
     assert workflow["concurrency"] == {
         "group": "e2e-prod-production",
         "cancel-in-progress": False,

@@ -1,0 +1,28 @@
+# Dependencies and build outputs are recreated inside the image.
+node_modules/
+.next/
+out/
+dist/
+
+# Test, coverage, and local runtime artifacts are never build inputs.
+coverage/
+playwright-report/
+test-results/
+blob-report/
+tmp/
+*.log
+
+# Local environment and private-key material must never enter the Next.js
+# builder context. Next automatically loads .env* files during `next build`.
+.env*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Local source-control and workstation metadata.
+.git/
+.gitignore
+.DS_Store

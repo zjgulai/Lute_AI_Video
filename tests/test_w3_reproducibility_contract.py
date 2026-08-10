@@ -97,11 +97,17 @@ def test_pyproject_and_uv_lock_cover_the_full_production_dependency_set() -> Non
 
 
 def test_backend_images_use_digest_pinned_python_and_locked_uv_sync() -> None:
-    expected_prefix = f"FROM python:{PINNED_PYTHON}-slim-trixie@sha256:"
+    expected_prefix = f"ARG PYTHON_IMAGE=python:{PINNED_PYTHON}-slim-trixie@sha256:"
     for path in BACKEND_DOCKERFILES:
         text = path.read_text()
         assert text.startswith(expected_prefix), path.name
-        assert re.search(r"^FROM python:.*@sha256:[0-9a-f]{64}$", text, re.MULTILINE)
+        assert re.search(
+            rf"^ARG PYTHON_IMAGE=python:{re.escape(PINNED_PYTHON)}"
+            r"-slim-trixie@sha256:[0-9a-f]{64}$",
+            text,
+            re.MULTILINE,
+        )
+        assert text.count("FROM ${PYTHON_IMAGE}") == 2
         assert "COPY pyproject.toml uv.lock ./" in text
         assert "uv sync --locked --no-dev" in text
         assert 'ENV PATH="/app/.venv/bin:$PATH"' in text

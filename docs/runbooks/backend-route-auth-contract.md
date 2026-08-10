@@ -5,7 +5,7 @@ module: backend
 topic: route-auth-contract
 status: stable
 created: 2026-05-31
-updated: 2026-07-22
+updated: 2026-08-01
 owner: self
 source: human+ai
 ---
@@ -19,6 +19,13 @@ source: human+ai
 ## 当前契约
 
 契约文件：`configs/backend-route-auth-contract.yaml`
+
+权限语义的机器契约是 `configs/auth-permission-contract.json`，源码权威是
+`src/routers/_deps.py`。database-backed tenant API key 只识别 `all`、
+`provider:submit`、`artifact:accept`、`artifact:publish`；private environment fallback
+是 default tenant 的兼容入口并具有 `all`；test-bundle key 仅用于本地/测试，
+生产默认拒绝，只有显式例外开关才接受且同样具有 `all`，绝不是 public read-only key；
+admin cookie + CSRF 属于完全独立的鉴权平面。文档不得记录任何真实 key 值。
 
 公开路由只能出现在 `public_routes`：
 

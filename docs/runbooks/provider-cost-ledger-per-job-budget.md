@@ -171,46 +171,18 @@ rollout 必须由 owner 单独授权，并严格按以下顺序执行：
 本地/fixture 验证不得读取 `.env`、生产 DSN 或 credential，不执行真实 provider
 request、生产 migration、deploy、publish、delivery 或 reconciliation。
 
-## 6. W1-31 exact gate 与本地证据
+## 6. W1-31 历史证据边界
 
-W1-31 使用独立入口
-`scripts/w1_31_provider_billing_reconciliation.py`，只允许一个 PoYo
-`gpt-image-2` low/1K/1-image 样本。它不复用 C21 的 3-image + 1-video harness，
-也不接受动态 provider/model/quality/resolution/budget。
+W1-31 的 provider mutation 已永久退役。保留的
+`scripts/w1_31_provider_billing_reconciliation.py` 只允许无网络 preflight；任何
+execute 请求都固定返回 `w1_31_execution_retired`，不能因 key、余额、旧 approval
+或确认变量而恢复。
 
-Live 前必须全部满足：
-
-1. 使用 `scripts/build_w1_31_billing_approval.py` 生成 `tmp/` 或仓库外的 `0600`
-   private record；
-2. `approved_by` 与 `confirmed_by` 是两个不同的具体人类，第二确认人于 30 分钟内
-   人工确认可用 credits 至少为 2；
-3. 24 小时内重新检查 PoYo model/API/status 官方页面，仍为 2 credits / `$0.01`；
-4. exact authorization statement、`max_provider_calls=1`、`max_retries=0`、两小时内
-   expiry 与 `$0.01` hard cap 全部匹配；
-5. `POYO_API_KEY` 通过 presence-only 检查；不得打印 value，也不得从 `.env` 加载；
-6. no-token preflight 为 `blocked=false`，且 code-owned consumption marker 不存在。
-
-执行命令还需显式设置 `AI_VIDEO_W1_31_EXECUTE=1` 并传 `--execute`。runner 在
-provider client construction 前以 `O_EXCL` 创建 approval-ID-bound `0600` marker；
-无论后续是否 submit、是否返回 task ID、是否成功 settle，该 approval 都不得复用。
-同一 task 的 status/download 可以有界重试，但 mutation 只能发生一次。
-
-如果执行进程在 summary 前终止，不得复用 approval。使用
-`scripts/read_w1_31_billing_ledger.py --run-directory <private-run-dir>` 只读重开
-SQLite ledger；该命令不读取 key、不调用 provider，只报告 bounded account/attempt
-事实，供人工决定是否需要新的 reconciliation 授权。
-
-只有官方 expected 2 credits / `$0.01`、terminal `credits_amount=2_000_000`、本地
-ledger `settled=10_000_000` USD nanos 且 conservation 完全一致，才可记录
-`single_task_charge_reconciled=true`。这仍不是月账单或 invoice 对账；报告必须保留
-`invoice_reconciliation=false`、`production_unchanged=true`。
-
-当前实现的成功路径仍只有 local/fake-transport evidence。2026-07-19 的唯一真实
-mutation 是 L4 authorized-live failed attempt：`provider_attempt_made=true`，但
-`billing_reconciliation=false`、`invoice_reconciliation=false`，authority 已消费，
-ledger 为 `ambiguous`。不得声称零扣费、task 一定未创建、credential 有效或 403
-根因已知；任何 repaired attempt 都需要新的 exact authorization 与 fresh dual-human
-funded evidence。
+2026-07-19 的唯一真实 mutation 仍是历史 ambiguous evidence：authority 已消费，
+`provider_attempt_made=true`、`billing_reconciliation=false`、
+`invoice_reconciliation=false`。不得声称零扣费、task 一定未创建、credential
+有效或 403 根因已知。任何新 provider 验证必须建立全新的 W5
+exact-authorization plan；不得修复、复制或重新启用 W1-31 runner。
 
 ## 7. 相关文档
 

@@ -5,7 +5,7 @@ module: project
 topic: root-directory-governance
 status: stable
 created: 2026-06-01
-updated: 2026-07-22
+updated: 2026-07-29
 owner: self
 source: human+ai
 ---
@@ -67,6 +67,7 @@ source: human+ai
 | `.github` | config |
 | `configs` | config |
 | `deploy` | deployment_directory |
+| `docker` | source_directory |
 | `docs` | project_asset_directory |
 | `eval` | test_directory |
 | `migrations` | config |

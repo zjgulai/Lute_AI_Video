@@ -88,4 +88,5 @@ GitHub-hosted workflow 的 JavaScript actions 必须使用 Node 24-compatible ma
 ## 永久 fix
 
 - 所有 Docker 预检变更必须先更新 `tests/test_docker_no_token_preflight.py`。
-- 真 provider smoke 只能留在 P2 充值后的显式手动流程，不能混入 Docker build / compose config 预检。
+- 真 provider smoke 只能使用全新的 W5 exact-authorization 计划，不能混入
+  Docker build / compose config 预检；充值、key 或旧 P2/L4C 开关不授予执行权限。

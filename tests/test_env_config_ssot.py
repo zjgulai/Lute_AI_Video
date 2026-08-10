@@ -26,7 +26,6 @@ ACTIVE_ENV_DOCS = [
     REPO_ROOT / "docs" / "knowledge" / "local-vs-production-stable.md",
     REPO_ROOT / "docs" / "workflows" / "deploy-lighthouse-stable.md",
     REPO_ROOT / "docs" / "workflows" / "deploy-test-sop-stable.md",
-    REPO_ROOT / "docs" / "runbooks" / "p2-recharge-smoke-checklist.md",
     REPO_ROOT / "docs" / "runbooks" / "production-e2e-token-smoke.md",
 ]
 

@@ -7,7 +7,6 @@ import argparse
 import contextlib
 import io
 import json
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,7 +14,6 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE_URL = "https://video.lute-tlz-dddd.top"
-CONFIRM_ENV = "CONFIRM_P2_TOKEN_SMOKE"
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -31,20 +29,16 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
         DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
         DEFAULT_AUTH_TEST_SCOPE,
         PROVIDER_REVALIDATION_REF,
-        REQUIRED_API_KEY_ENVS,
-        RUN_TOKEN_SMOKE_ENV,
         SAMPLE_PLAN_REF,
         build_token_smoke_preflight_report,
     )
 
 DISCUSSION_ARTIFACT_REFS = (
     "docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md",
-    "docs/runbooks/p2-recharge-smoke-checklist.md",
     "scripts/commercial_token_smoke_preflight.py",
     "scripts/build_authorized_live_approval_record.py",
     "scripts/build_provider_account_readiness_record.py",
     "scripts/build_authorized_live_smoke_packet.py",
-    "scripts/p2_recharge_smoke_checklist.py",
     SAMPLE_PLAN_REF,
     PROVIDER_REVALIDATION_REF,
 )
@@ -60,9 +54,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--budget-limit", default=DEFAULT_AUTH_BUDGET_LIMIT)
     parser.add_argument(
         "--preflight-env",
-        choices=("empty", "current"),
+        choices=("empty",),
         default="empty",
-        help="Use empty env for deterministic blocked proof, or current process env.",
+        help="Legacy readiness is observation-only and always uses an empty environment.",
     )
     parser.add_argument("--output", type=Path, help="Optional JSON output path; must be under tmp/ or outside repo.")
     parser.add_argument("--force", action="store_true", help="Overwrite an existing output file.")
@@ -127,35 +121,6 @@ def _compact_sample_plan(payload: dict[str, Any] | None) -> dict[str, Any] | Non
     }
 
 
-def _execution_blockers(preflight: dict[str, Any]) -> list[dict[str, Any]]:
-    blockers = [
-        {
-            "name": "exact_c21_authorization_statement",
-            "detail": "The user must provide the exact C21 authorization statement in the current discussion.",
-            "evidence_refs": ["required_authorization_statement"],
-        },
-        {
-            "name": "production_backend_keys",
-            "detail": "API_KEY and PLAYWRIGHT_API_KEY must be non-demo production keys.",
-            "evidence_refs": ["API_KEY", "PLAYWRIGHT_API_KEY"],
-        },
-        {
-            "name": "double_execute_flags",
-            "detail": "CONFIRM_P2_TOKEN_SMOKE=1 and RUN_TOKEN_SMOKE=1 are required for execute mode.",
-            "evidence_refs": [CONFIRM_ENV, RUN_TOKEN_SMOKE_ENV],
-        },
-    ]
-    for check in preflight.get("checks", []):
-        if not isinstance(check, dict) or check.get("status") != "block":
-            continue
-        blockers.append({
-            "name": str(check.get("name", "preflight_check")),
-            "detail": str(check.get("detail", "")),
-            "evidence_refs": check.get("evidence_refs", []),
-        })
-    return blockers
-
-
 def _build_report(args: argparse.Namespace) -> dict[str, Any]:
     authorization_statement = APPROVAL_STATEMENT_TEMPLATE.format(
         provider_model_scope=args.provider_model_scope,
@@ -165,18 +130,19 @@ def _build_report(args: argparse.Namespace) -> dict[str, Any]:
     artifact_checks = _artifact_checks()
     sample_plan, sample_plan_error = _load_json_ref(SAMPLE_PLAN_REF)
     provider_revalidation, provider_revalidation_error = _load_json_ref(PROVIDER_REVALIDATION_REF)
-    preflight_env = os.environ if args.preflight_env == "current" else {}
-    preflight = build_token_smoke_preflight_report(env=preflight_env).model_dump(mode="json")
+    preflight = build_token_smoke_preflight_report(env={}).model_dump(mode="json")
     artifact_ready = all(check["status"] == "pass" for check in artifact_checks)
     contract_ready = sample_plan_error is None and provider_revalidation_error is None
     discussion_ready = artifact_ready and contract_ready
-    live_execution_ready = discussion_ready and preflight["provider_call_allowed"] is True
+    live_execution_ready = False
 
     return {
         "report_id": f"authorized_live_test_plan_readiness_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
         "evidence_level": "L2-fixture-or-dry-run",
         "no_provider_call": True,
-        "provider_call_allowed": preflight["provider_call_allowed"],
+        "provider_call_allowed": False,
+        "execution_allowed": False,
+        "replacement": "fresh governed W5 exact-authorization plan",
         "ready_for_test_plan_discussion": discussion_ready,
         "ready_for_live_execution": live_execution_ready,
         "preflight_env_source": args.preflight_env,
@@ -192,13 +158,7 @@ def _build_report(args: argparse.Namespace) -> dict[str, Any]:
             "account_readiness_record_env": ACCOUNT_READINESS_RECORD_ENV,
             "output_location_rule": "private records must stay under tmp/ or outside the repository",
         },
-        "required_runtime_env": {
-            CONFIRM_ENV: "1",
-            RUN_TOKEN_SMOKE_ENV: "1",
-            "API_KEY": "non-demo production backend key",
-            "PLAYWRIGHT_API_KEY": "non-demo production Playwright key",
-            **{env_name: "configured; value is never printed by this report" for env_name in REQUIRED_API_KEY_ENVS},
-        },
+        "required_runtime_env": {},
         "discussion_artifacts": artifact_checks,
         "contract_errors": [error for error in (sample_plan_error, provider_revalidation_error) if error],
         "sample_plan": _compact_sample_plan(sample_plan),
@@ -208,7 +168,13 @@ def _build_report(args: argparse.Namespace) -> dict[str, Any]:
             "evidence_level": provider_revalidation.get("evidence_level") if provider_revalidation else None,
         },
         "preflight_projection": preflight,
-        "execution_blockers": [] if live_execution_ready else _execution_blockers(preflight),
+        "execution_blockers": [
+            {
+                "name": "legacy_execution_retired",
+                "detail": "P2/C21 cannot execute; create a fresh governed W5 exact-authorization plan.",
+                "evidence_refs": ["replacement"],
+            }
+        ],
         "supported_claims": [
             "The project has enough no-token artifacts to discuss the formal authorized-live smoke test plan.",
             "The report itself does not contact provider APIs, validate account balance, or generate media.",

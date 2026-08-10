@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-01",
+  "updated": "2026-08-01",
   "runbook": "docs/runbooks/markdown-frontmatter-compliance.md",
   "scanned_globs": [
     "docs/**/*.md",
@@ -26,7 +26,9 @@
     "other"
   ],
   "allowed_statuses": [
+    "active",
     "draft",
+    "historical",
     "review",
     "stable",
     "deprecated",
@@ -52,7 +54,6 @@
     {"path": "docs/architecture/poyo-model-matrix-stable.md", "status": "legacy_backfill_required", "issues": ["missing:title"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/architecture/product-architecture.md", "status": "legacy_backfill_required", "issues": ["missing_frontmatter"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/architecture/quality-score-feedback-loop-2026-05-15.md", "status": "legacy_backfill_required", "issues": ["missing:title"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
-    {"path": "docs/claude/known-gaps-stable.md", "status": "legacy_backfill_required", "issues": ["missing:topic"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/claude/project-standard-stable.md", "status": "legacy_backfill_required", "issues": ["missing:topic"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/claude/updates/project-updates-202605-stable.md", "status": "legacy_backfill_required", "issues": ["missing:topic"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/demo/run-book.md", "status": "legacy_backfill_required", "issues": ["missing_frontmatter"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
@@ -96,8 +97,6 @@
     {"path": "docs/workflows/2026-05-14-poyo-constrained-optimization-roadmap.md", "status": "legacy_backfill_required", "issues": ["missing:title"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/workflows/2026-05-15-sprint-0-3-review-and-deploy-plan.md", "status": "legacy_backfill_required", "issues": ["missing:title"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/workflows/brand-story-workflow.md", "status": "legacy_backfill_required", "issues": ["missing:created", "missing:doc_type", "missing:module", "missing:owner", "missing:source", "missing:status", "missing:title", "missing:topic", "missing:updated"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
-    {"path": "docs/workflows/deploy-lighthouse-stable.md", "status": "legacy_backfill_required", "issues": ["missing:topic"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
-    {"path": "docs/workflows/deploy-test-sop-stable.md", "status": "legacy_backfill_required", "issues": ["missing:topic"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."},
     {"path": "docs/workflows/portfolio-ops-stable.md", "status": "legacy_backfill_required", "issues": ["missing:topic"], "reason": "Existing tracked Markdown predates the frontmatter gate; backfill in a focused documentation pass."}
   ]
 }

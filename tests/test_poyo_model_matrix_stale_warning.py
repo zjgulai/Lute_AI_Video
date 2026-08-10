@@ -71,7 +71,8 @@ def test_poyo_model_matrix_runbook_documents_revalidation_workflow() -> None:
     assert "tests/test_poyo_model_matrix_stale_warning.py" in runbook_text
     assert "poyo.ai 当前产品页面/API 文档" in runbook_text
     assert "充值" in runbook_text
-    assert "RUN_TOKEN_SMOKE=1" in runbook_text
+    assert "W5 exact-authorization" in runbook_text
+    assert "充值或 key 存在不授予执行权限" in runbook_text
     assert "不执行" in runbook_text
 
 

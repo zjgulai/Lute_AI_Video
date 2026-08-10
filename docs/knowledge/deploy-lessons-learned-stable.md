@@ -3,7 +3,7 @@ title: 腾讯云部署错误教训与根因分析
 doc_type: knowledge
 module: deploy
 topic: lighthouse-deployment-mistakes
-status: stable
+status: historical
 created: 2026-04-30
 updated: 2026-07-09
 owner: self
@@ -11,6 +11,9 @@ source: human+ai
 ---
 
 # 腾讯云部署错误教训与根因分析
+
+> Historical incident evidence only. This document is not a current execution
+> entrypoint; use `docs/runbooks/production-operations.md` for every live action.
 
 本文档记录 2026-04-29 至 2026-04-30 期间在腾讯云 Lighthouse 服务器部署 AI Video 项目时发生的全部错误、根因和修复方案。所有教训必须作为 checklist 在后续部署中逐项确认。
 

@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from src._version import APP_VERSION
+from src._version import APP_SOURCE_REVISION, APP_VERSION
 
 try:
     from src.storage.db import (  # noqa: F401  # availability sentinel; reimported inside body
@@ -28,7 +28,11 @@ _RENDERER_HEALTH_PROBE_TIMEOUT_SECONDS = 25.0
 async def liveness() -> dict[str, Any]:
     """Process-only liveness; never probes dependencies."""
 
-    return {"status": "alive", "version": APP_VERSION}
+    return {
+        "status": "alive",
+        "version": APP_VERSION,
+        "source_revision": APP_SOURCE_REVISION,
+    }
 
 
 @router.get("/health/ready")
@@ -50,6 +54,7 @@ async def readiness() -> JSONResponse:
         {
             "status": "ready" if ready else "not_ready",
             "version": APP_VERSION,
+            "source_revision": APP_SOURCE_REVISION,
             "persistence": database,
         }
     )
@@ -218,6 +223,7 @@ async def health():
     return _sanitize_health_payload({
         "status": "ok",
         "version": APP_VERSION,
+        "source_revision": APP_SOURCE_REVISION,
         "remotion": remotion_env,
         "persistence": persistence_status,
         "media_tools": media_tools,

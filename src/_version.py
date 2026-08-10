@@ -19,17 +19,37 @@ def _read_pyproject_version() -> str | None:
 
 
 def get_version() -> str:
-    env_override = os.environ.get("APP_VERSION", "").strip()
-    if env_override:
-        return env_override
+    pyproject_version = _read_pyproject_version()
+    package_version: str | None = None
     try:
-        return version("short-video-agent")
+        package_version = version("short-video-agent")
     except PackageNotFoundError:
         pass
-    pyproject_version = _read_pyproject_version()
-    if pyproject_version:
-        return pyproject_version
+
+    if pyproject_version and package_version and package_version != pyproject_version:
+        raise RuntimeError("installed package version does not match pyproject authority")
+
+    canonical = pyproject_version or package_version
+    env_override = os.environ.get("APP_VERSION", "").strip()
+    if env_override:
+        if canonical and env_override != canonical:
+            raise RuntimeError("APP_VERSION does not match pyproject authority")
+        return env_override
+    if canonical:
+        return canonical
     return "0.0.0+dev"
 
 
+def get_source_revision() -> str:
+    """Return a public, non-secret release revision without trusting free text."""
+
+    value = os.environ.get("RELEASE_SOURCE_SHA", "").strip().lower()
+    if re.fullmatch(r"[0-9a-f]{40}", value):
+        return value
+    if value == "local-dev-dirty":
+        return value
+    return "unavailable"
+
+
 APP_VERSION = get_version()
+APP_SOURCE_REVISION = get_source_revision()

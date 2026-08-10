@@ -49,7 +49,9 @@ The script explicitly clears external provider and publishing credentials:
 - `SHOPIFY_PUBLISH_ENABLED`
 - `SUPABASE_SERVICE_KEY`
 
-Do not add production URLs, `RUN_TOKEN_SMOKE=1`, curl commands or scenario submit smoke calls to this script. Real generation remains P2 after POYO recharge.
+Do not add production URLs, legacy token-smoke flags, curl commands or scenario
+submit smoke calls to this script. Real generation requires a fresh governed W5
+exact-authorization plan; recharge or key presence grants no authority.
 
 ## Covered Files
 

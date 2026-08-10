@@ -459,7 +459,7 @@ class TestDeployWorkflow:
 
     def test_frontend_release_image_binds_its_loopback_health_probe(self):
         dockerfile = (REPO_ROOT / "web/Dockerfile").read_text()
-        runner = dockerfile.split("FROM node:22-alpine AS runner", 1)[1]
+        runner = dockerfile.split("FROM ${NODE_IMAGE} AS runner", 1)[1]
         runtime = runner.split("\nFROM ", 1)[0]
 
         assert "\nENV HOSTNAME=0.0.0.0\n" in f"\n{runtime}\n"
@@ -473,7 +473,7 @@ class TestDeployWorkflow:
             "/usr/local/bin/npm /usr/local/bin/npx"
         )
         frontend_runner = (REPO_ROOT / "web/Dockerfile").read_text().split(
-            "FROM node:22-alpine AS runner", 1
+            "FROM ${NODE_IMAGE} AS runner", 1
         )[1]
         rendering = RENDERING_DOCKERFILE.read_text()
 
@@ -558,7 +558,8 @@ class TestDeployWorkflow:
 
         smoke = (REPO_ROOT / "deploy/lighthouse/smoke.sh").read_text()
         assert "200|500" not in smoke
-        assert "expected 200, got" in smoke
+        assert "provider_call=false" in smoke
+        assert "/api/fast/generate" not in smoke
 
     def test_lighthouse_rendering_build_pins_fixed_google_chrome(self):
         dockerfile = RENDERING_DOCKERFILE.read_text()
@@ -599,7 +600,9 @@ class TestDeployWorkflow:
         assert "[2/8] Entering AI Video maintenance while preserving shared ingress" in text
         assert '"${ACTIVE_COMMAND[@]}" stop nginx' not in text
         assert "docker exec ai_video_nginx nginx -t" in text
-        app_health_index = text.index('verify_release_health || fail')
+        app_health_index = text.index(
+            'verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1'
+        )
         nginx_reload_index = text.rindex("docker exec ai_video_nginx nginx -s reload")
         assert app_health_index < nginx_reload_index
         assert '"${COMPOSE[@]}" up -d --no-deps --force-recreate nginx' not in text
@@ -610,6 +613,11 @@ class TestDeployWorkflow:
         assert "tables_verified" in text
         assert 'persistence.get("backend") != "postgresql"' in text
         assert 'persistence.get("status") != "healthy"' in text
+        assert 'payload.get("version") != sys.argv[1]' in text
+        assert 'payload.get("source_revision") != sys.argv[2]' in text
+        assert 'org.opencontainers.image.version' in text
+        assert 'image semantic version mismatch' in text
+        assert 'ACTIVE_IDENTITY_REQUIRED="1"' in text
         assert "alembic current" in text or "deploy_alembic_gate.sh --check" in text
 
     def test_backend_dockerfile_pins_torch_cpu_wheel(self):
@@ -677,6 +685,8 @@ class TestDeployWorkflow:
         assert text.count("RELEASE_SOURCE_SHA=${{ github.sha }}") >= 3
         assert "Verify release image revision labels" in text
         assert "org.opencontainers.image.revision" in text
+        assert "org.opencontainers.image.version" in text
+        assert text.count("APP_VERSION=${{ steps.project-version.outputs.value }}") >= 3
         for component in ("backend", "frontend", "rendering"):
             assert f"Generate {component} SBOM" in text
             assert f"Scan {component} image" in text
@@ -687,6 +697,16 @@ class TestDeployWorkflow:
         assert "Smoke exact frontend and rendering image runtimes" in text
         assert "release-smoke-frontend" in text
         assert "release-smoke-rendering" in text
+
+    def test_deploy_smoke_binds_public_health_to_both_release_identities(self, workflow):
+        steps = workflow["jobs"]["deploy"].get("steps") or []
+        smoke = _step_by_name(steps, "Smoke test /health")
+        run = smoke.get("run") or ""
+
+        assert "scripts/project_version.py --check" in run
+        assert 'payload.get("version")==sys.argv[1]' in run
+        assert 'payload.get("source_revision")==sys.argv[2]' in run
+        assert '"$expected_version" "$GITHUB_SHA"' in run
 
     def test_renderer_release_smoke_uses_production_security_boundary(self, workflow):
         steps = workflow["jobs"]["build-images"].get("steps") or []

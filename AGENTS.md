@@ -2,7 +2,9 @@
 
 ## Overview
 
-**Short Video Agent** (v0.2.7) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
+**Short Video Agent** (2.0.0) is a multi-agent AI video creation pipeline for cross-border e-commerce. It automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics. `pyproject.toml` is the semantic-version authority; the expected tag is `v2.0.0` but is not claimed to exist. Every deployment is identified separately by its exact source revision.
+
+**Authentication authority:** a database-backed tenant API key may contain only `all`, `provider:submit`, `artifact:accept`, or `artifact:publish`; the private environment fallback is default-tenant compatibility with `all`; the test-bundle key is local/test-only, rejected in production by default, and has `all` only under explicit exceptional enablement; admin cookie + CSRF is a separate authentication plane.
 
 The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints. It targets maternal/baby product categories (wearable breast pumps, feeding appliances) with 5 content scenarios.
 
@@ -325,7 +327,7 @@ The app is created at module level with 5 middleware layers:
 2. **Rate Limiting** (P3-1) — 120 requests per 60s per IP, skips `/health`
 3. **Request Logging** — logs method, path, status, duration for every request
 4. **Response Wrapper** (P-TEST) — injects `_meta` {trace_id, duration_ms, version, timestamp} into all JSON responses, echoes `X-Client-Trace-Id` as `X-Trace-Id`
-5. **API Key Auth** — `verify_api_key` dependency applied to most routers. Demo key (`ai_video_demo_2026`) is read-only.
+5. **API Key Auth** — `verify_api_key` protects tenant routers. Permission and test-bundle behavior are defined by `src/routers/_deps.py` and `configs/auth-permission-contract.json`; no demo/test credential is a public production read-only key.
 
 Routers are mounted on startup:
 - `/health` — no auth
@@ -643,7 +645,7 @@ the dependency authority; `requirements.txt` is generated compatibility output o
 ### API Design
 - All JSON responses wrapped with `_meta` (trace_id, duration_ms, version, timestamp)
 - API key required for all mutating endpoints
-- Demo key (`ai_video_demo_2026`) is read-only — blocks DELETE/POST/PUT on write paths
+- Tenant API key permissions are server-side and route-specific; the local/test bundle key is rejected in production by default and, if explicitly enabled, has `all`
 - Rate limiting: 120 req/min per IP
 - Per-request API key injection via contextvars for multi-tenant safety
 
@@ -831,7 +833,8 @@ None. The v0.2.6 release is clean.
 
 See also:
 - `docs/workflows/enterprise-ai-content-all-scenarios-roadmap-20260711.md` — current enterprise-content closure program
-- `docs/claude/known-gaps-stable.md` — current backlog plus append-only history
+- `docs/backlog/current.md` — current tracked closure backlog
+- `docs/claude/known-gaps-stable.md` — append-only historical evidence, not a current execution entry point
 - `docs/claude/updates/project-updates-202605-stable.md` — historical release and remediation context
 - `docs/runbooks/README.md` — 5 incident runbooks
 

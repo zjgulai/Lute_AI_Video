@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import hashlib
 import os
 import subprocess
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,7 @@ from src.tools.cosyvoice_client import _validate_response_format
 from src.tools.safe_media import (
     UnsafeMediaError,
     ffmpeg_local_input_args,
+    ffprobe_local_input_args,
     validate_media_file,
     validate_media_header,
 )
@@ -84,6 +87,122 @@ def test_playlist_or_xml_disguised_as_mp4_is_rejected_before_ffmpeg(
         ffmpeg_local_input_args(media)
     assert poster_extractor.ensure_poster(media) is None
     assert calls == 0
+
+
+@pytest.mark.parametrize(
+    "input_args_builder",
+    (ffmpeg_local_input_args, ffprobe_local_input_args),
+    ids=("ffmpeg", "ffprobe"),
+)
+def test_iamf_is_rejected_before_ffmpeg_or_ffprobe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    input_args_builder: Callable[[str | Path], list[str]],
+) -> None:
+    # Synthetic 17-byte guard fixture for the minimized malformed IAMF OBU
+    # length shape reviewed in upstream commit 86708357. It is deliberately
+    # never executed against FFmpeg/FFprobe and is not a standalone exploit.
+    payload = bytes.fromhex("0000000000000000ffffffff0f00000000")
+    assert len(payload) == 17
+    assert hashlib.sha256(payload).hexdigest() == (
+        "32c1c96cead9bd4b76ce22a1d484367b230736fe8d271c8463b99dce0efdbe46"
+    )
+    calls = 0
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("IAMF must not reach FFmpeg or FFprobe")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    for filename, expected_error in (
+        ("crafted.iamf", "extension is not approved"),
+        ("crafted.mp4", "media bytes do not match"),
+    ):
+        media = tmp_path / filename
+        media.write_bytes(payload)
+        with pytest.raises(UnsafeMediaError, match=expected_error):
+            input_args_builder(media)
+
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "payload"),
+    (
+        ("crafted.iamf", bytes.fromhex("0000000000000000ffffffff0f00000000")),
+        ("crafted.mp4", bytes.fromhex("0000000000000000ffffffff0f00000000")),
+        ("crafted.mp4", b"# VobSub index file, v7 (do not modify this line!)"),
+        ("crafted.mp4", bytes.fromhex("8000002003120400")),
+        ("crafted.mp4", bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c")),
+        ("crafted.mp4", bytes.fromhex("7ffe8001")),
+    ),
+    ids=("iamf-extension", "iamf-renamed", "vobsub", "adx", "asf", "dts-spdif"),
+)
+async def test_transcription_rejects_dangerous_media_before_faster_whisper_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    payload: bytes,
+) -> None:
+    media = tmp_path / filename
+    media.write_bytes(payload)
+    imported = False
+    original_import = __import__
+
+    def guarded_import(
+        name: str,
+        globals: dict[str, object] | None = None,
+        locals: dict[str, object] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ):
+        nonlocal imported
+        if name == "faster_whisper":
+            imported = True
+            raise AssertionError("unsafe media reached faster-whisper/PyAV")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", guarded_import)
+    downloader = object.__new__(VideoDownloader)
+
+    with pytest.raises(UnsafeMediaError):
+        await downloader._real_transcribe(str(media))
+    assert imported is False
+
+
+def test_faster_whisper_decode_boundary_is_unique_cpu_only_and_prevalidated() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    source_path = repo_root / "src" / "tools" / "video_downloader.py"
+    source = source_path.read_text()
+    tree = ast.parse(source)
+    real_transcribe = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_real_transcribe"
+    )
+    segment = ast.get_source_segment(source, real_transcribe) or ""
+
+    assert segment.count("from faster_whisper import WhisperModel") == 1
+    assert segment.index("validate_media_file(video_path)") < segment.index(
+        "from faster_whisper import WhisperModel"
+    )
+    assert 'WhisperModel("base", device="cpu", compute_type="int8")' in segment
+    assert "model.transcribe(" in segment
+    assert 'video_path, language="en", beam_size=1' in segment
+    runtime_model_imports = []
+    for candidate in (repo_root / "src").rglob("*.py"):
+        candidate_source = candidate.read_text()
+        candidate_tree = ast.parse(candidate_source)
+        for node in ast.walk(candidate_tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "faster_whisper"
+                and any(alias.name == "WhisperModel" for alias in node.names)
+            ):
+                runtime_model_imports.append(candidate.relative_to(repo_root).as_posix())
+    assert runtime_model_imports == ["src/tools/video_downloader.py"]
 
 
 def test_wav_ima_adpcm_is_rejected_before_ffmpeg(tmp_path: Path) -> None:

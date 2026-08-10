@@ -67,6 +67,7 @@ git diff --check
 - `rendering/` 出现 provider key：删除该读取点，把 provider 调用放回后端 provider client。
 - `rendering` compose service 出现 `env_file`：移除，避免 `.env.prod` 中的 provider credentials 泄入渲染容器。
 - `rendering` 出现 TCP listener、外部 network、`-safe 0`、AVI 或 caller-controlled absolute manifest：删除该入口并恢复 UDS/strict snapshot 边界。
-- CI rendering 步骤注入 provider env：拆分为无 token build/test；真实生成 smoke 继续走 P2 充值后的专用流程。
+- CI rendering 步骤注入 provider env：拆分为无 token build/test；真实生成只能
+  使用全新的 W5 exact-authorization 计划，旧 P2/L4C 流程不可复用。
 - 进程被 SIGKILL 或主机异常断电后若遗留 `.renderer-<label>.lock`：先停止 renderer，确认对应 tenant/run 目录中没有同 label 的已发布 `.mp4`，并确认 lock 的修改时间已超过 540 秒总 deadline；再对该精确目录执行 `lstat`，确认它是普通目录且不是 symlink，最后只删除这一条精确 lock 目录并重启 renderer。禁止在 renderer 运行时清理、禁止跨 tenant/run 扫描删除，也禁止用宽泛的 `find ... -delete`。
 - 固定 Chrome `.deb` URL 或 checksum 失效：Docker build 必须失败关闭；重新从受信上游取得精确版本与 SHA-256，经独立构建/扫描复验后同时更新版本和 checksum，禁止临时切换到未固定的 latest URL。

@@ -1,0 +1,45 @@
+{
+  "updated": "2026-08-01",
+  "source": "src/routers/_deps.py",
+  "tenant_api_key": {
+    "recognized_permissions": [
+      "all",
+      "artifact:accept",
+      "artifact:publish",
+      "provider:submit"
+    ],
+    "tenant_source": "database_record"
+  },
+  "environment_fallback": {
+    "tenant": "default",
+    "permissions": ["all"],
+    "purpose": "private compatibility credential"
+  },
+  "test_bundle": {
+    "purpose": "local and test convenience only",
+    "production_default": "rejected",
+    "explicit_enable_permissions": ["all"]
+  },
+  "admin": {
+    "authentication": "session_cookie",
+    "write_protection": "csrf",
+    "separate_from_tenant_api_keys": true
+  },
+  "active_documentation": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/runbooks/backend-route-auth-contract.md"
+  ],
+  "production_e2e": {
+    "documentation": "docs/runbooks/production-e2e-token-smoke.md",
+    "workflow": ".github/workflows/e2e-prod.yml",
+    "public_readonly_job_has_api_key": false,
+    "authenticated_readonly_workflow": false
+  },
+  "required_document_markers": [
+    "tenant API key",
+    "environment fallback",
+    "test-bundle key",
+    "admin cookie + CSRF"
+  ]
+}

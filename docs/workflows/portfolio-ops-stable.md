@@ -102,10 +102,12 @@ v0.2.6 起 thumbnail 生成走"4 入口 + 1 backstop"的去中心化模型,**不
 - `scripts/portfolio_index.py` 扫 12 子目录输出 JSON(供离线/CI 使用)
 - `/api/portfolio/` 端点**不读此 JSON**,运行时直接扫文件系统
 
-**双向 sync 脚本**:
+**历史双向 sync 边界（不作为当前执行入口）**:
 
-- `scripts/sync_output_to_lighthouse.sh`:本地 output/ → 生产 volume
-- `scripts/sync_lighthouse_to_output.sh`:生产 volume → 本地 output/
+旧版双向同步脚本因不安全 SSH/secret 和直接生产 mutation 边界已从工作树删除，历史内容
+仅由 Git history 保存。任何生产 artifact 迁移必须从
+[Production operations](../runbooks/production-operations.md) 进入，绑定 exact release、
+权限、dry-run 与恢复方案。
 
 **遗留批量脚本** `scripts/generate_portfolio_thumbnails.py`:
 v0.2.6 之前用于本地预生成 + rsync 到生产。新架构后**只在初始化或灾备场景使用**,日常
@@ -117,4 +119,3 @@ v0.2.6 之前用于本地预生成 + rsync 到生产。新架构后**只在初�
 
 - [ADR-005 — Poster Extraction at Every Video Producer](../architecture/adr/005-poster-extraction-everywhere.md)
 - [Runbook — Thumbnail Missing](../runbooks/thumbnail-missing.md)
-
