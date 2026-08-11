@@ -420,325 +420,325 @@ ignore:
     version: 3.12.13
     type: binary
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64830
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64831
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64832
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64833
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64834
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-64835
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
@@ -750,271 +750,271 @@ ignore:
     version: 2.84.4-3~deb13u3
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65703
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65704
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65705
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-65706
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66036
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
@@ -1128,163 +1128,163 @@ ignore:
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66039
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66040
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-66041
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
@@ -1326,110 +1326,158 @@ ignore:
     version: 8.1.2
     type: binary
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70628
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: ffmpeg
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavcodec61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavdevice61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavfilter10
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavformat61
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libavutil59
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libpostproc58
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswresample5
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
 - vulnerability: CVE-2026-70632
-  fix-state: not-fixed
+  fix-state: wont-fix
   package:
     name: libswscale8
     version: 7:7.1.5-0+deb13u1+h10.4
     type: deb
+- vulnerability: CVE-2026-65703
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-65704
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-65705
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-65706
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-66036
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-66039
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-66040
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-66041
+  fix-state: unknown
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary

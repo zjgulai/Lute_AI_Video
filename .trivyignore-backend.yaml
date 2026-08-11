@@ -1491,3 +1491,43 @@ vulnerabilities:
   - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-65703
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=AVI and TDSC inputs are rejected before the backend imports faster-whisper or its embedded PyAV FFmpeg
+- id: CVE-2026-65704
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Transcription accepts one prevalidated local file and exposes no concat demuxer directives
+- id: CVE-2026-65705
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Transcription is decode-only and never constructs or selects the floodfill filter
+- id: CVE-2026-65706
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Transcription is decode-only and never constructs or selects the swaprect filter
+- id: CVE-2026-66036
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Transcription is decode-only and never constructs or selects the hqdn3d filter
+- id: CVE-2026-66039
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=CAF and MACE6 inputs are rejected before the backend imports faster-whisper or its embedded PyAV FFmpeg
+- id: CVE-2026-66040
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Transcription is decode-only and never selects native PNG or APNG encoders
+- id: CVE-2026-66041
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Transcription exposes neither PGS subtitle processing nor the quirc filter

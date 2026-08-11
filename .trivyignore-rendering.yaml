@@ -1339,3 +1339,13 @@ vulnerabilities:
   - pkg:deb/debian/libswscale8@7.1.5-0%2Bdeb13u1%2Bh10.4
   expired_at: 2026-08-21
   statement: owner=self; reason=Exact upstream 7.1 backport 16b2049d is checksum-bound and applied before package build
+- id: CVE-2026-58050
+  purls:
+  - pkg:deb/debian/libssh2-1t64@1.11.1-1%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Renderer has network_mode none and no SSH or SFTP code path invokes libssh2
+- id: CVE-2026-58051
+  purls:
+  - pkg:deb/debian/libssh2-1t64@1.11.1-1%2Bdeb13u1
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Renderer has network_mode none and no SSH or SFTP code path invokes libssh2
