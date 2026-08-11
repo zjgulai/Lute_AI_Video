@@ -341,6 +341,71 @@ jobs:
           output-format: json
           output-file: scan-rendering.json
 
+      - name: Scan backend image with Trivy
+        id: trivy-backend
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        env:
+          # Backend ships FFmpeg but does not inherit renderer-only network isolation.
+          TRIVY_IGNOREFILE: .trivyignore-backend.yaml
+        with:
+          version: v0.69.3
+          image-ref: lighthouse-backend:${{ github.sha }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          format: json
+          output: trivy-backend.json
+          exit-code: 1
+
+      - name: Scan frontend image with Trivy
+        id: trivy-frontend
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        env:
+          TRIVY_IGNOREFILE: .trivyignore.yaml
+        with:
+          version: v0.69.3
+          image-ref: lighthouse-frontend:${{ github.sha }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          format: json
+          output: trivy-frontend.json
+          exit-code: 1
+
+      - name: Scan rendering image with Trivy
+        id: trivy-rendering
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        env:
+          TRIVY_IGNOREFILE: .trivyignore-rendering.yaml
+        with:
+          version: v0.69.3
+          image-ref: lighthouse-rendering:${{ github.sha }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          format: json
+          output: trivy-rendering.json
+          exit-code: 1
+
+      - name: Verify vulnerability scan evidence is complete
+        id: scan-evidence
+        if: always()
+        continue-on-error: true
+        run: |
+          for report in \
+            scan-backend.json \
+            scan-frontend.json \
+            scan-rendering.json \
+            trivy-backend.json \
+            trivy-frontend.json \
+            trivy-rendering.json; do
+            test -s "$report"
+            python3 -m json.tool "$report" >/dev/null
+          done
+
       - name: Upload vulnerability scan evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -352,17 +417,28 @@ jobs:
             scan-backend.json
             scan-frontend.json
             scan-rendering.json
+            trivy-backend.json
+            trivy-frontend.json
+            trivy-rendering.json
 
       - name: Enforce High/Critical vulnerability scan results
         if: always()
         env:
-          BACKEND_SCAN_OUTCOME: ${{ steps.scan-backend.outcome }}
-          FRONTEND_SCAN_OUTCOME: ${{ steps.scan-frontend.outcome }}
-          RENDERING_SCAN_OUTCOME: ${{ steps.scan-rendering.outcome }}
+          BACKEND_GRYPE_OUTCOME: ${{ steps.scan-backend.outcome }}
+          FRONTEND_GRYPE_OUTCOME: ${{ steps.scan-frontend.outcome }}
+          RENDERING_GRYPE_OUTCOME: ${{ steps.scan-rendering.outcome }}
+          BACKEND_TRIVY_OUTCOME: ${{ steps.trivy-backend.outcome }}
+          FRONTEND_TRIVY_OUTCOME: ${{ steps.trivy-frontend.outcome }}
+          RENDERING_TRIVY_OUTCOME: ${{ steps.trivy-rendering.outcome }}
+          SCAN_EVIDENCE_OUTCOME: ${{ steps.scan-evidence.outcome }}
         run: |
-          test "$BACKEND_SCAN_OUTCOME" = success
-          test "$FRONTEND_SCAN_OUTCOME" = success
-          test "$RENDERING_SCAN_OUTCOME" = success
+          test "$BACKEND_GRYPE_OUTCOME" = success
+          test "$FRONTEND_GRYPE_OUTCOME" = success
+          test "$RENDERING_GRYPE_OUTCOME" = success
+          test "$BACKEND_TRIVY_OUTCOME" = success
+          test "$FRONTEND_TRIVY_OUTCOME" = success
+          test "$RENDERING_TRIVY_OUTCOME" = success
+          test "$SCAN_EVIDENCE_OUTCOME" = success
 
       - name: Package exact reviewed release images and digests
         run: |
@@ -392,6 +468,7 @@ jobs:
             image-digests.txt
             sbom-*.spdx.json
             scan-*.json
+            trivy-*.json
 
   remote-dry-run:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.execution_scope == 'remote-dry-run' || inputs.execution_scope == 'deploy' }}
