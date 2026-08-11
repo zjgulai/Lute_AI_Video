@@ -48,6 +48,14 @@ DEPLOY_IF = (
     "inputs.execution_scope == 'deploy' }}"
 )
 ARCHIVE_ONLY_JOB_NAMES = ("provenance", "preflight", "build-images")
+SCAN_EVIDENCE_REPORTS = (
+    "scan-backend.json",
+    "scan-frontend.json",
+    "scan-rendering.json",
+    "trivy-backend.json",
+    "trivy-frontend.json",
+    "trivy-rendering.json",
+)
 REMOTE_SHELL_COMMAND = re.compile(
     r"(?:^|[;&|]|\$\()\s*(?:command\s+|sudo\s+)?(?:ssh|rsync)(?=\s|$)"
 )
@@ -108,6 +116,20 @@ def _assert_archive_only_job_is_local(job_name: str, job: dict[str, Any]) -> Non
                 f"archive-only job {job_name} must not execute a remote command: "
                 f"{executable}"
             )
+
+
+def _assert_scan_evidence_verifier_is_fail_closed(step: dict[str, Any]) -> None:
+    expected_lines = ["for report in \\"]
+    expected_lines.extend(f"  {report} \\" for report in SCAN_EVIDENCE_REPORTS[:-1])
+    expected_lines.extend(
+        (
+            f"  {SCAN_EVIDENCE_REPORTS[-1]}; do",
+            '  test -s "$report"',
+            '  python3 -m json.tool "$report" >/dev/null',
+            "done",
+        )
+    )
+    assert (step.get("run") or "").splitlines() == expected_lines
 
 
 class TestDeployWorkflow:
@@ -742,6 +764,7 @@ class TestDeployWorkflow:
         for component in ("backend", "frontend", "rendering"):
             assert f"Generate {component} SBOM" in text
             assert f"Scan {component} image" in text
+            assert f"Scan {component} image with Trivy" in text
         assert "Package exact reviewed release images and digests" in text
         assert "Upload reviewed release bundle" in text
         assert "docker save" in text
@@ -783,6 +806,12 @@ class TestDeployWorkflow:
         steps = workflow["jobs"]["build-images"].get("steps") or []
         step_names = [step.get("name") for step in steps]
 
+        trivy_policies = {
+            "backend": ".trivyignore-backend.yaml",
+            "frontend": ".trivyignore.yaml",
+            "rendering": ".trivyignore-rendering.yaml",
+        }
+
         for component in ("backend", "frontend", "rendering"):
             scan = _step_by_name(steps, f"Scan {component} image")
             assert scan["id"] == f"scan-{component}"
@@ -790,8 +819,34 @@ class TestDeployWorkflow:
             assert scan["with"]["fail-build"] is True
             assert scan["with"]["severity-cutoff"] == "high"
 
+            trivy = _step_by_name(steps, f"Scan {component} image with Trivy")
+            assert trivy["id"] == f"trivy-{component}"
+            assert trivy["continue-on-error"] is True
+            assert trivy["uses"] == (
+                "aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8"
+            )
+            assert trivy["env"] == {
+                "TRIVY_IGNOREFILE": trivy_policies[component],
+            }
+            assert trivy["with"] == {
+                "version": "v0.69.3",
+                "image-ref": f"lighthouse-{component}:${{{{ github.sha }}}}",
+                "scanners": "vuln",
+                "severity": "HIGH,CRITICAL",
+                "ignore-unfixed": False,
+                "format": "json",
+                "output": f"trivy-{component}.json",
+                "exit-code": 1,
+            }
+
+        verify = _step_by_name(steps, "Verify vulnerability scan evidence is complete")
         upload = _step_by_name(steps, "Upload vulnerability scan evidence")
         enforce = _step_by_name(steps, "Enforce High/Critical vulnerability scan results")
+        release_upload = _step_by_name(steps, "Upload reviewed release bundle")
+        assert verify["if"] == "always()"
+        assert verify["id"] == "scan-evidence"
+        assert verify["continue-on-error"] is True
+        _assert_scan_evidence_verifier_is_fail_closed(verify)
         assert upload["if"] == "always()"
         assert upload["uses"] == (
             "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"
@@ -799,23 +854,55 @@ class TestDeployWorkflow:
         assert upload["with"]["if-no-files-found"] == "error"
         for component in ("backend", "frontend", "rendering"):
             assert f"scan-{component}.json" in upload["with"]["path"]
+            assert f"trivy-{component}.json" in upload["with"]["path"]
+            assert f"scan-{component}.json" in verify["run"]
+            assert f"trivy-{component}.json" in verify["run"]
+        assert "scan-*.json" in release_upload["with"]["path"]
+        assert "trivy-*.json" in release_upload["with"]["path"]
         assert enforce["if"] == "always()"
         assert enforce["env"] == {
-            "BACKEND_SCAN_OUTCOME": "${{ steps.scan-backend.outcome }}",
-            "FRONTEND_SCAN_OUTCOME": "${{ steps.scan-frontend.outcome }}",
-            "RENDERING_SCAN_OUTCOME": "${{ steps.scan-rendering.outcome }}",
+            "BACKEND_GRYPE_OUTCOME": "${{ steps.scan-backend.outcome }}",
+            "FRONTEND_GRYPE_OUTCOME": "${{ steps.scan-frontend.outcome }}",
+            "RENDERING_GRYPE_OUTCOME": "${{ steps.scan-rendering.outcome }}",
+            "BACKEND_TRIVY_OUTCOME": "${{ steps.trivy-backend.outcome }}",
+            "FRONTEND_TRIVY_OUTCOME": "${{ steps.trivy-frontend.outcome }}",
+            "RENDERING_TRIVY_OUTCOME": "${{ steps.trivy-rendering.outcome }}",
+            "SCAN_EVIDENCE_OUTCOME": "${{ steps.scan-evidence.outcome }}",
         }
         assert enforce["run"].splitlines() == [
-            'test "$BACKEND_SCAN_OUTCOME" = success',
-            'test "$FRONTEND_SCAN_OUTCOME" = success',
-            'test "$RENDERING_SCAN_OUTCOME" = success',
+            'test "$BACKEND_GRYPE_OUTCOME" = success',
+            'test "$FRONTEND_GRYPE_OUTCOME" = success',
+            'test "$RENDERING_GRYPE_OUTCOME" = success',
+            'test "$BACKEND_TRIVY_OUTCOME" = success',
+            'test "$FRONTEND_TRIVY_OUTCOME" = success',
+            'test "$RENDERING_TRIVY_OUTCOME" = success',
+            'test "$SCAN_EVIDENCE_OUTCOME" = success',
         ]
+        assert step_names.index("Verify vulnerability scan evidence is complete") < (
+            step_names.index("Upload vulnerability scan evidence")
+        )
         assert step_names.index("Upload vulnerability scan evidence") < step_names.index(
             "Enforce High/Critical vulnerability scan results"
         )
         assert step_names.index("Enforce High/Critical vulnerability scan results") < (
             step_names.index("Package exact reviewed release images and digests")
         )
+
+    def test_scan_evidence_verifier_rejects_noop_mutations(self, workflow):
+        steps = workflow["jobs"]["build-images"].get("steps") or []
+        verify = _step_by_name(steps, "Verify vulnerability scan evidence is complete")
+
+        _assert_scan_evidence_verifier_is_fail_closed(verify)
+        for required_command in (
+            'test -s "$report"',
+            'python3 -m json.tool "$report" >/dev/null',
+        ):
+            mutated = {
+                **verify,
+                "run": verify["run"].replace(required_command, 'echo "$report"'),
+            }
+            with pytest.raises(AssertionError):
+                _assert_scan_evidence_verifier_is_fail_closed(mutated)
 
     def test_deploy_requires_remote_dry_run_artifact_before_environment_approval(self, workflow):
         jobs = workflow["jobs"]
@@ -857,6 +944,11 @@ class TestDeployWorkflow:
             "build-images",
             "remote-dry-run",
         ]
+
+    def test_build_images_has_exact_read_only_token_permissions(self, workflow):
+        assert workflow["jobs"]["build-images"].get("permissions") == {
+            "contents": "read"
+        }
 
     def test_deploy_runbook_documents_execution_scope_boundaries(self):
         text = GITHUB_ACTIONS_DEPLOY_RUNBOOK.read_text()
