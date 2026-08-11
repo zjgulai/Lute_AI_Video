@@ -945,6 +945,11 @@ class TestDeployWorkflow:
             "remote-dry-run",
         ]
 
+    def test_build_images_has_exact_read_only_token_permissions(self, workflow):
+        assert workflow["jobs"]["build-images"].get("permissions") == {
+            "contents": "read"
+        }
+
     def test_deploy_runbook_documents_execution_scope_boundaries(self):
         text = GITHUB_ACTIONS_DEPLOY_RUNBOOK.read_text()
 
