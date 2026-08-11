@@ -35,6 +35,22 @@ LIGHTHOUSE_RELEASE_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compo
 BACKEND_DOCKERFILE = REPO_ROOT / "Dockerfile.backend"
 RENDERING_DOCKERFILE = REPO_ROOT / "rendering" / "Dockerfile"
 RENDERING_SERVER = REPO_ROOT / "rendering" / "server.mjs"
+GITHUB_ACTIONS_DEPLOY_RUNBOOK = (
+    REPO_ROOT / "docs" / "runbooks" / "github-actions-deploy-secrets.md"
+)
+REMOTE_DRY_RUN_IF = (
+    "${{ github.event_name != 'workflow_dispatch' || "
+    "inputs.execution_scope == 'remote-dry-run' || "
+    "inputs.execution_scope == 'deploy' }}"
+)
+DEPLOY_IF = (
+    "${{ github.event_name != 'workflow_dispatch' || "
+    "inputs.execution_scope == 'deploy' }}"
+)
+ARCHIVE_ONLY_JOB_NAMES = ("provenance", "preflight", "build-images")
+REMOTE_SHELL_COMMAND = re.compile(
+    r"(?:^|[;&|]|\$\()\s*(?:command\s+|sudo\s+)?(?:ssh|rsync)(?=\s|$)"
+)
 
 HERMETIC_PYTEST_ENV = {
     "API_KEY": "test-api-key-for-pytest",
@@ -72,6 +88,28 @@ def _assert_hermetic_pytest_env(env: dict[str, str]) -> None:
         assert "secrets." not in str(value), f"{key} must not read GitHub secrets in pytest env"
 
 
+def _assert_archive_only_job_is_local(job_name: str, job: dict[str, Any]) -> None:
+    assert job.get("environment") is None, (
+        f"archive-only job {job_name} must not enter a GitHub Environment"
+    )
+    job_text = yaml.safe_dump(job, sort_keys=True)
+    for forbidden in ("${{ secrets.", "DRY_RUN_", "DEPLOY_"):
+        assert forbidden not in job_text, (
+            f"archive-only job {job_name} must not reference {forbidden}"
+        )
+
+    for step in job.get("steps") or []:
+        run = step.get("run")
+        if not isinstance(run, str):
+            continue
+        for raw_line in run.splitlines():
+            executable = raw_line.split("#", 1)[0].strip()
+            assert REMOTE_SHELL_COMMAND.search(executable) is None, (
+                f"archive-only job {job_name} must not execute a remote command: "
+                f"{executable}"
+            )
+
+
 class TestDeployWorkflow:
 
     @pytest.fixture
@@ -93,6 +131,20 @@ class TestDeployWorkflow:
         inputs = wd.get("inputs") or {}
         assert "reason" in inputs, "workflow_dispatch must require 'reason' input for audit trail"
         assert inputs["reason"].get("required") is True
+
+    def test_workflow_dispatch_has_exact_execution_scope_choices(self, workflow):
+        on = workflow.get(True) or workflow.get("on")
+        dispatch = (on.get("workflow_dispatch") or {}).get("inputs") or {}
+        execution_scope = dispatch.get("execution_scope") or {}
+
+        assert execution_scope.get("required") is True
+        assert execution_scope.get("type") == "choice"
+        assert execution_scope.get("default") == "archive-only"
+        assert execution_scope.get("options") == [
+            "archive-only",
+            "remote-dry-run",
+            "deploy",
+        ]
 
     def test_has_concurrency_lock(self, workflow):
         assert "concurrency" in workflow, "deploy must use concurrency to prevent parallel runs"
@@ -785,6 +837,37 @@ class TestDeployWorkflow:
         assert jobs["remote-dry-run"]["environment"]["name"] == (
             "production-read-only-dry-run"
         )
+
+    def test_execution_scope_gates_only_external_jobs(self, workflow):
+        jobs = workflow["jobs"]
+
+        for job_name in ARCHIVE_ONLY_JOB_NAMES:
+            assert jobs[job_name].get("if") is None
+            _assert_archive_only_job_is_local(job_name, jobs[job_name])
+
+        assert jobs["remote-dry-run"].get("if") == REMOTE_DRY_RUN_IF
+        assert jobs["deploy"].get("if") == DEPLOY_IF
+        assert jobs["remote-dry-run"]["needs"] == [
+            "provenance",
+            "preflight",
+            "build-images",
+        ]
+        assert jobs["deploy"]["needs"] == [
+            "preflight",
+            "build-images",
+            "remote-dry-run",
+        ]
+
+    def test_deploy_runbook_documents_execution_scope_boundaries(self):
+        text = GITHUB_ACTIONS_DEPLOY_RUNBOOK.read_text()
+
+        for scope in ("archive-only", "remote-dry-run", "deploy"):
+            assert f"`{scope}`" in text
+        assert "默认选择 `archive-only`" in text
+        assert "PR head" in text
+        assert "exact `origin/main`" in text
+        assert "不会进入任何 GitHub Environment" in text
+        assert "不构成生产部署证据" in text
 
     def test_deploy_acceptance_uses_canonical_hostname_and_valid_tls(self, workflow):
         deploy_text = str(workflow["jobs"]["deploy"])
