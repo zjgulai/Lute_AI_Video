@@ -46,7 +46,6 @@ jobs:
     timeout-minutes: 15
     env:
       PLAYWRIGHT_PROD_URL: ${{ github.event.inputs.base_url || 'https://video.lute-tlz-dddd.top' }}
-      PLAYWRIGHT_API_KEY: ${{ secrets.PROD_DEMO_API_KEY || 'ai_video_demo_2026' }}
       RUN_TOKEN_SMOKE: "0"
       CI: "true"
     defaults:
@@ -87,7 +86,8 @@ jobs:
           retention-days: 7
 
   e2e-prod-token-smoke:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.token_smoke_spec != '' }}
+    # Dormant compatibility definition only. W5 is the sole current provider executor.
+    if: ${{ false }}
     needs: e2e-prod-readonly
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-28",
+  "updated": "2026-07-29",
   "runbook": "docs/runbooks/root-directory-governance.md",
   "policy": {
     "default_documents": "docs/ or drafts/docs/",
@@ -151,6 +151,11 @@
       "path": "deploy",
       "status": "deployment_directory",
       "reason": "Deployment scripts and environment-specific SOPs."
+    },
+    {
+      "path": "docker",
+      "status": "source_directory",
+      "reason": "Container build tooling and checksum-bound supply-chain sources."
     },
     {
       "path": "docs",

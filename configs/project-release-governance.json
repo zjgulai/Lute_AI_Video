@@ -1,0 +1,55 @@
+{
+  "updated": "2026-08-01",
+  "semantic_version_source": "pyproject.toml",
+  "semantic_version": "2.0.0",
+  "expected_tag": "v2.0.0",
+  "expected_tag_exists": false,
+  "version_projections": [
+    "web/package.json",
+    "web/package-lock.json",
+    "uv.lock",
+    "docs/release/current.md"
+  ],
+  "image_dockerfiles": [
+    "Dockerfile.backend",
+    "web/Dockerfile",
+    "rendering/Dockerfile"
+  ],
+  "canonical_operations": {
+    "entrypoint": "docs/runbooks/production-operations.md",
+    "deploy": "docs/workflows/deploy-lighthouse-stable.md",
+    "disaster_recovery": "docs/disaster_recovery_runbook.md",
+    "token_smoke": "docs/runbooks/production-e2e-token-smoke.md"
+  },
+  "historical_operations_docs": [
+    "docs/workflows/deploy-test-sop-stable.md",
+    "docs/workflows/deployment-sop-stable.md",
+    "docs/workflows/update-guide-stable.md",
+    "deploy/lighthouse/PHASE0-DEPLOY-SOP-2026-05-15.md"
+  ],
+  "historical_evidence_docs": [
+    "docs/knowledge/deploy-lessons-learned-stable.md",
+    "docs/workflows/ai-video-project-2-0-e2e-test-plan-stable.md",
+    "docs/workflows/ai-video-project-2-0-final-self-proof-stable.md",
+    "docs/runbooks/p2-recharge-smoke-checklist.md",
+    "docs/runbooks/release-smoke-token-opt-in.md",
+    "docs/runbooks/production-post-deploy-regression-checklist.md"
+  ],
+  "active_operations_document_scope": "configs/docs-link-check-scope.txt",
+  "active_operations_non_document_surfaces": [
+    "web/src/i18n/translations.ts",
+    "deploy/lighthouse/build-and-deploy.sh",
+    "deploy/lighthouse/deploy.sh",
+    "deploy/lighthouse/smoke.sh"
+  ],
+  "forbidden_patterns": [
+    "docker(?:-compose| compose)[^\\n]*down[^\\n]*--volumes",
+    "StrictHostKeyChecking\\s*=\\s*no",
+    "grep[^\\n]*API_KEY[^\\n]*\\.env\\.prod",
+    "(?:^|[\\s\\\"'])(?:\\./)?DDDD\\.pem",
+    "rsync\\s+-avz\\s+--delete"
+  ],
+  "current_backlog": "docs/backlog/current.md",
+  "historical_backlog": "docs/claude/known-gaps-stable.md",
+  "ignored_journals_are_release_inputs": false
+}

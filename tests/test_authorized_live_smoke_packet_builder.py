@@ -61,16 +61,14 @@ def test_default_packet_is_no_token_and_contains_exact_authorization_gate():
     assert packet["evidence_level"] == "L2-fixture-or-dry-run"
     assert packet["no_provider_call"] is True
     assert packet["provider_call_allowed"] is False
+    assert packet["execution_allowed"] is False
+    assert packet["replacement"] == "fresh governed W5 exact-authorization plan"
     assert packet["required_authorization_statement"] == _approval_statement()
     assert packet["sample_plan_ref"] == SAMPLE_PLAN_REF
     assert packet["provider_revalidation_ref"] == PROVIDER_REVALIDATION_REF
     assert packet["required_private_records"]["approval_record_env"] == APPROVAL_RECORD_ENV
     assert packet["required_private_records"]["account_readiness_record_env"] == ACCOUNT_READINESS_RECORD_ENV
-    assert packet["required_runtime_env"]["CONFIRM_P2_TOKEN_SMOKE"] == "1"
-    assert packet["required_runtime_env"][RUN_TOKEN_SMOKE_ENV] == "1"
-    assert packet["required_runtime_env"]["AI_VIDEO_AUTHORIZED_LIVE_EXECUTE"] == "1"
-    assert packet["required_runtime_env"]["AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT"] == "1"
-    assert packet["required_runtime_env"]["AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS"].startswith("private poyo payload")
+    assert packet["required_runtime_env"] == {}
     assert "继续下一步" in packet["rejected_confirmation_examples"]
     assert packet["provider_model_scope"] == DEFAULT_AUTH_PROVIDER_MODEL_SCOPE
     assert packet["test_scope"] == DEFAULT_AUTH_TEST_SCOPE
@@ -79,10 +77,9 @@ def test_default_packet_is_no_token_and_contains_exact_authorization_gate():
     assert packet["provider_model_scope"] == "poyo/gpt-image-2 + poyo/seedance-2"
     assert "Momcozy 消毒器" in packet["required_authorization_statement"]
     assert "--available-credit-usd 3.00" in " ".join(packet["record_build_commands"])
-    assert "scripts/p2_recharge_smoke_checklist.py --execute" in packet["execute_command_preview"]
-    assert "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1" in packet["execute_command_preview"]
-    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1" in packet["execute_command_preview"]
-    assert "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json>" in packet["execute_command_preview"]
+    assert packet["execute_command_preview"].startswith("BLOCKED:")
+    assert "W5 exact-authorization" in packet["execute_command_preview"]
+    assert "p2_recharge_smoke_checklist.py" not in packet["execute_command_preview"]
     assert "sk_fixture_secret" not in result.stdout
 
 
@@ -128,7 +125,7 @@ def test_script_source_has_no_provider_or_subprocess_execution_path():
     assert "requests." not in source
     assert "provider_call_allowed\": False" in source
     assert "build_token_smoke_preflight_report" in source
-    assert "p2_recharge_smoke_checklist.py --execute" in source
+    assert "p2_recharge_smoke_checklist.py" not in source
 
 
 def _approval_statement() -> str:

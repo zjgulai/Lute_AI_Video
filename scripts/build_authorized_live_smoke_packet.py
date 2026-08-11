@@ -7,7 +7,6 @@ import argparse
 import contextlib
 import io
 import json
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,7 +14,6 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE_URL = "https://video.lute-tlz-dddd.top"
-CONFIRM_ENV = "CONFIRM_P2_TOKEN_SMOKE"
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -32,8 +30,6 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
         DEFAULT_AUTH_PROVIDER_MODEL_SCOPE,
         DEFAULT_AUTH_TEST_SCOPE,
         PROVIDER_REVALIDATION_REF,
-        REQUIRED_API_KEY_ENVS,
-        RUN_TOKEN_SMOKE_ENV,
         SAMPLE_PLAN_REF,
         build_token_smoke_preflight_report,
     )
@@ -55,9 +51,9 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--preflight-env",
-        choices=("empty", "current"),
+        choices=("empty",),
         default="empty",
-        help="Use empty env for deterministic blocked proof, or current process env.",
+        help="Legacy readiness is observation-only and always uses an empty environment.",
     )
     parser.add_argument("--output", type=Path, help="Optional JSON output path; must be under tmp/ or outside repo.")
     parser.add_argument("--force", action="store_true", help="Overwrite an existing output file.")
@@ -90,6 +86,8 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
         "evidence_level": "L2-fixture-or-dry-run",
         "no_provider_call": True,
         "provider_call_allowed": False,
+        "execution_allowed": False,
+        "replacement": "fresh governed W5 exact-authorization plan",
         "target_base_url": args.base_url,
         "provider": args.provider,
         "model": args.model,
@@ -105,16 +103,7 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
             "account_readiness_record_env": ACCOUNT_READINESS_RECORD_ENV,
             "output_location_rule": "private records must stay under tmp/ or outside the repository",
         },
-        "required_runtime_env": {
-            CONFIRM_ENV: "1",
-            RUN_TOKEN_SMOKE_ENV: "1",
-            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE": "1",
-            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT": "1",
-            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS": "private poyo payload JSON under tmp/ or outside repo",
-            "API_KEY": "non-demo production backend key",
-            "PLAYWRIGHT_API_KEY": "non-demo production Playwright key",
-            **{env_name: "configured; value is never printed by this packet" for env_name in REQUIRED_API_KEY_ENVS},
-        },
+        "required_runtime_env": {},
         "sample_plan_ref": SAMPLE_PLAN_REF,
         "provider_revalidation_ref": PROVIDER_REVALIDATION_REF,
         "record_build_commands": [
@@ -137,16 +126,8 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
         ],
         "dry_run_preflight_command": "python scripts/commercial_token_smoke_preflight.py --pretty",
         "execute_command_preview": (
-            f"{CONFIRM_ENV}=1 {RUN_TOKEN_SMOKE_ENV}=1 "
-            f"{APPROVAL_RECORD_ENV}=<private-approval-json> "
-            f"{ACCOUNT_READINESS_RECORD_ENV}=<private-account-readiness-json> "
-            "AI_VIDEO_AUTHORIZED_LIVE_EXECUTE=1 "
-            "AI_VIDEO_AUTHORIZED_LIVE_POYO_TRANSPORT=1 "
-            "AI_VIDEO_AUTHORIZED_LIVE_POYO_PAYLOADS=<private-poyo-payloads-json> "
-            "API_KEY=<production-api-key> PLAYWRIGHT_API_KEY=<production-api-key> "
-            "POYO_API_KEY=<funded-poyo-key> DEEPSEEK_API_KEY=<deepseek-key> "
-            "SILICONFLOW_API_KEY=<siliconflow-key> "
-            "python scripts/p2_recharge_smoke_checklist.py --execute"
+            "BLOCKED: legacy P2/C21 execution is retired; use a fresh governed "
+            "W5 exact-authorization plan"
         ),
         "supported_claims": [
             "The launch packet documents the authorized-live gate inputs.",
@@ -158,8 +139,7 @@ def _build_packet(args: argparse.Namespace) -> dict[str, Any]:
         ],
     }
     if args.include_preflight:
-        env = os.environ if args.preflight_env == "current" else {}
-        report = build_token_smoke_preflight_report(env=env)
+        report = build_token_smoke_preflight_report(env={})
         packet["preflight_projection"] = report.model_dump(mode="json")
         packet["preflight_env_source"] = args.preflight_env
     return packet

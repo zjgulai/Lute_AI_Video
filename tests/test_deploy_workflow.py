@@ -35,6 +35,22 @@ LIGHTHOUSE_RELEASE_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compo
 BACKEND_DOCKERFILE = REPO_ROOT / "Dockerfile.backend"
 RENDERING_DOCKERFILE = REPO_ROOT / "rendering" / "Dockerfile"
 RENDERING_SERVER = REPO_ROOT / "rendering" / "server.mjs"
+GITHUB_ACTIONS_DEPLOY_RUNBOOK = (
+    REPO_ROOT / "docs" / "runbooks" / "github-actions-deploy-secrets.md"
+)
+REMOTE_DRY_RUN_IF = (
+    "${{ github.event_name != 'workflow_dispatch' || "
+    "inputs.execution_scope == 'remote-dry-run' || "
+    "inputs.execution_scope == 'deploy' }}"
+)
+DEPLOY_IF = (
+    "${{ github.event_name != 'workflow_dispatch' || "
+    "inputs.execution_scope == 'deploy' }}"
+)
+ARCHIVE_ONLY_JOB_NAMES = ("provenance", "preflight", "build-images")
+REMOTE_SHELL_COMMAND = re.compile(
+    r"(?:^|[;&|]|\$\()\s*(?:command\s+|sudo\s+)?(?:ssh|rsync)(?=\s|$)"
+)
 
 HERMETIC_PYTEST_ENV = {
     "API_KEY": "test-api-key-for-pytest",
@@ -72,6 +88,28 @@ def _assert_hermetic_pytest_env(env: dict[str, str]) -> None:
         assert "secrets." not in str(value), f"{key} must not read GitHub secrets in pytest env"
 
 
+def _assert_archive_only_job_is_local(job_name: str, job: dict[str, Any]) -> None:
+    assert job.get("environment") is None, (
+        f"archive-only job {job_name} must not enter a GitHub Environment"
+    )
+    job_text = yaml.safe_dump(job, sort_keys=True)
+    for forbidden in ("${{ secrets.", "DRY_RUN_", "DEPLOY_"):
+        assert forbidden not in job_text, (
+            f"archive-only job {job_name} must not reference {forbidden}"
+        )
+
+    for step in job.get("steps") or []:
+        run = step.get("run")
+        if not isinstance(run, str):
+            continue
+        for raw_line in run.splitlines():
+            executable = raw_line.split("#", 1)[0].strip()
+            assert REMOTE_SHELL_COMMAND.search(executable) is None, (
+                f"archive-only job {job_name} must not execute a remote command: "
+                f"{executable}"
+            )
+
+
 class TestDeployWorkflow:
 
     @pytest.fixture
@@ -93,6 +131,20 @@ class TestDeployWorkflow:
         inputs = wd.get("inputs") or {}
         assert "reason" in inputs, "workflow_dispatch must require 'reason' input for audit trail"
         assert inputs["reason"].get("required") is True
+
+    def test_workflow_dispatch_has_exact_execution_scope_choices(self, workflow):
+        on = workflow.get(True) or workflow.get("on")
+        dispatch = (on.get("workflow_dispatch") or {}).get("inputs") or {}
+        execution_scope = dispatch.get("execution_scope") or {}
+
+        assert execution_scope.get("required") is True
+        assert execution_scope.get("type") == "choice"
+        assert execution_scope.get("default") == "archive-only"
+        assert execution_scope.get("options") == [
+            "archive-only",
+            "remote-dry-run",
+            "deploy",
+        ]
 
     def test_has_concurrency_lock(self, workflow):
         assert "concurrency" in workflow, "deploy must use concurrency to prevent parallel runs"
@@ -459,7 +511,7 @@ class TestDeployWorkflow:
 
     def test_frontend_release_image_binds_its_loopback_health_probe(self):
         dockerfile = (REPO_ROOT / "web/Dockerfile").read_text()
-        runner = dockerfile.split("FROM node:22-alpine AS runner", 1)[1]
+        runner = dockerfile.split("FROM ${NODE_IMAGE} AS runner", 1)[1]
         runtime = runner.split("\nFROM ", 1)[0]
 
         assert "\nENV HOSTNAME=0.0.0.0\n" in f"\n{runtime}\n"
@@ -473,7 +525,7 @@ class TestDeployWorkflow:
             "/usr/local/bin/npm /usr/local/bin/npx"
         )
         frontend_runner = (REPO_ROOT / "web/Dockerfile").read_text().split(
-            "FROM node:22-alpine AS runner", 1
+            "FROM ${NODE_IMAGE} AS runner", 1
         )[1]
         rendering = RENDERING_DOCKERFILE.read_text()
 
@@ -558,7 +610,8 @@ class TestDeployWorkflow:
 
         smoke = (REPO_ROOT / "deploy/lighthouse/smoke.sh").read_text()
         assert "200|500" not in smoke
-        assert "expected 200, got" in smoke
+        assert "provider_call=false" in smoke
+        assert "/api/fast/generate" not in smoke
 
     def test_lighthouse_rendering_build_pins_fixed_google_chrome(self):
         dockerfile = RENDERING_DOCKERFILE.read_text()
@@ -599,7 +652,9 @@ class TestDeployWorkflow:
         assert "[2/8] Entering AI Video maintenance while preserving shared ingress" in text
         assert '"${ACTIVE_COMMAND[@]}" stop nginx' not in text
         assert "docker exec ai_video_nginx nginx -t" in text
-        app_health_index = text.index('verify_release_health || fail')
+        app_health_index = text.index(
+            'verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1'
+        )
         nginx_reload_index = text.rindex("docker exec ai_video_nginx nginx -s reload")
         assert app_health_index < nginx_reload_index
         assert '"${COMPOSE[@]}" up -d --no-deps --force-recreate nginx' not in text
@@ -610,6 +665,11 @@ class TestDeployWorkflow:
         assert "tables_verified" in text
         assert 'persistence.get("backend") != "postgresql"' in text
         assert 'persistence.get("status") != "healthy"' in text
+        assert 'payload.get("version") != sys.argv[1]' in text
+        assert 'payload.get("source_revision") != sys.argv[2]' in text
+        assert 'org.opencontainers.image.version' in text
+        assert 'image semantic version mismatch' in text
+        assert 'ACTIVE_IDENTITY_REQUIRED="1"' in text
         assert "alembic current" in text or "deploy_alembic_gate.sh --check" in text
 
     def test_backend_dockerfile_pins_torch_cpu_wheel(self):
@@ -677,6 +737,8 @@ class TestDeployWorkflow:
         assert text.count("RELEASE_SOURCE_SHA=${{ github.sha }}") >= 3
         assert "Verify release image revision labels" in text
         assert "org.opencontainers.image.revision" in text
+        assert "org.opencontainers.image.version" in text
+        assert text.count("APP_VERSION=${{ steps.project-version.outputs.value }}") >= 3
         for component in ("backend", "frontend", "rendering"):
             assert f"Generate {component} SBOM" in text
             assert f"Scan {component} image" in text
@@ -687,6 +749,16 @@ class TestDeployWorkflow:
         assert "Smoke exact frontend and rendering image runtimes" in text
         assert "release-smoke-frontend" in text
         assert "release-smoke-rendering" in text
+
+    def test_deploy_smoke_binds_public_health_to_both_release_identities(self, workflow):
+        steps = workflow["jobs"]["deploy"].get("steps") or []
+        smoke = _step_by_name(steps, "Smoke test /health")
+        run = smoke.get("run") or ""
+
+        assert "scripts/project_version.py --check" in run
+        assert 'payload.get("version")==sys.argv[1]' in run
+        assert 'payload.get("source_revision")==sys.argv[2]' in run
+        assert '"$expected_version" "$GITHUB_SHA"' in run
 
     def test_renderer_release_smoke_uses_production_security_boundary(self, workflow):
         steps = workflow["jobs"]["build-images"].get("steps") or []
@@ -765,6 +837,37 @@ class TestDeployWorkflow:
         assert jobs["remote-dry-run"]["environment"]["name"] == (
             "production-read-only-dry-run"
         )
+
+    def test_execution_scope_gates_only_external_jobs(self, workflow):
+        jobs = workflow["jobs"]
+
+        for job_name in ARCHIVE_ONLY_JOB_NAMES:
+            assert jobs[job_name].get("if") is None
+            _assert_archive_only_job_is_local(job_name, jobs[job_name])
+
+        assert jobs["remote-dry-run"].get("if") == REMOTE_DRY_RUN_IF
+        assert jobs["deploy"].get("if") == DEPLOY_IF
+        assert jobs["remote-dry-run"]["needs"] == [
+            "provenance",
+            "preflight",
+            "build-images",
+        ]
+        assert jobs["deploy"]["needs"] == [
+            "preflight",
+            "build-images",
+            "remote-dry-run",
+        ]
+
+    def test_deploy_runbook_documents_execution_scope_boundaries(self):
+        text = GITHUB_ACTIONS_DEPLOY_RUNBOOK.read_text()
+
+        for scope in ("archive-only", "remote-dry-run", "deploy"):
+            assert f"`{scope}`" in text
+        assert "默认选择 `archive-only`" in text
+        assert "PR head" in text
+        assert "exact `origin/main`" in text
+        assert "不会进入任何 GitHub Environment" in text
+        assert "不构成生产部署证据" in text
 
     def test_deploy_acceptance_uses_canonical_hostname_and_valid_tls(self, workflow):
         deploy_text = str(workflow["jobs"]["deploy"])

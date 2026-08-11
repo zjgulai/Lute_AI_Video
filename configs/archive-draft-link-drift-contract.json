@@ -51,15 +51,6 @@
       "reason": "Frontmatter provenance link to historical planning source; not a current execution entrypoint."
     },
     {
-      "source_path": "docs/claude/known-gaps-stable.md",
-      "kind": "markdown_link",
-      "target_path": "superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md",
-      "raw_target": "../../superpowers/plans/2026-05-22-s1-continuity-migration-s2-s5.md",
-      "status": "historical_reference_only",
-      "current_entrypoint": false,
-      "reason": "Historical rollout evidence link retained inside older-polling section."
-    },
-    {
       "source_path": "docs/claude/updates/project-updates-202605-stable.md",
       "kind": "markdown_link",
       "target_path": ".kiro/plan/BRAND-ASSETS-DIAGNOSIS-2026-05-11.md",

@@ -1,4 +1,24 @@
-FROM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+ARG PYTHON_IMAGE=python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+
+FROM ${PYTHON_IMAGE} AS ffmpeg-h10-build
+ARG APT_MIRROR=mirrors.aliyun.com
+COPY docker/ffmpeg/install-h10-build-deps.sh /usr/local/bin/install-h10-build-deps.sh
+RUN chmod 0555 /usr/local/bin/install-h10-build-deps.sh \
+    && /usr/local/bin/install-h10-build-deps.sh
+ADD --checksum=sha256:de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f \
+  https://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_7.1.5.orig.tar.xz \
+  /opt/ffmpeg/ffmpeg_7.1.5.orig.tar.xz
+ADD --checksum=sha256:a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef \
+  https://deb.debian.org/debian-security/pool/updates/main/f/ffmpeg/ffmpeg_7.1.5-0+deb13u1.debian.tar.xz \
+  /opt/ffmpeg/ffmpeg_7.1.5-0+deb13u1.debian.tar.xz
+COPY docker/ffmpeg/86708357d126af84c16f80d9c57335d1e8c845c5.patch /opt/ffmpeg/
+COPY docker/ffmpeg/02fc47e13f903768b75f7985a2706a6223ab4506.patch /opt/ffmpeg/
+COPY docker/ffmpeg/16b2049d4d5222db6cd7c031409058571c94f6a9.patch /opt/ffmpeg/
+COPY docker/ffmpeg/build-h10-debs.sh /usr/local/bin/build-h10-debs.sh
+RUN chmod 0555 /usr/local/bin/build-h10-debs.sh \
+    && /usr/local/bin/build-h10-debs.sh
+
+FROM ${PYTHON_IMAGE}
 COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 WORKDIR /app
 
@@ -18,12 +38,18 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
 # Install the only runtime system dependency. All Python packages used here
 # have reviewed CPython 3.12 wheels in uv.lock, including psycopg[binary] and
 # Pillow, so compiler and development headers must not remain in the image.
-#   - ffmpeg: required by validated local media probes, stub generation, and
-#     frame extraction. yt-dlp is explicitly single-format/native/fixup-never;
-#     it must not invoke ffmpeg before the downloaded bytes pass safe-media.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
+#   - H10 FFmpeg: the exact Debian 7.1.5 source is patched with upstream
+#     86708357, 02fc47e1, and 16b2049d and built without the IAMF demuxer.
+#     The custom version prevents the vulnerable distribution package from
+#     silently returning.
+COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs
+COPY docker/ffmpeg/verify-h10-runtime.sh /usr/local/bin/verify-h10-runtime.sh
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/ffmpeg-debs/*.deb \
+    && chmod 0555 /usr/local/bin/verify-h10-runtime.sh \
+    && /usr/local/bin/verify-h10-runtime.sh \
+    && rm -rf /tmp/ffmpeg-debs /usr/local/bin/verify-h10-runtime.sh \
+      /var/lib/apt/lists/*
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
@@ -68,9 +94,13 @@ RUN (getent group 999 >/dev/null || groupadd --gid 999 appgroup) && \
 # Release identity is metadata-only. Keep it after all filesystem layers so a
 # new reviewed SHA cannot invalidate the pinned apt and uv dependency layers.
 ARG RELEASE_SOURCE_SHA
-LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
+ARG APP_VERSION
+LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app \
+    APP_VERSION="${APP_VERSION}" \
+    RELEASE_SOURCE_SHA="${RELEASE_SOURCE_SHA}"
 ENV PATH="/app/.venv/bin:$PATH" \
     XDG_DATA_HOME=/usr/share
 USER 999:999

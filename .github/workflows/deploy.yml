@@ -7,6 +7,15 @@ on:
         description: "Deployment reason (audit trail)"
         required: true
         type: string
+      execution_scope:
+        description: "Maximum authorized workflow boundary"
+        required: true
+        default: archive-only
+        type: choice
+        options:
+          - archive-only
+          - remote-dry-run
+          - deploy
   push:
     tags:
       - "v*.*.*"
@@ -83,6 +92,9 @@ jobs:
       - name: Install Python deps
         run: uv sync --locked --extra dev
 
+      - name: Check semantic version projections
+        run: uv run --locked python scripts/project_version.py --check
+
       - name: Lint
         run: uv run --locked --extra dev ruff check src tests scripts --output-format=github
 
@@ -132,6 +144,7 @@ jobs:
           docker compose -f docker-compose.yml config --quiet
           AI_VIDEO_SHARED_ROOT=/tmp/ai-video-shared AI_VIDEO_ENV_FILE=/dev/null \
             PORTAL_AUTH_ENV_FILE=/dev/null RELEASE_SOURCE_SHA=${{ github.sha }} \
+            APP_VERSION=$(python scripts/project_version.py --check) \
             RELEASE_IMAGE_TAG=${{ github.sha }} \
             docker compose -f deploy/lighthouse/docker-compose.release.yml config --quiet
 
@@ -151,6 +164,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
+      - name: Read semantic version
+        id: project-version
+        run: echo "value=$(python3 scripts/project_version.py --check)" >> "$GITHUB_OUTPUT"
+
       - name: Build backend image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -163,6 +180,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
           build-args: |
             RELEASE_SOURCE_SHA=${{ github.sha }}
+            APP_VERSION=${{ steps.project-version.outputs.value }}
             APT_MIRROR=deb.debian.org
             PIP_INDEX_URL=https://pypi.org/simple/
 
@@ -178,6 +196,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
           build-args: |
             RELEASE_SOURCE_SHA=${{ github.sha }}
+            APP_VERSION=${{ steps.project-version.outputs.value }}
             NEXT_PUBLIC_API_BASE_URL=/api
             NEXT_PUBLIC_IS_DEMO=false
             NEXT_PUBLIC_API_KEY=
@@ -194,9 +213,10 @@ jobs:
           cache-to: type=gha,mode=max,scope=rendering
           build-args: |
             RELEASE_SOURCE_SHA=${{ github.sha }}
+            APP_VERSION=${{ steps.project-version.outputs.value }}
             APT_MIRROR=deb.debian.org
 
-      - name: Verify release image revision labels and backend runtime config
+      - name: Verify release image revision labels, semantic versions and backend runtime config
         run: |
           for image in \
             lighthouse-backend:${{ github.sha }} \
@@ -206,6 +226,10 @@ jobs:
               --format='{{index .Config.Labels "org.opencontainers.image.revision"}}' \
               "$image")
             test "$revision" = "${{ github.sha }}"
+            version=$(docker image inspect \
+              --format='{{index .Config.Labels "org.opencontainers.image.version"}}' \
+              "$image")
+            test "$version" = "${{ steps.project-version.outputs.value }}"
           done
           docker run --rm --network none --entrypoint python3 \
             -e ENVIRONMENT=production \
@@ -370,6 +394,7 @@ jobs:
             scan-*.json
 
   remote-dry-run:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.execution_scope == 'remote-dry-run' || inputs.execution_scope == 'deploy' }}
     name: Remote rsync dry-run evidence
     needs: [provenance, preflight, build-images]
     runs-on: ubuntu-latest
@@ -432,6 +457,7 @@ jobs:
           retention-days: 14
 
   deploy:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.execution_scope == 'deploy' }}
     name: Deploy to Lighthouse
     needs: [preflight, build-images, remote-dry-run]
     runs-on: ubuntu-latest
@@ -528,8 +554,9 @@ jobs:
       - name: Smoke test /health
         run: |
           sleep 15
+          expected_version=$(python3 scripts/project_version.py --check)
           curl -fsS --max-time 30 "https://video.lute-tlz-dddd.top/api/health" \
-            | python3 -c 'import json,sys; payload=json.load(sys.stdin); persistence=payload.get("persistence") or {}; assert payload.get("status")=="ok"; assert persistence.get("backend")=="postgresql"; assert persistence.get("status")=="healthy"; assert persistence.get("tables_verified") is True'
+            | python3 -c 'import json,sys; payload=json.load(sys.stdin); persistence=payload.get("persistence") or {}; assert payload.get("status")=="ok"; assert payload.get("version")==sys.argv[1]; assert payload.get("source_revision")==sys.argv[2]; assert persistence.get("backend")=="postgresql"; assert persistence.get("status")=="healthy"; assert persistence.get("tables_verified") is True' "$expected_version" "$GITHUB_SHA"
 
       - name: Log deploy event
         run: |

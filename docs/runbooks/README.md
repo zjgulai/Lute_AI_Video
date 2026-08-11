@@ -23,6 +23,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 
 | 文件 | 故障模式 | 预期 MTTR |
 |---|---|---|
+| [production-operations.md](./production-operations.md) | 生产 deploy / DR / token smoke 唯一当前入口与授权边界 | 2-5 min |
 | [admin-csrf-contract.md](./admin-csrf-contract.md) | Admin 写操作 CSRF、cookie path、前端 `adminFetch` 契约漂移 | 2-5 min |
 | [deepseek-timeout.md](./deepseek-timeout.md) | DeepSeek LLM API 超时 / 不可用 / 限速 | 5-15 min |
 | [api-rate-limit-contract.md](./api-rate-limit-contract.md) | FastAPI fallback rate-limit、skip path、429 响应契约漂移 | 2-5 min |
@@ -74,8 +75,6 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 | [docker-no-token-preflight.md](./docker-no-token-preflight.md) | Docker build / compose 预检必须保持无 token、无外部 provider 调用 | 2-5 min |
 | [gate-approve-idempotency.md](./gate-approve-idempotency.md) | Gate approve 重复提交、网络重试、background resume 重复启动 | 5-10 min |
 | [key-rotation.md](./key-rotation.md) | API key rotation（泄露/定期/授权变更） | 30-45 min |
-| [p2-recharge-smoke-checklist.md](./p2-recharge-smoke-checklist.md) | poyo.ai 充值后真实 smoke 的 dry-run 与双确认执行入口 | 5-15 min |
-| [production-post-deploy-regression-checklist.md](./production-post-deploy-regression-checklist.md) | Lighthouse 部署后回归复盘清单（页面/API/容器/日志） | 10-20 min |
 | [scenario-state-persistence-schema.md](./scenario-state-persistence-schema.md) | S1-S5 state JSON 初始化、filesystem fallback、PG projection 字段契约漂移 | 5-10 min |
 | [thumbnail-missing.md](./thumbnail-missing.md) | /works 或 /library 视频卡片黑底无缩略图 | 5-15 min |
 
@@ -102,5 +101,7 @@ description: Runbooks 索引文档，列出所有运维事故应急手册及其�
 
 ## 相关文档
 
+- [当前生产收口 backlog](../backlog/current.md) — 当前优先级与外部门禁
+- [当前 release identity](../release/current.md) — semantic version 与 source revision 边界
 - [ADR 索引](../architecture/adr/README.md) — 架构决策
 - [部署指南](../../deploy/local-run.md) — 日常部署

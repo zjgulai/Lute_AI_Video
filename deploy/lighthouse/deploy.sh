@@ -8,6 +8,10 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.release.yml}"
 RELEASE_SOURCE_SHA="${RELEASE_SOURCE_SHA:-}"
 AI_VIDEO_SHARED_ROOT="${AI_VIDEO_SHARED_ROOT:-/opt/ai-video}"
 RELEASE_ROOT="$(cd ../.. && pwd)"
+APP_VERSION="$(python3 "$RELEASE_ROOT/scripts/project_version.py" --check)" || {
+  echo "ERROR: release semantic version projections are invalid" >&2
+  exit 1
+}
 ROLLBACK_COMPOSE="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/docker-compose.prod.yml"
 AI_VIDEO_ENV_FILE="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/.env.prod"
 PORTAL_AUTH_ENV_FILE="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/.portal-auth.env"
@@ -25,6 +29,9 @@ RELEASE_IMAGE_ARCHIVE_SHA256="${RELEASE_IMAGE_ARCHIVE_SHA256:-${RELEASE_IMAGE_AR
 
 ACTIVE_COMMAND=()
 ACTIVE_RELEASE_KIND=""
+ACTIVE_APP_VERSION=""
+ACTIVE_SOURCE_REVISION=""
+ACTIVE_IDENTITY_REQUIRED="0"
 PREVIOUS_RELEASE_ROOT=""
 PREVIOUS_RELEASE_SHA=""
 DEPLOY_COMPLETE="0"
@@ -66,7 +73,7 @@ if ! [[ "$CLEANUP_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   fail "CLEANUP_TIMEOUT_SECONDS must be a positive integer"
 fi
 
-export RELEASE_SOURCE_SHA
+export RELEASE_SOURCE_SHA APP_VERSION
 export RELEASE_IMAGE_TAG="$RELEASE_SOURCE_SHA"
 export AI_VIDEO_SHARED_ROOT AI_VIDEO_ENV_FILE PORTAL_AUTH_ENV_FILE
 
@@ -76,12 +83,13 @@ COMPOSE=(
   sudo env
   "RELEASE_SOURCE_SHA=$RELEASE_SOURCE_SHA"
   "RELEASE_IMAGE_TAG=$RELEASE_IMAGE_TAG"
+  "APP_VERSION=$APP_VERSION"
   "AI_VIDEO_ENV_FILE=$AI_VIDEO_ENV_FILE"
   docker compose -f "$COMPOSE_FILE"
 )
 
 configure_active_release() {
-  local current_link="$AI_VIDEO_SHARED_ROOT/current" previous_compose image
+  local current_link="$AI_VIDEO_SHARED_ROOT/current" previous_compose previous_app_version image
   if [ -L "$current_link" ]; then
     PREVIOUS_RELEASE_ROOT="$(readlink -f "$current_link")"
     PREVIOUS_RELEASE_SHA="${PREVIOUS_RELEASE_ROOT##*/releases-}"
@@ -91,6 +99,14 @@ configure_active_release() {
     fi
     previous_compose="$PREVIOUS_RELEASE_ROOT/deploy/lighthouse/docker-compose.release.yml"
     [ -f "$previous_compose" ] || fail "previous release compose is unavailable"
+    previous_app_version="$APP_VERSION"
+    if [ -f "$PREVIOUS_RELEASE_ROOT/scripts/project_version.py" ]; then
+      previous_app_version="$(python3 "$PREVIOUS_RELEASE_ROOT/scripts/project_version.py" --check)" \
+        || fail "previous release semantic version projections are invalid"
+      ACTIVE_APP_VERSION="$previous_app_version"
+      ACTIVE_SOURCE_REVISION="$PREVIOUS_RELEASE_SHA"
+      ACTIVE_IDENTITY_REQUIRED="1"
+    fi
     for image in \
       "lighthouse-backend:$PREVIOUS_RELEASE_SHA" \
       "lighthouse-frontend:$PREVIOUS_RELEASE_SHA" \
@@ -103,6 +119,7 @@ configure_active_release() {
       sudo env
       "RELEASE_SOURCE_SHA=$PREVIOUS_RELEASE_SHA"
       "RELEASE_IMAGE_TAG=$PREVIOUS_RELEASE_SHA"
+      "APP_VERSION=$previous_app_version"
       "AI_VIDEO_SHARED_ROOT=$AI_VIDEO_SHARED_ROOT"
       "AI_VIDEO_ENV_FILE=$AI_VIDEO_ENV_FILE"
       "PORTAL_AUTH_ENV_FILE=$PORTAL_AUTH_ENV_FILE"
@@ -134,8 +151,10 @@ cleanup_backup_helper() {
 }
 
 verify_backend_health() {
+  local expected_version="$1" expected_revision="$2" identity_required="$3"
   sudo docker exec ai_video_backend python3 -c '
 import json
+import sys
 import urllib.request
 payload = json.load(urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=10))
 persistence = payload.get("persistence") or {}
@@ -147,13 +166,18 @@ if persistence.get("status") != "healthy":
     raise SystemExit("persistence status is not healthy")
 if persistence.get("tables_verified") is not True:
     raise SystemExit("required PostgreSQL tables are not verified")
-' >/dev/null
+if sys.argv[3] == "1":
+    if payload.get("version") != sys.argv[1]:
+        raise SystemExit("backend semantic version does not match release")
+    if payload.get("source_revision") != sys.argv[2]:
+        raise SystemExit("backend source revision does not match release")
+' "$expected_version" "$expected_revision" "$identity_required" >/dev/null
 }
 
 verify_release_health() {
-  local attempt
+  local expected_version="$1" expected_revision="$2" identity_required="$3" attempt
   for attempt in $(seq 1 24); do
-    if verify_backend_health \
+    if verify_backend_health "$expected_version" "$expected_revision" "$identity_required" \
       && sudo docker exec ai_video_frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 \
       && sudo docker exec ai_video_rendering node /app/healthcheck.mjs \
         >/dev/null 2>&1; then
@@ -166,7 +190,7 @@ verify_release_health() {
 }
 
 verify_public_health() {
-  local attempt payload
+  local expected_version="$1" expected_revision="$2" identity_required="$3" attempt payload
   for attempt in $(seq 1 24); do
     if sudo docker exec ai_video_nginx nginx -t >/dev/null 2>&1; then
       payload="$(curl -fsS --max-time 10 \
@@ -180,7 +204,10 @@ assert payload.get("status") == "ok"
 assert persistence.get("backend") == "postgresql"
 assert persistence.get("status") == "healthy"
 assert persistence.get("tables_verified") is True
-' >/dev/null 2>&1; then
+if sys.argv[3] == "1":
+    assert payload.get("version") == sys.argv[1]
+    assert payload.get("source_revision") == sys.argv[2]
+' "$expected_version" "$expected_revision" "$identity_required" >/dev/null 2>&1; then
         echo "  Public HTTPS health passed with verified PostgreSQL schema (attempt $attempt/24)"
         return 0
       fi
@@ -208,7 +235,8 @@ rollback_release() {
   restore_shared_nginx_config
   nginx_rc="$?"
   if [ "$app_rc" -ne 0 ] || [ "$nginx_rc" -ne 0 ] \
-    || ! verify_release_health || ! verify_public_health; then
+    || ! verify_release_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED" \
+    || ! verify_public_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED"; then
     ROLLBACK_FAILED="1"
     echo "  ROLLBACK_FAILED: preserved production compose did not pass health verification." >&2
   else
@@ -224,7 +252,8 @@ restore_preswitch_services() {
   if [ "$OLD_BACKEND_STOPPED" = "1" ]; then
     "${ACTIVE_COMMAND[@]}" start rendering backend >/dev/null 2>&1
   fi
-  if ! verify_release_health || ! verify_public_health; then
+  if ! verify_release_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED" \
+    || ! verify_public_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED"; then
     ROLLBACK_FAILED="1"
     echo "  ROLLBACK_FAILED: unchanged production services did not recover." >&2
   else
@@ -305,6 +334,8 @@ for image in \
 do
   image_revision="$(sudo docker image inspect --format='{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
   [ "$image_revision" = "$RELEASE_SOURCE_SHA" ] || fail "image revision mismatch for $image"
+  image_version="$(sudo docker image inspect --format='{{index .Config.Labels "org.opencontainers.image.version"}}' "$image")"
+  [ "$image_version" = "$APP_VERSION" ] || fail "image semantic version mismatch for $image"
 done
 sudo docker run --rm --network none --entrypoint python3 \
   "lighthouse-backend:$RELEASE_IMAGE_TAG" -c \
@@ -379,7 +410,8 @@ echo "[4/8] Applying explicit schema-first migration gate..."
 echo "[5/8] Switching AI Video application containers behind preserved ingress..."
 APP_SWITCH_STARTED="1"
 "${COMPOSE[@]}" up -d --no-deps --force-recreate rendering backend frontend
-verify_release_health || fail "release application health did not pass"
+verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 \
+  || fail "release application health or identity did not pass"
 "${COMPOSE[@]}" run --rm --no-deps backend /bin/bash /app/scripts/deploy_alembic_gate.sh --check
 
 echo "[6/8] Reloading only the reviewed AI Video config in preserved shared nginx..."
@@ -390,7 +422,8 @@ NGINX_CONFIG_CHANGED="1"
 sudo cp "$RELEASE_AI_VIDEO_LOCATIONS" "$SHARED_AI_VIDEO_LOCATIONS"
 sudo docker exec ai_video_nginx nginx -t >/dev/null
 sudo docker exec ai_video_nginx nginx -s reload >/dev/null
-verify_public_health || fail "release public health did not pass"
+verify_public_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 \
+  || fail "release public health or identity did not pass"
 
 echo "[7/8] Recording the successful release pointer..."
 CURRENT_LINK="$AI_VIDEO_SHARED_ROOT/current"

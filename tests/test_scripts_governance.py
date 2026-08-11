@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -46,34 +45,37 @@ LOCAL_SYNC_SIDECAR_SUFFIXES = (
 
 
 def _script_paths() -> set[str]:
-    result = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "scripts"],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
     return {
-        path
-        for path in result.stdout.splitlines()
-        if "/" in path
-        and Path(path).parent == Path("scripts")
-        and not path.endswith(LOCAL_SYNC_SIDECAR_SUFFIXES)
+        str(Path("scripts") / path.name)
+        for path in SCRIPTS_DIR.iterdir()
+        if path.is_file()
+        and path.suffix in {".py", ".sh"}
+        and not path.name.endswith(LOCAL_SYNC_SIDECAR_SUFFIXES)
     }
 
 
-def _contract() -> dict:
+def _contract() -> dict[str, object]:
     assert CONTRACT_PATH.exists(), "scripts governance contract is missing"
     return json.loads(CONTRACT_PATH.read_text())
 
 
-def _contract_items() -> list[dict]:
+def _object_items(key: str) -> list[dict[str, str]]:
     contract = _contract()
-    items: list[dict] = []
+    items: list[dict[str, str]] = []
+    raw_items = contract.get(key)
+    assert isinstance(raw_items, list), f"{key} must be a list"
+    for item in raw_items:
+        assert isinstance(item, dict), f"{key} entries must be objects"
+        assert all(isinstance(item_key, str) for item_key in item)
+        assert all(isinstance(value, str) for value in item.values())
+        items.append(item)
+    return items
+
+
+def _contract_items() -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
     for category in SCRIPT_CATEGORIES:
-        category_items = contract.get(category)
-        assert isinstance(category_items, list), f"{category} must be a list"
-        items.extend(category_items)
+        items.extend(_object_items(category))
     return items
 
 
@@ -113,7 +115,7 @@ def test_ambiguous_script_names_are_not_marked_active_reusable():
 def test_provider_probe_scripts_are_not_called_by_default_entrypoints():
     provider_probe_names = {
         Path(item["path"]).name
-        for item in _contract().get("provider_probe_scripts", [])
+        for item in _object_items("provider_probe_scripts")
     }
     entrypoints = (
         REPO_ROOT / "Makefile",
@@ -140,8 +142,7 @@ def test_makefile_lint_covers_scripts_and_tests():
 
 def test_generated_script_artifacts_have_cleanup_policy_without_implicit_delete():
     generated_artifacts = list(SCRIPTS_DIR.rglob("__pycache__/*")) + list(SCRIPTS_DIR.rglob("*.pyc"))
-    contract = _contract()
-    policies = contract.get("generated_artifact_policies", [])
+    policies = _object_items("generated_artifact_policies")
 
     if generated_artifacts:
         assert {
@@ -158,13 +159,11 @@ def test_lighthouse_rsync_excludes_local_sync_sidecars():
 
 def test_scripts_governance_runbook_covers_contract_and_cleanup_boundary():
     runbook_text = RUNBOOK_PATH.read_text()
-    contract = _contract()
-
     assert "scripts-governance-contract.json" in runbook_text
     assert "cleanup_requires_confirmation" in runbook_text
     assert "不直接删除" in runbook_text
 
     for category in SCRIPT_CATEGORIES:
         assert category in runbook_text
-        for item in contract[category]:
+        for item in _object_items(category):
             assert item["path"] in runbook_text

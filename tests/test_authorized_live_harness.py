@@ -340,17 +340,17 @@ def test_cli_default_is_disabled_and_json_parseable():
         check=False,
     )
 
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    assert payload["status"] == "disabled"
-    assert payload["provider_call_executed"] is False
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "is retired and cannot execute" in result.stderr
 
 
-def test_cli_source_has_explicit_poyo_http_submitter_opt_in():
+def test_cli_source_is_a_network_free_retired_stub():
     source = SCRIPT_PATH.read_text()
 
-    assert "--enable-poyo-http-submitter" in source
-    assert "build_authorized_live_poyo_runtime_submitter" in source
+    assert "is retired and cannot execute" in source
+    assert "--enable-poyo-http-submitter" not in source
+    assert "build_authorized_live_poyo_runtime_submitter" not in source
     assert "PoyoClient" not in source
     assert "httpx" not in source
 

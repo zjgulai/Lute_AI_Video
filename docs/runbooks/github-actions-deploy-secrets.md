@@ -6,7 +6,7 @@ module: ci-cd
 topic: deploy-secrets
 status: stable
 created: 2026-05-17
-updated: 2026-07-20
+updated: 2026-08-11
 owner: Sisyphus
 ---
 
@@ -16,10 +16,18 @@ owner: Sisyphus
 
 `deploy.yml` 在两种条件下运行：
 
-1. **手动触发** (`workflow_dispatch`): GitHub UI → Actions → Deploy to Production → Run workflow，填写 `reason` 字段
-2. **Tag 推送**: `git tag v0.2.5 && git push origin v0.2.5` 自动触发
+1. **手动触发** (`workflow_dispatch`): GitHub UI → Actions → Deploy to Production → Run workflow，填写 `reason` 并选择 `execution_scope`
+2. **Tag 推送**: `git tag v0.2.5 && git push origin v0.2.5` 自动触发完整部署路径
 
-两种方式都先经过无生产凭证的 exact-main provenance gate。远程只读 dry-run 使用独立的 `production-read-only-dry-run` environment；真实部署才经过 GitHub Environment `production` 的 manual approval gate。
+| `execution_scope` | 最后执行的成功边界 | Environment / 凭据 |
+|---|---|---|
+| `archive-only` | exact-main preflight、三镜像 smoke/SBOM/scan、release bundle | 不会进入任何 GitHub Environment，不读取 `DRY_RUN_*`/`DEPLOY_*` |
+| `remote-dry-run` | 上述 archive + 受限 rsync dry-run artifact | 仅 `production-read-only-dry-run` 与 `DRY_RUN_*` |
+| `deploy` | 完整 remote dry-run + production deploy/health smoke | 远端 dry-run 成功后才进入 `production` |
+
+手动触发默认选择 `archive-only`。所有范围都要求 workflow SHA 精确等于执行时的 exact `origin/main` tip；PR head 或 pull-request synthetic merge SHA 不能生成 canonical deployable archive。`archive-only` 成功只构成 exact-main L2 archive/CI 证据，不构成生产部署证据。
+
+所有触发方式都先经过无生产凭证的 exact-main provenance gate。远程只读 dry-run 使用独立的 `production-read-only-dry-run` environment；真实部署才经过 GitHub Environment `production` 的 manual approval gate。
 
 ## 必需的 production Environment Secrets
 

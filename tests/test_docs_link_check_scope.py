@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shlex
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -26,29 +27,31 @@ HISTORICAL_PREFIXES = (
 REQUIRED_SCOPE_TARGETS = {
     "README.md",
     "AGENTS.md",
-    "docs/claude/known-gaps-stable.md",
+    "docs/backlog/current.md",
+    "docs/release/current.md",
     "docs/claude/project-standard-stable.md",
     "docs/reference/api-endpoints.md",
     "docs/runbooks/README.md",
     "docs/runbooks/production-e2e-token-smoke.md",
+    "docs/runbooks/production-operations.md",
     "docs/runbooks/s1-s5-hermetic-regression.md",
     "deploy/local-run.md",
     "deploy/tencent-cloudbase.md",
 }
 
 
-def _ci_workflow() -> dict:
+def _ci_workflow() -> dict[str, Any]:
     return yaml.safe_load(CI_YML.read_text())
 
 
-def _docs_link_check_job() -> dict:
+def _docs_link_check_job() -> dict[str, Any]:
     workflow = _ci_workflow()
     jobs = workflow.get("jobs") or {}
     assert "docs-link-check" in jobs, "ci.yml must keep the docs link-check job"
     return jobs["docs-link-check"]
 
 
-def _lychee_step() -> dict:
+def _lychee_step() -> dict[str, Any]:
     steps = _docs_link_check_job().get("steps") or []
     matches = [
         step
@@ -124,3 +127,8 @@ def test_docs_link_check_scope_is_current_formal_docs_only():
             f"historical docs must stay out of the blocking link check: {target}"
         )
         assert (REPO_ROOT / target).is_file(), f"scope target does not exist: {target}"
+        text = (REPO_ROOT / target).read_text(encoding="utf-8")
+        frontmatter = text.split("---", 2)[1] if text.startswith("---") else ""
+        assert "status: historical" not in frontmatter, (
+            f"historical document must not remain in current link scope: {target}"
+        )

@@ -85,4 +85,5 @@ def test_makefile_and_runbook_point_to_scenario_hermetic_entrypoint():
 
     assert "make test-hermetic-scenarios" in runbook
     assert "scripts/run_s1_s5_hermetic_regression.sh" in runbook
-    assert "Real generation remains P2 after POYO recharge" in runbook
+    assert "fresh governed W5" in runbook
+    assert "recharge or key presence grants no authority" in runbook

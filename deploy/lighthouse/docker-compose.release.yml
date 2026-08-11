@@ -12,6 +12,7 @@ services:
       dockerfile: Dockerfile.backend
       args:
         RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+        APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
     container_name: ai_video_backend
     restart: on-failure:5
     user: "999:999"
@@ -27,6 +28,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
+      - APP_VERSION=${APP_VERSION:?APP_VERSION is required}
+      - RELEASE_SOURCE_SHA=${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
       - LOG_LEVEL=INFO
       - RENDERING_SERVICE_SOCKET=/run/rendering/rendering.sock
       - XDG_DATA_HOME=/usr/share
@@ -55,6 +58,7 @@ services:
       dockerfile: rendering/Dockerfile
       args:
         RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+        APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
     container_name: ai_video_rendering
     restart: unless-stopped
     init: true
@@ -93,6 +97,7 @@ services:
       dockerfile: Dockerfile
       args:
         RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:?RELEASE_SOURCE_SHA is required}
+        APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
         NEXT_PUBLIC_API_BASE_URL: /api
         NEXT_PUBLIC_IS_DEMO: "false"
         NEXT_PUBLIC_API_KEY: ""

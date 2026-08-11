@@ -35,6 +35,14 @@ SHARED_ROOT="${AI_VIDEO_SHARED_ROOT:-/opt/ai-video}"
 ENV_FILE="${AI_VIDEO_ENV_FILE:-${SHARED_ROOT}/deploy/lighthouse/.env.prod}"
 CURRENT_RELEASE="${SHARED_ROOT}/releases-${EXPECTED_SHA}"
 COMPOSE_FILE="${CURRENT_RELEASE}/deploy/lighthouse/docker-compose.release.yml"
+VERSION_ROOT="${CURRENT_RELEASE}"
+if [[ "${FIXTURE_MODE}" == "1" ]]; then
+  VERSION_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+APP_VERSION="$(python3 "${VERSION_ROOT}/scripts/project_version.py" --check)" || {
+  echo "release semantic version projections are invalid" >&2
+  exit 2
+}
 BACKUP_DIR=""
 BACKUP_FILE=""
 EVIDENCE_ID=""
@@ -54,6 +62,7 @@ _restart_backend() {
   sudo env \
     RELEASE_IMAGE_TAG="${EXPECTED_SHA}" \
     RELEASE_SOURCE_SHA="${EXPECTED_SHA}" \
+    APP_VERSION="${APP_VERSION}" \
     AI_VIDEO_ENV_FILE="${ENV_FILE}" \
     docker compose \
       -p lighthouse \

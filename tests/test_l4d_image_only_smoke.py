@@ -148,10 +148,9 @@ def test_l4d_image_only_cli_default_is_disabled_without_provider_call() -> None:
         capture_output=True,
     )
 
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    assert payload["status"] == "disabled"
-    assert payload["provider_call_executed"] is False
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "is retired and cannot execute" in result.stderr
 
 
 def test_l4d_image_only_cli_source_does_not_call_full_asset_pack_harness() -> None:

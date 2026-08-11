@@ -1,9 +1,14 @@
-# Short Video Agent v0.2.7
+# Short Video Agent 2.0.0
 
 Multi-agent AI video creation pipeline for cross-border e-commerce.
 Automates the full content production workflow: strategy → script → compliance → storyboard → asset sourcing → media generation → edit → audio → caption → thumbnail → distribution → analytics.
 
 Built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) and 4 human-in-the-loop review checkpoints.
+
+`pyproject.toml` is the semantic-version authority. The expected external tag is
+`v2.0.0`, but it is not asserted to exist until an authorized release creates
+it. Runtime identity is the semantic version plus the exact source revision;
+see [current release identity](docs/release/current.md).
 
 **Live:** [https://video.lute-tlz-dddd.top](https://video.lute-tlz-dddd.top) (Tencent Lighthouse canonical domain). IP fallback: [https://101.34.52.232](https://101.34.52.232).
 
@@ -158,17 +163,16 @@ cd web
 npm run e2e         # Playwright local
 npm run e2e:ui      # UI-only visual/interaction regression, no poyo.ai token usage
 npm run e2e:prod    # Playwright production, skips @token-smoke by default
-RUN_TOKEN_SMOKE=1 npm run e2e:prod  # Explicit real task / provider-credit smoke
+# Provider mutation is not a generic test command; use a reviewed W5 exact-authorization window.
 ```
 
 ---
 
 ## Project Status
 
-- **v0.2.7** — Brand assets Phase 2-4, portfolio API, quick templates
-- **2026-06-25 production deploy** — Lighthouse live at `https://video.lute-tlz-dddd.top`; local deploy source `ae094f45d9ea720d15194a4336a4a7ca86347186` is now pushed to `origin/main`
-- Production read-only baseline is healthy: `/api/health.version=2.0.0`, Lighthouse smoke passed with `RUN_TOKEN_SMOKE=0`, and strict read-only production E2E was `55 passed`
-- 6 scenarios (Fast Mode + S1-S5) have staged production evidence; real token-consuming generation smoke is still opt-in via `RUN_TOKEN_SMOKE=1`
+- **2.0.0 semantic version** — source revision remains a separate release identity.
+- Production read-only baseline is healthy on `0bb5022e2f03c212f1681789428e0e1c42b13255`; this does not prove the current local candidate is deployed.
+- Fast Mode plus S1-S5 have historical provider-off or bounded evidence. Any new provider execution requires a reviewed W5 exact-authorization window and cannot be enabled by a generic environment opt-in.
 - Quality system in observe mode (frame variance, AV sync, video specs)
 - Admin Panel Phase 1 operational (tenants, logs, health, auth)
 - 380+ tests, CI/CD via GitHub Actions

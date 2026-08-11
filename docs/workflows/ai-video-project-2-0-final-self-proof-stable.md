@@ -3,7 +3,7 @@ title: AI Video 2.0 最终自证状态
 doc_type: workflow
 module: ai-video-2.0
 topic: final-self-proof
-status: stable
+status: historical
 created: 2026-06-04
 updated: 2026-06-07
 owner: self
@@ -11,6 +11,9 @@ source: human+ai
 ---
 
 # AI Video 2.0 最终自证状态
+
+> 历史证据：不作为当前执行入口。旧 P2/C21/L4C 权限与命令不可复用；
+> 当前 provider mutation 只能使用全新的 W5 exact-authorization 计划。
 
 ## 结论
 

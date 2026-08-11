@@ -1,11 +1,11 @@
 {
-  "updated": "2026-07-24",
+  "updated": "2026-08-01",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
     "scratch_or_one_off_location": "tmp/ or drafts/scripts/",
-    "archive_location": "archive/scripts/",
-    "notes": "Top-level tracked or non-ignored pending scripts must be reusable, named for stable purpose, and classified here before they are committed. Gitignored local probes such as scripts/test_*.py are intentionally excluded from this contract."
+    "archive_location": "Git history only; runnable source archives are forbidden inside the worktree",
+    "notes": "Every Python or shell file recursively present under scripts/ is governed, including tracked, untracked, ignored, and nested files. Only generated __pycache__ and bytecode are excluded. Provider-capable historical source must be removed or replaced by a fail-closed archive stub."
   },
   "active_reusable_scripts": [
     {
@@ -17,6 +17,11 @@
       "path": "scripts/check_step_order_consistency.py",
       "status": "active_reusable",
       "reason": "Step ordering consistency check."
+    },
+    {
+      "path": "scripts/project_version.py",
+      "status": "active_reusable",
+      "reason": "Check-only semantic-version authority and projection verifier."
     },
     {
       "path": "scripts/check_pyright_ratchet.py",
@@ -89,6 +94,11 @@
       "reason": "No-provider W1-31 approval-record builder; it does not execute provider mutations."
     },
     {
+      "path": "scripts/w1_31_provider_billing_reconciliation.py",
+      "status": "active_reusable",
+      "reason": "Consumed W1-31 compatibility CLI retained only for no-network read-only preflight; --execute is permanently blocked."
+    },
+    {
       "path": "scripts/commercial_token_smoke_preflight.py",
       "status": "active_reusable",
       "reason": "No-token C21 authorized-live preflight report."
@@ -109,11 +119,6 @@
       "reason": "Local developer startup helper."
     },
     {
-      "path": "scripts/diagnose_apis.py",
-      "status": "active_reusable",
-      "reason": "General API diagnostics that do not imply provider token spending by name."
-    },
-    {
       "path": "scripts/generate_portfolio_posters.py",
       "status": "active_reusable",
       "reason": "Portfolio poster backfill utility."
@@ -132,11 +137,6 @@
       "path": "scripts/monitoring_fixture_receiver.py",
       "status": "active_reusable",
       "reason": "Local-only bounded Alertmanager receiver for the provider-off monitoring profile."
-    },
-    {
-      "path": "scripts/p2_recharge_smoke_checklist.py",
-      "status": "active_reusable",
-      "reason": "Dry-run checklist for post-recharge smoke execution."
     },
     {
       "path": "scripts/production_non_token_e2e_check.py",
@@ -174,24 +174,9 @@
       "reason": "Brand asset refresh utility."
     },
     {
-      "path": "scripts/render_video.py",
-      "status": "active_reusable",
-      "reason": "Reusable local video rendering helper."
-    },
-    {
-      "path": "scripts/run_pipeline.py",
-      "status": "active_reusable",
-      "reason": "Generic pipeline runner."
-    },
-    {
       "path": "scripts/run_s1_s5_hermetic_regression.sh",
       "status": "active_reusable",
       "reason": "No-token S1-S5 hermetic regression entrypoint."
-    },
-    {
-      "path": "scripts/run_s1_video.py",
-      "status": "active_reusable",
-      "reason": "Reusable S1 video runner retained for local explicit execution."
     },
     {
       "path": "scripts/scrape_momcozy.py",
@@ -261,11 +246,6 @@
       "reason": "Version-specific release finalization script."
     },
     {
-      "path": "scripts/release_smoke_v0.4.0.sh",
-      "status": "manual_deploy_only",
-      "reason": "Version-specific release smoke script; token behavior is reviewed separately."
-    },
-    {
       "path": "scripts/run_alembic_upgrade.sh",
       "status": "manual_deploy_only",
       "reason": "Database migration operation."
@@ -274,64 +254,9 @@
       "path": "scripts/deploy_alembic_gate.sh",
       "status": "manual_deploy_only",
       "reason": "Fail-closed production Alembic readiness and apply gate; manual deployment workflow only."
-    },
-    {
-      "path": "scripts/sync_lighthouse_to_output.sh",
-      "status": "manual_deploy_only",
-      "reason": "Production artifact sync from Lighthouse to local output."
-    },
-    {
-      "path": "scripts/sync_output_to_lighthouse.sh",
-      "status": "manual_deploy_only",
-      "reason": "Production artifact sync from local output to Lighthouse."
     }
   ],
   "provider_probe_scripts": [
-    {
-      "path": "scripts/authorized_live_token_smoke_harness.py",
-      "status": "provider_probe",
-      "reason": "Authorized-live token smoke entrypoint; execute mode requires explicit gates and may call providers."
-    },
-    {
-      "path": "scripts/l4d_image_only_smoke.py",
-      "status": "provider_probe",
-      "reason": "L4D staged image-only provider smoke; execute mode may call poyo.ai."
-    },
-    {
-      "path": "scripts/l4d_paired_smoke.py",
-      "status": "provider_probe",
-      "reason": "L4D staged paired image-plus-video provider smoke; execute mode may call poyo.ai."
-    },
-    {
-      "path": "scripts/l4d_video_only_smoke.py",
-      "status": "provider_probe",
-      "reason": "L4D staged video-only provider smoke; execute mode may call poyo.ai."
-    },
-    {
-      "path": "scripts/debug_poyo_403.py",
-      "status": "provider_probe",
-      "reason": "Direct poyo.ai diagnostic; may consume provider credits."
-    },
-    {
-      "path": "scripts/diagnose_poyo.py",
-      "status": "provider_probe",
-      "reason": "Direct poyo.ai diagnostic; may consume provider credits."
-    },
-    {
-      "path": "scripts/discover_poyo_models.py",
-      "status": "provider_probe",
-      "reason": "Direct poyo.ai model discovery; may consume provider credits."
-    },
-    {
-      "path": "scripts/probe_sora2pro.py",
-      "status": "provider_probe",
-      "reason": "Direct provider probe; may consume provider credits."
-    },
-    {
-      "path": "scripts/w1_31_provider_billing_reconciliation.py",
-      "status": "provider_probe",
-      "reason": "Retired W1-31 one-shot provider runner; remains provider-sensitive even though execute entrypoints now fail closed."
-    },
     {
       "path": "scripts/w5_fast_one_shot_operator.py",
       "status": "provider_probe",
@@ -340,118 +265,102 @@
   ],
   "legacy_one_off_scripts": [
     {
-      "path": "scripts/apply_fix_patch.py",
+      "path": "scripts/diagnose_apis.py",
       "status": "archive_candidate",
-      "reason": "One-off historical patch helper; not a stable project entrypoint."
+      "reason": "Retired generic live-provider diagnostic; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/fix_page_mac.py",
+      "path": "scripts/render_video.py",
       "status": "archive_candidate",
-      "reason": "Machine-specific historical fix script."
+      "reason": "Retired live media renderer; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/fix_remotion.sh",
+      "path": "scripts/run_pipeline.py",
       "status": "archive_candidate",
-      "reason": "Historical remediation script with ambiguous fix naming."
+      "reason": "Retired live pipeline runner; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/overwrite_fix.py",
+      "path": "scripts/authorized_live_token_smoke_harness.py",
       "status": "archive_candidate",
-      "reason": "One-off overwrite helper; unsafe as a default script."
+      "reason": "Retired C21 provider runner; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/patch_api_submit_review.py",
+      "path": "scripts/l4d_image_only_smoke.py",
       "status": "archive_candidate",
-      "reason": "One-off API patch helper."
+      "reason": "Retired L4D image provider runner; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/phase1_sync.py",
+      "path": "scripts/l4d_paired_smoke.py",
       "status": "archive_candidate",
-      "reason": "Historical phase sync script with non-semantic phase naming."
+      "reason": "Retired L4D paired provider runner; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/phase2_sync.py",
+      "path": "scripts/l4d_video_only_smoke.py",
       "status": "archive_candidate",
-      "reason": "Historical phase sync script with non-semantic phase naming."
+      "reason": "Retired L4D video provider runner; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/phase3_sync.py",
+      "path": "scripts/debug_poyo_403.py",
       "status": "archive_candidate",
-      "reason": "Historical phase sync script with non-semantic phase naming."
+      "reason": "Retired direct PoYo diagnostic; the compatibility stub always fails closed."
+    },
+    {
+      "path": "scripts/diagnose_poyo.py",
+      "status": "archive_candidate",
+      "reason": "Retired direct PoYo diagnostic; the compatibility stub always fails closed."
+    },
+    {
+      "path": "scripts/discover_poyo_models.py",
+      "status": "archive_candidate",
+      "reason": "Retired multi-model PoYo probe; the compatibility stub always fails closed."
+    },
+    {
+      "path": "scripts/probe_sora2pro.py",
+      "status": "archive_candidate",
+      "reason": "Retired direct provider probe; the compatibility stub always fails closed."
+    },
+    {
+      "path": "scripts/p2_recharge_smoke_checklist.py",
+      "status": "archive_candidate",
+      "reason": "Retired P2/C21 provider-smoke entrypoint; the compatibility stub always fails closed and W5 is the only current governed provider path."
+    },
+    {
+      "path": "scripts/release_smoke_v0.4.0.sh",
+      "status": "archive_candidate",
+      "reason": "Version-specific historical smoke reads production secrets and is not a current release entrypoint."
     },
     {
       "path": "scripts/run_s1_video_now.py",
       "status": "archive_candidate",
-      "reason": "Ad-hoc now-named S1 runner; stable runner is scripts/run_s1_video.py."
+      "reason": "Retired ad-hoc S1 mutation runner; the compatibility stub always fails closed."
     },
     {
-      "path": "scripts/sync_brand_color.py",
+      "path": "scripts/run_s1_video.py",
       "status": "archive_candidate",
-      "reason": "Historical one-off brand color sync."
+      "reason": "Retired S1 mutation runner; the compatibility stub always fails closed."
     },
-    {
-      "path": "scripts/sync_bugfix.py",
-      "status": "archive_candidate",
-      "reason": "Historical bugfix sync script."
-    },
-    {
-      "path": "scripts/sync_bugfix_v2.py",
-      "status": "archive_candidate",
-      "reason": "Historical bugfix sync variant with version-suffix naming."
-    },
-    {
-      "path": "scripts/sync_p4.py",
-      "status": "archive_candidate",
-      "reason": "Historical phase/priority sync helper with low-information name."
-    },
-    {
-      "path": "scripts/sync_phase6.py",
-      "status": "archive_candidate",
-      "reason": "Historical phase sync script with non-semantic phase naming."
-    },
-    {
-      "path": "scripts/sync_phase7.py",
-      "status": "archive_candidate",
-      "reason": "Historical phase sync script with non-semantic phase naming."
-    },
-    {
-      "path": "scripts/sync_plan_to_mac.py",
-      "status": "archive_candidate",
-      "reason": "Machine-specific historical sync helper."
-    },
-    {
-      "path": "scripts/sync_resume_fix.py",
-      "status": "archive_candidate",
-      "reason": "Historical resume-fix sync helper."
-    },
-    {
-      "path": "scripts/sync_s1.py",
-      "status": "archive_candidate",
-      "reason": "Historical S1 sync helper."
-    }
-  ],
-  "historical_e2e_scripts": [
     {
       "path": "scripts/e2e_influencer_remix.py",
-      "status": "historical_e2e",
-      "reason": "Legacy E2E utility retained outside default CI."
+      "status": "archive_candidate",
+      "reason": "Retired E2E mutation runner; the compatibility stub always fails closed."
     },
     {
       "path": "scripts/e2e_verify_distribution.py",
-      "status": "historical_e2e",
-      "reason": "Legacy E2E utility retained outside default CI."
+      "status": "archive_candidate",
+      "reason": "Retired E2E mutation runner; the compatibility stub always fails closed."
     },
     {
       "path": "scripts/run_5scenario_e2e.py",
-      "status": "historical_e2e",
-      "reason": "Legacy full-scenario E2E utility retained outside default CI."
+      "status": "archive_candidate",
+      "reason": "Retired multi-scenario mutation runner; the compatibility stub always fails closed."
     },
     {
       "path": "scripts/run_s1_e2e.py",
-      "status": "historical_e2e",
-      "reason": "Legacy S1 E2E utility retained outside default CI."
+      "status": "archive_candidate",
+      "reason": "Retired S1 E2E runner; the compatibility stub always fails closed."
     }
   ],
+  "historical_e2e_scripts": [],
   "generated_artifact_policies": [
     {
       "pattern": "scripts/__pycache__/**",

@@ -1,7 +1,24 @@
-# syntax=docker/dockerfile:1.7
-
 ARG NODE_IMAGE=node:22-trixie-slim@sha256:e6d9a389d34ff9678438af985c9913fbd1eb6ed36e80fea56644f4b4f6dd70ba
+ARG FFMPEG_BUILDER_IMAGE=python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 ARG CHROME_PACKAGE_STAGE=chrome-download
+
+FROM ${FFMPEG_BUILDER_IMAGE} AS ffmpeg-h10-build
+ARG APT_MIRROR=deb.debian.org
+COPY docker/ffmpeg/install-h10-build-deps.sh /usr/local/bin/install-h10-build-deps.sh
+RUN chmod 0555 /usr/local/bin/install-h10-build-deps.sh \
+    && /usr/local/bin/install-h10-build-deps.sh
+ADD --checksum=sha256:de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f \
+  https://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_7.1.5.orig.tar.xz \
+  /opt/ffmpeg/ffmpeg_7.1.5.orig.tar.xz
+ADD --checksum=sha256:a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef \
+  https://deb.debian.org/debian-security/pool/updates/main/f/ffmpeg/ffmpeg_7.1.5-0+deb13u1.debian.tar.xz \
+  /opt/ffmpeg/ffmpeg_7.1.5-0+deb13u1.debian.tar.xz
+COPY docker/ffmpeg/86708357d126af84c16f80d9c57335d1e8c845c5.patch /opt/ffmpeg/
+COPY docker/ffmpeg/02fc47e13f903768b75f7985a2706a6223ab4506.patch /opt/ffmpeg/
+COPY docker/ffmpeg/16b2049d4d5222db6cd7c031409058571c94f6a9.patch /opt/ffmpeg/
+COPY docker/ffmpeg/build-h10-debs.sh /usr/local/bin/build-h10-debs.sh
+RUN chmod 0555 /usr/local/bin/build-h10-debs.sh \
+    && /usr/local/bin/build-h10-debs.sh
 
 FROM ${NODE_IMAGE} AS chrome-download
 ADD --checksum=sha256:4193e00b6d5d5969ee63f7a69596868f546aa0e8cb077b3e0bf9cc1e2c719d00 \
@@ -13,7 +30,9 @@ FROM ${CHROME_PACKAGE_STAGE} AS chrome-package
 FROM ${NODE_IMAGE}
 
 ARG RELEASE_SOURCE_SHA
-LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}"
+ARG APP_VERSION
+LABEL org.opencontainers.image.revision="${RELEASE_SOURCE_SHA}" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
 ARG TARGETARCH
 ARG APT_MIRROR=deb.debian.org
@@ -22,9 +41,11 @@ ARG GOOGLE_CHROME_SHA256=4193e00b6d5d5969ee63f7a69596868f546aa0e8cb077b3e0bf9cc1
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Chrome is fixed to the first upstream stable build after the vulnerable
-# 150.0.7871.128-r0 package. The exact .deb is checksum-bound. FFmpeg is
-# supplied by supported Debian 13; release scans remain blocking unless every
-# High/Critical is either absent or covered by an exact, unexpired reviewed rule.
+# 150.0.7871.128-r0 package. The exact .deb is checksum-bound. H10 rebuilds
+# Debian FFmpeg from checksum-pinned source with upstream IAMF, DVB subtitle,
+# and CFHD fixes and removes the unused IAMF demuxer; release scans remain
+# blocking unless every High/Critical is absent or covered by an exact,
+# unexpired reviewed rule.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i "s|deb.debian.org|${APT_MIRROR}|g" \
         /etc/apt/sources.list.d/debian.sources; \
@@ -36,6 +57,8 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=chrome-package /google-chrome-stable.deb /tmp/google-chrome-stable.deb
+COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs
+COPY docker/ffmpeg/verify-h10-runtime.sh /usr/local/bin/verify-h10-runtime.sh
 RUN echo "${GOOGLE_CHROME_SHA256}  /tmp/google-chrome-stable.deb" | sha256sum -c - \
     && if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i \
@@ -46,15 +69,18 @@ RUN echo "${GOOGLE_CHROME_SHA256}  /tmp/google-chrome-stable.deb" | sha256sum -c
     && test "${TARGETARCH}" = "amd64" \
     && apt-get install -y --no-install-recommends \
       -o Acquire::Retries=5 \
-      ffmpeg \
       fonts-freefont-ttf \
       fonts-noto \
       fonts-noto-cjk \
+      /tmp/ffmpeg-debs/*.deb \
       /tmp/google-chrome-stable.deb \
     && test "$(dpkg-query -W -f='${Version}' google-chrome-stable)" = \
       "${GOOGLE_CHROME_VERSION}" \
+    && chmod 0555 /usr/local/bin/verify-h10-runtime.sh \
+    && /usr/local/bin/verify-h10-runtime.sh \
     && rm -f /tmp/google-chrome-stable.deb \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /tmp/ffmpeg-debs /usr/local/bin/verify-h10-runtime.sh \
+      /var/lib/apt/lists/*
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     RENDERING_SERVICE_SOCKET=/run/rendering/rendering.sock \

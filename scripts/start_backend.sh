@@ -13,9 +13,18 @@ set -a
 source .env
 set +a
 
-echo "API_KEY: $API_KEY"
-echo "ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:0:20}..."
-echo "POYO_API_KEY: ${POYO_API_KEY:0:20}..."
+credential_state() {
+  local name="$1"
+  if [ -n "${!name:-}" ]; then
+    echo "${name}: configured"
+  else
+    echo "${name}: not_configured"
+  fi
+}
+
+credential_state API_KEY
+credential_state ELEVENLABS_API_KEY
+credential_state POYO_API_KEY
 echo "Starting uvicorn on port 8001..."
 
 uvicorn src.api:app --reload --port 8001 --reload-dir src

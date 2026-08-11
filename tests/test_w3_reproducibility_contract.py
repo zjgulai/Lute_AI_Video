@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from packaging.version import Version
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -29,6 +30,11 @@ RUNTIME_MEDIA_DEPENDENCIES = {
     "torch",
     "transformers",
     "yt-dlp",
+}
+SECURITY_MINIMUMS = {
+    "cryptography": "50.0.0",
+    "h2": "4.4.1",
+    "langgraph-checkpoint-postgres": "3.1.1",
 }
 
 FINAL_E1_IMAGE_ID = "sha256:01b2e4bc18f59ba14032a696405ec0263c9cc5ff30add4b666fb26fff7a5e5c4"
@@ -97,11 +103,17 @@ def test_pyproject_and_uv_lock_cover_the_full_production_dependency_set() -> Non
 
 
 def test_backend_images_use_digest_pinned_python_and_locked_uv_sync() -> None:
-    expected_prefix = f"FROM python:{PINNED_PYTHON}-slim-trixie@sha256:"
+    expected_prefix = f"ARG PYTHON_IMAGE=python:{PINNED_PYTHON}-slim-trixie@sha256:"
     for path in BACKEND_DOCKERFILES:
         text = path.read_text()
         assert text.startswith(expected_prefix), path.name
-        assert re.search(r"^FROM python:.*@sha256:[0-9a-f]{64}$", text, re.MULTILINE)
+        assert re.search(
+            rf"^ARG PYTHON_IMAGE=python:{re.escape(PINNED_PYTHON)}"
+            r"-slim-trixie@sha256:[0-9a-f]{64}$",
+            text,
+            re.MULTILINE,
+        )
+        assert text.count("FROM ${PYTHON_IMAGE}") == 2
         assert "COPY pyproject.toml uv.lock ./" in text
         assert "uv sync --locked --no-dev" in text
         assert 'ENV PATH="/app/.venv/bin:$PATH"' in text
@@ -138,6 +150,48 @@ def test_ci_and_deploy_preflight_sync_the_same_locked_environment() -> None:
         assert "uv sync --locked --extra dev" in commands, path.name
         assert 'pip install -e ".[dev]"' not in commands, path.name
         assert "pip install ruff" not in commands, path.name
+
+
+def test_ci_compose_validation_binds_the_canonical_project_version() -> None:
+    workflow = _workflow(CI)
+    steps = workflow["jobs"]["docker-build"]["steps"]
+    compose_step = next(
+        step
+        for step in steps
+        if step.get("name") == "Docker compose config validation (no start)"
+    )
+    command = str(compose_step.get("run") or "")
+
+    version_export = 'export APP_VERSION="$(python scripts/project_version.py --check)"'
+    assert version_export in command
+    assert command.index(version_export) < command.index(
+        "docker compose -f docker-compose.yml config --quiet"
+    )
+    assert command.index(version_export) < command.index(
+        "docker compose -f deploy/lighthouse/docker-compose.release.yml config --quiet"
+    )
+
+
+def test_locked_security_dependencies_cannot_regress_below_fixed_versions() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text())
+    requirements = {
+        _dependency_name(item): item
+        for item in (
+            *pyproject["project"]["dependencies"],
+            *pyproject["tool"]["uv"]["constraint-dependencies"],
+        )
+    }
+    locked = {
+        package["name"]: Version(package["version"])
+        for package in tomllib.loads(UV_LOCK.read_text())["package"]
+    }
+
+    for name, minimum in SECURITY_MINIMUMS.items():
+        requirement = requirements[name]
+        prefix = f"{name}>="
+        assert requirement.startswith(prefix)
+        assert Version(requirement.removeprefix(prefix)) >= Version(minimum)
+        assert locked[name] >= Version(minimum)
 
 
 def test_typecheck_is_a_real_make_and_ci_gate() -> None:

@@ -87,6 +87,11 @@ if docker[:2] == ["image", "inspect"]:
         raise SystemExit(1)
     if "--format={{index .Config.Labels \"org.opencontainers.image.revision\"}}" in docker:
         print(previous_sha if is_previous else current_sha)
+    if "--format={{index .Config.Labels \"org.opencontainers.image.version\"}}" in docker:
+        if os.environ.get("FAIL_STAGE") == "image_version" and not is_previous:
+            print("9.9.9")
+        else:
+            print(os.environ.get("APP_VERSION", "2.0.0"))
     raise SystemExit(0)
 if docker[:1] == ["load"]:
     loaded.write_text("loaded\n")
@@ -132,7 +137,17 @@ stack_path = pathlib.Path(os.environ["FAKE_STACK"])
 stack = stack_path.read_text().strip() if stack_path.exists() else "active"
 if os.environ.get("FAIL_STAGE") == "public_health" and stack == "release":
     raise SystemExit(22)
-print(json.dumps({"status":"ok","persistence":{"backend":"postgresql","status":"healthy","tables_verified":True}}))
+revision = os.environ.get("RELEASE_SOURCE_SHA", os.environ["FAKE_CURRENT_SHA"])
+if stack != "release" and os.environ.get("FAKE_PREVIOUS_SHA"):
+    revision = os.environ["FAKE_PREVIOUS_SHA"]
+if os.environ.get("FAIL_STAGE") == "public_identity" and stack == "release":
+    revision = "f" * 40
+print(json.dumps({
+    "status":"ok",
+    "version":os.environ.get("APP_VERSION", "2.0.0"),
+    "source_revision":revision,
+    "persistence":{"backend":"postgresql","status":"healthy","tables_verified":True},
+}))
 '''
 
 
@@ -268,6 +283,22 @@ def test_existing_image_tag_fails_before_maintenance(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert "immutable release image tag already exists" in result.stderr
     assert " stop nginx" not in log
+
+
+def test_image_version_mismatch_fails_before_maintenance(tmp_path: Path) -> None:
+    result, log = _run_deploy(tmp_path, fail_stage="image_version")
+
+    assert result.returncode != 0
+    assert "image semantic version mismatch" in result.stderr
+    assert "stop rendering backend" not in log
+
+
+def test_public_release_identity_mismatch_rolls_back(tmp_path: Path) -> None:
+    result, log = _run_deploy(tmp_path, fail_stage="public_identity")
+
+    assert result.returncode != 0
+    assert "release public health or identity did not pass" in result.stderr
+    assert "up -d --no-deps --force-recreate rendering backend frontend" in log
 
 
 def test_cleanup_is_rejected_before_any_docker_command(tmp_path: Path) -> None:

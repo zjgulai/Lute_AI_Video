@@ -1,10 +1,12 @@
 {
-  "status": "stable",
+  "status": "historical",
   "script": "scripts/release_smoke_v0.4.0.sh",
   "runbook": "docs/runbooks/release-smoke-token-opt-in.md",
-  "default_token_smoke": "disabled",
-  "opt_in_env": "RUN_TOKEN_SMOKE=1",
-  "no_token_boundary": true,
+  "execution_allowed": false,
+  "replacement": "governed W5 exact-authorization executor",
+  "default_token_smoke": "forbidden",
+  "opt_in_env": null,
+  "no_token_boundary": false,
   "token_consuming_endpoints": [
     "/api/fast/generate",
     "/api/fast/submit",

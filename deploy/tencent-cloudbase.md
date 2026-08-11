@@ -20,7 +20,8 @@
 ## 前置要求
 
 1. 腾讯云账号（已完成实名认证）
-2. 本项目的 `Dockerfile.backend`、`pyproject.toml` 和 `uv.lock`
+2. 本项目的 `Dockerfile.backend`、`pyproject.toml`、`uv.lock` 和
+   `docker/ffmpeg/` H10 构建输入
 
 ---
 
@@ -53,7 +54,7 @@
 
 | 变量名 | 值 |
 |---|---|
-| `API_KEY` | `ai_video_demo_2026` |
+| `API_KEY` | 管理员私下签发的 tenant API key；不得把值写入文档或仓库 |
 | `CORS_ORIGINS` | `https://zjgulai.github.io` |
 | `VIDEO_OUTPUT_DIR` | `/app/output` |
 | `DEFAULT_LLM_PROVIDER` | `deepseek` |
@@ -71,7 +72,7 @@
 1. 在项目根目录执行：
 ```bash
 cd /path/to/Lute_AI_Video
-zip -r deploy.zip Dockerfile.backend pyproject.toml uv.lock src/ scripts/ configs/ migrations/ strategy_source/ rendering/
+zip -r deploy.zip Dockerfile.backend pyproject.toml uv.lock docker/ src/ scripts/ configs/ migrations/ strategy_source/ rendering/
 ```
 
 2. 点击「上传代码包」
@@ -91,7 +92,7 @@ zip -r deploy.zip Dockerfile.backend pyproject.toml uv.lock src/ scripts/ config
 1. 打开 GitHub Pages 站点：`https://zjgulai.github.io/Lute_AI_Video/`
 2. 点击右上角 ⚙️ 齿轮图标
 3. Backend URL 填入 CloudBase 提供的访问地址
-4. API Key 填入：`ai_video_demo_2026`
+4. API Key 填入管理员私下签发且绑定目标租户/权限的值；不要使用公共 demo 占位符。
 5. 关闭 Demo Mode
 6. 点击 Test Connection → Save
 7. 刷新页面
@@ -114,6 +115,8 @@ CloudBase 云托管按量计费：
 ### 构建失败
 - 检查代码包包含 `pyproject.toml` 与 `uv.lock`，且 Docker build 中
   `uv sync --locked --no-dev --no-install-project` 未报告 lock 漂移
+- 检查代码包包含 `docker/ffmpeg/`，否则 H10 FFmpeg 构建输入无法被
+  `Dockerfile.backend` 复制
 - 检查是否有系统依赖需要安装（如 `libpq-dev`）
 
 ### 服务启动失败

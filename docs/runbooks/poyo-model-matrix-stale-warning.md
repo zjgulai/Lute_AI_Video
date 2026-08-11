@@ -20,13 +20,15 @@ source: human+ai
 
 当前公开文档重验契约：[`configs/poyo-current-provider-revalidation-contract.json`](../../configs/poyo-current-provider-revalidation-contract.json)。
 
-真实 smoke 最小样本计划契约：[`configs/authorized-live-token-smoke-sample-plan-contract.json`](../../configs/authorized-live-token-smoke-sample-plan-contract.json)。
+历史 C21 最小样本契约仅用于解释旧证据，不是当前执行输入。当前真实生成必须
+使用全新的 W5 exact-authorization 计划及其 activation/runtime binding。
 
 ## 2. 强制边界
 
 - 该矩阵只能表达 `2026-05` catalog snapshot 与本项目阈值映射。
 - 该矩阵不得被表述为 poyo.ai 当前最新模型目录、价格或审核规则。
-- 充值、真实 token smoke、`RUN_TOKEN_SMOKE=1`、部署默认模型切换或成本测算前，先重新核对 poyo.ai 当前产品页面/API 文档。
+- 新建 W5 provider 计划、部署默认模型切换或成本测算前，先重新核对
+  poyo.ai 当前产品页面/API 文档；充值或 key 存在不授予执行权限。
 - 本 runbook 不执行 poyo.ai 请求，不执行 `/api/fast/*`、`/scenario/*`、gate candidate、上传、发布或任何外部 provider 调用。
 - 2026-06-06 的公开文档重验只支持 `L1-public-doc-revalidation`，不得表述为 key 可用、余额充足、provider runtime 成功或商业交付完成。
 
@@ -73,5 +75,6 @@ git diff --check
 
 - 缺少快照警告：先补矩阵顶部 warning，再更新 contract 中的必需短语。
 - link-check scope 失败：把本 runbook 保持在 `configs/docs-link-check-scope.txt` 和 `.github/workflows/ci.yml` 的 lychee 参数中。
-- 充值前验证被误跳过：停止真实 smoke，不设置 `RUN_TOKEN_SMOKE=1`，先完成 poyo.ai 当前产品页面/API 文档重验。
-- `provider_revalidation_ref` 不匹配：停止真实 smoke，刷新公开文档重验契约或修正私有 approval record；不要手动绕过 preflight。
+- provider 文档重验被误跳过：停止 W5 计划创建，先完成 poyo.ai 当前产品页面/API 文档重验。
+- W5 plan 的 provider revalidation 绑定不匹配：停止执行并重新生成 exact plan；
+  不得复用旧 approval record 或手动绕过 readiness。

@@ -29,6 +29,7 @@ services:
       dockerfile: Dockerfile.backend
       args:
         RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:-local-dev-dirty}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
     container_name: ai_video_backend
     restart: unless-stopped
     ports:
@@ -37,6 +38,8 @@ services:
       - .env
     environment:
       - PYTHONPATH=/app
+      - APP_VERSION=${APP_VERSION:-2.0.0}
+      - RELEASE_SOURCE_SHA=${RELEASE_SOURCE_SHA:-local-dev-dirty}
       - DATABASE_URL=postgresql://ai_video:ai_video_dev_2026@postgres:5432/ai_video
     working_dir: /app
     volumes:
@@ -57,6 +60,8 @@ services:
       context: ./web
       dockerfile: Dockerfile
       args:
+        RELEASE_SOURCE_SHA: ${RELEASE_SOURCE_SHA:-local-dev-dirty}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
         NEXT_PUBLIC_API_BASE_URL: http://backend:8001
     container_name: ai_video_frontend
     restart: unless-stopped
