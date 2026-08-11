@@ -1214,6 +1214,11 @@ vulnerabilities:
   - pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u4
   expired_at: 2026-08-21
   statement: owner=self; reason=Renderer has network_mode none and no application curl or libcurl invocation; the dependency is inert
+- id: CVE-2026-8458
+  purls:
+  - pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u4
+  expired_at: 2026-08-21
+  statement: owner=self; reason=Renderer has network_mode none and application runtime does not invoke libcurl HTTP Negotiate or CURLOPT_SERVICE_NAME; the affected connection-reuse path is unreachable
 - id: CVE-2026-8924
   purls:
   - pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u4
