@@ -1,9 +1,9 @@
 ---
 title: "Exact-main release archive execution scopes"
-doc_type: design
+doc_type: architecture
 module: ci-cd
 topic: exact-main-archive-provenance
-status: proposed
+status: review
 created: 2026-08-11
 updated: 2026-08-11
 owner: self

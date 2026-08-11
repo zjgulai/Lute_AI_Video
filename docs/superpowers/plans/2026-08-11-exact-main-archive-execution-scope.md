@@ -1,3 +1,15 @@
+---
+title: "Exact-main Archive Execution Scope Implementation Plan"
+doc_type: workflow
+module: ci-cd
+topic: exact-main-archive-provenance
+status: review
+created: 2026-08-11
+updated: 2026-08-11
+owner: self
+source: human+ai
+---
+
 # Exact-main Archive Execution Scope Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -10,7 +22,7 @@
 
 ## Global Constraints
 
-- The approved design authority is `docs/superpowers/specs/2026-08-11-exact-main-archive-execution-scope-design.md`, SHA-256 `1d3c7e32b5cc36dd57419f3a37aaf9a22257ba20bd744d4237c704dfb2665ed0`.
+- The approved design authority is `docs/superpowers/specs/2026-08-11-exact-main-archive-execution-scope-design.md`, SHA-256 `0a8d0abe602e01962a0b72562c815e9a123713850a33a8109bf02445c9218c9b`.
 - Manual scopes are exactly `archive-only`, `remote-dry-run`, and `deploy`; the default is exactly `archive-only`.
 - Every scope retains `github.sha == origin/main` provenance, existing concurrency, preflight, build, smoke, SBOM, scan, archive, checksum, and 14-day retention behavior.
 - Tag pushes retain the existing full remote-dry-run and deploy path.
