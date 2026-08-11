@@ -63,7 +63,10 @@ FRONTEND_NODE_IMAGE = (
     "sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32"
 )
 RENDERER_NODE_IMAGE = (
-    "node:22-trixie-slim@"
+    "node:22.23.2-trixie-slim@"
+    "sha256:db8a96a63e5264607ada2d206758876ebbed6a12be2ada7517793cbfb0c2a29c"
+)
+SUPERSEDED_RENDERER_NODE_DIGEST = (
     "sha256:e6d9a389d34ff9678438af985c9913fbd1eb6ed36e80fea56644f4b4f6dd70ba"
 )
 
@@ -82,6 +85,7 @@ def test_release_base_images_are_pinned_canonical_and_overrideable() -> None:
     assert "FROM node:22-alpine" not in frontend
 
     assert f"ARG NODE_IMAGE={RENDERER_NODE_IMAGE}" in renderer
+    assert SUPERSEDED_RENDERER_NODE_DIGEST not in renderer
     assert f"ARG FFMPEG_BUILDER_IMAGE={PYTHON_IMAGE}" in renderer
     assert renderer.count("FROM ${NODE_IMAGE}") == 2
     assert renderer.count("FROM ${FFMPEG_BUILDER_IMAGE}") == 1
