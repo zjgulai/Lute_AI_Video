@@ -407,28 +407,108 @@ snapshot_backup_schedule() {
 }
 
 restore_backup_schedule() {
-  local restore_rc=0
+  local candidate_runtime_backup compensation_rc restore_rc=0 runtime_stage
+  candidate_runtime_backup="${BACKUP_RUNTIME_DIR}.candidate-${RELEASE_SOURCE_SHA}"
+  runtime_stage="${BACKUP_RUNTIME_DIR}.restore-${RELEASE_SOURCE_SHA}"
   [ "$BACKUP_SCHEDULE_SNAPSHOT_READY" = "1" ] || return 0
+
+  if ! sudo sh -eu -c '
+    snapshot_dir="$1"
+    present_count=0
+    absent_count=0
+    [ -f "$snapshot_dir/crontab.present" ] && present_count=1
+    [ -f "$snapshot_dir/crontab.absent" ] && absent_count=1
+    [ "$((present_count + absent_count))" -eq 1 ]
+    present_count=0
+    absent_count=0
+    [ -f "$snapshot_dir/runtime.present" ] && present_count=1
+    [ -f "$snapshot_dir/runtime.absent" ] && absent_count=1
+    [ "$((present_count + absent_count))" -eq 1 ]
+  ' sh "$BACKUP_SCHEDULE_ROLLBACK_DIR"; then
+    echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: snapshot markers are incomplete or ambiguous; live schedule preserved." >&2
+    return 1
+  fi
+
+  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.present"; then
+    if sudo test -L "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" \
+      || ! sudo test -d "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" \
+      || ! sudo test -r "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" \
+      || ! sudo test -x "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime"; then
+      echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: runtime snapshot is unavailable; live schedule preserved." >&2
+      return 1
+    fi
+    if ! sudo test ! -e "$runtime_stage" \
+      || ! sudo test ! -e "$candidate_runtime_backup" \
+      || ! sudo cp -a "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" "$runtime_stage" \
+      || ! sudo diff -qr "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" "$runtime_stage" \
+        >/dev/null 2>&1; then
+      sudo rm -rf -- "$runtime_stage" >/dev/null 2>&1 || true
+      echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: unable to stage the original runtime; live schedule preserved." >&2
+      return 1
+    fi
+  fi
+
+  if sudo test -L "$BACKUP_RUNTIME_DIR" \
+    || ! sudo test -d "$BACKUP_RUNTIME_DIR" \
+    || ! sudo test ! -e "$candidate_runtime_backup"; then
+    sudo rm -rf -- "$runtime_stage" >/dev/null 2>&1 || true
+    echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: candidate runtime cannot be preserved; live schedule preserved." >&2
+    return 1
+  fi
+
+  if ! sudo mv -- "$BACKUP_RUNTIME_DIR" "$candidate_runtime_backup"; then
+    sudo rm -rf -- "$runtime_stage" >/dev/null 2>&1 || true
+    echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: candidate runtime could not be preserved; live schedule preserved." >&2
+    return 1
+  fi
+
+  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.present"; then
+    if ! sudo mv -- "$runtime_stage" "$BACKUP_RUNTIME_DIR" \
+      || ! sudo diff -qr "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" "$BACKUP_RUNTIME_DIR" \
+        >/dev/null 2>&1; then
+      compensation_rc=0
+      sudo rm -rf -- "$BACKUP_RUNTIME_DIR" "$runtime_stage" \
+        >/dev/null 2>&1 || compensation_rc=1
+      if [ "$compensation_rc" -eq 0 ]; then
+        sudo mv -- "$candidate_runtime_backup" "$BACKUP_RUNTIME_DIR" \
+          >/dev/null 2>&1 || compensation_rc=1
+      fi
+      if [ "$compensation_rc" -eq 0 ]; then
+        echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: runtime restore failed; disabled candidate runtime was retained." >&2
+      else
+        ROLLBACK_FAILED="1"
+        echo "  BACKUP_SCHEDULE_STATE_UNKNOWN: runtime restore compensation failed; snapshot retained and manual recovery is required." >&2
+      fi
+      return 1
+    fi
+  elif ! sudo test ! -e "$BACKUP_RUNTIME_DIR"; then
+    compensation_rc=0
+    sudo rm -rf -- "$BACKUP_RUNTIME_DIR" "$runtime_stage" \
+      >/dev/null 2>&1 || compensation_rc=1
+    if [ "$compensation_rc" -eq 0 ]; then
+      sudo mv -- "$candidate_runtime_backup" "$BACKUP_RUNTIME_DIR" \
+        >/dev/null 2>&1 || compensation_rc=1
+    fi
+    if [ "$compensation_rc" -eq 0 ]; then
+      echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: absent runtime restore failed; disabled candidate runtime was retained." >&2
+    else
+      ROLLBACK_FAILED="1"
+      echo "  BACKUP_SCHEDULE_STATE_UNKNOWN: absent-runtime compensation failed; snapshot retained and manual recovery is required." >&2
+    fi
+    return 1
+  fi
 
   if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/crontab.present"; then
     sudo "$BACKUP_CRONTAB_BIN" "$BACKUP_SCHEDULE_ROLLBACK_DIR/root.crontab" \
       || restore_rc=1
+    if [ "$restore_rc" -eq 0 ]; then
+      sudo sh -eu -c '
+        "$1" -l | cmp -s - "$2"
+      ' sh "$BACKUP_CRONTAB_BIN" "$BACKUP_SCHEDULE_ROLLBACK_DIR/root.crontab" \
+        || restore_rc=1
+    fi
   else
     sudo "$BACKUP_CRONTAB_BIN" -r >/dev/null 2>&1 || true
-  fi
-
-  sudo rm -rf -- "$BACKUP_RUNTIME_DIR" || restore_rc=1
-  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.present"; then
-    sudo cp -a "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" "$BACKUP_RUNTIME_DIR" \
-      || restore_rc=1
-  fi
-
-  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/crontab.present"; then
-    sudo sh -eu -c '
-      "$1" -l | cmp -s - "$2"
-    ' sh "$BACKUP_CRONTAB_BIN" "$BACKUP_SCHEDULE_ROLLBACK_DIR/root.crontab" \
-      || restore_rc=1
-  else
     sudo sh -eu -c '
       if output=$("$1" -l 2>&1); then
         exit 1
@@ -436,16 +516,29 @@ restore_backup_schedule() {
       printf "%s" "$output" | grep -qi "no crontab for"
     ' sh "$BACKUP_CRONTAB_BIN" || restore_rc=1
   fi
-  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.present"; then
-    sudo diff -qr "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" "$BACKUP_RUNTIME_DIR" \
-      >/dev/null 2>&1 || restore_rc=1
-  else
-    sudo test ! -e "$BACKUP_RUNTIME_DIR" || restore_rc=1
+
+  if [ "$restore_rc" -ne 0 ]; then
+    compensation_rc=0
+    sudo rm -rf -- "$BACKUP_RUNTIME_DIR" >/dev/null 2>&1 \
+      || compensation_rc=1
+    if [ "$compensation_rc" -eq 0 ]; then
+      sudo mv -- "$candidate_runtime_backup" "$BACKUP_RUNTIME_DIR" \
+        >/dev/null 2>&1 || compensation_rc=1
+    fi
+    disable_backup_schedule_for_rollback >/dev/null 2>&1 \
+      || compensation_rc=1
+    if [ "$compensation_rc" -eq 0 ]; then
+      echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: original cron was not verified; disabled candidate schedule was retained." >&2
+    else
+      ROLLBACK_FAILED="1"
+      echo "  BACKUP_SCHEDULE_STATE_UNKNOWN: runtime or cron compensation failed; snapshot retained and manual recovery is required." >&2
+    fi
+    return 1
   fi
 
-  if [ "$restore_rc" -eq 0 ]; then
-    cleanup_backup_schedule_snapshot || restore_rc=1
-  fi
+  sudo rm -rf -- "$candidate_runtime_backup" "$runtime_stage" \
+    >/dev/null 2>&1 || restore_rc=1
+  cleanup_backup_schedule_snapshot || restore_rc=1
   if [ "$restore_rc" -eq 0 ]; then
     BACKUP_SCHEDULE_CHANGED="0"
     echo "  Original backup runtime and root cron were restored." >&2
@@ -621,7 +714,7 @@ release_exit_handler() {
 trap release_exit_handler EXIT
 trap 'exit 130' HUP INT TERM
 
-echo "[0/8] Validating release inputs and compose..."
+echo "[0/9] Validating release inputs and compose..."
 [ -f "$COMPOSE_FILE" ] || fail "release compose not found: $COMPOSE_FILE"
 [ -f "$ROLLBACK_COMPOSE" ] || fail "preserved rollback compose not found"
 [ -f "$AI_VIDEO_ENV_FILE" ] || fail "production backend env file not found"
@@ -653,7 +746,7 @@ PY
 "${COMPOSE[@]}" config --quiet
 echo "  Rollback source: $ACTIVE_RELEASE_KIND${PREVIOUS_RELEASE_SHA:+ ($PREVIOUS_RELEASE_SHA)}"
 
-echo "[1/8] Loading the exact CI-reviewed backend/frontend/rendering images..."
+echo "[1/9] Loading the exact CI-reviewed backend/frontend/rendering images..."
 for image in \
   "lighthouse-backend:$RELEASE_IMAGE_TAG" \
   "lighthouse-frontend:$RELEASE_IMAGE_TAG" \
@@ -679,11 +772,11 @@ sudo docker run --rm --network none --entrypoint python3 \
   "lighthouse-backend:$RELEASE_IMAGE_TAG" -c \
   'from pathlib import Path; from src.services.provider_price_catalog import ProviderPriceCatalog; assert Path("/app/configs/provider-cost-catalog.v1.json").is_file(); ProviderPriceCatalog.load_default()'
 
-echo "[2/8] Quiescing and verifying the production backup schedule..."
+echo "[2/9] Quiescing and verifying the production backup schedule..."
 install_and_verify_backup_schedule
 verify_no_backup_in_progress
 
-echo "[2/8] Entering AI Video maintenance while preserving shared ingress..."
+echo "[3/9] Entering AI Video maintenance while preserving shared ingress..."
 MAINTENANCE_BEGUN="1"
 "${ACTIVE_COMMAND[@]}" stop rendering backend
 OLD_BACKEND_STOPPED="1"
@@ -770,22 +863,22 @@ PY
   echo "  Fresh complete backup passed isolated restore verification."
 }
 
-echo "[3/8] Creating and isolated-restoring a fresh production backup..."
+echo "[4/9] Creating and isolated-restoring a fresh production backup..."
 run_verified_backup
 
-echo "[4/8] Applying explicit schema-first migration gate..."
+echo "[5/9] Applying explicit schema-first migration gate..."
 "${COMPOSE[@]}" run --rm --no-deps \
   -e DEPLOY_MIGRATION_AUTH=APPLY_REVIEWED_RELEASE \
   backend /bin/bash /app/scripts/deploy_alembic_gate.sh --apply
 
-echo "[5/8] Switching AI Video application containers behind preserved ingress..."
+echo "[6/9] Switching AI Video application containers behind preserved ingress..."
 APP_SWITCH_STARTED="1"
 "${COMPOSE[@]}" up -d --no-deps --force-recreate rendering backend frontend
 verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 strict \
   || fail "release application health or identity did not pass"
 "${COMPOSE[@]}" run --rm --no-deps backend /bin/bash /app/scripts/deploy_alembic_gate.sh --check
 
-echo "[6/8] Reloading only the reviewed AI Video config in preserved shared nginx..."
+echo "[7/9] Reloading only the reviewed AI Video config in preserved shared nginx..."
 sudo test ! -e "$NGINX_CONFIG_BACKUP" \
   || fail "nginx rollback config already exists for this release"
 sudo cp -p "$SHARED_AI_VIDEO_LOCATIONS" "$NGINX_CONFIG_BACKUP"
@@ -796,7 +889,7 @@ sudo docker exec ai_video_nginx nginx -s reload >/dev/null
 verify_public_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 \
   || fail "release public health or identity did not pass"
 
-echo "[7/8] Recording the successful release pointer..."
+echo "[8/9] Recording the successful release pointer and backup schedule..."
 NEXT_LINK="$AI_VIDEO_SHARED_ROOT/.current-$RELEASE_SOURCE_SHA"
 ln -sfn "$RELEASE_ROOT" "$NEXT_LINK"
 python3 - "$NEXT_LINK" "$CURRENT_LINK" <<'PY'
@@ -810,7 +903,7 @@ activate_backup_schedule
 commit_backup_schedule
 DEPLOY_COMPLETE="1"
 
-echo "[8/8] Preserving current and previous release images for offline rollback..."
+echo "[9/9] Preserving current and previous release images for offline rollback..."
 echo "  Cleanup skipped."
 
 echo "Deploy complete: provider-off release $RELEASE_SOURCE_SHA"

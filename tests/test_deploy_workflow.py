@@ -32,6 +32,7 @@ RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 LIGHTHOUSE_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
 LIGHTHOUSE_BUILD_AND_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "build-and-deploy.sh"
 LIGHTHOUSE_RELEASE_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.release.yml"
+LIGHTHOUSE_DEPLOY_RUNBOOK = REPO_ROOT / "docs" / "workflows" / "deploy-lighthouse-stable.md"
 BACKEND_DOCKERFILE = REPO_ROOT / "Dockerfile.backend"
 RENDERING_DOCKERFILE = REPO_ROOT / "rendering" / "Dockerfile"
 RENDERING_SERVER = REPO_ROOT / "rendering" / "server.mjs"
@@ -731,7 +732,7 @@ class TestDeployWorkflow:
     def test_lighthouse_deploy_keeps_ingress_stopped_until_application_health_passes(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
 
-        assert "[2/8] Entering AI Video maintenance while preserving shared ingress" in text
+        assert "[3/9] Entering AI Video maintenance while preserving shared ingress" in text
         assert '"${ACTIVE_COMMAND[@]}" stop nginx' not in text
         assert "docker exec ai_video_nginx nginx -t" in text
         app_health_index = text.index(
@@ -740,6 +741,20 @@ class TestDeployWorkflow:
         nginx_reload_index = text.rindex("docker exec ai_video_nginx nginx -s reload")
         assert app_health_index < nginx_reload_index
         assert '"${COMPOSE[@]}" up -d --no-deps --force-recreate nginx' not in text
+
+    def test_lighthouse_deploy_stage_banners_match_ten_stage_runbook(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+        banners = re.findall(r'^echo "\[([0-9]+)/([0-9]+)\]', text, re.MULTILINE)
+
+        assert banners == [(str(index), "9") for index in range(10)]
+        runbook = LIGHTHOUSE_DEPLOY_RUNBOOK.read_text()
+        assert "## 远端十阶段" in runbook
+        stage_heading = runbook.index("## 远端十阶段")
+        acceptance_heading = runbook.index("## 验收边界")
+        stage_section = runbook[stage_heading:acceptance_heading]
+        assert re.findall(r"^([0-9]+)\. ", stage_section, re.MULTILINE) == [
+            str(index) for index in range(1, 11)
+        ]
 
     def test_lighthouse_deploy_backend_health_verifies_postgres_schema_and_fails_closed(self):
         text = LIGHTHOUSE_DEPLOY.read_text()

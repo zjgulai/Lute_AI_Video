@@ -70,11 +70,72 @@ if (
 ):
     raise SystemExit(52)
 if (
+    os.environ.get("FAIL_STAGE") == "schedule_restore_snapshot_missing"
+    and args[:2] == ["test", "-d"]
+    and args[-1] == f"{snapshot_dir}/runtime"
+):
+    raise SystemExit(54)
+if (
+    os.environ.get("FAIL_STAGE") == "schedule_restore_copy"
+    and args[:2] == ["cp", "-a"]
+    and args[-2] == f"{snapshot_dir}/runtime"
+):
+    raise SystemExit(55)
+if (
+    os.environ.get("FAIL_STAGE") == "schedule_restore_swap"
+    and args[:1] == ["mv"]
+    and args[-2].endswith(
+        f".restore-{os.environ.get('RELEASE_SOURCE_SHA', os.environ['FAKE_CURRENT_SHA'])}"
+    )
+    and args[-1] == os.environ.get("BACKUP_RUNTIME_DIR")
+):
+    raise SystemExit(56)
+if (
+    os.environ.get("COMPENSATION_FAIL_STAGE") == "runtime_fallback"
+    and args[:1] == ["mv"]
+    and args[-2].endswith(
+        f".candidate-{os.environ.get('RELEASE_SOURCE_SHA', os.environ['FAKE_CURRENT_SHA'])}"
+    )
+    and args[-1] == os.environ.get("BACKUP_RUNTIME_DIR")
+    and pathlib.Path(os.environ["FAKE_ORIGINAL_CRON_RESTORE_MARKER"]).exists()
+):
+    raise SystemExit(60)
+if (
+    os.environ.get("COMPENSATION_FAIL_STAGE") == "early_runtime_fallback"
+    and args[:1] == ["mv"]
+    and args[-2].endswith(
+        f".candidate-{os.environ.get('RELEASE_SOURCE_SHA', os.environ['FAKE_CURRENT_SHA'])}"
+    )
+    and args[-1] == os.environ.get("BACKUP_RUNTIME_DIR")
+):
+    raise SystemExit(62)
+if (
+    os.environ.get("FAIL_STAGE") == "schedule_restore_verify"
+    and args[:2] == ["diff", "-qr"]
+    and args[-1] == os.environ.get("BACKUP_RUNTIME_DIR")
+):
+    raise SystemExit(57)
+if (
+    os.environ.get("FAIL_STAGE") == "schedule_restore_absent_race"
+    and args[:3] == ["test", "!", "-e"]
+    and args[-1] == os.environ.get("BACKUP_RUNTIME_DIR")
+    and pathlib.Path(f"{snapshot_dir}/runtime.absent").exists()
+    and pathlib.Path(
+        f"{os.environ['BACKUP_RUNTIME_DIR']}.candidate-"
+        f"{os.environ.get('RELEASE_SOURCE_SHA', os.environ['FAKE_CURRENT_SHA'])}"
+    ).exists()
+):
+    runtime = pathlib.Path(os.environ["BACKUP_RUNTIME_DIR"])
+    runtime.mkdir(parents=True, exist_ok=True)
+    (runtime / "unexpected-race").write_text("race\n", encoding="utf-8")
+    raise SystemExit(63)
+if (
     args[:3] == ["rm", "-rf", "--"]
     and args[-1] == os.environ.get("BACKUP_SCHEDULE_ROLLBACK_DIR")
     and os.environ.get("FAIL_STAGE") in {
         "schedule_commit",
         "schedule_commit_pointer_restore",
+        "schedule_quiesce",
     }
 ):
     marker = pathlib.Path(os.environ["FAKE_COMMIT_FAILURE_MARKER"])
@@ -92,6 +153,20 @@ if "install_backup_cron.sh" in joined:
         else "candidate disabled backup cron\n"
     )
     if mode == "install":
+        if (
+            os.environ.get("COMPENSATION_FAIL_STAGE") == "schedule_disable"
+            and enabled == "0"
+            and pathlib.Path(
+                os.environ["FAKE_ORIGINAL_CRON_RESTORE_MARKER"]
+            ).exists()
+        ):
+            raise SystemExit(61)
+        if (
+            os.environ.get("FAIL_STAGE") == "schedule_quiesce"
+            and enabled == "0"
+            and (pathlib.Path(os.environ["AI_VIDEO_SHARED_ROOT"]) / "current").exists()
+        ):
+            raise SystemExit(58)
         runtime.mkdir(parents=True, exist_ok=True)
         for name in ("backup_production.sh", "pg_dump_logical.py", "backup_manifest.py"):
             (runtime / name).write_text(f"candidate {name}\n", encoding="utf-8")
@@ -221,7 +296,14 @@ if docker[:1] == ["exec"]:
             if os.environ.get("FAKE_ACTIVE_RENDERER_HEALTH_FAIL") == "1":
                 raise SystemExit(1)
             raise SystemExit(0)
-    if os.environ.get("FAIL_STAGE") == "app_health" and active == "release" and "ai_video_backend" in docker:
+    if (
+        active == "release"
+        and "ai_video_backend" in docker
+        and (
+            os.environ.get("FAIL_STAGE") == "app_health"
+            or os.environ.get("FAIL_STAGE", "").startswith("schedule_restore_")
+        )
+    ):
         raise SystemExit(1)
     raise SystemExit(0)
 if docker[:1] == ["compose"]:
@@ -277,7 +359,10 @@ def _run_deploy(
     cleanup: str = "0",
     media_sign_secret: str | None = "m" * 32,
     active_renderer_healthy: bool = True,
+    active_renderer_legacy: bool = True,
+    compensation_fail_stage: str = "",
     existing_crontab: bool = True,
+    existing_runtime: bool = True,
     hold_backup_lock: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     shared = tmp_path / "shared"
@@ -359,15 +444,27 @@ if [ "${1:-}" = "-l" ]; then
 elif [ "${1:-}" = "-r" ]; then
   rm -f "${FAKE_CRONTAB_FILE:?}"
 else
+  if [ "${FAIL_STAGE:-}" = "schedule_restore_cron_write" ] \
+    && [[ "$1" == */backup-schedule-rollback/root.crontab ]]; then
+    exit 59
+  fi
   cp "$1" "${FAKE_CRONTAB_FILE:?}"
+  if [[ "$1" == */backup-schedule-rollback/root.crontab ]]; then
+    printf 'attempted\n' >"${FAKE_ORIGINAL_CRON_RESTORE_MARKER:?}"
+  fi
+  if [ "${FAIL_STAGE:-}" = "schedule_restore_cron_verify" ] \
+    && [[ "$1" == */backup-schedule-rollback/root.crontab ]]; then
+    printf 'corrupt restored cron\n' >"${FAKE_CRONTAB_FILE:?}"
+  fi
 fi
 """,
     )
 
     backup_runtime = tmp_path / "backup-runtime"
-    backup_runtime.mkdir()
-    for name in ("backup_production.sh", "pg_dump_logical.py", "backup_manifest.py"):
-        (backup_runtime / name).write_text(f"legacy {name}\n", encoding="utf-8")
+    if existing_runtime:
+        backup_runtime.mkdir()
+        for name in ("backup_production.sh", "pg_dump_logical.py", "backup_manifest.py"):
+            (backup_runtime / name).write_text(f"legacy {name}\n", encoding="utf-8")
 
     log = tmp_path / "deploy.log"
     loaded = tmp_path / "loaded"
@@ -395,7 +492,7 @@ fi
         "FAKE_STACK": str(stack),
         "FAKE_PREVIOUS_SHA": PREVIOUS_SHA if previous_release else "",
         "FAKE_EXISTING_TAG": "1" if existing_tag else "0",
-        "FAKE_ACTIVE_RENDERER_LEGACY": "1",
+        "FAKE_ACTIVE_RENDERER_LEGACY": "1" if active_renderer_legacy else "0",
         "FAKE_ACTIVE_RENDERER_HEALTH_FAIL": (
             "0" if active_renderer_healthy else "1"
         ),
@@ -403,7 +500,11 @@ fi
         "BACKUP_RUNTIME_DIR": str(backup_runtime),
         "BACKUP_SCHEDULE_ROLLBACK_DIR": str(tmp_path / "backup-schedule-rollback"),
         "FAKE_COMMIT_FAILURE_MARKER": str(tmp_path / "commit-failed-once"),
+        "FAKE_ORIGINAL_CRON_RESTORE_MARKER": str(
+            tmp_path / "original-cron-restore-attempted"
+        ),
         "FAIL_STAGE": fail_stage,
+        "COMPENSATION_FAIL_STAGE": compensation_fail_stage,
     }
     lock_holder: subprocess.Popen[str] | None = None
     ready = tmp_path / "backup-lock-ready"
@@ -423,11 +524,12 @@ time.sleep(30)
             ],
             text=True,
         )
-        for _ in range(100):
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
             if ready.exists():
                 break
-            time.sleep(0.01)
-        assert ready.exists()
+            time.sleep(0.02)
+        assert ready.exists(), "backup lock holder did not acquire the lock in time"
     try:
         result = subprocess.run(
             ["bash", str(DEPLOY_SCRIPT)],
@@ -521,6 +623,22 @@ def test_candidate_renderer_never_uses_legacy_health_fallback(tmp_path: Path) ->
     strict_probe = log.index("node /app/healthcheck.mjs")
     legacy_probe = log.index("http://127.0.0.1:3001/health")
     assert strict_probe < rollback_switch < legacy_probe
+    assert "ROLLBACK_FAILED" not in result.stderr
+
+
+def test_nonlegacy_active_renderer_uses_strict_healthcheck_on_rollback(
+    tmp_path: Path,
+) -> None:
+    result, log = _run_deploy(
+        tmp_path,
+        fail_stage="app_health",
+        active_renderer_legacy=False,
+    )
+
+    assert result.returncode != 0
+    assert "docker exec ai_video_rendering test -f /app/healthcheck.mjs" in log
+    assert "docker exec ai_video_rendering node /app/healthcheck.mjs" in log
+    assert "http://127.0.0.1:3001/health" not in log
     assert "ROLLBACK_FAILED" not in result.stderr
 
 
@@ -624,6 +742,152 @@ def test_pointer_restore_failure_keeps_backup_schedule_disabled(tmp_path: Path) 
     assert (tmp_path / "root.crontab").read_text() == "candidate disabled backup cron\n"
     assert (tmp_path / "backup-schedule-rollback").exists()
     assert (tmp_path / "shared" / "current").resolve() == REPO_ROOT
+
+
+def test_schedule_quiesce_failure_preserves_candidate_transaction(
+    tmp_path: Path,
+) -> None:
+    result, log = _run_deploy(tmp_path, fail_stage="schedule_quiesce")
+
+    assert result.returncode != 0
+    assert "BACKUP_SCHEDULE_QUIESCE_FAILED" in result.stderr
+    assert "APPLICATION_ROLLBACK_SKIPPED" in result.stderr
+    assert "Previous release pointer was restored" not in result.stderr
+    assert "Original backup runtime and root cron were restored" not in result.stderr
+    assert log.count("up -d --no-deps --force-recreate rendering backend frontend") == 1
+    assert (tmp_path / "root.crontab").read_text() == "candidate active backup cron\n"
+    assert (tmp_path / "backup-schedule-rollback").exists()
+    assert (tmp_path / "shared" / "current").resolve() == REPO_ROOT
+
+
+@pytest.mark.parametrize(
+    "fail_stage",
+    [
+        "schedule_restore_snapshot_missing",
+        "schedule_restore_copy",
+        "schedule_restore_swap",
+        "schedule_restore_verify",
+        "schedule_restore_cron_write",
+        "schedule_restore_cron_verify",
+    ],
+)
+def test_schedule_runtime_restore_failure_preserves_disabled_candidate_state(
+    tmp_path: Path,
+    fail_stage: str,
+) -> None:
+    result, log = _run_deploy(tmp_path, fail_stage=fail_stage)
+
+    assert result.returncode != 0
+    assert "BACKUP_SCHEDULE_ROLLBACK_FAILED" in result.stderr
+    assert (tmp_path / "root.crontab").read_text() == "candidate disabled backup cron\n"
+    runtime = tmp_path / "backup-runtime"
+    for name in ("backup_production.sh", "pg_dump_logical.py", "backup_manifest.py"):
+        assert (runtime / name).read_text() == f"candidate {name}\n"
+    assert (tmp_path / "backup-schedule-rollback").exists()
+    original_cron_restore = (
+        f"sudo {tmp_path}/bin/crontab "
+        f"{tmp_path}/backup-schedule-rollback/root.crontab"
+    )
+    if fail_stage in {"schedule_restore_cron_write", "schedule_restore_cron_verify"}:
+        assert original_cron_restore in log
+        assert "CRON_ENABLED=0" in log[log.index(original_cron_restore) :]
+    else:
+        assert original_cron_restore not in log
+
+
+def test_schedule_restore_swaps_runtime_before_enabling_original_cron(
+    tmp_path: Path,
+) -> None:
+    result, log = _run_deploy(tmp_path, fail_stage="app_health")
+
+    assert result.returncode != 0
+    runtime_restore = log.index("runtime.restore-")
+    original_cron_restore = log.index(
+        f"sudo {tmp_path}/bin/crontab "
+        f"{tmp_path}/backup-schedule-rollback/root.crontab"
+    )
+    assert runtime_restore < original_cron_restore
+
+
+@pytest.mark.parametrize(
+    "compensation_fail_stage",
+    ["runtime_fallback", "schedule_disable"],
+)
+def test_schedule_restore_compensation_failure_reports_unknown_state(
+    tmp_path: Path,
+    compensation_fail_stage: str,
+) -> None:
+    result, _ = _run_deploy(
+        tmp_path,
+        fail_stage="schedule_restore_cron_verify",
+        compensation_fail_stage=compensation_fail_stage,
+    )
+
+    assert result.returncode != 0
+    assert "BACKUP_SCHEDULE_STATE_UNKNOWN" in result.stderr
+    assert "manual recovery" in result.stderr
+    assert "disabled candidate schedule was retained" not in result.stderr
+    assert (tmp_path / "backup-schedule-rollback").exists()
+
+
+@pytest.mark.parametrize(
+    "fail_stage",
+    ["schedule_restore_swap", "schedule_restore_verify"],
+)
+def test_runtime_restore_fallback_failure_reports_unknown_state(
+    tmp_path: Path,
+    fail_stage: str,
+) -> None:
+    result, _ = _run_deploy(
+        tmp_path,
+        fail_stage=fail_stage,
+        compensation_fail_stage="early_runtime_fallback",
+    )
+
+    assert result.returncode != 0
+    assert "BACKUP_SCHEDULE_STATE_UNKNOWN" in result.stderr
+    assert "manual recovery" in result.stderr
+    assert "disabled candidate runtime was retained" not in result.stderr
+    assert (tmp_path / "root.crontab").read_text() == "candidate disabled backup cron\n"
+    assert (tmp_path / "backup-schedule-rollback").exists()
+
+
+def test_absent_runtime_race_restores_disabled_candidate_runtime(tmp_path: Path) -> None:
+    result, _ = _run_deploy(
+        tmp_path,
+        fail_stage="schedule_restore_absent_race",
+        existing_runtime=False,
+    )
+
+    assert result.returncode != 0
+    assert "BACKUP_SCHEDULE_ROLLBACK_FAILED" in result.stderr
+    assert "absent runtime restore failed" in result.stderr
+    assert "disabled candidate runtime was retained" in result.stderr
+    assert "BACKUP_SCHEDULE_STATE_UNKNOWN" not in result.stderr
+    assert (tmp_path / "root.crontab").read_text() == "candidate disabled backup cron\n"
+    runtime = tmp_path / "backup-runtime"
+    for name in ("backup_production.sh", "pg_dump_logical.py", "backup_manifest.py"):
+        assert (runtime / name).read_text() == f"candidate {name}\n"
+    assert not (runtime / "unexpected-race").exists()
+    assert (tmp_path / "backup-schedule-rollback").exists()
+
+
+def test_absent_runtime_race_fallback_failure_reports_unknown_state(
+    tmp_path: Path,
+) -> None:
+    result, _ = _run_deploy(
+        tmp_path,
+        fail_stage="schedule_restore_absent_race",
+        compensation_fail_stage="early_runtime_fallback",
+        existing_runtime=False,
+    )
+
+    assert result.returncode != 0
+    assert "BACKUP_SCHEDULE_STATE_UNKNOWN" in result.stderr
+    assert "manual recovery" in result.stderr
+    assert "disabled candidate runtime was retained" not in result.stderr
+    assert (tmp_path / "root.crontab").read_text() == "candidate disabled backup cron\n"
+    assert (tmp_path / "backup-schedule-rollback").exists()
 
 
 @pytest.mark.parametrize(

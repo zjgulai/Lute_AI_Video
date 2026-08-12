@@ -936,7 +936,12 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
     assert f"BACKUP_MANIFEST_SCRIPT={runtime_dir}/backup_manifest.py" in installed
     assert f"PROJECT_ROOT={current_release}" in installed
     assert f"SOURCE_MANIFEST_PATH={current_release}/source-manifest.v1.json" in installed
-    assert not installed.startswith("# ai-video-production-backup-disabled")
+    managed_lines = [
+        line for line in installed.splitlines() if "ai-video-production-backup" in line
+    ]
+    assert len(managed_lines) == 1
+    assert managed_lines[0].startswith("0 3 * * * umask 077; ")
+    assert "ai-video-production-backup-disabled" not in installed
     assert (runtime_dir / "backup_production.sh").is_file()
     assert (runtime_dir / "pg_dump_logical.py").is_file()
     assert (runtime_dir / "backup_manifest.py").is_file()
@@ -1129,8 +1134,16 @@ def test_cron_installer_stages_disabled_schedule_before_explicit_activation(
         text=True,
     )
     assert activated.returncode == 0, activated.stderr
-    assert store.read_text().startswith("0 3 * * * umask 077; ")
-    assert "PROJECT_ROOT=" + str(current_release) in store.read_text()
+    active_crontab = store.read_text()
+    managed_lines = [
+        line
+        for line in active_crontab.splitlines()
+        if "ai-video-production-backup" in line
+    ]
+    assert len(managed_lines) == 1
+    assert managed_lines[0].startswith("0 3 * * * umask 077; ")
+    assert "PROJECT_ROOT=" + str(current_release) in managed_lines[0]
+    assert "ai-video-production-backup-disabled" not in active_crontab
 
 
 def test_cron_installer_requires_explicit_legacy_migration(tmp_path: Path) -> None:
