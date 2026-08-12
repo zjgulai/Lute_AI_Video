@@ -5,7 +5,7 @@ module: deploy
 topic: lighthouse-exact-image-deployment
 status: stable
 created: 2026-05-08
-updated: 2026-08-01
+updated: 2026-08-12
 owner: self
 source: human+ai
 ---
@@ -78,7 +78,9 @@ deploy/lighthouse/build-and-deploy.sh
 `source_revision` 字段，只能走明确标记的过渡兼容 rollback 健康检查，
 不能据此声称旧 release 已具备双身份闭环。
 
-切换前失败只启动之前停止的旧 rendering/backend，不重建应用或共享 sidecar。切换后失败优先使用 `current` 指向的上一 immutable release；首次发布才 fallback 到 preserved legacy compose。两条 rollback 都不触碰 `portal_auth` 或重建共享 nginx，并必须恢复 AI Video snippet、reload nginx、复验 application/public health。
+切换前失败只启动之前停止的旧 rendering/backend，不重建应用或共享 sidecar。切换后失败优先使用 `current` 指向的上一 immutable release；首次发布才 fallback 到 preserved legacy compose。新候选始终执行严格的 `/app/healthcheck.mjs`；只有已冻结的 ACTIVE rollback 镜像缺少该能力时，才允许使用结构化 legacy `/health` 探针，并同时核验 `status=ok`、Remotion 版本以及 ffmpeg/Chromium readiness。两条 rollback 都不触碰 `portal_auth` 或重建共享 nginx，并必须恢复 AI Video snippet、reload nginx、复验 application/public health。
+
+进入维护窗口并停止 backend 前，部署会先保存 root crontab 与 root-owned backup runtime，再用当前 exact release 的 `install_backup_cron.sh` 显式迁移 legacy job、执行 `MODE=verify`。managed cron 成为 `CRON_ENABLED=0` 后，部署还必须对实际备份脚本的 `${BACKUP_ROOT}/.backup.lock` 执行非阻塞 `flock` 探针；只有取得锁并证明没有在途 job 后才可停止 backend，从而避免 03:00 并发。部署通过已安装 runtime 创建 scheduled-style canonical backup；动态业务表集合必须与隔离恢复 `actual_counts` 完全一致。只有候选 application/public health 和 `current` 指针原子切换成功后，才允许以 `/opt/ai-video/current` 为 SSOT 执行 `CRON_ENABLED=1` 的 install+verify。任何安装、备份、恢复、migration、切换、schedule 激活或事务提交失败都会恢复原应用、指针、crontab/runtime。post-pointer 回滚必须先把候选 schedule 重新置为 disabled，再恢复 current、原应用，最后才恢复原 schedule；schedule 静默化或 current 恢复失败时不得切回原应用或重新启用原任务，必须保持候选应用/current 一致、尽可能保持 schedule disabled，并保留事务快照供人工处置。原应用回滚健康检查失败时同样不得重新启用 schedule。成功后才删除事务快照；因此一次标记为 complete 但缺 canonical manifest、detached checksum、restore marker 或完整动态表覆盖的旧日备不能充当发布恢复证据。
 
 ## 验收边界
 

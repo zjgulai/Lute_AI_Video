@@ -18,7 +18,13 @@ PORTAL_AUTH_ENV_FILE="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/.portal-auth.env"
 SHARED_AI_VIDEO_LOCATIONS="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/ai_video_locations.conf"
 RELEASE_AI_VIDEO_LOCATIONS="$RELEASE_ROOT/deploy/lighthouse/ai_video_locations.conf"
 NGINX_CONFIG_BACKUP="$AI_VIDEO_SHARED_ROOT/deploy/lighthouse/.ai_video_locations.rollback-$RELEASE_SOURCE_SHA"
+CURRENT_LINK="$AI_VIDEO_SHARED_ROOT/current"
 BACKUP_ROOT="${BACKUP_ROOT:-/opt/ai-video-backups}"
+BACKUP_LOCK_FILE="$BACKUP_ROOT/.backup.lock"
+BACKUP_FLOCK_BIN="${BACKUP_FLOCK_BIN:-$(command -v flock || true)}"
+BACKUP_RUNTIME_DIR="${BACKUP_RUNTIME_DIR:-/usr/local/libexec/ai-video-backup}"
+BACKUP_SCHEDULE_ROLLBACK_DIR="${BACKUP_SCHEDULE_ROLLBACK_DIR:-$AI_VIDEO_SHARED_ROOT/.backup-schedule.rollback-$RELEASE_SOURCE_SHA}"
+BACKUP_CRONTAB_BIN="${BACKUP_CRONTAB_BIN:-$(command -v crontab || true)}"
 ALLOW_MAINTENANCE_WINDOW="${ALLOW_MAINTENANCE_WINDOW:-0}"
 CLEANUP_AFTER_DEPLOY="${CLEANUP_AFTER_DEPLOY:-0}"
 CLEANUP_TIMEOUT_SECONDS="${CLEANUP_TIMEOUT_SECONDS:-180}"
@@ -42,6 +48,9 @@ ROLLBACK_FAILED="0"
 RESTORE_CONTAINER_ID=""
 BACKUP_HELPER_ID=""
 NGINX_CONFIG_CHANGED="0"
+BACKUP_SCHEDULE_SNAPSHOT_READY="0"
+BACKUP_SCHEDULE_CHANGED="0"
+CURRENT_POINTER_UPDATED="0"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -55,11 +64,29 @@ require_zero_or_one() {
   fi
 }
 
+require_safe_absolute_path() {
+  local name="$1" value="$2"
+  [[ "$value" =~ ^/[A-Za-z0-9._/-]+$ ]] \
+    || fail "$name must be an absolute path without shell metacharacters"
+}
+
 if ! [[ "$RELEASE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   fail "RELEASE_SOURCE_SHA must be the reviewed 40-character Git SHA"
 fi
 require_zero_or_one ALLOW_MAINTENANCE_WINDOW "$ALLOW_MAINTENANCE_WINDOW"
 require_zero_or_one CLEANUP_AFTER_DEPLOY "$CLEANUP_AFTER_DEPLOY"
+require_safe_absolute_path BACKUP_ROOT "$BACKUP_ROOT"
+require_safe_absolute_path BACKUP_LOCK_FILE "$BACKUP_LOCK_FILE"
+require_safe_absolute_path BACKUP_RUNTIME_DIR "$BACKUP_RUNTIME_DIR"
+require_safe_absolute_path BACKUP_SCHEDULE_ROLLBACK_DIR "$BACKUP_SCHEDULE_ROLLBACK_DIR"
+[ "$BACKUP_RUNTIME_DIR" != "/" ] || fail "BACKUP_RUNTIME_DIR cannot be root"
+[ "$BACKUP_ROOT" != "/" ] || fail "BACKUP_ROOT cannot be root"
+[ "$BACKUP_SCHEDULE_ROLLBACK_DIR" != "/" ] \
+  || fail "BACKUP_SCHEDULE_ROLLBACK_DIR cannot be root"
+[ -n "$BACKUP_CRONTAB_BIN" ] || fail "crontab command is required"
+require_safe_absolute_path BACKUP_CRONTAB_BIN "$BACKUP_CRONTAB_BIN"
+[ -n "$BACKUP_FLOCK_BIN" ] || fail "flock command is required"
+require_safe_absolute_path BACKUP_FLOCK_BIN "$BACKUP_FLOCK_BIN"
 if [ "$ALLOW_MAINTENANCE_WINDOW" != "1" ]; then
   fail "provider-off rollout requires explicit ALLOW_MAINTENANCE_WINDOW=1"
 fi
@@ -89,9 +116,9 @@ COMPOSE=(
 )
 
 configure_active_release() {
-  local current_link="$AI_VIDEO_SHARED_ROOT/current" previous_compose previous_app_version image
-  if [ -L "$current_link" ]; then
-    PREVIOUS_RELEASE_ROOT="$(readlink -f "$current_link")"
+  local previous_compose previous_app_version image
+  if [ -L "$CURRENT_LINK" ]; then
+    PREVIOUS_RELEASE_ROOT="$(readlink -f "$CURRENT_LINK")"
     PREVIOUS_RELEASE_SHA="${PREVIOUS_RELEASE_ROOT##*/releases-}"
     if ! [[ "$PREVIOUS_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
       || [ "$PREVIOUS_RELEASE_ROOT" != "$AI_VIDEO_SHARED_ROOT/releases-$PREVIOUS_RELEASE_SHA" ]; then
@@ -126,7 +153,7 @@ configure_active_release() {
       docker compose -f "$previous_compose"
     )
     ACTIVE_RELEASE_KIND="immutable"
-  elif [ -e "$current_link" ]; then
+  elif [ -e "$CURRENT_LINK" ]; then
     fail "current release pointer exists but is not a symlink"
   else
     ACTIVE_COMMAND=(sudo docker compose -f "$ROLLBACK_COMPOSE")
@@ -174,13 +201,69 @@ if sys.argv[3] == "1":
 ' "$expected_version" "$expected_revision" "$identity_required" >/dev/null
 }
 
+verify_legacy_renderer_health() {
+  sudo docker exec ai_video_rendering node -e '
+const http = require("node:http");
+const request = http.get(
+  "http://127.0.0.1:3001/health",
+  { timeout: 10_000 },
+  (response) => {
+    let body = "";
+    response.setEncoding("utf8");
+    response.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 65_536) request.destroy(new Error("health payload too large"));
+    });
+    response.on("end", () => {
+      try {
+        const payload = JSON.parse(body);
+        const healthy = response.statusCode === 200
+          && payload.status === "ok"
+          && typeof payload.remotion === "string"
+          && payload.remotion.length > 0
+          && payload.ffmpeg === true
+          && payload.chromium === true;
+        process.exit(healthy ? 0 : 1);
+      } catch {
+        process.exit(1);
+      }
+    });
+  },
+);
+request.on("timeout", () => request.destroy(new Error("health timeout")));
+request.on("error", () => process.exit(1));
+' >/dev/null 2>&1
+}
+
+verify_renderer_health() {
+  local probe_policy="$1"
+  case "$probe_policy" in
+    strict)
+      sudo docker exec ai_video_rendering node /app/healthcheck.mjs \
+        >/dev/null 2>&1
+      ;;
+    active-compatible)
+      if sudo docker exec ai_video_rendering test -f /app/healthcheck.mjs \
+        >/dev/null 2>&1; then
+        sudo docker exec ai_video_rendering node /app/healthcheck.mjs \
+          >/dev/null 2>&1
+      else
+        verify_legacy_renderer_health
+      fi
+      ;;
+    *)
+      fail "unknown renderer health probe policy: $probe_policy"
+      ;;
+  esac
+}
+
 verify_release_health() {
-  local expected_version="$1" expected_revision="$2" identity_required="$3" attempt
+  local expected_version="$1" expected_revision="$2" identity_required="$3"
+  local renderer_probe_policy="$4" attempt
   for attempt in $(seq 1 24); do
     if verify_backend_health "$expected_version" "$expected_revision" "$identity_required" \
       && sudo docker exec ai_video_frontend wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 \
-      && sudo docker exec ai_video_rendering node /app/healthcheck.mjs \
-        >/dev/null 2>&1; then
+      && verify_renderer_health "$renderer_probe_policy"; then
       echo "  Application containers healthy with verified PostgreSQL schema (attempt $attempt/24)"
       return 0
     fi
@@ -235,7 +318,7 @@ rollback_release() {
   restore_shared_nginx_config
   nginx_rc="$?"
   if [ "$app_rc" -ne 0 ] || [ "$nginx_rc" -ne 0 ] \
-    || ! verify_release_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED" \
+    || ! verify_release_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED" active-compatible \
     || ! verify_public_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED"; then
     ROLLBACK_FAILED="1"
     echo "  ROLLBACK_FAILED: preserved production compose did not pass health verification." >&2
@@ -252,7 +335,7 @@ restore_preswitch_services() {
   if [ "$OLD_BACKEND_STOPPED" = "1" ]; then
     "${ACTIVE_COMMAND[@]}" start rendering backend >/dev/null 2>&1
   fi
-  if ! verify_release_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED" \
+  if ! verify_release_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED" active-compatible \
     || ! verify_public_health "$ACTIVE_APP_VERSION" "$ACTIVE_SOURCE_REVISION" "$ACTIVE_IDENTITY_REQUIRED"; then
     ROLLBACK_FAILED="1"
     echo "  ROLLBACK_FAILED: unchanged production services did not recover." >&2
@@ -262,16 +345,271 @@ restore_preswitch_services() {
   set -e
 }
 
+cleanup_backup_schedule_snapshot() {
+  local cleanup_rc=0
+  if [ -n "$BACKUP_SCHEDULE_ROLLBACK_DIR" ]; then
+    sudo rm -rf -- "$BACKUP_SCHEDULE_ROLLBACK_DIR" >/dev/null 2>&1 \
+      || cleanup_rc=1
+    sudo test ! -e "$BACKUP_SCHEDULE_ROLLBACK_DIR" || cleanup_rc=1
+  fi
+  if [ "$cleanup_rc" -eq 0 ]; then
+    BACKUP_SCHEDULE_SNAPSHOT_READY="0"
+  fi
+  return "$cleanup_rc"
+}
+
+snapshot_backup_schedule() {
+  sudo test ! -e "$BACKUP_SCHEDULE_ROLLBACK_DIR" \
+    || fail "backup schedule rollback snapshot already exists"
+  if ! sudo mkdir "$BACKUP_SCHEDULE_ROLLBACK_DIR"; then
+    fail "unable to create the backup schedule rollback snapshot"
+  fi
+  if ! sudo chmod 0700 "$BACKUP_SCHEDULE_ROLLBACK_DIR"; then
+    cleanup_backup_schedule_snapshot || true
+    fail "unable to secure the backup schedule rollback snapshot"
+  fi
+  if ! sudo sh -eu -c '
+    crontab_bin="$1"
+    snapshot_dir="$2"
+    if "$crontab_bin" -l >"$snapshot_dir/root.crontab" 2>"$snapshot_dir/crontab.error"; then
+      touch "$snapshot_dir/crontab.present"
+    elif grep -qi "no crontab for" "$snapshot_dir/crontab.error"; then
+      : >"$snapshot_dir/root.crontab"
+      touch "$snapshot_dir/crontab.absent"
+    else
+      exit 1
+    fi
+    rm -f "$snapshot_dir/crontab.error"
+  ' sh "$BACKUP_CRONTAB_BIN" "$BACKUP_SCHEDULE_ROLLBACK_DIR"; then
+    cleanup_backup_schedule_snapshot || true
+    fail "unable to snapshot the root backup crontab"
+  fi
+
+  if sudo test -L "$BACKUP_RUNTIME_DIR"; then
+    cleanup_backup_schedule_snapshot || true
+    fail "backup runtime directory must not be a symlink"
+  elif sudo test -d "$BACKUP_RUNTIME_DIR"; then
+    if ! sudo cp -a "$BACKUP_RUNTIME_DIR" "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" \
+      || ! sudo touch "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.present"; then
+      cleanup_backup_schedule_snapshot || true
+      fail "unable to snapshot the backup runtime"
+    fi
+  elif sudo test -e "$BACKUP_RUNTIME_DIR"; then
+    cleanup_backup_schedule_snapshot || true
+    fail "backup runtime path exists but is not a directory"
+  else
+    if ! sudo touch "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.absent"; then
+      cleanup_backup_schedule_snapshot || true
+      fail "unable to record the absent backup runtime"
+    fi
+  fi
+  BACKUP_SCHEDULE_SNAPSHOT_READY="1"
+}
+
+restore_backup_schedule() {
+  local restore_rc=0
+  [ "$BACKUP_SCHEDULE_SNAPSHOT_READY" = "1" ] || return 0
+
+  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/crontab.present"; then
+    sudo "$BACKUP_CRONTAB_BIN" "$BACKUP_SCHEDULE_ROLLBACK_DIR/root.crontab" \
+      || restore_rc=1
+  else
+    sudo "$BACKUP_CRONTAB_BIN" -r >/dev/null 2>&1 || true
+  fi
+
+  sudo rm -rf -- "$BACKUP_RUNTIME_DIR" || restore_rc=1
+  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.present"; then
+    sudo cp -a "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" "$BACKUP_RUNTIME_DIR" \
+      || restore_rc=1
+  fi
+
+  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/crontab.present"; then
+    sudo sh -eu -c '
+      "$1" -l | cmp -s - "$2"
+    ' sh "$BACKUP_CRONTAB_BIN" "$BACKUP_SCHEDULE_ROLLBACK_DIR/root.crontab" \
+      || restore_rc=1
+  else
+    sudo sh -eu -c '
+      if output=$("$1" -l 2>&1); then
+        exit 1
+      fi
+      printf "%s" "$output" | grep -qi "no crontab for"
+    ' sh "$BACKUP_CRONTAB_BIN" || restore_rc=1
+  fi
+  if sudo test -f "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime.present"; then
+    sudo diff -qr "$BACKUP_SCHEDULE_ROLLBACK_DIR/runtime" "$BACKUP_RUNTIME_DIR" \
+      >/dev/null 2>&1 || restore_rc=1
+  else
+    sudo test ! -e "$BACKUP_RUNTIME_DIR" || restore_rc=1
+  fi
+
+  if [ "$restore_rc" -eq 0 ]; then
+    cleanup_backup_schedule_snapshot || restore_rc=1
+  fi
+  if [ "$restore_rc" -eq 0 ]; then
+    BACKUP_SCHEDULE_CHANGED="0"
+    echo "  Original backup runtime and root cron were restored." >&2
+    return 0
+  fi
+  echo "  BACKUP_SCHEDULE_ROLLBACK_FAILED: original backup schedule was not restored." >&2
+  return 1
+}
+
+commit_backup_schedule() {
+  cleanup_backup_schedule_snapshot \
+    || fail "unable to remove committed backup schedule rollback snapshot"
+  BACKUP_SCHEDULE_CHANGED="0"
+}
+
+restore_release_pointer() {
+  local rollback_link
+  [ "$CURRENT_POINTER_UPDATED" = "1" ] || return 0
+  if [ -n "$PREVIOUS_RELEASE_ROOT" ]; then
+    rollback_link="$AI_VIDEO_SHARED_ROOT/.current-rollback-$RELEASE_SOURCE_SHA"
+    ln -sfn "$PREVIOUS_RELEASE_ROOT" "$rollback_link"
+    if ! python3 - "$rollback_link" "$CURRENT_LINK" <<'PY'
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
+    then
+      return 1
+    fi
+  else
+    if ! python3 - "$CURRENT_LINK" "$RELEASE_ROOT" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+current = Path(sys.argv[1])
+expected = Path(sys.argv[2]).resolve()
+if not current.is_symlink() or Path(os.path.realpath(current)) != expected:
+    raise SystemExit("refusing to remove an unexpected current release pointer")
+current.unlink()
+PY
+    then
+      return 1
+    fi
+  fi
+  CURRENT_POINTER_UPDATED="0"
+  echo "  Previous release pointer was restored before original backup schedule restoration." >&2
+}
+
+install_and_verify_backup_schedule() {
+  snapshot_backup_schedule
+  BACKUP_SCHEDULE_CHANGED="1"
+  sudo env \
+    MODE=install \
+    CRON_ENABLED=0 \
+    MIGRATE_LEGACY=1 \
+    RETENTION_DAYS=3 \
+    CURRENT_RELEASE_ROOT="$RELEASE_ROOT" \
+    SOURCE_MANIFEST_PATH="$RELEASE_ROOT/source-manifest.v1.json" \
+    RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    BACKUP_RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    /bin/bash "$RELEASE_ROOT/scripts/install_backup_cron.sh"
+  sudo env \
+    MODE=verify \
+    CRON_ENABLED=0 \
+    RETENTION_DAYS=3 \
+    CURRENT_RELEASE_ROOT="$RELEASE_ROOT" \
+    SOURCE_MANIFEST_PATH="$RELEASE_ROOT/source-manifest.v1.json" \
+    RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    BACKUP_RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    /bin/bash "$RELEASE_ROOT/scripts/install_backup_cron.sh"
+}
+
+verify_no_backup_in_progress() {
+  sudo test -d "$BACKUP_ROOT" || fail "production backup root is missing"
+  sudo "$BACKUP_FLOCK_BIN" -n "$BACKUP_LOCK_FILE" true \
+    || fail "another production backup is already running"
+}
+
+activate_backup_schedule() {
+  sudo env \
+    MODE=install \
+    CRON_ENABLED=1 \
+    MIGRATE_LEGACY=1 \
+    RETENTION_DAYS=3 \
+    CURRENT_RELEASE_ROOT="$CURRENT_LINK" \
+    SOURCE_MANIFEST_PATH="$CURRENT_LINK/source-manifest.v1.json" \
+    RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    BACKUP_RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    /bin/bash "$RELEASE_ROOT/scripts/install_backup_cron.sh"
+  sudo env \
+    MODE=verify \
+    CRON_ENABLED=1 \
+    RETENTION_DAYS=3 \
+    CURRENT_RELEASE_ROOT="$CURRENT_LINK" \
+    SOURCE_MANIFEST_PATH="$CURRENT_LINK/source-manifest.v1.json" \
+    RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    BACKUP_RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    /bin/bash "$RELEASE_ROOT/scripts/install_backup_cron.sh"
+}
+
+disable_backup_schedule_for_rollback() {
+  sudo env \
+    MODE=install \
+    CRON_ENABLED=0 \
+    MIGRATE_LEGACY=1 \
+    RETENTION_DAYS=3 \
+    CURRENT_RELEASE_ROOT="$RELEASE_ROOT" \
+    SOURCE_MANIFEST_PATH="$RELEASE_ROOT/source-manifest.v1.json" \
+    RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    BACKUP_RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    /bin/bash "$RELEASE_ROOT/scripts/install_backup_cron.sh" \
+    || return 1
+  sudo env \
+    MODE=verify \
+    CRON_ENABLED=0 \
+    RETENTION_DAYS=3 \
+    CURRENT_RELEASE_ROOT="$RELEASE_ROOT" \
+    SOURCE_MANIFEST_PATH="$RELEASE_ROOT/source-manifest.v1.json" \
+    RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    BACKUP_RUNTIME_DIR="$BACKUP_RUNTIME_DIR" \
+    /bin/bash "$RELEASE_ROOT/scripts/install_backup_cron.sh" \
+    || return 1
+}
+
 release_exit_handler() {
   local exit_status="$?"
+  local rollback_consistent="1"
   trap - EXIT
   cleanup_restore_container
   cleanup_backup_helper
   if [ "$exit_status" -ne 0 ] && [ "$DEPLOY_COMPLETE" != "1" ]; then
-    if [ "$APP_SWITCH_STARTED" = "1" ]; then
-      rollback_release
-    elif [ "$MAINTENANCE_BEGUN" = "1" ]; then
-      restore_preswitch_services
+    if [ "$BACKUP_SCHEDULE_CHANGED" = "1" ] \
+      && [ "$CURRENT_POINTER_UPDATED" = "1" ] \
+      && ! disable_backup_schedule_for_rollback; then
+      rollback_consistent="0"
+      ROLLBACK_FAILED="1"
+      echo "  BACKUP_SCHEDULE_QUIESCE_FAILED: current pointer and original schedule were not changed." >&2
+    fi
+    if [ "$CURRENT_POINTER_UPDATED" = "1" ] \
+      && [ "$rollback_consistent" = "1" ] \
+      && ! restore_release_pointer; then
+      rollback_consistent="0"
+      ROLLBACK_FAILED="1"
+      echo "  RELEASE_POINTER_ROLLBACK_FAILED: current pointer was not restored; backup schedule remains disabled." >&2
+    fi
+    if [ "$rollback_consistent" = "1" ]; then
+      if [ "$APP_SWITCH_STARTED" = "1" ]; then
+        rollback_release
+      elif [ "$MAINTENANCE_BEGUN" = "1" ]; then
+        restore_preswitch_services
+      fi
+      if [ "$ROLLBACK_FAILED" = "1" ]; then
+        rollback_consistent="0"
+        echo "  BACKUP_SCHEDULE_RESTORE_SKIPPED: application rollback is unhealthy; backup schedule remains disabled." >&2
+      fi
+    else
+      echo "  APPLICATION_ROLLBACK_SKIPPED: preserving the candidate application/current consistency for manual recovery." >&2
+    fi
+    if [ "$BACKUP_SCHEDULE_CHANGED" = "1" ] \
+      && [ "$rollback_consistent" = "1" ] \
+      && ! restore_backup_schedule; then
+      ROLLBACK_FAILED="1"
     fi
   fi
   if [ "$ROLLBACK_FAILED" = "1" ]; then
@@ -341,6 +679,10 @@ sudo docker run --rm --network none --entrypoint python3 \
   "lighthouse-backend:$RELEASE_IMAGE_TAG" -c \
   'from pathlib import Path; from src.services.provider_price_catalog import ProviderPriceCatalog; assert Path("/app/configs/provider-cost-catalog.v1.json").is_file(); ProviderPriceCatalog.load_default()'
 
+echo "[2/8] Quiescing and verifying the production backup schedule..."
+install_and_verify_backup_schedule
+verify_no_backup_in_progress
+
 echo "[2/8] Entering AI Video maintenance while preserving shared ingress..."
 MAINTENANCE_BEGUN="1"
 "${ACTIVE_COMMAND[@]}" stop rendering backend
@@ -357,11 +699,13 @@ run_verified_backup() {
     -eu -c 'exec sleep 3600')"
   [ -n "$BACKUP_HELPER_ID" ] || fail "failed to start reviewed backup helper"
   before="$(sudo find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??????' -print 2>/dev/null | sort | tail -1)"
-  sudo RETENTION_DAYS=15 BACKUP_ROOT="$BACKUP_ROOT" \
+  sudo RETENTION_DAYS=3 BACKUP_ROOT="$BACKUP_ROOT" \
     PROJECT_ROOT="$RELEASE_ROOT" \
-    DUMP_SCRIPT="$RELEASE_ROOT/scripts/pg_dump_logical.py" \
+    SOURCE_MANIFEST_PATH="$RELEASE_ROOT/source-manifest.v1.json" \
+    DUMP_SCRIPT="$BACKUP_RUNTIME_DIR/pg_dump_logical.py" \
+    BACKUP_MANIFEST_SCRIPT="$BACKUP_RUNTIME_DIR/backup_manifest.py" \
     CONTAINER_NAME="$BACKUP_HELPER_ID" \
-    /bin/bash "$RELEASE_ROOT/scripts/backup_production.sh"
+    /bin/bash "$BACKUP_RUNTIME_DIR/backup_production.sh"
   latest="$(sudo find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??????' -print | sort | tail -1)"
   [ -n "$latest" ] && [ "$latest" != "$before" ] || fail "fresh production backup was not created"
   manifest_status="$(sudo awk -F': ' '$1 == "status" {print $2}' "$latest/manifest.txt")"
@@ -394,6 +738,33 @@ run_verified_backup() {
     BACKUP_MANIFEST_SCRIPT="$RELEASE_ROOT/scripts/backup_manifest.py" \
     /bin/bash "$RELEASE_ROOT/scripts/restore_backup_database.sh" "$latest" >/dev/null
   sudo test -s "$latest/restore_verified.json" || fail "fresh backup lacks restore verification evidence"
+  sudo python3 - "$latest/pg_dump_stats.json" "$latest/restore_verified.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+stats = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+restore = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+expected = stats.get("expected_tables")
+tables = stats.get("tables")
+actual_counts = restore.get("actual_counts")
+if (
+    not isinstance(expected, list)
+    or not expected
+    or any(not isinstance(name, str) or not name for name in expected)
+    or len(expected) != len(set(expected))
+    or not isinstance(tables, dict)
+    or set(tables) != set(expected)
+    or restore.get("status") != "passed"
+    or restore.get("table_count") != len(expected)
+    or not isinstance(actual_counts, dict)
+    or set(actual_counts) != set(expected)
+):
+    raise SystemExit(
+        "scheduled backup table coverage differs from isolated restore"
+    )
+print(f"scheduled_backup_business_table_count={len(expected)}")
+PY
   cleanup_restore_container
   cleanup_backup_helper
   echo "  Fresh complete backup passed isolated restore verification."
@@ -410,7 +781,7 @@ echo "[4/8] Applying explicit schema-first migration gate..."
 echo "[5/8] Switching AI Video application containers behind preserved ingress..."
 APP_SWITCH_STARTED="1"
 "${COMPOSE[@]}" up -d --no-deps --force-recreate rendering backend frontend
-verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 \
+verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 strict \
   || fail "release application health or identity did not pass"
 "${COMPOSE[@]}" run --rm --no-deps backend /bin/bash /app/scripts/deploy_alembic_gate.sh --check
 
@@ -426,7 +797,6 @@ verify_public_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 \
   || fail "release public health or identity did not pass"
 
 echo "[7/8] Recording the successful release pointer..."
-CURRENT_LINK="$AI_VIDEO_SHARED_ROOT/current"
 NEXT_LINK="$AI_VIDEO_SHARED_ROOT/.current-$RELEASE_SOURCE_SHA"
 ln -sfn "$RELEASE_ROOT" "$NEXT_LINK"
 python3 - "$NEXT_LINK" "$CURRENT_LINK" <<'PY'
@@ -435,6 +805,9 @@ import sys
 
 os.replace(sys.argv[1], sys.argv[2])
 PY
+CURRENT_POINTER_UPDATED="1"
+activate_backup_schedule
+commit_backup_schedule
 DEPLOY_COMPLETE="1"
 
 echo "[8/8] Preserving current and previous release images for offline rollback..."

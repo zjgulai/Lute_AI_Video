@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-08-01
+updated: 2026-08-12
 owner: self
 source: human+ai
 ---
@@ -144,10 +144,23 @@ Git history 保存。`release_smoke_v0.4.0.sh` 仅保留无条件 fail-closed �
 `scripts/backup_production.sh` 与 `scripts/install_backup_cron.sh` 都属于生产写操作。Lighthouse rsync 会把普通文件模式统一为 `0644`，所以 cron 与人工命令必须显式使用 `/bin/bash` 调用，不能依赖 executable bit。安装器把执行文件复制到 root-owned 的 `/usr/local/libexec/ai-video-backup/`，常规重跑只替换带 `ai-video-production-backup` marker 的行；发现指向 current source、历史 `/opt/ai-video/scripts/backup_production.sh` 或 root-owned runtime 的旧无 marker 行时必须显式设置 `MIGRATE_LEGACY=1`，精确移除这些 AI Video job，并始终保留其他 cron 任务。
 
 安装器的 `MODE=verify` 是只读运行时漂移门禁：它逐字节比较 reviewed backup、logical
-dump、canonical manifest 三份 `/opt/ai-video/current/scripts/` 源文件与 root-owned
+dump、canonical manifest 三份 exact immutable release 源文件与 root-owned
 runtime，拒绝符号链接、非 root owner/group 和模式漂移，并要求唯一 managed cron 行和
 预期命令完全一致；它不复制文件、不改 crontab、日志或 lock。默认安装模式完成写入后也
 运行同一校验，未得到 `backup_runtime_verification=passed` 不得声称 runtime 安装完成。
+Canonical Lighthouse deploy 会在进入维护窗口、停止 backend 之前保存原 root crontab/runtime，
+使用候选 immutable release 路径和 `CRON_ENABLED=0` 执行 `MIGRATE_LEGACY=1` 安装及
+`MODE=verify`。cron 被禁用后，部署必须对实际备份脚本使用的
+`${BACKUP_ROOT}/.backup.lock` 执行非阻塞 `flock` 探针；只有拿到锁、证明没有在途 job 后才可
+停止 backend，因此此后维护期不存在可并发触发的 active backup job。随后从已安装 runtime 发起一次 scheduled-style
+canonical backup 和隔离恢复，备份与恢复的动态业务表集合必须完全一致。候选健康及
+`current` 原子切换成功后，才以 `/opt/ai-video/current` 为 source SSOT 执行
+`CRON_ENABLED=1` 的 install+verify。任一后续发布门禁失败都要恢复原 crontab/runtime、
+应用及 current pointer；post-pointer 回滚会先禁用候选 schedule，再恢复 current，然后恢复
+原应用，最后才恢复原 active schedule。若 schedule 静默化或 current 恢复失败，不得切回原应用
+或重新启用原任务；应保持候选应用/current 一致、尽可能保持 schedule disabled、保留事务快照并
+进入人工恢复。原应用回滚健康检查失败时也不得重新启用 schedule。成功部署才提交 active
+schedule 并删除事务快照。
 
 `scripts/production_readonly_log_gate.py` 只做本地 backend log / summary 回放，不创建 key、不访问生产、不调用 provider。它用于 L4D/L4E 这类生产只读回归的日志判定：允许 `GET /portfolio` 和本地健康检查噪音（`127.0.0.1 /health`、当前 renderer UDS 的 `http://rendering/health` 日志；为历史证据回放兼容退役的 `rendering:3001/health` 形式），继续禁止外部 health/admin/media 请求、scenario/Fast submit、provider、publish、delivery 和 approved brand token 相关日志。
 
