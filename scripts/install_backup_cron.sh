@@ -6,6 +6,7 @@ set -euo pipefail
 RETENTION_DAYS="${RETENTION_DAYS:-3}"
 MAX_RETENTION_DAYS=3650
 MODE="${MODE:-install}"
+CRON_ENABLED="${CRON_ENABLED:-1}"
 CURRENT_RELEASE_ROOT="${CURRENT_RELEASE_ROOT:-/opt/ai-video/current}"
 BACKUP_SCRIPT="${BACKUP_SCRIPT:-${CURRENT_RELEASE_ROOT}/scripts/backup_production.sh}"
 DUMP_SCRIPT_SOURCE="${DUMP_SCRIPT_SOURCE:-${CURRENT_RELEASE_ROOT}/scripts/pg_dump_logical.py}"
@@ -24,6 +25,7 @@ CMP_BIN="${CMP_BIN:-cmp}"
 STAT_BIN="${STAT_BIN:-stat}"
 MARKER="ai-video-production-backup"
 LEGACY_SHARED_BACKUP_SCRIPT="/opt/ai-video/scripts/backup_production.sh"
+LEGACY_CURRENT_BACKUP_SCRIPT="/opt/ai-video/current/scripts/backup_production.sh"
 RUNTIME_DIR="${RUNTIME_DIR%/}"
 RUNTIME_BACKUP_SCRIPT="${RUNTIME_DIR}/backup_production.sh"
 RUNTIME_DUMP_SCRIPT="${RUNTIME_DIR}/pg_dump_logical.py"
@@ -47,6 +49,8 @@ require_safe_absolute_path() {
   || fail "RETENTION_DAYS must be a canonical decimal integer between 1 and ${MAX_RETENTION_DAYS}"
 [[ "$MODE" =~ ^(install|verify)$ ]] \
   || fail "MODE must be install or verify"
+[[ "$CRON_ENABLED" =~ ^[01]$ ]] \
+  || fail "CRON_ENABLED must be 0 or 1"
 [[ "$MIGRATE_LEGACY" =~ ^[01]$ ]] \
   || fail "MIGRATE_LEGACY must be 0 or 1"
 require_safe_absolute_path "BACKUP_SCRIPT" "$BACKUP_SCRIPT"
@@ -83,17 +87,23 @@ FLOCK_PATH=$(command -v "$FLOCK_BIN")
 require_safe_absolute_path "DOCKER_PATH" "$DOCKER_PATH"
 require_safe_absolute_path "FLOCK_PATH" "$FLOCK_PATH"
 
-CRON_LINE="0 3 * * * umask 077; DOCKER_BIN=${DOCKER_PATH} FLOCK_BIN=${FLOCK_PATH} PROJECT_ROOT=${CURRENT_RELEASE_ROOT} SOURCE_MANIFEST_PATH=${SOURCE_MANIFEST_PATH} DUMP_SCRIPT=${RUNTIME_DUMP_SCRIPT} BACKUP_MANIFEST_SCRIPT=${RUNTIME_MANIFEST_SCRIPT} RETENTION_DAYS=${RETENTION_DAYS} /bin/bash ${RUNTIME_BACKUP_SCRIPT} >> ${BACKUP_LOG_FILE} 2>&1 # ${MARKER}"
+CRON_COMMAND="umask 077; DOCKER_BIN=${DOCKER_PATH} FLOCK_BIN=${FLOCK_PATH} PROJECT_ROOT=${CURRENT_RELEASE_ROOT} SOURCE_MANIFEST_PATH=${SOURCE_MANIFEST_PATH} DUMP_SCRIPT=${RUNTIME_DUMP_SCRIPT} BACKUP_MANIFEST_SCRIPT=${RUNTIME_MANIFEST_SCRIPT} RETENTION_DAYS=${RETENTION_DAYS} /bin/bash ${RUNTIME_BACKUP_SCRIPT} >> ${BACKUP_LOG_FILE} 2>&1"
+if [ "$CRON_ENABLED" = "1" ]; then
+  CRON_LINE="0 3 * * * ${CRON_COMMAND} # ${MARKER}"
+else
+  CRON_LINE="# ai-video-production-backup-disabled ${CRON_COMMAND} # ${MARKER}"
+fi
 
 count_unmanaged_backup_jobs() {
   awk \
     -v marker="$MARKER" \
     -v current="$BACKUP_SCRIPT" \
     -v shared="$LEGACY_SHARED_BACKUP_SCRIPT" \
+    -v legacy_current="$LEGACY_CURRENT_BACKUP_SCRIPT" \
     -v runtime="$RUNTIME_BACKUP_SCRIPT" '
     function has_backup_script() {
       for (field = 1; field <= NF; field += 1) {
-        if ($field == current || $field == shared || $field == runtime) {
+        if ($field == current || $field == shared || $field == legacy_current || $field == runtime) {
           return 1
         }
       }
@@ -197,11 +207,12 @@ awk \
   -v marker="$MARKER" \
   -v current="$BACKUP_SCRIPT" \
   -v shared="$LEGACY_SHARED_BACKUP_SCRIPT" \
+  -v legacy_current="$LEGACY_CURRENT_BACKUP_SCRIPT" \
   -v runtime="$RUNTIME_BACKUP_SCRIPT" \
   -v migrate="$MIGRATE_LEGACY" '
   function has_backup_script() {
     for (field = 1; field <= NF; field += 1) {
-      if ($field == current || $field == shared || $field == runtime) {
+      if ($field == current || $field == shared || $field == legacy_current || $field == runtime) {
         return 1
       }
     }

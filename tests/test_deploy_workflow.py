@@ -32,11 +32,15 @@ RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 LIGHTHOUSE_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "deploy.sh"
 LIGHTHOUSE_BUILD_AND_DEPLOY = REPO_ROOT / "deploy" / "lighthouse" / "build-and-deploy.sh"
 LIGHTHOUSE_RELEASE_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.release.yml"
+LIGHTHOUSE_DEPLOY_RUNBOOK = REPO_ROOT / "docs" / "workflows" / "deploy-lighthouse-stable.md"
 BACKEND_DOCKERFILE = REPO_ROOT / "Dockerfile.backend"
 RENDERING_DOCKERFILE = REPO_ROOT / "rendering" / "Dockerfile"
 RENDERING_SERVER = REPO_ROOT / "rendering" / "server.mjs"
 GITHUB_ACTIONS_DEPLOY_RUNBOOK = (
     REPO_ROOT / "docs" / "runbooks" / "github-actions-deploy-secrets.md"
+)
+LEGACY_GITHUB_DEPLOY_SETUP_RUNBOOK = (
+    REPO_ROOT / "docs" / "runbooks" / "github-deploy-secrets-setup.md"
 )
 REMOTE_DRY_RUN_IF = (
     "${{ github.event_name != 'workflow_dispatch' || "
@@ -500,11 +504,54 @@ class TestDeployWorkflow:
         assert "verify_release_health" in text
         assert "ROLLBACK_FAILED" in text
         assert "run_verified_backup" in text
+        assert "snapshot_backup_schedule" in text
+        assert "install_and_verify_backup_schedule" in text
+        assert "verify_no_backup_in_progress" in text
+        assert "activate_backup_schedule" in text
+        assert "disable_backup_schedule_for_rollback" in text
+        assert "restore_backup_schedule" in text
+        assert "commit_backup_schedule" in text
+        assert "restore_release_pointer" in text
+        assert "CURRENT_POINTER_UPDATED" in text
+        assert "install_backup_cron.sh" in text
+        assert "MIGRATE_LEGACY=1" in text
+        assert "MODE=install" in text
+        assert "MODE=verify" in text
+        assert "CRON_ENABLED=0" in text
+        assert "CRON_ENABLED=1" in text
+        assert 'CURRENT_RELEASE_ROOT="$CURRENT_LINK"' in text
+        assert 'SOURCE_MANIFEST_PATH="$CURRENT_LINK/source-manifest.v1.json"' in text
+        handler = text[
+            text.index("release_exit_handler() {") : text.index(
+                "trap release_exit_handler EXIT"
+            )
+        ]
+        assert handler.index("disable_backup_schedule_for_rollback") < handler.index(
+            "restore_release_pointer"
+        ) < handler.index("rollback_release") < handler.index(
+            "restore_backup_schedule"
+        )
+        disabled_call = text.rindex("\ninstall_and_verify_backup_schedule\n")
+        backup_lock_probe = text.rindex("\nverify_no_backup_in_progress\n")
+        maintenance_start = text.index('MAINTENANCE_BEGUN="1"')
+        stop_call = text.index('"${ACTIVE_COMMAND[@]}" stop rendering backend')
+        assert disabled_call < backup_lock_probe < maintenance_start < stop_call
+        assert 'BACKUP_LOCK_FILE="$BACKUP_ROOT/.backup.lock"' in text
+        assert '"$BACKUP_FLOCK_BIN" -n "$BACKUP_LOCK_FILE" true' in text
+        activate_call = text.rindex("\nactivate_backup_schedule\n")
+        assert text.index(
+            'verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 strict'
+        ) < activate_call
+        assert 'BACKUP_RUNTIME_DIR="${BACKUP_RUNTIME_DIR:-/usr/local/libexec/ai-video-backup}"' in text
+        assert 'DUMP_SCRIPT="$BACKUP_RUNTIME_DIR/pg_dump_logical.py"' in text
+        assert 'BACKUP_MANIFEST_SCRIPT="$BACKUP_RUNTIME_DIR/backup_manifest.py"' in text
+        assert '"$latest/pg_dump_stats.json"' in text
+        assert "scheduled backup table coverage differs from isolated restore" in text
         assert 'PROJECT_ROOT="$RELEASE_ROOT"' in text
-        assert 'DUMP_SCRIPT="$RELEASE_ROOT/scripts/pg_dump_logical.py"' in text
+        assert 'DUMP_SCRIPT="$BACKUP_RUNTIME_DIR/pg_dump_logical.py"' in text
         assert 'CONTAINER_NAME="$BACKUP_HELPER_ID"' in text
         assert (
-            'BACKUP_MANIFEST_SCRIPT="$RELEASE_ROOT/scripts/backup_manifest.py"'
+            'BACKUP_MANIFEST_SCRIPT="$BACKUP_RUNTIME_DIR/backup_manifest.py"'
             in text
         )
         assert "restore_verified.json" in text
@@ -655,6 +702,20 @@ class TestDeployWorkflow:
         assert '"${COMPOSE[@]}" up -d --no-deps --force-recreate rendering backend frontend' in text
         assert "docker exec ai_video_rendering" in text
         assert "node /app/healthcheck.mjs" in text
+        candidate_health = text.split(
+            'verify_release_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 strict',
+            1,
+        )
+        assert len(candidate_health) == 2
+        assert "active-compatible" in text
+        legacy_probe = text.split("verify_legacy_renderer_health()", 1)[1].split(
+            "verify_renderer_health()", 1
+        )[0]
+        assert "http://127.0.0.1:3001/health" in legacy_probe
+        assert 'payload.status === "ok"' in legacy_probe
+        assert 'typeof payload.remotion === "string"' in legacy_probe
+        assert "payload.ffmpeg === true" in legacy_probe
+        assert "payload.chromium === true" in legacy_probe
 
     def test_lighthouse_cleanup_is_explicit_and_canonical_deploy_is_provider_off(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
@@ -671,7 +732,7 @@ class TestDeployWorkflow:
     def test_lighthouse_deploy_keeps_ingress_stopped_until_application_health_passes(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
 
-        assert "[2/8] Entering AI Video maintenance while preserving shared ingress" in text
+        assert "[3/9] Entering AI Video maintenance while preserving shared ingress" in text
         assert '"${ACTIVE_COMMAND[@]}" stop nginx' not in text
         assert "docker exec ai_video_nginx nginx -t" in text
         app_health_index = text.index(
@@ -680,6 +741,20 @@ class TestDeployWorkflow:
         nginx_reload_index = text.rindex("docker exec ai_video_nginx nginx -s reload")
         assert app_health_index < nginx_reload_index
         assert '"${COMPOSE[@]}" up -d --no-deps --force-recreate nginx' not in text
+
+    def test_lighthouse_deploy_stage_banners_match_ten_stage_runbook(self):
+        text = LIGHTHOUSE_DEPLOY.read_text()
+        banners = re.findall(r'^echo "\[([0-9]+)/([0-9]+)\]', text, re.MULTILINE)
+
+        assert banners == [(str(index), "9") for index in range(10)]
+        runbook = LIGHTHOUSE_DEPLOY_RUNBOOK.read_text()
+        assert "## 远端十阶段" in runbook
+        stage_heading = runbook.index("## 远端十阶段")
+        acceptance_heading = runbook.index("## 验收边界")
+        stage_section = runbook[stage_heading:acceptance_heading]
+        assert re.findall(r"^([0-9]+)\. ", stage_section, re.MULTILINE) == [
+            str(index) for index in range(1, 11)
+        ]
 
     def test_lighthouse_deploy_backend_health_verifies_postgres_schema_and_fails_closed(self):
         text = LIGHTHOUSE_DEPLOY.read_text()
@@ -960,6 +1035,25 @@ class TestDeployWorkflow:
         assert "exact `origin/main`" in text
         assert "不会进入任何 GitHub Environment" in text
         assert "不构成生产部署证据" in text
+
+    def test_legacy_deploy_setup_runbook_is_an_explicit_safe_redirect(self):
+        text = LEGACY_GITHUB_DEPLOY_SETUP_RUNBOOK.read_text()
+        frontmatter, body = text.split("---", 2)[1:]
+
+        assert "status: deprecated" in frontmatter
+        assert "github-actions-deploy-secrets.md" in body
+        assert "archive-only" in body
+        assert "remote-dry-run" in body
+        assert "DEPLOY_KNOWN_HOSTS" in body
+        assert "v*.*.*" in body
+        for stale_claim in (
+            "所需 4 个 secrets",
+            "4 个 secrets 未配置",
+            "添加 4 个 secrets",
+            "tags `v*`",
+            "approve 后：rsync + remote deploy",
+        ):
+            assert stale_claim not in text
 
     def test_deploy_acceptance_uses_canonical_hostname_and_valid_tls(self, workflow):
         deploy_text = str(workflow["jobs"]["deploy"])

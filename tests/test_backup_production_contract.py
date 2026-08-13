@@ -882,6 +882,8 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
         f"0 3 * * * {backup_script} >> /tmp/old-backup.log 2>&1\n"
         "0 2 * * * /bin/bash /opt/ai-video/scripts/backup_production.sh "
         ">> /tmp/old-shared-backup.log 2>&1\n"
+        "30 2 * * * /bin/bash /opt/ai-video/current/scripts/backup_production.sh "
+        ">> /tmp/old-current-backup.log 2>&1\n"
         f"0 1 * * * /bin/bash {runtime_dir}/backup_production.sh "
         ">> /tmp/old-runtime-backup.log 2>&1\n"
     )
@@ -908,6 +910,7 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
             "BACKUP_LOG_FILE": str(log_file),
             "RETENTION_DAYS": "15",
             "MIGRATE_LEGACY": "1",
+            "CRON_ENABLED": "1",
         }
     )
     for _ in range(2):
@@ -926,12 +929,19 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
     assert installed.count("ai-video-production-backup") == 1
     assert installed.count(str(backup_script)) == 0
     assert "/opt/ai-video/scripts/backup_production.sh" not in installed
+    assert "/opt/ai-video/current/scripts/backup_production.sh" not in installed
     assert installed.count(f"/bin/bash {runtime_dir}/backup_production.sh") == 1
     assert f"/bin/bash {runtime_dir}/backup_production.sh" in installed
     assert f"DUMP_SCRIPT={runtime_dir}/pg_dump_logical.py" in installed
     assert f"BACKUP_MANIFEST_SCRIPT={runtime_dir}/backup_manifest.py" in installed
     assert f"PROJECT_ROOT={current_release}" in installed
     assert f"SOURCE_MANIFEST_PATH={current_release}/source-manifest.v1.json" in installed
+    managed_lines = [
+        line for line in installed.splitlines() if "ai-video-production-backup" in line
+    ]
+    assert len(managed_lines) == 1
+    assert managed_lines[0].startswith("0 3 * * * umask 077; ")
+    assert "ai-video-production-backup-disabled" not in installed
     assert (runtime_dir / "backup_production.sh").is_file()
     assert (runtime_dir / "pg_dump_logical.py").is_file()
     assert (runtime_dir / "backup_manifest.py").is_file()
@@ -1058,6 +1068,82 @@ def test_cron_installer_is_idempotent_and_preserves_unrelated_jobs(tmp_path: Pat
     assert store.read_text() == store_before_metadata_verify
     assert log_file.read_bytes() == log_before_metadata_verify
     assert (tmp_path / "cron.lock").read_bytes() == lock_before_metadata_verify
+
+
+def test_cron_installer_stages_disabled_schedule_before_explicit_activation(
+    tmp_path: Path,
+) -> None:
+    _, fake_crontab, fake_install, fake_chown, store = _fake_crontab(tmp_path)
+    current_release = tmp_path / "current"
+    scripts_dir = current_release / "scripts"
+    scripts_dir.mkdir(parents=True)
+    for name in ("backup_production.sh", "pg_dump_logical.py", "backup_manifest.py"):
+        (scripts_dir / name).write_text(f"# {name}\n")
+    (current_release / "source-manifest.v1.json").write_text("{}\n")
+    fake_flock = _write_executable(tmp_path / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    fake_docker = _write_executable(tmp_path / "docker-command", "#!/usr/bin/env bash\nexit 0\n")
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_crontab.parent}:{env['PATH']}",
+            "CRONTAB_BIN": str(fake_crontab),
+            "INSTALL_BIN": str(fake_install),
+            "CHOWN_BIN": str(fake_chown),
+            "DOCKER_BIN": str(fake_docker),
+            "FLOCK_BIN": str(fake_flock),
+            "STAT_BIN": str(_fake_root_stat(tmp_path)),
+            "FAKE_CRONTAB_FILE": str(store),
+            "CURRENT_RELEASE_ROOT": str(current_release),
+            "RUNTIME_DIR": str(tmp_path / "runtime"),
+            "CRON_LOCK_FILE": str(tmp_path / "cron.lock"),
+            "BACKUP_LOG_FILE": str(tmp_path / "backup.log"),
+            "CRON_ENABLED": "0",
+        }
+    )
+
+    staged = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert staged.returncode == 0, staged.stderr
+    assert store.read_text().startswith("# ai-video-production-backup-disabled ")
+    assert "ai-video-production-backup" in store.read_text()
+
+    env["MODE"] = "verify"
+    verified_disabled = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert verified_disabled.returncode == 0, verified_disabled.stderr
+
+    env.update({"MODE": "install", "CRON_ENABLED": "1"})
+    activated = subprocess.run(
+        ["bash", str(CRON_INSTALLER)],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert activated.returncode == 0, activated.stderr
+    active_crontab = store.read_text()
+    managed_lines = [
+        line
+        for line in active_crontab.splitlines()
+        if "ai-video-production-backup" in line
+    ]
+    assert len(managed_lines) == 1
+    assert managed_lines[0].startswith("0 3 * * * umask 077; ")
+    assert "PROJECT_ROOT=" + str(current_release) in managed_lines[0]
+    assert "ai-video-production-backup-disabled" not in active_crontab
 
 
 def test_cron_installer_requires_explicit_legacy_migration(tmp_path: Path) -> None:
