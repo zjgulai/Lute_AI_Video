@@ -150,10 +150,28 @@ jobs:
             rendering/package-lock.json
 
       - name: Audit frontend production dependencies
+        id: audit_frontend_dependencies
+        continue-on-error: true
         run: cd web && npm audit --omit=dev --audit-level=high
 
       - name: Audit rendering production dependencies
+        id: audit_rendering_dependencies
+        if: ${{ always() }}
+        continue-on-error: true
         run: cd rendering && npm audit --omit=dev --audit-level=high
+
+      - name: Enforce Node dependency audit results
+        id: enforce_node_dependency_audits
+        if: ${{ always() }}
+        env:
+          FRONTEND_AUDIT_OUTCOME: ${{ steps.audit_frontend_dependencies.outcome }}
+          RENDERING_AUDIT_OUTCOME: ${{ steps.audit_rendering_dependencies.outcome }}
+        run: |
+          if [[ "$FRONTEND_AUDIT_OUTCOME" != "success" ]] || \
+             [[ "$RENDERING_AUDIT_OUTCOME" != "success" ]]; then
+            echo "Node dependency audit failed: frontend=$FRONTEND_AUDIT_OUTCOME rendering=$RENDERING_AUDIT_OUTCOME" >&2
+            exit 1
+          fi
 
   docs-link-check:
     name: Docs link check (lychee)

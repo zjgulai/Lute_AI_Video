@@ -117,7 +117,7 @@ def test_frontend_package_json_has_one_complete_override_policy() -> None:
         "undici": "7.28.0",
         "vite": "8.1.0",
         "js-yaml": "4.3.0",
-        "nanoid": "3.3.17",
+        "nanoid": "3.3.18",
         "postcss": "$postcss",
         "next": {
             "sharp": "0.35.3",

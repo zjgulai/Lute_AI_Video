@@ -234,6 +234,37 @@ def test_ci_has_blocking_python_node_and_image_vulnerability_gates() -> None:
         assert with_config.get("severity") == "HIGH,CRITICAL"
 
 
+def test_ci_runs_both_node_audits_before_one_fail_closed_enforcement() -> None:
+    workflow = _workflow(CI)
+    steps = workflow["jobs"]["vulnerability-scan"]["steps"]
+    indexed = {
+        str(step.get("id")): (position, step)
+        for position, step in enumerate(steps)
+        if step.get("id")
+    }
+
+    frontend_position, frontend = indexed["audit_frontend_dependencies"]
+    rendering_position, rendering = indexed["audit_rendering_dependencies"]
+    enforcement_position, enforcement = indexed["enforce_node_dependency_audits"]
+
+    assert frontend["continue-on-error"] is True
+    assert frontend["run"] == "cd web && npm audit --omit=dev --audit-level=high"
+    assert rendering["if"] == "${{ always() }}"
+    assert rendering["continue-on-error"] is True
+    assert rendering["run"] == (
+        "cd rendering && npm audit --omit=dev --audit-level=high"
+    )
+    assert enforcement["if"] == "${{ always() }}"
+    assert enforcement["env"] == {
+        "FRONTEND_AUDIT_OUTCOME": "${{ steps.audit_frontend_dependencies.outcome }}",
+        "RENDERING_AUDIT_OUTCOME": "${{ steps.audit_rendering_dependencies.outcome }}",
+    }
+    assert '"$FRONTEND_AUDIT_OUTCOME" != "success"' in enforcement["run"]
+    assert '"$RENDERING_AUDIT_OUTCOME" != "success"' in enforcement["run"]
+    assert "exit 1" in enforcement["run"]
+    assert frontend_position < rendering_position < enforcement_position
+
+
 def test_vulnerability_runbook_records_the_final_e1_image_evidence() -> None:
     text = VULNERABILITY_RUNBOOK.read_text()
 
