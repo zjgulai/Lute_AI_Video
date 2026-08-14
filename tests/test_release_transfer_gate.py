@@ -971,6 +971,243 @@ def test_installer_creates_fixed_role_wrapper_without_authorized_keys_mutation()
     assert "DEPLOY_" not in text
 
 
+def test_gate_contract_documents_only_fixed_read_only_docker_safety_probe():
+    module_doc = (gate_module.__doc__ or "").lower()
+    assert "read-only" in module_doc
+    assert "docker ps" in module_doc
+    assert "never invokes docker" not in module_doc
+
+    for document in (
+        REPO_ROOT / "docs/runbooks/github-actions-deploy-secrets.md",
+        REPO_ROOT
+        / "docs/superpowers/specs/2026-08-13-cos-release-artifact-transfer-design.md",
+        REPO_ROOT / "docs/workflows/deploy-lighthouse-stable.md",
+    ):
+        text = document.read_text().lower()
+        assert "docker ps" in text
+        assert "read-only" in text
+
+
+def test_runtime_container_guard_uses_canonical_release_root_constant():
+    source = (REPO_ROOT / "deploy/lighthouse/release_transfer_gate.py").read_text()
+    guard = source.split(
+        "def _assert_runtime_not_using_candidate", 1
+    )[1].split("def _assert_no_process_references", 1)[0]
+    assert "DEFAULT_RELEASE_ROOT.resolve()" in guard
+    assert 'Path("/opt/ai-video").resolve()' not in guard
+
+
+@pytest.mark.parametrize(
+    ("system", "operation_name", "expected_argtypes"),
+    [
+        (
+            "Linux",
+            "renameat2",
+            [
+                gate_module.ctypes.c_int,
+                gate_module.ctypes.c_char_p,
+                gate_module.ctypes.c_int,
+                gate_module.ctypes.c_char_p,
+                gate_module.ctypes.c_uint,
+            ],
+        ),
+        (
+            "Darwin",
+            "renamex_np",
+            [
+                gate_module.ctypes.c_char_p,
+                gate_module.ctypes.c_char_p,
+                gate_module.ctypes.c_uint,
+            ],
+        ),
+    ],
+)
+def test_atomic_noreplace_declares_exact_ctypes_abi(
+    monkeypatch: pytest.MonkeyPatch,
+    system: str,
+    operation_name: str,
+    expected_argtypes: list[object],
+):
+    class FakeOperation:
+        argtypes: list[object] | None = None
+        restype: object | None = None
+
+        def __call__(self, *_args: object) -> int:
+            return 0
+
+    operation = FakeOperation()
+    library = type("FakeLibrary", (), {operation_name: operation})()
+    monkeypatch.setattr(gate_module.platform, "system", lambda: system)
+    monkeypatch.setattr(
+        gate_module.ctypes,
+        "CDLL",
+        lambda *_args, **_kwargs: library,
+    )
+
+    gate_module._rename_noreplace(Path("source"), Path("destination"))
+
+    assert operation.argtypes == expected_argtypes
+    assert operation.restype is gate_module.ctypes.c_int
+
+
+def test_installer_cleanup_helpers_attempt_every_path_after_individual_failures(
+    tmp_path: Path,
+):
+    prefix = INSTALLER.read_text().split('\ncase "$ACTION" in\n', 1)[0]
+    command = prefix + r'''
+candidate=$1
+pointer=$2
+previous=$3
+calls=()
+cleanup_candidate() {
+  calls+=(candidate)
+  return "${FIXTURE_CANDIDATE_RC:-0}"
+}
+remove_install_temp_file() {
+  calls+=("rm:$1")
+  if [ "$1" = "$pointer" ]; then
+    return "${FIXTURE_POINTER_RC:-0}"
+  fi
+  return "${FIXTURE_PREVIOUS_RC:-0}"
+}
+if cleanup_install_artifacts "$candidate" "$pointer" "$previous"; then
+  status=0
+else
+  status=$?
+fi
+printf '%s\n' "$status" "${calls[*]}"
+'''
+    candidate = tmp_path / "candidate"
+    pointer = tmp_path / "pointer"
+    previous = tmp_path / "previous"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            command,
+            "installer-test",
+            str(candidate),
+            str(pointer),
+            str(previous),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            **os.environ,
+            "SOURCE_ROOT": str(REPO_ROOT),
+            "FIXTURE_CANDIDATE_RC": "1",
+            "FIXTURE_POINTER_RC": "1",
+            "FIXTURE_PREVIOUS_RC": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "1",
+        f"candidate rm:{pointer} rm:{previous}",
+    ]
+
+
+def test_installer_rollback_failure_preserves_previous_while_cleaning_other_paths(
+    tmp_path: Path,
+):
+    text = INSTALLER.read_text()
+    prefix = text.split('\ncase "$ACTION" in\n', 1)[0]
+    cleanup_body = text.split("    cleanup_install() {", 1)[1].split(
+        "    }\n    trap cleanup_install EXIT", 1
+    )[0]
+    command = prefix + "\ncleanup_install() {" + cleanup_body + r'''
+}
+runtime=$1
+candidate=$2
+pointer=$3
+previous=$4
+had_previous=1
+switch_started=1
+rollback_pointer() {
+  printf '%s\n' rollback_failed
+  return 1
+}
+cleanup_install_artifacts() {
+  printf 'cleanup:%s:%s:%s:preserve=%s\n' "$1" "$2" "$3" "$4"
+  return 0
+}
+set +e
+(exit 7)
+cleanup_install
+'''
+    runtime = tmp_path / "runtime"
+    candidate = tmp_path / "candidate"
+    pointer = tmp_path / "pointer"
+    previous = tmp_path / "previous"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            command,
+            "installer-test",
+            str(runtime),
+            str(candidate),
+            str(pointer),
+            str(previous),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "SOURCE_ROOT": str(REPO_ROOT)},
+    )
+
+    assert result.returncode == 7
+    assert result.stdout.splitlines() == [
+        "rollback_failed",
+        f"cleanup:{candidate}:{pointer}:{previous}:preserve=1",
+    ]
+    assert "release_transfer_gate_install_cleanup_failed" in result.stderr
+
+
+@pytest.mark.parametrize("failure", ["find", "rmdir"])
+def test_installer_candidate_cleanup_reports_find_or_rmdir_failure(
+    tmp_path: Path,
+    failure: str,
+):
+    prefix = INSTALLER.read_text().split('\ncase "$ACTION" in\n', 1)[0]
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    if failure == "find":
+        (candidate / "owned").write_text("fixture")
+        injection = "find() { return 9; }"
+    else:
+        (candidate / "unexpected-directory").mkdir()
+        injection = ""
+    command = prefix + f'''\n{injection}\nif cleanup_candidate "$1"; then\n  exit 90\nfi\n[ -d "$1" ]\n'''
+
+    result = subprocess.run(
+        ["bash", "-c", command, "installer-test", str(candidate)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "SOURCE_ROOT": str(REPO_ROOT)},
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_installer_exit_trap_aggregates_rollback_and_all_cleanup_failures():
+    text = INSTALLER.read_text()
+    cleanup = text.split("    cleanup_install() {", 1)[1].split(
+        "    }\n    trap cleanup_install EXIT", 1
+    )[0]
+    assert 'rollback_pointer "$runtime/release-transfer-gate"' in cleanup
+    assert "|| cleanup_failed=1" in cleanup
+    assert 'cleanup_install_artifacts "$candidate" "$pointer" "$previous"' in cleanup
+    assert '"$preserve_previous"' in cleanup
+    assert "preserve_previous=1" in cleanup
+    assert "release_transfer_gate_install_cleanup_failed" in cleanup
+    assert cleanup.index("rollback_pointer") < cleanup.index("cleanup_install_artifacts")
+    assert cleanup.index("cleanup_install_artifacts") < cleanup.index('exit "$rc"')
+
+
 def test_installer_verifies_complete_bundle_before_atomic_pointer_switch():
     text = INSTALLER.read_text()
 

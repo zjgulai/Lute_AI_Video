@@ -2,9 +2,10 @@
 """Restricted COS release staging gate for Tencent Lighthouse.
 
 The forced-command staging role can only probe, stage, read a receipt, or
-remove its own verified incoming transaction.  Promotion is a separate
-production-only command and never invokes Docker, migration, backup, cron,
-nginx, provider, publish, or delivery operations.
+remove its own verified incoming transaction. Promotion is a separate
+production-only command. The gate may execute one fixed read-only ``docker ps``
+runtime-safety probe, but never arbitrary or mutating Docker, migration, backup,
+cron, nginx, provider, publish, or delivery operations.
 """
 
 from __future__ import annotations
@@ -1720,7 +1721,7 @@ def cleanup_incoming(
 
 
 def _assert_runtime_not_using_candidate(root: Path, identity: GateIdentity) -> None:
-    if root.resolve() != Path("/opt/ai-video").resolve():
+    if root.resolve() != DEFAULT_RELEASE_ROOT.resolve():
         return
     try:
         result = subprocess.run(
@@ -1814,6 +1815,14 @@ def _rename_noreplace(source: Path, destination: Path) -> None:
         operation = getattr(library, "renameat2", None)
         if operation is None:
             raise GateError("atomic no-replace rename is unavailable")
+        operation.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        operation.restype = ctypes.c_int
         result = operation(
             ctypes.c_int(-100),
             ctypes.c_char_p(source_bytes),
@@ -1825,6 +1834,12 @@ def _rename_noreplace(source: Path, destination: Path) -> None:
         operation = getattr(library, "renamex_np", None)
         if operation is None:
             raise GateError("atomic no-replace rename is unavailable")
+        operation.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        operation.restype = ctypes.c_int
         result = operation(
             ctypes.c_char_p(source_bytes),
             ctypes.c_char_p(destination_bytes),

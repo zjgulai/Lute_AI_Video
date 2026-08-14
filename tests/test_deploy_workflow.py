@@ -206,7 +206,6 @@ class TestDeployWorkflow:
             "remote-dry-run",
         }
         assert "artifact-stage" in deploy["needs"]
-        assert stage["needs"].index("remote-dry-run") > stage["needs"].index("build-images")
 
     def test_external_release_jobs_have_exact_read_only_token_permissions(self, workflow):
         for name in ("remote-dry-run", "deploy", "cleanup-staged-release"):
@@ -215,6 +214,17 @@ class TestDeployWorkflow:
             "actions": "read",
             "contents": "read",
         }
+
+    def test_secret_bearing_release_jobs_do_not_persist_checkout_credentials(
+        self, workflow
+    ):
+        for job_name in ("remote-dry-run", "artifact-stage", "deploy"):
+            checkout = next(
+                step
+                for step in workflow["jobs"][job_name]["steps"]
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            )
+            assert checkout.get("with", {}).get("persist-credentials") is False
 
     def test_failed_or_rejected_deploy_has_exact_staging_cleanup_compensation(
         self, workflow
@@ -293,7 +303,8 @@ class TestDeployWorkflow:
         assert "--retry" not in transfer_run
         assert 'if [ "$RESUME_TRANSFER" = true ]' in transfer_run
         assert "--resume" in transfer_run
-        assert 'done < "$upload_plan"' in transfer_run
+        assert "read -r -u 3 path object_key object_sha object_size" in transfer_run
+        assert 'done 3< "$upload_plan"' in transfer_run
         assert '"bucket":sys.argv[4]' in transfer_run
         assert '"endpoint_host":sys.argv[5]' in transfer_run
         assert "DEPLOY_" not in text
@@ -327,18 +338,20 @@ class TestDeployWorkflow:
 
     def test_explicit_resume_reuses_only_shared_objects_and_always_creates_manifest(self, workflow):
         steps = workflow["jobs"]["artifact-stage"]["steps"]
-        run = _step_by_name(steps, "Upload, probe and stage exact release")["run"]
+        step = _step_by_name(steps, "Upload, probe and stage exact release")
+        run = step["run"]
         resume_gate = run.index('if [ "$RESUME_TRANSFER" = true ]; then')
         resume_end = run.index("\nfi\n", resume_gate)
         plan = run.index("python3 scripts/release_transfer.py shared-object-upload-plan")
-        upload = run.index('done < "$upload_plan"')
+        upload = run.index('done 3< "$upload_plan"')
         readback = run.index("shared-object-readback-verify")
         manifest_upload = run.index('--object-key "$manifest_object_key"')
         assert resume_gate < resume_end < plan < upload < readback < manifest_upload
         assert "cos-object-upload" in run
         assert "transactions/${workflow_run_id}/${workflow_run_attempt}" not in run
         assert "manifest_object_key" in run
-        assert "RESUME_TRANSFER: ${{ inputs.resume_transfer || false }}" not in run
+        assert "inputs.resume_transfer" not in run
+        assert step["env"]["RESUME_TRANSFER"] == "${{ inputs.resume_transfer || false }}"
 
     def test_two_leg_probe_and_versioning_gate_precede_all_release_object_mutation(
         self, workflow
@@ -354,7 +367,7 @@ class TestDeployWorkflow:
             '> "${transfer_root}/server-probe-receipt.json"', runner_gate
         )
         upload_plan = run.index("shared-object-upload-plan", server_gate)
-        release_upload = run.index('done < "$upload_plan"', upload_plan)
+        release_upload = run.index('done 3< "$upload_plan"', upload_plan)
         manifest_upload = run.index('--object-key "$manifest_object_key"', release_upload)
         assert versioning < probe_upload < runner_gate < server_gate
         assert server_gate < upload_plan < release_upload < manifest_upload
@@ -456,6 +469,7 @@ class TestDeployWorkflow:
         transfer = _step_by_name(stage["steps"], "Upload, probe and stage exact release")
         transfer_run = transfer["run"]
         assert "signed-url-payload" in transfer_run
+        assert "--validity-seconds 7200" not in transfer_run
         assert "| timeout --foreground --signal=TERM --kill-after=5s" in transfer_run
         assert "ssh -i \"$ssh_key\"" in transfer_run
         assert "https://" not in transfer_run
@@ -469,9 +483,17 @@ class TestDeployWorkflow:
         deploy = workflow["jobs"]["deploy"]
         steps = deploy["steps"]
         names = [step.get("name") for step in steps]
+        required = _step_by_name(steps, "Verify required secrets")
         promote = _step_by_name(steps, "Promote verified incoming release")
         trigger = _step_by_name(steps, "Trigger remote deploy")
+        assert names.index(required["name"]) < names.index(promote["name"])
         assert names.index(promote["name"]) < names.index(trigger["name"])
+        assert required["env"]["DEPLOY_TARGET_DIR"] == (
+            "${{ secrets.DEPLOY_TARGET_DIR }}"
+        )
+        assert '[ "$DEPLOY_TARGET_DIR" = /opt/ai-video ]' in required["run"]
+        assert "deploy_target_root_invalid" in required["run"]
+        assert "secrets.DEPLOY_TARGET_DIR" not in required["run"]
         assert "promote" in promote["run"]
         assert "release-transfer-gate" in promote["run"]
         assert "Rsync reviewed release to server" not in names
@@ -493,6 +515,12 @@ class TestDeployWorkflow:
             check=True,
             capture_output=True,
             text=True,
+            env={
+                "HOME": str(REPO_ROOT),
+                "LANG": "C.UTF-8",
+                "LC_ALL": "C.UTF-8",
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            },
         )
         assert result.stderr == ""
         assert result.stdout.splitlines() == [

@@ -244,8 +244,11 @@ The server receives signed GET URLs only over SSH standard input. A root-owned
 wrapper captures the forced command before sudo, passes it as one non-shell
 argument to an exact staging allowlist, and never preserves arbitrary caller
 environment. URLs never appear in the SSH command, process arguments,
-repository, GitHub output, or receipt. Their validity is bounded to the stage
-window; the gate retains them only in process memory.
+repository, GitHub output, or receipt. Every signed GET URL, including resume
+readback, has an effective validity equal to the lesser
+of the requested value and the remaining shared transfer deadline, never more
+than 1,800 seconds; less than 60 seconds remaining fails before signing. The
+gate retains URLs only in process memory.
 
 ## Multipart Upload and Explicit Resume
 
@@ -314,8 +317,9 @@ or implicit cross-run authority.
 
 The staging SSH identity is distinct from the production deploy identity. Its
 authorized key is restricted to one root-owned gate and cannot run an arbitrary
-shell, Docker, migration, backup, service, cron, nginx, provider, publish, or
-delivery command.
+shell or arbitrary/mutating Docker, migration, backup, service, cron, nginx,
+provider, publish, or delivery command. The only Docker operation in the gate
+is a fixed read-only `docker ps` runtime-safety probe before cleanup/promotion.
 
 Before creating incoming state, the gate downloads the full signed, run-bound
 64 MiB probe object into a root-owned temporary file, verifies its fixed hash,
@@ -339,8 +343,14 @@ complete old or complete new trio. Install root, versions root and each runtime
 must be non-symlink `root:root:0755`; the lock is `root:root:0600`, and these
 facts are rechecked immediately before and after the pointer switch. The lock
 is opened without symlink following or truncation and must be a single-link
-regular inode. Every root Python helper runs isolated from cwd and environment;
-the installed gate loads only its exact sibling contract. Candidate and
+regular inode. On failure the EXIT handler attempts pointer rollback and every candidate,
+pointer, and previous temporary cleanup independently. Cleanup faults cannot
+short-circuit later compensation or replace the original failure and add the
+stable `release_transfer_gate_install_cleanup_failed` terminal.
+If pointer rollback fails, the previous-pointer snapshot is retained for
+manual recovery while candidate and pointer temporaries are still cleaned.
+Every root Python helper runs isolated from cwd and environment; the installed
+gate loads only its exact sibling contract. Candidate and
 published runtime bytes are rehashed against the frozen content-address before
 publication and immediately before the pointer switch. It also verifies this root and
 `/opt/ai-video` are on the same filesystem:
@@ -372,8 +382,9 @@ The image archive, adjacent checksum, and three image digests must match the
 transfer manifest.
 
 After all checks, the marker becomes `verified`. The staging gate cannot rename
-the directory to `releases-<SHA>`, cannot call Docker, and cannot modify
-`current`.
+the directory to `releases-<SHA>`, cannot run arbitrary or mutating Docker, and
+cannot modify `current`; it may run only the fixed read-only `docker ps` safety
+probe described above.
 
 Promotion uses Linux `renameat2(RENAME_NOREPLACE)` to atomically rename that
 directory to `/opt/ai-video/releases-<SHA>`. The installer performs a real
@@ -439,7 +450,9 @@ with stable phase terminals; a parser `RecursionError` never escapes as a
 traceback. On normal failure, signal, or timeout, the gate removes temporary
 credential files and `.part` files. The runner marks the exact probe key as a
 possible mutation before issuing its single PUT, so an ambiguous response also
-triggers one idempotent exact probe DELETE. Runner-side failure handling also
+triggers one idempotent exact probe DELETE. That DELETE gets a fresh bounded
+30-second cleanup deadline independent of an expired transfer deadline and is
+never retried. Runner-side failure handling also
 issues one idempotent cleanup for the exact run identity, covering a broken SSH
 receipt stream after the server already reached `verified`, probe deletion
 failure, or another late transfer-step error. A verified incoming directory is

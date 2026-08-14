@@ -496,6 +496,8 @@ jobs:
       name: production-read-only-dry-run
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Build exact source manifest
         run: |
@@ -568,6 +570,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -778,7 +781,6 @@ jobs:
             --bucket "$COS_BUCKET" \
             --endpoint-host "$COS_ENDPOINT" \
             --object-key "$probe_object_key" \
-            --validity-seconds 7200 \
             | python3 -c 'import json,sys; print(json.dumps({"schema_version":"release-transfer-probe-url.v1","manifest_sha256":sys.argv[1],"release_bytes":int(sys.argv[2]),"deadline_seconds_remaining":int(sys.argv[3]),"bucket":sys.argv[4],"endpoint_host":sys.argv[5],"url":sys.stdin.read().strip()},sort_keys=True,separators=(",",":")))' \
                 "${{ steps.packet.outputs.manifest_sha256 }}" \
                 "${{ steps.packet.outputs.release_bytes }}" \
@@ -803,7 +805,7 @@ jobs:
             --manifest "$manifest" \
             "${resume_flag[@]}" > "$upload_plan"
           transfer_status=cos_release_upload_failed
-          while IFS=$'\t' read -r path object_key object_sha object_size; do
+          while IFS=$'\t' read -r -u 3 path object_key object_sha object_size; do
             [ -n "$path" ] || continue
             [ "$(stat -c '%s' "${transfer_root}/${path}")" = "$object_size" ]
             [ "$(sha256sum "${transfer_root}/${path}" | awk '{print $1}')" = "$object_sha" ]
@@ -814,7 +816,7 @@ jobs:
               --object-key "$object_key" \
               --sha256 "$object_sha" \
               --size-bytes "$object_size" >/dev/null
-          done < "$upload_plan"
+          done 3< "$upload_plan"
           transfer_status=cos_identity_readback_failed
           python3 scripts/release_transfer.py shared-object-readback-verify \
             --manifest "$manifest"
@@ -838,7 +840,6 @@ jobs:
           stage_deadline_remaining=$(deadline_remaining)
           python3 scripts/release_transfer.py signed-url-payload \
             --manifest "$manifest" \
-            --validity-seconds 7200 \
             | timeout --foreground --signal=TERM --kill-after=5s \
                 "${stage_deadline_remaining}s" \
                 ssh -i "$ssh_key" -o StrictHostKeyChecking=yes \
@@ -911,6 +912,8 @@ jobs:
       url: https://video.lute-tlz-dddd.top
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Verify required secrets
         run: |
@@ -924,6 +927,10 @@ jobs:
           if [ "$missing" -eq 1 ]; then
             exit 1
           fi
+          [ "$DEPLOY_TARGET_DIR" = /opt/ai-video ] || {
+            printf '%s\n' '::error::deploy_target_root_invalid'
+            exit 1
+          }
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}

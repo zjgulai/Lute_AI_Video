@@ -300,8 +300,27 @@ cleanup_candidate() {
   local candidate=${1:-}
   [ -n "$candidate" ] || return 0
   [ -d "$candidate" ] && [ ! -L "$candidate" ] || return 0
-  find "$candidate" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
-  rmdir "$candidate" 2>/dev/null || true
+  find "$candidate" -mindepth 1 -maxdepth 1 -type f -links 1 -delete \
+    || return 1
+  rmdir "$candidate" 2>/dev/null || return 1
+}
+
+remove_install_temp_file() {
+  /bin/rm -f -- "$1"
+}
+
+cleanup_install_artifacts() {
+  local candidate=$1
+  local pointer=$2
+  local previous=$3
+  local preserve_previous=${4:-0}
+  local cleanup_failed=0
+  cleanup_candidate "$candidate" || cleanup_failed=1
+  remove_install_temp_file "$pointer" || cleanup_failed=1
+  if [ "$preserve_previous" -eq 0 ]; then
+    remove_install_temp_file "$previous" || cleanup_failed=1
+  fi
+  [ "$cleanup_failed" -eq 0 ]
 }
 
 rollback_pointer() {
@@ -360,14 +379,23 @@ case "$ACTION" in
 
     cleanup_install() {
       local rc=$?
+      local cleanup_failed=0
+      local preserve_previous=0
       trap - EXIT
       if [ "$rc" -ne 0 ] && [ "$switch_started" -eq 1 ]; then
         rollback_pointer "$runtime/release-transfer-gate" "$previous" \
-          "$had_previous" || rc=1
+          "$had_previous" || {
+            cleanup_failed=1
+            preserve_previous=1
+          }
       fi
-      cleanup_candidate "$candidate"
-      /bin/rm -f "$pointer"
-      /bin/rm -f "$previous"
+      cleanup_install_artifacts "$candidate" "$pointer" "$previous" \
+        "$preserve_previous" \
+        || cleanup_failed=1
+      if [ "$cleanup_failed" -ne 0 ]; then
+        printf '%s\n' 'ERROR: release_transfer_gate_install_cleanup_failed' >&2
+        [ "$rc" -ne 0 ] || rc=1
+      fi
       exit "$rc"
     }
     trap cleanup_install EXIT
@@ -407,8 +435,8 @@ case "$ACTION" in
     switch_started=1
     atomic_replace "$pointer" "$WRAPPER_PATH" || fail
     verify_installation "$version" || fail
+    remove_install_temp_file "$previous" || fail
     trap - EXIT
-    /bin/rm -f "$previous"
     ;;
   verify)
     [ "$(id -u)" -eq 0 ] || fail

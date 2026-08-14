@@ -43,6 +43,9 @@ owner: Sisyphus
 | `DEPLOY_KNOWN_HOSTS` | 预先核验并固定的生产 SSH `known_hosts` 行；禁止运行时 `ssh-keyscan`/TOFU | `<host> <key-type> <public-key>` |
 
 这些 secret 不得配置成 repository-wide secret；它们只能在 `production` 人工批准后进入 deploy job。
+workflow 在任何 production SSH 或 promotion 之前要求 `DEPLOY_TARGET_DIR`
+精确等于 canonical `/opt/ai-video`；空值或其他路径以
+`deploy_target_root_invalid` 失败关闭。
 
 production job 不再从 GitHub runner 直接 rsync source 或 2.28 GB image archive。它只使用上述凭据调用 root-owned transfer gate 的 `promote`，然后从 immutable `releases-<SHA>` 执行既有 `deploy.sh`。
 
@@ -122,8 +125,13 @@ production promotion 的不可逆 rename 紧邻前再次复验；任何身份、
 `EXDEV`、旧/混装文件或 wrapper 漂移都会阻断。incoming 只存在于该 staging root，production promotion 才原子
 rename 到 `/opt/ai-video/releases-<SHA>`。不得把 staging root 改回 deploy
 用户可写目录。
+安装失败的 EXIT handler 会依次尝试 pointer rollback、candidate、pointer temp
+和 previous temp 清理；单项失败不能短路后续清理，任一清理失败均保留原始失败并输出
+`release_transfer_gate_install_cleanup_failed`，不得报告安装成功。
+若 pointer rollback 本身失败，previous pointer 快照必须保留用于人工恢复，
+同时仍继续清理 candidate 与 pointer temp。
 
-把 `print-authorized-command` 输出的固定 command 前缀与 staging 公钥组合到 staging 用户的唯一 `authorized_keys` 行。另在 root-owned sudoers drop-in 中只允许该用户执行 `/usr/local/sbin/ai-video-release-transfer-gate --staging-command *`；wrapper 把 sshd 提供的 `SSH_ORIGINAL_COMMAND` 作为单一非 shell 参数交给 root gate，gate 再按精确五字段语法和 staging action allowlist 解析。不得设置 `SETENV`，不得授予该用户其他 sudo 命令。安装脚本本身不会修改账号、sudoers、SSH 配置或 `authorized_keys`。该身份只能执行 `probe`、`stage`、`receipt`、`cleanup`，不能执行 `promote`、shell、Docker、migration、backup、cron、nginx、provider、publish 或 delivery。
+把 `print-authorized-command` 输出的固定 command 前缀与 staging 公钥组合到 staging 用户的唯一 `authorized_keys` 行。另在 root-owned sudoers drop-in 中只允许该用户执行 `/usr/local/sbin/ai-video-release-transfer-gate --staging-command *`；wrapper 把 sshd 提供的 `SSH_ORIGINAL_COMMAND` 作为单一非 shell 参数交给 root gate，gate 再按精确五字段语法和 staging action allowlist 解析。不得设置 `SETENV`，不得授予该用户其他 sudo 命令。安装脚本本身不会修改账号、sudoers、SSH 配置或 `authorized_keys`。该身份只能执行 `probe`、`stage`、`receipt`、`cleanup`，不能执行 `promote`、shell、任意或变更型 Docker、migration、backup、cron、nginx、provider、publish 或 delivery；gate 仅允许固定的 read-only `docker ps` runtime safety probe。
 
 ## 必需的 GitHub Environment
 
@@ -143,6 +151,7 @@ rename 到 `/opt/ai-video/releases-<SHA>`。不得把 staging root 改回 deploy
 - `preflight`: ruff check + pytest + frontend `eslint` + `tsc --noEmit` + Vitest + `next build`
 - `build-images`: 构建 backend/frontend/rendering 三个 SHA-tagged image，校验 revision label、backend production import、frontend HTTP 和 rendering/ffmpeg/Chromium health；不读取 provider secret
 - `remote-dry-run`: 只使用受限 `DRY_RUN_*` 身份生成 rsync dry-run artifact，不读取 `DEPLOY_*`
+`artifact-stage` 的全部 signed URL（包括 resume readback）有效期取请求值与总期限剩余秒数的较小值，最高 1,800 秒；剩余不足 60 秒时不签名。probe DELETE 使用独立 fresh 30 秒 cleanup deadline，不继承已经过期的 transfer deadline，且仍只尝试一次。
 - `artifact-stage`: 先按 producer digest 对 GitHub artifact 原始 ZIP 做硬校验，校验成功后才解包；随后启动一个 runner monotonic 1,800 秒总期限，检查 bucket 从未启用 versioning，使用仓库自有 no-redirect、每请求单次 attempt 客户端，先分别通过 64 MiB runner→COS 与 COS→Lighthouse 两腿吞吐门禁，再执行 serial 64 MiB multipart/create-only upload。probe 在 PUT 前即标记为可能存在，因此 response 丢失也会对精确 key 做一次幂等 DELETE。所有 URL 必须精确等于 `<COS_BUCKET>.<COS_ENDPOINT>`，manifest 与 probe 的 bucket/region 必须一致。服务器从 signed URL stdin 下载到 root-owned `/var/lib/ai-video-release-transfer/.incoming-<SHA>-<run>-<attempt>`；runner 仅传播剩余秒数，同时用该剩余值硬限制 probe/stage/receipt 三条 SSH pipeline，server 建立自己的 monotonic deadline，socket timeout、信号与总超时都进入同一 abort/`.part`/incoming 清理路径。deadline 必须覆盖下载后的 hash、archive/source 验证与 receipt commit；既有 probe receipt/symlink 在下载前失败关闭。receipt 与 incoming mkdir 在文件系统 mutation 前建立 intent，在屏蔽受控 signal 的临界区记录已创建 inode；提交后的 deadline/signal 失败只清理同 inode、同身份状态，foreign race、所有权不明或删除失败必须保留并标记 manual recovery。server 用 manifest 真实总字节重算门禁，规范化 source mode，并在 promotion 前重新核验每个 source byte、symlink target、精确文件/目录集合与类型；canonical manifest bytes、全量 SHA/size/source tree/archive safety/receipt 通过后才标 `verified`
 
 只要 provenance、preflight、build-images、remote-dry-run 或 artifact-stage 任意失败，production deploy job 都不会启动。`artifact-stage-only` 成功后必须删除 verified incoming；它只证明 transfer path，不构成 image load、backup/restore、migration、应用切换或 production acceptance。transfer step 的 EXIT handler 会先删 probe，再对可能存在的 remote transaction 做精确 cleanup；若 receipt 已形成后 evidence upload 才失败，或 `deploy` 的审批被拒绝、job 被跳过/失败，`cleanup-staged-release` 也会重新进入 `production-artifact-staging`，仅用 `TRANSFER_*` 身份对精确 SHA/run/attempt/manifest 执行一次补偿，并始终上传 bounded terminal evidence。它不能读取 COS/DEPLOY 凭据，也不能删除已 promotion 的 final release；失败终态统一为 `incoming_cleanup_failed`，不得写成已清理。

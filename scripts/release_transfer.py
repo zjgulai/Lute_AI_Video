@@ -1043,7 +1043,9 @@ def _upload_simple(
         endpoint_host=endpoint_host,
         object_key=object_key,
         headers={
-            "content-md5": base64.b64encode(hashlib.md5(data).digest()).decode(),
+            "content-md5": base64.b64encode(
+                hashlib.md5(data, usedforsecurity=False).digest()
+            ).decode(),
             "x-cos-forbid-overwrite": "true",
             "x-cos-meta-ai-video-sha256": sha256,
             "x-cos-meta-ai-video-size": str(len(data)),
@@ -1105,7 +1107,7 @@ def _upload_multipart(
                     query={"partNumber": str(part_number), "uploadId": upload_id},
                     headers={
                         "content-md5": base64.b64encode(
-                            hashlib.md5(chunk).digest()
+                            hashlib.md5(chunk, usedforsecurity=False).digest()
                         ).decode()
                     },
                     body=chunk,
@@ -1214,7 +1216,7 @@ def delete_object_once(
     deadline_ns: int | None = None,
 ) -> None:
     operation_deadline = (
-        _deadline_from_environment(default_seconds=30)
+        time.monotonic_ns() + 30 * 1_000_000_000
         if deadline_ns is None
         else deadline_ns
     )
@@ -1231,13 +1233,9 @@ def delete_object_once(
 
 
 def _signed_urls(*, manifest_path: Path, validity_seconds: int) -> bytes:
-    if validity_seconds < 60 or validity_seconds > MAX_VALIDITY_SECONDS:
-        raise TransferContractError("signed URL validity is invalid")
     manifest = load_canonical_manifest(manifest_path)
-    deadline = _deadline_from_environment()
-    deadline_seconds_remaining = max(
-        1,
-        int(_remaining_timeout(deadline, MAX_ESTIMATED_SECONDS)),
+    effective_validity, deadline_seconds_remaining = _bounded_signed_url_validity(
+        validity_seconds
     )
     cos = cast(dict[str, object], manifest["cos"])
     bucket = cast(str, cos["bucket"])
@@ -1253,7 +1251,7 @@ def _signed_urls(*, manifest_path: Path, validity_seconds: int) -> bytes:
             bucket=bucket,
             endpoint_host=endpoint,
             object_key=object_key,
-            validity_seconds=validity_seconds,
+            validity_seconds=effective_validity,
         )
         _validate_readback_url(url, bucket=bucket, endpoint_host=endpoint)
         urls[PurePosixPath(object_key).name] = url
@@ -1265,6 +1263,25 @@ def _signed_urls(*, manifest_path: Path, validity_seconds: int) -> bytes:
             "urls": urls,
         }
     )
+
+
+def _bounded_signed_url_validity(
+    requested_seconds: int,
+    *,
+    deadline_ns: int | None = None,
+) -> tuple[int, int]:
+    if requested_seconds < 60 or requested_seconds > MAX_VALIDITY_SECONDS:
+        raise TransferContractError("signed URL validity is invalid")
+    deadline = (
+        _deadline_from_environment() if deadline_ns is None else deadline_ns
+    )
+    remaining = max(
+        1,
+        int(_remaining_timeout(deadline, MAX_ESTIMATED_SECONDS)),
+    )
+    if remaining < 60:
+        raise TransferContractError("signed URL validity is invalid")
+    return min(requested_seconds, remaining), remaining
 
 
 def _signed_object_url(
@@ -1375,11 +1392,15 @@ def plan_shared_object_uploads(
     planned: list[dict[str, object]] = []
     with _deadline_alarm(operation_deadline):
         for entry in files:
+            effective_validity, _ = _bounded_signed_url_validity(
+                validity_seconds,
+                deadline_ns=operation_deadline,
+            )
             url = _signed_object_url(
                 bucket=bucket,
                 endpoint_host=endpoint,
                 object_key=cast(str, entry["object_key"]),
-                validity_seconds=validity_seconds,
+                validity_seconds=effective_validity,
             )
             if not _object_readback_matches(
                 url=url,
@@ -1433,7 +1454,7 @@ def _parser() -> argparse.ArgumentParser:
     probe.add_argument("--release-bytes", type=int, required=True)
     sign = commands.add_parser("signed-url-payload")
     sign.add_argument("--manifest", type=Path, required=True)
-    sign.add_argument("--validity-seconds", type=int, default=MAX_VALIDITY_SECONDS)
+    sign.add_argument("--validity-seconds", type=int, default=MAX_ESTIMATED_SECONDS)
     plan = commands.add_parser("shared-object-upload-plan")
     plan.add_argument("--manifest", type=Path, required=True)
     plan.add_argument("--resume", action="store_true")
@@ -1457,7 +1478,7 @@ def _parser() -> argparse.ArgumentParser:
     signed.add_argument("--bucket", required=True)
     signed.add_argument("--endpoint-host", required=True)
     signed.add_argument("--object-key", required=True)
-    signed.add_argument("--validity-seconds", type=int, default=MAX_VALIDITY_SECONDS)
+    signed.add_argument("--validity-seconds", type=int, default=MAX_ESTIMATED_SECONDS)
     return parser
 
 
@@ -1538,12 +1559,15 @@ def _execute(args: argparse.Namespace) -> int:
             )
             print('{"status":"deleted"}')
         else:
+            effective_validity, _ = _bounded_signed_url_validity(
+                args.validity_seconds
+            )
             print(
                 _signed_object_url(
                     bucket=args.bucket,
                     endpoint_host=args.endpoint_host,
                     object_key=args.object_key,
-                    validity_seconds=args.validity_seconds,
+                    validity_seconds=effective_validity,
                 )
             )
     except TransferContractError:

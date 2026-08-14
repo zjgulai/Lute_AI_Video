@@ -440,6 +440,75 @@ def test_resume_plan_reuses_only_exact_readback_and_uploads_missing(
     assert len(signed) == len(files)
 
 
+@pytest.mark.parametrize(
+    "operation",
+    [plan_shared_object_uploads, verify_shared_object_readback],
+)
+def test_resume_readback_urls_are_clamped_to_explicit_remaining_deadline(
+    bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation,
+):
+    manifest_path = bundle / "release-transfer-manifest.v1.json"
+    manifest_path.write_bytes(canonical_json_bytes(_manifest(bundle)))
+    signed: list[int] = []
+
+    def fake_sign(**kwargs):
+        signed.append(cast(int, kwargs["validity_seconds"]))
+        return (
+            f"https://{kwargs['bucket']}.{kwargs['endpoint_host']}/"
+            f"{kwargs['object_key']}?sig=fixture"
+        )
+
+    monkeypatch.setattr(transfer_module, "_signed_object_url", fake_sign)
+    monkeypatch.setattr(
+        transfer_module,
+        "_object_readback_matches",
+        lambda **_kwargs: True,
+    )
+    deadline = transfer_module.time.monotonic_ns() + 120 * 1_000_000_000
+
+    kwargs = {"manifest_path": manifest_path, "deadline_ns": deadline}
+    if operation is plan_shared_object_uploads:
+        kwargs["resume"] = True
+    result = operation(**kwargs)
+
+    if operation is plan_shared_object_uploads:
+        assert result == []
+    assert signed
+    assert all(60 <= validity <= 120 for validity in signed)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [plan_shared_object_uploads, verify_shared_object_readback],
+)
+def test_resume_readback_rejects_less_than_one_minute_before_signing(
+    bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation,
+):
+    manifest_path = bundle / "release-transfer-manifest.v1.json"
+    manifest_path.write_bytes(canonical_json_bytes(_manifest(bundle)))
+    monkeypatch.setattr(
+        transfer_module,
+        "_signed_object_url",
+        lambda **_kwargs: pytest.fail("resume signer must not run"),
+    )
+    monkeypatch.setattr(
+        transfer_module,
+        "_object_readback_matches",
+        lambda **_kwargs: pytest.fail("resume readback must not run"),
+    )
+    deadline = transfer_module.time.monotonic_ns() + 59 * 1_000_000_000
+
+    with pytest.raises(TransferContractError, match="validity"):
+        kwargs = {"manifest_path": manifest_path, "deadline_ns": deadline}
+        if operation is plan_shared_object_uploads:
+            kwargs["resume"] = True
+        operation(**kwargs)
+
+
 def test_shared_object_readback_fails_when_any_object_is_missing(
     bundle: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -561,6 +630,10 @@ def test_cos_readback_rejects_redirect_without_contacting_target():
     finally:
         redirect.shutdown()
         target.shutdown()
+        for thread in threads:
+            thread.join(timeout=5)
+        redirect.server_close()
+        target.server_close()
 
 
 def test_cos_readback_http_framing_error_is_stable(
@@ -675,6 +748,141 @@ def test_single_object_request_has_no_automatic_retry(
             expected_size=5,
         )
     assert attempts == 1
+
+
+def test_probe_delete_uses_one_fresh_bounded_cleanup_attempt_after_parent_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    attempts = 0
+
+    def fail_once(**kwargs):
+        nonlocal attempts
+        attempts += 1
+        assert kwargs["method"] == "DELETE"
+        assert kwargs["timeout"] == 30
+        assert kwargs["deadline_ns"] > transfer_module.time.monotonic_ns()
+        raise TransferContractError("fixture delete failed")
+
+    monkeypatch.setenv(
+        "TRANSFER_DEADLINE_MONOTONIC_NS",
+        str(transfer_module.time.monotonic_ns() - 1),
+    )
+    monkeypatch.setattr(transfer_module, "_cos_request", fail_once)
+
+    with pytest.raises(TransferContractError, match="fixture delete failed"):
+        transfer_module.delete_object_once(
+            bucket="ai-video-release-1250000000",
+            endpoint_host="cos.ap-shanghai.myqcloud.com",
+            object_key="ai-video/probes/run/probe.bin",
+        )
+
+    assert attempts == 1
+
+
+def test_signed_url_payload_is_clamped_to_remaining_transfer_authority(
+    bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    manifest_path = bundle / "release-transfer-manifest.v1.json"
+    manifest_path.write_bytes(canonical_json_bytes(_manifest(bundle)))
+    signed: list[dict[str, object]] = []
+
+    def fake_signed_object_url(**kwargs):
+        signed.append(kwargs)
+        return (
+            f"https://{kwargs['bucket']}.{kwargs['endpoint_host']}/"
+            f"{kwargs['object_key']}?fixture=1"
+        )
+
+    monkeypatch.setenv(
+        "TRANSFER_DEADLINE_MONOTONIC_NS",
+        str(transfer_module.time.monotonic_ns() + 1_800 * 1_000_000_000),
+    )
+    monkeypatch.setattr(transfer_module, "_signed_object_url", fake_signed_object_url)
+
+    payload = json.loads(
+        transfer_module._signed_urls(
+            manifest_path=manifest_path,
+            validity_seconds=transfer_module.MAX_VALIDITY_SECONDS,
+        )
+    )
+
+    remaining = cast(int, payload["deadline_seconds_remaining"])
+    assert 60 <= remaining <= transfer_module.MAX_ESTIMATED_SECONDS
+    assert signed
+    assert {entry["validity_seconds"] for entry in signed} == {remaining}
+    assert set(cast(dict[str, str], payload["urls"])) == {
+        Path(cast(str, entry["object_key"])).name
+        for entry in cast(list[dict[str, object]], _manifest(bundle)["files"])
+    } | {"release-transfer-manifest.v1.json"}
+
+
+def test_signed_url_commands_default_and_clamp_to_transfer_window(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    calls: list[dict[str, object]] = []
+
+    def fake_signed_object_url(**kwargs):
+        calls.append(kwargs)
+        return "https://fixture.invalid/object?fixture=1"
+
+    parser = transfer_module._parser()
+    args = parser.parse_args(
+        [
+            "cos-signed-url",
+            "--bucket",
+            "ai-video-release-1250000000",
+            "--endpoint-host",
+            "cos.ap-shanghai.myqcloud.com",
+            "--object-key",
+            "ai-video/probes/run/probe.bin",
+        ]
+    )
+    payload_args = parser.parse_args(
+        ["signed-url-payload", "--manifest", "fixture.json"]
+    )
+    assert args.validity_seconds == transfer_module.MAX_ESTIMATED_SECONDS
+    assert payload_args.validity_seconds == transfer_module.MAX_ESTIMATED_SECONDS
+
+    monkeypatch.setenv(
+        "TRANSFER_DEADLINE_MONOTONIC_NS",
+        str(transfer_module.time.monotonic_ns() + 1_800 * 1_000_000_000),
+    )
+    monkeypatch.setattr(transfer_module, "_signed_object_url", fake_signed_object_url)
+
+    assert transfer_module._execute(args) == 0
+    assert capsys.readouterr().out.strip() == "https://fixture.invalid/object?fixture=1"
+    assert len(calls) == 1
+    assert 60 <= cast(int, calls[0]["validity_seconds"]) <= 1_800
+
+
+def test_signed_url_fails_closed_when_less_than_one_minute_remains(
+    bundle: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    manifest_path = bundle / "release-transfer-manifest.v1.json"
+    manifest_path.write_bytes(canonical_json_bytes(_manifest(bundle)))
+    monkeypatch.setenv(
+        "TRANSFER_DEADLINE_MONOTONIC_NS",
+        str(transfer_module.time.monotonic_ns() + 59 * 1_000_000_000),
+    )
+    monkeypatch.setattr(
+        transfer_module,
+        "_signed_object_url",
+        lambda **_kwargs: pytest.fail("signer must not run with an expired authority"),
+    )
+
+    with pytest.raises(TransferContractError, match="validity"):
+        transfer_module._signed_urls(
+            manifest_path=manifest_path,
+            validity_seconds=transfer_module.MAX_ESTIMATED_SECONDS,
+        )
+
+
+def test_cos_content_md5_is_explicitly_non_security():
+    source = (Path(__file__).parents[1] / "scripts" / "release_transfer.py").read_text()
+    assert source.count("usedforsecurity=False") == 2
 
 
 def test_expired_shared_deadline_fails_before_any_cos_request(
