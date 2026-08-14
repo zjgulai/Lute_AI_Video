@@ -603,20 +603,28 @@ def test_backup_manifest_validator_rejects_symlinked_backup_root(tmp_path: Path)
         validate_backup_manifest(linked)
 
 
-def test_release_sync_paths_generate_exact_source_manifest_before_rsync() -> None:
+def test_release_paths_generate_exact_source_manifest_before_transfer() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
     wrapper = (
         REPO_ROOT / "deploy" / "lighthouse" / "build-and-deploy.sh"
     ).read_text()
 
     assert workflow.count("scripts/backup_manifest.py source-create") >= 2
-    assert workflow.count("--git-sha ${{ github.sha }}") >= 2
-    dry_run_job = workflow.split("  remote-dry-run:", 1)[1].split("  deploy:", 1)[0]
+    assert "--git-sha ${{ github.sha }}" in workflow
+    assert '--git-sha "${GITHUB_SHA}"' in workflow
+    dry_run_job = workflow.split("  remote-dry-run:", 1)[1].split(
+        "  artifact-stage:", 1
+    )[0]
+    stage_job = workflow.split("  artifact-stage:", 1)[1].split("  deploy:", 1)[0]
     deploy_job = workflow.split("  deploy:", 1)[1]
-    for job in (dry_run_job, deploy_job):
-        assert job.index("scripts/backup_manifest.py source-create") < job.index(
-            "rsync -avz"
-        )
+    assert dry_run_job.index("scripts/backup_manifest.py source-create") < (
+        dry_run_job.index("rsync -avz")
+    )
+    assert stage_job.index("scripts/backup_manifest.py source-create") < (
+        stage_job.index("git archive --format=tar")
+    )
+    assert "scripts/backup_manifest.py source-create" not in deploy_job
+    assert "rsync -avz" not in deploy_job
     assert "scripts/backup_manifest.py source-create" in wrapper
     assert wrapper.index("scripts/backup_manifest.py source-create") < wrapper.index(
         '"$RSYNC_BIN" "${RSYNC_ARGS[@]}"'

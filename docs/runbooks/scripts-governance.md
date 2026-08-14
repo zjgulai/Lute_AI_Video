@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-08-12
+updated: 2026-08-13
 owner: self
 source: human+ai
 ---
@@ -72,6 +72,7 @@ source: human+ai
 | `scripts/scrape_momcozy.py` | active_reusable |
 | `scripts/start_api.sh` | active_reusable |
 | `scripts/start_backend.sh` | active_reusable |
+| `scripts/release_transfer.py` | active_reusable |
 
 ### manual_deploy_scripts
 
@@ -80,6 +81,7 @@ source: human+ai
 | `scripts/bootstrap_postgres.py` | manual_deploy_only |
 | `scripts/backup_production.sh` | manual_deploy_only |
 | `scripts/install_backup_cron.sh` | manual_deploy_only |
+| `scripts/install_release_transfer_gate.sh` | manual_deploy_only |
 | `scripts/offhost_backup.py` | manual_deploy_only |
 | `scripts/pg_dump_logical.py` | manual_deploy_only |
 | `scripts/pg_restore_logical.py` | manual_deploy_only |
@@ -142,6 +144,8 @@ Git history 保存。`release_smoke_v0.4.0.sh` 仅保留无条件 fail-closed �
 `docs/runbooks/production-operations.md` 进入。
 
 `scripts/backup_production.sh` 与 `scripts/install_backup_cron.sh` 都属于生产写操作。Lighthouse rsync 会把普通文件模式统一为 `0644`，所以 cron 与人工命令必须显式使用 `/bin/bash` 调用，不能依赖 executable bit。安装器把执行文件复制到 root-owned 的 `/usr/local/libexec/ai-video-backup/`，常规重跑只替换带 `ai-video-production-backup` marker 的行；发现指向 current source、历史 `/opt/ai-video/scripts/backup_production.sh` 或 root-owned runtime 的旧无 marker 行时必须显式设置 `MIGRATE_LEGACY=1`，精确移除这些 AI Video job，并始终保留其他 cron 任务。
+
+`scripts/release_transfer.py` 是 provider-off 的 canonical transfer contract 和 COS V5 客户端；它生成/校验 manifest、receipt、probe、stdin signed-URL payload，并以 exact regional endpoint/bucket、no-redirect、单 request 单 attempt、serial multipart 与共享 monotonic deadline 方式传输。它必须在任何 object mutation 前确认 bucket 从未启用 versioning。`scripts/install_release_transfer_gate.sh` 是 production configuration mutation，只能在 exact reviewed source 与单独服务器配置授权下执行；它逐字节核验已安装 contract/gate/canonical wrapper、输出三份 SHA-256 receipt，并通过一次真实 atomic no-replace 探针确认 staging/release roots 兼容。它不修改账号、sudoers 或 `authorized_keys`，并把 staging/production role 固定到 root-owned wrapper。
 
 安装器的 `MODE=verify` 是只读运行时漂移门禁：它逐字节比较 reviewed backup、logical
 dump、canonical manifest 三份 exact immutable release 源文件与 root-owned

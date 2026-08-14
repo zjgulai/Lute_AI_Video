@@ -45,12 +45,30 @@ LEGACY_GITHUB_DEPLOY_SETUP_RUNBOOK = (
 REMOTE_DRY_RUN_IF = (
     "${{ github.event_name != 'workflow_dispatch' || "
     "inputs.execution_scope == 'remote-dry-run' || "
+    "inputs.execution_scope == 'artifact-stage-only' || "
     "inputs.execution_scope == 'deploy' }}"
 )
 DEPLOY_IF = (
     "${{ github.event_name != 'workflow_dispatch' || "
     "inputs.execution_scope == 'deploy' }}"
 )
+ARTIFACT_STAGE_IF = (
+    "${{ github.event_name != 'workflow_dispatch' || "
+    "inputs.execution_scope == 'artifact-stage-only' || "
+    "inputs.execution_scope == 'deploy' }}"
+)
+CLEANUP_STAGED_RELEASE_IF = (
+    "${{ always() && needs.artifact-stage.result != 'skipped' && "
+    "needs.artifact-stage.outputs.manifest_sha256 != '' && "
+    "needs.deploy.result != 'success' && "
+    "(github.event_name != 'workflow_dispatch' || "
+    "inputs.execution_scope == 'deploy') }}"
+)
+RELEASE_TRANSFER = REPO_ROOT / "scripts" / "release_transfer.py"
+RELEASE_TRANSFER_GATE = (
+    REPO_ROOT / "deploy" / "lighthouse" / "release_transfer_gate.py"
+)
+INSTALL_RELEASE_TRANSFER_GATE = REPO_ROOT / "scripts" / "install_release_transfer_gate.sh"
 ARCHIVE_ONLY_JOB_NAMES = ("provenance", "preflight", "build-images")
 SCAN_EVIDENCE_REPORTS = (
     "scan-backend.json",
@@ -169,7 +187,318 @@ class TestDeployWorkflow:
         assert execution_scope.get("options") == [
             "archive-only",
             "remote-dry-run",
+            "artifact-stage-only",
             "deploy",
+        ]
+
+    def test_artifact_stage_job_is_approval_gated_and_precedes_deploy(self, workflow):
+        jobs = workflow["jobs"]
+        stage = jobs["artifact-stage"]
+        deploy = jobs["deploy"]
+        assert stage["if"] == ARTIFACT_STAGE_IF
+        assert stage["environment"] == {"name": "production-artifact-staging"}
+        assert stage["permissions"] == {"actions": "read", "contents": "read"}
+        assert workflow.get("permissions") == {"contents": "read"}
+        assert set(stage["needs"]) == {
+            "provenance",
+            "preflight",
+            "build-images",
+            "remote-dry-run",
+        }
+        assert "artifact-stage" in deploy["needs"]
+        assert stage["needs"].index("remote-dry-run") > stage["needs"].index("build-images")
+
+    def test_external_release_jobs_have_exact_read_only_token_permissions(self, workflow):
+        for name in ("remote-dry-run", "deploy", "cleanup-staged-release"):
+            assert workflow["jobs"][name].get("permissions") == {"contents": "read"}
+        assert workflow["jobs"]["artifact-stage"].get("permissions") == {
+            "actions": "read",
+            "contents": "read",
+        }
+
+    def test_failed_or_rejected_deploy_has_exact_staging_cleanup_compensation(
+        self, workflow
+    ):
+        jobs = workflow["jobs"]
+        cleanup = jobs["cleanup-staged-release"]
+        assert cleanup["if"] == CLEANUP_STAGED_RELEASE_IF
+        assert cleanup["needs"] == ["artifact-stage", "deploy"]
+        assert cleanup["environment"] == {"name": "production-artifact-staging"}
+        assert cleanup["permissions"] == {"contents": "read"}
+        assert cleanup["timeout-minutes"] == 5
+        assert jobs["artifact-stage"]["timeout-minutes"] == 40
+
+        cleanup_text = yaml.safe_dump(cleanup, sort_keys=True)
+        for name in (
+            "TRANSFER_HOST",
+            "TRANSFER_USER",
+            "TRANSFER_SSH_KEY",
+            "TRANSFER_KNOWN_HOSTS",
+        ):
+            assert f"secrets.{name}" in cleanup_text
+        for forbidden in (
+            "secrets.COS_",
+            "secrets.DEPLOY_",
+            "DRY_RUN_",
+            "provider",
+            "W5",
+            "publish",
+            "delivery",
+        ):
+            assert forbidden.lower() not in cleanup_text.lower()
+
+        steps = cleanup["steps"]
+        attempt = _step_by_name(steps, "Cleanup exact unpromoted incoming release")
+        run = attempt["run"]
+        exact_identity = (
+            "cleanup ${GITHUB_SHA} ${GITHUB_RUN_ID} ${GITHUB_RUN_ATTEMPT} "
+            "${{ needs.artifact-stage.outputs.manifest_sha256 }}"
+        )
+        assert exact_identity in run
+        assert "sudo" not in run
+        assert "rm -rf" not in run
+        assert "cleanup_status=failed" in run
+        assert "cleanup_status=passed" in run
+        assert "release-transfer-cleanup-terminal.v1.json" in run
+        assert "trap finish EXIT" in run
+
+        upload = _step_by_name(steps, "Upload staged release cleanup evidence")
+        assert upload["if"] == "${{ always() }}"
+        assert upload["with"]["if-no-files-found"] == "error"
+        assert "release-transfer-cleanup-terminal.v1.json" in upload["with"]["path"]
+
+    def test_artifact_stage_has_exact_one_attempt_transfer_safety_contract(
+        self, workflow
+    ):
+        stage = workflow["jobs"]["artifact-stage"]
+        text = yaml.safe_dump(stage, sort_keys=False)
+        for fragment in (
+            "cos-versioning-verify",
+            "cos-object-upload",
+            "cos-object-delete",
+            "cos-signed-url",
+            "shared-object-upload-plan",
+            "shared-object-readback-verify",
+            "release-transfer-manifest.v1.json",
+            "release-transfer-receipt.v1.json",
+            "probe",
+            "stage",
+            "cleanup",
+        ):
+            assert fragment in text
+        transfer_run = next(
+            step["run"] for step in stage["steps"] if step.get("id") == "transfer"
+        )
+        assert "coscli" not in transfer_run.lower()
+        assert "--retry" not in transfer_run
+        assert 'if [ "$RESUME_TRANSFER" = true ]' in transfer_run
+        assert "--resume" in transfer_run
+        assert 'done < "$upload_plan"' in transfer_run
+        assert '"bucket":sys.argv[4]' in transfer_run
+        assert '"endpoint_host":sys.argv[5]' in transfer_run
+        assert "DEPLOY_" not in text
+        assert "provider" not in text.lower()
+        assert "publish" not in text.lower()
+        assert "delivery" not in text.lower()
+
+    def test_transfer_manifest_normalizes_upload_artifact_digest_output(self, workflow):
+        build = workflow["jobs"]["build-images"]
+        assert build["outputs"]["release_artifact_digest"] == (
+            "${{ steps.release-bundle.outputs.artifact-digest }}"
+        )
+        packet = _step_by_name(
+            workflow["jobs"]["artifact-stage"]["steps"],
+            "Build exact source bundle and transfer manifest",
+        )
+        run = packet["run"]
+        assert '--github-artifact-digest "sha256:${{ steps.artifact.outputs.sha256 }}"' in run
+        artifact = _step_by_name(
+            workflow["jobs"]["artifact-stage"]["steps"],
+            "Download and verify exact reviewed release artifact",
+        )
+        artifact_run = artifact["run"]
+        assert "actions/artifacts/${{ needs.build-images.outputs.release_artifact_id }}/zip" in artifact_run
+        assert 'expected_digest="${expected_digest#sha256:}"' in artifact_run
+        assert artifact_run.index("sha256sum -c -") < artifact_run.index("unzip -q")
+        assert "--location" in artifact_run
+        assert "--location-trusted" not in artifact_run
+        assert "--proto-redir '=https'" in artifact_run
+        assert "--max-redirs 3" in artifact_run
+
+    def test_explicit_resume_reuses_only_shared_objects_and_always_creates_manifest(self, workflow):
+        steps = workflow["jobs"]["artifact-stage"]["steps"]
+        run = _step_by_name(steps, "Upload, probe and stage exact release")["run"]
+        resume_gate = run.index('if [ "$RESUME_TRANSFER" = true ]; then')
+        resume_end = run.index("\nfi\n", resume_gate)
+        plan = run.index("python3 scripts/release_transfer.py shared-object-upload-plan")
+        upload = run.index('done < "$upload_plan"')
+        readback = run.index("shared-object-readback-verify")
+        manifest_upload = run.index('--object-key "$manifest_object_key"')
+        assert resume_gate < resume_end < plan < upload < readback < manifest_upload
+        assert "cos-object-upload" in run
+        assert "transactions/${workflow_run_id}/${workflow_run_attempt}" not in run
+        assert "manifest_object_key" in run
+        assert "RESUME_TRANSFER: ${{ inputs.resume_transfer || false }}" not in run
+
+    def test_two_leg_probe_and_versioning_gate_precede_all_release_object_mutation(
+        self, workflow
+    ):
+        run = _step_by_name(
+            workflow["jobs"]["artifact-stage"]["steps"],
+            "Upload, probe and stage exact release",
+        )["run"]
+        versioning = run.index("cos-versioning-verify")
+        probe_upload = run.index('--object-key "$probe_object_key"', versioning)
+        runner_gate = run.index("probe-evaluate", probe_upload)
+        server_gate = run.index(
+            '> "${transfer_root}/server-probe-receipt.json"', runner_gate
+        )
+        upload_plan = run.index("shared-object-upload-plan", server_gate)
+        release_upload = run.index('done < "$upload_plan"', upload_plan)
+        manifest_upload = run.index('--object-key "$manifest_object_key"', release_upload)
+        assert versioning < probe_upload < runner_gate < server_gate
+        assert server_gate < upload_plan < release_upload < manifest_upload
+        assert "runner_probe_failed" in run
+        assert "server_probe_failed" in run
+        assert "TRANSFER_DEADLINE_MONOTONIC_NS" in run
+        assert "1800 * 1_000_000_000" in run
+        assert '"deadline_seconds_remaining":int(sys.argv[3])' in run
+        assert "deadline_remaining()" in run
+        assert run.count("timeout --foreground --signal=TERM --kill-after=5s") >= 3
+        assert "env -u TRANSFER_DEADLINE_MONOTONIC_NS" in run
+        assert "cos_release_upload_failed" in run
+
+    def test_transfer_terminal_uses_phase_specific_stable_codes(self, workflow):
+        run = _step_by_name(
+            workflow["jobs"]["artifact-stage"]["steps"],
+            "Upload, probe and stage exact release",
+        )["run"]
+        for code in (
+            "transfer_initialization_failed",
+            "cos_versioning_gate_failed",
+            "runner_probe_failed",
+            "server_probe_failed",
+            "cos_release_upload_failed",
+            "cos_identity_readback_failed",
+            "cos_manifest_upload_failed",
+            "incoming_stage_failed",
+            "incoming_cleanup_failed",
+            "cos_probe_cleanup_failed",
+            "transfer_passed",
+        ):
+            assert f"transfer_status={code}" in run
+
+    def test_transfer_failure_attempts_exact_incoming_cleanup_before_evidence(self, workflow):
+        steps = workflow["jobs"]["artifact-stage"]["steps"]
+        run = _step_by_name(steps, "Upload, probe and stage exact release")["run"]
+        assert "remote_state_may_exist=0" in run
+        assert "remote_state_may_exist=1" in run
+        assert "probe_uploaded" not in run
+        probe_intent_index = run.index("probe_mutation_may_exist=1")
+        probe_upload_index = run.index(
+            "python3 scripts/release_transfer.py cos-object-upload",
+            probe_intent_index,
+        )
+        probe_cleanup_index = run.index('if [ "$probe_mutation_may_exist" = 1 ]')
+        cleanup_index = run.index(
+            'if [ "$status" -ne 0 ] && [ "$remote_state_may_exist" = 1 ]'
+        )
+        secret_removal_index = run.index('rm -f "$ssh_key" "$known_hosts"')
+        assert probe_intent_index < probe_upload_index
+        assert probe_cleanup_index < cleanup_index < secret_removal_index
+        assert "transfer_status=incoming_cleanup_failed" in run
+        assert "transfer_status=cleanup_failed" not in run
+        assert "trap cleanup EXIT" in run
+        assert "trap 'exit 129' HUP" in run
+        assert "trap 'exit 130' INT" in run
+        assert "trap 'exit 143' TERM" in run
+
+    def test_late_stage_failure_compensation_is_not_success_only(self, workflow):
+        stage = workflow["jobs"]["artifact-stage"]
+        cleanup = workflow["jobs"]["cleanup-staged-release"]
+        transfer = _step_by_name(stage["steps"], "Upload, probe and stage exact release")[
+            "run"
+        ]
+
+        assert "needs.artifact-stage.result == 'success'" not in cleanup["if"]
+        assert "needs.artifact-stage.result != 'skipped'" in cleanup["if"]
+        assert "needs.artifact-stage.outputs.manifest_sha256 != ''" in cleanup["if"]
+        assert transfer.index("remote_state_may_exist=1") < transfer.index(
+            '> "${transfer_root}/server-probe-receipt.json"'
+        )
+        assert transfer.index('if [ "$probe_mutation_may_exist" = 1 ]') < transfer.index(
+            'if [ "$status" -ne 0 ] && [ "$remote_state_may_exist" = 1 ]'
+        )
+        assert _step_by_name(stage["steps"], "Upload bounded transfer evidence")["if"] == (
+            "${{ always() }}"
+        )
+
+    def test_artifact_stage_separates_cos_staging_and_production_credentials(self, workflow):
+        stage_text = yaml.safe_dump(workflow["jobs"]["artifact-stage"], sort_keys=True)
+        deploy_text = yaml.safe_dump(workflow["jobs"]["deploy"], sort_keys=True)
+        for name in (
+            "COS_SECRET_ID",
+            "COS_SECRET_KEY",
+            "COS_SESSION_TOKEN",
+            "TRANSFER_HOST",
+            "TRANSFER_USER",
+            "TRANSFER_SSH_KEY",
+            "TRANSFER_KNOWN_HOSTS",
+        ):
+            assert f"secrets.{name}" in stage_text
+            assert f"secrets.{name}" not in deploy_text
+        for name in ("COS_BUCKET", "COS_ENDPOINT", "TRANSFER_TARGET_DIR"):
+            assert f"vars.{name}" in stage_text
+        assert "secrets.DEPLOY_" not in stage_text
+
+    def test_signed_urls_flow_only_over_ssh_stdin_and_never_into_artifacts(self, workflow):
+        stage = workflow["jobs"]["artifact-stage"]
+        transfer = _step_by_name(stage["steps"], "Upload, probe and stage exact release")
+        transfer_run = transfer["run"]
+        assert "signed-url-payload" in transfer_run
+        assert "| timeout --foreground --signal=TERM --kill-after=5s" in transfer_run
+        assert "ssh -i \"$ssh_key\"" in transfer_run
+        assert "https://" not in transfer_run
+        for step in stage["steps"]:
+            if step.get("uses", "").startswith("actions/upload-artifact@"):
+                artifact_text = yaml.safe_dump(step, sort_keys=True).lower()
+                assert "url" not in artifact_text
+                assert "cos.yaml" not in artifact_text
+
+    def test_deploy_promotes_verified_incoming_before_existing_deploy_script(self, workflow):
+        deploy = workflow["jobs"]["deploy"]
+        steps = deploy["steps"]
+        names = [step.get("name") for step in steps]
+        promote = _step_by_name(steps, "Promote verified incoming release")
+        trigger = _step_by_name(steps, "Trigger remote deploy")
+        assert names.index(promote["name"]) < names.index(trigger["name"])
+        assert "promote" in promote["run"]
+        assert "release-transfer-gate" in promote["run"]
+        assert "Rsync reviewed release to server" not in names
+        assert "Upload exact reviewed image archive" not in names
+        assert "Prepare reviewed release directory" not in names
+
+    def test_transfer_contract_and_gate_are_repository_owned_and_executable(self):
+        for executable in (
+            RELEASE_TRANSFER,
+            RELEASE_TRANSFER_GATE,
+            INSTALL_RELEASE_TRANSFER_GATE,
+        ):
+            assert executable.is_file()
+            assert executable.stat().st_mode & 0o111
+
+        result = subprocess.run(
+            [str(INSTALL_RELEASE_TRANSFER_GATE), "print-authorized-command"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert result.stderr == ""
+        assert result.stdout.splitlines() == [
+            'command="/usr/local/sbin/ai-video-release-transfer-gate '
+            '--staging-forward",restrict',
+            '{"status":"passed","action":"print-authorized-command"}',
         ]
 
     def test_has_concurrency_lock(self, workflow):
@@ -327,9 +656,9 @@ class TestDeployWorkflow:
         assert "bash deploy.sh" in run
 
     def test_rsync_uses_lighthouse_exclude_file(self, workflow):
-        deploy = workflow["jobs"]["deploy"]
-        steps = deploy.get("steps") or []
-        rsync_step = _step_by_name(steps, "Rsync reviewed release to server")
+        dry_run = workflow["jobs"]["remote-dry-run"]
+        steps = dry_run.get("steps") or []
+        rsync_step = _step_by_name(steps, "Capture rsync dry-run deletion artifact")
 
         run = rsync_step.get("run") or ""
         assert '--exclude-from="$RUNNER_TEMP/release-excludes.zlist"' in run, (
@@ -513,6 +842,11 @@ class TestDeployWorkflow:
         assert "commit_backup_schedule" in text
         assert "restore_release_pointer" in text
         assert "CURRENT_POINTER_UPDATED" in text
+        assert 'sudo ln -sfn "$PREVIOUS_RELEASE_ROOT" "$rollback_link"' in text
+        assert 'sudo python3 - "$rollback_link" "$CURRENT_LINK"' in text
+        assert 'sudo python3 - "$CURRENT_LINK" "$RELEASE_ROOT"' in text
+        assert 'sudo ln -sfn "$RELEASE_ROOT" "$NEXT_LINK"' in text
+        assert 'sudo python3 - "$NEXT_LINK" "$CURRENT_LINK"' in text
         assert "install_backup_cron.sh" in text
         assert "MIGRATE_LEGACY=1" in text
         assert "MODE=install" in text
@@ -805,13 +1139,14 @@ class TestDeployWorkflow:
             provenance_steps,
             "Verify workflow SHA is the exact origin main tip",
         )
-        rsync_step = _step_by_name(deploy_steps, "Rsync reviewed release to server")
+        promote_step = _step_by_name(deploy_steps, "Promote verified incoming release")
         ssh_step = _step_by_name(deploy_steps, "Setup pinned SSH identity")
         trigger = _step_by_name(deploy_steps, "Trigger remote deploy")
 
         assert "origin refs/heads/main" in (provenance.get("run") or "")
         assert "github.sha" in (provenance.get("run") or "")
-        assert "releases-${{ github.sha }}" in (rsync_step.get("run") or "")
+        assert "github.sha" in (promote_step.get("run") or "")
+        assert "release-transfer-gate" in (promote_step.get("run") or "")
         assert "releases-${{ github.sha }}" in (trigger.get("run") or "")
         assert "DEPLOY_KNOWN_HOSTS" in text
         assert "ssh-keyscan" not in text
@@ -987,8 +1322,12 @@ class TestDeployWorkflow:
         assert "Upload rsync dry-run evidence" in dry_text
         deploy_needs = jobs["deploy"]["needs"]
         assert "remote-dry-run" in deploy_needs
+        assert "artifact-stage" in deploy_needs
         deploy_text = str(jobs["deploy"])
-        assert "Download exact reviewed release bundle" in deploy_text
+        stage_text = str(jobs["artifact-stage"])
+        assert "Download and verify exact reviewed release artifact" in stage_text
+        assert "release-transfer-receipt.v1.json" in stage_text
+        assert "Promote verified incoming release" in deploy_text
         assert "RELEASE_IMAGE_ARCHIVE=" in deploy_text
         assert jobs["preflight"]["needs"] == "provenance"
         assert "provenance" in jobs["build-images"]["needs"]
@@ -1008,7 +1347,9 @@ class TestDeployWorkflow:
             _assert_archive_only_job_is_local(job_name, jobs[job_name])
 
         assert jobs["remote-dry-run"].get("if") == REMOTE_DRY_RUN_IF
+        assert jobs["artifact-stage"].get("if") == ARTIFACT_STAGE_IF
         assert jobs["deploy"].get("if") == DEPLOY_IF
+        assert jobs["cleanup-staged-release"].get("if") == CLEANUP_STAGED_RELEASE_IF
         assert jobs["remote-dry-run"]["needs"] == [
             "provenance",
             "preflight",
@@ -1018,6 +1359,11 @@ class TestDeployWorkflow:
             "preflight",
             "build-images",
             "remote-dry-run",
+            "artifact-stage",
+        ]
+        assert jobs["cleanup-staged-release"]["needs"] == [
+            "artifact-stage",
+            "deploy",
         ]
 
     def test_build_images_has_exact_read_only_token_permissions(self, workflow):
@@ -1028,7 +1374,12 @@ class TestDeployWorkflow:
     def test_deploy_runbook_documents_execution_scope_boundaries(self):
         text = GITHUB_ACTIONS_DEPLOY_RUNBOOK.read_text()
 
-        for scope in ("archive-only", "remote-dry-run", "deploy"):
+        for scope in (
+            "archive-only",
+            "remote-dry-run",
+            "artifact-stage-only",
+            "deploy",
+        ):
             assert f"`{scope}`" in text
         assert "默认选择 `archive-only`" in text
         assert "PR head" in text
