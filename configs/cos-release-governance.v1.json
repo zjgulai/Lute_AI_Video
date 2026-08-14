@@ -1,0 +1,94 @@
+{
+  "cam_policy": {
+    "statement_templates": [
+      {
+        "actions": [
+          "name/cos:GetBucketACL",
+          "name/cos:GetBucketLifecycle",
+          "name/cos:GetBucketPolicy",
+          "name/cos:GetBucketVersioning"
+        ],
+        "condition": {},
+        "effect": "allow",
+        "id": "bucket-readback",
+        "resources": [
+          "qcs::cos:{region}:uid/{appid}:{bucket}/*"
+        ]
+      },
+      {
+        "actions": [
+          "name/cos:DeleteObject",
+          "name/cos:GetObject",
+          "name/cos:PutObject"
+        ],
+        "condition": {},
+        "effect": "allow",
+        "id": "run-bound-probe",
+        "resources": [
+          "qcs::cos:{region}:uid/{appid}:{bucket}/ai-video/probes/{source_revision}/{workflow_run_id}/{workflow_run_attempt}/*"
+        ]
+      },
+      {
+        "actions": [
+          "name/cos:AbortMultipartUpload",
+          "name/cos:CompleteMultipartUpload",
+          "name/cos:GetObject",
+          "name/cos:InitiateMultipartUpload",
+          "name/cos:PutObject",
+          "name/cos:UploadPart"
+        ],
+        "condition": {},
+        "effect": "allow",
+        "id": "exact-release",
+        "resources": [
+          "qcs::cos:{region}:uid/{appid}:{bucket}/ai-video/releases/{source_revision}/*"
+        ]
+      }
+    ],
+    "version": "2.0"
+  },
+  "lifecycle": {
+    "additional_rules_allowed": false,
+    "rules": [
+      {
+        "abort_incomplete_multipart_upload_days": null,
+        "expiration_days": 1,
+        "id": "ai-video-probes-expire-v1",
+        "prefix": "ai-video/probes/",
+        "status": "Enabled"
+      },
+      {
+        "abort_incomplete_multipart_upload_days": 1,
+        "expiration_days": null,
+        "id": "ai-video-release-multipart-abort-v1",
+        "prefix": "ai-video/releases/",
+        "status": "Enabled"
+      },
+      {
+        "abort_incomplete_multipart_upload_days": null,
+        "expiration_days": 14,
+        "id": "ai-video-releases-expire-v1",
+        "prefix": "ai-video/releases/",
+        "status": "Enabled"
+      }
+    ]
+  },
+  "privacy": {
+    "acl": "owner-full-control-only",
+    "bucket_policy": "absent"
+  },
+  "schema_version": "cos-release-governance.v1",
+  "sts": {
+    "api_endpoint": "sts.tencentcloudapi.com",
+    "api_version": "2018-08-13",
+    "audience": "sts.tencentcloudapi.com",
+    "cleanup_reserve_seconds": 300,
+    "duration_seconds": 7200,
+    "environment": "production-artifact-staging",
+    "github_repository": "zjgulai/Lute_AI_Video",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "minimum_remaining_seconds_before_mutation": 3600,
+    "setup_and_evidence_reserve_seconds": 1500,
+    "transfer_deadline_seconds": 1800
+  }
+}
