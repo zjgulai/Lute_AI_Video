@@ -5,7 +5,7 @@ module: deploy
 topic: lighthouse-exact-image-deployment
 status: stable
 created: 2026-05-08
-updated: 2026-08-12
+updated: 2026-08-13
 owner: self
 source: human+ai
 ---
@@ -19,7 +19,7 @@ source: human+ai
 - 发布源必须是 clean、实时等于远端 `origin/main` tip 的 `main`，并绑定 40 位 `RELEASE_SOURCE_SHA`。
 - `pyproject.toml` 是 semantic version SSOT；CI 先运行 `scripts/project_version.py --check`，再把 `APP_VERSION` 和 40 位 `RELEASE_SOURCE_SHA` 分别写入三个 image 的 OCI version/revision label。二者不能互相替代。
 - CI 构建 backend/frontend/rendering 三个 SHA image，校验 version/revision label 和 backend runtime catalog，生成 SBOM、漏洞扫描、image ID、精确 image archive 及 SHA-256。服务器只 `docker load` 该 archive，不重新构建。
-- source 同步到全新 `/opt/ai-video/releases-<SHA>/`；已存在目录或同 SHA image tag立即失败，禁止覆盖。
+- exact source/image bundle 先经 private COS 中继下载到 run-bound `.incoming-<SHA>-<run>-<attempt>`；全量身份与 receipt 通过后，production approval 才允许原子 promotion 为 `/opt/ai-video/releases-<SHA>/`。已存在 final 目录或同 SHA image tag立即失败，禁止覆盖。
 - SSH 只接受预先核验的 `known_hosts`。手工 wrapper 必须传 `SSH_KNOWN_HOSTS_FILE`；GitHub 必须配置 `DEPLOY_KNOWN_HOSTS`。禁止 `ssh-keyscan` 和 `StrictHostKeyChecking=accept-new`。
 - production compose 使用 `name: lighthouse`、SHA image，backend 只挂载 `lighthouse_backend_output`；不 bind-mount `src/`、`requirements.txt`、`web/.next`。
 - canonical deploy 永久为 provider-off：`RUN_TOKEN_SMOKE=0`、`RUN_DEPLOY_SMOKE=0`，不读取 API key，不调用生成、publish 或 delivery。
@@ -33,12 +33,24 @@ source: human+ai
 1. backend/full frontend gate 和 compose config。
 2. 三镜像 build、label/content 校验、SBOM、Critical 漏洞扫描、digest/archive artifact。
 3. 只读 SSH + rsync `--dry-run --itemize-changes --delete`，上传删除清单 artifact。
-4. GitHub Environment `production` 人工批准。
-5. 再次确认 release dir 不存在，创建目录，同步 source 与 exact image archive。
-6. 远端执行 provider-off `deploy.sh`。
-7. HTTPS `/health` 必须同时满足 `status=ok`、`version` 等于候选 semantic version、`source_revision` 等于候选 SHA、`persistence.backend=postgresql`、`persistence.status=healthy`、`tables_verified=true`。
+4. GitHub Environment `production-artifact-staging` 人工批准；先硬校验 GitHub artifact ZIP digest，再启动一个 runner-monotonic 1,800 秒总期限，以临时 STS 核验 bucket 从未启用 versioning，并在任何完整 release object 上传前通过 64 MiB runner→COS 与 COS→Lighthouse 两腿探针。
+5. 受限 forced-command gate 仅从 stdin 接收 signed GET URL；URL host 必须精确等于 manifest 中 `<bucket>.<regional-endpoint>`。signed URL 有效期取请求值与 runner remaining time 的较小值，最高 1,800 秒且不足 60 秒时拒绝签名。runner remaining time 硬限制 probe/stage/receipt SSH pipeline，server deadline 继续覆盖下载后的 hash、archive/source 验证和 receipt commit。gate 拒绝既有 probe receipt/symlink；receipt、incoming mkdir 与 `.part` download 在 mutation 前建立 intent 并在受控 signal 屏蔽区记录 inode，提交后的失败只回滚同 inode、同身份状态，EEXIST winner 保留并稳定失败，foreign race、所有权不明或删除失败进入 manual recovery。gate 不允许运行任意或变更型 Docker，仅可执行固定 read-only `docker ps` runtime safety probe。随后 gate 在同文件系统 incoming transaction 下载并校验 canonical manifest bytes、source manifest、archives、image digests、SHA/size、archive member safety 和独立于 root umask 的 source mode contract，产生 canonical receipt。
+6. `artifact-stage-only` 删除 verified incoming 并停止；`deploy` 则继续等待独立的 `production` 人工批准。
+7. production job 在任何 SSH/promotion 前要求 `DEPLOY_TARGET_DIR` 精确为 canonical `/opt/ai-video`，再复核未过期 receipt，把 verified incoming 原子 promotion 为 immutable final path；不从 GitHub runner 再次 rsync 2.28 GB archive。
+8. 远端执行 provider-off `deploy.sh`。
+9. HTTPS `/health` 必须同时满足 `status=ok`、`version` 等于候选 semantic version、`source_revision` 等于候选 SHA、`persistence.backend=postgresql`、`persistence.status=healthy`、`tables_verified=true`。
+10. transfer step 的 EXIT handler 先删 probe 并补偿可能存在的 remote transaction；若 stage 的 evidence upload 随后失败，或 deploy job 未成功完成，独立 `cleanup-staged-release` job 仍会重新经过 staging Environment，只用受限 `TRANSFER_*` 身份清理精确未 promotion incoming 并上传终态证据；若 final 已存在或状态不明则以 `incoming_cleanup_failed` 失败关闭，不做广泛删除。
 
 Tag 和 `workflow_dispatch` 都必须精确等于执行时的 `origin/main` tip；仅“属于 main ancestry”不够。
+
+COS 只替换数据面，不替换 exact-image 审查。六个共享对象的 prefix 固定为 `ai-video/releases/<SHA>/<image-archive-sha256>/`，run-bound manifest 位于 `transactions/<run>/<attempt>/`；禁止 `latest`、branch alias 和 overwrite。bucket 必须从未启用 versioning；endpoint 必须精确为 `cos.<region>.myqcloud.com`，全部 signed URL 精确绑定 `<bucket>.<endpoint>`。仓库自有 Python client 使用 serial 64 MiB parts、Content-MD5/ETag、create-only completion，每个 HTTP request 恰一次 attempt，拒绝全部 redirect，失败时最多发一次 multipart abort。probe mutation intent 在 PUT 前设置，故 ambiguous response 也会触发 exact DELETE。一个 1,800 秒 monotonic 总期限贯穿 versioning/probe/upload/readback/stage/download 及下载后验证/receipt，runner timeout 防止 SSH 延迟重新获得预算；40 分钟 job limit 只预留补偿与 evidence 余量，信号和超时不得绕开清理。显式 resume 也必须先对每个共享对象做一字节 signed-range readback并核对总大小与 SHA-256/size metadata；只补传缺失对象，任何不一致都失败关闭。incoming 位于 root-owned `0700` `/var/lib/ai-video-release-transfer`；安装器在 immutable content-addressed version 目录中逐字节复验 contract/gate/canonical wrapper并实际做一次跨 staging/release roots 的 atomic no-replace 探针，全部通过后只以一次原子 pointer 替换对外生效，失败恢复旧 pointer，forced-command 不可观察 mixed runtime。installer 锁文件用 no-follow/no-truncate 方式打开并精确为单链接 `root:root:0600`；所有 root Python 辅助与运行 gate 使用 `-I`，installed gate 只加载同一 runtime 的 sibling contract，candidate 与 published runtime 从自身三份字节重算 content address。`/opt/ai-video` 必须保持非 symlink `root:root:0755`，并在 promotion 的 no-replace rename 紧邻前复验 device/inode。source path 还受 UTF-8 字节、单组件及 64 级深度硬上限约束；source file/dir mode 由 archive contract 规范化，promotion 前重算 source bytes、symlink target 和精确文件/目录集合，并在不可逆 rename 紧邻前再次验证 expiry。服务器 staging 身份不能 promotion，production 身份不能凭空创建 incoming。任何 URL、STS token 或 runner absolute path 都不得进入 receipt/evidence。
+
+补偿 cleanup 不是无条件垃圾回收。GitHub 整体取消可能阻止后续 job 启动，同一 staging Environment 也可能要求再次人工批准；这两种情况必须保留 exact transaction 并明确报告“未清理”，随后只允许按 SHA/run/attempt/manifest 调受限 gate。COS lifecycle 只处理 bucket object，不能替代服务器 incoming cleanup。
+probe DELETE 使用独立 fresh 30 秒 cleanup deadline，不继承已经过期的
+transfer deadline，仍只执行一次请求。installer EXIT compensation 逐项聚合
+pointer rollback 与所有临时路径清理结果，任一失败均明确失败关闭；pointer
+rollback 失败时保留 previous 快照用于人工恢复。resume readback URL 也必须按
+同一个 transfer deadline clamp，并在剩余不足 60 秒时拒绝签名。
 
 ## 手工路径
 

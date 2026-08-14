@@ -235,19 +235,19 @@ def test_lighthouse_sync_entrypoints_use_the_shared_exclude_file():
     assert '--from0' in wrapper
     assert '--files-from="$RSYNC_FILE_LIST"' in wrapper
     assert '"$RSYNC_BIN" "${RSYNC_ARGS[@]}"' in wrapper
+    remote_job = workflow.split("  remote-dry-run:", 1)[1].split(
+        "  artifact-stage:", 1
+    )[0]
+    deploy_job = workflow.split("  deploy:", 1)[1]
     assert (
-        workflow.count(
-            'done < deploy/lighthouse/rsync-excludes.txt > '
-            '"$RUNNER_TEMP/release-excludes.zlist"'
-        )
-        >= 2
-    )
-    assert (
-        workflow.count('--exclude-from="$RUNNER_TEMP/release-excludes.zlist"') >= 2
-    )
-    assert workflow.count("git ls-files -z > \"$RUNNER_TEMP/release-files.zlist\"") >= 2
-    assert workflow.count("--from0") >= 2
-    assert workflow.count('--files-from="$RUNNER_TEMP/release-files.zlist"') >= 2
+        'done < deploy/lighthouse/rsync-excludes.txt > '
+        '"$RUNNER_TEMP/release-excludes.zlist"'
+    ) in remote_job
+    assert '--exclude-from="$RUNNER_TEMP/release-excludes.zlist"' in remote_job
+    assert "git ls-files -z > \"$RUNNER_TEMP/release-files.zlist\"" in remote_job
+    assert "--from0" in remote_job
+    assert '--files-from="$RUNNER_TEMP/release-files.zlist"' in remote_job
+    assert "rsync -avz" not in deploy_job
 
     for forbidden_inline in ("--exclude='.next'", "--exclude='output'", "--exclude='tmp'"):
         assert forbidden_inline not in workflow

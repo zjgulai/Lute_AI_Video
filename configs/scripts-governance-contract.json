@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-01",
+  "updated": "2026-08-13",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
@@ -192,6 +192,11 @@
       "path": "scripts/start_backend.sh",
       "status": "active_reusable",
       "reason": "Backend startup helper."
+    },
+    {
+      "path": "scripts/release_transfer.py",
+      "status": "active_reusable",
+      "reason": "Canonical provider-off release transfer contract and no-redirect, exact-one-attempt COS V5 client."
     }
   ],
   "manual_deploy_scripts": [
@@ -209,6 +214,11 @@
       "path": "scripts/install_backup_cron.sh",
       "status": "manual_deploy_only",
       "reason": "Production root-crontab mutation; requires explicit operator intent."
+    },
+    {
+      "path": "scripts/install_release_transfer_gate.sh",
+      "status": "manual_deploy_only",
+      "reason": "Root-owned release transfer gate installation; requires explicit server configuration authority."
     },
     {
       "path": "scripts/offhost_backup.py",

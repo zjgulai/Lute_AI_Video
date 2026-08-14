@@ -559,8 +559,8 @@ restore_release_pointer() {
   [ "$CURRENT_POINTER_UPDATED" = "1" ] || return 0
   if [ -n "$PREVIOUS_RELEASE_ROOT" ]; then
     rollback_link="$AI_VIDEO_SHARED_ROOT/.current-rollback-$RELEASE_SOURCE_SHA"
-    ln -sfn "$PREVIOUS_RELEASE_ROOT" "$rollback_link"
-    if ! python3 - "$rollback_link" "$CURRENT_LINK" <<'PY'
+    sudo ln -sfn "$PREVIOUS_RELEASE_ROOT" "$rollback_link"
+    if ! sudo python3 - "$rollback_link" "$CURRENT_LINK" <<'PY'
 import os
 import sys
 
@@ -570,7 +570,7 @@ PY
       return 1
     fi
   else
-    if ! python3 - "$CURRENT_LINK" "$RELEASE_ROOT" <<'PY'
+    if ! sudo python3 - "$CURRENT_LINK" "$RELEASE_ROOT" <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -891,8 +891,8 @@ verify_public_health "$APP_VERSION" "$RELEASE_SOURCE_SHA" 1 \
 
 echo "[8/9] Recording the successful release pointer and backup schedule..."
 NEXT_LINK="$AI_VIDEO_SHARED_ROOT/.current-$RELEASE_SOURCE_SHA"
-ln -sfn "$RELEASE_ROOT" "$NEXT_LINK"
-python3 - "$NEXT_LINK" "$CURRENT_LINK" <<'PY'
+sudo ln -sfn "$RELEASE_ROOT" "$NEXT_LINK"
+sudo python3 - "$NEXT_LINK" "$CURRENT_LINK" <<'PY'
 import os
 import sys
 
