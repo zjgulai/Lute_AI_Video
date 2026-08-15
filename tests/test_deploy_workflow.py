@@ -12,6 +12,7 @@ Does NOT exercise GitHub Actions runtime — that requires a real PR/push.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -65,6 +66,9 @@ CLEANUP_STAGED_RELEASE_IF = (
     "inputs.execution_scope == 'deploy') }}"
 )
 RELEASE_TRANSFER = REPO_ROOT / "scripts" / "release_transfer.py"
+RELEASE_TRANSFER_GOVERNANCE = (
+    REPO_ROOT / "configs" / "cos-release-governance.v1.json"
+)
 RELEASE_TRANSFER_GATE = (
     REPO_ROOT / "deploy" / "lighthouse" / "release_transfer_gate.py"
 )
@@ -197,7 +201,11 @@ class TestDeployWorkflow:
         deploy = jobs["deploy"]
         assert stage["if"] == ARTIFACT_STAGE_IF
         assert stage["environment"] == {"name": "production-artifact-staging"}
-        assert stage["permissions"] == {"actions": "read", "contents": "read"}
+        assert stage["permissions"] == {
+            "actions": "read",
+            "contents": "read",
+            "id-token": "write",
+        }
         assert workflow.get("permissions") == {"contents": "read"}
         assert set(stage["needs"]) == {
             "provenance",
@@ -213,6 +221,7 @@ class TestDeployWorkflow:
         assert workflow["jobs"]["artifact-stage"].get("permissions") == {
             "actions": "read",
             "contents": "read",
+            "id-token": "write",
         }
 
     def test_secret_bearing_release_jobs_do_not_persist_checkout_credentials(
@@ -308,7 +317,8 @@ class TestDeployWorkflow:
         assert '"bucket":sys.argv[4]' in transfer_run
         assert '"endpoint_host":sys.argv[5]' in transfer_run
         assert "DEPLOY_" not in text
-        assert "provider" not in text.lower()
+        for forbidden in ("POYO_API_KEY", "DEEPSEEK_API_KEY", "SILICONFLOW_API_KEY"):
+            assert forbidden not in text
         assert "publish" not in text.lower()
         assert "delivery" not in text.lower()
 
@@ -450,9 +460,6 @@ class TestDeployWorkflow:
         stage_text = yaml.safe_dump(workflow["jobs"]["artifact-stage"], sort_keys=True)
         deploy_text = yaml.safe_dump(workflow["jobs"]["deploy"], sort_keys=True)
         for name in (
-            "COS_SECRET_ID",
-            "COS_SECRET_KEY",
-            "COS_SESSION_TOKEN",
             "TRANSFER_HOST",
             "TRANSFER_USER",
             "TRANSFER_SSH_KEY",
@@ -460,9 +467,132 @@ class TestDeployWorkflow:
         ):
             assert f"secrets.{name}" in stage_text
             assert f"secrets.{name}" not in deploy_text
-        for name in ("COS_BUCKET", "COS_ENDPOINT", "TRANSFER_TARGET_DIR"):
+        for name in (
+            "COS_BUCKET",
+            "COS_ENDPOINT",
+            "TRANSFER_TARGET_DIR",
+            "COS_STS_ROLE_ARN",
+            "COS_OIDC_PROVIDER_ID",
+        ):
             assert f"vars.{name}" in stage_text
+        for retired in (
+            "secrets.COS_SECRET_ID",
+            "secrets.COS_SECRET_KEY",
+            "secrets.COS_SESSION_TOKEN",
+            "vars.COS_STS_DURATION_SECONDS",
+            "vars.COS_STS_EXPIRES_AT",
+            "vars.COS_STS_POLICY_SHA256",
+        ):
+            assert retired not in stage_text
         assert "secrets.DEPLOY_" not in stage_text
+
+    def test_artifact_stage_verifies_tracked_governance_and_jit_sts_before_mutation(
+        self, workflow
+    ):
+        contract = json.loads(RELEASE_TRANSFER_GOVERNANCE.read_text())
+        assert contract["schema_version"] == "cos-release-governance.v1"
+        assert contract["sts"] == {
+            "api_endpoint": "sts.tencentcloudapi.com",
+            "api_version": "2018-08-13",
+            "audience": "sts.tencentcloudapi.com",
+            "cleanup_reserve_seconds": 300,
+            "duration_seconds": 7200,
+            "environment": "production-artifact-staging",
+            "github_repository": "zjgulai/Lute_AI_Video",
+            "issuer": "https://token.actions.githubusercontent.com",
+            "minimum_remaining_seconds_before_mutation": 3600,
+            "setup_and_evidence_reserve_seconds": 1500,
+            "transfer_deadline_seconds": 1800,
+        }
+        assert contract["privacy"] == {
+            "acl": "owner-full-control-only",
+            "bucket_policy": "absent",
+        }
+        assert contract["lifecycle"]["additional_rules_allowed"] is False
+        assert contract["lifecycle"]["rules"] == [
+            {
+                "abort_incomplete_multipart_upload_days": None,
+                "expiration_days": 1,
+                "id": "ai-video-probes-expire-v1",
+                "prefix": "ai-video/probes/",
+                "status": "Enabled",
+            },
+            {
+                "abort_incomplete_multipart_upload_days": 1,
+                "expiration_days": None,
+                "id": "ai-video-release-multipart-abort-v1",
+                "prefix": "ai-video/releases/",
+                "status": "Enabled",
+            },
+            {
+                "abort_incomplete_multipart_upload_days": None,
+                "expiration_days": 14,
+                "id": "ai-video-releases-expire-v1",
+                "prefix": "ai-video/releases/",
+                "status": "Enabled",
+            },
+        ]
+
+        transfer = _step_by_name(
+            workflow["jobs"]["artifact-stage"]["steps"],
+            "Upload, probe and stage exact release",
+        )
+        run = transfer["run"]
+        issuance = run.index("sts-assume-github-oidc")
+        first_sts = run.index("sts-credentials-verify", issuance)
+        versioning = run.index("cos-versioning-verify", first_sts)
+        lifecycle = run.index("cos-lifecycle-verify", versioning)
+        privacy = run.index("cos-privacy-verify", lifecycle)
+        second_sts = run.index("sts-credentials-verify", privacy)
+        mutation_intent = run.index("probe_mutation_may_exist=1", second_sts)
+        assert issuance < first_sts < versioning < lifecycle < privacy < second_sts
+        assert second_sts < mutation_intent
+        assert run.count("sts-credentials-verify") == 2
+        assert run.count("sts-assume-github-oidc") == 1
+        assert "transfer_status=sts_validity_gate_failed" in run
+        assert "transfer_status=sts_oidc_issuance_failed" in run
+        assert "transfer_status=cos_lifecycle_gate_failed" in run
+        assert "transfer_status=cos_privacy_gate_failed" in run
+        assert "transfer_status=sts_credential_cleanup_failed" in run
+        assert 'rm -f "$ssh_key" "$known_hosts" "$credential_file"' in run
+        assert "configs/cos-release-governance.v1.json" in run
+        assert transfer["env"]["COS_STS_ROLE_ARN"] == "${{ vars.COS_STS_ROLE_ARN }}"
+        assert transfer["env"]["COS_OIDC_PROVIDER_ID"] == (
+            "${{ vars.COS_OIDC_PROVIDER_ID }}"
+        )
+        assert "COS_STS_CREDENTIALS_FILE" not in transfer["env"]
+        assert "cos-sts-issuance-receipt.v1.json" in _step_by_name(
+            workflow["jobs"]["artifact-stage"]["steps"],
+            "Upload bounded transfer evidence",
+        )["with"]["path"]
+
+    def test_cam_effective_role_gate_is_live_api_provenance_before_approval(self):
+        runbook = GITHUB_ACTIONS_DEPLOY_RUNBOOK.read_text()
+        stable = LIGHTHOUSE_DEPLOY_RUNBOOK.read_text()
+        script = RELEASE_TRANSFER.read_text()
+        required_actions = (
+            "DescribeOIDCConfig",
+            "GetRole",
+            "ListAttachedRolePolicies",
+            "ListPolicyVersions",
+            "GetPolicyVersion",
+            "GetRolePermissionBoundary",
+        )
+
+        assert "cam-effective-role-readback" in runbook
+        assert "cam-policy-verify" not in runbook
+        assert "批准 Environment 之前" in runbook
+        assert "operator 自报" in runbook
+        assert "cam-effective-role-readback.v1" in stable
+        for action in required_actions:
+            assert f'"{action}"' in script
+            assert f"cam:{action}" in runbook
+        assert "attached policy 总数恰一" in runbook
+        assert "Deactived=0" in runbook
+        assert "permission boundary 不存在" in runbook
+        assert "六个服务端 `RequestId`" in runbook
+        assert "test ! -e \"$CAM_READBACK_CREDENTIAL_FILE\"" in runbook
+        assert "rm -f \"$CAM_READBACK_CREDENTIAL_FILE\"" not in runbook
 
     def test_signed_urls_flow_only_over_ssh_stdin_and_never_into_artifacts(self, workflow):
         stage = workflow["jobs"]["artifact-stage"]

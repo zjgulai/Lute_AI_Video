@@ -6,8 +6,10 @@ import copy
 import hashlib
 import http.client
 import http.server
+import io
 import json
 import os
+import stat
 import threading
 import urllib.error
 from datetime import UTC, datetime, timedelta
@@ -693,6 +695,982 @@ def test_bucket_must_have_never_enabled_versioning(monkeypatch: pytest.MonkeyPat
                 bucket="ai-video-release-1250000000",
                 endpoint_host="cos.ap-shanghai.myqcloud.com",
             )
+
+
+def test_tracked_release_governance_contract_and_cam_policy_are_exact():
+    contract_path = (
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    contract = transfer_module.load_release_governance_contract(contract_path)
+    policy = transfer_module.build_expected_cam_policy(
+        contract=contract,
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        source_revision=SOURCE_SHA,
+        workflow_run_id=12345,
+        workflow_run_attempt=1,
+    )
+    assert any(
+        statement["action"]
+        == [
+            "name/cos:GetBucketACL",
+            "name/cos:GetBucketLifecycle",
+            "name/cos:GetBucketPolicy",
+            "name/cos:GetBucketVersioning",
+        ]
+        for statement in cast(list[dict[str, object]], policy["statement"])
+    )
+    assert transfer_module.validate_cam_policy_readback(
+        policy,
+        contract=contract,
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        source_revision=SOURCE_SHA,
+        workflow_run_id=12345,
+        workflow_run_attempt=1,
+    ) == policy
+    assert hashlib.sha256(canonical_json_bytes(policy)).hexdigest() == (
+        transfer_module.expected_cam_policy_sha256(
+            contract=contract,
+            bucket="ai-video-release-1250000000",
+            endpoint_host="cos.ap-shanghai.myqcloud.com",
+            source_revision=SOURCE_SHA,
+            workflow_run_id=12345,
+            workflow_run_attempt=1,
+        )
+    )
+
+    mutated_contract = copy.deepcopy(contract)
+    cast(
+        list[dict[str, object]],
+        cast(dict[str, object], mutated_contract["cam_policy"])["statement_templates"],
+    )[1]["actions"] = ["name/cos:*"]
+    with pytest.raises(TransferContractError, match="CAM policy"):
+        transfer_module.validate_release_governance_contract(mutated_contract)
+
+    for section, field, replacement, message in (
+        ("privacy", "acl", "public-read", "privacy"),
+        ("privacy", "bucket_policy", "present", "privacy"),
+        ("sts", "audience", "attacker.invalid", "STS"),
+        ("sts", "github_repository", "attacker/repo", "STS"),
+    ):
+        mutated_contract = copy.deepcopy(contract)
+        cast(dict[str, object], mutated_contract[section])[field] = replacement
+        with pytest.raises(TransferContractError, match=message):
+            transfer_module.validate_release_governance_contract(mutated_contract)
+
+    for field, replacement in (
+        ("action", ["name/cos:*"]),
+        ("resource", ["*"]),
+        ("condition", {"ip_equal": {"qcs:ip": "0.0.0.0/0"}}),
+    ):
+        mutated = copy.deepcopy(policy)
+        cast(list[dict[str, object]], mutated["statement"])[1][field] = replacement
+        with pytest.raises(TransferContractError, match="CAM policy"):
+            transfer_module.validate_cam_policy_readback(
+                mutated,
+                contract=contract,
+                bucket="ai-video-release-1250000000",
+                endpoint_host="cos.ap-shanghai.myqcloud.com",
+                source_revision=SOURCE_SHA,
+                workflow_run_id=12345,
+                workflow_run_attempt=1,
+            )
+
+
+def test_cos_lifecycle_readback_requires_exact_three_rules(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    exact = b"""<LifecycleConfiguration xmlns="http://www.qcloud.com/">
+      <Rule><ID>ai-video-probes-expire-v1</ID><Filter><Prefix>ai-video/probes/</Prefix></Filter><Status>Enabled</Status><Expiration><Days>1</Days></Expiration></Rule>
+      <Rule><ID>ai-video-release-multipart-abort-v1</ID><Filter><Prefix>ai-video/releases/</Prefix></Filter><Status>Enabled</Status><AbortIncompleteMultipartUpload><DaysAfterInitiation>1</DaysAfterInitiation></AbortIncompleteMultipartUpload></Rule>
+      <Rule><ID>ai-video-releases-expire-v1</ID><Filter><Prefix>ai-video/releases/</Prefix></Filter><Status>Enabled</Status><Expiration><Days>14</Days></Expiration></Rule>
+    </LifecycleConfiguration>"""
+    payloads = [
+        exact,
+        exact.replace(b"<Days>14</Days>", b"<Days>15</Days>"),
+        exact.replace(
+            b"</LifecycleConfiguration>",
+            b"<Rule><ID>extra</ID><Filter><Prefix>other/</Prefix></Filter><Status>Enabled</Status><Expiration><Days>1</Days></Expiration></Rule></LifecycleConfiguration>",
+        ),
+        exact.replace(
+            b"<Expiration><Days>14</Days></Expiration>",
+            b"<Expiration><Days>14</Days><Date>2026-08-15T00:00:00Z</Date></Expiration>",
+        ),
+    ]
+
+    def response(*_args, **_kwargs):
+        return payloads.pop(0), {}, 200
+
+    monkeypatch.setattr(transfer_module, "_cos_request", response)
+    assert transfer_module.verify_bucket_lifecycle_governance(
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        contract=contract,
+    ) == cast(dict[str, object], contract["lifecycle"])["rules"]
+    for _ in range(3):
+        with pytest.raises(TransferContractError, match="lifecycle"):
+            transfer_module.verify_bucket_lifecycle_governance(
+                bucket="ai-video-release-1250000000",
+                endpoint_host="cos.ap-shanghai.myqcloud.com",
+                contract=contract,
+            )
+
+
+def test_jit_sts_window_is_exact_and_has_cleanup_margin():
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    result = transfer_module.validate_sts_window(
+        duration_seconds=7200,
+        expires_at="2026-08-14T03:00:00Z",
+        now=datetime(2026, 8, 14, 2, 0, 0, tzinfo=UTC),
+        contract=contract,
+    )
+    assert result["duration_seconds"] == 7200
+    assert result["remaining_seconds"] == 3600
+    assert result["cleanup_reserve_seconds"] == 300
+
+    for duration_seconds, expires_at, now in (
+        (
+            7199,
+            "2026-08-14T02:59:59Z",
+            datetime(2026, 8, 14, 2, 0, 0, tzinfo=UTC),
+        ),
+        (
+            7200,
+            "2026-08-14T03:00:00Z",
+            datetime(2026, 8, 14, 2, 0, 1, tzinfo=UTC),
+        ),
+    ):
+        with pytest.raises(TransferContractError, match="STS"):
+            transfer_module.validate_sts_window(
+                duration_seconds=duration_seconds,
+                expires_at=expires_at,
+                now=now,
+                contract=contract,
+            )
+
+
+class _FixtureHTTPResponse:
+    def __init__(self, payload: bytes, status: int = 200):
+        self.status = status
+        self.headers = Message()
+        self._stream = io.BytesIO(payload)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self, size: int = -1) -> bytes:
+        return self._stream.read(size)
+
+
+def _jwt(payload: dict[str, object]) -> str:
+    def encode(value: object) -> str:
+        raw = json.dumps(value, separators=(",", ":")).encode()
+        return transfer_module.base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"{encode({'alg': 'RS256', 'kid': 'fixture'})}.{encode(payload)}.signature"
+
+
+def test_github_oidc_is_exchanged_once_for_exact_tencent_role_and_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    token = _jwt(
+        {
+            "iss": "https://token.actions.githubusercontent.com",
+            "aud": "sts.tencentcloudapi.com",
+            "sub": "repo:zjgulai/Lute_AI_Video:environment:production-artifact-staging",
+            "repository": "zjgulai/Lute_AI_Video",
+            "sha": SOURCE_SHA,
+            "run_id": "12345",
+            "run_attempt": "1",
+            "iat": int(now.timestamp()),
+            "exp": int(now.timestamp()) + 300,
+        }
+    )
+    expiration = now + timedelta(seconds=7200)
+    responses = [
+        _FixtureHTTPResponse(
+            canonical_json_bytes({"count": len(token), "value": token})
+        ),
+        _FixtureHTTPResponse(
+            canonical_json_bytes(
+                {
+                    "Response": {
+                        "Credentials": {
+                            "Token": "SESSION_TOKEN_FIXTURE",
+                            "TmpSecretId": "AKID_FIXTURE",
+                            "TmpSecretKey": "SECRET_KEY_FIXTURE",
+                        },
+                        "ExpiredTime": int(expiration.timestamp()),
+                        "Expiration": expiration.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "RequestId": "12345678-1234-1234-1234-1234567890ab",
+                    }
+                }
+            )
+        ),
+    ]
+    requests: list[transfer_module.urllib.request.Request] = []
+
+    def open_once(request, **_kwargs):
+        requests.append(request)
+        return responses.pop(0)
+
+    monkeypatch.setattr(transfer_module, "_open_no_redirect", open_once)
+    credential_path = tmp_path / "cos-sts-credentials.json"
+    receipt = transfer_module.assume_github_oidc_role(
+        contract=contract,
+        provider_id="GitHubActions",
+        role_arn="qcs::cam::uin/1234567890:roleName/ai-video-release",
+        source_revision=SOURCE_SHA,
+        workflow_run_id=12345,
+        workflow_run_attempt=1,
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        credentials_output=credential_path,
+        request_url=(
+            "https://pipelinesghubeus9.actions.githubusercontent.com/opaque/"
+            "_apis/distributedtask/hubs/build/plans/p/jobs/j/idtoken?api-version=2.0"
+        ),
+        request_token="GITHUB_REQUEST_TOKEN_FIXTURE",
+        now=now,
+        deadline_ns=transfer_module.time.monotonic_ns() + 60_000_000_000,
+    )
+
+    assert len(requests) == 2
+    assert requests[0].full_url.endswith(
+        "api-version=2.0&audience=sts.tencentcloudapi.com"
+    )
+    assert requests[0].get_header("Authorization") == (
+        "Bearer GITHUB_REQUEST_TOKEN_FIXTURE"
+    )
+    assert requests[1].full_url == "https://sts.tencentcloudapi.com/"
+    assert requests[1].get_header("Authorization") == "SKIP"
+    request_body = json.loads(cast(bytes, requests[1].data))
+    assert request_body == {
+        "DurationSeconds": 7200,
+        "ProviderId": "GitHubActions",
+        "RoleArn": "qcs::cam::uin/1234567890:roleName/ai-video-release",
+        "RoleSessionName": "ai-video-12345-1",
+        "WebIdentityToken": token,
+    }
+    assert stat.S_IMODE(credential_path.stat().st_mode) == 0o600
+    assert receipt["request_id"] == "12345678-1234-1234-1234-1234567890ab"
+    assert "credentials" not in receipt
+    assert "SESSION_TOKEN_FIXTURE" not in canonical_json_bytes(receipt).decode()
+    verified = transfer_module.validate_sts_credentials_file(
+        path=credential_path,
+        contract=contract,
+        source_revision=SOURCE_SHA,
+        workflow_run_id=12345,
+        workflow_run_attempt=1,
+        provider_id="GitHubActions",
+        role_arn="qcs::cam::uin/1234567890:roleName/ai-video-release",
+        now=now + timedelta(seconds=1),
+    )
+    assert cast(int, verified["remaining_seconds"]) >= 7198
+
+
+@pytest.mark.parametrize(
+    "request_url",
+    [
+        "http://pipelines.actions.githubusercontent.com/opaque/_apis/token",
+        "https://actions.githubusercontent.com.evil.example/_apis/token",
+        "https://user@pipelines.actions.githubusercontent.com/opaque/_apis/token",
+        "https://pipelines.actions.githubusercontent.com:bad/opaque/_apis/token",
+        "https://[::1]/_apis/token",
+        "https://pipelines.actions.githubusercontent.com/opaque/token",
+    ],
+)
+def test_github_oidc_transport_rejects_non_github_or_malformed_endpoint(
+    request_url: str,
+):
+    with pytest.raises(TransferContractError, match="OIDC request configuration"):
+        transfer_module._github_oidc_token(
+            request_url=request_url,
+            request_token="fixture",
+            audience="sts.tencentcloudapi.com",
+            deadline_ns=transfer_module.time.monotonic_ns() + 10_000_000_000,
+        )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"count": True, "value": "token"},
+        {"count": -1, "value": "token"},
+        {"count": 1},
+        {"value": 1},
+        {"extra": "metadata", "value": "token"},
+    ],
+)
+def test_github_oidc_response_envelope_rejects_unsafe_variants(
+    payload: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        transfer_module,
+        "_open_no_redirect",
+        lambda *_args, **_kwargs: _FixtureHTTPResponse(canonical_json_bytes(payload)),
+    )
+    with pytest.raises(TransferContractError, match="OIDC"):
+        transfer_module._github_oidc_token(
+            request_url="https://pipelines.actions.githubusercontent.com/x/_apis/token",
+            request_token="fixture",
+            audience="sts.tencentcloudapi.com",
+            deadline_ns=transfer_module.time.monotonic_ns() + 10_000_000_000,
+        )
+
+
+def test_github_oidc_response_accepts_large_nonnegative_count_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    token = "x" * 1390
+    monkeypatch.setattr(
+        transfer_module,
+        "_open_no_redirect",
+        lambda *_args, **_kwargs: _FixtureHTTPResponse(
+            canonical_json_bytes({"count": len(token), "value": token})
+        ),
+    )
+    assert transfer_module._github_oidc_token(
+        request_url="https://pipelines.actions.githubusercontent.com/x/_apis/token",
+        request_token="fixture",
+        audience="sts.tencentcloudapi.com",
+        deadline_ns=transfer_module.time.monotonic_ns() + 10_000_000_000,
+    ) == token
+
+
+def test_oidc_identity_mutation_fails_before_tencent_sts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    token = _jwt(
+        {
+            "iss": "https://token.actions.githubusercontent.com",
+            "aud": "sts.tencentcloudapi.com",
+            "sub": "repo:attacker/repo:environment:production-artifact-staging",
+            "repository": "attacker/repo",
+            "sha": SOURCE_SHA,
+            "run_id": "12345",
+            "run_attempt": "1",
+            "iat": int(now.timestamp()),
+            "exp": int(now.timestamp()) + 300,
+        }
+    )
+    requests = 0
+
+    def open_once(*_args, **_kwargs):
+        nonlocal requests
+        requests += 1
+        return _FixtureHTTPResponse(canonical_json_bytes({"value": token}))
+
+    monkeypatch.setattr(transfer_module, "_open_no_redirect", open_once)
+    with pytest.raises(TransferContractError, match="OIDC token identity"):
+        transfer_module.assume_github_oidc_role(
+            contract=contract,
+            provider_id="GitHubActions",
+            role_arn="qcs::cam::uin/1234567890:roleName/ai-video-release",
+            source_revision=SOURCE_SHA,
+            workflow_run_id=12345,
+            workflow_run_attempt=1,
+            bucket="ai-video-release-1250000000",
+            endpoint_host="cos.ap-shanghai.myqcloud.com",
+            credentials_output=tmp_path / "credentials.json",
+            request_url=(
+                "https://token.actions.githubusercontent.com/_apis/fixture?api-version=2.0"
+            ),
+            request_token="fixture",
+            now=now,
+            deadline_ns=transfer_module.time.monotonic_ns() + 60_000_000_000,
+        )
+    assert requests == 1
+    assert not (tmp_path / "credentials.json").exists()
+
+
+def test_cos_privacy_requires_owner_only_acl_and_no_bucket_policy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    owner = "qcs::cam::uin/1234567890:uin/1234567890"
+    private_acl = f"""<AccessControlPolicy xmlns=\"http://www.qcloud.com/\">
+      <Owner><ID>{owner}</ID><DisplayName>{owner}</DisplayName></Owner>
+      <AccessControlList><Grant><Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"CanonicalUser\"><ID>{owner}</ID><DisplayName>{owner}</DisplayName></Grantee><Permission>FULL_CONTROL</Permission></Grant></AccessControlList>
+    </AccessControlPolicy>""".encode()
+    no_policy = b"<Error><Code>NoSuchBucketPolicy</Code><RequestId>fixture</RequestId></Error>"
+    responses = [(private_acl, {}, 200), (no_policy, {}, 404)]
+    monkeypatch.setattr(
+        transfer_module,
+        "_cos_request",
+        lambda **_kwargs: responses.pop(0),
+    )
+    result = transfer_module.verify_bucket_privacy_governance(
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        contract=contract,
+    )
+    assert result == {
+        "acl": "owner-full-control-only",
+        "bucket_policy": "absent",
+        "owner_id": owner,
+    }
+
+    for public_uri in (
+        "http://cam.qcloud.com/groups/global/AllUsers",
+        "http://cam.qcloud.com/groups/global/AuthenticatedUsers",
+    ):
+        public_acl = private_acl.replace(
+            f'<Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID>{owner}</ID><DisplayName>{owner}</DisplayName></Grantee><Permission>FULL_CONTROL</Permission>'.encode(),
+            f'<Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Group"><URI>{public_uri}</URI></Grantee><Permission>READ</Permission>'.encode(),
+        )
+        responses[:] = [(public_acl, {}, 200)]
+        with pytest.raises(TransferContractError, match="must be private"):
+            transfer_module.verify_bucket_privacy_governance(
+                bucket="ai-video-release-1250000000",
+                endpoint_host="cos.ap-shanghai.myqcloud.com",
+                contract=contract,
+            )
+
+    extra_grant = private_acl.replace(
+        b"</AccessControlList>",
+        b"<Grant><Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"CanonicalUser\"><ID>qcs::cam::uin/9999999999:uin/9999999999</ID><DisplayName>other</DisplayName></Grantee><Permission>READ</Permission></Grant></AccessControlList>",
+    )
+    responses[:] = [(extra_grant, {}, 200)]
+    with pytest.raises(TransferContractError, match="must be private"):
+        transfer_module.verify_bucket_privacy_governance(
+            bucket="ai-video-release-1250000000",
+            endpoint_host="cos.ap-shanghai.myqcloud.com",
+            contract=contract,
+        )
+
+    responses[:] = [(private_acl, {}, 200), (b'{"public":true}', {}, 200)]
+    with pytest.raises(TransferContractError, match="policy must be absent"):
+        transfer_module.verify_bucket_privacy_governance(
+            bucket="ai-video-release-1250000000",
+            endpoint_host="cos.ap-shanghai.myqcloud.com",
+            contract=contract,
+        )
+    responses[:] = [
+        (private_acl, {}, 200),
+        (b"<Error><Code>AccessDenied</Code></Error>", {}, 404),
+    ]
+    with pytest.raises(TransferContractError, match="policy must be absent"):
+        transfer_module.verify_bucket_privacy_governance(
+            bucket="ai-video-release-1250000000",
+            endpoint_host="cos.ap-shanghai.myqcloud.com",
+            contract=contract,
+        )
+
+
+def test_cos_request_preserves_exact_expected_404_body(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    payload = b"<Error><Code>NoSuchBucketPolicy</Code></Error>"
+    headers = Message()
+    headers["Content-Type"] = "application/xml"
+
+    def missing(request, **_kwargs):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            404,
+            "not found",
+            headers,
+            io.BytesIO(payload),
+        )
+
+    monkeypatch.setattr(transfer_module, "_credentials", lambda: ("id", "key", "token"))
+    monkeypatch.setattr(transfer_module, "_open_no_redirect", missing)
+    body, response_headers, status = transfer_module._cos_request(
+        method="GET",
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        query={"policy": ""},
+        expected_status={200, 404},
+    )
+    assert (body, status) == (payload, 404)
+    assert response_headers["content-type"] == "application/xml"
+
+
+def _cam_readback_responses(contract: dict[str, object]) -> dict[str, dict[str, object]]:
+    policy = transfer_module.build_expected_cam_policy(
+        contract=contract,
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        source_revision=SOURCE_SHA,
+        workflow_run_id=12345,
+        workflow_run_attempt=1,
+    )
+    trust = {
+        "version": "2.0",
+        "statement": [
+            {
+                "action": "name/sts:AssumeRoleWithWebIdentity",
+                "effect": "allow",
+                "principal": {
+                    "federated": [
+                        "qcs::cam::uin/1234567890:oidc-provider/GitHubActions"
+                    ]
+                },
+                "condition": {
+                    "string_equal": {
+                        "oidc:iss": ["https://token.actions.githubusercontent.com"],
+                        "oidc:aud": ["sts.tencentcloudapi.com"],
+                        "oidc:sub": [
+                            "repo:zjgulai/Lute_AI_Video:environment:"
+                            "production-artifact-staging"
+                        ],
+                    }
+                },
+            }
+        ],
+    }
+    request_ids = {
+        action: f"12345678-1234-1234-1234-{index:012d}"
+        for index, action in enumerate(
+            (
+                "DescribeOIDCConfig",
+                "GetRole",
+                "ListAttachedRolePolicies",
+                "ListPolicyVersions",
+                "GetPolicyVersion",
+                "GetRolePermissionBoundary",
+            ),
+            start=1,
+        )
+    }
+    return {
+        "DescribeOIDCConfig": {
+            "ProviderType": 11,
+            "IdentityUrl": "https://token.actions.githubusercontent.com",
+            "IdentityKey": "eyJrZXlzIjpbXX0=",
+            "ClientId": ["sts.tencentcloudapi.com"],
+            "Status": 11,
+            "Name": "GitHubActions",
+            "AutoRotateKey": 1,
+            "RequestId": request_ids["DescribeOIDCConfig"],
+        },
+        "GetRole": {
+            "RoleInfo": {
+                "RoleId": "4611686018427844696",
+                "RoleName": "ai-video-release",
+                "RoleArn": "qcs::cam::uin/1234567890:roleName/ai-video-release",
+                "PolicyDocument": json.dumps(trust, separators=(",", ":")),
+                "ConsoleLogin": 0,
+                "RoleType": "user",
+                "SessionDuration": 7200,
+            },
+            "RequestId": request_ids["GetRole"],
+        },
+        "ListAttachedRolePolicies": {
+            "List": [
+                {
+                    "PolicyId": 10001,
+                    "PolicyName": "ai-video-release-exact",
+                    "PolicyType": "User",
+                    "Deactived": 0,
+                    "DeactivedDetail": [],
+                }
+            ],
+            "TotalNum": 1,
+            "RequestId": request_ids["ListAttachedRolePolicies"],
+        },
+        "ListPolicyVersions": {
+            "Versions": [
+                {"VersionId": 1, "IsDefaultVersion": 0},
+                {"VersionId": 2, "IsDefaultVersion": 1},
+            ],
+            "RequestId": request_ids["ListPolicyVersions"],
+        },
+        "GetPolicyVersion": {
+            "PolicyVersion": {
+                "VersionId": 2,
+                "IsDefaultVersion": 1,
+                "Document": json.dumps(policy, separators=(",", ":")),
+            },
+            "RequestId": request_ids["GetPolicyVersion"],
+        },
+        "GetRolePermissionBoundary": {
+            "PolicyId": None,
+            "PolicyName": None,
+            "PolicyDocument": None,
+            "PolicyType": None,
+            "CreateMode": None,
+            "RequestId": request_ids["GetRolePermissionBoundary"],
+        },
+    }
+
+
+def _cam_readback_credentials(path: Path, now: datetime) -> None:
+    path.write_bytes(
+        canonical_json_bytes(
+            {
+                "schema_version": "cam-readback-credentials.v1",
+                "expiration": (now + timedelta(seconds=7200)).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                ),
+                "credentials": {
+                    "secret_id": "AKID_READBACK_FIXTURE",
+                    "secret_key": "SECRET_READBACK_FIXTURE",
+                    "session_token": "TOKEN_READBACK_FIXTURE",
+                },
+            }
+        )
+    )
+    path.chmod(0o600)
+
+
+def _cam_readback_call(
+    contract: dict[str, object],
+    credentials: Path,
+    now: datetime,
+) -> dict[str, object]:
+    return transfer_module.readback_cam_effective_role(
+        contract=contract,
+        credentials_path=credentials,
+        provider_id="GitHubActions",
+        role_arn="qcs::cam::uin/1234567890:roleName/ai-video-release",
+        bucket="ai-video-release-1250000000",
+        endpoint_host="cos.ap-shanghai.myqcloud.com",
+        source_revision=SOURCE_SHA,
+        workflow_run_id=12345,
+        workflow_run_attempt=1,
+        now=now,
+        deadline_ns=transfer_module.time.monotonic_ns() + 60_000_000_000,
+    )
+
+
+def test_cam_effective_role_readback_is_live_complete_and_run_bound(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    credentials = tmp_path / "cam-readback-credentials.json"
+    _cam_readback_credentials(credentials, now)
+    responses = _cam_readback_responses(contract)
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def request(**kwargs):
+        action = cast(str, kwargs["action"])
+        calls.append((action, cast(dict[str, object], kwargs["body"])))
+        return copy.deepcopy(responses[action])
+
+    monkeypatch.setattr(transfer_module, "_tencent_cam_request", request)
+    receipt = _cam_readback_call(contract, credentials, now)
+    assert [action for action, _ in calls] == [
+        "DescribeOIDCConfig",
+        "GetRole",
+        "ListAttachedRolePolicies",
+        "ListPolicyVersions",
+        "GetPolicyVersion",
+        "GetRolePermissionBoundary",
+    ]
+    assert receipt["status"] == "passed"
+    assert receipt["permission_boundary"] == "absent"
+    assert receipt["workflow_run_id"] == 12345
+    assert set(cast(dict[str, str], receipt["request_ids"])) == set(responses)
+    encoded = canonical_json_bytes(receipt).decode()
+    assert "SECRET_READBACK_FIXTURE" not in encoded
+    assert "TOKEN_READBACK_FIXTURE" not in encoded
+    assert not credentials.exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["extra-policy", "broad-trust", "wrong-version", "deactivated", "boolean-active"],
+)
+def test_cam_effective_role_readback_rejects_extra_authority_or_wrong_version(
+    mutation: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    credentials = tmp_path / "cam-readback-credentials.json"
+    _cam_readback_credentials(credentials, now)
+    responses = _cam_readback_responses(contract)
+    if mutation == "extra-policy":
+        response = responses["ListAttachedRolePolicies"]
+        response["TotalNum"] = 2
+        cast(list[object], response["List"]).append(
+            {"PolicyId": 10002, "PolicyName": "extra", "PolicyType": "User"}
+        )
+    elif mutation == "broad-trust":
+        role = cast(dict[str, object], responses["GetRole"]["RoleInfo"])
+        trust = json.loads(cast(str, role["PolicyDocument"]))
+        trust["statement"][0]["condition"]["string_equal"]["oidc:sub"] = ["*"]
+        role["PolicyDocument"] = json.dumps(trust)
+    elif mutation == "wrong-version":
+        version = cast(
+            dict[str, object], responses["GetPolicyVersion"]["PolicyVersion"]
+        )
+        version["VersionId"] = 1
+    elif mutation == "deactivated":
+        policy = cast(
+            dict[str, object],
+            cast(list[object], responses["ListAttachedRolePolicies"]["List"])[0],
+        )
+        policy["Deactived"] = 1
+        policy["DeactivedDetail"] = ["cos"]
+    else:
+        policy = cast(
+            dict[str, object],
+            cast(list[object], responses["ListAttachedRolePolicies"]["List"])[0],
+        )
+        policy["Deactived"] = False
+
+    monkeypatch.setattr(
+        transfer_module,
+        "_tencent_cam_request",
+        lambda **kwargs: copy.deepcopy(responses[cast(str, kwargs["action"])]),
+    )
+    with pytest.raises(TransferContractError, match="CAM"):
+        _cam_readback_call(contract, credentials, now)
+    assert not credentials.exists()
+
+
+def test_cam_readback_consumes_credentials_before_request_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    credentials = tmp_path / "cam-readback-credentials.json"
+    _cam_readback_credentials(credentials, now)
+
+    def interrupted(**_kwargs):
+        assert not credentials.exists()
+        raise TransferContractError("release transfer interrupted")
+
+    monkeypatch.setattr(transfer_module, "_tencent_cam_request", interrupted)
+    with pytest.raises(TransferContractError, match="interrupted"):
+        _cam_readback_call(contract, credentials, now)
+    assert not credentials.exists()
+
+
+def test_cam_readback_cleanup_failure_blocks_api_calls(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    credentials = tmp_path / "cam-readback-credentials.json"
+    _cam_readback_credentials(credentials, now)
+    calls = 0
+    original_unlink = transfer_module.os.unlink
+
+    def fail_credential_unlink(path, *args, **kwargs):
+        if str(path).startswith(".cam-readback-consume-"):
+            raise OSError("fixture cleanup failure")
+        return original_unlink(path, *args, **kwargs)
+
+    def request(**_kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("CAM request must not run")
+
+    monkeypatch.setattr(transfer_module.os, "unlink", fail_credential_unlink)
+    monkeypatch.setattr(transfer_module, "_tencent_cam_request", request)
+    with pytest.raises(TransferContractError, match="manual recovery"):
+        _cam_readback_call(contract, credentials, now)
+    assert calls == 0
+    assert not credentials.exists()
+    quarantine = list(tmp_path.glob(".cam-readback-consume-*"))
+    assert len(quarantine) == 1
+    assert quarantine[0].read_bytes() == b""
+
+
+@pytest.mark.parametrize("foreign_kind", ["file", "symlink"])
+def test_cam_readback_quarantine_preserves_swap_winner_and_blocks_api(
+    foreign_kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    credentials = tmp_path / "cam-readback-credentials.json"
+    moved_original = tmp_path / "consumed-original"
+    foreign_target = tmp_path / "foreign-target"
+    _cam_readback_credentials(credentials, now)
+    original_rename = transfer_module._atomic_rename_noreplace_at
+    calls = 0
+
+    def swap_then_rename(
+        parent_descriptor: int,
+        source_name: str,
+        destination_name: str,
+    ) -> None:
+        transfer_module.os.rename(credentials, moved_original)
+        if foreign_kind == "file":
+            credentials.write_bytes(b"FOREIGN")
+            credentials.chmod(0o600)
+        else:
+            foreign_target.write_bytes(b"FOREIGN")
+            credentials.symlink_to(foreign_target.name)
+        original_rename(parent_descriptor, source_name, destination_name)
+
+    def request(**_kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("CAM request must not run")
+
+    monkeypatch.setattr(
+        transfer_module, "_atomic_rename_noreplace_at", swap_then_rename
+    )
+    monkeypatch.setattr(transfer_module, "_tencent_cam_request", request)
+    with pytest.raises(TransferContractError, match="manual recovery"):
+        _cam_readback_call(contract, credentials, now)
+
+    assert calls == 0
+    assert moved_original.read_bytes() == b""
+    quarantine = list(tmp_path.glob(".cam-readback-consume-*"))
+    assert len(quarantine) == 1
+    if foreign_kind == "file":
+        assert quarantine[0].read_bytes() == b"FOREIGN"
+    else:
+        assert quarantine[0].is_symlink()
+        assert quarantine[0].readlink() == Path(foreign_target.name)
+
+
+def test_cam_readback_recovers_committed_quarantine_move_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    contract = transfer_module.load_release_governance_contract(
+        Path(__file__).parents[1] / "configs" / "cos-release-governance.v1.json"
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    credentials = tmp_path / "cam-readback-credentials.json"
+    _cam_readback_credentials(credentials, now)
+    responses = _cam_readback_responses(contract)
+    original_rename = transfer_module._atomic_rename_noreplace_at
+
+    def committed_then_interrupted(
+        parent_descriptor: int,
+        source_name: str,
+        destination_name: str,
+    ) -> None:
+        original_rename(parent_descriptor, source_name, destination_name)
+        raise TransferContractError("release transfer interrupted")
+
+    monkeypatch.setattr(
+        transfer_module, "_atomic_rename_noreplace_at", committed_then_interrupted
+    )
+    monkeypatch.setattr(
+        transfer_module,
+        "_tencent_cam_request",
+        lambda **kwargs: copy.deepcopy(responses[cast(str, kwargs["action"])]),
+    )
+    receipt = _cam_readback_call(contract, credentials, now)
+    assert receipt["status"] == "passed"
+    assert not credentials.exists()
+    assert list(tmp_path.glob(".cam-readback-consume-*")) == []
+
+
+def test_cam_readback_api_requires_service_request_id(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        transfer_module,
+        "_open_no_redirect",
+        lambda *_args, **_kwargs: _FixtureHTTPResponse(b'{"Response":{"List":[]}}'),
+    )
+    with pytest.raises(TransferContractError, match="provenance"):
+        transfer_module._tencent_cam_request(
+            action="ListAttachedRolePolicies",
+            body={"RoleId": "1", "Page": 1, "Rp": 200},
+            credentials={
+                "secret_id": "id",
+                "secret_key": "key",
+                "session_token": "token",
+            },
+            deadline_ns=transfer_module.time.monotonic_ns() + 10_000_000_000,
+            now=datetime.now(UTC),
+        )
+
+
+def test_cam_authorization_matches_official_tc3_algorithm_fixed_vector(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    requests: list[transfer_module.urllib.request.Request] = []
+
+    def capture(request, **_kwargs):
+        requests.append(request)
+        return _FixtureHTTPResponse(
+            canonical_json_bytes(
+                {
+                    "Response": {
+                        "RoleInfo": {},
+                        "RequestId": "12345678-1234-1234-1234-1234567890ab",
+                    }
+                }
+            )
+        )
+
+    monkeypatch.setattr(transfer_module, "_open_no_redirect", capture)
+    transfer_module._tencent_cam_request(
+        action="GetRole",
+        body={"RoleName": "ai-video-release"},
+        credentials={
+            "secret_id": "AKIDEXAMPLE",
+            "secret_key": "SECRETKEY",
+            "session_token": "TOKEN",
+        },
+        deadline_ns=transfer_module.time.monotonic_ns() + 10_000_000_000,
+        now=datetime.fromtimestamp(1_551_113_065, UTC),
+    )
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.full_url == "https://cam.tencentcloudapi.com/"
+    assert request.data == b'{"RoleName":"ai-video-release"}\n'
+    assert request.get_header("Content-type") == "application/json; charset=utf-8"
+    assert request.get_header("Host") == "cam.tencentcloudapi.com"
+    assert request.get_header("X-tc-action") == "GetRole"
+    assert request.get_header("X-tc-timestamp") == "1551113065"
+    assert request.get_header("X-tc-token") == "TOKEN"
+    assert request.get_header("X-tc-version") == "2019-01-16"
+    assert request.get_header("Authorization") == (
+        "TC3-HMAC-SHA256 "
+        "Credential=AKIDEXAMPLE/2019-02-25/cam/tc3_request, "
+        "SignedHeaders=content-type;host;x-tc-action, "
+        "Signature=da622c9389ecfd959f0951685685c0c3"
+        "bfb87d80490ed031d84c930314885299"
+    )
+
+
+def test_local_cam_policy_file_is_not_a_live_provenance_gate():
+    parser = transfer_module._parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["cam-policy-verify"])
 
 
 def test_cos_authorization_matches_official_go_sdk_fixed_vector():

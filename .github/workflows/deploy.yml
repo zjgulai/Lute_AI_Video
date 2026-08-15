@@ -561,6 +561,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     environment:
       name: production-artifact-staging
     outputs:
@@ -659,8 +660,10 @@ jobs:
           set -euo pipefail
           umask 077
           transfer_root="${RUNNER_TEMP}/release-transfer"
+          governance_contract="configs/cos-release-governance.v1.json"
           ssh_key="${RUNNER_TEMP}/transfer_key"
           known_hosts="${RUNNER_TEMP}/transfer_known_hosts"
+          credential_file="${RUNNER_TEMP}/cos-sts-credentials.json"
           terminal="${transfer_root}/release-transfer-terminal.v1.json"
           probe_object_key="ai-video/probes/${GITHUB_SHA}/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}/probe.bin"
           probe_mutation_may_exist=0
@@ -696,7 +699,10 @@ jobs:
                 status=1
               fi
             fi
-            rm -f "$ssh_key" "$known_hosts"
+            if ! rm -f "$ssh_key" "$known_hosts" "$credential_file"; then
+              transfer_status=sts_credential_cleanup_failed
+              status=1
+            fi
             python3 - "$terminal" "$transfer_status" "$GITHUB_SHA" \
               "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'PY'
           import json
@@ -722,9 +728,9 @@ jobs:
           trap 'exit 130' INT
           trap 'exit 143' TERM
 
-          for name in COS_SECRET_ID COS_SECRET_KEY COS_SESSION_TOKEN TRANSFER_HOST \
-            TRANSFER_USER TRANSFER_SSH_KEY TRANSFER_KNOWN_HOSTS COS_BUCKET \
-            COS_ENDPOINT TRANSFER_TARGET_DIR; do
+          for name in TRANSFER_HOST TRANSFER_USER TRANSFER_SSH_KEY \
+            TRANSFER_KNOWN_HOSTS COS_BUCKET COS_ENDPOINT TRANSFER_TARGET_DIR \
+            COS_STS_ROLE_ARN COS_OIDC_PROVIDER_ID; do
             [ -n "${!name:-}" ] || { printf 'ERROR: transfer_configuration_missing\n' >&2; exit 1; }
           done
           [ "$TRANSFER_TARGET_DIR" = /opt/ai-video ] || {
@@ -743,13 +749,54 @@ jobs:
           ssh-keygen -F "$TRANSFER_HOST" -f "$known_hosts" >/dev/null
 
           manifest="${transfer_root}/release-transfer-manifest.v1.json"
+          transfer_status=sts_oidc_issuance_failed
+          python3 scripts/release_transfer.py sts-assume-github-oidc \
+            --provider-id "$COS_OIDC_PROVIDER_ID" \
+            --role-arn "$COS_STS_ROLE_ARN" \
+            --source-revision "$GITHUB_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --bucket "$COS_BUCKET" \
+            --endpoint-host "$COS_ENDPOINT" \
+            --credentials-output "$credential_file" \
+            --governance-contract "$governance_contract" \
+            > "${transfer_root}/cos-sts-issuance-receipt.v1.json"
+          export COS_STS_CREDENTIALS_FILE="$credential_file"
+          transfer_status=sts_validity_gate_failed
+          python3 scripts/release_transfer.py sts-credentials-verify \
+            --credentials "$credential_file" \
+            --provider-id "$COS_OIDC_PROVIDER_ID" \
+            --role-arn "$COS_STS_ROLE_ARN" \
+            --source-revision "$GITHUB_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --governance-contract "$governance_contract" >/dev/null
           transfer_status=cos_versioning_gate_failed
           python3 scripts/release_transfer.py cos-versioning-verify \
             --bucket "$COS_BUCKET" \
             --endpoint-host "$COS_ENDPOINT" >/dev/null
+          transfer_status=cos_lifecycle_gate_failed
+          python3 scripts/release_transfer.py cos-lifecycle-verify \
+            --bucket "$COS_BUCKET" \
+            --endpoint-host "$COS_ENDPOINT" \
+            --governance-contract "$governance_contract" >/dev/null
+          transfer_status=cos_privacy_gate_failed
+          python3 scripts/release_transfer.py cos-privacy-verify \
+            --bucket "$COS_BUCKET" \
+            --endpoint-host "$COS_ENDPOINT" \
+            --governance-contract "$governance_contract" >/dev/null
 
           head -c 67108864 /dev/zero > "${transfer_root}/probe.bin"
           probe_sha=$(sha256sum "${transfer_root}/probe.bin" | awk '{print $1}')
+          transfer_status=sts_validity_gate_failed
+          python3 scripts/release_transfer.py sts-credentials-verify \
+            --credentials "$credential_file" \
+            --provider-id "$COS_OIDC_PROVIDER_ID" \
+            --role-arn "$COS_STS_ROLE_ARN" \
+            --source-revision "$GITHUB_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --governance-contract "$governance_contract" >/dev/null
           transfer_status=runner_probe_failed
           probe_mutation_may_exist=1
           python3 scripts/release_transfer.py cos-object-upload \
@@ -873,9 +920,6 @@ jobs:
           fi
           transfer_status=transfer_passed
         env:
-          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
-          COS_SESSION_TOKEN: ${{ secrets.COS_SESSION_TOKEN }}
           TRANSFER_HOST: ${{ secrets.TRANSFER_HOST }}
           TRANSFER_USER: ${{ secrets.TRANSFER_USER }}
           TRANSFER_SSH_KEY: ${{ secrets.TRANSFER_SSH_KEY }}
@@ -883,6 +927,8 @@ jobs:
           COS_BUCKET: ${{ vars.COS_BUCKET }}
           COS_ENDPOINT: ${{ vars.COS_ENDPOINT }}
           TRANSFER_TARGET_DIR: ${{ vars.TRANSFER_TARGET_DIR }}
+          COS_STS_ROLE_ARN: ${{ vars.COS_STS_ROLE_ARN }}
+          COS_OIDC_PROVIDER_ID: ${{ vars.COS_OIDC_PROVIDER_ID }}
           RESUME_TRANSFER: ${{ inputs.resume_transfer || false }}
           EXECUTION_SCOPE: ${{ inputs.execution_scope || 'deploy' }}
 
@@ -895,6 +941,7 @@ jobs:
           retention-days: 14
           path: |
             ${{ runner.temp }}/release-transfer/release-transfer-terminal.v1.json
+            ${{ runner.temp }}/release-transfer/cos-sts-issuance-receipt.v1.json
             ${{ runner.temp }}/release-transfer/runner-probe-receipt.json
             ${{ runner.temp }}/release-transfer/server-probe-receipt.json
             ${{ runner.temp }}/release-transfer/release-transfer-receipt.v1.json

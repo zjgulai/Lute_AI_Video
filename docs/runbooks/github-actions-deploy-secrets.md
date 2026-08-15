@@ -23,7 +23,7 @@ owner: Sisyphus
 |---|---|---|
 | `archive-only` | exact-main preflight、三镜像 smoke/SBOM/scan、release bundle | 不会进入任何 GitHub Environment，不读取 `DRY_RUN_*`/`DEPLOY_*` |
 | `remote-dry-run` | 上述 archive + 受限 rsync dry-run artifact | 仅 `production-read-only-dry-run` 与 `DRY_RUN_*` |
-| `artifact-stage-only` | 上述 dry-run + private COS multipart upload + 同地域下载/校验/receipt + incoming 清理 | `production-artifact-staging`；读取独立 `COS_*`/`TRANSFER_*`，不读取 `DEPLOY_*` |
+| `artifact-stage-only` | 上述 dry-run + GitHub OIDC→腾讯 STS + private COS multipart upload + 同地域下载/校验/receipt + incoming 清理 | `production-artifact-staging`；读取独立 `COS_*` variables/`TRANSFER_*` secrets，不读取 `DEPLOY_*` |
 | `deploy` | 完整 staging + verified incoming 原子 promotion + production deploy/health smoke | staging 成功后才进入 `production` |
 
 手动触发默认选择 `archive-only`。所有范围都要求 workflow SHA 精确等于执行时的 exact `origin/main` tip；PR head 或 pull-request synthetic merge SHA 不能生成 canonical deployable archive。`archive-only` 成功只构成 exact-main L2 archive/CI 证据，不构成生产部署证据。
@@ -65,15 +65,12 @@ production job 不再从 GitHub runner 直接 rsync source 或 2.28 GB image arc
 
 ## Artifact staging Environment
 
-在独立 Environment `production-artifact-staging` 配置临时 COS 身份和专用 forced-command SSH 身份。
+在独立 Environment `production-artifact-staging` 配置 GitHub OIDC→腾讯 STS 角色绑定和专用 forced-command SSH 身份。workflow 只取得 `id-token: write` 来申请当前 job 的 OIDC JWT；它不保存长期 CAM key，也不从 Environment 读取 COS 临时密钥。
 
 Environment secrets 必须恰为：
 
 | Secret | 说明 |
 |---|---|
-| `COS_SECRET_ID` | 当前 staging 窗口的临时 STS SecretId |
-| `COS_SECRET_KEY` | 与该 STS 身份配对的临时 SecretKey |
-| `COS_SESSION_TOKEN` | STS session token；不得使用无 token 的长期 CAM key |
 | `TRANSFER_HOST` | 安装了 release transfer gate 的 Lighthouse 主机 |
 | `TRANSFER_USER` | 只允许 forced command 的 staging 用户 |
 | `TRANSFER_SSH_KEY` | 与 production deploy key 分离的 staging 私钥 |
@@ -86,8 +83,36 @@ Environment variables 必须恰为：
 | `COS_BUCKET` | private、启用短生命周期治理的 `<bucket>-<appid>` 名称 |
 | `COS_ENDPOINT` | 固定地域 endpoint host，例如 `cos.ap-shanghai.myqcloud.com`，必须匹配 `cos.<region>.myqcloud.com` 且不得带 scheme/path |
 | `TRANSFER_TARGET_DIR` | 固定为 `/opt/ai-video`；workflow 与 gate 均 fail closed |
+| `COS_STS_ROLE_ARN` | 只关联已审查 exact COS policy 的腾讯 CAM OIDC role ARN |
+| `COS_OIDC_PROVIDER_ID` | 腾讯 CAM 中 GitHub OIDC 身份提供商的精确名称 |
 
-STS CAM policy 只允许读取 bucket versioning 状态，以及该 bucket 下 `ai-video/releases/` 和本次 run-bound `ai-video/probes/` 的必要 object/multipart 操作。bucket 必须从未启用 versioning；`Enabled` 和 `Suspended` 都会在任何 probe/release object mutation 前失败关闭，因为这两种状态下 COS no-overwrite 不成立。六个共享对象位于 content-addressed prefix；每个获批 run 的 manifest 位于其 `transactions/<run>/<attempt>/` 子键，避免 run-bound manifest 与 create-only 语义冲突。禁止 public ACL、`latest`、branch alias、覆盖已有对象和跨 bucket 权限。仓库自有 Python signer/client 只从 masked step environment 读取临时 STS，禁止 shell tracing；signed GET URL 仅通过 SSH stdin 管道传递，不写入文件、参数、GitHub output 或 artifact。
+腾讯 OIDC IdP 必须冻结 issuer=`https://token.actions.githubusercontent.com`、audience=`sts.tencentcloudapi.com`，role trust 的 subject 必须精确为 `repo:zjgulai/Lute_AI_Video:environment:production-artifact-staging`。获批 job 通过 GitHub runner 自带的不透明 OIDC transport URL/token 取一次 JWT；transport 只允许 HTTPS/443、无 userinfo/fragment、主机为 `actions.githubusercontent.com` 或其严格子域，并拒绝 redirect，但不得把它误当成固定 issuer host/path。客户端逐字段核对 repo/SHA/run/attempt/issuer/audience/subject，再对固定 `sts.tencentcloudapi.com` 发一次 no-redirect `AssumeRoleWithWebIdentity`，请求精确 `DurationSeconds=7200`。返回的 SecretId/SecretKey/Token 只落在 runner `0600` 临时文件；非秘密 receipt 记录 RoleArn、ProviderId、RequestId、请求时间与 STS 返回的 Expiration/ExpiredTime。workflow 在 COS readback 前和第一个 probe PUT 前都对该同一凭据文件复验 exact identity 与剩余 TTL 至少 3600 秒；不足时终态为 `sts_validity_gate_failed`，不得 mutation。
+
+`configs/cos-release-governance.v1.json` 冻结完整 CAM allowlist：bucket readback 仅 `GetBucketACL`/`GetBucketPolicy`/`GetBucketLifecycle`/`GetBucketVersioning`；run-bound probe 仅 `PutObject`/`GetObject`/`DeleteObject`；exact SHA release prefix 仅 `PutObject`/`GetObject`/`InitiateMultipartUpload`/`UploadPart`/`CompleteMultipartUpload`/`AbortMultipartUpload`；三条 statement 的 `condition` 均为空且禁止额外 action/resource/statement。运行时不接受 operator 自报的 policy JSON/hash。六个共享对象位于 content-addressed prefix；每个获批 run 的 manifest 位于其 `transactions/<run>/<attempt>/` 子键。仓库自有 signer 只从该 `0600` STS 文件读取凭据，禁止 shell tracing；signed GET URL 仅通过 SSH stdin 管道传递，不写入文件、参数、GitHub output 或 artifact。
+
+### CAM effective-role readback gate
+
+创建 workflow dispatch 后，先让 `artifact-stage` 停在 `production-artifact-staging` Environment 审批，记录 exact `source_revision/run_id/run_attempt`；**批准 Environment 之前**，使用一次性、只读、最短可行期限的 CAM 审计 STS 凭据执行仓库命令。凭据文件必须在仓库外的 owner-only `0700` 目录中、文件 mode=`0600`、schema=`cam-readback-credentials.v1`，包含 `expiration` 与临时 `secret_id/secret_key/session_token`，不得进入聊天、日志、Git、artifact 或 receipt。审计身份只允许以下读取动作：`cam:DescribeOIDCConfig`、`cam:GetRole`、`cam:ListAttachedRolePolicies`、`cam:ListPolicyVersions`、`cam:GetPolicyVersion`、`cam:GetRolePermissionBoundary`；不得拥有 CAM/COS mutation。
+
+```bash
+umask 077
+.venv/bin/python scripts/release_transfer.py cam-effective-role-readback \
+  --credentials "$CAM_READBACK_CREDENTIAL_FILE" \
+  --provider-id "$COS_OIDC_PROVIDER_ID" \
+  --role-arn "$COS_STS_ROLE_ARN" \
+  --bucket "$COS_BUCKET" \
+  --endpoint-host "$COS_ENDPOINT" \
+  --source-revision "$SOURCE_REVISION" \
+  --workflow-run-id "$GITHUB_RUN_ID" \
+  --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+  --governance-contract configs/cos-release-governance.v1.json \
+  > "$CAM_READBACK_RECEIPT"
+test ! -e "$CAM_READBACK_CREDENTIAL_FILE"
+```
+
+该命令先以打开的单链接 inode 为身份读取凭据，并在任何 CAM 请求前于信号屏蔽区内清零/fsync 原 inode，再以同一已验证 parent fd 做 atomic no-replace quarantine；quarantine 的 dev/inode/type/owner/link/mode 全量匹配后才删除。路径竞态、异物、rename/unlink 双故障都保留 quarantine 并进入 manual-recovery，且不发 CAM 请求。读取、解析、请求或策略校验失败时原凭据也已消费。随后它直接以 TC3-HMAC-SHA256、no-redirect、单次请求调用固定 `cam.tencentcloudapi.com`，不是读取 operator 生成的 policy 文件。它必须取得六个服务端 `RequestId` 并一次性证明：目标 OIDC provider 启用、issuer/audience 精确且 key 自动轮换；目标 role ARN/name/ID 精确、console login 关闭、session duration=7200；trust 只有一个 `AssumeRoleWithWebIdentity` statement，federated provider 与 `oidc:iss/aud/sub` 均精确且无额外主体；attached policy 总数恰一且必须为 active（`Deactived=0`、无停用详情）；全部 policy version 已枚举且唯一 default version 的文档等于当前 SHA/run/attempt 派生 allowlist；role permission boundary 不存在。CAM 角色权限模型通过 attached policies 授权；role 自身的 inline 文档是 trust policy，已由 `GetRole` 精确核验。任何额外 attachment、停用 attachment、额外 trust statement/principal/condition、错误 default version、非空 permission boundary、缺失 RequestId 或凭据过期都失败关闭。只有 canonical `cam-effective-role-readback.v1` receipt 通过独立复核后，才允许批准 staging Environment；receipt 只含身份、版本、摘要和 RequestId，不含凭据、OIDC JWT 或 policy 原文。
+
+专用 bucket 的 lifecycle 也由同一 contract 冻结，且不允许其他规则：`ai-video-probes-expire-v1`=`ai-video/probes/`/Enabled/Expiration 1 day；`ai-video-release-multipart-abort-v1`=`ai-video/releases/`/Enabled/AbortIncompleteMultipartUpload 1 day；`ai-video-releases-expire-v1`=`ai-video/releases/`/Enabled/Expiration 14 days。配置完成后，用 `cos-lifecycle-verify` 读回规范化 XML。`cos-privacy-verify` 还必须读回 bucket ACL，要求唯一 owner CanonicalUser=`FULL_CONTROL`，并要求 GET Bucket Policy 精确返回 `404 NoSuchBucketPolicy`；任何 AllUsers、AuthenticatedUsers、额外 grant 或任意 bucket policy 都在第一个 PUT 前失败关闭。不要把 CAM policy、OIDC JWT、STS credentials 或授权 header 写入仓库、聊天或 artifact。
 
 服务器安装与核验命令：
 
@@ -152,7 +177,7 @@ rename 到 `/opt/ai-video/releases-<SHA>`。不得把 staging root 改回 deploy
 - `build-images`: 构建 backend/frontend/rendering 三个 SHA-tagged image，校验 revision label、backend production import、frontend HTTP 和 rendering/ffmpeg/Chromium health；不读取 provider secret
 - `remote-dry-run`: 只使用受限 `DRY_RUN_*` 身份生成 rsync dry-run artifact，不读取 `DEPLOY_*`
 `artifact-stage` 的全部 signed URL（包括 resume readback）有效期取请求值与总期限剩余秒数的较小值，最高 1,800 秒；剩余不足 60 秒时不签名。probe DELETE 使用独立 fresh 30 秒 cleanup deadline，不继承已经过期的 transfer deadline，且仍只尝试一次。
-- `artifact-stage`: 先按 producer digest 对 GitHub artifact 原始 ZIP 做硬校验，校验成功后才解包；随后启动一个 runner monotonic 1,800 秒总期限，检查 bucket 从未启用 versioning，使用仓库自有 no-redirect、每请求单次 attempt 客户端，先分别通过 64 MiB runner→COS 与 COS→Lighthouse 两腿吞吐门禁，再执行 serial 64 MiB multipart/create-only upload。probe 在 PUT 前即标记为可能存在，因此 response 丢失也会对精确 key 做一次幂等 DELETE。所有 URL 必须精确等于 `<COS_BUCKET>.<COS_ENDPOINT>`，manifest 与 probe 的 bucket/region 必须一致。服务器从 signed URL stdin 下载到 root-owned `/var/lib/ai-video-release-transfer/.incoming-<SHA>-<run>-<attempt>`；runner 仅传播剩余秒数，同时用该剩余值硬限制 probe/stage/receipt 三条 SSH pipeline，server 建立自己的 monotonic deadline，socket timeout、信号与总超时都进入同一 abort/`.part`/incoming 清理路径。deadline 必须覆盖下载后的 hash、archive/source 验证与 receipt commit；既有 probe receipt/symlink 在下载前失败关闭。receipt 与 incoming mkdir 在文件系统 mutation 前建立 intent，在屏蔽受控 signal 的临界区记录已创建 inode；提交后的 deadline/signal 失败只清理同 inode、同身份状态，foreign race、所有权不明或删除失败必须保留并标记 manual recovery。server 用 manifest 真实总字节重算门禁，规范化 source mode，并在 promotion 前重新核验每个 source byte、symlink target、精确文件/目录集合与类型；canonical manifest bytes、全量 SHA/size/source tree/archive safety/receipt 通过后才标 `verified`
+- `artifact-stage`: 先按 producer digest 对 GitHub artifact 原始 ZIP 做硬校验，校验成功后才解包；随后启动一个 runner monotonic 1,800 秒总期限，通过 GitHub OIDC 现场取得并绑定 exact role/SHA/run/attempt 的单次 STS，再检查 bucket 从未启用 versioning、exact lifecycle、owner-only ACL 与 absent bucket policy。它使用仓库自有 no-redirect、每请求单次 attempt 客户端，先分别通过 64 MiB runner→COS 与 COS→Lighthouse 两腿吞吐门禁，再执行 serial 64 MiB multipart/create-only upload。probe 在 PUT 前即标记为可能存在，因此 response 丢失也会对精确 key 做一次幂等 DELETE。所有 URL 必须精确等于 `<COS_BUCKET>.<COS_ENDPOINT>`，manifest 与 probe 的 bucket/region 必须一致。服务器从 signed URL stdin 下载到 root-owned `/var/lib/ai-video-release-transfer/.incoming-<SHA>-<run>-<attempt>`；runner 仅传播剩余秒数，同时用该剩余值硬限制 probe/stage/receipt 三条 SSH pipeline，server 建立自己的 monotonic deadline，socket timeout、信号与总超时都进入同一 abort/`.part`/incoming 清理路径。deadline 必须覆盖下载后的 hash、archive/source 验证与 receipt commit；既有 probe receipt/symlink 在下载前失败关闭。receipt 与 incoming mkdir 在文件系统 mutation 前建立 intent，在屏蔽受控 signal 的临界区记录已创建 inode；提交后的 deadline/signal 失败只清理同 inode、同身份状态，foreign race、所有权不明或删除失败必须保留并标记 manual recovery。server 用 manifest 真实总字节重算门禁，规范化 source mode，并在 promotion 前重新核验每个 source byte、symlink target、精确文件/目录集合与类型；canonical manifest bytes、全量 SHA/size/source tree/archive safety/receipt 通过后才标 `verified`
 
 只要 provenance、preflight、build-images、remote-dry-run 或 artifact-stage 任意失败，production deploy job 都不会启动。`artifact-stage-only` 成功后必须删除 verified incoming；它只证明 transfer path，不构成 image load、backup/restore、migration、应用切换或 production acceptance。transfer step 的 EXIT handler 会先删 probe，再对可能存在的 remote transaction 做精确 cleanup；若 receipt 已形成后 evidence upload 才失败，或 `deploy` 的审批被拒绝、job 被跳过/失败，`cleanup-staged-release` 也会重新进入 `production-artifact-staging`，仅用 `TRANSFER_*` 身份对精确 SHA/run/attempt/manifest 执行一次补偿，并始终上传 bounded terminal evidence。它不能读取 COS/DEPLOY 凭据，也不能删除已 promotion 的 final release；失败终态统一为 `incoming_cleanup_failed`，不得写成已清理。
 

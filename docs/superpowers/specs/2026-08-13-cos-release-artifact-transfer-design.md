@@ -200,9 +200,6 @@ Client or signing changes require reviewed code and behavior tests.
 The private `production-artifact-staging` Environment contains exactly these
 secret names:
 
-- `COS_SECRET_ID`;
-- `COS_SECRET_KEY`;
-- `COS_SESSION_TOKEN`;
 - `TRANSFER_HOST`;
 - `TRANSFER_USER`;
 - `TRANSFER_SSH_KEY`;
@@ -212,24 +209,67 @@ It contains these non-secret variables:
 
 - `COS_BUCKET`;
 - `COS_ENDPOINT`;
-- `TRANSFER_TARGET_DIR`.
+- `TRANSFER_TARGET_DIR`;
+- `COS_STS_ROLE_ARN`;
+- `COS_OIDC_PROVIDER_ID`.
 
-The COS credential triple must be temporary STS material for the current
-window. A long-lived CAM key is rejected by operational policy. Its CAM policy
-is limited to `GetBucketVersioning` plus object operations in the one bucket
-under `ai-video/releases/` and run-bound probe prefixes. The bucket must have
-never enabled versioning; both `Enabled` and `Suspended` fail before the first
-probe or release-object mutation because COS no-overwrite is ineffective for a
-versioned bucket. The stage environment has the same main/tag branch policy and
-administrator-bypass prohibition as production, but it cannot access
-`DEPLOY_*` secrets.
+The job permissions are exactly `actions: read`, `contents: read`, and
+`id-token: write`; the last permission authorizes only GitHub OIDC JWT issuance.
+The repository client makes one no-redirect request to GitHub's runner-provided
+opaque OIDC transport endpoint. It accepts only HTTPS/443 at the strict
+`actions.githubusercontent.com` suffix boundary, while issuer validation remains
+separately fixed to `https://token.actions.githubusercontent.com`. It validates
+issuer, audience, subject, repository, SHA, run, and
+attempt, then makes one no-redirect `AssumeRoleWithWebIdentity` request to
+`sts.tencentcloudapi.com`. That request binds the exact configured role and
+provider and requests exactly `DurationSeconds=7200`. Tencent validates the JWT
+signature and role trust. Returned credentials exist only in a runner `0600`
+file; a non-secret receipt records role/provider/request/expiry facts. The same
+credential file must retain at least 3,600 seconds before COS readback and
+immediately before the first probe PUT.
+That lower bound covers the single 1,800-second transfer deadline plus two
+reserves: 300 seconds for cleanup and 1,500 seconds for approved-job setup and
+evidence finalization. A long-lived CAM key is rejected by operational policy.
+
+`configs/cos-release-governance.v1.json` is the machine-readable authority for
+the exact role CAM policy. The policy has three allow statements and no other
+action, resource, or condition: bucket readback permits only `GetBucketACL`,
+`GetBucketPolicy`, `GetBucketLifecycle`, and `GetBucketVersioning`; the exact run-bound probe prefix
+permits only `PutObject`, `GetObject`, and `DeleteObject`; the exact
+`ai-video/releases/<SHA>/` prefix permits only `PutObject`, `GetObject`,
+`InitiateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, and
+`AbortMultipartUpload`. Every statement has an empty condition object because
+the resource is already narrowed to the exact bucket and prefix. The actual
+effective role is an external configuration gate. After the exact workflow
+run ID and attempt exist, but before the staging Environment is approved, a
+repository-owned read-only client uses short-lived audit credentials to call
+the fixed CAM API directly. Before the first request, the client clears and
+fsyncs the opened credential inode, atomically moves its pathname with
+no-replace semantics into a random same-parent quarantine, and deletes only a
+quarantine entry whose inode and security facts still match. Races or cleanup
+faults preserve quarantine, require manual recovery, and prohibit the request.
+It reads the exact OIDC provider and role trust,
+enumerates the complete attached-policy set and every policy version, resolves
+the unique default version, and proves the permission boundary is absent. The
+client requires one exact active attached policy (`Deactived=0` and no
+deactivation detail), exact issuer/audience/subject trust,
+the repository-derived run-bound policy bytes, and a service RequestId for all
+six read calls; it emits a canonical non-secret receipt. Runtime never accepts
+an operator-declared policy file or hash as proof. The bucket must have never
+enabled versioning; both `Enabled` and
+`Suspended` fail before the first mutation. Its ACL must contain exactly the
+owner CanonicalUser with `FULL_CONTROL`, and GET Bucket Policy must return exact
+`NoSuchBucketPolicy` absence. Any public group, extra grant, or bucket policy
+fails closed. The stage environment has the same main/tag branch policy and
+administrator-bypass prohibition as production, but it cannot access `DEPLOY_*`
+secrets.
 
 Tag-triggered releases also pass through this Environment and the same COS
 stage. A tag never bypasses either the staging approval or the production
 approval.
 
-Credentials remain only in GitHub's masked step environment and signer process
-memory. Shell tracing is disabled. Secret values,
+Credentials remain only in one runner-local `0600` file and signer process
+memory; the EXIT handler removes that file. Shell tracing is disabled. Secret values,
 signed URLs, authorization headers, absolute runner paths, and COS session
 tokens are forbidden from receipts and uploaded artifacts.
 
@@ -426,7 +466,10 @@ then invokes `deploy.sh`.
 
 Every stage has a stable terminal code. At minimum:
 
+- `sts_oidc_issuance_failed`;
+- `sts_credential_cleanup_failed`;
 - `cos_versioning_gate_failed`;
+- `cos_privacy_gate_failed`;
 - `runner_probe_failed`;
 - `server_probe_failed`;
 - `cos_release_upload_failed`;
@@ -475,10 +518,14 @@ the exact incoming transaction for the restricted manual `cleanup` command;
 it is not represented as cleaned. The bucket lifecycle covers COS objects but
 never authorizes deletion of a server incoming transaction.
 
-Bucket lifecycle is a second safety net, not the primary cleanup mechanism:
-probe objects, incomplete multipart uploads, and release objects expire under
-separate reviewed retention periods. The workflow must not grant bucket-wide
-delete authority merely to implement cleanup.
+Bucket lifecycle is a second safety net, not the primary cleanup mechanism.
+The dedicated bucket must contain exactly three enabled rules and no additional
+rule: `ai-video-probes-expire-v1` expires `ai-video/probes/` after 1 day;
+`ai-video-release-multipart-abort-v1` aborts incomplete multipart uploads under
+`ai-video/releases/` after 1 day; `ai-video-releases-expire-v1` expires
+`ai-video/releases/` after 14 days. The workflow reads and normalizes the live
+XML and requires exact equality before the first object mutation. It must not
+grant bucket-wide object delete authority merely to implement cleanup.
 
 ## Tests
 
@@ -490,7 +537,8 @@ delete authority merely to implement cleanup.
 - Artifact staging cannot access `DEPLOY_*`; production deployment cannot
   access raw COS credentials.
 - The repository COS signer, 64 MiB part size, exact-one-attempt request rule,
-  never-versioned bucket gate, two-leg probe size, speed threshold, and maximum
+  OIDC-to-role binding, never-versioned/private/no-policy bucket gates,
+  two-leg probe size, speed threshold, and maximum
   estimated duration are exact.
 - Signed URLs are passed only over standard input and are absent from logs,
   outputs, artifacts, and receipts.
@@ -513,7 +561,8 @@ delete authority merely to implement cleanup.
 - Exact regional endpoint, bucket-derived URL host, canonical manifest-byte
   digest, hostile umask, unsafe source modes, deep JSON, signal, shared-deadline,
   and mixed/stale installer mutations fail closed.
-- Slow probe, zero bytes, partial upload, multipart mismatch, expired STS,
+- Slow probe, zero bytes, partial upload, multipart mismatch, mutated OIDC
+  identity, expired STS, public ACL, present bucket policy,
   signed-URL expiry, range refusal, truncated download, checksum mismatch, tar
   traversal, invalid member type, source-manifest mismatch, and image-digest
   mismatch all fail closed.
@@ -543,9 +592,17 @@ acceptance.
    authorization.
 4. Merge and exact-main automatic CI under separate authorization.
 5. Fresh exact-main `archive-only` under separate authorization.
-6. Configure and read back the private COS bucket, lifecycle, STS policy,
-   `production-artifact-staging` Environment, and restricted staging SSH gate
-   under separate authorization.
+6. Configure and read back the private COS bucket; exact three-rule lifecycle,
+   owner-only ACL, absent bucket policy; direct CAM API readback of the exact
+   role/provider/trust, single active attached policy (`Deactived=0` with no
+   deactivation detail), all versions, unique effective version and absent
+   permission boundary; the one-shot audit credential is consumed before the
+   first CAM request; 7,200-second JIT STS issuance/expiry;
+   `production-artifact-staging` Environment; and restricted
+   staging SSH gate under separate authorization. The lifecycle and CAM
+   readbacks must pass the repository validators before the gate is complete.
+   The CAM effective-role receipt is run after run ID/attempt creation and
+   before `production-artifact-staging` approval.
 7. Fresh exact-main `remote-dry-run` under separate authorization.
 8. One `artifact-stage-only` live transfer with zero automatic retry. It must
    produce matching local/remote receipts and leave no incoming/final release.
