@@ -5,7 +5,7 @@ module: project
 topic: root-directory-governance
 status: stable
 created: 2026-06-01
-updated: 2026-07-29
+updated: 2026-09-01
 owner: self
 source: human+ai
 ---
@@ -36,9 +36,11 @@ source: human+ai
 | --- | --- |
 | `.dockerignore` | config |
 | `.env.example` | config |
+| `.gitattributes` | config |
 | `.gitignore` | config |
 | `.grype-rendering.yaml` | config |
 | `.grype-backend.yaml` | config |
+| `.grype-raw.yaml` | config |
 | `.grype.yaml` | config |
 | `.python-version` | config |
 | `.trivyignore-rendering.yaml` | config |

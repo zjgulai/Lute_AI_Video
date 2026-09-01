@@ -9,6 +9,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "image-security-review.yml"
+RAW_GRYPE_POLICY = REPO_ROOT / ".grype-raw.yaml"
 
 
 def _workflow() -> dict[str, Any]:
@@ -95,7 +96,8 @@ def test_security_review_retains_raw_and_reviewed_dual_scanner_evidence() -> Non
     assert grype_raw["with"]["fail-build"] is False
     assert grype_raw["with"]["severity-cutoff"] == "high"
     assert grype_raw["with"]["output-format"] == "json"
-    assert "config" not in grype_raw["with"]
+    assert grype_raw["with"]["config"] == ".grype-raw.yaml"
+    assert yaml.safe_load(RAW_GRYPE_POLICY.read_text()) == {"ignore": []}
 
     grype_reviewed = _step(steps, "Apply reviewed Grype policy")
     assert grype_reviewed["with"]["config"] == "${{ matrix.grype_policy }}"

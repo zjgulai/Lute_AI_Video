@@ -17,6 +17,7 @@ on:
       - rendering/package-lock.json
       - docker/ffmpeg/**
       - .grype.yaml
+      - .grype-raw.yaml
       - .grype-backend.yaml
       - .grype-rendering.yaml
       - .trivyignore.yaml
@@ -43,6 +44,7 @@ on:
       - rendering/package-lock.json
       - docker/ffmpeg/**
       - .grype.yaml
+      - .grype-raw.yaml
       - .grype-backend.yaml
       - .grype-rendering.yaml
       - .trivyignore.yaml
@@ -151,6 +153,7 @@ jobs:
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: ai-video-${{ matrix.component }}:security-${{ env.REVIEW_SOURCE_SHA }}
+          config: .grype-raw.yaml
           fail-build: false
           severity-cutoff: high
           output-format: json

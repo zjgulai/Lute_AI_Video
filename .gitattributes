@@ -1,2 +1,2 @@
-# These provenance-bearing security patches are checksum-bound; preserve whitespace.
+# Patch bytes are checksum-bound; do not flag embedded patch whitespace as errors.
 docker/ffmpeg/*.patch -whitespace

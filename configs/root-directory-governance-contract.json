@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-29",
+  "updated": "2026-09-01",
   "runbook": "docs/runbooks/root-directory-governance.md",
   "policy": {
     "default_documents": "docs/ or drafts/docs/",
@@ -21,6 +21,11 @@
       "reason": "Public environment variable template with no real secrets."
     },
     {
+      "path": ".gitattributes",
+      "status": "config",
+      "reason": "Git whitespace-check policy for checksum-bound security patch files."
+    },
+    {
       "path": ".gitignore",
       "status": "config",
       "reason": "Git ignore policy for local-only and generated artifacts."
@@ -29,6 +34,11 @@
       "path": ".grype.yaml",
       "status": "config",
       "reason": "Exact version-bound frontend vulnerability scan policy."
+    },
+    {
+      "path": ".grype-raw.yaml",
+      "status": "config",
+      "reason": "Explicit empty Grype policy preventing auto-loaded exceptions from contaminating raw scan evidence."
     },
     {
       "path": ".grype-backend.yaml",
