@@ -34,6 +34,38 @@
         "**"
       ],
       "reason": "Production E2E is a remote no-token smoke by default, so it should run on production specs, prod Playwright config and dependency lock changes only."
+    },
+    {
+      "path": ".github/workflows/image-security-review.yml",
+      "events": ["push", "pull_request"],
+      "required_paths": [
+        "Dockerfile.backend",
+        "web/Dockerfile",
+        "rendering/Dockerfile",
+        "pyproject.toml",
+        "uv.lock",
+        "web/package-lock.json",
+        "rendering/package-lock.json",
+        "docker/ffmpeg/**",
+        ".grype.yaml",
+        ".grype-backend.yaml",
+        ".grype-rendering.yaml",
+        ".trivyignore.yaml",
+        ".trivyignore-backend.yaml",
+        ".trivyignore-rendering.yaml",
+        "docker-compose.yml",
+        "deploy/lighthouse/docker-compose.release.yml",
+        "src/services/safe_media.py",
+        "rendering/media-safety.mjs",
+        ".github/workflows/image-security-review.yml"
+      ],
+      "forbidden_paths": [
+        "src/**",
+        "web/**",
+        "rendering/**",
+        "**"
+      ],
+      "reason": "Exact image review is expensive and runs only when an image dependency, scanner policy, FFmpeg build input, or exception-justifying runtime boundary changes."
     }
   ],
   "unfiltered_workflows": [
