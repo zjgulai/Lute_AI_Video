@@ -55,7 +55,7 @@
         ".trivyignore-rendering.yaml",
         "docker-compose.yml",
         "deploy/lighthouse/docker-compose.release.yml",
-        "src/services/safe_media.py",
+        "src/tools/safe_media.py",
         "rendering/media-safety.mjs",
         ".github/workflows/image-security-review.yml"
       ],

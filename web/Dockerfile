@@ -46,7 +46,10 @@ ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
 
 # The standalone server needs Node.js only. Remove the bundled package manager
 # so its build-time dependency tree is not retained in the runtime image.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+RUN apk add --no-cache \
+      'libcrypto3>=3.5.8-r0' \
+      'libssl3>=3.5.8-r0' \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
     && test ! -e /usr/local/lib/node_modules/npm
 
 # Copy only the production artifacts

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-readonly EXPECTED_VERSION="7:7.1.5-0+deb13u1+h10.4"
+readonly EXPECTED_VERSION="7:7.1.5-0+deb13u1+h10.5"
 readonly RUNTIME_PACKAGES="
 ffmpeg
 libavcodec61
@@ -83,4 +83,4 @@ dpkg-deb --fsys-tarfile "$ffmpeg_deb" \
   | tar -xO ./usr/share/doc/ffmpeg/changelog.Debian.gz \
   | gzip -dc \
   | grep -Fq \
-    'H10: backport IAMF, DVB subtitle, and CFHD fixes; disable IAMF, libssh/SFTP, and librist/RIST.'
+    'H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, and DASH fixes; disable IAMF, libssh/SFTP, and librist/RIST.'

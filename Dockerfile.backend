@@ -14,6 +14,10 @@ ADD --checksum=sha256:a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef22
 COPY docker/ffmpeg/86708357d126af84c16f80d9c57335d1e8c845c5.patch /opt/ffmpeg/
 COPY docker/ffmpeg/02fc47e13f903768b75f7985a2706a6223ab4506.patch /opt/ffmpeg/
 COPY docker/ffmpeg/16b2049d4d5222db6cd7c031409058571c94f6a9.patch /opt/ffmpeg/
+COPY docker/ffmpeg/9d786e4b5e9b8482651928574de33772aeee7be1.patch /opt/ffmpeg/
+COPY docker/ffmpeg/1c10bcc2e17255dacb717a25ab3db142ce390602.patch /opt/ffmpeg/
+COPY docker/ffmpeg/1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch /opt/ffmpeg/
+COPY docker/ffmpeg/65b0dab903e5975e036b30ecc58f5935d4f151e0.patch /opt/ffmpeg/
 COPY docker/ffmpeg/build-h10-debs.sh /usr/local/bin/build-h10-debs.sh
 RUN chmod 0555 /usr/local/bin/build-h10-debs.sh \
     && /usr/local/bin/build-h10-debs.sh
@@ -39,13 +43,50 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
 # have reviewed CPython 3.12 wheels in uv.lock, including psycopg[binary] and
 # Pillow, so compiler and development headers must not remain in the image.
 #   - H10 FFmpeg: the exact Debian 7.1.5 source is patched with upstream
-#     86708357, 02fc47e1, and 16b2049d and built without the IAMF demuxer.
+#     seven checksum-bound upstream fixes and built without the IAMF demuxer.
 #     The custom version prevents the vulnerable distribution package from
 #     silently returning.
 COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs
 COPY docker/ffmpeg/verify-h10-runtime.sh /usr/local/bin/verify-h10-runtime.sh
 RUN apt-get update \
     && apt-get install -y --no-install-recommends /tmp/ffmpeg-debs/*.deb \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+      bsdutils \
+      libblkid1 \
+      liblastlog2-2 \
+      libmount1 \
+      libsmartcols1 \
+      libssl3t64 \
+      libuuid1 \
+      login \
+      mount \
+      openssl \
+      openssl-provider-legacy \
+      util-linux \
+    && check_min_source_version() { \
+      package="$1"; expected_source="$2"; minimum="$3"; \
+      actual_source="$(dpkg-query -W -f='${source:Package}' "$package")"; \
+      actual_version="$(dpkg-query -W -f='${source:Version}' "$package")"; \
+      if [ "$actual_source" != "$expected_source" ] \
+        || ! dpkg --compare-versions "$actual_version" ge "$minimum"; then \
+        printf 'unexpected %s source/version: %s %s (expected %s >= %s)\n' \
+          "$package" "$actual_source" "$actual_version" \
+          "$expected_source" "$minimum" >&2; \
+        exit 1; \
+      fi; \
+    } \
+    && check_min_source_version bsdutils util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version libblkid1 util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version liblastlog2-2 util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version libmount1 util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version libsmartcols1 util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version libuuid1 util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version login util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version mount util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version util-linux util-linux '2.41.5-0+deb13u1' \
+    && check_min_source_version libssl3t64 openssl '3.5.7-1~deb13u2' \
+    && check_min_source_version openssl openssl '3.5.7-1~deb13u2' \
+    && check_min_source_version openssl-provider-legacy openssl '3.5.7-1~deb13u2' \
     && chmod 0555 /usr/local/bin/verify-h10-runtime.sh \
     && /usr/local/bin/verify-h10-runtime.sh \
     && rm -rf /tmp/ffmpeg-debs /usr/local/bin/verify-h10-runtime.sh \

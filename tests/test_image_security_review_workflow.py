@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -10,13 +11,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "image-security-review.yml"
 
 
-def _workflow() -> dict:
+def _workflow() -> dict[str, Any]:
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text())
     assert isinstance(workflow, dict)
     return workflow
 
 
-def _step(steps: list[dict], name: str) -> dict:
+def _step(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
     return next(step for step in steps if step.get("name") == name)
 
 
@@ -46,6 +47,13 @@ def test_security_review_is_exact_sha_read_only_and_never_deploys() -> None:
     identity = _step(steps, "Verify exact image source label")
     assert "org.opencontainers.image.revision" in identity["run"]
     assert 'test "$actual" = "$REVIEW_SOURCE_SHA"' in identity["run"]
+    boundary = _step(steps, "Verify backend vulnerable-tool boundary")
+    assert boundary["if"] == "${{ matrix.component == 'backend' }}"
+    assert boundary["continue-on-error"] is True
+    assert "--network none" in boundary["run"]
+    assert "command -v tiffcrop" in boundary["run"]
+    assert "src/tools/safe_media.py" in WORKFLOW_PATH.read_text()
+    assert "src/services/safe_media.py" not in WORKFLOW_PATH.read_text()
 
 
 def test_security_review_matrix_covers_all_release_images_and_policies() -> None:
@@ -115,4 +123,5 @@ def test_security_review_retains_raw_and_reviewed_dual_scanner_evidence() -> Non
 
     enforce = _step(steps, "Enforce reviewed High/Critical policy")
     assert enforce["if"] == "always()"
-    assert enforce["run"].count('= success') == 7
+    assert enforce["run"].count('= success') == 8
+    assert 'if [ "$COMPONENT" = backend ]' in enforce["run"]

@@ -24,7 +24,7 @@ on:
       - .trivyignore-rendering.yaml
       - docker-compose.yml
       - deploy/lighthouse/docker-compose.release.yml
-      - src/services/safe_media.py
+      - src/tools/safe_media.py
       - rendering/media-safety.mjs
       - .github/workflows/image-security-review.yml
   pull_request:
@@ -50,7 +50,7 @@ on:
       - .trivyignore-rendering.yaml
       - docker-compose.yml
       - deploy/lighthouse/docker-compose.release.yml
-      - src/services/safe_media.py
+      - src/tools/safe_media.py
       - rendering/media-safety.mjs
       - .github/workflows/image-security-review.yml
 
@@ -132,6 +132,18 @@ jobs:
             --format='{{index .Config.Labels "org.opencontainers.image.revision"}}' \
             "ai-video-${{ matrix.component }}:security-${REVIEW_SOURCE_SHA}")
           test "$actual" = "$REVIEW_SOURCE_SHA"
+
+      - name: Verify backend vulnerable-tool boundary
+        id: runtime-boundary
+        if: ${{ matrix.component == 'backend' }}
+        continue-on-error: true
+        run: |
+          docker run --rm --network none --entrypoint /bin/sh \
+            "ai-video-${{ matrix.component }}:security-${REVIEW_SOURCE_SHA}" \
+            -ec 'if command -v tiffcrop >/dev/null 2>&1; then
+              printf "unexpected tiffcrop runtime tool\n" >&2
+              exit 1
+            fi'
 
       - name: Capture raw Grype evidence
         id: grype-raw
@@ -221,6 +233,8 @@ jobs:
         env:
           BUILD_OUTCOME: ${{ steps.build.outcome }}
           IDENTITY_OUTCOME: ${{ steps.image-identity.outcome }}
+          RUNTIME_BOUNDARY_OUTCOME: ${{ steps.runtime-boundary.outcome }}
+          COMPONENT: ${{ matrix.component }}
           GRYPE_RAW_OUTCOME: ${{ steps.grype-raw.outcome }}
           GRYPE_REVIEWED_OUTCOME: ${{ steps.grype-reviewed.outcome }}
           TRIVY_RAW_OUTCOME: ${{ steps.trivy-raw.outcome }}
@@ -229,6 +243,9 @@ jobs:
         run: |
           test "$BUILD_OUTCOME" = success
           test "$IDENTITY_OUTCOME" = success
+          if [ "$COMPONENT" = backend ]; then
+            test "$RUNTIME_BOUNDARY_OUTCOME" = success
+          fi
           test "$GRYPE_RAW_OUTCOME" = success
           test "$GRYPE_REVIEWED_OUTCOME" = success
           test "$TRIVY_RAW_OUTCOME" = success
