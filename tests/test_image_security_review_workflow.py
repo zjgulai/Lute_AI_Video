@@ -47,8 +47,8 @@ def test_security_review_is_exact_sha_read_only_and_never_deploys() -> None:
     identity = _step(steps, "Verify exact image source label")
     assert "org.opencontainers.image.revision" in identity["run"]
     assert 'test "$actual" = "$REVIEW_SOURCE_SHA"' in identity["run"]
-    boundary = _step(steps, "Verify backend vulnerable-tool boundary")
-    assert boundary["if"] == "${{ matrix.component == 'backend' }}"
+    boundary = _step(steps, "Verify vulnerable-tool boundary")
+    assert boundary["if"] == "${{ matrix.component != 'frontend' }}"
     assert boundary["continue-on-error"] is True
     assert "--network none" in boundary["run"]
     assert "command -v tiffcrop" in boundary["run"]
@@ -124,4 +124,4 @@ def test_security_review_retains_raw_and_reviewed_dual_scanner_evidence() -> Non
     enforce = _step(steps, "Enforce reviewed High/Critical policy")
     assert enforce["if"] == "always()"
     assert enforce["run"].count('= success') == 8
-    assert 'if [ "$COMPONENT" = backend ]' in enforce["run"]
+    assert 'if [ "$COMPONENT" != frontend ]' in enforce["run"]

@@ -133,9 +133,9 @@ jobs:
             "ai-video-${{ matrix.component }}:security-${REVIEW_SOURCE_SHA}")
           test "$actual" = "$REVIEW_SOURCE_SHA"
 
-      - name: Verify backend vulnerable-tool boundary
+      - name: Verify vulnerable-tool boundary
         id: runtime-boundary
-        if: ${{ matrix.component == 'backend' }}
+        if: ${{ matrix.component != 'frontend' }}
         continue-on-error: true
         run: |
           docker run --rm --network none --entrypoint /bin/sh \
@@ -243,7 +243,7 @@ jobs:
         run: |
           test "$BUILD_OUTCOME" = success
           test "$IDENTITY_OUTCOME" = success
-          if [ "$COMPONENT" = backend ]; then
+          if [ "$COMPONENT" != frontend ]; then
             test "$RUNTIME_BOUNDARY_OUTCOME" = success
           fi
           test "$GRYPE_RAW_OUTCOME" = success
