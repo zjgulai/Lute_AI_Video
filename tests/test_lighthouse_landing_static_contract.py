@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LANDING_DIR = REPO_ROOT / "deploy" / "lighthouse" / "landing"
 RSYNC_EXCLUDES = REPO_ROOT / "deploy" / "lighthouse" / "rsync-excludes.txt"
 SIDECAR_SYNC = REPO_ROOT / "deploy" / "lighthouse" / "sync-landing-sidecars.sh"
+SIDECAR_REMOTE_HELPER = REPO_ROOT / "deploy" / "lighthouse" / "systems-sidecar-remote.py"
 NGINX_CONF = REPO_ROOT / "deploy" / "lighthouse" / "nginx.conf"
 DOCKER_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.prod.yml"
 
@@ -66,10 +67,19 @@ EXPECTED_SYSTEM_CARDS = {
     "kb.lute-tlz-dddd.top": ("经营咨询工作台", "ai"),
     "skills.lute-tlz-dddd.top": ("AI 技能库", "creation"),
 }
-UNMAPPED_LOOP_HOSTS = {
-    "redbook.lute-tlz-dddd.top",
-    "kgraph.lute-tlz-dddd.top",
-    "xmind.lute-tlz-dddd.top",
+EXPECTED_G3_LOOP_BADGES = {
+    "redbook.lute-tlz-dddd.top": {
+        "enterprise": "E5 资产内容",
+        "launch": "L4 内容生产",
+    },
+    "kgraph.lute-tlz-dddd.top": {
+        "enterprise": "E8 AI 沉淀",
+        "launch": "L7 AI 加速",
+    },
+    "xmind.lute-tlz-dddd.top": {
+        "enterprise": "E4 战略中枢",
+        "launch": "L7 AI 加速",
+    },
 }
 STATIC_SITE_MOUNTS = {
     "mkt": ("/opt/mkt53/html", "/var/www/mkt53"),
@@ -354,8 +364,7 @@ def test_lighthouse_system_directory_loop_and_search_contract():
     card_hosts = set(EXPECTED_SYSTEM_CARDS)
     metadata_hosts = _loop_metadata_hosts(systems_html)
 
-    assert metadata_hosts <= card_hosts
-    assert card_hosts - metadata_hosts == UNMAPPED_LOOP_HOSTS
+    assert metadata_hosts == card_hosts
     assert page.category_filters == ["all", "creation", "insight", "growth", "operations", "ai"]
     assert page.loop_views == ["functional", "enterprise", "launch"]
     assert page.filter_count_controls == dict.fromkeys(page.category_filters, 1)
@@ -371,18 +380,18 @@ def test_lighthouse_system_directory_loop_and_search_contract():
     assert "31 个产品入口" in initial["summary"]
     assert all(badge["hidden"] for badge in initial["badges"].values())
 
-    expected_pending = sorted(UNMAPPED_LOOP_HOSTS)
     for view_name, first_stage, last_stage in [("enterprise", "E1", "E8"), ("launch", "L1", "L7")]:
         view = result[view_name]
         assert view["visibleHosts"] == expected_hosts
-        assert view["pendingHosts"] == expected_pending
+        assert view["pendingHosts"] == []
         assert first_stage in view["stageMarkup"] and last_stage in view["stageMarkup"]
         for host, badge in view["badges"].items():
             assert badge["ariaHidden"] is None
             assert not badge["hidden"] and badge["text"]
-            if host in UNMAPPED_LOOP_HOSTS:
-                assert badge["text"] == "待归类"
-                assert "闭环阶段待产品负责人确认" in badge["ariaLabel"]
+
+        for host, expected_badges in EXPECTED_G3_LOOP_BADGES.items():
+            assert view["badges"][host]["text"] == expected_badges[view_name]
+            assert "闭环阶段待产品负责人确认" not in view["badges"][host]["ariaLabel"]
 
     assert result["enterprise"]["badges"]["reddit.lute-tlz-dddd.top"]["text"] == "E1 外部感知"
     assert result["launch"]["badges"]["reddit.lute-tlz-dddd.top"]["text"] == "L1 趋势机会"
@@ -452,17 +461,30 @@ def test_lighthouse_landing_sidecar_release_and_shared_root_boundaries():
 
 def test_lighthouse_landing_sidecar_sync_is_manual_dry_run_by_default():
     script = SIDECAR_SYNC.read_text()
+    helper = SIDECAR_REMOTE_HELPER.read_text()
 
     subprocess.run(["bash", "-n", str(SIDECAR_SYNC)], check=True)
 
     assert 'DRY_RUN="${DRY_RUN:-1}"' in script
+    assert 'ACTION="${ACTION:-sync}"' in script
+    assert 'SYNC_SCOPE="${SYNC_SCOPE:-systems-only}"' in script
     assert "REMOTE_LANDING_DIR=\"$REMOTE_DIR/deploy/lighthouse/landing\"" in script
+    assert "BASELINE_SYSTEMS_SHA256" in script
+    assert "CANDIDATE_SYSTEMS_SHA256" in script
+    assert "CONFIRM_SYSTEMS_LIVE" in script
+    assert "StrictHostKeyChecking=yes" in script
+    assert "SSH_KNOWN_HOSTS_FILE" in script
+    assert "StrictHostKeyChecking=accept-new" not in script
     assert "--delete" not in script
     assert "RUN_TOKEN_SMOKE" not in script
     assert "deploy.sh" not in script
     assert "docker-compose" not in script
     assert "docker compose" not in script
-    assert "docker exec ai_video_nginx nginx -t" in script
+    assert "systems.html" in script
+    assert "os.replace" in helper
+    assert "sync-receipt.v1.json" in helper
+    assert "rollback-receipt.v1.json" in helper
+    assert '"ai_video_nginx", "nginx", "-t"' in helper
 
-    for filename in ["index.html", *sorted(LANDING_SIDECARS)]:
-        assert filename in script
+    for filename in ["index.html", "login.html", "register.html", "lute-auth.css", "lute-auth.js"]:
+        assert filename not in script

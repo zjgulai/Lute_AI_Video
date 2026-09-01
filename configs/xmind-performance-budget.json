@@ -1,0 +1,118 @@
+{
+  "schema": "xmind-performance-budget.v1",
+  "origin": "https://xmind.lute-tlz-dddd.top",
+  "sampling": {
+    "warmups": 1,
+    "measured_runs": 5,
+    "percentile": 75,
+    "percentile_method": "nearest-rank",
+    "cache": "disabled"
+  },
+  "routes": [
+    {
+      "path": "/",
+      "content_marker": "前车之鉴",
+      "max_p75_ttfb_ms": 800,
+      "max_each_ttfb_ms": 4000,
+      "max_p75_total_ms": 2000,
+      "max_each_total_ms": 8000,
+      "max_encoded_bytes": 100000,
+      "max_decoded_bytes": 100000
+    },
+    {
+      "path": "/models/index.html",
+      "content_marker": "模型库",
+      "max_p75_ttfb_ms": 800,
+      "max_each_ttfb_ms": 4000,
+      "max_p75_total_ms": 4000,
+      "max_each_total_ms": 8000,
+      "max_encoded_bytes": 750000,
+      "max_decoded_bytes": 4000000
+    },
+    {
+      "path": "/router.html",
+      "content_marker": "Agent",
+      "max_p75_ttfb_ms": 800,
+      "max_each_ttfb_ms": 4000,
+      "max_p75_total_ms": 3000,
+      "max_each_total_ms": 8000,
+      "max_encoded_bytes": 250000,
+      "max_decoded_bytes": 250000
+    },
+    {
+      "path": "/models/socratic-midwifery-ea89f905ee32.html",
+      "content_marker": "苏格拉底",
+      "max_p75_ttfb_ms": 800,
+      "max_each_ttfb_ms": 4000,
+      "max_p75_total_ms": 2000,
+      "max_each_total_ms": 8000,
+      "max_encoded_bytes": 100000,
+      "max_decoded_bytes": 100000
+    }
+  ],
+  "lab_browser": {
+    "max_p75_ttfb_ms": 800,
+    "max_p75_fcp_ms": 1800,
+    "max_p75_lcp_ms": 2500,
+    "max_each_lcp_ms": 4000,
+    "max_p75_cls": 0.1,
+    "max_each_cls": 0.1,
+    "max_console_warnings": 0,
+    "max_console_errors": 0,
+    "max_failed_requests": 0,
+    "required_profiles": [
+      "desktop-1440x900",
+      "mobile-390x844"
+    ]
+  },
+  "browser_evidence_protocol": {
+    "max_age_hours": 24,
+    "allowed_clock_skew_minutes": 5,
+    "warmup_runs_per_route_profile": 1,
+    "max_warmup_errors": 0,
+    "measured_run_ids": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "network_profile": "unthrottled",
+    "cpu_profile": "unthrottled",
+    "profiles": {
+      "desktop-1440x900": {
+        "width": 1440,
+        "height": 900
+      },
+      "mobile-390x844": {
+        "width": 390,
+        "height": 844
+      }
+    }
+  },
+  "synthetic_search_response": {
+    "path": "/models/index.html",
+    "required_profile": "desktop-1440x900",
+    "queries": [
+      "第一性原理",
+      "苏格拉底",
+      "决策",
+      "情绪",
+      "AI"
+    ],
+    "max_p75_ms": 200,
+    "max_each_ms": 500,
+    "min_visible_results_per_query": 1,
+    "measured_runs_per_query": 5,
+    "must_match_visible_result_count": true,
+    "must_not_be_labelled_inp": true
+  },
+  "field_cwv": {
+    "status_without_crux_or_rum": "UNKNOWN",
+    "percentile": 75,
+    "max_lcp_ms": 2500,
+    "max_inp_ms": 200,
+    "max_cls": 0.1,
+    "required_for_claim": "field-cwv-passed"
+  }
+}

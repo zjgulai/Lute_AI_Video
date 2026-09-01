@@ -1,15 +1,19 @@
 version: 1
 owner: deploy
 status: stable
-updated: "2026-07-21"
+updated: "2026-09-01"
 
 entrypoints:
   exclude_file: deploy/lighthouse/rsync-excludes.txt
   local_sync_wrapper: deploy/lighthouse/build-and-deploy.sh
   landing_sidecar_sync_wrapper: deploy/lighthouse/sync-landing-sidecars.sh
+  landing_sidecar_remote_helper: deploy/lighthouse/systems-sidecar-remote.py
+  landing_sidecar_read_only_inspector: deploy/lighthouse/systems-sidecar-inspect.py
   github_deploy_workflow: .github/workflows/deploy.yml
   artifact_guard_tests: tests/test_lighthouse_rsync_artifact_guard.py
   landing_sidecar_tests: tests/test_lighthouse_landing_static_contract.py
+  landing_sidecar_transaction_tests: tests/test_lighthouse_systems_sync.py
+  landing_sidecar_recovery_tests: tests/test_lighthouse_systems_recovery.py
   runbook: docs/runbooks/lighthouse-rsync-artifact-exclude.md
 
 exclude_categories:
@@ -86,6 +90,13 @@ rules:
   local_wrapper_uses_exclude_file: true
   landing_sidecar_sync_defaults_to_dry_run: true
   landing_sidecar_sync_must_not_delete_remote_files: true
+  landing_sidecar_sync_exact_systems_only: true
+  landing_sidecar_sync_remote_baseline_cas: true
+  landing_sidecar_sync_atomic_activation: true
+  landing_sidecar_sync_verified_backup_and_receipt: true
+  landing_sidecar_sync_pinned_known_hosts: true
+  landing_sidecar_rollback_cas: true
+  landing_sidecar_ambiguous_state_is_inspectable: true
   dry_run_before_manual_deploy: true
   immutable_release_contains_all_tracked_sources: true
   immutable_release_uses_nul_safe_exact_file_list: true
@@ -97,8 +108,10 @@ rules:
 tests:
   artifact_exclude_guard: tests/test_lighthouse_rsync_artifact_guard.py
   landing_sidecar_guard: tests/test_lighthouse_landing_static_contract.py
+  landing_sidecar_transaction_guard: tests/test_lighthouse_systems_sync.py
+  landing_sidecar_recovery_guard: tests/test_lighthouse_systems_recovery.py
 
 commands:
-  focused_test: .venv/bin/python -m pytest tests/test_lighthouse_rsync_artifact_guard.py tests/test_lighthouse_landing_static_contract.py -q
+  focused_test: .venv/bin/python -m pytest tests/test_lighthouse_rsync_artifact_guard.py tests/test_lighthouse_landing_static_contract.py tests/test_lighthouse_systems_sync.py tests/test_lighthouse_systems_recovery.py -q
 
 no_token_boundary: true
