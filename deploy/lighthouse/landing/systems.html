@@ -96,8 +96,156 @@
     letter-spacing: 0.02em;
     animation: fade-up 500ms 240ms ease-out both;
   }
+  .category-bar {
+    width: 100%;
+    margin-top: 36px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    animation: fade-up 560ms 280ms ease-out both;
+  }
+  .category-button {
+    min-height: 40px;
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.76);
+    color: var(--text-body);
+    padding: 9px 14px;
+    font: 600 13px/1 var(--font-body);
+    cursor: pointer;
+    transition: color 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  }
+  .category-button:hover {
+    border-color: var(--border-hover);
+    color: var(--text-h1);
+  }
+  .category-button.is-active {
+    background: var(--text-h1);
+    border-color: var(--text-h1);
+    color: #fff;
+    box-shadow: var(--shadow-md);
+  }
+  .category-count {
+    margin-left: 6px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .category-button.is-active .category-count {
+    color: rgba(255, 255, 255, 0.68);
+  }
+  .system-tools {
+    width: min(760px, 100%);
+    margin-top: 28px;
+    animation: fade-up 540ms 260ms ease-out both;
+  }
+  .system-search {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--text-h1);
+    padding: 0 18px;
+    font: 500 14px/1 var(--font-body);
+    outline: none;
+    box-shadow: var(--shadow-sm);
+  }
+  .system-search:focus {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-md);
+  }
+  .system-search::placeholder {
+    color: var(--text-muted);
+  }
+  .loop-viewer {
+    width: 100%;
+    margin-top: 24px;
+    animation: fade-up 560ms 300ms ease-out both;
+  }
+  .loop-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  .loop-button {
+    min-height: 42px;
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.78);
+    color: var(--text-body);
+    padding: 10px 16px;
+    font: 600 13px/1 var(--font-body);
+    cursor: pointer;
+    transition: color 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  }
+  .loop-button:hover {
+    border-color: var(--border-hover);
+    color: var(--text-h1);
+  }
+  .loop-button.is-active {
+    background: var(--fortune-red);
+    border-color: var(--fortune-red);
+    color: #fff;
+    box-shadow: var(--shadow-md);
+  }
+  .loop-summary {
+    max-width: 820px;
+    margin: 14px auto 0;
+    color: var(--text-body);
+    font-size: 13px;
+    line-height: 1.7;
+    text-align: center;
+  }
+  .loop-stages {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    padding: 0;
+    margin: 16px 0 0;
+    list-style: none;
+  }
+  .loop-stage {
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.64);
+    color: var(--text-body);
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .loop-step-badge {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    max-width: 136px;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(215, 92, 112, 0.20);
+    border-radius: 999px;
+    background: rgba(253, 248, 246, 0.92);
+    color: var(--fortune-red);
+    padding: 5px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: opacity 180ms ease, transform 180ms ease;
+    z-index: 1;
+  }
+  .card.has-loop-badge .loop-step-badge {
+    opacity: 1;
+    transform: translateY(0);
+  }
   .grid {
-    margin-top: 64px;
+    margin-top: 40px;
     display: grid;
     gap: 24px;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -117,6 +265,9 @@
     transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease;
     box-shadow: var(--shadow-sm);
     overflow: hidden;
+  }
+  .card[hidden] {
+    display: none !important;
   }
   .card::before {
     content: "";
@@ -215,6 +366,15 @@
     color: var(--text-muted);
     font-weight: 500;
   }
+  .chip.status {
+    color: var(--text-h1);
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid var(--border-default);
+  }
+  .chip.status.docker { color: #2F6B4F; border-color: rgba(47, 107, 79, 0.26); }
+  .chip.status.static { color: #705A2E; border-color: rgba(112, 90, 46, 0.26); }
+  .chip.status.placeholder { color: #8B354A; border-color: rgba(139, 53, 74, 0.26); }
+  .chip.status.report { color: #5A5294; border-color: rgba(90, 82, 148, 0.26); }
   .footer {
     margin-top: 64px;
     text-align: center;
@@ -316,6 +476,12 @@
   }
   @media (max-width: 640px) {
     .page { padding: 4vh 20px 6vh; }
+    .loop-tabs { justify-content: flex-start; }
+    .loop-button { flex: 1 1 100%; }
+    .loop-summary { text-align: left; }
+    .loop-stages { justify-content: flex-start; }
+    .category-bar { justify-content: flex-start; }
+    .category-button { flex: 1 1 calc(50% - 10px); }
     .grid { margin-top: 40px; }
   }
 </style>
@@ -328,31 +494,80 @@
     <p class="tagline">数据 · 创新 · 共创</p>
     <p class="tagline-en">Data Science Hub for Cross-Border E-Commerce</p>
 
+    <div class="system-tools">
+      <input class="system-search" type="search" placeholder="搜索系统、域名、标签或应用类型" aria-label="搜索系统卡片" data-system-search>
+    </div>
+
+    <section class="loop-viewer" aria-label="跨境电商双环视图">
+      <div class="loop-tabs">
+        <button class="loop-button is-active" type="button" data-loop="functional" aria-pressed="true">功能矩阵</button>
+        <button class="loop-button" type="button" data-loop="enterprise" aria-pressed="false">企业经营闭环</button>
+        <button class="loop-button" type="button" data-loop="launch" aria-pressed="false">新品上市增长闭环</button>
+      </div>
+      <p class="loop-summary" data-loop-summary></p>
+      <ol class="loop-stages" data-loop-stages></ol>
+    </section>
+
+    <nav class="category-bar" aria-label="系统应用分类">
+      <button class="category-button is-active" type="button" data-filter="all" aria-pressed="true">全部<span class="category-count">0</span></button>
+      <button class="category-button" type="button" data-filter="creation" aria-pressed="false">内容创作与发布<span class="category-count">0</span></button>
+      <button class="category-button" type="button" data-filter="insight" aria-pressed="false">客户洞察与市场<span class="category-count">0</span></button>
+      <button class="category-button" type="button" data-filter="growth" aria-pressed="false">经营决策与增长<span class="category-count">0</span></button>
+      <button class="category-button" type="button" data-filter="operations" aria-pressed="false">数据治理与运营<span class="category-count">0</span></button>
+      <button class="category-button" type="button" data-filter="ai" aria-pressed="false">AI 能力与智能体<span class="category-count">0</span></button>
+    </nav>
+
     <div class="grid">
-      <a class="card" href="https://video.lute-tlz-dddd.top">
+      <a class="card" href="https://video.lute-tlz-dddd.top" data-category="creation">
         <div class="card-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M5 4l14 8-14 8V4z" fill="currentColor"/>
+            <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M10 9l5 3-5 3V9z" fill="currentColor"/>
           </svg>
         </div>
-        <p class="card-subtitle">AI Video Pipeline</p>
-        <h2 class="card-title">短视频创作平台</h2>
-        <p class="card-desc">16 步 AI 评审管线 · 多场景自动出片 · 多平台分发</p>
-        <p class="card-desc-en">Multi-agent video creation: strategy → script → storyboard → keyframe → seedance → audio → caption → thumbnail → distribution</p>
+        <p class="card-subtitle">AI Native Video</p>
+        <h2 class="card-title">AI 原生视频系统</h2>
+        <p class="card-desc">AI 视频生成 · 资产管理 · 长视频与品牌内容工作流</p>
+        <p class="card-desc-en">Native AI video creation platform for scripted generation, media assets and production workflows</p>
         <div class="card-meta">
-          <span class="chip">S1-S5 + Fast Mode</span>
-          <span class="chip">DeepSeek + POYO</span>
-          <span class="chip">Remotion Render</span>
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">AI Video</span>
+          <span class="chip">Next.js</span>
         </div>
         <span class="card-cta">
-          打开视频平台
+          打开视频系统
           <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
       </a>
 
-      <a class="card" href="https://voc.lute-tlz-dddd.top">
+      <a class="card" href="https://redbook.lute-tlz-dddd.top" data-category="creation">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 4h14v16H5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 8h8M8 12h5M8 16h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M16 13l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">AI Content Production</p>
+        <h2 class="card-title">AI 效能公式链</h2>
+        <p class="card-desc">热点发现 · 智能创作 · 内容评审 · 发布闭环</p>
+        <p class="card-desc-en">Intelligent content production platform for research, drafting, review and publishing workflows</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Hot Article</span>
+          <span class="chip">Content Workflow</span>
+        </div>
+        <span class="card-cta">
+          打开内容生产平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://voc.lute-tlz-dddd.top" data-category="insight">
         <div class="card-icon voc">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -363,9 +578,9 @@
         <p class="card-desc">Apache Superset · 跨境电商 NLP 增量处理 · 评论/反馈/舆情挖掘</p>
         <p class="card-desc-en">Customer review analytics &amp; sentiment dashboards on Apache Superset</p>
         <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
           <span class="chip">Apache Superset</span>
           <span class="chip">VOC NLP</span>
-          <span class="chip">PostgreSQL</span>
         </div>
         <span class="card-cta voc">
           打开数据平台
@@ -375,7 +590,82 @@
         </span>
       </a>
 
-      <a class="card report" href="https://report.lute-tlz-dddd.top">
+      <a class="card" href="https://ana.lute-tlz-dddd.top" data-category="insight">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 19V5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M8 15l3-4 3 2 5-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Momcozy DataPilot</p>
+        <h2 class="card-title">财经经营洞察</h2>
+        <p class="card-desc">Momcozy 经营数据驾驶舱 · 财经分析 · 指标追踪</p>
+        <p class="card-desc-en">Dockerized DataPilot workspace for financial and operating insight review</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">DataPilot</span>
+          <span class="chip">Finance Insight</span>
+        </div>
+        <span class="card-cta">
+          打开 DataPilot
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://asset.lute-tlz-dddd.top" data-category="growth">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 9h8M8 13h5M8 17h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M17 14l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">BrandOS Asset Intelligence</p>
+        <h2 class="card-title">品牌资产智能中台</h2>
+        <p class="card-desc">BrandOS · 母婴品牌 AI 大脑 · SKU 资产与决策智能</p>
+        <p class="card-desc-en">Static BrandOS site for brand asset intelligence and SKU decision workflows</p>
+        <div class="card-meta">
+          <span class="chip status static">静态站点</span>
+          <span class="chip">BrandOS</span>
+          <span class="chip">Asset Intelligence</span>
+        </div>
+        <span class="card-cta">
+          打开 BrandOS
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://bos.lute-tlz-dddd.top" data-category="growth">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7h16v12H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 7V5h8v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">BOS AI Brand Operations</p>
+        <h2 class="card-title">品牌经营操作系统</h2>
+        <p class="card-desc">AI 品牌经营工作台 · 数据洞察 · 策略协同 · 经营执行</p>
+        <p class="card-desc-en">Dockerized brand operating workspace for insight, strategy collaboration and execution</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">BOS Platform</span>
+          <span class="chip">Brand Operations</span>
+        </div>
+        <span class="card-cta">
+          打开 BOS 工作台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card report" href="https://report.lute-tlz-dddd.top" data-category="insight">
         <div class="card-icon report">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M9 17H7A5 5 0 0 1 7 7h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -388,9 +678,9 @@
         <p class="card-desc">Momcozy 喂养电器全链路洞察 · 六源交叉验证 · ECharts 可视化</p>
         <p class="card-desc-en">End-to-end insight report: 19,098 Amazon reviews × Meltwater 75,291 posts × 6-source cross-validation</p>
         <div class="card-meta">
+          <span class="chip status report">静态报告</span>
           <span class="chip">Amazon VOC 19,098</span>
           <span class="chip">Meltwater 75,291</span>
-          <span class="chip">Stage 1–7</span>
         </div>
         <span class="card-cta report">
           查看洞察报告
@@ -400,7 +690,7 @@
         </span>
       </a>
 
-      <a class="card shopify" href="https://shopify.lute-tlz-dddd.top">
+      <a class="card shopify" href="https://shopify.lute-tlz-dddd.top" data-category="growth">
         <div class="card-icon shopify">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M3 3h18v4H3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
@@ -413,9 +703,9 @@
         <p class="card-desc">Momcozy M1 v2.0 · Top 15 病灶 · 15 条 Liquid PR 代码 · 8 站竞品对标</p>
         <p class="card-desc-en">Playwright performance audit: LCP 4.92s → 2s roadmap, CVR 0.88% fix plan, estimated +.7M/month revenue recovery</p>
         <div class="card-meta">
+          <span class="chip status report">静态报告</span>
           <span class="chip">Playwright 实测</span>
           <span class="chip">Top 15 病灶</span>
-          <span class="chip">.7M ROI</span>
         </div>
         <span class="card-cta shopify">
           查看诊断报告
@@ -425,7 +715,31 @@
         </span>
       </a>
 
-      <a class="card mkt" href="https://mkt.lute-tlz-dddd.top">
+      <a class="card shopify" href="https://platform.shopify.lute-tlz-dddd.top" data-category="growth">
+        <div class="card-icon shopify">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 4h14v16H5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle shopify">Shopify AI Knowledge Base</p>
+        <h2 class="card-title">Shopify AI 经营知识库</h2>
+        <p class="card-desc">独立站经营知识库 · Neo4j 图谱 · AI 问答工作台</p>
+        <p class="card-desc-en">Dockerized Shopify operation knowledge base with graph-backed retrieval and AI workflows</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Neo4j</span>
+          <span class="chip">Knowledge Base</span>
+        </div>
+        <span class="card-cta shopify">
+          打开知识库
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card mkt" href="https://mkt.lute-tlz-dddd.top" data-category="insight">
         <div class="card-icon mkt">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M3 20h18M5 20V10l4-4 4 4 4-6v16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -436,9 +750,9 @@
         <p class="card-desc">Momcozy 母婴品牌全球市场分析 · 竞品追踪 · 用户画像 · 行业趋势</p>
         <p class="card-desc-en">Global baby care market intelligence: competitive analysis, consumer profiles, industry trends &amp; Momcozy brand deep-dive</p>
         <div class="card-meta">
+          <span class="chip status static">静态站点</span>
           <span class="chip">竞品分析</span>
           <span class="chip">用户画像</span>
-          <span class="chip">市场趋势</span>
         </div>
         <span class="card-cta mkt">
           打开市场看板
@@ -448,7 +762,7 @@
         </span>
       </a>
 
-      <a class="card brand" href="https://brand.lute-tlz-dddd.top">
+      <a class="card brand" href="https://brand.lute-tlz-dddd.top" data-category="growth">
         <div class="card-icon brand">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -457,22 +771,22 @@
         </div>
         <p class="card-subtitle brand">Brand Strategy Engine</p>
         <h2 class="card-title">品牌战略引擎</h2>
-        <p class="card-desc">品牌资产管理 · 品牌 Campaign · 统一视觉与内容策略入口</p>
-        <p class="card-desc-en">Brand packages, campaign strategy, visual consistency and content planning inside the AI Video platform</p>
+        <p class="card-desc">路特星链品牌战略应用 · 专属 Docker 前端 · 已接入统一网关</p>
+        <p class="card-desc-en">Dockerized Starlink brand strategy frontend behind the shared product-card gateway</p>
         <div class="card-meta">
-          <span class="chip">Brand Kit</span>
-          <span class="chip">Campaign</span>
-          <span class="chip">Strategy</span>
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Starlink Brand</span>
+          <span class="chip">Dedicated Upstream</span>
         </div>
         <span class="card-cta brand">
-          打开品牌引擎
+          打开品牌战略引擎
           <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
       </a>
 
-      <a class="card mas" href="https://mas.lute-tlz-dddd.top">
+      <a class="card mas" href="https://mas.lute-tlz-dddd.top" data-category="growth">
         <div class="card-icon mas">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <circle cx="6" cy="7" r="3" stroke="currentColor" stroke-width="1.8"/>
@@ -481,24 +795,24 @@
             <path d="M8.5 9.5l2 4M15.5 9.5l-2 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
         </div>
-        <p class="card-subtitle mas">Multi-Agent System</p>
-        <h2 class="card-title">多智能体系统</h2>
-        <p class="card-desc">策略 · 脚本 · 分镜 · 审核 · 渲染 · 分发的多智能体协作系统</p>
-        <p class="card-desc-en">Multi-agent workflow for strategy, script, storyboard, review, rendering and distribution</p>
+        <p class="card-subtitle mas">VOA MAS</p>
+        <h2 class="card-title">科学经营决策系统</h2>
+        <p class="card-desc">VOA 科学经营决策与执行闭环平台 · 专属 Docker 应用 · 已接入统一网关</p>
+        <p class="card-desc-en">Dockerized MAS decision platform with a dedicated upstream behind the shared gateway</p>
         <div class="card-meta">
-          <span class="chip">S1-S5</span>
-          <span class="chip">Review Gates</span>
-          <span class="chip">Pipeline</span>
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">VOA MAS</span>
+          <span class="chip">Dedicated Upstream</span>
         </div>
         <span class="card-cta mas">
-          打开多智能体系统
+          打开决策系统
           <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
       </a>
 
-      <a class="card business" href="https://business.lute-tlz-dddd.top">
+      <a class="card business" href="https://business.lute-tlz-dddd.top" data-category="growth">
         <div class="card-icon business">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M2 20h20M4 20V10l8-7 8 7v10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -510,9 +824,9 @@
         <p class="card-desc">566 亿母婴 AI 市场 · 五大反直觉创新方案 · 六大洞察框架</p>
         <p class="card-desc-en">NurtureLink: Heartbeat Cocoon · DadQuest · SafeBox · WarmMom · FamilyBridge — market research to product strategy</p>
         <div class="card-meta">
+          <span class="chip status static">静态站点</span>
           <span class="chip">5 创新方案</span>
           <span class="chip">React + Vite</span>
-          <span class="chip">市场洞察</span>
         </div>
         <span class="card-cta business">
           打开洞察平台
@@ -522,7 +836,7 @@
         </span>
       </a>
 
-      <a class="card product" href="https://product.lute-tlz-dddd.top">
+      <a class="card product" href="https://product.lute-tlz-dddd.top" data-category="growth">
         <div class="card-icon product">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M4 6h16v12H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
@@ -534,9 +848,9 @@
         <p class="card-desc">全球智能选品中心 · 店铺/商品/达人资产 · 跨境电商机会筛选</p>
         <p class="card-desc-en">AI product selection workspace with shop, product and creator assets for cross-border e-commerce decisions</p>
         <div class="card-meta">
+          <span class="chip status static">静态站点</span>
           <span class="chip">Product Assets</span>
           <span class="chip">Shop Data</span>
-          <span class="chip">Selection</span>
         </div>
         <span class="card-cta product">
           打开选品平台
@@ -546,7 +860,7 @@
         </span>
       </a>
 
-      <a class="card kg" href="https://kg.lute-tlz-dddd.top">
+      <a class="card kg" href="https://kg.lute-tlz-dddd.top" data-category="ai">
         <div class="card-icon kg">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -559,9 +873,9 @@
         <p class="card-desc">803 条精选 AI 提示词与技能 · 六维分类 · 全文搜索 · 角色筛选</p>
         <p class="card-desc-en">Curated prompts, skills, hooks, MCP tools, agents &amp; open-source projects — 14 professional roles, instant search</p>
         <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
           <span class="chip">193 提示词</span>
           <span class="chip">610 技能</span>
-          <span class="chip">React + tRPC</span>
         </div>
         <span class="card-cta kg">
           打开知识库
@@ -571,7 +885,33 @@
         </span>
       </a>
 
-      <a class="card person" href="https://person.lute-tlz-dddd.top">
+      <a class="card kg" href="https://kgraph.lute-tlz-dddd.top" data-category="ai">
+        <div class="card-icon kg">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="6" cy="7" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="18" cy="7" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="12" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M8 8l3 8M16 8l-3 8M8 7h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle kg">DocCanvas Knowledge Graph</p>
+        <h2 class="card-title">DocCanvas 工作台</h2>
+        <p class="card-desc">文档画布 · 知识关系建模 · 图谱探索 · 协作工作流</p>
+        <p class="card-desc-en">Document canvas and knowledge-graph workspace for relationship modeling and exploration</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">DocCanvas</span>
+          <span class="chip">Knowledge Graph</span>
+        </div>
+        <span class="card-cta kg">
+          打开 DocCanvas
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card person" href="https://person.lute-tlz-dddd.top" data-category="ai">
         <div class="card-icon person">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/>
@@ -584,9 +924,9 @@
         <p class="card-desc">55 种专业 AI 数字员工 · 2721 个业务模型 · 战略 / 数据 / 营销 / 法律 / 财务全覆盖</p>
         <p class="card-desc-en">On-demand AI employee rental: 55 roles, 2,721 models across strategy, data science, marketing, legal &amp; finance</p>
         <div class="card-meta">
+          <span class="chip status static">静态站点</span>
           <span class="chip">55 专业角色</span>
           <span class="chip">2721 业务模型</span>
-          <span class="chip">React + Vite</span>
         </div>
         <span class="card-cta person">
           进入数字员工平台
@@ -595,7 +935,7 @@
           </svg>
         </span>
       </a>
-      <a class="card llm" href="https://llm.lute-tlz-dddd.top">
+      <a class="card llm" href="https://llm.lute-tlz-dddd.top" data-category="ai">
         <div class="card-icon llm">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M4 6h16M4 10h10M4 14h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -607,12 +947,329 @@
         <p class="card-desc">PoYo.ai vs 硅基流动 · BAI · EasyRouter · 4 平台横向对比 · API 文档 · 费用计算</p>
         <p class="card-desc-en">Multi-platform LLM API explorer: pricing, capabilities &amp; curl examples across 130+ models — text, image, video, music &amp; more</p>
         <div class="card-meta">
+          <span class="chip status static">静态站点</span>
           <span class="chip">130+ 模型</span>
           <span class="chip">API Explorer</span>
-          <span class="chip">React + Vite</span>
         </div>
         <span class="card-cta llm">
           打开选型指南
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://scrapy.lute-tlz-dddd.top" data-category="operations">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 5h16v5H4zM4 14h16v5H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 10v4M16 10v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Data Intelligence Hub</p>
+        <h2 class="card-title">数据采集平台</h2>
+        <p class="card-desc">采集任务 · 数据处理 · 智能分析工作台</p>
+        <p class="card-desc-en">Scrapy deployment for data collection, processing and intelligence workflows</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Scrapy</span>
+          <span class="chip">Next.js</span>
+        </div>
+        <span class="card-cta">
+          打开采集平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://melwater.lute-tlz-dddd.top" data-category="insight">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 18V6M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M7 15l4-4 3 3 5-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Melwater VOC</p>
+        <h2 class="card-title">Melwater 分析</h2>
+        <p class="card-desc">社媒舆情 · VOC 决策 · 评审状态管理</p>
+        <p class="card-desc-en">Melwater VOC decision workbench for social listening and review-state workflows</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">VOC</span>
+          <span class="chip">Review State</span>
+        </div>
+        <span class="card-cta">
+          打开 Melwater
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://reddit.brand.lute-tlz-dddd.top" data-category="insight">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 7h14v10H9l-4 3V7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M9 11h6M9 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Reddit Brand VOC</p>
+        <h2 class="card-title">Reddit VOC 洞察台</h2>
+        <p class="card-desc">Reddit 舆情 · 品牌声量 · 客户需求洞察</p>
+        <p class="card-desc-en">Reddit brand listening workbench for VOC signals, audience needs and market opportunities</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Reddit</span>
+          <span class="chip">VOC</span>
+        </div>
+        <span class="card-cta">
+          打开 Reddit 洞察台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://reddit.lute-tlz-dddd.top" data-category="insight">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 7h14v10H9l-4 3V7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 11h8M8 14h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="18" cy="5" r="2" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Reddit Insight Workbench</p>
+        <h2 class="card-title">Reddit 舆情工作台</h2>
+        <p class="card-desc">社区舆情 · 主题洞察 · 品牌机会 · 数据报告</p>
+        <p class="card-desc-en">Reddit intelligence workspace for community signals, themes and brand opportunities</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Reddit Insights</span>
+          <span class="chip">VOC</span>
+        </div>
+        <span class="card-cta">
+          打开舆情工作台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://plugin.lute-tlz-dddd.top" data-category="ai">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M8 4h8v6h4v10H4V10h4V4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M9 15h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">VOC Hub</p>
+        <h2 class="card-title">插件中心</h2>
+        <p class="card-desc">浏览器插件 · VOC 工作流 · API 服务</p>
+        <p class="card-desc-en">Plugin Hub for VOC tooling, browser extension workflows and API services</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Plugin Hub</span>
+          <span class="chip">Extension</span>
+        </div>
+        <span class="card-cta">
+          打开插件中心
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://flowise.lute-tlz-dddd.top" data-category="ai">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="6" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="18" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="12" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M8 6h8M7 8l4 8M17 8l-4 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Flowise Agent Builder</p>
+        <h2 class="card-title">AI 流程编排平台</h2>
+        <p class="card-desc">可视化编排 · Agent 工作流 · 模型与工具集成</p>
+        <p class="card-desc-en">Visual AI workflow orchestration for agents, models, tools and reusable execution flows</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Flowise</span>
+          <span class="chip">Agent Workflow</span>
+        </div>
+        <span class="card-cta">
+          打开流程编排平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://label.lute-tlz-dddd.top" data-category="insight">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7h16M4 12h10M4 17h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M17 13l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">VOC Label Workbench</p>
+        <h2 class="card-title">VOC 标签工作台</h2>
+        <p class="card-desc">标签工程 · 标注审核 · 数据治理</p>
+        <p class="card-desc-en">VOC label engineering workbench for taxonomy, review and data governance</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Labeling</span>
+          <span class="chip">Taxonomy</span>
+        </div>
+        <span class="card-cta">
+          打开标签工作台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://scm.lute-tlz-dddd.top" data-category="operations">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M3 8h18v10H3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M7 8V5h10v3M8 13h3M14 13h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">SCM Governance</p>
+        <h2 class="card-title">供应链治理</h2>
+        <p class="card-desc">数据开发 · 治理工作台 · 角色追踪</p>
+        <p class="card-desc-en">Supply-chain data governance workbench for AIP-SCM operations</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">SCM</span>
+          <span class="chip">Governance</span>
+        </div>
+        <span class="card-cta">
+          打开 SCM 工作台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://audit.lute-tlz-dddd.top" data-category="operations">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M6 4h12v16H6z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M9 9h6M9 13h4M9 17h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M9 4V2h6v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Medical Audit Collaboration</p>
+        <h2 class="card-title">AI 审计一体化协作平台</h2>
+        <p class="card-desc">审计协作 · 问题闭环 · 证据与整改追踪</p>
+        <p class="card-desc-en">Integrated AI audit collaboration for evidence review, remediation and operational closure</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Audit</span>
+          <span class="chip">Collaboration</span>
+        </div>
+        <span class="card-cta">
+          打开审计协作平台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://present.lute-tlz-dddd.top" data-category="creation">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">HTML Anything</p>
+        <h2 class="card-title">发布资产工厂</h2>
+        <p class="card-desc">HTML 资产生成 · 发布材料 · 产品表达</p>
+        <p class="card-desc-en">Product release asset factory for HTML pages and structured presentation material</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">HTML</span>
+          <span class="chip">Release Assets</span>
+        </div>
+        <span class="card-cta">
+          打开资产工厂
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://wct.lute-tlz-dddd.top" data-category="creation">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 4h14v16H5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M16 15l2 2 3-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">WeChat Content Toolkit</p>
+        <h2 class="card-title">微信公众号文章批量下载</h2>
+        <p class="card-desc">文章采集 · 批量下载 · 内容资产沉淀</p>
+        <p class="card-desc-en">Batch collection and download toolkit for WeChat articles and reusable content assets</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">WeChat</span>
+          <span class="chip">Content Assets</span>
+        </div>
+        <span class="card-cta">
+          打开文章下载工具
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://kb.lute-tlz-dddd.top" data-category="ai">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 4h14v16H5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">Consultant Agent</p>
+        <h2 class="card-title">经营咨询工作台</h2>
+        <p class="card-desc">角色知识库 · 咨询交付 · 本地检索</p>
+        <p class="card-desc-en">Consultant delivery workbench backed by local retrieval and role knowledge base</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">KB</span>
+          <span class="chip">Consulting</span>
+        </div>
+        <span class="card-cta">
+          打开咨询工作台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      <a class="card" href="https://skills.lute-tlz-dddd.top" data-category="creation">
+        <div class="card-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M12 4l8 4-8 4-8-4 8-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M4 12l8 4 8-4M4 16l8 4 8-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle">paper2skills</p>
+        <h2 class="card-title">AI 技能库</h2>
+        <p class="card-desc">母婴跨境品牌技能 · playbooks · agent 方法库</p>
+        <p class="card-desc-en">Reusable AI playbooks and operating skills for cross-border brand teams</p>
+        <div class="card-meta">
+          <span class="chip status static">静态站点</span>
+          <span class="chip">Skills</span>
+          <span class="chip">Playbooks</span>
+        </div>
+        <span class="card-cta">
+          打开技能库
           <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -622,19 +1279,216 @@
 
     <p class="footer">
       © 2026 Lute · Digital &amp; Data Science Dept. · Powered by
-      <a href="https://video.lute-tlz-dddd.top">video.lute</a> &middot;
       <a href="https://voc.lute-tlz-dddd.top">voc.lute</a> &middot;
+      <a href="https://video.lute-tlz-dddd.top">video.lute</a> &middot;
+      <a href="https://redbook.lute-tlz-dddd.top">redbook.lute</a> &middot;
+      <a href="https://ana.lute-tlz-dddd.top">ana.lute</a> &middot;
+      <a href="https://asset.lute-tlz-dddd.top">asset.lute</a> &middot;
+      <a href="https://bos.lute-tlz-dddd.top">bos.lute</a> &middot;
       <a href="https://mkt.lute-tlz-dddd.top">mkt.lute</a> &middot;
       <a href="https://brand.lute-tlz-dddd.top">brand.lute</a> &middot;
       <a href="https://shopify.lute-tlz-dddd.top">shopify.lute</a> &middot;
+      <a href="https://platform.shopify.lute-tlz-dddd.top">platform.shopify.lute</a> &middot;
       <a href="https://mas.lute-tlz-dddd.top">mas.lute</a> &middot;
       <a href="https://report.lute-tlz-dddd.top">report.lute</a> &middot;
       <a href="https://business.lute-tlz-dddd.top">business.lute</a> &middot;
       <a href="https://product.lute-tlz-dddd.top">product.lute</a> &middot;
       <a href="https://kg.lute-tlz-dddd.top">kg.lute</a> &middot;
+      <a href="https://kgraph.lute-tlz-dddd.top">kgraph.lute</a> &middot;
       <a href="https://person.lute-tlz-dddd.top">person.lute</a> &middot;
-      <a href="https://llm.lute-tlz-dddd.top">llm.lute</a>
+      <a href="https://llm.lute-tlz-dddd.top">llm.lute</a> &middot;
+      <a href="https://scrapy.lute-tlz-dddd.top">scrapy.lute</a> &middot;
+      <a href="https://melwater.lute-tlz-dddd.top">melwater.lute</a> &middot;
+      <a href="https://reddit.brand.lute-tlz-dddd.top">reddit.brand.lute</a> &middot;
+      <a href="https://reddit.lute-tlz-dddd.top">reddit.lute</a> &middot;
+      <a href="https://plugin.lute-tlz-dddd.top">plugin.lute</a> &middot;
+      <a href="https://flowise.lute-tlz-dddd.top">flowise.lute</a> &middot;
+      <a href="https://label.lute-tlz-dddd.top">label.lute</a> &middot;
+      <a href="https://scm.lute-tlz-dddd.top">scm.lute</a> &middot;
+      <a href="https://audit.lute-tlz-dddd.top">audit.lute</a> &middot;
+      <a href="https://present.lute-tlz-dddd.top">present.lute</a> &middot;
+      <a href="https://wct.lute-tlz-dddd.top">wct.lute</a> &middot;
+      <a href="https://kb.lute-tlz-dddd.top">kb.lute</a> &middot;
+      <a href="https://skills.lute-tlz-dddd.top">skills.lute</a>
     </p>
   </main>
+  <script>
+    const categoryButtons = Array.from(document.querySelectorAll("[data-filter]"));
+    const loopButtons = Array.from(document.querySelectorAll("[data-loop]"));
+    const cards = Array.from(document.querySelectorAll("[data-category]"));
+    const grid = document.querySelector(".grid");
+    const searchInput = document.querySelector("[data-system-search]");
+    const loopSummary = document.querySelector("[data-loop-summary]");
+    const loopStages = document.querySelector("[data-loop-stages]");
+    const originalCardOrder = cards.map((card, index) => ({ card, index }));
+    let activeCategory = "all";
+    let activeLoop = "functional";
+
+    const loopViews = {
+      functional: {
+        summary: "按现有能力分类浏览 31 个系统，适合快速查找单个应用入口。",
+        stages: ["内容创作与发布", "客户洞察与市场", "经营决策与增长", "数据治理与运营", "AI 能力与智能体"]
+      },
+      enterprise: {
+        summary: "从外部信号、机会判断、品牌与内容、渠道增长、供应链财务到知识沉淀，形成跨境电商企业经营闭环。",
+        stages: ["E1 外部感知", "E2 标签洞察", "E3 机会选品", "E4 战略中枢", "E5 资产内容", "E6 渠道增长", "E7 经营履约", "E8 AI 沉淀"]
+      },
+      launch: {
+        summary: "围绕新品上市，把市场机会、选品验证、品牌资产、内容生产、渠道转化、反馈复盘和 AI 加速串成增长战役。",
+        stages: ["L1 趋势机会", "L2 选品验证", "L3 定位资产", "L4 内容生产", "L5 渠道转化", "L6 反馈复盘", "L7 AI 加速"]
+      }
+    };
+
+    const loopMetadata = {
+      "scrapy.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 101], launch: ["L1", "趋势机会", 103], upstream: "外部平台与竞品数据", downstream: "市场洞察与机会判断" },
+      "mkt.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 102], launch: ["L1", "趋势机会", 101], upstream: "采集数据", downstream: "机会点与选品判断" },
+      "melwater.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 103], launch: ["L1", "趋势机会", 104], upstream: "社媒与舆情信号", downstream: "VOC 标签与洞察报告" },
+      "reddit.brand.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 105], launch: ["L1", "趋势机会", 105], upstream: "Reddit 社区与品牌讨论", downstream: "VOC 洞察与机会判断" },
+      "voc.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 104], launch: ["L2", "选品验证", 202], upstream: "评论与客户反馈", downstream: "标签治理与产品验证" },
+      "label.lute-tlz-dddd.top": { enterprise: ["E2", "标签洞察", 201], launch: ["L2", "选品验证", 203], upstream: "VOC 与舆情样本", downstream: "报告、选品与产品迭代" },
+      "report.lute-tlz-dddd.top": { enterprise: ["E2", "标签洞察", 202], launch: ["L2", "选品验证", 204], upstream: "多源洞察与标签", downstream: "机会筛选与经营判断" },
+      "business.lute-tlz-dddd.top": { enterprise: ["E3", "机会选品", 301], launch: ["L1", "趋势机会", 102], upstream: "市场洞察", downstream: "选品与品牌战略" },
+      "product.lute-tlz-dddd.top": { enterprise: ["E3", "机会选品", 302], launch: ["L2", "选品验证", 201], upstream: "机会池", downstream: "品牌定位与内容 Brief" },
+      "brand.lute-tlz-dddd.top": { enterprise: ["E4", "战略中枢", 401], launch: ["L3", "定位资产", 301], upstream: "机会与选品", downstream: "品牌资产与内容生产" },
+      "bos.lute-tlz-dddd.top": { enterprise: ["E4", "战略中枢", 402], launch: ["L3", "定位资产", 303], upstream: "品牌战略", downstream: "经营动作编排" },
+      "mas.lute-tlz-dddd.top": { enterprise: ["E4", "战略中枢", 403], launch: ["L6", "反馈复盘", 603], upstream: "经营数据", downstream: "下一轮动作与资源分配" },
+      "asset.lute-tlz-dddd.top": { enterprise: ["E5", "资产内容", 501], launch: ["L3", "定位资产", 302], upstream: "品牌定位", downstream: "发布资产与视频内容" },
+      "present.lute-tlz-dddd.top": { enterprise: ["E5", "资产内容", 502], launch: ["L4", "内容生产", 401], upstream: "品牌资产", downstream: "渠道页面与发布材料" },
+      "wct.lute-tlz-dddd.top": { enterprise: ["E5", "资产内容", 505], launch: ["L4", "内容生产", 404], upstream: "微信公众号内容源", downstream: "可复用内容资产" },
+      "video.lute-tlz-dddd.top": { enterprise: ["E5", "资产内容", 503], launch: ["L4", "内容生产", 402], upstream: "内容 Brief 与素材", downstream: "渠道投放与转化监控" },
+      "skills.lute-tlz-dddd.top": { enterprise: ["E5", "资产内容", 504], launch: ["L4", "内容生产", 403], upstream: "方法库与案例", downstream: "团队复用与数字员工执行" },
+      "platform.shopify.lute-tlz-dddd.top": { enterprise: ["E6", "渠道增长", 601], launch: ["L5", "渠道转化", 501], upstream: "发布资产", downstream: "独立站页面与运营动作" },
+      "shopify.lute-tlz-dddd.top": { enterprise: ["E6", "渠道增长", 602], launch: ["L5", "渠道转化", 502], upstream: "独立站运营", downstream: "转化诊断与优化清单" },
+      "ana.lute-tlz-dddd.top": { enterprise: ["E7", "经营履约", 701], launch: ["L6", "反馈复盘", 601], upstream: "销售与经营数据", downstream: "财务洞察与策略复盘" },
+      "scm.lute-tlz-dddd.top": { enterprise: ["E7", "经营履约", 702], launch: ["L6", "反馈复盘", 602], upstream: "订单、库存与供应数据", downstream: "供应链治理与履约修正" },
+      "audit.lute-tlz-dddd.top": { enterprise: ["E7", "经营履约", 703], launch: ["L6", "反馈复盘", 604], upstream: "审计证据与经营问题", downstream: "整改闭环与风险复盘" },
+      "kb.lute-tlz-dddd.top": { enterprise: ["E8", "AI 沉淀", 801], launch: ["L7", "AI 加速", 701], upstream: "经营复盘与咨询交付", downstream: "可复用决策知识" },
+      "kg.lute-tlz-dddd.top": { enterprise: ["E8", "AI 沉淀", 802], launch: ["L7", "AI 加速", 702], upstream: "知识与提示词资产", downstream: "检索、推理与智能体能力" },
+      "person.lute-tlz-dddd.top": { enterprise: ["E8", "AI 沉淀", 803], launch: ["L7", "AI 加速", 703], upstream: "流程与技能", downstream: "数字员工执行" },
+      "llm.lute-tlz-dddd.top": { enterprise: ["E8", "AI 沉淀", 804], launch: ["L7", "AI 加速", 704], upstream: "任务需求", downstream: "模型选型与成本控制" },
+      "plugin.lute-tlz-dddd.top": { enterprise: ["E8", "AI 沉淀", 805], launch: ["L7", "AI 加速", 705], upstream: "VOC 与浏览器工作流", downstream: "插件化执行与数据回流" },
+      "flowise.lute-tlz-dddd.top": { enterprise: ["E8", "AI 沉淀", 806], launch: ["L7", "AI 加速", 706], upstream: "模型、工具与业务流程", downstream: "可复用 Agent 工作流" }
+    };
+
+    function normalize(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function hostOf(card) {
+      try {
+        return new URL(card.href).host;
+      } catch {
+        return "";
+      }
+    }
+
+    function initLoopMetadata() {
+      cards.forEach((card) => {
+        const metadata = loopMetadata[hostOf(card)];
+        if (!metadata) return;
+        const badge = document.createElement("span");
+        badge.className = "loop-step-badge";
+        badge.setAttribute("aria-hidden", "true");
+        card.appendChild(badge);
+        card.dataset.enterpriseOrder = metadata.enterprise[2];
+        card.dataset.launchOrder = metadata.launch[2];
+        card.dataset.enterpriseBadge = `${metadata.enterprise[0]} ${metadata.enterprise[1]}`;
+        card.dataset.launchBadge = `${metadata.launch[0]} ${metadata.launch[1]}`;
+        card.dataset.loopContext = `上游：${metadata.upstream}；下游：${metadata.downstream}`;
+      });
+    }
+
+    function updateCounts() {
+      const counts = cards.reduce((acc, card) => {
+        const category = card.dataset.category || "uncategorized";
+        acc.all += 1;
+        acc[category] = (acc[category] || 0) + 1;
+        return acc;
+      }, { all: 0 });
+
+      categoryButtons.forEach((button) => {
+        const count = button.querySelector(".category-count");
+        if (count) count.textContent = counts[button.dataset.filter] || 0;
+      });
+    }
+
+    function applyFilters() {
+      const query = normalize(searchInput?.value);
+
+      categoryButtons.forEach((button) => {
+        const active = button.dataset.filter === activeCategory;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+
+      cards.forEach((card) => {
+        const matchesCategory = activeCategory === "all" || card.dataset.category === activeCategory;
+        const haystack = normalize(`${card.textContent} ${card.getAttribute("href") || ""}`);
+        const matchesSearch = !query || haystack.includes(query);
+        card.hidden = !(matchesCategory && matchesSearch);
+      });
+    }
+
+    function sortCardsForLoop() {
+      if (!grid) return;
+      const ordered = originalCardOrder.slice().sort((left, right) => {
+        if (activeLoop === "functional") return left.index - right.index;
+        const attr = activeLoop === "enterprise" ? "enterpriseOrder" : "launchOrder";
+        const leftOrder = Number(left.card.dataset[attr] || 9999);
+        const rightOrder = Number(right.card.dataset[attr] || 9999);
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return left.index - right.index;
+      });
+      ordered.forEach(({ card }) => grid.appendChild(card));
+    }
+
+    function updateLoopView() {
+      const view = loopViews[activeLoop] || loopViews.functional;
+      loopButtons.forEach((button) => {
+        const active = button.dataset.loop === activeLoop;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      if (loopSummary) loopSummary.textContent = view.summary;
+      if (loopStages) {
+        loopStages.innerHTML = view.stages.map((stage) => `<li class="loop-stage">${stage}</li>`).join("");
+      }
+      cards.forEach((card) => {
+        const badge = card.querySelector(".loop-step-badge");
+        const badgeText = activeLoop === "enterprise" ? card.dataset.enterpriseBadge : activeLoop === "launch" ? card.dataset.launchBadge : "";
+        card.classList.toggle("has-loop-badge", Boolean(badgeText));
+        if (badge) {
+          badge.textContent = badgeText;
+          badge.title = badgeText ? card.dataset.loopContext || badgeText : "";
+        }
+        if (activeLoop === "functional") {
+          card.removeAttribute("title");
+        } else {
+          card.setAttribute("title", card.dataset.loopContext || "");
+        }
+      });
+      sortCardsForLoop();
+      applyFilters();
+    }
+
+    categoryButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        activeCategory = button.dataset.filter || "all";
+        applyFilters();
+      });
+    });
+
+    loopButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        activeLoop = button.dataset.loop || "functional";
+        updateLoopView();
+      });
+    });
+
+    searchInput?.addEventListener("input", applyFilters);
+    initLoopMetadata();
+    updateCounts();
+    updateLoopView();
+  </script>
 </body>
 </html>
