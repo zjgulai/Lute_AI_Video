@@ -8,6 +8,7 @@ import subprocess
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -235,7 +236,7 @@ def _loop_metadata_hosts(text: str) -> set[str]:
 SYSTEMS_DOM_HARNESS = REPO_ROOT / "tests" / "fixtures" / "lighthouse_systems_dom_harness.cjs"
 
 
-def _run_systems_dom_contract(text: str, page: _SystemsPageParser) -> dict[str, object]:
+def _run_systems_dom_contract(text: str, page: _SystemsPageParser) -> dict[str, Any]:
     scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", text, re.DOTALL)
     scripts = [script for script in scripts if script.strip()]
     assert len(scripts) == 1
@@ -260,7 +261,9 @@ def _run_systems_dom_contract(text: str, page: _SystemsPageParser) -> dict[str, 
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
+    decoded = json.loads(result.stdout)
+    assert isinstance(decoded, dict), "DOM harness must return a JSON object"
+    return decoded
 
 
 def _local_landing_file_from_url(raw_url: str) -> Path | None:
