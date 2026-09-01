@@ -3,7 +3,7 @@ set -eu
 
 readonly UPSTREAM_VERSION="7.1.5"
 readonly DEBIAN_VERSION="7:7.1.5-0+deb13u1"
-readonly H10_VERSION="7:7.1.5-0+deb13u1+h10.6"
+readonly H10_VERSION="7:7.1.5-0+deb13u1+h10.7"
 readonly SOURCE_ROOT="/opt/ffmpeg"
 readonly BUILD_ROOT="/build/ffmpeg"
 readonly OUTPUT_ROOT="/ffmpeg-debs"
@@ -15,6 +15,7 @@ readonly LIBRIST_PATCH_NAME="1c10bcc2e17255dacb717a25ab3db142ce390602.patch"
 readonly VC2HQ_PATCH_NAME="1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch"
 readonly DASH_PATCH_NAME="65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch"
 readonly SWSCALE_PATCH_NAME="aca41d3d9327be4d6ab036f494b700118fcc04e1-ffmpeg-7.1.5-backport.patch"
+readonly HEVC_HVCC_PATCH_NAME="acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781.patch"
 readonly ORIGINAL_SOURCE_SHA256="de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
 readonly DEBIAN_SOURCE_SHA256="a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef"
 readonly PATCH_SHA256="b800c259300e41ba3a35a626953ca7665648e7de9955e168d8477d7414e7e3f1"
@@ -25,6 +26,7 @@ readonly LIBRIST_PATCH_SHA256="89554690fc735a902724168084150ec7b4631e42d525bd9a8
 readonly VC2HQ_PATCH_SHA256="849f908e6336d4b9676521c7e3405d18ef54b9b8800e58d9030ecb343868e03b"
 readonly DASH_PATCH_SHA256="393142cc01e241019986194cb15b9d248b5173ccc45e23c1724ebc5f59fd73f5"
 readonly SWSCALE_PATCH_SHA256="9f5d2c615312e362001687b78730eb0cf83e8d6defbc41d5ccad6dfff2310b45"
+readonly HEVC_HVCC_PATCH_SHA256="e91545b75e1a2b1391c9f83a1a40becc4130c2a687638b7c8d2f13f963a3b222"
 readonly RUNTIME_PACKAGES="
 ffmpeg
 libavcodec61
@@ -49,6 +51,7 @@ verify_inputs() {
     "$VC2HQ_PATCH_SHA256" "$SOURCE_ROOT/$VC2HQ_PATCH_NAME" \
     "$DASH_PATCH_SHA256" "$SOURCE_ROOT/$DASH_PATCH_NAME" \
     "$SWSCALE_PATCH_SHA256" "$SOURCE_ROOT/$SWSCALE_PATCH_NAME" \
+    "$HEVC_HVCC_PATCH_SHA256" "$SOURCE_ROOT/$HEVC_HVCC_PATCH_NAME" \
     | sha256sum -c -
 }
 
@@ -69,7 +72,8 @@ prepare_source() {
     "$LIBRIST_PATCH_NAME" \
     "$VC2HQ_PATCH_NAME" \
     "$DASH_PATCH_NAME" \
-    "$SWSCALE_PATCH_NAME"; do
+    "$SWSCALE_PATCH_NAME" \
+    "$HEVC_HVCC_PATCH_NAME"; do
     cp "$SOURCE_ROOT/$patch_name" "$BUILD_ROOT/debian/patches/$patch_name"
     grep -qxF "$patch_name" "$BUILD_ROOT/debian/patches/series" \
       || printf '%s\n' "$patch_name" >> "$BUILD_ROOT/debian/patches/series"
@@ -79,7 +83,7 @@ prepare_source() {
     "1s/(${DEBIAN_VERSION})/(${H10_VERSION})/" \
     "$BUILD_ROOT/debian/changelog"
   sed -i \
-    '3i\  * H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, DASH, and swscale fixes; disable IAMF, libssh/SFTP, and librist/RIST.' \
+    '3i\  * H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, DASH, swscale, and HEVC hvcC fixes; disable IAMF, libssh/SFTP, and librist/RIST.' \
     "$BUILD_ROOT/debian/changelog"
   printf '\n# H10 defense in depth: the application never accepts IAMF.\n' \
     >> "$BUILD_ROOT/debian/rules"

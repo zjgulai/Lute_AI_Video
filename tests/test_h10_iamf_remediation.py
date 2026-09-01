@@ -34,6 +34,9 @@ DASH_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
 SWSCALE_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
     "aca41d3d9327be4d6ab036f494b700118fcc04e1-ffmpeg-7.1.5-backport.patch"
 )
+HEVC_HVCC_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781.patch"
+)
 BUILD_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "build-h10-debs.sh"
 INSTALL_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "install-h10-build-deps.sh"
 VERIFY_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "verify-h10-runtime.sh"
@@ -65,16 +68,20 @@ DASH_PATCH_SHA256 = (
 SWSCALE_PATCH_SHA256 = (
     "9f5d2c615312e362001687b78730eb0cf83e8d6defbc41d5ccad6dfff2310b45"
 )
+HEVC_HVCC_PATCH_SHA256 = (
+    "e91545b75e1a2b1391c9f83a1a40becc4130c2a687638b7c8d2f13f963a3b222"
+)
 ORIGINAL_SOURCE_SHA256 = (
     "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
 )
 DEBIAN_SOURCE_SHA256 = (
     "a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef"
 )
-H10_VERSION = "7:7.1.5-0+deb13u1+h10.6"
+H10_VERSION = "7:7.1.5-0+deb13u1+h10.7"
 H10_CHANGELOG_MARKER = (
     "H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, "
-    "DASH, and swscale fixes; disable IAMF, libssh/SFTP, and librist/RIST."
+    "DASH, swscale, and HEVC hvcC fixes; disable IAMF, libssh/SFTP, and "
+    "librist/RIST."
 )
 FFMPEG_RUNTIME_PACKAGES = {
     "ffmpeg",
@@ -260,6 +267,17 @@ def test_swscale_backport_is_checksum_bound_and_preserves_upstream_fix() -> None
     assert "(int)(buf0[i] * yalpha1 + buf1[i] * yalpha)" in patch_text
 
 
+def test_hevc_hvcc_fix_is_exact_and_auditable() -> None:
+    patch_bytes = HEVC_HVCC_PATCH.read_bytes()
+    patch_text = patch_bytes.decode()
+
+    assert hashlib.sha256(patch_bytes).hexdigest() == HEVC_HVCC_PATCH_SHA256
+    assert "From acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781" in patch_text
+    assert "libavformat/hevc.c" in patch_text
+    assert "if (numNalus >= UINT16_MAX)" in patch_text
+    assert "return AVERROR_INVALIDDATA" in patch_text
+
+
 def test_builder_patches_exact_debian_source_and_disables_iamf() -> None:
     source = BUILD_SCRIPT.read_text()
 
@@ -273,6 +291,7 @@ def test_builder_patches_exact_debian_source_and_disables_iamf() -> None:
     assert VC2HQ_PATCH_SHA256 in source
     assert DASH_PATCH_SHA256 in source
     assert SWSCALE_PATCH_SHA256 in source
+    assert HEVC_HVCC_PATCH_SHA256 in source
     assert H10_VERSION in source
     for variable in (
         "PATCH",
@@ -283,6 +302,7 @@ def test_builder_patches_exact_debian_source_and_disables_iamf() -> None:
         "VC2HQ_PATCH",
         "DASH_PATCH",
         "SWSCALE_PATCH",
+        "HEVC_HVCC_PATCH",
     ):
         assert f'"${variable}_NAME"' in source
         assert f'"${variable}_SHA256" "$SOURCE_ROOT/${variable}_NAME"' in source
@@ -443,6 +463,7 @@ def test_backend_and_renderer_install_the_same_h10_packages() -> None:
             "aca41d3d9327be4d6ab036f494b700118fcc04e1-ffmpeg-7.1.5-backport.patch"
             in source
         )
+        assert "acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781.patch" in source
         assert "COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs" in source
         assert "verify-h10-runtime.sh" in source
         assert "rm -rf /tmp/ffmpeg-debs" in source
