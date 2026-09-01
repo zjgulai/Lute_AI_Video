@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-readonly EXPECTED_VERSION="7:7.1.5-0+deb13u1+h10.5"
+readonly EXPECTED_VERSION="7:7.1.5-0+deb13u1+h10.6"
 readonly RUNTIME_PACKAGES="
 ffmpeg
 libavcodec61
