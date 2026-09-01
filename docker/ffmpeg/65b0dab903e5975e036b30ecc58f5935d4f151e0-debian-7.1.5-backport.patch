@@ -9,15 +9,18 @@ the upper bound before indexing fragments[]. Add a lower-bound check and
 clamp the negative delta at its source.
 
 Fixes: out of array read
+
+Backport-note: the second hunk context is adapted to FFmpeg 7.1.5, where
+get_current_fragment() does not yet declare reload_count. The code changes
+are identical to upstream commit 65b0dab903e5975e036b30ecc58f5935d4f151e0.
 ---
  libavformat/dashdec.c | 7 +++++--
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/libavformat/dashdec.c b/libavformat/dashdec.c
-index d4a05ace7e415..740ac6bc1c15d 100644
 --- a/libavformat/dashdec.c
 +++ b/libavformat/dashdec.c
-@@ -1537,8 +1537,11 @@ static void move_segments(struct representation *rep_src, struct representation
+@@ -1488,8 +1488,11 @@ static void move_segments(struct representation *rep_src, struct representation
          free_fragment_list(rep_dest);
          if (rep_src->start_number > (rep_dest->start_number + rep_dest->n_fragments))
              rep_dest->cur_seq_no = 0;
@@ -30,8 +33,8 @@ index d4a05ace7e415..740ac6bc1c15d 100644
          rep_dest->fragments    = rep_src->fragments;
          rep_dest->n_fragments  = rep_src->n_fragments;
          rep_dest->parent  = rep_src->parent;
-@@ -1658,7 +1661,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
-     int reload_count = 0;
+@@ -1608,7 +1611,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
+     DASHContext *c = pls->parent->priv_data;
  
      while (( !ff_check_interrupt(c->interrupt_callback)&& pls->n_fragments > 0)) {
 -        if (pls->cur_seq_no < pls->n_fragments) {

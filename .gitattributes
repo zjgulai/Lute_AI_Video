@@ -1,2 +1,2 @@
-# These byte-exact upstream mail patches are checksum-bound; preserve whitespace.
+# These provenance-bearing security patches are checksum-bound; preserve whitespace.
 docker/ffmpeg/*.patch -whitespace

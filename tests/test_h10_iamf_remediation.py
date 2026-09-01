@@ -29,7 +29,7 @@ VC2HQ_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
     "1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch"
 )
 DASH_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
-    "65b0dab903e5975e036b30ecc58f5935d4f151e0.patch"
+    "65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch"
 )
 BUILD_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "build-h10-debs.sh"
 INSTALL_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "install-h10-build-deps.sh"
@@ -57,7 +57,7 @@ VC2HQ_PATCH_SHA256 = (
     "849f908e6336d4b9676521c7e3405d18ef54b9b8800e58d9030ecb343868e03b"
 )
 DASH_PATCH_SHA256 = (
-    "1937e2eb9f957cae9305a248103bb2a7875b111a88c529a27ce510fb27ccf8d2"
+    "393142cc01e241019986194cb15b9d248b5173ccc45e23c1724ebc5f59fd73f5"
 )
 ORIGINAL_SOURCE_SHA256 = (
     "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
@@ -208,13 +208,6 @@ def test_upstream_iamf_patch_is_exact_and_auditable() -> None:
             "libavformat/rtpenc_vc2hq.c",
             "size > rtp_ctx->max_payload_size",
         ),
-        (
-            DASH_PATCH,
-            DASH_PATCH_SHA256,
-            "65b0dab903e5975e036b30ecc58f5935d4f151e0",
-            "libavformat/dashdec.c",
-            "pls->cur_seq_no >= 0",
-        ),
     ),
 )
 def test_new_upstream_ffmpeg_patches_are_exact_and_auditable(
@@ -231,6 +224,18 @@ def test_new_upstream_ffmpeg_patches_are_exact_and_auditable(
     assert f"From {commit}" in patch_text
     assert source_file in patch_text
     assert fixed_expression in patch_text
+
+
+def test_dash_backport_is_checksum_bound_and_preserves_upstream_fix() -> None:
+    patch_bytes = DASH_PATCH.read_bytes()
+    patch_text = patch_bytes.decode()
+
+    assert hashlib.sha256(patch_bytes).hexdigest() == DASH_PATCH_SHA256
+    assert "From 65b0dab903e5975e036b30ecc58f5935d4f151e0" in patch_text
+    assert "Backport-note: the second hunk context is adapted to FFmpeg 7.1.5" in patch_text
+    assert "libavformat/dashdec.c" in patch_text
+    assert "rep_dest->cur_seq_no < 0" in patch_text
+    assert "pls->cur_seq_no >= 0" in patch_text
 
 
 def test_builder_patches_exact_debian_source_and_disables_iamf() -> None:
@@ -403,7 +408,10 @@ def test_backend_and_renderer_install_the_same_h10_packages() -> None:
         assert "9d786e4b5e9b8482651928574de33772aeee7be1.patch" in source
         assert "1c10bcc2e17255dacb717a25ab3db142ce390602.patch" in source
         assert "1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch" in source
-        assert "65b0dab903e5975e036b30ecc58f5935d4f151e0.patch" in source
+        assert (
+            "65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch"
+            in source
+        )
         assert "COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs" in source
         assert "verify-h10-runtime.sh" in source
         assert "rm -rf /tmp/ffmpeg-debs" in source

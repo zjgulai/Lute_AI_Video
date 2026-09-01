@@ -17,7 +17,7 @@ COPY docker/ffmpeg/16b2049d4d5222db6cd7c031409058571c94f6a9.patch /opt/ffmpeg/
 COPY docker/ffmpeg/9d786e4b5e9b8482651928574de33772aeee7be1.patch /opt/ffmpeg/
 COPY docker/ffmpeg/1c10bcc2e17255dacb717a25ab3db142ce390602.patch /opt/ffmpeg/
 COPY docker/ffmpeg/1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch /opt/ffmpeg/
-COPY docker/ffmpeg/65b0dab903e5975e036b30ecc58f5935d4f151e0.patch /opt/ffmpeg/
+COPY docker/ffmpeg/65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch /opt/ffmpeg/
 COPY docker/ffmpeg/build-h10-debs.sh /usr/local/bin/build-h10-debs.sh
 RUN chmod 0555 /usr/local/bin/build-h10-debs.sh \
     && /usr/local/bin/build-h10-debs.sh
@@ -42,8 +42,9 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
 # Install the only runtime system dependency. All Python packages used here
 # have reviewed CPython 3.12 wheels in uv.lock, including psycopg[binary] and
 # Pillow, so compiler and development headers must not remain in the image.
-#   - H10 FFmpeg: the exact Debian 7.1.5 source is patched with upstream
-#     seven checksum-bound upstream fixes and built without the IAMF demuxer.
+#   - H10 FFmpeg: the exact Debian 7.1.5 source is patched with seven
+#     checksum-bound upstream fixes (one context-only backport) and built
+#     without the IAMF demuxer.
 #     The custom version prevents the vulnerable distribution package from
 #     silently returning.
 COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs

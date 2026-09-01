@@ -19,7 +19,7 @@ COPY docker/ffmpeg/16b2049d4d5222db6cd7c031409058571c94f6a9.patch /opt/ffmpeg/
 COPY docker/ffmpeg/9d786e4b5e9b8482651928574de33772aeee7be1.patch /opt/ffmpeg/
 COPY docker/ffmpeg/1c10bcc2e17255dacb717a25ab3db142ce390602.patch /opt/ffmpeg/
 COPY docker/ffmpeg/1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch /opt/ffmpeg/
-COPY docker/ffmpeg/65b0dab903e5975e036b30ecc58f5935d4f151e0.patch /opt/ffmpeg/
+COPY docker/ffmpeg/65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch /opt/ffmpeg/
 COPY docker/ffmpeg/build-h10-debs.sh /usr/local/bin/build-h10-debs.sh
 RUN chmod 0555 /usr/local/bin/build-h10-debs.sh \
     && /usr/local/bin/build-h10-debs.sh
@@ -46,8 +46,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Chrome is fixed to the first upstream stable build after the vulnerable
 # 150.0.7871.128-r0 package. The exact .deb is checksum-bound. H10 rebuilds
-# Debian FFmpeg from checksum-pinned source with seven upstream fixes and
-# removes the unused IAMF demuxer; release scans remain
+# Debian FFmpeg from checksum-pinned source with seven upstream fixes (one
+# context-only backport) and removes the unused IAMF demuxer; release scans remain
 # blocking unless every High/Critical is absent or covered by an exact,
 # unexpired reviewed rule.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
