@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-13",
+  "updated": "2026-09-01",
   "runbook": "docs/runbooks/scripts-governance.md",
   "policy": {
     "default_new_script_location": "scripts/",
@@ -17,6 +17,16 @@
       "path": "scripts/check_step_order_consistency.py",
       "status": "active_reusable",
       "reason": "Step ordering consistency check."
+    },
+    {
+      "path": "scripts/check_xmind_performance.py",
+      "status": "active_reusable",
+      "reason": "Fail-closed XMind transport, browser, and synthetic performance budget evaluator."
+    },
+    {
+      "path": "scripts/xmind_transport_probe.py",
+      "status": "active_reusable",
+      "reason": "Read-only bounded XMind HTTP transport evidence collector with TLS verification and redirects disabled."
     },
     {
       "path": "scripts/project_version.py",
