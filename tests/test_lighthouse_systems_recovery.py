@@ -97,9 +97,14 @@ def test_stage_inode_change_after_backup_is_rejected_before_activation(
     def swap_stage_after_copy(source: Path, destination: Path) -> None:
         real_copy(source, destination)
         if destination == transaction.candidate_backup:
-            transaction.stage.unlink()
-            transaction.stage.write_bytes(recovery_fixture.candidate_bytes)
-            transaction.stage.chmod(0o644)
+            # Keep the unlinked file alive until its replacement exists. Linux may
+            # otherwise immediately reuse the same inode, making this identity-swap
+            # regression nondeterministic despite the pathname being replaced.
+            with transaction.stage.open("rb") as original_stage:
+                transaction.stage.unlink()
+                transaction.stage.write_bytes(recovery_fixture.candidate_bytes)
+                transaction.stage.chmod(0o644)
+                assert original_stage.fileno() >= 0
 
     monkeypatch.setitem(module_globals, "_copy_create_only", swap_stage_after_copy)
 
