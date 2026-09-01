@@ -83,4 +83,4 @@ dpkg-deb --fsys-tarfile "$ffmpeg_deb" \
   | tar -xO ./usr/share/doc/ffmpeg/changelog.Debian.gz \
   | gzip -dc \
   | grep -Fq \
-    'H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, and DASH fixes; disable IAMF, libssh/SFTP, and librist/RIST.'
+    'H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, DASH, and swscale fixes; disable IAMF, libssh/SFTP, and librist/RIST.'

@@ -72,6 +72,10 @@ DEBIAN_SOURCE_SHA256 = (
     "a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef"
 )
 H10_VERSION = "7:7.1.5-0+deb13u1+h10.6"
+H10_CHANGELOG_MARKER = (
+    "H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, "
+    "DASH, and swscale fixes; disable IAMF, libssh/SFTP, and librist/RIST."
+)
 FFMPEG_RUNTIME_PACKAGES = {
     "ffmpeg",
     "libavcodec61",
@@ -308,8 +312,11 @@ def test_builder_dependencies_are_exact_and_cacheable() -> None:
 
 def test_runtime_verifier_binds_every_package_and_removes_iamf() -> None:
     source = VERIFY_SCRIPT.read_text()
+    builder = BUILD_SCRIPT.read_text()
 
     assert H10_VERSION in source
+    assert H10_CHANGELOG_MARKER in builder
+    assert H10_CHANGELOG_MARKER in source
     assert "dpkg-query" in source
     assert "ffmpeg -hide_banner -demuxers" in source
     assert "ffprobe -hide_banner -formats" in source
