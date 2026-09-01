@@ -240,6 +240,9 @@
     transition: opacity 180ms ease, transform 180ms ease;
     z-index: 1;
   }
+  .loop-step-badge[hidden] {
+    display: none !important;
+  }
   .card.has-loop-badge .loop-step-badge {
     opacity: 1;
     transform: translateY(0);
@@ -267,6 +270,20 @@
     overflow: hidden;
   }
   .card[hidden] {
+    display: none !important;
+  }
+  .empty-state {
+    width: min(680px, 100%);
+    margin: 40px auto 0;
+    border: 1px dashed var(--border-hover);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.68);
+    color: var(--text-body);
+    padding: 24px;
+    text-align: center;
+    line-height: 1.7;
+  }
+  .empty-state[hidden] {
     display: none !important;
   }
   .card::before {
@@ -959,6 +976,34 @@
         </span>
       </a>
 
+      <a class="card kg" href="https://xmind.lute-tlz-dddd.top" data-category="ai">
+        <div class="card-icon kg">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="19" cy="6" r="2" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="5" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M7 7.5l3 2.8M17 7.5l-3 2.8M7 16.5l3-2.8M17 16.5l-3-2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="card-subtitle kg">Oriental Thinking Workbench</p>
+        <h2 class="card-title">前车之鉴 · 思维模型工作台</h2>
+        <p class="card-desc">2789 个思维模型 · 13 个认知章节 · 19 个 Agent 角色 · 场景匹配与组合路线</p>
+        <p class="card-desc-en">Thinking-model workspace for scenario matching, model combinations and agent decision routes</p>
+        <div class="card-meta">
+          <span class="chip status docker">Docker 应用</span>
+          <span class="chip">Thinking Models</span>
+          <span class="chip">Agent Router</span>
+        </div>
+        <span class="card-cta kg">
+          打开思维模型工作台
+          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
       <a class="card" href="https://scrapy.lute-tlz-dddd.top" data-category="operations">
         <div class="card-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -1001,30 +1046,6 @@
         </div>
         <span class="card-cta">
           打开 Melwater
-          <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-      </a>
-
-      <a class="card" href="https://reddit.brand.lute-tlz-dddd.top" data-category="insight">
-        <div class="card-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M5 7h14v10H9l-4 3V7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-            <path d="M9 11h6M9 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <p class="card-subtitle">Reddit Brand VOC</p>
-        <h2 class="card-title">Reddit VOC 洞察台</h2>
-        <p class="card-desc">Reddit 舆情 · 品牌声量 · 客户需求洞察</p>
-        <p class="card-desc-en">Reddit brand listening workbench for VOC signals, audience needs and market opportunities</p>
-        <div class="card-meta">
-          <span class="chip status docker">Docker 应用</span>
-          <span class="chip">Reddit</span>
-          <span class="chip">VOC</span>
-        </div>
-        <span class="card-cta">
-          打开 Reddit 洞察台
           <svg class="card-cta-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -1277,6 +1298,10 @@
       </a>
     </div>
 
+    <p class="empty-state" data-empty-state role="status" aria-live="polite" hidden>
+      未找到匹配的产品，请调整搜索词或筛选条件。
+    </p>
+
     <p class="footer">
       © 2026 Lute · Digital &amp; Data Science Dept. · Powered by
       <a href="https://voc.lute-tlz-dddd.top">voc.lute</a> &middot;
@@ -1297,9 +1322,9 @@
       <a href="https://kgraph.lute-tlz-dddd.top">kgraph.lute</a> &middot;
       <a href="https://person.lute-tlz-dddd.top">person.lute</a> &middot;
       <a href="https://llm.lute-tlz-dddd.top">llm.lute</a> &middot;
+      <a href="https://xmind.lute-tlz-dddd.top">xmind.lute</a> &middot;
       <a href="https://scrapy.lute-tlz-dddd.top">scrapy.lute</a> &middot;
       <a href="https://melwater.lute-tlz-dddd.top">melwater.lute</a> &middot;
-      <a href="https://reddit.brand.lute-tlz-dddd.top">reddit.brand.lute</a> &middot;
       <a href="https://reddit.lute-tlz-dddd.top">reddit.lute</a> &middot;
       <a href="https://plugin.lute-tlz-dddd.top">plugin.lute</a> &middot;
       <a href="https://flowise.lute-tlz-dddd.top">flowise.lute</a> &middot;
@@ -1318,6 +1343,7 @@
     const cards = Array.from(document.querySelectorAll("[data-category]"));
     const grid = document.querySelector(".grid");
     const searchInput = document.querySelector("[data-system-search]");
+    const emptyState = document.querySelector("[data-empty-state]");
     const loopSummary = document.querySelector("[data-loop-summary]");
     const loopStages = document.querySelector("[data-loop-stages]");
     const originalCardOrder = cards.map((card, index) => ({ card, index }));
@@ -1326,7 +1352,7 @@
 
     const loopViews = {
       functional: {
-        summary: "按现有能力分类浏览 31 个系统，适合快速查找单个应用入口。",
+        summary: `按现有能力分类浏览 ${cards.length} 个产品入口，适合快速查找单个应用。`,
         stages: ["内容创作与发布", "客户洞察与市场", "经营决策与增长", "数据治理与运营", "AI 能力与智能体"]
       },
       enterprise: {
@@ -1343,7 +1369,7 @@
       "scrapy.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 101], launch: ["L1", "趋势机会", 103], upstream: "外部平台与竞品数据", downstream: "市场洞察与机会判断" },
       "mkt.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 102], launch: ["L1", "趋势机会", 101], upstream: "采集数据", downstream: "机会点与选品判断" },
       "melwater.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 103], launch: ["L1", "趋势机会", 104], upstream: "社媒与舆情信号", downstream: "VOC 标签与洞察报告" },
-      "reddit.brand.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 105], launch: ["L1", "趋势机会", 105], upstream: "Reddit 社区与品牌讨论", downstream: "VOC 洞察与机会判断" },
+      "reddit.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 105], launch: ["L1", "趋势机会", 105], upstream: "Reddit 社区与品牌讨论", downstream: "VOC 洞察与机会判断" },
       "voc.lute-tlz-dddd.top": { enterprise: ["E1", "外部感知", 104], launch: ["L2", "选品验证", 202], upstream: "评论与客户反馈", downstream: "标签治理与产品验证" },
       "label.lute-tlz-dddd.top": { enterprise: ["E2", "标签洞察", 201], launch: ["L2", "选品验证", 203], upstream: "VOC 与舆情样本", downstream: "报告、选品与产品迭代" },
       "report.lute-tlz-dddd.top": { enterprise: ["E2", "标签洞察", 202], launch: ["L2", "选品验证", 204], upstream: "多源洞察与标签", downstream: "机会筛选与经营判断" },
@@ -1382,14 +1408,23 @@
       }
     }
 
+    function initSearchIndex() {
+      cards.forEach((card) => {
+        card.dataset.searchText = normalize(`${card.textContent} ${card.getAttribute("href") || ""}`);
+      });
+    }
+
     function initLoopMetadata() {
       cards.forEach((card) => {
         const metadata = loopMetadata[hostOf(card)];
-        if (!metadata) return;
         const badge = document.createElement("span");
         badge.className = "loop-step-badge";
-        badge.setAttribute("aria-hidden", "true");
+        badge.hidden = true;
         card.appendChild(badge);
+        if (!metadata) {
+          card.dataset.loopUnmapped = "true";
+          return;
+        }
         card.dataset.enterpriseOrder = metadata.enterprise[2];
         card.dataset.launchOrder = metadata.launch[2];
         card.dataset.enterpriseBadge = `${metadata.enterprise[0]} ${metadata.enterprise[1]}`;
@@ -1414,6 +1449,7 @@
 
     function applyFilters() {
       const query = normalize(searchInput?.value);
+      let visibleCount = 0;
 
       categoryButtons.forEach((button) => {
         const active = button.dataset.filter === activeCategory;
@@ -1423,10 +1459,19 @@
 
       cards.forEach((card) => {
         const matchesCategory = activeCategory === "all" || card.dataset.category === activeCategory;
-        const haystack = normalize(`${card.textContent} ${card.getAttribute("href") || ""}`);
+        const haystack = card.dataset.searchText || "";
         const matchesSearch = !query || haystack.includes(query);
-        card.hidden = !(matchesCategory && matchesSearch);
+        const visible = matchesCategory && matchesSearch;
+        card.hidden = !visible;
+        if (visible) visibleCount += 1;
       });
+
+      if (emptyState) {
+        emptyState.hidden = visibleCount !== 0;
+        emptyState.textContent = query
+          ? `未找到与“${searchInput?.value.trim()}”匹配的产品，请调整搜索词或筛选条件。`
+          : "当前分类暂无产品，请选择其他分类。";
+      }
     }
 
     function sortCardsForLoop() {
@@ -1455,16 +1500,24 @@
       }
       cards.forEach((card) => {
         const badge = card.querySelector(".loop-step-badge");
-        const badgeText = activeLoop === "enterprise" ? card.dataset.enterpriseBadge : activeLoop === "launch" ? card.dataset.launchBadge : "";
+        const mappedBadgeText = activeLoop === "enterprise" ? card.dataset.enterpriseBadge : activeLoop === "launch" ? card.dataset.launchBadge : "";
+        const badgeText = mappedBadgeText || (activeLoop === "functional" ? "" : "待归类");
+        const loopContext = card.dataset.loopContext || "闭环阶段待产品负责人确认";
         card.classList.toggle("has-loop-badge", Boolean(badgeText));
         if (badge) {
+          badge.hidden = !badgeText;
           badge.textContent = badgeText;
-          badge.title = badgeText ? card.dataset.loopContext || badgeText : "";
+          badge.title = badgeText ? loopContext : "";
+          if (badgeText) {
+            badge.setAttribute("aria-label", `${badgeText}；${loopContext}`);
+          } else {
+            badge.removeAttribute("aria-label");
+          }
         }
         if (activeLoop === "functional") {
           card.removeAttribute("title");
         } else {
-          card.setAttribute("title", card.dataset.loopContext || "");
+          card.setAttribute("title", loopContext);
         }
       });
       sortCardsForLoop();
@@ -1486,6 +1539,7 @@
     });
 
     searchInput?.addEventListener("input", applyFilters);
+    initSearchIndex();
     initLoopMetadata();
     updateCounts();
     updateLoopView();

@@ -5,7 +5,7 @@ module: deploy
 topic: lighthouse-rsync-artifact-exclude
 status: stable
 created: 2026-06-01
-updated: 2026-07-21
+updated: 2026-09-01
 owner: self
 source: human+ai
 ---
@@ -40,6 +40,9 @@ source: human+ai
 - tracked 的 `deploy/lighthouse/docker-compose.prod.yml`、`deploy/lighthouse/nginx.conf`、`landing/login.html`、`landing/register.html`、`landing/systems.html`、`landing/lute-auth.css`、`landing/lute-auth.js` 只作为已审查 source copy 进入新的不可变 release 目录。`deploy.sh` 不得把这些副本复制到共享根；真实 shared-root sidecar 仍只由独立入口管理。
 - 仍须排除未跟踪的 remote-only landing sidecars：`landing/lute-*.html`、`landing/voc-zh_messages.json`、`landing/.portal.htpasswd`、`landing/brand-placeholder.html`。
 - apex landing sidecar 的唯一手动同步入口是 `deploy/lighthouse/sync-landing-sidecars.sh`。该脚本默认 `DRY_RUN=1`，只同步 `index.html`、`login.html`、`register.html`、`systems.html`、`lute-auth.css`、`lute-auth.js`，不使用 `--delete`，不调用 `deploy.sh`，不重启容器，不触发生成接口。
+- `deploy/lighthouse/landing/systems.html` 是产品门户唯一 tracked 源。`tests/test_lighthouse_landing_static_contract.py` 必须锁定 exact card host/title/category、card/footer parity、canonical Reddit、XMind 候选、Distill 排除、闭环未归类清单、动态计数与搜索空状态；不能只断言历史 host 子集或卡片总数。
+- 当前 Redbook、DocCanvas 与 XMind 的闭环阶段仍是产品负责人决策项；页面必须显式显示“待归类”，不得静默省略或凭名称补写 E/L 阶段。在三项映射和 XMind 性能预算关闭前，`systems.html` 只能标为本地 candidate，不能标为 production-ready。
+- `sync-landing-sidecars.sh` 会同步六个 landing 文件。任何 `DRY_RUN=0` 之前，必须先逐一核对六个本地/生产 SHA，或在独立门禁中实现并测试精确的 systems-only 模式；不得因只修改 `systems.html` 就假设其他五个文件不会被覆盖。
 - 该检查只读取本地脚本和配置，不触发生成接口、不访问生产、不消耗 poyo.ai tokens。
 
 ## 验证命令
