@@ -29,5 +29,5 @@ gates. Do not copy commands from documents marked historical.
 
 The production host must provide dependency-free Python 3.9 or newer for the
 repository-owned preflight and manifest utilities. Application and image code
-remain pinned to CPython 3.12.13. `scripts/project_version.py --check` includes
+remain pinned to CPython 3.12.14. `scripts/project_version.py --check` includes
 a Python 3.9/3.10 fallback and must pass before any release mutation.

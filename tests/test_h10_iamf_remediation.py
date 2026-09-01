@@ -89,8 +89,8 @@ FFMPEG_RUNTIME_PACKAGES = {
 }
 
 PYTHON_IMAGE = (
-    "python:3.12.13-slim-trixie@"
-    "sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+    "python:3.12.14-slim-trixie@"
+    "sha256:e5c9fa26ffb76e11e0f054f30dc2523a2f9693f0c36c0cf1e39b27e152d899fc"
 )
 FRONTEND_NODE_IMAGE = (
     "node:22-alpine@"
