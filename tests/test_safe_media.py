@@ -137,8 +137,25 @@ def test_iamf_is_rejected_before_ffmpeg_or_ffprobe(
         ("crafted.mp4", bytes.fromhex("8000002003120400")),
         ("crafted.mp4", bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c")),
         ("crafted.mp4", bytes.fromhex("7ffe8001")),
+        # FFmpeg libavformat/wtv_common.c::ff_wtv_guid. These are boundary
+        # fixtures only and are never passed to PyAV/FFmpeg as exploit inputs.
+        ("crafted.wtv", bytes.fromhex("b7d800203749da11a64e0007e95ead8d")),
+        ("crafted.mp4", bytes.fromhex("b7d800203749da11a64e0007e95ead8d")),
+        ("crafted.avi", b"RIFF" + b"\x00" * 4 + b"AVI "),
+        ("crafted.mp4", b"RIFF" + b"\x00" * 4 + b"AVI "),
     ),
-    ids=("iamf-extension", "iamf-renamed", "vobsub", "adx", "asf", "dts-spdif"),
+    ids=(
+        "iamf-extension",
+        "iamf-renamed",
+        "vobsub",
+        "adx",
+        "asf",
+        "dts-spdif",
+        "wtv-extension",
+        "wtv-renamed",
+        "avi-extension",
+        "avi-renamed",
+    ),
 )
 async def test_transcription_rejects_dangerous_media_before_faster_whisper_import(
     tmp_path: Path,

@@ -1583,3 +1583,15 @@ ignore:
     name: perl-base
     version: 5.40.1-6
     type: deb
+- vulnerability: CVE-2026-70628
+  fix-state: fixed
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary
+- vulnerability: CVE-2026-70632
+  fix-state: fixed
+  package:
+    name: ffmpeg
+    version: 8.1.2
+    type: binary

@@ -1732,3 +1732,13 @@ vulnerabilities:
   - pkg:deb/debian/perl-base@5.40.1-6
   expired_at: 2026-09-15
   statement: owner=self; reason=Perl Archive-Tar is not invoked by the application runtime
+- id: CVE-2026-70628
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-09-15
+  statement: owner=self; reason=PyAV FFmpeg 8.1.2 remains an accepted short-lived residual; the unique faster-whisper path validates a regular local file before import, and WTV is absent from the approved extension/container set
+- id: CVE-2026-70632
+  purls:
+  - pkg:generic/ffmpeg@8.1.2
+  expired_at: 2026-09-15
+  statement: owner=self; reason=PyAV FFmpeg 8.1.2 remains an accepted short-lived residual; the unique faster-whisper path validates a regular local file before import, and AVI is absent from the approved extension/container set
