@@ -207,7 +207,7 @@ numpy==2.5.1
     #   ctranslate2
     #   onnxruntime
     #   transformers
-onnxruntime==1.27.0
+onnxruntime==1.28.0
     # via faster-whisper
 openai==2.38.0
     # via langchain-openai
