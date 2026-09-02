@@ -113,7 +113,7 @@ def test_docker_validation_prepares_locked_python_before_monitoring_tests() -> N
         if step.get("run") == "uv sync --locked --extra dev"
     )
 
-    assert steps[setup_index]["with"]["python-version"] == "3.12.13"
+    assert steps[setup_index]["with"]["python-version"] == "3.12.14"
     assert setup_index < install_index < sync_index < monitoring_index
 
 

@@ -19,6 +19,24 @@ DVBSUB_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
 CFHD_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
     "16b2049d4d5222db6cd7c031409058571c94f6a9.patch"
 )
+MPEGENC_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "9d786e4b5e9b8482651928574de33772aeee7be1.patch"
+)
+LIBRIST_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "1c10bcc2e17255dacb717a25ab3db142ce390602.patch"
+)
+VC2HQ_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch"
+)
+DASH_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch"
+)
+SWSCALE_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "aca41d3d9327be4d6ab036f494b700118fcc04e1-ffmpeg-7.1.5-backport.patch"
+)
+HEVC_HVCC_PATCH = REPO_ROOT / "docker" / "ffmpeg" / (
+    "acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781.patch"
+)
 BUILD_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "build-h10-debs.sh"
 INSTALL_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "install-h10-build-deps.sh"
 VERIFY_SCRIPT = REPO_ROOT / "docker" / "ffmpeg" / "verify-h10-runtime.sh"
@@ -35,13 +53,36 @@ DVBSUB_PATCH_SHA256 = (
 CFHD_PATCH_SHA256 = (
     "dd5ab52749f5aabbdf02202d0bd26703079261cd429a0f6e6013299d6d468646"
 )
+MPEGENC_PATCH_SHA256 = (
+    "2dcfec279bad372be7eb54b55f5f2c59b1c33151325317946b92da4e95039f34"
+)
+LIBRIST_PATCH_SHA256 = (
+    "89554690fc735a902724168084150ec7b4631e42d525bd9a86b31dc5e8df8573"
+)
+VC2HQ_PATCH_SHA256 = (
+    "849f908e6336d4b9676521c7e3405d18ef54b9b8800e58d9030ecb343868e03b"
+)
+DASH_PATCH_SHA256 = (
+    "393142cc01e241019986194cb15b9d248b5173ccc45e23c1724ebc5f59fd73f5"
+)
+SWSCALE_PATCH_SHA256 = (
+    "9f5d2c615312e362001687b78730eb0cf83e8d6defbc41d5ccad6dfff2310b45"
+)
+HEVC_HVCC_PATCH_SHA256 = (
+    "e91545b75e1a2b1391c9f83a1a40becc4130c2a687638b7c8d2f13f963a3b222"
+)
 ORIGINAL_SOURCE_SHA256 = (
     "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
 )
 DEBIAN_SOURCE_SHA256 = (
     "a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef"
 )
-H10_VERSION = "7:7.1.5-0+deb13u1+h10.4"
+H10_VERSION = "7:7.1.5-0+deb13u1+h10.7"
+H10_CHANGELOG_MARKER = (
+    "H10: backport IAMF, DVB subtitle, CFHD, MPEG-PS, librist, VC-2 RTP, "
+    "DASH, swscale, and HEVC hvcC fixes; disable IAMF, libssh/SFTP, and "
+    "librist/RIST."
+)
 FFMPEG_RUNTIME_PACKAGES = {
     "ffmpeg",
     "libavcodec61",
@@ -55,8 +96,8 @@ FFMPEG_RUNTIME_PACKAGES = {
 }
 
 PYTHON_IMAGE = (
-    "python:3.12.13-slim-trixie@"
-    "sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de"
+    "python:3.12.14-slim-trixie@"
+    "sha256:e5c9fa26ffb76e11e0f054f30dc2523a2f9693f0c36c0cf1e39b27e152d899fc"
 )
 FRONTEND_NODE_IMAGE = (
     "node:22-alpine@"
@@ -64,7 +105,7 @@ FRONTEND_NODE_IMAGE = (
 )
 RENDERER_NODE_IMAGE = (
     "node:22.23.2-trixie-slim@"
-    "sha256:db8a96a63e5264607ada2d206758876ebbed6a12be2ada7517793cbfb0c2a29c"
+    "sha256:7b8a0c89c54499bee567618f96578e1a12a800f062fbdbfd1fb6a443fa6f6284"
 )
 SUPERSEDED_RENDERER_NODE_DIGEST = (
     "sha256:e6d9a389d34ff9678438af985c9913fbd1eb6ed36e80fea56644f4b4f6dd70ba"
@@ -163,6 +204,27 @@ def test_upstream_iamf_patch_is_exact_and_auditable() -> None:
             "libavcodec/cfhd.c",
             "lowpass_width * 2 > s->plane[plane].width",
         ),
+        (
+            MPEGENC_PATCH,
+            MPEGENC_PATCH_SHA256,
+            "9d786e4b5e9b8482651928574de33772aeee7be1",
+            "libavformat/mpegenc.c",
+            "get_system_header_size(ctx) > 128 - 14",
+        ),
+        (
+            LIBRIST_PATCH,
+            LIBRIST_PATCH_SHA256,
+            "1c10bcc2e17255dacb717a25ab3db142ce390602",
+            "libavformat/librist.c",
+            "FFMIN(data_block->payload_len, size)",
+        ),
+        (
+            VC2HQ_PATCH,
+            VC2HQ_PATCH_SHA256,
+            "1cdeb3c4e7f1f8566d846b9b451e01c376398818",
+            "libavformat/rtpenc_vc2hq.c",
+            "size > rtp_ctx->max_payload_size",
+        ),
     ),
 )
 def test_new_upstream_ffmpeg_patches_are_exact_and_auditable(
@@ -181,6 +243,41 @@ def test_new_upstream_ffmpeg_patches_are_exact_and_auditable(
     assert fixed_expression in patch_text
 
 
+def test_dash_backport_is_checksum_bound_and_preserves_upstream_fix() -> None:
+    patch_bytes = DASH_PATCH.read_bytes()
+    patch_text = patch_bytes.decode()
+
+    assert hashlib.sha256(patch_bytes).hexdigest() == DASH_PATCH_SHA256
+    assert "From 65b0dab903e5975e036b30ecc58f5935d4f151e0" in patch_text
+    assert "Backport-note: the second hunk context is adapted to FFmpeg 7.1.5" in patch_text
+    assert "libavformat/dashdec.c" in patch_text
+    assert "rep_dest->cur_seq_no < 0" in patch_text
+    assert "pls->cur_seq_no >= 0" in patch_text
+
+
+def test_swscale_backport_is_checksum_bound_and_preserves_upstream_fix() -> None:
+    patch_bytes = SWSCALE_PATCH.read_bytes()
+    patch_text = patch_bytes.decode()
+
+    assert hashlib.sha256(patch_bytes).hexdigest() == SWSCALE_PATCH_SHA256
+    assert "From aca41d3d9327be4d6ab036f494b700118fcc04e1" in patch_text
+    assert "Backport-note: adapted the exact changed expressions to FFmpeg 7.1.5" in patch_text
+    assert "libswscale/output.c" in patch_text
+    assert "unsigned  yalpha =  yalpha_param" in patch_text
+    assert "(int)(buf0[i] * yalpha1 + buf1[i] * yalpha)" in patch_text
+
+
+def test_hevc_hvcc_fix_is_exact_and_auditable() -> None:
+    patch_bytes = HEVC_HVCC_PATCH.read_bytes()
+    patch_text = patch_bytes.decode()
+
+    assert hashlib.sha256(patch_bytes).hexdigest() == HEVC_HVCC_PATCH_SHA256
+    assert "From acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781" in patch_text
+    assert "libavformat/hevc.c" in patch_text
+    assert "if (numNalus >= UINT16_MAX)" in patch_text
+    assert "return AVERROR_INVALIDDATA" in patch_text
+
+
 def test_builder_patches_exact_debian_source_and_disables_iamf() -> None:
     source = BUILD_SCRIPT.read_text()
 
@@ -189,13 +286,26 @@ def test_builder_patches_exact_debian_source_and_disables_iamf() -> None:
     assert PATCH_SHA256 in source
     assert DVBSUB_PATCH_SHA256 in source
     assert CFHD_PATCH_SHA256 in source
+    assert MPEGENC_PATCH_SHA256 in source
+    assert LIBRIST_PATCH_SHA256 in source
+    assert VC2HQ_PATCH_SHA256 in source
+    assert DASH_PATCH_SHA256 in source
+    assert SWSCALE_PATCH_SHA256 in source
+    assert HEVC_HVCC_PATCH_SHA256 in source
     assert H10_VERSION in source
-    assert (
-        'for patch_name in "$PATCH_NAME" "$DVBSUB_PATCH_NAME" '
-        '"$CFHD_PATCH_NAME"'
-    ) in source
-    assert '"$DVBSUB_PATCH_SHA256" "$SOURCE_ROOT/$DVBSUB_PATCH_NAME"' in source
-    assert '"$CFHD_PATCH_SHA256" "$SOURCE_ROOT/$CFHD_PATCH_NAME"' in source
+    for variable in (
+        "PATCH",
+        "DVBSUB_PATCH",
+        "CFHD_PATCH",
+        "MPEGENC_PATCH",
+        "LIBRIST_PATCH",
+        "VC2HQ_PATCH",
+        "DASH_PATCH",
+        "SWSCALE_PATCH",
+        "HEVC_HVCC_PATCH",
+    ):
+        assert f'"${variable}_NAME"' in source
+        assert f'"${variable}_SHA256" "$SOURCE_ROOT/${variable}_NAME"' in source
     assert 'mkdir -p "$BUILD_ROOT/debian/patches"' in source
     assert "--disable-demuxer=iamf" in source
     assert "--disable-libssh" in source
@@ -222,8 +332,11 @@ def test_builder_dependencies_are_exact_and_cacheable() -> None:
 
 def test_runtime_verifier_binds_every_package_and_removes_iamf() -> None:
     source = VERIFY_SCRIPT.read_text()
+    builder = BUILD_SCRIPT.read_text()
 
     assert H10_VERSION in source
+    assert H10_CHANGELOG_MARKER in builder
+    assert H10_CHANGELOG_MARKER in source
     assert "dpkg-query" in source
     assert "ffmpeg -hide_banner -demuxers" in source
     assert "ffprobe -hide_banner -formats" in source
@@ -339,9 +452,80 @@ def test_backend_and_renderer_install_the_same_h10_packages() -> None:
         assert "86708357d126af84c16f80d9c57335d1e8c845c5.patch" in source
         assert "02fc47e13f903768b75f7985a2706a6223ab4506.patch" in source
         assert "16b2049d4d5222db6cd7c031409058571c94f6a9.patch" in source
+        assert "9d786e4b5e9b8482651928574de33772aeee7be1.patch" in source
+        assert "1c10bcc2e17255dacb717a25ab3db142ce390602.patch" in source
+        assert "1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch" in source
+        assert (
+            "65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch"
+            in source
+        )
+        assert (
+            "aca41d3d9327be4d6ab036f494b700118fcc04e1-ffmpeg-7.1.5-backport.patch"
+            in source
+        )
+        assert "acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781.patch" in source
         assert "COPY --from=ffmpeg-h10-build /ffmpeg-debs /tmp/ffmpeg-debs" in source
         assert "verify-h10-runtime.sh" in source
         assert "rm -rf /tmp/ffmpeg-debs" in source
+
+
+def test_backend_runtime_upgrades_fixable_system_packages_fail_closed() -> None:
+    source = BACKEND_DOCKERFILE.read_text()
+    runtime = source.split("FROM ${PYTHON_IMAGE}", 2)[2]
+    required_packages = {
+        "bsdutils",
+        "libblkid1",
+        "liblastlog2-2",
+        "libmount1",
+        "libsmartcols1",
+        "libssl3t64",
+        "libuuid1",
+        "login",
+        "mount",
+        "openssl",
+        "openssl-provider-legacy",
+        "util-linux",
+    }
+
+    assert "apt-get install -y --no-install-recommends --only-upgrade" in runtime
+    assert "apt-get upgrade" not in runtime
+    for package in required_packages:
+        assert f"      {package} \\\n" in runtime
+    source_minimums = {
+        "bsdutils": ("util-linux", "2.41.5-0+deb13u1"),
+        "libblkid1": ("util-linux", "2.41.5-0+deb13u1"),
+        "liblastlog2-2": ("util-linux", "2.41.5-0+deb13u1"),
+        "libmount1": ("util-linux", "2.41.5-0+deb13u1"),
+        "libsmartcols1": ("util-linux", "2.41.5-0+deb13u1"),
+        "libuuid1": ("util-linux", "2.41.5-0+deb13u1"),
+        "login": ("util-linux", "2.41.5-0+deb13u1"),
+        "mount": ("util-linux", "2.41.5-0+deb13u1"),
+        "util-linux": ("util-linux", "2.41.5-0+deb13u1"),
+        "libssl3t64": ("openssl", "3.5.7-1~deb13u2"),
+        "openssl": ("openssl", "3.5.7-1~deb13u2"),
+        "openssl-provider-legacy": ("openssl", "3.5.7-1~deb13u2"),
+    }
+    assert "${source:Package}" in runtime
+    assert "${source:Version}" in runtime
+    assert "dpkg --compare-versions" in runtime
+    for package, (source_package, minimum) in source_minimums.items():
+        assert (
+            f"check_min_source_version {package} {source_package} '{minimum}'"
+            in runtime
+        )
+    verifier_call = "&& /usr/local/bin/verify-h10-runtime.sh"
+    assert runtime.index("--only-upgrade") < runtime.index(verifier_call)
+    assert runtime.rindex("check_min_source_version") < runtime.index(verifier_call)
+
+
+def test_frontend_runtime_requires_fixed_openssl_packages() -> None:
+    source = FRONTEND_DOCKERFILE.read_text()
+    runtime = source.split("FROM ${NODE_IMAGE} AS runner", 1)[1]
+
+    assert "apk add --no-cache" in runtime
+    assert "'libcrypto3>=3.5.8-r0'" in runtime
+    assert "'libssl3>=3.5.8-r0'" in runtime
+    assert runtime.index("apk add --no-cache") < runtime.index("USER 1000:1000")
 
 
 def test_supported_backend_upload_bundle_includes_h10_build_inputs() -> None:

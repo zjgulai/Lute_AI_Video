@@ -16,11 +16,11 @@ see [current release identity](docs/release/current.md).
 
 ## Prerequisites
 
-- **CPython 3.12.13** (the version pinned by `.python-version`)
+- **CPython 3.12.14** (the version pinned by `.python-version`)
 - **Node.js 22+** with npm (for WebUI + Remotion rendering)
 
 ```bash
-python3 --version  # 3.12.13
+python3 --version  # 3.12.14
 node --version     # >= 22
 npm --version
 ```

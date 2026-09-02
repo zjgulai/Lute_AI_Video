@@ -1,5 +1,5 @@
-ARG NODE_IMAGE=node:22.23.2-trixie-slim@sha256:db8a96a63e5264607ada2d206758876ebbed6a12be2ada7517793cbfb0c2a29c
-ARG FFMPEG_BUILDER_IMAGE=python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+ARG NODE_IMAGE=node:22.23.2-trixie-slim@sha256:7b8a0c89c54499bee567618f96578e1a12a800f062fbdbfd1fb6a443fa6f6284
+ARG FFMPEG_BUILDER_IMAGE=python:3.12.14-slim-trixie@sha256:e5c9fa26ffb76e11e0f054f30dc2523a2f9693f0c36c0cf1e39b27e152d899fc
 ARG CHROME_PACKAGE_STAGE=chrome-download
 
 FROM ${FFMPEG_BUILDER_IMAGE} AS ffmpeg-h10-build
@@ -16,6 +16,12 @@ ADD --checksum=sha256:a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef22
 COPY docker/ffmpeg/86708357d126af84c16f80d9c57335d1e8c845c5.patch /opt/ffmpeg/
 COPY docker/ffmpeg/02fc47e13f903768b75f7985a2706a6223ab4506.patch /opt/ffmpeg/
 COPY docker/ffmpeg/16b2049d4d5222db6cd7c031409058571c94f6a9.patch /opt/ffmpeg/
+COPY docker/ffmpeg/9d786e4b5e9b8482651928574de33772aeee7be1.patch /opt/ffmpeg/
+COPY docker/ffmpeg/1c10bcc2e17255dacb717a25ab3db142ce390602.patch /opt/ffmpeg/
+COPY docker/ffmpeg/1cdeb3c4e7f1f8566d846b9b451e01c376398818.patch /opt/ffmpeg/
+COPY docker/ffmpeg/65b0dab903e5975e036b30ecc58f5935d4f151e0-debian-7.1.5-backport.patch /opt/ffmpeg/
+COPY docker/ffmpeg/aca41d3d9327be4d6ab036f494b700118fcc04e1-ffmpeg-7.1.5-backport.patch /opt/ffmpeg/
+COPY docker/ffmpeg/acf5d7cdc1f9ae8752c23e1ea8d7f355ed780781.patch /opt/ffmpeg/
 COPY docker/ffmpeg/build-h10-debs.sh /usr/local/bin/build-h10-debs.sh
 RUN chmod 0555 /usr/local/bin/build-h10-debs.sh \
     && /usr/local/bin/build-h10-debs.sh
@@ -42,8 +48,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Chrome is fixed to the first upstream stable build after the vulnerable
 # 150.0.7871.128-r0 package. The exact .deb is checksum-bound. H10 rebuilds
-# Debian FFmpeg from checksum-pinned source with upstream IAMF, DVB subtitle,
-# and CFHD fixes and removes the unused IAMF demuxer; release scans remain
+# Debian FFmpeg from checksum-pinned source with nine upstream fixes (two
+# version-context backports) and removes the unused IAMF demuxer; release scans remain
 # blocking unless every High/Critical is absent or covered by an exact,
 # unexpired reviewed rule.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \

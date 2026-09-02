@@ -1,0 +1,256 @@
+name: Exact image security review
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.backend
+      - web/Dockerfile
+      - rendering/Dockerfile
+      - .dockerignore
+      - web/.dockerignore
+      - pyproject.toml
+      - uv.lock
+      - web/package.json
+      - web/package-lock.json
+      - rendering/package.json
+      - rendering/package-lock.json
+      - docker/ffmpeg/**
+      - .grype.yaml
+      - .grype-raw.yaml
+      - .grype-backend.yaml
+      - .grype-rendering.yaml
+      - .trivyignore.yaml
+      - .trivyignore-backend.yaml
+      - .trivyignore-rendering.yaml
+      - docker-compose.yml
+      - deploy/lighthouse/docker-compose.release.yml
+      - src/tools/safe_media.py
+      - rendering/media-safety.mjs
+      - .github/workflows/image-security-review.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - Dockerfile.backend
+      - web/Dockerfile
+      - rendering/Dockerfile
+      - .dockerignore
+      - web/.dockerignore
+      - pyproject.toml
+      - uv.lock
+      - web/package.json
+      - web/package-lock.json
+      - rendering/package.json
+      - rendering/package-lock.json
+      - docker/ffmpeg/**
+      - .grype.yaml
+      - .grype-raw.yaml
+      - .grype-backend.yaml
+      - .grype-rendering.yaml
+      - .trivyignore.yaml
+      - .trivyignore-backend.yaml
+      - .trivyignore-rendering.yaml
+      - docker-compose.yml
+      - deploy/lighthouse/docker-compose.release.yml
+      - src/tools/safe_media.py
+      - rendering/media-safety.mjs
+      - .github/workflows/image-security-review.yml
+
+concurrency:
+  group: image-security-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  REVIEW_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  scan:
+    name: Exact image security review (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: .
+            dockerfile: ./Dockerfile.backend
+            grype_policy: .grype-backend.yaml
+            trivy_policy: .trivyignore-backend.yaml
+            build_args: |
+              APT_MIRROR=deb.debian.org
+          - component: frontend
+            context: ./web
+            dockerfile: ./web/Dockerfile
+            grype_policy: .grype.yaml
+            trivy_policy: .trivyignore.yaml
+            build_args: |
+              NEXT_PUBLIC_API_BASE_URL=/api
+              NEXT_PUBLIC_IS_DEMO=false
+              NEXT_PUBLIC_API_KEY=
+          - component: rendering
+            context: .
+            dockerfile: ./rendering/Dockerfile
+            grype_policy: .grype-rendering.yaml
+            trivy_policy: .trivyignore-rendering.yaml
+            build_args: |
+              APT_MIRROR=deb.debian.org
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.REVIEW_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Read semantic version
+        id: project-version
+        run: echo "value=$(python3 scripts/project_version.py --check)" >> "$GITHUB_OUTPUT"
+
+      - name: Build exact image (no push)
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: ai-video-${{ matrix.component }}:security-${{ env.REVIEW_SOURCE_SHA }}
+          cache-from: type=gha,scope=security-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=security-${{ matrix.component }}
+          build-args: |
+            ${{ matrix.build_args }}
+            RELEASE_SOURCE_SHA=${{ env.REVIEW_SOURCE_SHA }}
+            APP_VERSION=${{ steps.project-version.outputs.value }}
+
+      - name: Verify exact image source label
+        id: image-identity
+        run: |
+          actual=$(docker image inspect \
+            --format='{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+            "ai-video-${{ matrix.component }}:security-${REVIEW_SOURCE_SHA}")
+          test "$actual" = "$REVIEW_SOURCE_SHA"
+
+      - name: Verify vulnerable-tool boundary
+        id: runtime-boundary
+        if: ${{ matrix.component != 'frontend' }}
+        continue-on-error: true
+        run: |
+          docker run --rm --network none --entrypoint /bin/sh \
+            "ai-video-${{ matrix.component }}:security-${REVIEW_SOURCE_SHA}" \
+            -ec 'if command -v tiffcrop >/dev/null 2>&1; then
+              printf "unexpected tiffcrop runtime tool\n" >&2
+              exit 1
+            fi'
+
+      - name: Capture raw Grype evidence
+        id: grype-raw
+        continue-on-error: true
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: ai-video-${{ matrix.component }}:security-${{ env.REVIEW_SOURCE_SHA }}
+          config: .grype-raw.yaml
+          fail-build: false
+          severity-cutoff: high
+          output-format: json
+          output-file: grype-${{ matrix.component }}-raw.json
+
+      - name: Apply reviewed Grype policy
+        id: grype-reviewed
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: ai-video-${{ matrix.component }}:security-${{ env.REVIEW_SOURCE_SHA }}
+          config: ${{ matrix.grype_policy }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: json
+          output-file: grype-${{ matrix.component }}-reviewed.json
+
+      - name: Capture raw Trivy evidence
+        id: trivy-raw
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          version: v0.69.3
+          image-ref: ai-video-${{ matrix.component }}:security-${{ env.REVIEW_SOURCE_SHA }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          format: json
+          output: trivy-${{ matrix.component }}-raw.json
+          exit-code: 0
+
+      - name: Apply reviewed Trivy policy
+        id: trivy-reviewed
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        env:
+          TRIVY_IGNOREFILE: ${{ matrix.trivy_policy }}
+        with:
+          version: v0.69.3
+          image-ref: ai-video-${{ matrix.component }}:security-${{ env.REVIEW_SOURCE_SHA }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          format: json
+          output: trivy-${{ matrix.component }}-reviewed.json
+          exit-code: 1
+
+      - name: Verify scanner evidence is complete
+        id: evidence
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          for report in \
+            grype-${{ matrix.component }}-raw.json \
+            grype-${{ matrix.component }}-reviewed.json \
+            trivy-${{ matrix.component }}-raw.json \
+            trivy-${{ matrix.component }}-reviewed.json; do
+            test -s "$report"
+            python3 -m json.tool "$report" >/dev/null
+          done
+
+      - name: Upload exact scanner evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: image-security-${{ matrix.component }}-${{ env.REVIEW_SOURCE_SHA }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            grype-${{ matrix.component }}-raw.json
+            grype-${{ matrix.component }}-reviewed.json
+            trivy-${{ matrix.component }}-raw.json
+            trivy-${{ matrix.component }}-reviewed.json
+
+      - name: Enforce reviewed High/Critical policy
+        if: always()
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          IDENTITY_OUTCOME: ${{ steps.image-identity.outcome }}
+          RUNTIME_BOUNDARY_OUTCOME: ${{ steps.runtime-boundary.outcome }}
+          COMPONENT: ${{ matrix.component }}
+          GRYPE_RAW_OUTCOME: ${{ steps.grype-raw.outcome }}
+          GRYPE_REVIEWED_OUTCOME: ${{ steps.grype-reviewed.outcome }}
+          TRIVY_RAW_OUTCOME: ${{ steps.trivy-raw.outcome }}
+          TRIVY_REVIEWED_OUTCOME: ${{ steps.trivy-reviewed.outcome }}
+          EVIDENCE_OUTCOME: ${{ steps.evidence.outcome }}
+        run: |
+          test "$BUILD_OUTCOME" = success
+          test "$IDENTITY_OUTCOME" = success
+          if [ "$COMPONENT" != frontend ]; then
+            test "$RUNTIME_BOUNDARY_OUTCOME" = success
+          fi
+          test "$GRYPE_RAW_OUTCOME" = success
+          test "$GRYPE_REVIEWED_OUTCOME" = success
+          test "$TRIVY_RAW_OUTCOME" = success
+          test "$TRIVY_REVIEWED_OUTCOME" = success
+          test "$EVIDENCE_OUTCOME" = success

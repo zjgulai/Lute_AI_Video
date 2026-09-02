@@ -1,0 +1,2 @@
+# Patch bytes are checksum-bound; do not flag embedded patch whitespace as errors.
+docker/ffmpeg/*.patch -whitespace

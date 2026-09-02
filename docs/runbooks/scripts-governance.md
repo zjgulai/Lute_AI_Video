@@ -5,7 +5,7 @@ module: project
 topic: scripts-governance
 status: stable
 created: 2026-06-01
-updated: 2026-08-13
+updated: 2026-09-01
 owner: self
 source: human+ai
 ---
@@ -37,6 +37,8 @@ source: human+ai
 | --- | --- |
 | `scripts/check_openapi_types_drift.py` | active_reusable |
 | `scripts/check_step_order_consistency.py` | active_reusable |
+| `scripts/check_xmind_performance.py` | active_reusable |
+| `scripts/xmind_transport_probe.py` | active_reusable |
 | `scripts/project_version.py` | active_reusable |
 | `scripts/check_pyright_ratchet.py` | active_reusable |
 | `scripts/backup_manifest.py` | active_reusable |

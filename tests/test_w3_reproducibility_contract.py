@@ -23,7 +23,7 @@ LEGACY_PROD_COMPOSE = REPO_ROOT / "deploy" / "lighthouse" / "docker-compose.prod
 RENDER_BLUEPRINT = REPO_ROOT / "render.yaml"
 VULNERABILITY_RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "vulnerability-scan-exceptions.md"
 
-PINNED_PYTHON = "3.12.13"
+PINNED_PYTHON = "3.12.14"
 RUNTIME_MEDIA_DEPENDENCIES = {
     "faster-whisper",
     "pillow",
@@ -59,7 +59,7 @@ def _all_run_commands(workflow: dict[str, Any]) -> str:
     )
 
 
-def test_python_31213_is_the_single_project_tool_and_ci_version() -> None:
+def test_pinned_python_is_the_single_project_tool_and_ci_version() -> None:
     pyproject = tomllib.loads(PYPROJECT.read_text())
     assert PYTHON_VERSION.read_text().strip() == PINNED_PYTHON
     assert pyproject["project"]["requires-python"] == ">=3.12,<3.13"

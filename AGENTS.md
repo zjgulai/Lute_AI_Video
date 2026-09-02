@@ -76,7 +76,7 @@ The pipeline is built on **LangGraph** with 16 nodes (12 worker + 4 self-audit) 
                          │ HTTP + API Key auth
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│  src/api.py  (FastAPI, Python 3.12.13, Port 8001)        │
+│  src/api.py  (FastAPI, Python 3.12.14, Port 8001)        │
 │  Routers: pipeline, scenario, distribution, metrics,     │
 │           assets, media, health, telemetry               │
 │  Middleware: CORS, rate-limit, response-wrapper, logging │
@@ -622,7 +622,7 @@ Key test areas:
 
 **Frontend:** Vitest with jsdom. Component tests in `web/src/components/*.test.tsx`.
 
-**CI:** GitHub Actions on push/PR to main — locked CPython 3.12.13 environment, Ruff,
+**CI:** GitHub Actions on push/PR to main — locked CPython 3.12.14 environment, Ruff,
 production-source Pyright plus test-diagnostic ratchet, pytest/coverage, dependency audits,
 frontend gates, and a locally loaded Critical image scan. `pyproject.toml` plus `uv.lock` are
 the dependency authority; `requirements.txt` is generated compatibility output only.
